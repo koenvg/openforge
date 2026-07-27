@@ -268,6 +268,527 @@ function isOpenForgePackageMetadata(data) {
 }
 var isPluginPackageMetadata = isOpenForgePackageMetadata;
 //#endregion
+//#region packages/plugin-sdk/src/testing/support.ts
+function createDisposable(dispose) {
+	let disposed = false;
+	return { async dispose() {
+		if (disposed) return;
+		disposed = true;
+		await dispose();
+	} };
+}
+var TestingSubscriptionSink = class {
+	subscriptions = [];
+	add(subscription) {
+		if (typeof subscription === "function") {
+			this.subscriptions.push(createDisposable(subscription));
+			return;
+		}
+		if (!subscription || typeof subscription.dispose !== "function") throw new Error("context.subscriptions.add requires a disposable or cleanup function");
+		this.subscriptions.push(subscription);
+	}
+	async disposeAll() {
+		const subscriptions = this.subscriptions.splice(0).reverse();
+		for (const subscription of subscriptions) await subscription.dispose();
+	}
+};
+function createTestingCalls() {
+	return {
+		commandInvocations: [],
+		globalCommandInvocations: [],
+		backendInvocations: [],
+		emittedEvents: [],
+		emittedGlobalEvents: [],
+		openUrl: [],
+		navigationRequests: [],
+		notify: [],
+		taskCreations: [],
+		startPromptContributionConfigurations: [],
+		taskImplementationStarts: [],
+		taskListRequests: [],
+		taskSummaryUpdates: [],
+		taskStatusUpdates: [],
+		configWrites: [],
+		fsWrites: [],
+		shellSpawns: [],
+		shellWrites: [],
+		shellResizes: [],
+		shellKills: [],
+		shellBuffers: [],
+		browserSurfaceGetOrCreate: [],
+		browserSurfaceAttachments: [],
+		browserSurfaceDetaches: [],
+		browserSurfaceDestroys: [],
+		browserSurfaceNavigations: [],
+		browserSurfaceControls: [],
+		browserSurfaceSessionResets: [],
+		storageGets: [],
+		storageSets: [],
+		storageDeletes: []
+	};
+}
+function createMemoryPluginStorage(calls = createTestingCalls()) {
+	const values = /* @__PURE__ */ new Map();
+	function scope(scopeKind, scopeId) {
+		const prefix = `${scopeKind}:${scopeId ?? ""}:`;
+		return {
+			async get(key) {
+				calls.storageGets.push({
+					scope: scopeKind,
+					scopeId,
+					key
+				});
+				return values.has(`${prefix}${key}`) ? values.get(`${prefix}${key}`) : null;
+			},
+			async set(key, value) {
+				values.set(`${prefix}${key}`, value);
+				calls.storageSets.push({
+					scope: scopeKind,
+					scopeId,
+					key,
+					value
+				});
+			},
+			async delete(key) {
+				values.delete(`${prefix}${key}`);
+				calls.storageDeletes.push({
+					scope: scopeKind,
+					scopeId,
+					key
+				});
+			}
+		};
+	}
+	return {
+		global: scope("global", null),
+		project: (projectId) => scope("project", projectId),
+		task: (taskId) => scope("task", taskId)
+	};
+}
+function commandDescriptor(command) {
+	return {
+		id: command.id,
+		qualifiedId: command.qualifiedId,
+		pluginId: command.pluginId,
+		projectId: command.projectId,
+		title: command.title,
+		icon: command.icon,
+		shortcut: command.shortcut,
+		discoverable: command.discoverable ?? true,
+		input: command.input,
+		output: command.output
+	};
+}
+function assertLocalId(kind, id) {
+	if (typeof id !== "string" || id.trim().length === 0) throw new Error(`${kind} registration requires a non-empty id`);
+	const trimmed = id.trim();
+	if (trimmed.startsWith("openforge.")) throw new Error(`${kind} registration cannot use openforge.* reserved namespace`);
+	if (trimmed.includes(":") || trimmed.startsWith(".") || trimmed.endsWith(".") || trimmed.includes("..")) throw new Error(`${kind} registration has invalid id "${trimmed}"`);
+}
+function assertTitle(kind, title) {
+	if (typeof title !== "string" || title.trim().length === 0) throw new Error(`${kind} registration requires a non-empty title`);
+}
+function assertFunction(kind, field, value) {
+	if (typeof value !== "function") throw new Error(`${kind} registration requires a ${field} function`);
+}
+var TestingContributionClaims = class {
+	ids = /* @__PURE__ */ new Set();
+	claim(kind, qualifiedId) {
+		const key = this.key(kind, qualifiedId);
+		if (this.ids.has(key)) throw new Error(`Duplicate runtime contribution id: ${qualifiedId}`);
+		this.ids.add(key);
+	}
+	release(kind, qualifiedId) {
+		this.ids.delete(this.key(kind, qualifiedId));
+	}
+	key(kind, qualifiedId) {
+		return kind === "commands" ? `commands:${qualifiedId}` : `${kind}:${qualifiedId}`;
+	}
+};
+var TestingRegistryServices = class {
+	pluginId;
+	projectId;
+	taskId;
+	viewId;
+	packageMetadata;
+	calls;
+	storage;
+	config = /* @__PURE__ */ new Map();
+	seededTasks;
+	claims = new TestingContributionClaims();
+	constructor(options = {}) {
+		this.pluginId = options.pluginId ?? "test-plugin";
+		this.projectId = options.projectId ?? null;
+		this.taskId = options.taskId ?? null;
+		this.viewId = options.viewId ?? "board";
+		this.packageMetadata = options.packageMetadata ?? {
+			id: this.pluginId,
+			apiVersion: 1,
+			displayName: this.pluginId,
+			description: ""
+		};
+		this.calls = createTestingCalls();
+		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
+		this.seededTasks = options.tasks ?? [];
+	}
+	localQualifiedId(kind, id) {
+		assertLocalId(kind, id);
+		return `${this.pluginId}.${id.trim()}`;
+	}
+	getContextSnapshot() {
+		return {
+			pluginId: this.pluginId,
+			projectId: this.projectId,
+			...this.taskId === null ? {} : { taskId: this.taskId }
+		};
+	}
+	getNavigationSnapshot(overrides = {}) {
+		return {
+			activeProjectId: overrides.projectId ?? this.projectId,
+			currentView: overrides.viewId ?? this.viewId,
+			selectedTaskId: overrides.taskId ?? this.taskId
+		};
+	}
+	startPromptContributions(projectId) {
+		const raw = this.config.get(`project:${projectId}:start_prompt_contributions`);
+		return Array.isArray(raw) ? raw.filter((entry) => Boolean(entry) && typeof entry === "object" && typeof entry.id === "string" && typeof entry.content === "string") : [];
+	}
+};
+//#endregion
+//#region packages/plugin-sdk/src/testing/backendServicesFake.ts
+var TestingBackendServicesFake = class {
+	services;
+	backendMethods = /* @__PURE__ */ new Map();
+	backgroundServices = /* @__PURE__ */ new Map();
+	constructor(services) {
+		this.services = services;
+	}
+	createApi() {
+		return {
+			backend: { registerMethod: (method, registration) => this.registerBackendMethod(method, registration) },
+			background: { register: (registration) => this.registerBackgroundService(registration) }
+		};
+	}
+	getSnapshot() {
+		return {
+			backendMethods: Array.from(this.backendMethods.values()),
+			backgroundServices: Array.from(this.backgroundServices.values())
+		};
+	}
+	captureBackgroundServiceIds() {
+		return new Set(this.backgroundServices.keys());
+	}
+	async startNewBackgroundServices(existingServices) {
+		for (const [key, service] of this.backgroundServices.entries()) {
+			if (existingServices.has(key) || service.started) continue;
+			await service.start();
+			service.started = true;
+		}
+	}
+	async invokeMethod(method, payload) {
+		const qualifiedId = this.services.localQualifiedId("backend", method);
+		this.services.calls.backendInvocations.push({
+			method,
+			qualifiedId,
+			payload
+		});
+		const contribution = this.backendMethods.get(qualifiedId);
+		if (!contribution) throw new Error(`Backend method is not registered: ${qualifiedId}`);
+		return await contribution.registration.handler(payload);
+	}
+	registerBackendMethod(method, registration) {
+		const qualifiedId = this.services.localQualifiedId("backend", method);
+		assertFunction("backend", "handler", registration.handler);
+		this.services.claims.claim("backend", qualifiedId);
+		const contribution = {
+			id: method.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId,
+			registration
+		};
+		this.backendMethods.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.backendMethods.delete(qualifiedId);
+			this.services.claims.release("backend", qualifiedId);
+		});
+	}
+	registerBackgroundService(registration) {
+		const qualifiedId = this.services.localQualifiedId("background", registration.id);
+		if (registration.scope !== "global" && registration.scope !== "project" && registration.scope !== "task") throw new Error("background registration requires scope to be global, project, or task");
+		assertFunction("background", "start", registration.start);
+		this.services.claims.claim("background", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId,
+			started: false
+		};
+		this.backgroundServices.set(qualifiedId, contribution);
+		return createDisposable(async () => {
+			this.backgroundServices.delete(qualifiedId);
+			this.services.claims.release("background", qualifiedId);
+			if (contribution.started) {
+				await contribution.stop?.();
+				contribution.started = false;
+			}
+		});
+	}
+};
+//#endregion
+//#region packages/plugin-sdk/src/testing/commonApiFake.ts
+var TestingCommonApiFake = class {
+	services;
+	commands = /* @__PURE__ */ new Map();
+	eventListeners = /* @__PURE__ */ new Map();
+	eventHandlers = /* @__PURE__ */ new Map();
+	eventListenerSequence = 0;
+	constructor(services) {
+		this.services = services;
+	}
+	createApi() {
+		return {
+			commands: {
+				register: (registration) => this.registerCommand(registration),
+				invoke: async (id, payload) => this.invokeCommand(id, payload),
+				invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload),
+				list: async () => Array.from(this.commands.values()).map(commandDescriptor),
+				listCatalog: async () => []
+			},
+			events: {
+				on: (event, handler) => this.registerEventListener(event, handler, false),
+				onGlobal: (qualifiedEvent, handler) => this.registerEventListener(qualifiedEvent, handler, true),
+				emit: async (event, payload) => this.emitEvent(event, payload, false),
+				emitGlobal: async (qualifiedEvent, payload) => this.emitEvent(qualifiedEvent, payload, true)
+			},
+			storage: this.services.storage,
+			context: { getSnapshot: () => this.services.getContextSnapshot() },
+			tasks: {
+				list: async (request) => {
+					const projectId = request?.projectId ?? null;
+					const includeDone = request?.includeDone ?? false;
+					this.services.calls.taskListRequests.push({
+						projectId,
+						includeDone
+					});
+					return this.services.seededTasks.filter((task) => {
+						if (projectId !== null && task.project_id !== projectId) return false;
+						if (!includeDone && task.status === "done") return false;
+						return true;
+					});
+				},
+				get: async () => null,
+				create: async (request) => {
+					this.services.calls.taskCreations.push(request);
+					return {
+						id: `mock-task-${this.services.calls.taskCreations.length}`,
+						initial_prompt: request.initialPrompt,
+						status: "backlog",
+						prompt: null,
+						title: null,
+						title_source: null,
+						title_generated_at: null,
+						summary: null,
+						agent: null,
+						permission_mode: null,
+						worktree_source: null,
+						worktree_branch: null,
+						handoff_notes_enabled: true,
+						source_ticket_url: null,
+						depends_on: request.dependsOn ?? [],
+						project_id: request.projectId,
+						created_at: 0,
+						updated_at: 0
+					};
+				},
+				updateSummary: async (taskId, summary) => {
+					this.services.calls.taskSummaryUpdates.push({
+						taskId,
+						summary
+					});
+				},
+				updateStatus: async (taskId, status) => {
+					this.services.calls.taskStatusUpdates.push({
+						taskId,
+						status
+					});
+				},
+				listStartPromptContributions: async (projectId) => this.services.startPromptContributions(projectId),
+				configureStartPromptContribution: async (request) => {
+					this.services.calls.startPromptContributionConfigurations.push(request);
+					const next = [...this.services.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id), request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+					this.services.config.set(`project:${request.projectId}:start_prompt_contributions`, next);
+					return next;
+				},
+				startImplementation: async (request) => {
+					this.services.calls.taskImplementationStarts.push(request);
+					return {
+						taskId: request.taskId,
+						workspacePath: "/mock-workspace",
+						sessionId: "mock-session"
+					};
+				},
+				getWorkspace: async () => null,
+				getLatestSession: async () => null
+			},
+			projects: {
+				list: async () => [],
+				get: async () => null
+			},
+			fs: {
+				readDir: async () => [],
+				readFile: async () => ({
+					type: "text",
+					content: "",
+					mimeType: null,
+					size: 0
+				}),
+				writeFile: async (request) => {
+					this.services.calls.fsWrites.push(request);
+				},
+				searchFiles: async () => []
+			},
+			shell: {
+				spawn: async (request) => {
+					this.services.calls.shellSpawns.push(request);
+					return 0;
+				},
+				write: async (request) => {
+					this.services.calls.shellWrites.push(request);
+				},
+				resize: async (request) => {
+					this.services.calls.shellResizes.push(request);
+				},
+				kill: async (request) => {
+					this.services.calls.shellKills.push(request);
+				},
+				getBuffer: async (request) => {
+					this.services.calls.shellBuffers.push(request);
+					return null;
+				}
+			},
+			notifications: { notify: async (request) => {
+				this.services.calls.notify.push(request);
+			} },
+			attention: { listProjects: async () => [] },
+			system: { openUrl: async (url) => {
+				this.services.calls.openUrl.push(url);
+			} },
+			navigation: {
+				get: () => this.services.getNavigationSnapshot(),
+				navigate: async (request) => {
+					this.services.calls.navigationRequests.push(request);
+					return this.services.getNavigationSnapshot(request);
+				}
+			},
+			config: {
+				get: async (key) => this.services.config.has(`global:${key}`) ? this.services.config.get(`global:${key}`) : null,
+				set: async (key, value) => {
+					this.services.config.set(`global:${key}`, value);
+					this.services.calls.configWrites.push({
+						key,
+						value,
+						projectId: null
+					});
+				}
+			},
+			projectConfig: {
+				get: async (key, projectId = this.services.projectId ?? "") => this.services.config.has(`project:${projectId}:${key}`) ? this.services.config.get(`project:${projectId}:${key}`) : null,
+				set: async (key, value, projectId = this.services.projectId ?? "") => {
+					this.services.config.set(`project:${projectId}:${key}`, value);
+					this.services.calls.configWrites.push({
+						key,
+						value,
+						projectId
+					});
+				}
+			}
+		};
+	}
+	getSnapshot() {
+		return {
+			commands: Array.from(this.commands.values()),
+			eventListeners: Array.from(this.eventListeners.values())
+		};
+	}
+	registerCommand(registration) {
+		const qualifiedId = this.services.localQualifiedId("commands", registration.id);
+		assertTitle("commands", registration.title);
+		assertFunction("commands", "handler", registration.handler);
+		this.services.claims.claim("commands", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			title: registration.title.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId,
+			handler: registration.handler
+		};
+		this.commands.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.commands.delete(qualifiedId);
+			this.services.claims.release("commands", qualifiedId);
+		});
+	}
+	registerEventListener(event, handler, global) {
+		const qualifiedId = global ? event : this.services.localQualifiedId("events", event);
+		if (qualifiedId.trim().length === 0) throw new Error("events registration requires a non-empty id");
+		assertFunction("events", "handler", handler);
+		const handlers = this.eventHandlers.get(qualifiedId) ?? /* @__PURE__ */ new Set();
+		handlers.add(handler);
+		this.eventHandlers.set(qualifiedId, handlers);
+		const listenerKey = `${qualifiedId}#${++this.eventListenerSequence}`;
+		const contribution = {
+			id: event,
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId,
+			handler,
+			global
+		};
+		this.eventListeners.set(listenerKey, contribution);
+		return createDisposable(() => {
+			handlers.delete(handler);
+			if (handlers.size === 0) this.eventHandlers.delete(qualifiedId);
+			this.eventListeners.delete(listenerKey);
+		});
+	}
+	async invokeCommand(id, payload) {
+		const qualifiedId = this.services.localQualifiedId("commands", id);
+		this.services.calls.commandInvocations.push({
+			id,
+			qualifiedId,
+			payload
+		});
+		return this.invokeGlobalCommand(qualifiedId, payload);
+	}
+	async invokeGlobalCommand(qualifiedId, payload) {
+		this.services.calls.globalCommandInvocations.push({
+			qualifiedId,
+			payload
+		});
+		const command = this.commands.get(qualifiedId);
+		if (!command) throw new Error(`Unknown command: ${qualifiedId}`);
+		return await command.handler(payload);
+	}
+	async emitEvent(event, payload, global) {
+		const qualifiedEvent = global ? event : this.services.localQualifiedId("events", event);
+		if (global) this.services.calls.emittedGlobalEvents.push({
+			qualifiedEvent,
+			payload
+		});
+		else this.services.calls.emittedEvents.push({
+			event,
+			qualifiedEvent,
+			payload
+		});
+		for (const handler of Array.from(this.eventHandlers.get(qualifiedEvent) ?? [])) handler(payload);
+	}
+};
+//#endregion
 //#region packages/plugin-sdk/src/browserSurfacesTesting.ts
 function disposable(dispose) {
 	let disposed = false;
@@ -484,79 +1005,26 @@ function createTestingBrowserSurfaces(calls) {
 	};
 }
 //#endregion
-//#region packages/plugin-sdk/src/testing.ts
-var TestingSubscriptionSink = class {
-	subscriptions = [];
-	add(subscription) {
-		if (typeof subscription === "function") {
-			this.subscriptions.push(createDisposable(subscription));
-			return;
-		}
-		if (!subscription || typeof subscription.dispose !== "function") throw new Error("context.subscriptions.add requires a disposable or cleanup function");
-		this.subscriptions.push(subscription);
-	}
-	async disposeAll() {
-		const subscriptions = this.subscriptions.splice(0).reverse();
-		for (const subscription of subscriptions) await subscription.dispose();
-	}
-};
-var TestingOpenForgeRegistryFake = class {
-	pluginId;
-	projectId;
-	taskId;
-	viewId;
-	packageMetadata;
-	calls;
-	storage;
-	frontendSubscriptions = new TestingSubscriptionSink();
-	backendSubscriptions = new TestingSubscriptionSink();
-	commands = /* @__PURE__ */ new Map();
+//#region packages/plugin-sdk/src/testing/frontendContributionFake.ts
+var TestingFrontendContributionFake = class {
+	services;
+	invokeBackendMethod;
 	views = /* @__PURE__ */ new Map();
 	taskPaneTabs = /* @__PURE__ */ new Map();
 	taskUISections = /* @__PURE__ */ new Map();
 	settingsSections = /* @__PURE__ */ new Map();
-	eventListeners = /* @__PURE__ */ new Map();
-	eventHandlers = /* @__PURE__ */ new Map();
-	backendMethods = /* @__PURE__ */ new Map();
-	backgroundServices = /* @__PURE__ */ new Map();
-	injectionPointsMap = /* @__PURE__ */ new Map();
-	claimedIds = /* @__PURE__ */ new Set();
-	testingBrowserSurfaces;
-	config = /* @__PURE__ */ new Map();
-	seededTasks;
-	eventListenerSequence = 0;
-	cachedFrontendApi = null;
-	cachedBackendApi = null;
-	constructor(options = {}) {
-		this.pluginId = options.pluginId ?? "test-plugin";
-		this.projectId = options.projectId ?? null;
-		this.taskId = options.taskId ?? null;
-		this.viewId = options.viewId ?? "board";
-		this.packageMetadata = options.packageMetadata ?? {
-			id: this.pluginId,
-			apiVersion: 1,
-			displayName: this.pluginId,
-			description: ""
-		};
-		this.calls = createTestingCalls();
-		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
-		this.seededTasks = options.tasks ?? [];
-		this.testingBrowserSurfaces = createTestingBrowserSurfaces(this.calls);
+	injectionPoints = /* @__PURE__ */ new Map();
+	browserSurfaces;
+	api = null;
+	constructor(services, invokeBackendMethod) {
+		this.services = services;
+		this.invokeBackendMethod = invokeBackendMethod;
+		this.browserSurfaces = createTestingBrowserSurfaces(services.calls);
 	}
-	get frontendApi() {
-		return this.createFrontendApi();
-	}
-	get backendApi() {
-		return this.createBackendApi();
-	}
-	get snapshot() {
-		return this.getSnapshot();
-	}
-	createFrontendApi() {
-		if (this.cachedFrontendApi) return this.cachedFrontendApi;
+	createApi() {
+		if (this.api) return this.api;
 		const api = {
-			...this.createCommonApi(),
-			browserSurfaces: this.testingBrowserSurfaces.api,
+			browserSurfaces: this.browserSurfaces.api,
 			views: { register: (registration) => this.registerView(registration) },
 			taskUI: {
 				registerTab: (registration) => this.registerTaskPaneTab(registration),
@@ -571,17 +1039,154 @@ var TestingOpenForgeRegistryFake = class {
 					handler();
 					return createDisposable(() => void 0);
 				},
-				invoke: async (method, payload) => this.invokeBackend(method, payload)
+				invoke: async (method, payload) => this.invokeBackendMethod(method, payload)
 			},
-			injectionPoints: { register: (registration) => {
-				this.injectionPointsMap.set(registration.id, {
-					id: registration.id,
-					location: registration.location
-				});
-				return createDisposable(() => {
-					this.injectionPointsMap.delete(registration.id);
-				});
-			} },
+			injectionPoints: { register: (registration) => this.registerInjectionPoint(registration) }
+		};
+		this.api = api;
+		return api;
+	}
+	setBrowserSurfaceState(taskId, id, patch) {
+		this.browserSurfaces.setState(taskId, id, patch);
+	}
+	getSnapshot() {
+		return {
+			views: Array.from(this.views.values()),
+			taskPaneTabs: Array.from(this.taskPaneTabs.values()),
+			taskUISections: Array.from(this.taskUISections.values()),
+			settingsSections: Array.from(this.settingsSections.values()),
+			injectionPoints: Array.from(this.injectionPoints.values())
+		};
+	}
+	registerView(registration) {
+		const qualifiedId = this.services.localQualifiedId("views", registration.id);
+		assertTitle("views", registration.title);
+		assertFunction("views", "component", registration.component);
+		this.services.claims.claim("views", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			title: registration.title.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId
+		};
+		this.views.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.views.delete(qualifiedId);
+			this.services.claims.release("views", qualifiedId);
+		});
+	}
+	registerTaskPaneTab(registration) {
+		const qualifiedId = this.services.localQualifiedId("taskPane", registration.id);
+		assertTitle("taskPane", registration.title);
+		assertFunction("taskPane", "component", registration.component);
+		this.services.claims.claim("taskPane", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			title: registration.title.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId
+		};
+		this.taskPaneTabs.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.taskPaneTabs.delete(qualifiedId);
+			this.services.claims.release("taskPane", qualifiedId);
+		});
+	}
+	registerTaskUISection(registration) {
+		const qualifiedId = this.services.localQualifiedId("taskUI", registration.id);
+		assertFunction("taskUI", "component", registration.component);
+		this.services.claims.claim("taskUI", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId
+		};
+		this.taskUISections.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.taskUISections.delete(qualifiedId);
+			this.services.claims.release("taskUI", qualifiedId);
+		});
+	}
+	registerSettingsSection(registration) {
+		const qualifiedId = this.services.localQualifiedId("settings", registration.id);
+		assertTitle("settings", registration.title);
+		assertFunction("settings", "component", registration.component);
+		this.services.claims.claim("settings", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			title: registration.title.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId
+		};
+		this.settingsSections.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.settingsSections.delete(qualifiedId);
+			this.services.claims.release("settings", qualifiedId);
+		});
+	}
+	registerInjectionPoint(registration) {
+		this.injectionPoints.set(registration.id, {
+			id: registration.id,
+			location: registration.location
+		});
+		return createDisposable(() => {
+			this.injectionPoints.delete(registration.id);
+		});
+	}
+};
+//#endregion
+//#region packages/plugin-sdk/src/testing/registryFake.ts
+var TestingOpenForgeRegistryFake = class {
+	pluginId;
+	projectId;
+	taskId;
+	viewId;
+	packageMetadata;
+	calls;
+	storage;
+	frontendSubscriptions = new TestingSubscriptionSink();
+	backendSubscriptions = new TestingSubscriptionSink();
+	services;
+	commonApi;
+	frontendContributions;
+	backendServices;
+	cachedFrontendApi = null;
+	cachedBackendApi = null;
+	constructor(options = {}) {
+		this.services = new TestingRegistryServices(options);
+		this.pluginId = this.services.pluginId;
+		this.projectId = this.services.projectId;
+		this.taskId = this.services.taskId;
+		this.viewId = this.services.viewId;
+		this.packageMetadata = this.services.packageMetadata;
+		this.calls = this.services.calls;
+		this.storage = this.services.storage;
+		this.commonApi = new TestingCommonApiFake(this.services);
+		this.backendServices = new TestingBackendServicesFake(this.services);
+		this.frontendContributions = new TestingFrontendContributionFake(this.services, (method, payload) => this.backendServices.invokeMethod(method, payload));
+	}
+	get frontendApi() {
+		return this.createFrontendApi();
+	}
+	get backendApi() {
+		return this.createBackendApi();
+	}
+	get snapshot() {
+		return this.getSnapshot();
+	}
+	createFrontendApi() {
+		if (this.cachedFrontendApi) return this.cachedFrontendApi;
+		const api = {
+			...this.commonApi.createApi(),
+			...this.frontendContributions.createApi(),
 			__testing: {
 				calls: this.calls,
 				registry: this
@@ -593,9 +1198,8 @@ var TestingOpenForgeRegistryFake = class {
 	createBackendApi() {
 		if (this.cachedBackendApi) return this.cachedBackendApi;
 		const api = {
-			...this.createCommonApi(),
-			backend: { registerMethod: (method, registration) => this.registerBackendMethod(method, registration) },
-			background: { register: (registration) => this.registerBackgroundService(registration) },
+			...this.commonApi.createApi(),
+			...this.backendServices.createApi(),
 			__testing: {
 				calls: this.calls,
 				registry: this
@@ -614,12 +1218,12 @@ var TestingOpenForgeRegistryFake = class {
 		await plugin.activate(this.frontendApi, this.createFrontendContext());
 	}
 	async activateBackend(plugin) {
-		const existingServices = new Set(this.backgroundServices.keys());
+		const existingServices = this.backendServices.captureBackgroundServiceIds();
 		await plugin.activate(this.backendApi, this.createBackendContext());
-		await this.startBackgroundServices(existingServices);
+		await this.backendServices.startNewBackgroundServices(existingServices);
 	}
 	setBrowserSurfaceState(taskId, id, patch) {
-		this.testingBrowserSurfaces.setState(taskId, id, patch);
+		this.frontendContributions.setBrowserSurfaceState(taskId, id, patch);
 	}
 	async disposeAll() {
 		await this.backendSubscriptions.disposeAll();
@@ -629,15 +1233,9 @@ var TestingOpenForgeRegistryFake = class {
 		return {
 			pluginId: this.pluginId,
 			projectId: this.projectId,
-			views: Array.from(this.views.values()),
-			taskPaneTabs: Array.from(this.taskPaneTabs.values()),
-			taskUISections: Array.from(this.taskUISections.values()),
-			settingsSections: Array.from(this.settingsSections.values()),
-			commands: Array.from(this.commands.values()),
-			eventListeners: Array.from(this.eventListeners.values()),
-			backendMethods: Array.from(this.backendMethods.values()),
-			backgroundServices: Array.from(this.backgroundServices.values()),
-			injectionPoints: Array.from(this.injectionPointsMap.values())
+			...this.frontendContributions.getSnapshot(),
+			...this.commonApi.getSnapshot(),
+			...this.backendServices.getSnapshot()
 		};
 	}
 	createContext(subscriptions) {
@@ -647,402 +1245,6 @@ var TestingOpenForgeRegistryFake = class {
 			packageMetadata: this.packageMetadata,
 			subscriptions
 		};
-	}
-	startPromptContributions(projectId) {
-		const raw = this.config.get(`project:${projectId}:start_prompt_contributions`);
-		return Array.isArray(raw) ? raw.filter((entry) => Boolean(entry) && typeof entry === "object" && typeof entry.id === "string" && typeof entry.content === "string") : [];
-	}
-	createCommonApi() {
-		return {
-			commands: {
-				register: (registration) => this.registerCommand(registration),
-				invoke: async (id, payload) => this.invokeCommand(id, payload),
-				invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload),
-				list: async () => Array.from(this.commands.values()).map(commandDescriptor),
-				listCatalog: async () => []
-			},
-			events: {
-				on: (event, handler) => this.registerEventListener(event, handler, false),
-				onGlobal: (qualifiedEvent, handler) => this.registerEventListener(qualifiedEvent, handler, true),
-				emit: async (event, payload) => this.emitEvent(event, payload, false),
-				emitGlobal: async (qualifiedEvent, payload) => this.emitEvent(qualifiedEvent, payload, true)
-			},
-			storage: this.storage,
-			context: { getSnapshot: () => this.getContextSnapshot() },
-			tasks: {
-				list: async (request) => {
-					const projectId = request?.projectId ?? null;
-					const includeDone = request?.includeDone ?? false;
-					this.calls.taskListRequests.push({
-						projectId,
-						includeDone
-					});
-					return this.seededTasks.filter((task) => {
-						if (projectId !== null && task.project_id !== projectId) return false;
-						if (!includeDone && task.status === "done") return false;
-						return true;
-					});
-				},
-				get: async () => null,
-				create: async (request) => {
-					this.calls.taskCreations.push(request);
-					return {
-						id: `mock-task-${this.calls.taskCreations.length}`,
-						initial_prompt: request.initialPrompt,
-						status: "backlog",
-						prompt: null,
-						title: null,
-						title_source: null,
-						title_generated_at: null,
-						summary: null,
-						agent: null,
-						permission_mode: null,
-						worktree_source: null,
-						worktree_branch: null,
-						handoff_notes_enabled: true,
-						source_ticket_url: null,
-						depends_on: request.dependsOn ?? [],
-						project_id: request.projectId,
-						created_at: 0,
-						updated_at: 0
-					};
-				},
-				updateSummary: async (taskId, summary) => {
-					this.calls.taskSummaryUpdates.push({
-						taskId,
-						summary
-					});
-				},
-				updateStatus: async (taskId, status) => {
-					this.calls.taskStatusUpdates.push({
-						taskId,
-						status
-					});
-				},
-				listStartPromptContributions: async (projectId) => this.startPromptContributions(projectId),
-				configureStartPromptContribution: async (request) => {
-					this.calls.startPromptContributionConfigurations.push(request);
-					const next = [...this.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id), request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
-					this.config.set(`project:${request.projectId}:start_prompt_contributions`, next);
-					return next;
-				},
-				startImplementation: async (request) => {
-					this.calls.taskImplementationStarts.push(request);
-					return {
-						taskId: request.taskId,
-						workspacePath: "/mock-workspace",
-						sessionId: "mock-session"
-					};
-				},
-				getWorkspace: async () => null,
-				getLatestSession: async () => null
-			},
-			projects: {
-				list: async () => [],
-				get: async () => null
-			},
-			fs: {
-				readDir: async () => [],
-				readFile: async () => ({
-					type: "text",
-					content: "",
-					mimeType: null,
-					size: 0
-				}),
-				writeFile: async (request) => {
-					this.calls.fsWrites.push(request);
-				},
-				searchFiles: async () => []
-			},
-			shell: {
-				spawn: async (request) => {
-					this.calls.shellSpawns.push(request);
-					return 0;
-				},
-				write: async (request) => {
-					this.calls.shellWrites.push(request);
-				},
-				resize: async (request) => {
-					this.calls.shellResizes.push(request);
-				},
-				kill: async (request) => {
-					this.calls.shellKills.push(request);
-				},
-				getBuffer: async (request) => {
-					this.calls.shellBuffers.push(request);
-					return null;
-				}
-			},
-			notifications: { notify: async (request) => {
-				this.calls.notify.push(request);
-			} },
-			attention: { listProjects: async () => [] },
-			system: { openUrl: async (url) => {
-				this.calls.openUrl.push(url);
-			} },
-			navigation: {
-				get: () => this.getNavigationSnapshot(),
-				navigate: async (request) => {
-					this.calls.navigationRequests.push(request);
-					return this.getNavigationSnapshot(request);
-				}
-			},
-			config: {
-				get: async (key) => this.config.has(`global:${key}`) ? this.config.get(`global:${key}`) : null,
-				set: async (key, value) => {
-					this.config.set(`global:${key}`, value);
-					this.calls.configWrites.push({
-						key,
-						value,
-						projectId: null
-					});
-				}
-			},
-			projectConfig: {
-				get: async (key, projectId = this.projectId ?? "") => this.config.has(`project:${projectId}:${key}`) ? this.config.get(`project:${projectId}:${key}`) : null,
-				set: async (key, value, projectId = this.projectId ?? "") => {
-					this.config.set(`project:${projectId}:${key}`, value);
-					this.calls.configWrites.push({
-						key,
-						value,
-						projectId
-					});
-				}
-			}
-		};
-	}
-	getContextSnapshot() {
-		return {
-			pluginId: this.pluginId,
-			projectId: this.projectId,
-			...this.taskId === null ? {} : { taskId: this.taskId }
-		};
-	}
-	getNavigationSnapshot(overrides = {}) {
-		return {
-			activeProjectId: overrides.projectId ?? this.projectId,
-			currentView: overrides.viewId ?? this.viewId,
-			selectedTaskId: overrides.taskId ?? this.taskId
-		};
-	}
-	localQualifiedId(kind, id) {
-		assertLocalId(kind, id);
-		return `${this.pluginId}.${id.trim()}`;
-	}
-	claim(kind, qualifiedId) {
-		const key = kind === "commands" ? `commands:${qualifiedId}` : `${kind}:${qualifiedId}`;
-		if (this.claimedIds.has(key)) throw new Error(`Duplicate runtime contribution id: ${qualifiedId}`);
-		this.claimedIds.add(key);
-	}
-	release(kind, qualifiedId) {
-		const key = kind === "commands" ? `commands:${qualifiedId}` : `${kind}:${qualifiedId}`;
-		this.claimedIds.delete(key);
-	}
-	registerCommand(registration) {
-		const qualifiedId = this.localQualifiedId("commands", registration.id);
-		assertTitle("commands", registration.title);
-		assertFunction("commands", "handler", registration.handler);
-		this.claim("commands", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			title: registration.title.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId,
-			handler: registration.handler
-		};
-		this.commands.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.commands.delete(qualifiedId);
-			this.release("commands", qualifiedId);
-		});
-	}
-	registerView(registration) {
-		const qualifiedId = this.localQualifiedId("views", registration.id);
-		assertTitle("views", registration.title);
-		assertFunction("views", "component", registration.component);
-		this.claim("views", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			title: registration.title.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId
-		};
-		this.views.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.views.delete(qualifiedId);
-			this.release("views", qualifiedId);
-		});
-	}
-	registerTaskPaneTab(registration) {
-		const qualifiedId = this.localQualifiedId("taskPane", registration.id);
-		assertTitle("taskPane", registration.title);
-		assertFunction("taskPane", "component", registration.component);
-		this.claim("taskPane", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			title: registration.title.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId
-		};
-		this.taskPaneTabs.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.taskPaneTabs.delete(qualifiedId);
-			this.release("taskPane", qualifiedId);
-		});
-	}
-	registerTaskUISection(registration) {
-		const qualifiedId = this.localQualifiedId("taskUI", registration.id);
-		assertFunction("taskUI", "component", registration.component);
-		this.claim("taskUI", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId
-		};
-		this.taskUISections.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.taskUISections.delete(qualifiedId);
-			this.release("taskUI", qualifiedId);
-		});
-	}
-	registerSettingsSection(registration) {
-		const qualifiedId = this.localQualifiedId("settings", registration.id);
-		assertTitle("settings", registration.title);
-		assertFunction("settings", "component", registration.component);
-		this.claim("settings", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			title: registration.title.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId
-		};
-		this.settingsSections.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.settingsSections.delete(qualifiedId);
-			this.release("settings", qualifiedId);
-		});
-	}
-	registerBackendMethod(method, registration) {
-		const qualifiedId = this.localQualifiedId("backend", method);
-		assertFunction("backend", "handler", registration.handler);
-		this.claim("backend", qualifiedId);
-		const contribution = {
-			id: method.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId,
-			registration
-		};
-		this.backendMethods.set(qualifiedId, contribution);
-		return createDisposable(() => {
-			this.backendMethods.delete(qualifiedId);
-			this.release("backend", qualifiedId);
-		});
-	}
-	registerBackgroundService(registration) {
-		const qualifiedId = this.localQualifiedId("background", registration.id);
-		if (registration.scope !== "global" && registration.scope !== "project" && registration.scope !== "task") throw new Error("background registration requires scope to be global, project, or task");
-		assertFunction("background", "start", registration.start);
-		this.claim("background", qualifiedId);
-		const contribution = {
-			...registration,
-			id: registration.id.trim(),
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId,
-			started: false
-		};
-		this.backgroundServices.set(qualifiedId, contribution);
-		return createDisposable(async () => {
-			this.backgroundServices.delete(qualifiedId);
-			this.release("background", qualifiedId);
-			if (contribution.started) {
-				await contribution.stop?.();
-				contribution.started = false;
-			}
-		});
-	}
-	registerEventListener(event, handler, global) {
-		const qualifiedId = global ? event : this.localQualifiedId("events", event);
-		if (qualifiedId.trim().length === 0) throw new Error("events registration requires a non-empty id");
-		assertFunction("events", "handler", handler);
-		const handlers = this.eventHandlers.get(qualifiedId) ?? /* @__PURE__ */ new Set();
-		handlers.add(handler);
-		this.eventHandlers.set(qualifiedId, handlers);
-		const listenerKey = `${qualifiedId}#${++this.eventListenerSequence}`;
-		const contribution = {
-			id: event,
-			qualifiedId,
-			pluginId: this.pluginId,
-			projectId: this.projectId,
-			handler,
-			global
-		};
-		this.eventListeners.set(listenerKey, contribution);
-		return createDisposable(() => {
-			handlers.delete(handler);
-			if (handlers.size === 0) this.eventHandlers.delete(qualifiedId);
-			this.eventListeners.delete(listenerKey);
-		});
-	}
-	async startBackgroundServices(existingServices) {
-		for (const [key, service] of this.backgroundServices.entries()) {
-			if (existingServices.has(key) || service.started) continue;
-			await service.start();
-			service.started = true;
-		}
-	}
-	async invokeCommand(id, payload) {
-		const qualifiedId = this.localQualifiedId("commands", id);
-		this.calls.commandInvocations.push({
-			id,
-			qualifiedId,
-			payload
-		});
-		return this.invokeGlobalCommand(qualifiedId, payload);
-	}
-	async invokeGlobalCommand(qualifiedId, payload) {
-		this.calls.globalCommandInvocations.push({
-			qualifiedId,
-			payload
-		});
-		const command = this.commands.get(qualifiedId);
-		if (!command) throw new Error(`Unknown command: ${qualifiedId}`);
-		return await command.handler(payload);
-	}
-	async invokeBackend(method, payload) {
-		const qualifiedId = this.localQualifiedId("backend", method);
-		this.calls.backendInvocations.push({
-			method,
-			qualifiedId,
-			payload
-		});
-		const contribution = this.backendMethods.get(qualifiedId);
-		if (!contribution) throw new Error(`Backend method is not registered: ${qualifiedId}`);
-		return await contribution.registration.handler(payload);
-	}
-	async emitEvent(event, payload, global) {
-		const qualifiedEvent = global ? event : this.localQualifiedId("events", event);
-		if (global) this.calls.emittedGlobalEvents.push({
-			qualifiedEvent,
-			payload
-		});
-		else this.calls.emittedEvents.push({
-			event,
-			qualifiedEvent,
-			payload
-		});
-		for (const handler of Array.from(this.eventHandlers.get(qualifiedEvent) ?? [])) handler(payload);
 	}
 };
 function createOpenForgeRegistryFake(options = {}) {
@@ -1059,113 +1261,6 @@ function createMockBackendOpenForgeApi(options = {}) {
 }
 function createMockPluginContext(options = {}) {
 	return createOpenForgeRegistryFake(options).createFrontendContext();
-}
-function createMemoryPluginStorage(calls = createTestingCalls()) {
-	const values = /* @__PURE__ */ new Map();
-	function scope(scopeKind, scopeId) {
-		const prefix = `${scopeKind}:${scopeId ?? ""}:`;
-		return {
-			async get(key) {
-				calls.storageGets.push({
-					scope: scopeKind,
-					scopeId,
-					key
-				});
-				return values.has(`${prefix}${key}`) ? values.get(`${prefix}${key}`) : null;
-			},
-			async set(key, value) {
-				values.set(`${prefix}${key}`, value);
-				calls.storageSets.push({
-					scope: scopeKind,
-					scopeId,
-					key,
-					value
-				});
-			},
-			async delete(key) {
-				values.delete(`${prefix}${key}`);
-				calls.storageDeletes.push({
-					scope: scopeKind,
-					scopeId,
-					key
-				});
-			}
-		};
-	}
-	return {
-		global: scope("global", null),
-		project: (projectId) => scope("project", projectId),
-		task: (taskId) => scope("task", taskId)
-	};
-}
-function createTestingCalls() {
-	return {
-		commandInvocations: [],
-		globalCommandInvocations: [],
-		backendInvocations: [],
-		emittedEvents: [],
-		emittedGlobalEvents: [],
-		openUrl: [],
-		navigationRequests: [],
-		notify: [],
-		taskCreations: [],
-		startPromptContributionConfigurations: [],
-		taskImplementationStarts: [],
-		taskListRequests: [],
-		taskSummaryUpdates: [],
-		taskStatusUpdates: [],
-		configWrites: [],
-		fsWrites: [],
-		shellSpawns: [],
-		shellWrites: [],
-		shellResizes: [],
-		shellKills: [],
-		shellBuffers: [],
-		browserSurfaceGetOrCreate: [],
-		browserSurfaceAttachments: [],
-		browserSurfaceDetaches: [],
-		browserSurfaceDestroys: [],
-		browserSurfaceNavigations: [],
-		browserSurfaceControls: [],
-		browserSurfaceSessionResets: [],
-		storageGets: [],
-		storageSets: [],
-		storageDeletes: []
-	};
-}
-function commandDescriptor(command) {
-	return {
-		id: command.id,
-		qualifiedId: command.qualifiedId,
-		pluginId: command.pluginId,
-		projectId: command.projectId,
-		title: command.title,
-		icon: command.icon,
-		shortcut: command.shortcut,
-		discoverable: command.discoverable ?? true,
-		input: command.input,
-		output: command.output
-	};
-}
-function createDisposable(dispose) {
-	let disposed = false;
-	return { async dispose() {
-		if (disposed) return;
-		disposed = true;
-		await dispose();
-	} };
-}
-function assertLocalId(kind, id) {
-	if (typeof id !== "string" || id.trim().length === 0) throw new Error(`${kind} registration requires a non-empty id`);
-	const trimmed = id.trim();
-	if (trimmed.startsWith("openforge.")) throw new Error(`${kind} registration cannot use openforge.* reserved namespace`);
-	if (trimmed.includes(":") || trimmed.startsWith(".") || trimmed.endsWith(".") || trimmed.includes("..")) throw new Error(`${kind} registration has invalid id "${trimmed}"`);
-}
-function assertTitle(kind, title) {
-	if (typeof title !== "string" || title.trim().length === 0) throw new Error(`${kind} registration requires a non-empty title`);
-}
-function assertFunction(kind, field, value) {
-	if (typeof value !== "function") throw new Error(`${kind} registration requires a ${field} function`);
 }
 //#endregion
 //#region packages/plugin-sdk/src/numberParsing.ts
