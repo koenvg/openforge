@@ -548,6 +548,22 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     return entry
   }
 
+  function rollbackFailedAcquisition(taskId: string, acquisition: TerminalAcquisition): void {
+    const entry = acquisition.entry
+    if (!entry) return
+
+    if (pool.get(taskId) === entry) pool.delete(taskId)
+    acquisition.entry = null
+
+    try {
+      disposeTerminalEntry(entry)
+    } catch (cleanupError) {
+      console.warn('[terminalPool] Failed to fully dispose terminal after initialization failure:', cleanupError)
+    } finally {
+      releaseAppEventsReconnectListenerIfIdle()
+    }
+  }
+
   function acquire(taskId: string): Promise<PoolEntry> {
     const pendingAcquisition = pendingAcquisitions.get(taskId)
     if (pendingAcquisition) return pendingAcquisition.promise
@@ -556,7 +572,10 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     if (existing) return Promise.resolve(existing)
 
     const operation: TerminalAcquisition = { released: false, entry: null }
-    const promise = initializeTerminal(taskId, operation)
+    const promise = initializeTerminal(taskId, operation).catch((error: unknown) => {
+      rollbackFailedAcquisition(taskId, operation)
+      throw error
+    })
     const acquisition: PendingTerminalAcquisition = { operation, promise }
     pendingAcquisitions.set(taskId, acquisition)
 
@@ -653,10 +672,16 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   
   function disposeTerminalEntry(entry: PoolEntry): void {
     detach(entry)
-    entry.unlisteners.forEach(fn => {
-      fn()
-    })
-    entry.unlisteners.length = 0
+
+    const unlisteners = entry.unlisteners.splice(0)
+    for (const unlisten of unlisteners) {
+      try {
+        unlisten()
+      } catch (error) {
+        console.warn('[terminalPool] Failed to remove terminal event listener:', error)
+      }
+    }
+
     disposeWebglContextLossListener(entry)
     entry.terminal.dispose()
   }
