@@ -36,20 +36,24 @@ const imageAddonMocks = vi.hoisted(() => ({
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: vi.fn(function Terminal() {
+    const loadedAddons: Array<{ dispose?: () => void }> = []
     const terminal = {
       write: vi.fn(),
       reset: vi.fn(),
       open: vi.fn(),
-      dispose: vi.fn(),
+      dispose: vi.fn(() => {
+        for (const addon of loadedAddons) addon.dispose?.()
+      }),
       refresh: vi.fn(),
       focus: vi.fn(),
-      loadAddon: vi.fn((addon: { activate?: unknown; options?: { iipSupport?: boolean } }) => {
+      loadAddon: vi.fn((addon: { activate?: unknown; dispose?: () => void; options?: { iipSupport?: boolean } }) => {
         if (terminalMocks.failImageAddon && addon.options?.iipSupport) {
           throw new Error('image addon unavailable')
         }
         if (terminalMocks.failCompatibilityAddon && addon.activate && !addon.options?.iipSupport) {
           throw new Error('compatibility addon unavailable')
         }
+        loadedAddons.push(addon)
       }),
       onData: vi.fn(),
       attachCustomKeyEventHandler: vi.fn(),
@@ -67,13 +71,14 @@ vi.mock('@xterm/addon-fit', () => ({
     return {
       fit: vi.fn(),
       proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
+      dispose: vi.fn(),
     }
   }),
 }))
 
 vi.mock('@xterm/addon-web-links', () => ({
   WebLinksAddon: vi.fn(function WebLinksAddon() {
-    return {}
+    return { dispose: vi.fn() }
   }),
 }))
 
@@ -104,6 +109,7 @@ interface TestHost extends TerminalRuntimeHost {
   getListenerCount(eventName: string): number
   deferBufferRead(taskId: string): () => void
   deferListenerRegistration(eventName: string): () => void
+  failNextListenerRegistration(eventName: string): void
 }
 
 function createDeferredGate(): { promise: Promise<void>; release: () => void } {
@@ -119,11 +125,15 @@ function createHost(): TestHost {
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
+  const listenerRegistrationFailures = new Set<string>()
 
   return {
     themeMode: writable('dark'),
     async listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void) {
       await listenerRegistrationGates.get(eventName)?.promise
+      if (listenerRegistrationFailures.delete(eventName)) {
+        throw new Error(`listener registration failed: ${eventName}`)
+      }
       const current = listeners.get(eventName) ?? new Set()
       current.add(handler as (event: TerminalRuntimeEvent<unknown>) => void)
       listeners.set(eventName, current)
@@ -160,6 +170,9 @@ function createHost(): TestHost {
         gate.release()
       }
     },
+    failNextListenerRegistration(eventName: string) {
+      listenerRegistrationFailures.add(eventName)
+    },
     getListenerCount(eventName: string) {
       return listeners.get(eventName)?.size ?? 0
     },
@@ -187,6 +200,37 @@ describe('terminal runtime acquisition', () => {
     expect(host.getListenerCount('pty-output-T-1-shell-0')).toBe(1)
     expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(1)
   })
+
+  it.each(['pty-output', 'pty-exit'] as const)(
+    'rolls back allocated resources and retained listeners when %s setup fails, then retries cleanly',
+    async (failedEventPrefix) => {
+      const terminalKey = 'T-1-shell-0'
+      const outputEvent = `pty-output-${terminalKey}`
+      const exitEvent = `pty-exit-${terminalKey}`
+      const failedEvent = `${failedEventPrefix}-${terminalKey}`
+      const host = createHost()
+      host.failNextListenerRegistration(failedEvent)
+      const runtime = createTerminalRuntime(host)
+
+      await expect(runtime.acquire(terminalKey)).rejects.toThrow(`listener registration failed: ${failedEvent}`)
+
+      expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+      expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
+      expect(runtime.hasTerminal(terminalKey)).toBe(false)
+      expect(runtime._getPool().has(terminalKey)).toBe(false)
+      expect(host.getListenerCount(outputEvent)).toBe(0)
+      expect(host.getListenerCount(exitEvent)).toBe(0)
+      expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(0)
+
+      const retriedEntry = await runtime.acquire(terminalKey)
+
+      expect(terminalMocks.instances).toHaveLength(2)
+      expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
+      expect(host.getListenerCount(outputEvent)).toBe(1)
+      expect(host.getListenerCount(exitEvent)).toBe(1)
+      expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
+    },
+  )
 
   it('reacquires cleanly after release invalidates initialization before pool registration', async () => {
     const terminalKey = 'T-1-shell-0'
@@ -282,6 +326,35 @@ describe('terminal runtime acquisition', () => {
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
     expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(1)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
+  })
+
+  it('rolls back the provisional pool entry when reconnect listener setup fails, then retries cleanly', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const outputEvent = `pty-output-${terminalKey}`
+    const exitEvent = `pty-exit-${terminalKey}`
+    const host = createHost()
+    host.failNextListenerRegistration(APP_EVENTS_RECONNECTED_EVENT)
+    const runtime = createTerminalRuntime(host)
+
+    await expect(runtime.acquire(terminalKey)).rejects.toThrow(
+      `listener registration failed: ${APP_EVENTS_RECONNECTED_EVENT}`,
+    )
+
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(runtime.hasTerminal(terminalKey)).toBe(false)
+    expect(runtime._getPool().has(terminalKey)).toBe(false)
+    expect(host.getListenerCount(outputEvent)).toBe(0)
+    expect(host.getListenerCount(exitEvent)).toBe(0)
+    expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(0)
+
+    const retriedEntry = await runtime.acquire(terminalKey)
+
+    expect(terminalMocks.instances).toHaveLength(2)
+    expect(retriedEntry).toBe(runtime._getPool().get(terminalKey))
+    expect(host.getListenerCount(outputEvent)).toBe(1)
+    expect(host.getListenerCount(exitEvent)).toBe(1)
+    expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
   })
 })
 
