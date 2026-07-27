@@ -10,6 +10,7 @@ import type {
 import type { OpenForgeDesktopBridge } from '../desktopIpc'
 
 const STATE_EVENT = 'task-browser-surface-state'
+const MAX_ATTACHMENT_UPDATE_ATTEMPTS = 3
 let attachmentSequence = 0
 
 interface BrowserSurfaceReference {
@@ -55,6 +56,155 @@ function stateCopy(state: TaskBrowserSurfaceState): TaskBrowserSurfaceState {
   return { ...state, error: state.error ? { ...state.error } : null }
 }
 
+interface TrackedSurfaceAttachments {
+  pluginId: string
+  taskId: string
+  attachments: Set<Disposable>
+}
+
+const trackedSurfaceAttachments = new Map<string, TrackedSurfaceAttachments>()
+
+interface AttachmentCleanupScope {
+  pluginId: string
+  taskId: string | null
+  surfaceId: string | null
+}
+
+interface ActiveAttachmentCleanup {
+  scope: AttachmentCleanupScope
+  operation: Promise<void>
+}
+
+const activeAttachmentCleanups = new Map<number, ActiveAttachmentCleanup>()
+let attachmentCleanupSequence = 0
+let attachmentCleanupEpoch = 0
+
+function cleanupScopesOverlap(left: AttachmentCleanupScope, right: AttachmentCleanupScope): boolean {
+  if (left.pluginId !== right.pluginId) return false
+  if (left.taskId !== null && right.taskId !== null && left.taskId !== right.taskId) return false
+  return left.surfaceId === null || right.surfaceId === null || left.surfaceId === right.surfaceId
+}
+
+async function waitForAttachmentCleanup(scope: AttachmentCleanupScope): Promise<number> {
+  let observedEpoch = attachmentCleanupEpoch
+  while (true) {
+    const pending = Array.from(activeAttachmentCleanups.values())
+      .filter(cleanup => cleanupScopesOverlap(cleanup.scope, scope))
+      .map(cleanup => cleanup.operation.catch(() => undefined))
+    await Promise.all(pending)
+    if (observedEpoch === attachmentCleanupEpoch) {
+      const stillActive = Array.from(activeAttachmentCleanups.values())
+        .some(cleanup => cleanupScopesOverlap(cleanup.scope, scope))
+      if (!stillActive) return observedEpoch
+    }
+    observedEpoch = attachmentCleanupEpoch
+  }
+}
+
+async function waitForStableAttachmentCleanup(scope: AttachmentCleanupScope): Promise<void> {
+  while (true) {
+    const stableEpoch = await waitForAttachmentCleanup(scope)
+    if (stableEpoch === attachmentCleanupEpoch) return
+  }
+}
+
+function runAttachmentCleanup(
+  scope: AttachmentCleanupScope,
+  cleanup: () => Promise<void>,
+): Promise<void> {
+  attachmentCleanupEpoch += 1
+  const cleanupId = ++attachmentCleanupSequence
+  const previous = Array.from(activeAttachmentCleanups.values())
+    .filter(active => cleanupScopesOverlap(active.scope, scope))
+    .map(active => active.operation.catch(() => undefined))
+  let operation: Promise<void>
+  operation = Promise.all(previous)
+    .then(() => cleanup())
+    .finally(() => { activeAttachmentCleanups.delete(cleanupId) })
+  activeAttachmentCleanups.set(cleanupId, { scope, operation })
+  return operation
+}
+
+function trackAttachment(
+  pluginId: string,
+  taskId: string,
+  surfaceId: string,
+  attachment: Disposable,
+): Disposable {
+  let entry = trackedSurfaceAttachments.get(surfaceId)
+  if (!entry) {
+    entry = { pluginId, taskId, attachments: new Set() }
+    trackedSurfaceAttachments.set(surfaceId, entry)
+  }
+  let tracked = true
+  const disposable: Disposable = {
+    async dispose() {
+      if (!tracked) return
+      tracked = false
+      entry?.attachments.delete(disposable)
+      if (entry?.attachments.size === 0 && trackedSurfaceAttachments.get(surfaceId) === entry) {
+        trackedSurfaceAttachments.delete(surfaceId)
+      }
+      await attachment.dispose()
+    },
+  }
+  entry.attachments.add(disposable)
+  return disposable
+}
+
+async function disposeTrackedSurfaceAttachments(surfaceId: string): Promise<void> {
+  const entry = trackedSurfaceAttachments.get(surfaceId)
+  if (!entry) return
+  trackedSurfaceAttachments.delete(surfaceId)
+  await Promise.allSettled(Array.from(entry.attachments, attachment => attachment.dispose()))
+}
+
+async function disposeTrackedAttachmentsWhere(
+  predicate: (entry: TrackedSurfaceAttachments) => boolean,
+): Promise<void> {
+  const surfaceIds = Array.from(trackedSurfaceAttachments.entries())
+    .filter(([, entry]) => predicate(entry))
+    .map(([surfaceId]) => surfaceId)
+  await Promise.all(surfaceIds.map(disposeTrackedSurfaceAttachments))
+}
+
+async function createTrackedAttachment(
+  pluginId: string,
+  taskId: string,
+  surfaceId: string,
+  bridge: OpenForgeDesktopBridge,
+  element: HTMLElement,
+): Promise<Disposable> {
+  const cleanupScope = { pluginId, taskId, surfaceId }
+  await waitForStableAttachmentCleanup(cleanupScope)
+  let released = false
+  let attachmentPromise: Promise<Disposable> | null = null
+  const pendingAttachment: Disposable = {
+    async dispose() {
+      released = true
+      const attachment = await attachmentPromise?.catch(() => null)
+      await attachment?.dispose()
+    },
+  }
+  attachmentPromise = createAttachment(bridge, surfaceId, element)
+  const trackedAttachment = trackAttachment(pluginId, taskId, surfaceId, pendingAttachment)
+
+  try {
+    await attachmentPromise
+    if (released) {
+      throw new BrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Attachment was released during attachment')
+    }
+    return trackedAttachment
+  } catch (error) {
+    const releasedByLifecycle = released
+    await trackedAttachment.dispose()
+    if (releasedByLifecycle && !(error instanceof BrowserSurfaceError && error.code === 'SURFACE_DESTROYED')) {
+      throw new BrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Attachment was released during attachment')
+    }
+    throw error
+  }
+}
+
 type SerializableBounds = { x: number; y: number; width: number; height: number }
 
 function intersectBounds(left: SerializableBounds, right: SerializableBounds): SerializableBounds | null {
@@ -66,7 +216,7 @@ function intersectBounds(left: SerializableBounds, right: SerializableBounds): S
   return { x, y, width: rightEdge - x, height: bottomEdge - y }
 }
 
-function visibleElementBounds(element: HTMLElement, rect: DOMRect, intersectionBounds: SerializableBounds | null): SerializableBounds | null {
+function visibleElementBounds(element: HTMLElement, rect: DOMRect): SerializableBounds | null {
   const style = getComputedStyle(element)
   if (!element.isConnected || rect.width <= 0 || rect.height <= 0 || style.display === 'none' || style.visibility === 'hidden') return null
 
@@ -74,7 +224,6 @@ function visibleElementBounds(element: HTMLElement, rect: DOMRect, intersectionB
     { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight },
   )
-  if (visible && intersectionBounds) visible = intersectBounds(visible, intersectionBounds)
 
   let ancestor = element.parentElement
   while (visible && ancestor) {
@@ -97,42 +246,97 @@ function visibleElementBounds(element: HTMLElement, rect: DOMRect, intersectionB
   return visible
 }
 
-function createAttachment(
+async function createAttachment(
   bridge: OpenForgeDesktopBridge,
   surfaceId: string,
   element: HTMLElement,
 ): Promise<Disposable> {
-  const attachmentId = `task-browser-attachment-${++attachmentSequence}`
+  const attachmentGeneration = ++attachmentSequence
+  const attachmentId = `task-browser-attachment-${attachmentGeneration}`
   let disposed = false
   let frame: number | null = null
   let intersecting = true
-  let intersectionBounds: SerializableBounds | null = null
+  let shouldTrackPosition = false
+  let lastBoundsKey: string | undefined
+  let failedBoundsKey: string | undefined
+  let failedBoundsAttempts = 0
+  let updateQueue: Promise<void> = Promise.resolve()
 
   const update = async () => {
-    frame = null
     if (disposed) return
     const rect = element.getBoundingClientRect()
-    const bounds = intersecting ? visibleElementBounds(element, rect, intersectionBounds) : null
-    const response = await bridge.invoke(
-      bounds ? 'task_browser_surface_attach' : 'task_browser_surface_detach',
-      bounds
-        ? { surfaceId, attachmentId, bounds }
-        : { surfaceId, attachmentId },
-    )
-    if (!isHostResponse(response) || !response.ok) {
-      const error = isHostResponse(response) && !response.ok
-        ? new BrowserSurfaceError(response.error.code, response.error.message)
-        : new BrowserSurfaceError('HOST_UNAVAILABLE', 'Task Browser Surface attachment host returned an invalid response')
+    const bounds = intersecting ? visibleElementBounds(element, rect) : null
+    shouldTrackPosition = bounds !== null
+    const boundsKey = JSON.stringify(bounds)
+    if (boundsKey === lastBoundsKey) {
+      failedBoundsKey = undefined
+      failedBoundsAttempts = 0
+      return
+    }
+    if (boundsKey !== failedBoundsKey) {
+      failedBoundsKey = undefined
+      failedBoundsAttempts = 0
+    }
+    if (failedBoundsAttempts >= MAX_ATTACHMENT_UPDATE_ATTEMPTS) return
+
+    try {
+      const response = await bridge.invoke('task_browser_surface_attach', {
+        surfaceId,
+        attachmentId,
+        attachmentGeneration,
+        bounds,
+      })
+      if (!isHostResponse(response) || !response.ok) {
+        const error = isHostResponse(response) && !response.ok
+          ? new BrowserSurfaceError(response.error.code, response.error.message)
+          : new BrowserSurfaceError('HOST_UNAVAILABLE', 'Task Browser Surface attachment host returned an invalid response')
+        throw error
+      }
+      lastBoundsKey = boundsKey
+      failedBoundsKey = undefined
+      failedBoundsAttempts = 0
+    } catch (error) {
+      failedBoundsKey = boundsKey
+      failedBoundsAttempts += 1
       throw error
     }
+  }
+
+  const queueUpdate = (): Promise<void> => {
+    const operation = updateQueue.then(update)
+    updateQueue = operation.catch(() => undefined)
+    return operation
+  }
+
+  const reportScheduledError = (error: unknown) => {
+    console.error('[taskBrowserSurfaces] Failed to update Task Browser Attachment bounds:', error)
   }
 
   const schedule = () => {
     if (disposed || frame !== null) return
     if (typeof requestAnimationFrame === 'function') {
-      frame = requestAnimationFrame(() => { void update() })
+      frame = requestAnimationFrame(() => {
+        void queueUpdate()
+          .catch(reportScheduledError)
+          .finally(() => {
+            frame = null
+            if (
+              shouldTrackPosition
+              || (failedBoundsKey !== undefined && failedBoundsAttempts < MAX_ATTACHMENT_UPDATE_ATTEMPTS)
+            ) schedule()
+          })
+      })
     } else {
-      void update()
+      void queueUpdate().catch(reportScheduledError)
+    }
+  }
+
+  while (true) {
+    try {
+      await queueUpdate()
+      break
+    } catch (error) {
+      if (failedBoundsAttempts >= MAX_ATTACHMENT_UPDATE_ATTEMPTS) throw error
     }
   }
 
@@ -141,14 +345,6 @@ function createAttachment(
     ? new IntersectionObserver(entries => {
         const entry = entries.find(candidate => candidate.target === element)
         intersecting = entry?.isIntersecting ?? false
-        intersectionBounds = entry?.isIntersecting
-          ? {
-              x: entry.intersectionRect.x,
-              y: entry.intersectionRect.y,
-              width: entry.intersectionRect.width,
-              height: entry.intersectionRect.height,
-            }
-          : null
         schedule()
       })
     : null
@@ -158,8 +354,9 @@ function createAttachment(
   mutationObserver?.observe(document.documentElement, { attributes: true, childList: true, subtree: true })
   window.addEventListener('resize', schedule)
   window.addEventListener('scroll', schedule, true)
+  if (shouldTrackPosition) schedule()
 
-  return update().then(() => ({
+  return {
     async dispose() {
       if (disposed) return
       disposed = true
@@ -169,9 +366,18 @@ function createAttachment(
       mutationObserver?.disconnect()
       window.removeEventListener('resize', schedule)
       window.removeEventListener('scroll', schedule, true)
-      await invokeHost<void>('task_browser_surface_detach', { surfaceId, attachmentId })
+      await updateQueue
+      try {
+        await invokeHost<void>('task_browser_surface_detach', {
+          surfaceId,
+          attachmentId,
+          attachmentGeneration,
+        })
+      } catch (error) {
+        if (!(error instanceof BrowserSurfaceError) || error.code !== 'SURFACE_DESTROYED') throw error
+      }
     },
-  }))
+  }
 }
 
 class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
@@ -181,26 +387,46 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
   constructor(
     private readonly bridge: OpenForgeDesktopBridge,
     private readonly reference: BrowserSurfaceReference,
+    private readonly pluginId: string,
+    private readonly taskId: string,
   ) {
     this.currentState = stateCopy(reference.state)
   }
 
-  attach(element: HTMLElement): Promise<Disposable> {
+  async attach(element: HTMLElement): Promise<Disposable> {
     this.assertLive()
     if (!(element instanceof HTMLElement)) {
-      return Promise.reject(new BrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Surface attach requires an HTMLElement'))
+      throw new BrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Surface attach requires an HTMLElement')
     }
-    return createAttachment(this.bridge, this.reference.surfaceId, element)
+    return createTrackedAttachment(
+      this.pluginId,
+      this.taskId,
+      this.reference.surfaceId,
+      this.bridge,
+      element,
+    )
   }
 
   async detach(): Promise<void> {
     this.assertLive()
-    await invokeHost<void>('task_browser_surface_detach', { surfaceId: this.reference.surfaceId })
+    await runAttachmentCleanup(
+      { pluginId: this.pluginId, taskId: this.taskId, surfaceId: this.reference.surfaceId },
+      async () => {
+        await disposeTrackedSurfaceAttachments(this.reference.surfaceId)
+        await invokeHost<void>('task_browser_surface_detach', { surfaceId: this.reference.surfaceId })
+      },
+    )
   }
 
   async destroy(): Promise<void> {
     if (this.destroyed) return
-    await invokeHost<void>('task_browser_surface_destroy', { surfaceId: this.reference.surfaceId })
+    await runAttachmentCleanup(
+      { pluginId: this.pluginId, taskId: this.taskId, surfaceId: this.reference.surfaceId },
+      async () => {
+        await disposeTrackedSurfaceAttachments(this.reference.surfaceId)
+        await invokeHost<void>('task_browser_surface_destroy', { surfaceId: this.reference.surfaceId })
+      },
+    )
     this.destroyed = true
   }
 
@@ -263,20 +489,33 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
 export function createHostBrowserSurfaces(pluginId: string): BrowserSurfacesAPI {
   return {
     async getOrCreate(request: GetOrCreateBrowserSurfaceRequest) {
+      await waitForStableAttachmentCleanup({ pluginId, taskId: request.taskId, surfaceId: null })
       const bridge = desktopBridge()
       const payload = request.initialUrl === undefined
         ? { pluginId, taskId: request.taskId, id: request.id }
         : { pluginId, ...request }
       const reference = await invokeHost<BrowserSurfaceReference>('task_browser_surface_get_or_create', payload)
-      return new HostTaskBrowserSurfaceController(bridge, reference)
+      return new HostTaskBrowserSurfaceController(bridge, reference, pluginId, request.taskId)
     },
     async resetSession(taskId: string) {
-      await invokeHost<void>('task_browser_surface_reset_session', { pluginId, taskId })
+      await runAttachmentCleanup(
+        { pluginId, taskId, surfaceId: null },
+        async () => {
+          await disposeTrackedAttachmentsWhere(entry => entry.pluginId === pluginId && entry.taskId === taskId)
+          await invokeHost<void>('task_browser_surface_reset_session', { pluginId, taskId })
+        },
+      )
     },
   }
 }
 
 export async function destroyHostPluginBrowserSurfaces(pluginId: string): Promise<void> {
   if (typeof window === 'undefined' || !window.openforge) return
-  await invokeHost<void>('task_browser_surface_destroy_plugin', { pluginId })
+  await runAttachmentCleanup(
+    { pluginId, taskId: null, surfaceId: null },
+    async () => {
+      await disposeTrackedAttachmentsWhere(entry => entry.pluginId === pluginId)
+      await invokeHost<void>('task_browser_surface_destroy_plugin', { pluginId })
+    },
+  )
 }

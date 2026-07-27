@@ -86,24 +86,44 @@ const electronFakes = vi.hoisted(() => {
     setBounds(bounds: unknown): void { this.bounds.push(bounds) }
   }
 
+  class FakeBrowserWindow {
+    readonly addedViews: FakeWebContentsView[] = []
+    readonly removedViews: FakeWebContentsView[] = []
+    readonly contentView = {
+      addChildView: (view: FakeWebContentsView) => { this.addedViews.push(view) },
+      removeChildView: (view: FakeWebContentsView) => { this.removedViews.push(view) },
+    }
+    destroyed = false
+
+    isDestroyed(): boolean { return this.destroyed }
+  }
+
   const views: FakeWebContentsView[] = []
   const sessions = new Map<string, FakeSession>()
+  const windows = new Map<number, FakeBrowserWindow>()
 
   return {
     FakeSession,
     FakeWebContentsView,
     views,
     sessions,
+    windows,
+    registerWindow(id: number) {
+      const window = new FakeBrowserWindow()
+      windows.set(id, window)
+      return window
+    },
     reset() {
       views.length = 0
       sessions.clear()
+      windows.clear()
     },
   }
 })
 
 vi.mock('electron', () => ({
   app: { isPackaged: true },
-  BrowserWindow: { fromId: () => null },
+  BrowserWindow: { fromId: (id: number) => electronFakes.windows.get(id) ?? null },
   WebContentsView: electronFakes.FakeWebContentsView,
   session: {
     fromPartition(partition: string) {
@@ -130,6 +150,33 @@ function preventableEvent() {
 describe('Electron Task Browser Surface navigation adapter', () => {
   beforeEach(() => electronFakes.reset())
 
+  it('attaches, detaches, throttles, and destroys the native live page', () => {
+    const window = electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      partition: 'persist:test-browser',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+    })
+    const view = electronFakes.views[0]
+
+    expect(view.webContents.backgroundThrottling).toEqual([true])
+    surface.attach(10, { x: 10.4, y: 20.6, width: 300.2, height: 199.8 })
+    expect(window.addedViews).toEqual([view])
+    expect(view.bounds).toEqual([{ x: 10, y: 21, width: 301, height: 199 }])
+    surface.attach(10, { x: 0.5, y: 0.5, width: 799.5, height: 599.5 })
+    expect(view.bounds.at(-1)).toEqual({ x: 1, y: 1, width: 799, height: 599 })
+    expect(view.webContents.backgroundThrottling.at(-1)).toBe(false)
+
+    surface.attach(10, { x: 0.1, y: 0.1, width: 0.2, height: 0.2 })
+    expect(window.removedViews).toEqual([view])
+    expect(view.webContents.backgroundThrottling.at(-1)).toBe(true)
+
+    surface.detach()
+    expect(window.removedViews).toEqual([view])
+    expect(view.webContents.backgroundThrottling.at(-1)).toBe(true)
+
+    surface.destroy()
+    expect(view.webContents.destroyed).toBe(true)
+  })
   it('keeps secure browser preferences fixed and only permits HTTP(S) top-level destinations', () => {
     const factory = new ElectronTaskBrowserSurfaceFactory()
     factory.createSurface({

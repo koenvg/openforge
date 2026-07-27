@@ -188,6 +188,10 @@ export async function deactivatePluginBackend(pluginId: string): Promise<void> {
   clearPluginRuntimeHostState(pluginId)
 }
 
+export async function destroyPluginBrowserSurfaces(pluginId: string): Promise<void> {
+  await destroyHostPluginBrowserSurfaces(pluginId)
+}
+
 export async function ensurePluginBackendReady(pluginId: string): Promise<void> {
   const entry = get(installedPlugins).get(pluginId)
   if (!entry?.manifest.backend) {
@@ -334,7 +338,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     destroyPluginBrowserSurfaces: (qualifiedPluginId: string) => {
       if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Surface plugin identity mismatch')
-      return destroyHostPluginBrowserSurfaces(pluginId)
+      return destroyPluginBrowserSurfaces(pluginId)
     },
     invokeHostCommand: (command: string, payload: unknown) => {
       ensurePluginHostStoreSubscriptions()
