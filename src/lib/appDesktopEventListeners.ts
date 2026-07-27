@@ -14,6 +14,7 @@ import { finalizeAgentSession, getLatestSession, getTaskDetail } from './ipc'
 import { getShellLifecycleState, release as releaseTerminal, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
 import { shouldHydratePtyInstanceFromAgentStatusMetadata, type AgentStatusChangedKind } from './agentPanelSessionSync'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
+import { loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForProject } from './plugin/pluginRegistry'
 import { getTaskPromptText } from './taskPrompt'
 import type { AgentEvent, AgentSession } from './types'
 
@@ -100,20 +101,6 @@ function setAgentNeedsPermissionNotification(taskId: string, session: AgentSessi
   return true
 }
 
-async function defaultReloadInstalledPluginMetadata(pluginId: string): Promise<boolean> {
-  const registry = await import('./plugin/pluginRegistry')
-  return registry.reloadInstalledPluginMetadata(pluginId)
-}
-
-async function defaultReloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
-  const registry = await import('./plugin/pluginRegistry')
-  return registry.reloadPluginForProject(projectId, pluginId)
-}
-
-async function defaultLoadEnabledPluginsForProject(projectId: string): Promise<void> {
-  const registry = await import('./plugin/pluginRegistry')
-  return registry.loadEnabledForProject(projectId)
-}
 
 async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
   const existing = get(activeSessions).get(taskId)
@@ -393,7 +380,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
     await listen<{ plugin_id: string }>('plugin-installation-changed', async (event) => {
       const pluginId = event.payload.plugin_id
       try {
-        await (deps.reloadInstalledPluginMetadata ?? defaultReloadInstalledPluginMetadata)(pluginId)
+        await (deps.reloadInstalledPluginMetadata ?? reloadInstalledPluginMetadata)(pluginId)
       } catch (e) {
         console.error('[plugins] Failed to refresh installed plugin from sidecar event:', pluginId, e)
       }
@@ -405,7 +392,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
       const projectId = event.payload.project_id
       if ((deps.getActiveProjectId?.() ?? projectId) !== projectId) return
       try {
-        await (deps.loadEnabledPluginsForProject ?? defaultLoadEnabledPluginsForProject)(projectId)
+        await (deps.loadEnabledPluginsForProject ?? loadEnabledForProject)(projectId)
       } catch (e) {
         console.error('[plugins] Failed to refresh project plugin enablement from sidecar event:', projectId, e)
       }
@@ -418,9 +405,9 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
       const projectId = deps.getActiveProjectId?.() ?? null
       try {
         if (projectId) {
-          await (deps.reloadPluginForProject ?? defaultReloadPluginForProject)(projectId, pluginId)
+          await (deps.reloadPluginForProject ?? reloadPluginForProject)(projectId, pluginId)
         } else {
-          await (deps.reloadInstalledPluginMetadata ?? defaultReloadInstalledPluginMetadata)(pluginId)
+          await (deps.reloadInstalledPluginMetadata ?? reloadInstalledPluginMetadata)(pluginId)
         }
       } catch (e) {
         console.error('[plugins] Failed to reload plugin from sidecar request:', pluginId, e)
