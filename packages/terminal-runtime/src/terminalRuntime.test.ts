@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
-import { createTerminalRuntime, type TerminalRuntimeEvent, type TerminalRuntimeHost } from './terminalRuntime'
+import {
+  APP_EVENTS_RECONNECTED_EVENT,
+  createTerminalRuntime,
+  type TerminalRuntimeEvent,
+  type TerminalRuntimeHost,
+} from './terminalRuntime'
 
 const terminalMocks = vi.hoisted(() => ({
   failCompatibilityAddon: false,
@@ -96,21 +101,36 @@ vi.mock('@xterm/addon-image', () => ({
 interface TestHost extends TerminalRuntimeHost {
   emit<TPayload>(eventName: string, payload: TPayload): void
   setBuffer(taskId: string, buffer: string | null): void
+  getListenerCount(eventName: string): number
+  deferBufferRead(taskId: string): () => void
+  deferListenerRegistration(eventName: string): () => void
+}
+
+function createDeferredGate(): { promise: Promise<void>; release: () => void } {
+  let release!: () => void
+  const promise = new Promise<void>(resolve => {
+    release = resolve
+  })
+  return { promise, release }
 }
 
 function createHost(): TestHost {
   const listeners = new Map<string, Set<(event: TerminalRuntimeEvent<unknown>) => void>>()
   const buffers = new Map<string, string | null>()
+  const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
+  const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
 
   return {
     themeMode: writable('dark'),
     async listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void) {
+      await listenerRegistrationGates.get(eventName)?.promise
       const current = listeners.get(eventName) ?? new Set()
       current.add(handler as (event: TerminalRuntimeEvent<unknown>) => void)
       listeners.set(eventName, current)
       return () => current.delete(handler as (event: TerminalRuntimeEvent<unknown>) => void)
     },
     async getPtyBuffer(taskId: string) {
+      await bufferReadGates.get(taskId)?.promise
       return buffers.get(taskId) ?? null
     },
     async writePty() {},
@@ -124,8 +144,146 @@ function createHost(): TestHost {
     setBuffer(taskId: string, buffer: string | null) {
       buffers.set(taskId, buffer)
     },
+    deferBufferRead(taskId: string) {
+      const gate = createDeferredGate()
+      bufferReadGates.set(taskId, gate)
+      return () => {
+        if (bufferReadGates.get(taskId) === gate) bufferReadGates.delete(taskId)
+        gate.release()
+      }
+    },
+    deferListenerRegistration(eventName: string) {
+      const gate = createDeferredGate()
+      listenerRegistrationGates.set(eventName, gate)
+      return () => {
+        if (listenerRegistrationGates.get(eventName) === gate) listenerRegistrationGates.delete(eventName)
+        gate.release()
+      }
+    },
+    getListenerCount(eventName: string) {
+      return listeners.get(eventName)?.size ?? 0
+    },
   }
 }
+
+describe('terminal runtime acquisition', () => {
+  beforeEach(() => {
+    terminalMocks.instances.length = 0
+    imageAddonMocks.instances.length = 0
+  })
+
+  it('deduplicates concurrent acquisitions for one terminal key', async () => {
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+
+    const [first, second] = await Promise.all([
+      runtime.acquire('T-1-shell-0'),
+      runtime.acquire('T-1-shell-0'),
+    ])
+
+    expect(second).toBe(first)
+    expect(terminalMocks.instances).toHaveLength(1)
+    expect(imageAddonMocks.instances).toHaveLength(1)
+    expect(host.getListenerCount('pty-output-T-1-shell-0')).toBe(1)
+    expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(1)
+  })
+
+  it('reacquires cleanly after release invalidates initialization before pool registration', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
+    const resumeBufferRead = host.deferBufferRead(terminalKey)
+    const runtime = createTerminalRuntime(host)
+
+    const releasedAcquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => expect(getPtyBuffer).toHaveBeenCalledOnce())
+
+    runtime.release(terminalKey)
+    resumeBufferRead()
+    const currentAcquisition = runtime.acquire(terminalKey)
+
+    const [releasedEntry, currentEntry] = await Promise.all([releasedAcquisition, currentAcquisition])
+
+    expect(releasedEntry).not.toBe(currentEntry)
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
+  })
+
+  it('releaseAllForTask invalidates a pending acquisition before pool registration', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
+    const resumeBufferRead = host.deferBufferRead(terminalKey)
+    const runtime = createTerminalRuntime(host)
+
+    const releasedAcquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => expect(getPtyBuffer).toHaveBeenCalledOnce())
+
+    expect(runtime.releaseAllForTask('T-1')).toBe(1)
+    resumeBufferRead()
+    await releasedAcquisition
+
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(runtime.hasTerminal(terminalKey)).toBe(false)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(0)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(0)
+  })
+
+  it('does not publish a released entry after final PTY listener registration', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    const listenEvent = vi.spyOn(host, 'listenEvent')
+    const resumeExitListenerRegistration = host.deferListenerRegistration(`pty-exit-${terminalKey}`)
+    const runtime = createTerminalRuntime(host)
+
+    const releasedAcquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => {
+      expect(listenEvent).toHaveBeenCalledWith(`pty-exit-${terminalKey}`, expect.any(Function))
+    })
+
+    resumeExitListenerRegistration()
+    // Let listener registration and retention settle, but release before initializeTerminal resumes.
+    await Promise.resolve()
+    await Promise.resolve()
+    runtime.release(terminalKey)
+
+    const releasedEntry = await releasedAcquisition
+
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(runtime.hasTerminal(terminalKey)).toBe(false)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(0)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(0)
+
+    const currentEntry = await runtime.acquire(terminalKey)
+    expect(currentEntry).not.toBe(releasedEntry)
+    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+  })
+
+  it('reacquires cleanly after release invalidates initialization during reconnect setup', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    const resumeReconnectRegistration = host.deferListenerRegistration(APP_EVENTS_RECONNECTED_EVENT)
+    const runtime = createTerminalRuntime(host)
+
+    const releasedAcquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => expect(runtime.hasTerminal(terminalKey)).toBe(true))
+
+    runtime.release(terminalKey)
+    const currentAcquisition = runtime.acquire(terminalKey)
+    resumeReconnectRegistration()
+
+    const [releasedEntry, currentEntry] = await Promise.all([releasedAcquisition, currentAcquisition])
+
+    expect(releasedEntry).not.toBe(currentEntry)
+    expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
+    expect(runtime._getPool().get(terminalKey)).toBe(currentEntry)
+    expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
+  })
+})
 
 describe('terminal runtime shell output lifecycle', () => {
   beforeEach(() => {

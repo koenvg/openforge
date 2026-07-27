@@ -81,12 +81,23 @@ export interface ShellLifecycleState {
 
 type ShellLifecycleListener = (state: ShellLifecycleState) => void
 
+interface TerminalAcquisition {
+  released: boolean
+  entry: PoolEntry | null
+}
+
+interface PendingTerminalAcquisition {
+  operation: TerminalAcquisition
+  promise: Promise<PoolEntry>
+}
+
 export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 export function createTerminalRuntime(host: TerminalRuntimeHost) {
   const activeThemeMode = host.themeMode ?? defaultThemeMode
 
   const pool = new Map<string, PoolEntry>()
+  const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
   const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
   const shellLifecycleListeners = new Map<string, Set<ShellLifecycleListener>>()
   const openedTerminals = new WeakSet<Terminal>()
@@ -400,13 +411,34 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     if (pool.size > 0) return
     appEventsReconnectUnlisten?.()
     appEventsReconnectUnlisten = null
-    appEventsReconnectListenerPending = null
   }
   
-  async function acquire(taskId: string): Promise<PoolEntry> {
-    const existing = pool.get(taskId)
-    if (existing) return existing
-  
+  function disposeReleasedAcquisition(acquisition: TerminalAcquisition): boolean {
+    if (!acquisition.released) return false
+
+    if (acquisition.entry) {
+      disposeTerminalEntry(acquisition.entry)
+      acquisition.entry = null
+    }
+    return true
+  }
+
+  async function retainAcquisitionListener(
+    acquisition: TerminalAcquisition,
+    entry: PoolEntry,
+    listenerRegistration: Promise<TerminalRuntimeUnlistenFn>,
+  ): Promise<boolean> {
+    const unlisten = await listenerRegistration
+    if (acquisition.released) {
+      unlisten()
+      return false
+    }
+
+    entry.unlisteners.push(unlisten)
+    return true
+  }
+
+  async function initializeTerminal(taskId: string, acquisition: TerminalAcquisition): Promise<PoolEntry> {
     const terminal = new Terminal({
       ...getTerminalOptions(get(activeThemeMode)),
       linkHandler: createTerminalLinkHandler(),
@@ -418,8 +450,6 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     const imageSupport = loadImageSupport(terminal)
   
     const hostDiv = createHostDiv()
-  
-    await preloadTerminalFonts()
   
     // NOTE: terminal.open() is deferred to the first attach() call so that
     // xterm.js measures character dimensions against a DOM-attached container
@@ -449,6 +479,10 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       webglContextLossDisposable: null,
       webglUnavailable: false,
     }
+
+    acquisition.entry = entry
+    await preloadTerminalFonts()
+    if (disposeReleasedAcquisition(acquisition)) return entry
   
     // Replay buffered output from backend
     try {
@@ -461,33 +495,44 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     } catch (e) {
       console.error('[terminalPool] Failed to get PTY buffer:', e)
     }
+    if (disposeReleasedAcquisition(acquisition)) return entry
   
     // Persistent PTY output listener (survives component unmount)
-    entry.unlisteners.push(await host.listenEvent<PtyEvent>(`pty-output-${taskId}`, (event) => {
-      const instanceId = event.payload.instance_id
-      if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
-        return
-      }
-      if (event.payload.data) {
-        if (entry.needsClear) {
-          resetTerminal(entry)
-          entry.needsClear = false
+    const outputListenerRetained = await retainAcquisitionListener(
+      acquisition,
+      entry,
+      host.listenEvent<PtyEvent>(`pty-output-${taskId}`, (event) => {
+        const instanceId = event.payload.instance_id
+        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
+          return
         }
-        entry.terminal.write(event.payload.data)
-        entry.ptyActive = true
-        entry.hasOutput = true
-        notifyShellLifecycleListeners(taskId)
-      }
-    }))
+        if (event.payload.data) {
+          if (entry.needsClear) {
+            resetTerminal(entry)
+            entry.needsClear = false
+          }
+          entry.terminal.write(event.payload.data)
+          entry.ptyActive = true
+          entry.hasOutput = true
+          notifyShellLifecycleListeners(taskId)
+        }
+      }),
+    )
+    if (!outputListenerRetained || disposeReleasedAcquisition(acquisition)) return entry
   
     // Persistent PTY exit listener
-    entry.unlisteners.push(await host.listenEvent<PtyEvent>(`pty-exit-${taskId}`, (event) => {
-      const instanceId = event.payload.instance_id
-      if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
-        return
-      }
-      markShellPtyExited(entry)
-    }))
+    const exitListenerRetained = await retainAcquisitionListener(
+      acquisition,
+      entry,
+      host.listenEvent<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+        const instanceId = event.payload.instance_id
+        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
+          return
+        }
+        markShellPtyExited(entry)
+      }),
+    )
+    if (!exitListenerRetained || disposeReleasedAcquisition(acquisition)) return entry
   
     attachAgentTerminalKeyHandler(entry)
   
@@ -501,6 +546,28 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     pool.set(taskId, entry)
     await ensureAppEventsReconnectListener()
     return entry
+  }
+
+  function acquire(taskId: string): Promise<PoolEntry> {
+    const pendingAcquisition = pendingAcquisitions.get(taskId)
+    if (pendingAcquisition) return pendingAcquisition.promise
+
+    const existing = pool.get(taskId)
+    if (existing) return Promise.resolve(existing)
+
+    const operation: TerminalAcquisition = { released: false, entry: null }
+    const promise = initializeTerminal(taskId, operation)
+    const acquisition: PendingTerminalAcquisition = { operation, promise }
+    pendingAcquisitions.set(taskId, acquisition)
+
+    const clearPendingAcquisition = () => {
+      if (pendingAcquisitions.get(taskId) === acquisition) {
+        pendingAcquisitions.delete(taskId)
+      }
+    }
+    void promise.then(clearPendingAcquisition, clearPendingAcquisition)
+
+    return promise
   }
   
   async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
@@ -584,10 +651,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.attached = false
   }
   
-  function release(taskId: string): void {
-    const entry = pool.get(taskId)
-    if (!entry) return
-  
+  function disposeTerminalEntry(entry: PoolEntry): void {
     detach(entry)
     entry.unlisteners.forEach(fn => {
       fn()
@@ -595,7 +659,25 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.unlisteners.length = 0
     disposeWebglContextLossListener(entry)
     entry.terminal.dispose()
-    pool.delete(taskId)
+  }
+
+  function release(taskId: string): void {
+    const pendingAcquisition = pendingAcquisitions.get(taskId)
+    if (pendingAcquisition) {
+      pendingAcquisition.operation.released = true
+      pendingAcquisitions.delete(taskId)
+    }
+
+    const pooledEntry = pool.get(taskId)
+    const pendingEntry = pendingAcquisition?.operation.entry ?? null
+    if (pooledEntry) {
+      disposeTerminalEntry(pooledEntry)
+      pool.delete(taskId)
+    } else if (pendingEntry) {
+      disposeTerminalEntry(pendingEntry)
+    }
+
+    if (pendingAcquisition) pendingAcquisition.operation.entry = null
     shellLifecycleListeners.delete(taskId)
     releaseAppEventsReconnectListenerIfIdle()
   }
@@ -680,8 +762,9 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   }
   
   function releaseAll(): void {
-    for (const taskId of [...pool.keys()]) {
-      release(taskId)
+    const terminalKeys = new Set([...pool.keys(), ...pendingAcquisitions.keys()])
+    for (const terminalKey of terminalKeys) {
+      release(terminalKey)
     }
     taskTabSessions.clear()
     shellLifecycleListeners.clear()
@@ -689,21 +772,19 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   }
   
   function releaseAllForTask(taskId: string): number {
-    let count = 0
-    const keysToRelease: string[] = []
-  
-    for (const key of pool.keys()) {
+    const keysToRelease = new Set<string>()
+
+    for (const key of [...pool.keys(), ...pendingAcquisitions.keys()]) {
       if (key.startsWith(`${taskId}-shell-`)) {
-        keysToRelease.push(key)
+        keysToRelease.add(key)
       }
     }
-  
+
     for (const key of keysToRelease) {
       release(key)
-      count++
     }
-  
-    return count
+
+    return keysToRelease.size
   }
   
   activeThemeMode.subscribe((mode) => {
