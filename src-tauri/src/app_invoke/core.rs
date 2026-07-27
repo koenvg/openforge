@@ -152,6 +152,27 @@ pub(super) async fn handle_app_unmatched_command(
 ) -> AppResult<serde_json::Value> {
     let db = crate::db::acquire_db(&state.db);
     let value = match request.command.as_str() {
+        "list_browser_session_purge_intents" => {
+            let intents: Vec<db::BrowserSessionPurgeIntentRow> =
+                db.list_browser_session_purge_intents().map_err(|error| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to list Task Browser Session purge intents: {error}"),
+                    )
+                })?;
+            json_value(intents)?
+        }
+        "acknowledge_browser_session_purge_intent" => {
+            let intent_id = payload_i64(&request.payload, "intentId")?;
+            db.acknowledge_browser_session_purge_intent(intent_id)
+                .map_err(|error| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to acknowledge Task Browser Session purge intent: {error}"),
+                    )
+                })?;
+            serde_json::Value::Null
+        }
         "get_config" => {
             let key = payload_string(&request.payload, "key")?;
             let db_value = || {

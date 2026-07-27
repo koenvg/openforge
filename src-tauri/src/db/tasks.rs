@@ -1204,6 +1204,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<()> {
+            super::browser_session_purges::enqueue_task_purge_if_present(&conn, id)?;
             conn.execute(
                 "DELETE FROM agent_sessions WHERE ticket_id = ?1",
                 rusqlite::params![id],
@@ -1252,6 +1253,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<()> {
+            super::browser_session_purges::enqueue_task_purge_if_present(&conn, id)?;
             conn.execute(
                 "DELETE FROM agent_sessions WHERE ticket_id = ?1",
                 rusqlite::params![id],

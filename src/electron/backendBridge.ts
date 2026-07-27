@@ -51,6 +51,8 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'update_task_source_ticket_url',
   'update_task_status',
   'delete_task',
+  'list_browser_session_purge_intents',
+  'acknowledge_browser_session_purge_intent',
   'get_tasks',
   'get_task_detail',
   'get_tasks_for_project',

@@ -596,3 +596,38 @@ async fn task_workspace_prefers_task_workspace_over_legacy_worktree() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn lists_and_acknowledges_task_browser_session_purge_intents() {
+    let (state, path) = test_state("app_invoke_browser_session_purges");
+    crate::db::test_helpers::insert_test_task(&crate::db::acquire_db(&state.db));
+
+    invoke_ok(&state, "delete_task", json!({ "id": "T-100" })).await;
+    let intents = invoke_ok(
+        &state,
+        "list_browser_session_purge_intents",
+        serde_json::Value::Null,
+    )
+    .await;
+    let intent = &intents.as_array().expect("purge intents")[0];
+    assert_eq!(intent["scope"], "task");
+    assert_eq!(intent["ownerId"], "T-100");
+
+    invoke_ok(
+        &state,
+        "acknowledge_browser_session_purge_intent",
+        json!({ "intentId": intent["id"] }),
+    )
+    .await;
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "list_browser_session_purge_intents",
+            serde_json::Value::Null,
+        )
+        .await,
+        json!([]),
+    );
+
+    let _ = std::fs::remove_file(path);
+}

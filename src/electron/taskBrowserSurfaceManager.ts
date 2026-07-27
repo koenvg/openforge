@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto'
+import type {
+  TaskBrowserPartitionRegistration,
+  TaskBrowserPartitionRegistry,
+} from './taskBrowserPartitionRegistry.js'
 
 export type TaskBrowserSurfaceErrorCode =
   | 'HOST_UNAVAILABLE'
@@ -108,6 +112,7 @@ export interface TaskBrowserSurfaceStateEvent {
 
 export interface TaskBrowserSurfaceManagerOptions {
   factory: NativeTaskBrowserSurfaceFactory
+  registry: TaskBrowserPartitionRegistry
   authorize(pluginId: string, taskId: string): Promise<void>
   onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
 }
@@ -147,6 +152,14 @@ type SurfaceRecord = {
 type PendingSurfaceCreation = {
   promise: Promise<TaskBrowserSurfaceReference>
   sessionEpoch: number
+}
+
+type CreationLifecycleEpoch = {
+  global: number
+  plugin: number
+  task: number
+  session: number
+  window: number
 }
 
 const LOCAL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -434,21 +447,17 @@ export class TaskBrowserSurfaceManager {
 
   async resetSession(pluginId: string, taskId: string): Promise<void> {
     if (!taskId.trim()) throw new TaskBrowserSurfaceError('INVALID_TASK', 'Task Browser Session reset requires a Task ID')
-    const sessionKey = this.sessionEpochKey(pluginId, taskId)
-    this.sessionEpochs.set(sessionKey, (this.sessionEpochs.get(sessionKey) ?? 0) + 1)
-    const previousReset = this.sessionResets.get(sessionKey)
-    const reset = (async () => {
-      await previousReset?.catch(() => undefined)
-      await this.options.authorize(pluginId, taskId)
-      this.destroyWhere(surface => surface.pluginId === pluginId && surface.taskId === taskId)
-      await this.options.factory.clearSession(taskBrowserSessionPartition(pluginId, taskId))
-    })()
-    this.sessionResets.set(sessionKey, reset)
-    try {
-      await reset
-    } finally {
-      if (this.sessionResets.get(sessionKey) === reset) this.sessionResets.delete(sessionKey)
+    await this.clearBrowserSession(
+      { pluginId, taskId, partition: taskBrowserSessionPartition(pluginId, taskId) },
+      true,
+    )
+  }
+
+  async purgeRegisteredSession(record: TaskBrowserPartitionRegistration): Promise<void> {
+    if (!record.pluginId.trim() || !record.taskId.trim() || !record.partition.startsWith('persist:')) {
+      throw new Error('Task Browser Session purge requires a valid durable partition registration')
     }
+    await this.clearBrowserSession(record, false)
   }
 
   destroyTask(taskId: string): void {
@@ -472,7 +481,7 @@ export class TaskBrowserSurfaceManager {
       throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser Surfaces only allow HTTP(S) initial URLs')
     }
     const sessionKey = this.sessionEpochKey(request.pluginId, request.taskId)
-    const lifecycleEpoch = {
+    const lifecycleEpoch: CreationLifecycleEpoch = {
       global: this.globalEpoch,
       plugin: this.pluginEpochs.get(request.pluginId) ?? 0,
       task: this.taskEpochs.get(request.taskId) ?? 0,
@@ -480,13 +489,7 @@ export class TaskBrowserSurfaceManager {
       window: this.windowEpochs.get(request.windowId) ?? 0,
     }
     await this.options.authorize(request.pluginId, request.taskId)
-    if (
-      lifecycleEpoch.global !== this.globalEpoch
-      || lifecycleEpoch.plugin !== (this.pluginEpochs.get(request.pluginId) ?? 0)
-      || lifecycleEpoch.task !== (this.taskEpochs.get(request.taskId) ?? 0)
-      || lifecycleEpoch.session !== (this.sessionEpochs.get(sessionKey) ?? 0)
-      || lifecycleEpoch.window !== (this.windowEpochs.get(request.windowId) ?? 0)
-) {
+    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
     if (!this.windows.has(request.windowId)) {
@@ -494,6 +497,14 @@ export class TaskBrowserSurfaceManager {
     }
 
     const partition = taskBrowserSessionPartition(request.pluginId, request.taskId)
+    await this.options.registry.register({
+      pluginId: request.pluginId,
+      taskId: request.taskId,
+      partition,
+    })
+    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
+    }
     const native = this.options.factory.createSurface({
       windowId: request.windowId,
       partition,
@@ -539,6 +550,27 @@ export class TaskBrowserSurfaceManager {
       throw error
     }
   }
+  private async clearBrowserSession(
+    record: TaskBrowserPartitionRegistration,
+    authorize: boolean,
+  ): Promise<void> {
+    const sessionKey = this.sessionEpochKey(record.pluginId, record.taskId)
+    this.sessionEpochs.set(sessionKey, (this.sessionEpochs.get(sessionKey) ?? 0) + 1)
+    const previousReset = this.sessionResets.get(sessionKey)
+    const reset = (async () => {
+      await previousReset?.catch(() => undefined)
+      if (authorize) await this.options.authorize(record.pluginId, record.taskId)
+      this.destroyWhere(surface => surface.pluginId === record.pluginId && surface.taskId === record.taskId)
+      await this.options.factory.clearSession(record.partition)
+    })()
+    this.sessionResets.set(sessionKey, reset)
+    try {
+      await reset
+    } finally {
+      if (this.sessionResets.get(sessionKey) === reset) this.sessionResets.delete(sessionKey)
+    }
+  }
+
   private async waitForSessionReset(pluginId: string, taskId: string): Promise<void> {
     const sessionKey = this.sessionEpochKey(pluginId, taskId)
     let reset = this.sessionResets.get(sessionKey)
@@ -550,6 +582,18 @@ export class TaskBrowserSurfaceManager {
 
   private sessionEpochKey(pluginId: string, taskId: string): string {
     return `${pluginId}\u0000${taskId}`
+  }
+
+  private creationWasSuperseded(
+    request: GetOrCreateTaskBrowserSurfaceRequest,
+    sessionKey: string,
+    epoch: CreationLifecycleEpoch,
+  ): boolean {
+    return epoch.global !== this.globalEpoch
+      || epoch.plugin !== (this.pluginEpochs.get(request.pluginId) ?? 0)
+      || epoch.task !== (this.taskEpochs.get(request.taskId) ?? 0)
+      || epoch.session !== (this.sessionEpochs.get(sessionKey) ?? 0)
+      || epoch.window !== (this.windowEpochs.get(request.windowId) ?? 0)
   }
 
   private validateIdentity(request: GetOrCreateTaskBrowserSurfaceRequest): void {

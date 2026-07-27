@@ -380,6 +380,8 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('create_task')).toBe(true)
     expect(isSidecarBackedCommand('update_task_status')).toBe(true)
     expect(isSidecarBackedCommand('delete_task')).toBe(true)
+    expect(isSidecarBackedCommand('list_browser_session_purge_intents')).toBe(true)
+    expect(isSidecarBackedCommand('acknowledge_browser_session_purge_intent')).toBe(true)
     expect(isSidecarBackedCommand('delete_project')).toBe(true)
     expect(isSidecarBackedCommand('get_config')).toBe(true)
     expect(isSidecarBackedCommand('resolve_ai_provider')).toBe(true)
