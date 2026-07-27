@@ -180,6 +180,7 @@ describe('Task Browser Surface Manager', () => {
     expect(factory.surfaces[1].loadCalls).toEqual([])
     expect(authorize).toHaveBeenCalledTimes(3)
     expect(factory.creations[0]).toMatchObject({
+      windowId: 10,
       partition: expect.stringMatching(/^persist:openforge-task-browser-/),
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
     })
@@ -574,7 +575,7 @@ describe('Task Browser Surface Manager', () => {
     await expect(manager.getState(reference.surfaceId)).resolves.toBeDefined()
   })
 
-  it('invalidates pending creation when reset or plugin cleanup wins the lifecycle race', async () => {
+  it('invalidates pending creation when reset, Task, or plugin cleanup wins the lifecycle race', async () => {
     let releaseResetCreation: (() => void) | null = null
     let authorizationCall = 0
     const resetHarness = createManager({
@@ -600,6 +601,17 @@ describe('Task Browser Surface Manager', () => {
     ;(releasePluginCreation as (() => void) | null)?.()
     await expect(pendingPlugin).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     expect(pluginHarness.factory.creations).toHaveLength(0)
+
+    let releaseTaskCreation: (() => void) | null = null
+    const taskHarness = createManager({
+      authorize: vi.fn(() => new Promise<void>(resolve => { releaseTaskCreation = resolve })),
+    })
+    const pendingTask = taskHarness.manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-task', id: 'main' })
+    await Promise.resolve()
+    taskHarness.manager.destroyTask('T-task')
+    ;(releaseTaskCreation as (() => void) | null)?.()
+    await expect(pendingTask).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    expect(taskHarness.factory.creations).toHaveLength(0)
 
     let releaseInitialLoad: (() => void) | null = null
     const loadHarness = createManager()
@@ -721,6 +733,42 @@ describe('Task Browser Surface Manager', () => {
     manager.detach(surfaces[0].surfaceId)
     expect(factory.surfaces[0].destroyed).toBe(false)
     expect(factory.surfaces[2].destroyed).toBe(true)
+  })
+
+  it('releases every live surface owned by a Task without clearing its durable sessions', async () => {
+    const { manager, factory } = createManager()
+    const browserTask = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-cleanup', id: 'main' })
+    const notesTask = await manager.getOrCreate({ windowId: 11, pluginId: 'notes', taskId: 'T-cleanup', id: 'main' })
+    const unaffected = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-other', id: 'main' })
+
+    manager.destroyTask('T-cleanup')
+
+    expect(factory.surfaces[0].destroyed).toBe(true)
+    expect(factory.surfaces[1].destroyed).toBe(true)
+    expect(factory.surfaces[2].destroyed).toBe(false)
+    await expect(manager.getState(browserTask.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(notesTask.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(unaffected.surfaceId)).resolves.toBeDefined()
+    expect(factory.clearedPartitions).toEqual([])
+  })
+
+  it('does not recreate a surface after Task cleanup when authorization observes a terminal Task', async () => {
+    let taskCompleted = false
+    const { manager, factory } = createManager({
+      authorize: vi.fn(async () => {
+        if (taskCompleted) throw new TaskBrowserSurfaceError('INVALID_TASK', 'Task is completed')
+      }),
+    })
+    const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-cleanup', id: 'main' })
+
+    taskCompleted = true
+    manager.destroyTask('T-cleanup')
+
+    await expect(manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-cleanup', id: 'main' }))
+      .rejects.toMatchObject({ code: 'INVALID_TASK' })
+    expect(factory.creations).toHaveLength(1)
+    expect(factory.surfaces[0].destroyed).toBe(true)
+    await expect(manager.getState(created.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
   it('releases plugin, window, and application live resources without clearing durable sessions', async () => {

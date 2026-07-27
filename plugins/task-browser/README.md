@@ -25,4 +25,4 @@ A small Trusted Plugin that adds a **Browser** tab to every Task and exercises O
 
 The tab opens `https://example.com` the first time. Enter any HTTP(S) address in the toolbar. The last successful URL is saved in plugin Task storage and restored when the live surface must be recreated.
 
-Site permissions, popups, and downloads intentionally fail closed in this first secure browser-surface path.
+Site permissions and popups currently fail closed. Every download opens an Electron-main-owned native Save dialog; canceling it cancels the download, and the plugin never receives a native download handle or destination path.

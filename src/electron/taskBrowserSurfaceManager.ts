@@ -75,6 +75,7 @@ export interface TaskBrowserPopupPolicy {
 }
 
 export interface TaskBrowserSurfaceCreateOptions {
+  windowId: number
   partition: TaskBrowserSessionPartition
   webPreferences: TaskBrowserWebPreferences
   popupPolicy: TaskBrowserPopupPolicy
@@ -247,6 +248,7 @@ export class TaskBrowserSurfaceManager {
   private readonly pending = new Map<string, PendingSurfaceCreation>()
   private readonly sessionResets = new Map<string, Promise<void>>()
   private readonly pluginEpochs = new Map<string, number>()
+  private readonly taskEpochs = new Map<string, number>()
   private readonly sessionEpochs = new Map<string, number>()
   private readonly windowEpochs = new Map<number, number>()
   private surfaceSequence = 0
@@ -449,6 +451,12 @@ export class TaskBrowserSurfaceManager {
     }
   }
 
+  destroyTask(taskId: string): void {
+    if (!taskId.trim()) return
+    this.taskEpochs.set(taskId, (this.taskEpochs.get(taskId) ?? 0) + 1)
+    this.destroyWhere(surface => surface.taskId === taskId)
+  }
+
   destroyPlugin(pluginId: string): void {
     this.pluginEpochs.set(pluginId, (this.pluginEpochs.get(pluginId) ?? 0) + 1)
     this.destroyWhere(surface => surface.pluginId === pluginId)
@@ -467,6 +475,7 @@ export class TaskBrowserSurfaceManager {
     const lifecycleEpoch = {
       global: this.globalEpoch,
       plugin: this.pluginEpochs.get(request.pluginId) ?? 0,
+      task: this.taskEpochs.get(request.taskId) ?? 0,
       session: this.sessionEpochs.get(sessionKey) ?? 0,
       window: this.windowEpochs.get(request.windowId) ?? 0,
     }
@@ -474,9 +483,10 @@ export class TaskBrowserSurfaceManager {
     if (
       lifecycleEpoch.global !== this.globalEpoch
       || lifecycleEpoch.plugin !== (this.pluginEpochs.get(request.pluginId) ?? 0)
+      || lifecycleEpoch.task !== (this.taskEpochs.get(request.taskId) ?? 0)
       || lifecycleEpoch.session !== (this.sessionEpochs.get(sessionKey) ?? 0)
       || lifecycleEpoch.window !== (this.windowEpochs.get(request.windowId) ?? 0)
-    ) {
+) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
     if (!this.windows.has(request.windowId)) {
@@ -485,6 +495,7 @@ export class TaskBrowserSurfaceManager {
 
     const partition = taskBrowserSessionPartition(request.pluginId, request.taskId)
     const native = this.options.factory.createSurface({
+      windowId: request.windowId,
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,

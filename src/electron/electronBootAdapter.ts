@@ -6,6 +6,7 @@ import { createTaskBrowserSurfaceAuthorizer } from './taskBrowserSurfaceAuthoriz
 import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter.js'
 import { TaskBrowserSurfaceIpcRouter, isTaskBrowserSurfaceCommand } from './taskBrowserSurfaceIpc.js'
 import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager.js'
+import { handleTaskBrowserSurfaceLifecycleEvent } from './taskBrowserSurfaceLifecycle.js'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
@@ -184,8 +185,11 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           const forwarder = createAppEventForwarder({
             sidecarConfig,
             fetch: (url, init) => fetch(url, init),
+            onEvent: envelope => {
+              handleTaskBrowserSurfaceLifecycleEvent(taskBrowserSurfaceManager, envelope)
+              eventListener?.(envelope)
+            },
             windows: () => BrowserWindow.getAllWindows(),
-            onEvent: envelope => eventListener?.(envelope),
             failureReporter: options.failureReporter,
           })
           return {
