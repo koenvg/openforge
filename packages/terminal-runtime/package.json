@@ -38,6 +38,6 @@
     "build": "tsc --noEmit"
   },
   "devDependencies": {
-    "svelte": "5.56.5"
+    "svelte": "5.56.7"
   }
 }
