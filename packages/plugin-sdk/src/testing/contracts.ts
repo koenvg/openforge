@@ -1,0 +1,143 @@
+import type { TestingOpenForgeRegistryFake } from './registryFake'
+import type {
+  BackendMethodRegistration,
+  BackendOpenForgeAPI,
+  BackgroundServiceRegistration,
+  CommandRegistration,
+  CommandShortcutMetadata,
+  ConfigureStartPromptContributionRequest,
+  CreateTaskRequest,
+  FrontendOpenForgeAPI,
+  InjectionPointLocation,
+  JsonValue,
+  NotificationRequest,
+  OpenForgeNavigationRequest,
+  OpenForgePackageMetadata,
+  PluginSettingsSectionRegistration,
+  PluginStorage,
+  PluginTaskPaneTabRegistration,
+  PluginTaskUISectionRegistration,
+  PluginViewRegistration,
+  ShellSpawnRequest,
+  StartTaskImplementationRequest,
+} from '../types'
+import type { Task } from '../domain'
+
+export type TestingRuntimeScope = 'global' | 'project' | 'task'
+export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'backend' | 'background'
+export type TestingMaybePromise<T> = T | Promise<T>
+export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
+export type TestingEventHandler = (payload: unknown) => void
+
+export interface TestingOpenForgeApiOptions {
+  pluginId?: string
+  projectId?: string | null
+  taskId?: string | null
+  /** The active view key reported by `navigation.get().currentView`. Defaults to `'board'`. */
+  viewId?: string
+  packageMetadata?: OpenForgePackageMetadata
+  storage?: PluginStorage
+  /**
+   * Tasks returned by `tasks.list`. The mock filters them by the requested
+   * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,
+   * mirroring the host capability. Defaults to an empty list.
+   */
+  tasks?: Task[]
+}
+
+export interface TestingOpenForgeApiCalls {
+  commandInvocations: Array<{ id: string; qualifiedId: string; payload: unknown }>
+  globalCommandInvocations: Array<{ qualifiedId: string; payload: unknown }>
+  backendInvocations: Array<{ method: string; qualifiedId: string; payload: unknown }>
+  emittedEvents: Array<{ event: string; qualifiedEvent: string; payload: unknown }>
+  emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
+  openUrl: string[]
+  navigationRequests: OpenForgeNavigationRequest[]
+  notify: NotificationRequest[]
+  taskCreations: CreateTaskRequest[]
+  startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
+  taskImplementationStarts: StartTaskImplementationRequest[]
+  taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
+  taskSummaryUpdates: Array<{ taskId: string; summary: string }>
+  taskStatusUpdates: Array<{ taskId: string; status: string }>
+  configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
+  fsWrites: Array<{ projectId: string; path: string; content: string }>
+  shellSpawns: ShellSpawnRequest[]
+  shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>
+  shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>
+  shellKills: Array<{ taskId: string; terminalIndex: number }>
+  shellBuffers: Array<{ taskId: string; terminalIndex: number }>
+  browserSurfaceGetOrCreate: Array<{ taskId: string; id: string; initialUrl?: string }>
+  browserSurfaceAttachments: Array<{ taskId: string; id: string; element: HTMLElement }>
+  browserSurfaceDetaches: Array<{ taskId: string; id: string }>
+  browserSurfaceDestroys: Array<{ taskId: string; id: string }>
+  browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
+  browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
+  browserSurfaceSessionResets: Array<{ taskId: string }>
+  storageGets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
+  storageSets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string; value: JsonValue }>
+  storageDeletes: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
+}
+
+export interface TestingContributionBase {
+  id: string
+  qualifiedId: string
+  pluginId: string
+  projectId: string | null
+}
+
+export type TestingCommandContribution = TestingContributionBase & CommandRegistration & {
+  title: string
+  icon?: string
+  shortcut?: CommandShortcutMetadata
+  handler: TestingCommandHandler
+}
+
+export type TestingEventListenerContribution = TestingContributionBase & {
+  handler: TestingEventHandler
+  global: boolean
+}
+
+export type TestingViewContribution = TestingContributionBase & PluginViewRegistration
+export type TestingTaskPaneTabContribution = TestingContributionBase & PluginTaskPaneTabRegistration
+export type TestingTaskUISectionContribution = TestingContributionBase & PluginTaskUISectionRegistration
+export type TestingSettingsSectionContribution = TestingContributionBase & PluginSettingsSectionRegistration
+export type TestingBackendMethodContribution = TestingContributionBase & {
+  registration: BackendMethodRegistration
+}
+export type TestingBackgroundServiceContribution = TestingContributionBase & BackgroundServiceRegistration & {
+  started: boolean
+}
+
+export interface TestingInjectionPointContribution {
+  id: string
+  location: InjectionPointLocation
+}
+
+export interface TestingOpenForgeRegistrySnapshot {
+  pluginId: string
+  projectId: string | null
+  views: TestingViewContribution[]
+  taskPaneTabs: TestingTaskPaneTabContribution[]
+  taskUISections: TestingTaskUISectionContribution[]
+  settingsSections: TestingSettingsSectionContribution[]
+  commands: TestingCommandContribution[]
+  eventListeners: TestingEventListenerContribution[]
+  backendMethods: TestingBackendMethodContribution[]
+  backgroundServices: TestingBackgroundServiceContribution[]
+  injectionPoints: TestingInjectionPointContribution[]
+}
+
+export type MockFrontendOpenForgeAPI = FrontendOpenForgeAPI & {
+  readonly __testing: {
+    readonly calls: TestingOpenForgeApiCalls
+    readonly registry: TestingOpenForgeRegistryFake
+  }
+}
+
+export type MockBackendOpenForgeAPI = BackendOpenForgeAPI & {
+  readonly __testing: {
+    readonly calls: TestingOpenForgeApiCalls
+    readonly registry: TestingOpenForgeRegistryFake
+  }
+}

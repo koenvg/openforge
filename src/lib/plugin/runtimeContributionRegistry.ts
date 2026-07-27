@@ -1,354 +1,50 @@
-import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
-import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
-import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
 import type {
-  Disposable,
   FrontendOpenForgeAPI,
-  GetOrCreateBrowserSurfaceRequest,
   FrontendPlugin,
-  TaskBrowserSurfaceController,
   FrontendPluginContext,
-  PluginInjectionPointRegistration,
-  PluginSettingsSectionRegistration,
-  PluginTaskPaneTabRegistration,
-  PluginTaskUISectionRegistration,
-  PluginViewRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import type {
-  BackendMethodRegistration,
   BackendOpenForgeAPI,
   BackendPlugin,
   BackendPluginContext,
-  BackgroundServiceRegistration,
 } from '@openforge-app/plugin-sdk/backend'
 import type {
-  AgentSession,
-  BackendReadyState,
-  CommandDescriptor,
-  CommandInfo,
-  CommandShortcutMetadata,
-  ConfigureStartPromptContributionRequest,
-  CreateTaskRequest,
-  FileContent,
-  FileEntry,
-  ImplementationRun,
+  Disposable,
   InjectionPointLocation,
-  JsonSchema,
   OpenForgeContextSnapshot,
-  OpenForgeNavigationRequest,
-  OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
-  PluginStorage,
-  Project,
-  ProjectAttention,
-  ShellSpawnRequest,
-  StartPromptContribution,
-  StartTaskImplementationRequest,
-  SubscriptionSink,
-  Task,
-  TaskWorkspaceInfo,
-  WritableBoardStatus,
 } from '@openforge-app/plugin-sdk'
+import { RuntimeBackendServices } from './runtimeBackendServices'
+import { RuntimeCommonApiRegistry } from './runtimeCommonApi'
+import {
+  RuntimeRegistryServices,
+  RuntimeSubscriptionSink,
+  qualifyLocalContributionId,
+} from './runtimeContributionSupport'
+import { RuntimeFrontendContributionRegistry } from './runtimeFrontendContributions'
+import type {
+  RuntimeContributionSnapshot,
+  RuntimeInjectionPointContribution,
+  RuntimeOptions,
+} from './runtimeContributionTypes'
 
-type MaybePromise<T> = T | Promise<T>
-type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints'
-type RuntimeScope = 'global' | 'project' | 'task'
-type RuntimeHandler = (payload?: unknown) => MaybePromise<unknown>
-type RuntimeEventHandler = (payload: unknown) => void
-
-export type RuntimeHostBridge = {
-  listProjects?(): Promise<Project[]>
-  getProject?(projectId: string): Promise<Project | null>
-  listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
-  getTask?(taskId: string): Promise<Task>
-  createTask?(request: CreateTaskRequest): Promise<Task>
-  updateTaskSummary?(taskId: string, summary: string): Promise<void>
-  updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>
-  listStartPromptContributions?(projectId: string): Promise<StartPromptContribution[]>
-  configureStartPromptContribution?(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
-  startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
-  getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
-  getLatestSession?(taskId: string): Promise<AgentSession | null>
-  listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>
-  readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
-  readFile?(request: { projectId: string; path: string }): Promise<FileContent>
-  writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
-  searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
-  spawnShell?(request: ShellSpawnRequest): Promise<number>
-  writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
-  resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>
-  killShell?(request: { taskId: string; terminalIndex: number }): Promise<void>
-  getShellBuffer?(request: { taskId: string; terminalIndex: number }): Promise<string | null>
-  notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
-  getAttention?(): Promise<ProjectAttention[]>
-  openUrl?(url: string): Promise<void>
-  getNavigation?(): OpenForgeNavigationSnapshot
-  navigate?(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
-  getConfig?(key: string): Promise<unknown>
-  setConfig?(key: string, value: unknown): Promise<void>
-  getProjectConfig?(projectId: string, key: string): Promise<unknown>
-  setProjectConfig?(projectId: string, key: string, value: unknown): Promise<void>
-  getBackendState?(): BackendReadyState
-  whenBackendReady?(): Promise<void>
-  onBackendReady?(handler: () => void): Disposable | (() => void)
-  invokeBackendMethod?(method: string, payload?: unknown): Promise<unknown>
-  invokeHostCommand?(command: string, payload?: unknown): Promise<unknown>
-  onHostEvent?(event: string, handler: (payload: unknown) => void): () => void
-  getOrCreateBrowserSurface?(pluginId: string, request: GetOrCreateBrowserSurfaceRequest): Promise<TaskBrowserSurfaceController>
-  resetBrowserSession?(pluginId: string, taskId: string): Promise<void>
-  destroyPluginBrowserSurfaces?(pluginId: string): Promise<void>
-}
-
-type RuntimeOptions = {
-  pluginId: string
-  projectId: string | null
-  packageMetadata?: OpenForgePackageMetadata
-  host?: RuntimeHostBridge
-  storage?: PluginStorage
-}
-
-type RuntimeContributionBase = {
-  id: string
-  qualifiedId: string
-  pluginId: string
-  projectId: string | null
-}
-
-export type RuntimeCommandContribution = RuntimeContributionBase & {
-  title: string
-  icon?: string
-  shortcut?: CommandShortcutMetadata
-  discoverable?: boolean
-  input?: JsonSchema
-  output?: JsonSchema
-  handler: RuntimeHandler
-}
-
-export type RuntimeEventListenerContribution = RuntimeContributionBase & {
-  handler: RuntimeEventHandler
-  global: boolean
-}
-
-export type RuntimeViewContribution = RuntimeContributionBase & PluginViewRegistration
-export type RuntimeTaskPaneTabContribution = RuntimeContributionBase & PluginTaskPaneTabRegistration
-export type RuntimeTaskUISectionContribution = RuntimeContributionBase & PluginTaskUISectionRegistration
-export type RuntimeSettingsSectionContribution = RuntimeContributionBase & PluginSettingsSectionRegistration
-export type RuntimeInjectionPointContribution = RuntimeContributionBase & {
-  location: InjectionPointLocation
-  component: PluginInjectionPointRegistration['component']
-}
-
-export type RuntimeBackgroundServiceContribution = RuntimeContributionBase & BackgroundServiceRegistration & {
-  started: boolean
-}
-
-export type RuntimeBackendMethodContribution = RuntimeContributionBase & {
-  registration: BackendMethodRegistration
-}
-
-export type RuntimeContributionSnapshot = {
-  pluginId: string
-  projectId: string | null
-  views: RuntimeViewContribution[]
-  taskPaneTabs: RuntimeTaskPaneTabContribution[]
-  taskUISections: RuntimeTaskUISectionContribution[]
-  settingsSections: RuntimeSettingsSectionContribution[]
-  injectionPoints: RuntimeInjectionPointContribution[]
-  commands: RuntimeCommandContribution[]
-  eventListeners: RuntimeEventListenerContribution[]
-  backendMethods: RuntimeBackendMethodContribution[]
-  backgroundServices: RuntimeBackgroundServiceContribution[]
-}
-
-class RuntimeValidationError extends Error {
-  constructor(kind: RuntimeKind, message: string) {
-    super(`${kind} registration ${message}`)
-    this.name = 'RuntimeValidationError'
-  }
-}
-
-class RuntimeSubscriptionSink implements SubscriptionSink {
-  readonly subscriptions: Disposable[] = []
-
-  get size(): number {
-    return this.subscriptions.length
-  }
-
-  add(subscription: Disposable | (() => void)): void {
-    if (typeof subscription === 'function') {
-      this.subscriptions.push({ dispose: subscription })
-      return
-    }
-
-    if (!subscription || typeof subscription.dispose !== 'function') {
-      throw new Error('context.subscriptions.add requires a disposable or cleanup function')
-    }
-
-    this.subscriptions.push(subscription)
-  }
-
-  async disposeFrom(index: number): Promise<void> {
-    const subscriptions = this.subscriptions.splice(index).reverse()
-    await disposeSubscriptions(subscriptions)
-  }
-
-  async disposeAll(): Promise<void> {
-    const subscriptions = this.subscriptions.splice(0).reverse()
-    await disposeSubscriptions(subscriptions)
-  }
-}
-
-async function disposeSubscriptions(subscriptions: Disposable[]): Promise<void> {
-  let firstError: unknown = null
-  for (const subscription of subscriptions) {
-    try {
-      await subscription.dispose()
-    } catch (error) {
-      firstError ??= error
-    }
-  }
-
-  if (firstError) {
-    throw firstError
-  }
-}
-
-export function qualifyLocalContributionId(pluginId: string, localId: string): string {
-  return `${pluginId}.${localId}`
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-function isFunction(value: unknown): value is (...args: never[]) => unknown {
-  return typeof value === 'function'
-}
-
-function assertLocalId(kind: RuntimeKind, id: unknown): asserts id is string {
-  if (!isNonEmptyString(id)) {
-    throw new RuntimeValidationError(kind, 'requires a non-empty id')
-  }
-
-  const trimmed = id.trim()
-  if (trimmed.startsWith('openforge.')) {
-    throw new RuntimeValidationError(kind, 'cannot use openforge.* reserved namespace')
-  }
-
-  if (trimmed.includes(':') || trimmed.startsWith('.') || trimmed.endsWith('.') || trimmed.includes('..')) {
-    throw new RuntimeValidationError(kind, `has invalid id "${trimmed}"`)
-  }
-}
-
-function assertTitle(kind: RuntimeKind, title: unknown): asserts title is string {
-  if (!isNonEmptyString(title)) {
-    throw new RuntimeValidationError(kind, 'requires a non-empty title')
-  }
-}
-
-function assertHandler(kind: RuntimeKind, handler: unknown): asserts handler is RuntimeHandler {
-  if (!isFunction(handler)) {
-    throw new RuntimeValidationError(kind, 'requires a handler function')
-  }
-}
-
-function assertComponent(kind: RuntimeKind, component: unknown): void {
-  if (!isFunction(component)) {
-    throw new RuntimeValidationError(kind, 'requires a component')
-  }
-}
-
-function sanitizeViewIcon(icon: unknown) {
-  try {
-    return sanitizePluginIcon(icon)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new RuntimeValidationError('views', `has invalid icon: ${message}`)
-  }
-}
-
-function assertScope(scope: unknown): asserts scope is RuntimeScope {
-  if (scope !== 'global' && scope !== 'project' && scope !== 'task') {
-    throw new RuntimeValidationError('background', 'requires scope to be global, project, or task')
-  }
-}
-
-function createDisposable(dispose: () => MaybePromise<void>): Disposable {
-  let disposed = false
-  return {
-    async dispose() {
-      if (disposed) return
-      disposed = true
-      await dispose()
-    },
-  }
-}
-
-function createMemoryStorageScope() {
-  const values = new Map<string, unknown>()
-  return {
-    async get<T>(key: string): Promise<T | null> {
-      return values.has(key) ? values.get(key) as T : null
-    },
-    async set<T>(key: string, value: T): Promise<void> {
-      values.set(key, value)
-    },
-    async delete(key: string): Promise<void> {
-      values.delete(key)
-    },
-  }
-}
-
-function createMemoryStorage(): PluginStorage {
-  const global = createMemoryStorageScope()
-  const projects = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
-  const tasks = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
-
-  return {
-    global,
-    project(projectId: string) {
-      let scope = projects.get(projectId)
-      if (!scope) {
-        scope = createMemoryStorageScope()
-        projects.set(projectId, scope)
-      }
-      return scope
-    },
-    task(taskId: string) {
-      let scope = tasks.get(taskId)
-      if (!scope) {
-        scope = createMemoryStorageScope()
-        tasks.set(taskId, scope)
-      }
-      return scope
-    },
-  }
-}
-
-const globalCommands = new Map<string, RuntimeCommandContribution>()
-const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
+export type {
+  RuntimeBackendMethodContribution,
+  RuntimeBackgroundServiceContribution,
+  RuntimeCommandContribution,
+  RuntimeContributionSnapshot,
+  RuntimeEventListenerContribution,
+  RuntimeHostBridge,
+  RuntimeInjectionPointContribution,
+  RuntimeSettingsSectionContribution,
+  RuntimeTaskPaneTabContribution,
+  RuntimeTaskUISectionContribution,
+  RuntimeViewContribution,
+} from './runtimeContributionTypes'
+export { qualifyLocalContributionId }
 
 type ActivationTransaction = {
   disposables: Disposable[]
-}
-
-function commandDescriptor(command: RuntimeCommandContribution): CommandDescriptor {
-  return {
-    id: command.id,
-    qualifiedId: command.qualifiedId,
-    pluginId: command.pluginId,
-    projectId: command.projectId,
-    title: command.title,
-    icon: command.icon,
-    shortcut: command.shortcut,
-    discoverable: command.discoverable ?? true,
-    input: command.input,
-    output: command.output,
-  }
-}
-
-function unavailableCapability(name: string): never {
-  throw new Error(`OpenForge host capability is unavailable: ${name}`)
 }
 
 export function createRuntimeContributionRegistry(options: RuntimeOptions) {
@@ -358,43 +54,36 @@ export function createRuntimeContributionRegistry(options: RuntimeOptions) {
 export type RuntimeContributionRegistryInstance = ReturnType<typeof createRuntimeContributionRegistry>
 
 class RuntimeContributionRegistry {
-  private readonly pluginId: string
-  private readonly projectId: string | null
   private readonly packageMetadata: OpenForgePackageMetadata
   private readonly contextSnapshot: OpenForgeContextSnapshot
-  private readonly host: RuntimeHostBridge
-  private readonly storage: PluginStorage
+  private readonly services: RuntimeRegistryServices
+  private readonly commonApi: RuntimeCommonApiRegistry
+  private readonly frontendContributions: RuntimeFrontendContributionRegistry
+  private readonly backendServices: RuntimeBackendServices
   private readonly frontendSubscriptions = new RuntimeSubscriptionSink()
   private readonly backendSubscriptions = new RuntimeSubscriptionSink()
   private frontendApi: FrontendOpenForgeAPI | null = null
   private backendApi: BackendOpenForgeAPI | null = null
-  private readonly duplicateKeys = new Set<string>()
-  private readonly eventHandlers = new Map<string, Set<RuntimeEventHandler>>()
-  private readonly commands = new Map<string, RuntimeCommandContribution>()
-  private readonly views = new Map<string, RuntimeViewContribution>()
-  private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
-  private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
-  private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
-  private readonly injectionPointContributions = new Map<string, RuntimeInjectionPointContribution>()
-  private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
-  private readonly backendMethods = new Map<string, RuntimeBackendMethodContribution>()
-  private readonly backgroundServices = new Map<string, RuntimeBackgroundServiceContribution>()
-  private eventListenerSequence = 0
   private activationTransaction: ActivationTransaction | null = null
 
   constructor(options: RuntimeOptions) {
-    assertLocalId('backend', options.pluginId)
-    this.pluginId = options.pluginId
-    this.projectId = options.projectId
+    this.services = new RuntimeRegistryServices({
+      ...options,
+      trackDisposable: (disposable) => this.trackActivationDisposable(disposable),
+    })
     this.packageMetadata = options.packageMetadata ?? {
       id: options.pluginId,
       apiVersion: 1,
       displayName: options.pluginId,
       description: '',
     }
-    this.host = options.host ?? {}
-    this.storage = options.storage ?? createMemoryStorage()
-    this.contextSnapshot = { pluginId: this.pluginId, projectId: this.projectId }
+    this.contextSnapshot = { pluginId: options.pluginId, projectId: options.projectId }
+    this.commonApi = new RuntimeCommonApiRegistry(this.services)
+    this.backendServices = new RuntimeBackendServices(this.services)
+    this.frontendContributions = new RuntimeFrontendContributionRegistry(
+      this.services,
+      (method, payload) => this.backendServices.invokeMethod(method, payload),
+    )
   }
 
   async activateFrontend(plugin: FrontendPlugin): Promise<void> {
@@ -405,9 +94,9 @@ class RuntimeContributionRegistry {
 
   async activateBackend(plugin: BackendPlugin): Promise<void> {
     await this.runActivationTransaction(this.backendSubscriptions, async () => {
-      const before = new Set(this.backgroundServices.keys())
+      const before = this.backendServices.captureBackgroundServiceIds()
       await plugin.activate(this.getBackendApi(), this.createBackendContext())
-      await this.startNewBackgroundServices(before)
+      await this.backendServices.startNewBackgroundServices(before)
     })
   }
 
@@ -420,7 +109,7 @@ class RuntimeContributionRegistry {
       firstError = error
     }
     try {
-      await this.host.destroyPluginBrowserSurfaces?.(this.pluginId)
+      await this.services.host.destroyPluginBrowserSurfaces?.(this.services.pluginId)
     } catch (error) {
       firstError ??= error
     }
@@ -429,93 +118,36 @@ class RuntimeContributionRegistry {
 
   getSnapshot(): RuntimeContributionSnapshot {
     return {
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      views: Array.from(this.views.values()),
-      taskPaneTabs: Array.from(this.taskPaneTabs.values()),
-      taskUISections: Array.from(this.taskUISections.values()),
-      settingsSections: Array.from(this.settingsSections.values()),
-      injectionPoints: Array.from(this.injectionPointContributions.values()),
-      commands: Array.from(this.commands.values()),
-      eventListeners: Array.from(this.eventListeners.values()),
-      backendMethods: Array.from(this.backendMethods.values()),
-      backgroundServices: Array.from(this.backgroundServices.values()),
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+      ...this.frontendContributions.getSnapshot(),
+      ...this.commonApi.getSnapshot(),
+      ...this.backendServices.getSnapshot(),
     }
   }
 
   getFrontendApi(): FrontendOpenForgeAPI {
-    if (this.frontendApi) {
-      return this.frontendApi
+    if (!this.frontendApi) {
+      this.frontendApi = {
+        ...this.commonApi.createApi(),
+        ...this.frontendContributions.createApi(),
+      }
     }
-
-    const registry = this
-    this.frontendApi = {
-      ...this.createCommonApi(),
-      browserSurfaces: {
-        getOrCreate: async (request) => this.host.getOrCreateBrowserSurface
-          ? this.host.getOrCreateBrowserSurface(this.pluginId, request)
-          : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.getOrCreate')),
-        resetSession: async (taskId) => this.host.resetBrowserSession
-          ? this.host.resetBrowserSession(this.pluginId, taskId)
-          : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.resetSession')),
-      },
-      views: {
-        register: (registration) => this.registerView(registration),
-      },
-      taskUI: {
-        registerTab: (registration) => this.registerTaskPaneTab(registration),
-        registerSection: (registration) => this.registerTaskUISection(registration),
-      },
-      taskPane: {
-        registerTab: (registration) => this.registerTaskPaneTab(registration),
-      },
-      settings: {
-        registerSection: (registration) => this.registerSettingsSection(registration),
-      },
-      injectionPoints: {
-        register: (registration) => this.registerInjectionPoint(registration),
-      },
-      backend: {
-        get state() {
-          return registry.host.getBackendState ? registry.host.getBackendState() : 'ready'
-        },
-        whenReady: async () => this.host.whenBackendReady ? this.host.whenBackendReady() : undefined,
-        onReady: (handler) => {
-          if (this.host.onBackendReady) {
-            const subscription = this.host.onBackendReady(handler)
-            return typeof subscription === 'function' ? createDisposable(subscription) : subscription
-          }
-
-          handler()
-          return createDisposable(() => undefined)
-        },
-        invoke: async (method, payload) => this.host.invokeBackendMethod ? this.host.invokeBackendMethod(method, payload) as never : this.invokeBackendMethod(method, payload),
-      },
-    }
-
     return this.frontendApi
   }
 
   getBackendApi(): BackendOpenForgeAPI {
-    if (this.backendApi) {
-      return this.backendApi
+    if (!this.backendApi) {
+      this.backendApi = {
+        ...this.commonApi.createApi(),
+        ...this.backendServices.createApi(),
+      }
     }
-
-    this.backendApi = {
-      ...this.createCommonApi(),
-      backend: {
-        registerMethod: (method, registration) => this.registerBackendMethod(method, registration),
-      },
-      background: {
-        register: (registration) => this.registerBackgroundService(registration),
-      },
-    }
-
     return this.backendApi
   }
 
   listInjectionPoints(location: InjectionPointLocation): RuntimeInjectionPointContribution[] {
-    return Array.from(this.injectionPointContributions.values()).filter((c) => c.location === location)
+    return this.frontendContributions.listInjectionPoints(location)
   }
 
   getContextSnapshot(): OpenForgeContextSnapshot {
@@ -532,7 +164,7 @@ class RuntimeContributionRegistry {
 
   private createFrontendContext(): FrontendPluginContext {
     return {
-      pluginId: this.pluginId,
+      pluginId: this.services.pluginId,
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions: this.frontendSubscriptions,
@@ -541,14 +173,17 @@ class RuntimeContributionRegistry {
 
   private createBackendContext(): BackendPluginContext {
     return {
-      pluginId: this.pluginId,
+      pluginId: this.services.pluginId,
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions: this.backendSubscriptions,
     }
   }
 
-  private async runActivationTransaction<T>(subscriptionSink: RuntimeSubscriptionSink, activate: () => Promise<T>): Promise<T> {
+  private async runActivationTransaction<T>(
+    subscriptionSink: RuntimeSubscriptionSink,
+    activate: () => Promise<T>,
+  ): Promise<T> {
     const previousTransaction = this.activationTransaction
     const transaction: ActivationTransaction = { disposables: [] }
     const subscriptionCheckpoint = subscriptionSink.size
@@ -573,7 +208,11 @@ class RuntimeContributionRegistry {
     return disposable
   }
 
-  private async rollbackActivationTransaction(transaction: ActivationTransaction, subscriptionSink: RuntimeSubscriptionSink, subscriptionCheckpoint: number): Promise<void> {
+  private async rollbackActivationTransaction(
+    transaction: ActivationTransaction,
+    subscriptionSink: RuntimeSubscriptionSink,
+    subscriptionCheckpoint: number,
+  ): Promise<void> {
     try {
       await subscriptionSink.disposeFrom(subscriptionCheckpoint)
     } catch {
@@ -587,366 +226,6 @@ class RuntimeContributionRegistry {
       } catch {
         // Preserve the activation failure as the reported error while continuing rollback.
       }
-    }
-  }
-
-  private createCommonApi() {
-    return {
-      commands: {
-        register: (registration: Parameters<FrontendOpenForgeAPI['commands']['register']>[0]) => this.registerCommand(registration),
-        invoke: async <TOutput>(id: string, payload?: unknown) => this.invokeCommand<TOutput>(id, payload),
-        invokeGlobal: async <TOutput>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
-        list: async () => Array.from(globalCommands.values()).map(commandDescriptor),
-        listCatalog: async (request?: { projectId?: string | null }) => this.host.listCommandCatalog ? this.host.listCommandCatalog(request) : unavailableCapability('commands.listCatalog'),
-      },
-      events: {
-        on: <TPayload>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as RuntimeEventHandler, false),
-        onGlobal: <TPayload>(qualifiedEvent: string, handler: (payload: TPayload) => void) => this.registerEventListener(qualifiedEvent, handler as RuntimeEventHandler, true),
-        emit: async <TPayload>(event: string, payload: TPayload) => this.emitEvent(this.qualifiedId('events', event), payload),
-        emitGlobal: async <TPayload>(qualifiedEvent: string, payload: TPayload) => this.emitEvent(qualifiedEvent, payload),
-      },
-      storage: this.storage,
-      context: {
-        getSnapshot: () => this.getContextSnapshot(),
-      },
-      tasks: {
-        list: async (request) => this.host.listTasks ? this.host.listTasks(request) : unavailableCapability('tasks.list'),
-        get: async (taskId) => this.host.getTask ? this.host.getTask(taskId) : unavailableCapability('tasks.get'),
-        create: async (request) => this.host.createTask ? this.host.createTask(request) : unavailableCapability('tasks.create'),
-        updateSummary: async (taskId, summary) => this.host.updateTaskSummary ? this.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
-        updateStatus: async (taskId, status) => this.host.updateTaskStatus ? this.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
-        listStartPromptContributions: async (projectId) => this.host.listStartPromptContributions ? this.host.listStartPromptContributions(projectId) : unavailableCapability('tasks.listStartPromptContributions'),
-        configureStartPromptContribution: async (request) => this.host.configureStartPromptContribution ? this.host.configureStartPromptContribution(request) : unavailableCapability('tasks.configureStartPromptContribution'),
-        startImplementation: async (request) => this.host.startTaskImplementation ? this.host.startTaskImplementation(request) : unavailableCapability('tasks.startImplementation'),
-        getWorkspace: async (taskId) => this.host.getTaskWorkspace ? this.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
-        getLatestSession: async (taskId) => this.host.getLatestSession ? this.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
-      },
-      projects: {
-        list: async () => this.host.listProjects ? this.host.listProjects() : unavailableCapability('projects.list'),
-        get: async (projectId) => this.host.getProject ? this.host.getProject(projectId) : unavailableCapability('projects.get'),
-      },
-      fs: {
-        readDir: async (request) => this.host.readDir ? this.host.readDir(request) : unavailableCapability('fs.readDir'),
-        readFile: async (request) => this.host.readFile ? this.host.readFile(request) : unavailableCapability('fs.readFile'),
-        writeFile: async (request) => this.host.writeFile ? this.host.writeFile(request) : unavailableCapability('fs.writeFile'),
-        searchFiles: async (request) => this.host.searchFiles ? this.host.searchFiles(request) : unavailableCapability('fs.searchFiles'),
-      },
-      shell: {
-        spawn: async (request) => this.host.spawnShell ? this.host.spawnShell(request) : unavailableCapability('shell.spawn'),
-        write: async (request) => this.host.writeShell ? this.host.writeShell(request) : unavailableCapability('shell.write'),
-        resize: async (request) => this.host.resizeShell ? this.host.resizeShell(request) : unavailableCapability('shell.resize'),
-        kill: async (request) => this.host.killShell ? this.host.killShell(request) : unavailableCapability('shell.kill'),
-        getBuffer: async (request) => this.host.getShellBuffer ? this.host.getShellBuffer(request) : unavailableCapability('shell.getBuffer'),
-      },
-      notifications: {
-        notify: async (request) => this.host.notify ? this.host.notify(request) : unavailableCapability('notifications.notify'),
-      },
-      attention: {
-        listProjects: async () => this.host.getAttention ? this.host.getAttention() : unavailableCapability('attention.listProjects'),
-      },
-      system: {
-        openUrl: async (url) => this.host.openUrl ? this.host.openUrl(url) : unavailableCapability('system.openUrl'),
-      },
-      navigation: {
-        get: () => this.host.getNavigation ? this.host.getNavigation() : unavailableCapability('navigation.get'),
-        navigate: async (request) => this.host.navigate ? this.host.navigate(request) : unavailableCapability('navigation.navigate'),
-      },
-      config: {
-        get: async (key) => this.host.getConfig ? this.host.getConfig(key) as never : unavailableCapability('config.get'),
-        set: async (key, value) => this.host.setConfig ? this.host.setConfig(key, value) : unavailableCapability('config.set'),
-      },
-      projectConfig: {
-        get: async (key, projectId = this.projectId ?? '') => this.host.getProjectConfig ? this.host.getProjectConfig(projectId, key) as never : unavailableCapability('projectConfig.get'),
-        set: async (key, value, projectId = this.projectId ?? '') => this.host.setProjectConfig ? this.host.setProjectConfig(projectId, key, value) : unavailableCapability('projectConfig.set'),
-      },
-    } satisfies Omit<FrontendOpenForgeAPI, 'browserSurfaces' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'>
-  }
-
-  private qualifiedId(kind: RuntimeKind, localId: string): string {
-    assertLocalId(kind, localId)
-    return qualifyLocalContributionId(this.pluginId, localId.trim())
-  }
-
-  private claim(kind: RuntimeKind, qualifiedId: string): void {
-    const duplicateNamespace = kind === 'commands' ? 'commands' : `${kind}:${qualifiedId}`
-    const key = kind === 'commands' ? `commands:${qualifiedId}` : duplicateNamespace
-    if (this.duplicateKeys.has(key)) {
-      throw new Error(`Duplicate runtime contribution id: ${qualifiedId}`)
-    }
-    this.duplicateKeys.add(key)
-  }
-
-  private release(kind: RuntimeKind, qualifiedId: string): void {
-    const key = kind === 'commands' ? `commands:${qualifiedId}` : `${kind}:${qualifiedId}`
-    this.duplicateKeys.delete(key)
-  }
-
-  private registerCommand(registration: Parameters<FrontendOpenForgeAPI['commands']['register']>[0]): Disposable {
-    const qualifiedId = this.qualifiedId('commands', registration?.id)
-    assertTitle('commands', registration?.title)
-    assertHandler('commands', registration?.handler)
-    this.claim('commands', qualifiedId)
-
-    const contribution: RuntimeCommandContribution = {
-      ...registration,
-      id: registration.id.trim(),
-      title: registration.title.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      handler: registration.handler as RuntimeHandler,
-    }
-    this.commands.set(qualifiedId, contribution)
-    globalCommands.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.commands.delete(qualifiedId)
-      globalCommands.delete(qualifiedId)
-      this.release('commands', qualifiedId)
-    }))
-  }
-
-  private registerEventListener(event: string, handler: RuntimeEventHandler, global: boolean): Disposable {
-    const qualifiedId = global ? event : this.qualifiedId('events', event)
-    if (!isNonEmptyString(qualifiedId)) {
-      throw new RuntimeValidationError('events', 'requires a non-empty id')
-    }
-    assertHandler('events', handler)
-
-    if (global && qualifiedId.startsWith('openforge.') && this.host.onHostEvent) {
-      const unsubscribe = this.host.onHostEvent(qualifiedId.slice('openforge.'.length), handler)
-      return this.trackActivationDisposable(createDisposable(() => unsubscribe()))
-    }
-
-    const target = global ? globalEventHandlers : this.eventHandlers
-    const handlers = target.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
-    handlers.add(handler)
-    target.set(qualifiedId, handlers)
-
-    const contribution: RuntimeEventListenerContribution = {
-      id: event,
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      handler,
-      global,
-    }
-    const listenerKey = `${qualifiedId}#${++this.eventListenerSequence}`
-    if (!global) {
-      this.eventListeners.set(listenerKey, contribution)
-    }
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      handlers.delete(handler)
-      if (handlers.size === 0) {
-        target.delete(qualifiedId)
-      }
-      if (!global) {
-        this.eventListeners.delete(listenerKey)
-      }
-    }))
-  }
-
-  private registerView(registration: PluginViewRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('views', registration?.id)
-    assertTitle('views', registration?.title)
-    assertComponent('views', registration?.component)
-    const icon = sanitizeViewIcon(registration?.icon)
-    this.claim('views', qualifiedId)
-
-    const contribution: RuntimeViewContribution = {
-      ...registration,
-      icon,
-      id: registration.id.trim(),
-      title: registration.title.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-    }
-    this.views.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.views.delete(qualifiedId)
-      this.release('views', qualifiedId)
-    }))
-  }
-
-  private registerTaskPaneTab(registration: PluginTaskPaneTabRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('taskPane', registration?.id)
-    assertTitle('taskPane', registration?.title)
-    assertComponent('taskPane', registration?.component)
-    this.claim('taskPane', qualifiedId)
-
-    const contribution: RuntimeTaskPaneTabContribution = {
-      ...registration,
-      id: registration.id.trim(),
-      title: registration.title.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-    }
-    this.taskPaneTabs.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.taskPaneTabs.delete(qualifiedId)
-      this.release('taskPane', qualifiedId)
-    }))
-  }
-
-  private registerTaskUISection(registration: PluginTaskUISectionRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('taskUI', registration?.id)
-    assertComponent('taskUI', registration?.component)
-    this.claim('taskUI', qualifiedId)
-
-    const contribution: RuntimeTaskUISectionContribution = {
-      ...registration,
-      id: registration.id.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-    }
-    this.taskUISections.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.taskUISections.delete(qualifiedId)
-      this.release('taskUI', qualifiedId)
-    }))
-  }
-
-  private registerSettingsSection(registration: PluginSettingsSectionRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('settings', registration?.id)
-    assertTitle('settings', registration?.title)
-    assertComponent('settings', registration?.component)
-    this.claim('settings', qualifiedId)
-
-    const contribution: RuntimeSettingsSectionContribution = {
-      ...registration,
-      id: registration.id.trim(),
-      title: registration.title.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-    }
-    this.settingsSections.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.settingsSections.delete(qualifiedId)
-      this.release('settings', qualifiedId)
-    }))
-  }
-
-  private registerInjectionPoint(registration: PluginInjectionPointRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('injectionPoints', registration?.id)
-    assertComponent('injectionPoints', registration?.component)
-    this.claim('injectionPoints', qualifiedId)
-
-    const contribution: RuntimeInjectionPointContribution = {
-      id: registration.id.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      location: registration.location,
-      component: registration.component,
-    }
-    this.injectionPointContributions.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.injectionPointContributions.delete(qualifiedId)
-      this.release('injectionPoints', qualifiedId)
-    }))
-  }
-
-  private registerBackendMethod(method: string, registration: BackendMethodRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('backend', method)
-    assertHandler('backend', registration?.handler)
-    this.claim('backend', qualifiedId)
-
-    const contribution: RuntimeBackendMethodContribution = {
-      id: method.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      registration,
-    }
-    this.backendMethods.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(() => {
-      this.backendMethods.delete(qualifiedId)
-      this.release('backend', qualifiedId)
-    }))
-  }
-
-  private registerBackgroundService(registration: BackgroundServiceRegistration): Disposable {
-    const qualifiedId = this.qualifiedId('background', registration?.id)
-    assertScope(registration?.scope)
-    if (!isFunction(registration?.start)) {
-      throw new RuntimeValidationError('background', 'requires a start function')
-    }
-    this.claim('background', qualifiedId)
-
-    const contribution: RuntimeBackgroundServiceContribution = {
-      ...registration,
-      id: registration.id.trim(),
-      qualifiedId,
-      pluginId: this.pluginId,
-      projectId: this.projectId,
-      started: false,
-    }
-    this.backgroundServices.set(qualifiedId, contribution)
-
-    return this.trackActivationDisposable(createDisposable(async () => {
-      this.backgroundServices.delete(qualifiedId)
-      this.release('background', qualifiedId)
-      if (contribution.started) {
-        await contribution.stop?.()
-        contribution.started = false
-      }
-    }))
-  }
-
-  private async startNewBackgroundServices(previousKeys: Set<string>): Promise<void> {
-    for (const [key, service] of this.backgroundServices.entries()) {
-      if (previousKeys.has(key) || service.started) continue
-      await service.start()
-      service.started = true
-    }
-  }
-
-  private async invokeCommand<TOutput>(id: string, payload?: unknown): Promise<TOutput> {
-    const qualifiedId = this.qualifiedId('commands', id)
-    return this.invokeGlobalCommand<TOutput>(qualifiedId, payload)
-  }
-
-  private async invokeGlobalCommand<TOutput>(qualifiedId: string, payload?: unknown): Promise<TOutput> {
-    const command = globalCommands.get(qualifiedId)
-    if (!command) {
-      if (qualifiedId.startsWith('openforge.') && this.host.invokeHostCommand) {
-        return await this.host.invokeHostCommand(qualifiedId.slice('openforge.'.length), payload) as TOutput
-      }
-      throw new Error(`Unknown command: ${qualifiedId}`)
-    }
-    validateSchemaValue(command.input, payload, `${qualifiedId} input`)
-    const output = await command.handler(payload)
-    validateSchemaValue(command.output, output, `${qualifiedId} output`)
-    return output as TOutput
-  }
-
-  private async invokeBackendMethod<TOutput>(method: string, payload?: unknown): Promise<TOutput> {
-    const qualifiedId = this.qualifiedId('backend', method)
-    const contribution = this.backendMethods.get(qualifiedId)
-    if (!contribution) {
-      throw new Error(`Backend method is not registered: ${qualifiedId}`)
-    }
-    return await contribution.registration.handler(payload) as TOutput
-  }
-
-  private async emitEvent<TPayload>(qualifiedEvent: string, payload: TPayload): Promise<void> {
-    const handlers = [
-      ...Array.from(this.eventHandlers.get(qualifiedEvent) ?? []),
-      ...Array.from(globalEventHandlers.get(qualifiedEvent) ?? []),
-    ]
-    for (const handler of handlers) {
-      handler(payload)
     }
   }
 }
