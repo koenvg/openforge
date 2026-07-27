@@ -19,6 +19,12 @@ vi.mock('./terminalPool', () => ({
   updateShellLifecycleState: vi.fn(),
 }))
 
+vi.mock('./plugin/pluginRegistry', () => ({
+  loadEnabledForProject: vi.fn(async () => undefined),
+  reloadInstalledPluginMetadata: vi.fn(async () => true),
+  reloadPluginForProject: vi.fn(async () => true),
+}))
+
 vi.mock('./ipc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./ipc')>()
   return {
@@ -31,6 +37,7 @@ vi.mock('./ipc', async (importOriginal) => {
 
 import { getShellLifecycleState, release, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
 import { finalizeAgentSession, getLatestSession } from './ipc'
+import { loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForProject } from './plugin/pluginRegistry'
 
 function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
   return {
@@ -328,6 +335,30 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true, 42)
     vi.useRealTimers()
+  })
+
+  it('uses the plugin registry defaults for sidecar plugin management events', async () => {
+    const { deps, handlers } = createHarness()
+    const defaultDeps = {
+      appWindow: deps.appWindow,
+      onCloseRequested: deps.onCloseRequested,
+      loadTasks: deps.loadTasks,
+      loadSessions: deps.loadSessions,
+      loadPullRequests: deps.loadPullRequests,
+      loadProjectAttention: deps.loadProjectAttention,
+      refreshPrCounts: deps.refreshPrCounts,
+      getActiveProjectId: deps.getActiveProjectId,
+      listen: deps.listen,
+    }
+
+    await registerAppDesktopEventListeners(defaultDeps)
+    await handlers.get('plugin-installation-changed')?.({ payload: { plugin_id: 'review-helper' } })
+    await handlers.get('project-plugin-enablement-changed')?.({ payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true } })
+    await handlers.get('plugin-reload-requested')?.({ payload: { plugin_id: 'review-helper', project_id: null } })
+
+    expect(reloadInstalledPluginMetadata).toHaveBeenCalledWith('review-helper')
+    expect(loadEnabledForProject).toHaveBeenCalledWith('P-1')
+    expect(reloadPluginForProject).toHaveBeenCalledWith('P-1', 'review-helper')
   })
 
   it('refreshes plugin state from sidecar plugin management events without rebuilding plugin source', async () => {
