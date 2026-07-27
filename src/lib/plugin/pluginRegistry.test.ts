@@ -193,6 +193,7 @@ function makeNormalized(id: string): NormalizedPluginRow {
 
 describe('pluginRegistry', () => {
   beforeEach(() => {
+    delete window.openforge
     installPluginMock.mockReset()
     forceGithubSyncMock.mockReset()
     getPluginIpcMock.mockReset()
@@ -1213,7 +1214,7 @@ describe('pluginRegistry', () => {
     expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('reload-plugin')
   })
 
-  it('reloadPluginForProject aborts before refreshing artifacts when backend deactivation fails', async () => {
+  it('reloadPluginForProject releases live browser resources even when backend deactivation fails', async () => {
     const manifest = makeManifest({ id: 'reload-plugin', backend: './dist/backend.js' })
     installedPlugins.set(new Map([['reload-plugin', {
       manifest,
@@ -1222,10 +1223,13 @@ describe('pluginRegistry', () => {
       sourceKind: 'local',
       sourceSpec: '/plugins/reload-plugin',
     }]]))
+    const invoke = vi.fn(async () => ({ ok: true, value: undefined }))
+    window.openforge = { version: 1, invoke, onEvent: () => () => undefined }
     pluginBackendDeactivateMock.mockRejectedValue(new Error('backend deactivation failed'))
 
     await expect(reloadPluginForProject('project-1', 'reload-plugin')).rejects.toThrow('backend deactivation failed')
 
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_destroy_plugin', { pluginId: 'reload-plugin' })
     expect(getPluginIpcMock).not.toHaveBeenCalled()
     expect(getEnabledPluginsMock).not.toHaveBeenCalled()
     expect(loadPluginFrontendMock).not.toHaveBeenCalled()

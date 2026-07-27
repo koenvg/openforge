@@ -52,10 +52,19 @@ function optionalStringField(payload: Record<string, unknown>, field: string): s
   return value
 }
 
-function boundsField(payload: Record<string, unknown>): TaskBrowserBounds {
+function attachmentGenerationField(payload: Record<string, unknown>): number {
+  const value = payload.attachmentGeneration
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires a valid generation')
+  }
+  return value
+}
+
+function boundsField(payload: Record<string, unknown>): TaskBrowserBounds | null {
   const bounds = payload.bounds
-  if (typeof bounds !== 'object' || bounds === null || Array.isArray(bounds)) {
-    throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment requires bounds')
+  if (bounds === null) return null
+  if (typeof bounds !== 'object' || Array.isArray(bounds)) {
+    throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment requires bounds or null')
   }
   const value = bounds as Record<string, unknown>
   if (![value.x, value.y, value.width, value.height].every(entry => typeof entry === 'number' && Number.isFinite(entry))) {
@@ -118,11 +127,22 @@ export class TaskBrowserSurfaceIpcRouter {
       this.manager.assertWindowOwnsSurface(surfaceId, windowId)
       switch (command) {
         case 'task_browser_surface_attach':
-          this.manager.attach(surfaceId, stringField(payload, 'attachmentId'), boundsField(payload))
+          this.manager.attach(
+            surfaceId,
+            stringField(payload, 'attachmentId'),
+            attachmentGenerationField(payload),
+            boundsField(payload),
+          )
           return { ok: true, value: undefined }
-        case 'task_browser_surface_detach':
-          this.manager.detach(surfaceId, optionalStringField(payload, 'attachmentId'))
+        case 'task_browser_surface_detach': {
+          const attachmentId = optionalStringField(payload, 'attachmentId')
+          this.manager.detach(
+            surfaceId,
+            attachmentId,
+            attachmentId === undefined ? undefined : attachmentGenerationField(payload),
+          )
           return { ok: true, value: undefined }
+        }
         case 'task_browser_surface_destroy':
           await this.manager.destroy(surfaceId)
           return { ok: true, value: undefined }

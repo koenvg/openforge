@@ -1,5 +1,6 @@
 import { BrowserWindow, WebContentsView, app, session as electronSession } from 'electron'
 import type { Session, WebContents } from 'electron'
+import { integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
 import type {
   NativeTaskBrowserSurface,
   NativeTaskBrowserSurfaceFactory,
@@ -24,14 +25,6 @@ function isAbortedNavigationError(error: unknown): boolean {
   return code === -3 || code === 'ERR_ABORTED'
 }
 
-function integerBounds(bounds: TaskBrowserBounds): TaskBrowserBounds {
-  return {
-    x: Math.round(bounds.x),
-    y: Math.round(bounds.y),
-    width: Math.round(bounds.width),
-    height: Math.round(bounds.height),
-  }
-}
 
 const securedTaskBrowserSessions = new WeakSet<Session>()
 
@@ -59,6 +52,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     }
     this.configureSecurityPolicy(this.view.webContents)
     this.configureStatePublication(this.view.webContents)
+    this.view.webContents.setBackgroundThrottling(true)
   }
 
   getState(): TaskBrowserNativeState {
@@ -105,6 +99,11 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   }
 
   attach(windowId: number, bounds: TaskBrowserBounds): void {
+    const nativeBounds = integerTaskBrowserBounds(bounds)
+    if (nativeBounds.width === 0 || nativeBounds.height === 0) {
+      this.detach()
+      return
+    }
     const window = BrowserWindow.fromId(windowId)
     if (!window || window.isDestroyed()) throw new Error('Owning OpenForge window is unavailable')
     if (this.attachedWindow !== window) {
@@ -112,7 +111,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       window.contentView.addChildView(this.view)
       this.attachedWindow = window
     }
-    this.view.setBounds(integerBounds(bounds))
+    this.view.setBounds(nativeBounds)
     this.view.webContents.setBackgroundThrottling(false)
   }
 

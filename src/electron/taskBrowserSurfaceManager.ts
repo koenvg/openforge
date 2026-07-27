@@ -123,12 +123,17 @@ type SurfaceRecord = {
   id: string
   partition: string
   attachmentId: string | null
-  staleAttachmentIds: Set<string>
+  attachmentGeneration: number
   requestedBounds: TaskBrowserBounds | null
   attached: boolean
   lastDetachedAt: number
   native: NativeTaskBrowserSurface
   unsubscribe: () => void
+}
+
+type PendingSurfaceCreation = {
+  promise: Promise<TaskBrowserSurfaceReference>
+  sessionEpoch: number
 }
 
 const LOCAL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -156,16 +161,19 @@ function allowedUrl(value: string): boolean {
 }
 
 function validBounds(bounds: TaskBrowserBounds): boolean {
-  return [bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)
+  return [bounds.x, bounds.y, bounds.width, bounds.height, bounds.x + bounds.width, bounds.y + bounds.height]
+    .every(Number.isFinite)
     && bounds.width >= 0
     && bounds.height >= 0
 }
 
 function clampBounds(bounds: TaskBrowserBounds, content: TaskBrowserBounds): TaskBrowserBounds {
-  const left = Math.max(bounds.x, content.x)
-  const top = Math.max(bounds.y, content.y)
-  const right = Math.min(bounds.x + bounds.width, content.x + content.width)
-  const bottom = Math.min(bounds.y + bounds.height, content.y + content.height)
+  const contentRight = content.x + content.width
+  const contentBottom = content.y + content.height
+  const left = Math.min(Math.max(bounds.x, content.x), contentRight)
+  const top = Math.min(Math.max(bounds.y, content.y), contentBottom)
+  const right = Math.min(Math.max(bounds.x + bounds.width, content.x), contentRight)
+  const bottom = Math.min(Math.max(bounds.y + bounds.height, content.y), contentBottom)
   return {
     x: left,
     y: top,
@@ -174,12 +182,25 @@ function clampBounds(bounds: TaskBrowserBounds, content: TaskBrowserBounds): Tas
   }
 }
 
+export function integerTaskBrowserBounds(bounds: TaskBrowserBounds): TaskBrowserBounds {
+  const x = Math.round(bounds.x)
+  const y = Math.round(bounds.y)
+  const right = Math.round(bounds.x + bounds.width)
+  const bottom = Math.round(bounds.y + bounds.height)
+  return {
+    x,
+    y,
+    width: Math.max(0, right - x),
+    height: Math.max(0, bottom - y),
+  }
+}
+
 export class TaskBrowserSurfaceManager {
   private readonly windows = new Map<number, TaskBrowserBounds>()
   private readonly surfacesByKey = new Map<string, SurfaceRecord>()
   private readonly surfacesById = new Map<string, SurfaceRecord>()
-  private readonly pending = new Map<string, Promise<TaskBrowserSurfaceReference>>()
-  private readonly destroyedSurfaceIds = new Set<string>()
+  private readonly pending = new Map<string, PendingSurfaceCreation>()
+  private readonly sessionResets = new Map<string, Promise<void>>()
   private readonly pluginEpochs = new Map<string, number>()
   private readonly sessionEpochs = new Map<string, number>()
   private readonly windowEpochs = new Map<number, number>()
@@ -203,7 +224,12 @@ export class TaskBrowserSurfaceManager {
     this.windows.set(windowId, { ...contentBounds })
     for (const surface of this.surfacesById.values()) {
       if (surface.windowId === windowId && surface.attachmentId && surface.requestedBounds) {
-        this.attach(surface.surfaceId, surface.attachmentId, surface.requestedBounds)
+        this.attach(
+          surface.surfaceId,
+          surface.attachmentId,
+          surface.attachmentGeneration,
+          surface.requestedBounds,
+        )
       }
     }
   }
@@ -216,26 +242,40 @@ export class TaskBrowserSurfaceManager {
 
   async getOrCreate(request: GetOrCreateTaskBrowserSurfaceRequest): Promise<TaskBrowserSurfaceReference> {
     this.validateIdentity(request)
+    const sessionKey = this.sessionEpochKey(request.pluginId, request.taskId)
+    let observedSessionEpoch = this.sessionEpochs.get(sessionKey) ?? 0
+    while (true) {
+      await this.waitForSessionReset(request.pluginId, request.taskId)
+      const currentSessionEpoch = this.sessionEpochs.get(sessionKey) ?? 0
+      if (currentSessionEpoch === observedSessionEpoch) break
+      observedSessionEpoch = currentSessionEpoch
+    }
     if (!this.windows.has(request.windowId)) {
       throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is unavailable')
     }
 
     const key = liveKey(request)
+    const inFlight = this.pending.get(key)
+    if (inFlight?.sessionEpoch === observedSessionEpoch) return inFlight.promise
+
     const existing = this.surfacesByKey.get(key)
     if (existing) {
       await this.options.authorize(request.pluginId, request.taskId)
+      if ((this.sessionEpochs.get(sessionKey) ?? 0) !== observedSessionEpoch) {
+        return this.getOrCreate(request)
+      }
+      if (this.surfacesByKey.get(key) !== existing) {
+        throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface was superseded during authorization')
+      }
       return this.reference(existing)
     }
 
-    const inFlight = this.pending.get(key)
-    if (inFlight) return inFlight
-
     const creation = this.createSurface(request, key)
-    this.pending.set(key, creation)
+    this.pending.set(key, { promise: creation, sessionEpoch: observedSessionEpoch })
     try {
       return await creation
     } finally {
-      if (this.pending.get(key) === creation) this.pending.delete(key)
+      if (this.pending.get(key)?.promise === creation) this.pending.delete(key)
     }
   }
 
@@ -251,41 +291,57 @@ export class TaskBrowserSurfaceManager {
     }
   }
 
-  attach(surfaceId: string, attachmentId: string, bounds: TaskBrowserBounds): void {
+  attach(
+    surfaceId: string,
+    attachmentId: string,
+    attachmentGeneration: number,
+    bounds: TaskBrowserBounds | null,
+  ): void {
     const surface = this.requireSurface(surfaceId)
     if (!attachmentId.trim()) throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires an id')
-    if (!validBounds(bounds)) throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment bounds are invalid')
+    if (!Number.isSafeInteger(attachmentGeneration) || attachmentGeneration <= 0) {
+      throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires a valid generation')
+    }
+    if (bounds !== null && !validBounds(bounds)) {
+      throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment bounds are invalid')
+    }
     const contentBounds = this.windows.get(surface.windowId)
     if (!contentBounds) throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is unavailable')
 
-    if (surface.staleAttachmentIds.has(attachmentId)) return
-    if (surface.attachmentId && surface.attachmentId !== attachmentId) {
-      surface.staleAttachmentIds.add(surface.attachmentId)
+    if (attachmentGeneration < surface.attachmentGeneration) return
+    const replacesAttachment = attachmentGeneration > surface.attachmentGeneration
+    if (!replacesAttachment && surface.attachmentId !== attachmentId) return
+
+    if (replacesAttachment) {
+      surface.attachmentId = attachmentId
+      surface.attachmentGeneration = attachmentGeneration
     }
-    surface.attachmentId = attachmentId
-    surface.requestedBounds = { ...bounds }
-    const clamped = clampBounds(bounds, contentBounds)
+    surface.requestedBounds = bounds === null ? null : { ...bounds }
+    if (bounds === null) {
+      this.retainDetached(surface, replacesAttachment)
+      return
+    }
+
+    const clamped = integerTaskBrowserBounds(clampBounds(bounds, contentBounds))
     if (clamped.width === 0 || clamped.height === 0) {
-      surface.native.detach()
-      surface.attached = false
-      surface.lastDetachedAt = ++this.lruSequence
-      this.enforceDetachedLimit(surface.windowId)
+      this.retainDetached(surface, replacesAttachment)
       return
     }
     surface.native.attach(surface.windowId, clamped)
     surface.attached = true
   }
 
-  detach(surfaceId: string, attachmentId?: string): void {
+  detach(surfaceId: string, attachmentId?: string, attachmentGeneration?: number): void {
     const surface = this.requireSurface(surfaceId)
-    if (attachmentId !== undefined && surface.attachmentId !== attachmentId) return
-    if (surface.attachmentId) surface.staleAttachmentIds.add(surface.attachmentId)
+    if (attachmentId !== undefined) {
+      if (attachmentGeneration === undefined) {
+        throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment disposal requires its generation')
+      }
+      if (surface.attachmentId !== attachmentId || surface.attachmentGeneration !== attachmentGeneration) return
+    }
     surface.attachmentId = null
     surface.requestedBounds = null
-    surface.attached = false
-    surface.lastDetachedAt = ++this.lruSequence
-    surface.native.detach()
-    this.enforceDetachedLimit(surface.windowId)
+    this.retainDetached(surface, true)
   }
 
   async destroy(surfaceId: string): Promise<void> {
@@ -333,9 +389,19 @@ export class TaskBrowserSurfaceManager {
     if (!taskId.trim()) throw new TaskBrowserSurfaceError('INVALID_TASK', 'Task Browser Session reset requires a Task ID')
     const sessionKey = this.sessionEpochKey(pluginId, taskId)
     this.sessionEpochs.set(sessionKey, (this.sessionEpochs.get(sessionKey) ?? 0) + 1)
-    await this.options.authorize(pluginId, taskId)
-    this.destroyWhere(surface => surface.pluginId === pluginId && surface.taskId === taskId)
-    await this.options.factory.clearSession(partitionFor(pluginId, taskId))
+    const previousReset = this.sessionResets.get(sessionKey)
+    const reset = (async () => {
+      await previousReset?.catch(() => undefined)
+      await this.options.authorize(pluginId, taskId)
+      this.destroyWhere(surface => surface.pluginId === pluginId && surface.taskId === taskId)
+      await this.options.factory.clearSession(partitionFor(pluginId, taskId))
+    })()
+    this.sessionResets.set(sessionKey, reset)
+    try {
+      await reset
+    } finally {
+      if (this.sessionResets.get(sessionKey) === reset) this.sessionResets.delete(sessionKey)
+    }
   }
 
   destroyPlugin(pluginId: string): void {
@@ -389,7 +455,7 @@ export class TaskBrowserSurfaceManager {
       id: request.id,
       partition,
       attachmentId: null,
-      staleAttachmentIds: new Set(),
+      attachmentGeneration: 0,
       requestedBounds: null,
       attached: false,
       lastDetachedAt: ++this.lruSequence,
@@ -416,6 +482,14 @@ export class TaskBrowserSurfaceManager {
       throw error
     }
   }
+  private async waitForSessionReset(pluginId: string, taskId: string): Promise<void> {
+    const sessionKey = this.sessionEpochKey(pluginId, taskId)
+    let reset = this.sessionResets.get(sessionKey)
+    while (reset) {
+      await reset.catch(() => undefined)
+      reset = this.sessionResets.get(sessionKey)
+    }
+  }
 
   private sessionEpochKey(pluginId: string, taskId: string): string {
     return `${pluginId}\u0000${taskId}`
@@ -432,8 +506,7 @@ export class TaskBrowserSurfaceManager {
   private requireSurface(surfaceId: string): SurfaceRecord {
     const surface = this.surfacesById.get(surfaceId)
     if (!surface) {
-      const detail = this.destroyedSurfaceIds.has(surfaceId) ? 'has been destroyed' : 'is unavailable'
-      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', `Task Browser Surface ${detail}`)
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface has been destroyed or evicted')
     }
     return surface
   }
@@ -461,12 +534,18 @@ export class TaskBrowserSurfaceManager {
       if (predicate(surface)) this.destroyRecord(surface)
     }
   }
+  private retainDetached(surface: SurfaceRecord, refreshRecency: boolean): void {
+    const wasAttached = surface.attached
+    surface.attached = false
+    surface.native.detach()
+    if (wasAttached || refreshRecency) surface.lastDetachedAt = ++this.lruSequence
+    this.enforceDetachedLimit(surface.windowId)
+  }
 
   private destroyRecord(surface: SurfaceRecord): void {
     if (this.surfacesById.get(surface.surfaceId) !== surface) return
     this.surfacesById.delete(surface.surfaceId)
     this.surfacesByKey.delete(surface.key)
-    this.destroyedSurfaceIds.add(surface.surfaceId)
     surface.unsubscribe()
     surface.native.detach()
     surface.native.destroy()

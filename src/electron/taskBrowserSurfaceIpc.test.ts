@@ -47,6 +47,21 @@ describe('Task Browser Surface IPC router', () => {
       id: 'main',
       initialUrl: 'https://example.com',
     })
+
+    await expect(router.handle('task_browser_surface_attach', {
+      surfaceId: 'surface-1',
+      attachmentId: 'attachment-2',
+      attachmentGeneration: 2,
+      bounds: null,
+    }, 10)).resolves.toMatchObject({ ok: true })
+    expect(manager.attach).toHaveBeenCalledWith('surface-1', 'attachment-2', 2, null)
+
+    await router.handle('task_browser_surface_detach', {
+      surfaceId: 'surface-1',
+      attachmentId: 'attachment-2',
+      attachmentGeneration: 2,
+    }, 10)
+    expect(manager.detach).toHaveBeenCalledWith('surface-1', 'attachment-2', 2)
   })
 
   it('checks window ownership for controller operations and returns named error envelopes', async () => {
@@ -70,9 +85,23 @@ describe('Task Browser Surface IPC router', () => {
       ok: false,
       error: { code: 'HOST_UNAVAILABLE' },
     })
-    await expect(router.handle('task_browser_surface_attach', { surfaceId: 'surface-1', attachmentId: 'a', bounds: { x: 0 } }, 10)).resolves.toMatchObject({
+    await expect(router.handle('task_browser_surface_attach', {
+      surfaceId: 'surface-1',
+      attachmentId: 'a',
+      attachmentGeneration: 1,
+      bounds: { x: 0 },
+    }, 10)).resolves.toMatchObject({
       ok: false,
       error: { code: 'INVALID_BOUNDS' },
+    })
+    await expect(router.handle('task_browser_surface_attach', {
+      surfaceId: 'surface-1',
+      attachmentId: 'a',
+      attachmentGeneration: 0,
+      bounds: null,
+    }, 10)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_ID' },
     })
   })
 })

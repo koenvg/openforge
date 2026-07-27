@@ -11,7 +11,12 @@ import type { RuntimeContributionRegistryInstance } from './runtimeContributionR
 import { createIpcPluginStorage } from './pluginStorage'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
-import { clearPluginRuntimeHostState, createPluginRuntimeHost, deactivatePluginBackend } from './pluginHostCommands'
+import {
+  clearPluginRuntimeHostState,
+  createPluginRuntimeHost,
+  deactivatePluginBackend,
+  destroyPluginBrowserSurfaces,
+} from './pluginHostCommands'
 import { clearPluginHostSubscriptions } from './pluginHostEvents'
 import {
   applyRuntimeSnapshotContributions,
@@ -381,11 +386,24 @@ export function listInjectionPointsAcrossPlugins(
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
-  await deactivatePluginBackend(pluginId)
+  let firstError: unknown = null
+  const attempt = async (cleanup: () => Promise<void>) => {
+    try {
+      await cleanup()
+    } catch (error) {
+      firstError ??= error
+    }
+  }
+
+  await attempt(() => deactivatePluginBackend(pluginId))
   bumpPluginFrontendReloadGeneration(pluginId)
-  await deactivateLoadedPluginModule(pluginId)
+  await attempt(() => destroyPluginBrowserSurfaces(pluginId))
+  await attempt(() => deactivateLoadedPluginModule(pluginId))
   clearPluginRuntimeContributions(pluginId)
-  await stopPluginBackgroundServices(pluginId)
+  await attempt(() => stopPluginBackgroundServices(pluginId))
   clearPluginHostSubscriptions(pluginId)
+  clearPluginRuntimeHostState(pluginId)
   setPluginRuntimeState(pluginId, 'installed', null)
+
+  if (firstError !== null) throw firstError
 }

@@ -106,6 +106,7 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
   readonly surfaces: FakeNativeSurface[] = []
   readonly clearedPartitions: string[] = []
   loadGate: Promise<void> | null = null
+  clearGate: Promise<void> | null = null
 
   createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface {
     this.creations.push(options)
@@ -117,6 +118,7 @@ class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
 
   async clearSession(partition: string): Promise<void> {
     this.clearedPartitions.push(partition)
+    if (this.clearGate) await this.clearGate
   }
 }
 
@@ -172,6 +174,38 @@ describe('Task Browser Surface Manager', () => {
     expect(factory.creations[1].partition).toBe(factory.creations[0].partition)
   })
 
+  it('keeps concurrent callers pending until the initial URL load completes', async () => {
+    let releaseInitialLoad: (() => void) | null = null
+    const { manager, factory } = createManager()
+    factory.loadGate = new Promise<void>(resolve => { releaseInitialLoad = resolve })
+
+    const first = manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-load-serialization',
+      id: 'main',
+      initialUrl: 'https://example.com',
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    let secondSettled = false
+    const second = manager
+      .getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-load-serialization', id: 'main' })
+      .then(reference => {
+        secondSettled = true
+        return reference
+      })
+    await Promise.resolve()
+    await Promise.resolve()
+    const settledBeforeLoad = secondSettled
+
+    ;(releaseInitialLoad as (() => void) | null)?.()
+    const [firstReference, secondReference] = await Promise.all([first, second])
+
+    expect(settledBeforeLoad).toBe(false)
+    expect(secondReference.surfaceId).toBe(firstReference.surfaceId)
+    expect(factory.creations).toHaveLength(1)
+  })
   it('serializes concurrent getOrCreate calls for the same live identity', async () => {
     let releaseAuthorization: (() => void) | null = null
     const authorize = vi.fn(() => new Promise<void>(resolve => { releaseAuthorization = resolve }))
@@ -209,14 +243,14 @@ describe('Task Browser Surface Manager', () => {
       .rejects.toMatchObject({ code: 'INVALID_URL' })
   })
 
-  it('attaches with clamped bounds, protects newer attachments, publishes state, and destroys explicitly', async () => {
+  it('clamps bounds and uses attachment generations to preserve the newest attachment', async () => {
     const { manager, factory, stateEvents } = createManager()
     const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-1', id: 'main' })
 
-    manager.attach(created.surfaceId, 'old', { x: -20, y: 20, width: 900, height: 700 })
-    manager.attach(created.surfaceId, 'new', { x: 30, y: 40, width: 300, height: 200 })
-    manager.attach(created.surfaceId, 'old', { x: 400, y: 400, width: 100, height: 100 })
-    manager.detach(created.surfaceId, 'old')
+    manager.attach(created.surfaceId, 'old', 1, { x: -20, y: 20, width: 900, height: 700 })
+    manager.attach(created.surfaceId, 'new', 2, { x: 30, y: 40, width: 300, height: 200 })
+    manager.attach(created.surfaceId, 'old', 1, { x: 400, y: 400, width: 100, height: 100 })
+    manager.detach(created.surfaceId, 'old', 1)
 
     expect(factory.surfaces[0].attachedWindowId).toBe(10)
     expect(factory.surfaces[0].bounds).toEqual([
@@ -230,16 +264,154 @@ describe('Task Browser Surface Manager', () => {
     ])
     await expect(manager.getState(created.surfaceId)).resolves.toMatchObject({ title: 'Example', loading: true })
 
-    manager.attach(created.surfaceId, 'new', { x: -20, y: 10, width: 100, height: 100 })
+    manager.attach(created.surfaceId, 'new', 2, { x: -20, y: 10, width: 100, height: 100 })
     manager.updateWindowBounds(10, { x: 0, y: 0, width: 50, height: 50 })
     expect(factory.surfaces[0].bounds.slice(-2)).toEqual([
       { x: 0, y: 10, width: 80, height: 100 },
       { x: 0, y: 10, width: 50, height: 40 },
     ])
 
+    manager.attach(created.surfaceId, 'new', 2, null)
+    expect(factory.surfaces[0].attachedWindowId).toBeNull()
+    manager.attach(created.surfaceId, 'new', 2, { x: 5, y: 6, width: 20, height: 30 })
+    expect(factory.surfaces[0].attachedWindowId).toBe(10)
+
+    manager.detach(created.surfaceId, 'new', 2)
+    manager.attach(created.surfaceId, 'new', 2, { x: 7, y: 8, width: 20, height: 30 })
+    expect(factory.surfaces[0].attachedWindowId).toBeNull()
+
+    manager.attach(created.surfaceId, 'tiny', 3, { x: 0.1, y: 0.1, width: 0.2, height: 0.2 })
+    expect(factory.surfaces[0].attachedWindowId).toBeNull()
+    manager.attach(created.surfaceId, 'tiny', 3, { x: 0.1, y: 0.1, width: 1.2, height: 1.2 })
+    expect(factory.surfaces[0].attachedWindowId).toBe(10)
+    expect(factory.surfaces[0].bounds.at(-1)).toEqual({ x: 0, y: 0, width: 1, height: 1 })
+
+    expect(() => manager.attach(created.surfaceId, 'replacement', 4, { x: 0, y: 0, width: -1, height: 20 }))
+      .toThrow(expect.objectContaining({ code: 'INVALID_BOUNDS' }))
+
     await manager.destroy(created.surfaceId)
     expect(factory.surfaces[0].destroyed).toBe(true)
     await expect(manager.getState(created.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+  })
+
+  it('does not return an existing surface destroyed while reauthorization is pending', async () => {
+    let releaseReauthorization: (() => void) | null = null
+    let authorizationCall = 0
+    const { manager } = createManager({
+      authorize: vi.fn(async () => {
+        authorizationCall += 1
+        if (authorizationCall === 2) {
+          await new Promise<void>(resolve => { releaseReauthorization = resolve })
+        }
+      }),
+    })
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-existing-race', id: 'main' })
+
+    const reacquired = manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-existing-race', id: 'main' })
+    await Promise.resolve()
+    manager.destroyPlugin('browser')
+    ;(releaseReauthorization as (() => void) | null)?.()
+
+    await expect(reacquired).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+  })
+
+  it('does not return an existing surface after a session reset starts', async () => {
+    let releaseClear: (() => void) | null = null
+    const { manager, factory } = createManager()
+    const existing = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-reset-existing',
+      id: 'main',
+    })
+    factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
+
+    let reacquireSettled = false
+    const reacquired = manager
+      .getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-existing', id: 'main' })
+      .then(reference => {
+        reacquireSettled = true
+        return reference
+      })
+    const reset = manager.resetSession('browser', 'T-reset-existing')
+    for (let count = 0; count < 6; count += 1) await Promise.resolve()
+    const settledBeforeResetFinished = reacquireSettled
+
+    ;(releaseClear as (() => void) | null)?.()
+    await reset
+    const replacement = await reacquired
+
+    expect(settledBeforeResetFinished).toBe(false)
+    expect(replacement.surfaceId).not.toBe(existing.surfaceId)
+    await expect(manager.getState(existing.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(replacement.surfaceId)).resolves.toBeDefined()
+  })
+
+  it('waits for reset clearing when reset starts during existing-surface authorization', async () => {
+    let releaseReauthorization: (() => void) | null = null
+    let releaseClear: (() => void) | null = null
+    let authorizationCall = 0
+    const { manager, factory } = createManager({
+      authorize: vi.fn(async () => {
+        authorizationCall += 1
+        if (authorizationCall === 2) {
+          await new Promise<void>(resolve => { releaseReauthorization = resolve })
+        }
+      }),
+    })
+    const existing = await manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-reset-during-authorization',
+      id: 'main',
+    })
+    factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
+
+    let reacquireSettled = false
+    const reacquired = manager
+      .getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-during-authorization', id: 'main' })
+      .then(reference => {
+        reacquireSettled = true
+        return reference
+      })
+    for (let count = 0; count < 6 && releaseReauthorization === null; count += 1) await Promise.resolve()
+    const reset = manager.resetSession('browser', 'T-reset-during-authorization')
+    for (let count = 0; count < 6; count += 1) await Promise.resolve()
+    ;(releaseReauthorization as (() => void) | null)?.()
+    for (let count = 0; count < 6; count += 1) await Promise.resolve()
+    const settledBeforeResetFinished = reacquireSettled
+
+    ;(releaseClear as (() => void) | null)?.()
+    await reset
+    const replacement = await reacquired
+
+    expect(settledBeforeResetFinished).toBe(false)
+    expect(replacement.surfaceId).not.toBe(existing.surfaceId)
+    await expect(manager.getState(replacement.surfaceId)).resolves.toBeDefined()
+  })
+
+  it('does not create a surface when a same-turn session reset begins first', async () => {
+    let releaseClear: (() => void) | null = null
+    const { manager, factory } = createManager()
+    factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
+
+    let getOrCreateSettled = false
+    const created = manager
+      .getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-same-turn', id: 'main' })
+      .then(reference => {
+        getOrCreateSettled = true
+        return reference
+      })
+    const reset = manager.resetSession('browser', 'T-reset-same-turn')
+    for (let count = 0; count < 6; count += 1) await Promise.resolve()
+    const settledBeforeResetFinished = getOrCreateSettled
+
+    ;(releaseClear as (() => void) | null)?.()
+    await reset
+    const reference = await created
+
+    expect(settledBeforeResetFinished).toBe(false)
+    await expect(manager.getState(reference.surfaceId)).resolves.toBeDefined()
   })
 
   it('invalidates pending creation when reset or plugin cleanup wins the lifecycle race', async () => {
@@ -286,10 +458,83 @@ describe('Task Browser Surface Manager', () => {
     await expect(pendingLoad).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
-  it('clears durable session data and evicts the least-recently-used detached surface above four', async () => {
+  it('reacquires a replacement instead of inheriting stale pre-reset pending creation', async () => {
+    let releaseInitialLoad: (() => void) | null = null
+    let releaseClear: (() => void) | null = null
+    const { manager, factory } = createManager()
+    factory.loadGate = new Promise<void>(resolve => { releaseInitialLoad = resolve })
+    const original = manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-reset-pending',
+      id: 'main',
+      initialUrl: 'https://example.com',
+    })
+    for (let count = 0; count < 8 && factory.creations.length === 0; count += 1) await Promise.resolve()
+    factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
+
+    const reset = manager.resetSession('browser', 'T-reset-pending')
+    for (let count = 0; count < 8 && factory.clearedPartitions.length === 0; count += 1) await Promise.resolve()
+    let reacquireSettled = false
+    const reacquired = manager
+      .getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-pending', id: 'main' })
+      .then(
+        reference => {
+          reacquireSettled = true
+          return { reference, errorCode: null }
+        },
+        error => {
+          reacquireSettled = true
+          return { reference: null, errorCode: (error as { code?: string }).code ?? 'unexpected-error' }
+        },
+      )
+    factory.loadGate = null
+
+    ;(releaseClear as (() => void) | null)?.()
+    await reset
+    for (let count = 0; count < 8; count += 1) await Promise.resolve()
+    const settledAfterReset = reacquireSettled
+
+    ;(releaseInitialLoad as (() => void) | null)?.()
+    const reacquireOutcome = await reacquired
+    await expect(original).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+
+    expect(settledAfterReset).toBe(true)
+    expect(reacquireOutcome.errorCode).toBeNull()
+    expect(reacquireOutcome.reference).not.toBeNull()
+    await expect(manager.getState(reacquireOutcome.reference!.surfaceId)).resolves.toBeDefined()
+  })
+  it('blocks new live surfaces until asynchronous Task Browser Session reset finishes', async () => {
+    let releaseClear: (() => void) | null = null
+    const { manager, factory } = createManager()
+    await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-serialized', id: 'main' })
+    factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
+
+    const reset = manager.resetSession('browser', 'T-reset-serialized')
+    for (let count = 0; count < 4; count += 1) await Promise.resolve()
+    const duringReset = manager.getOrCreate({
+      windowId: 10,
+      pluginId: 'browser',
+      taskId: 'T-reset-serialized',
+      id: 'main',
+    })
+    for (let count = 0; count < 4; count += 1) await Promise.resolve()
+    const creationsBeforeClearFinished = factory.creations.length
+
+    ;(releaseClear as (() => void) | null)?.()
+    await reset
+    const replacement = await duringReset
+
+    expect(creationsBeforeClearFinished).toBe(1)
+    expect(factory.creations).toHaveLength(2)
+    expect(factory.surfaces[0].destroyed).toBe(true)
+    expect(factory.surfaces[1].destroyed).toBe(false)
+    await expect(manager.getState(replacement.surfaceId)).resolves.toBeDefined()
+  })
+  it('retains at most four detached surfaces per window without evicting attached surfaces', async () => {
     const { manager, factory } = createManager()
     const surfaces = []
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       surfaces.push(await manager.getOrCreate({
         windowId: 10,
         pluginId: 'browser',
@@ -298,13 +543,56 @@ describe('Task Browser Surface Manager', () => {
       }))
     }
 
-    expect(factory.surfaces[0].destroyed).toBe(true)
-    await expect(manager.getState(surfaces[0].surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
-    await expect(manager.getState(surfaces[4].surfaceId)).resolves.toBeDefined()
+    manager.attach(surfaces[0].surfaceId, 'visible', 1, { x: 0, y: 0, width: 200, height: 100 })
+    for (let index = 4; index < 6; index += 1) {
+      surfaces.push(await manager.getOrCreate({
+        windowId: 10,
+        pluginId: 'browser',
+        taskId: `T-${index}`,
+        id: 'main',
+      }))
+    }
 
-    await manager.resetSession('browser', 'T-4')
-    expect(factory.clearedPartitions).toEqual([factory.creations[4].partition])
-    expect(factory.surfaces[4].destroyed).toBe(true)
+    expect(factory.surfaces[0].destroyed).toBe(false)
+    expect(factory.surfaces[1].destroyed).toBe(true)
+    await expect(manager.getState(surfaces[0].surfaceId)).resolves.toBeDefined()
+    await expect(manager.getState(surfaces[1].surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+
+    manager.detach(surfaces[0].surfaceId)
+    expect(factory.surfaces[0].destroyed).toBe(false)
+    expect(factory.surfaces[2].destroyed).toBe(true)
+  })
+
+  it('releases plugin, window, and application live resources without clearing durable sessions', async () => {
+    const { manager, factory } = createManager()
+    const pluginWindow10 = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-1', id: 'main' })
+    await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-2', id: 'main' })
+    const otherPluginWindow10 = await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-1', id: 'main' })
+    const otherPluginWindow11 = await manager.getOrCreate({ windowId: 11, pluginId: 'notes', taskId: 'T-2', id: 'main' })
+
+    manager.destroyPlugin('browser')
+    expect(factory.surfaces.slice(0, 2).every(surface => surface.destroyed)).toBe(true)
+    await expect(manager.getState(pluginWindow10.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(otherPluginWindow10.surfaceId)).resolves.toBeDefined()
+
+    manager.unregisterWindow(10)
+    expect(factory.surfaces[2].destroyed).toBe(true)
+    await expect(manager.getState(otherPluginWindow11.surfaceId)).resolves.toBeDefined()
+
+    manager.destroyAll()
+    expect(factory.surfaces[3].destroyed).toBe(true)
+    expect(factory.clearedPartitions).toEqual([])
+  })
+
+  it('clears durable session data only for an explicit session reset', async () => {
+    const { manager, factory } = createManager()
+    const surface = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset', id: 'main' })
+
+    await manager.resetSession('browser', 'T-reset')
+
+    expect(factory.clearedPartitions).toEqual([factory.creations[0].partition])
+    expect(factory.surfaces[0].destroyed).toBe(true)
+    await expect(manager.getState(surface.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
   it('controls HTTP(S) navigation and returns complete history and loading snapshots', async () => {
