@@ -13,6 +13,10 @@
       "directoryName": "terminal"
     },
     {
+      "id": "com.openforge.task-browser",
+      "directoryName": "task-browser"
+    },
+    {
       "id": "com.openforge.task-schedules",
       "directoryName": "task-schedules"
     }
