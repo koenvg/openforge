@@ -147,12 +147,65 @@ describe('createTaskActionRunner', () => {
     // immediately with the defensive `auto` resolution.
     expect(inspectExistingBranch).not.toHaveBeenCalled()
     expect(acquire).toHaveBeenCalledWith(task.id)
-    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto', 'iterm2')
+    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto', 'iterm2', null)
     expect(get(taskRuntimeInfo).get(task.id)).toEqual({ workspacePath: '/workspace/T-42' })
     expect(get(activeSessions).get(task.id)).toEqual({ ticket_id: task.id, status: 'running' })
     expect(loadTasks).toHaveBeenCalledOnce()
     expect(focusTerminal).toHaveBeenCalledWith(task.id)
     expect(get(startingTasks).has(task.id)).toBe(false)
+  })
+
+  it('passes a one-off prompt prefix to the sidecar on a cold start', async () => {
+    vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as any)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    tasks.set([task])
+    await runner.handleRunAction({
+      taskId: task.id,
+      actionPrompt: '',
+      agent: null,
+      promptPrefix: 'Verify this is still relevant.',
+    })
+
+    expect(startImplementation).toHaveBeenCalledWith(task.id, activeProject.path, 'auto', null, 'Verify this is still relevant.')
+  })
+
+  it('sends a null prefix when the start carries none', async () => {
+    vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as any)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    tasks.set([task])
+    await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+
+    expect(vi.mocked(startImplementation).mock.calls[0][4]).toBeNull()
+  })
+
+  it('ignores the prefix when a PTY is already live', async () => {
+    vi.mocked(isPtyActive).mockReturnValue(true)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    tasks.set([task])
+    await runner.handleRunAction({
+      taskId: task.id,
+      actionPrompt: 'continue',
+      agent: null,
+      promptPrefix: 'Verify this is still relevant.',
+    })
+
+    expect(startImplementation).not.toHaveBeenCalled()
+    expect(writePtyWithSubmit).toHaveBeenCalledWith(task.id, 'continue')
   })
 
   it('releases a terminal created for an implementation start that fails', async () => {
@@ -212,7 +265,7 @@ describe('createTaskActionRunner', () => {
 
     expect(inspectExistingBranch).toHaveBeenCalledWith(activeProject.path, 'origin/foo')
     expect(get(branchDivergenceRequest)).toBeNull()
-    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'auto')
+    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'auto', null, null)
   })
 
   it('opens the divergence modal for a diverged branch and threads the chosen resolution', async () => {
@@ -236,7 +289,7 @@ describe('createTaskActionRunner', () => {
     branchDivergenceRequest.set(null)
     await started
 
-    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'keepLocal')
+    expect(startImplementation).toHaveBeenCalledWith(branchTask.id, activeProject.path, 'keepLocal', null, null)
   })
 
   it('aborts the start when the divergence modal is cancelled', async () => {
