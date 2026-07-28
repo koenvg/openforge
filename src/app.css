@@ -33,9 +33,9 @@
   --color-info: #6C63C9;
   --color-info-content: #FFFFFF;
   --color-success: #4CAF50;
-  --color-success-content: #166534;
+  --color-success-content: #052E16;
   --color-warning: #E8A820;
-  --color-warning-content: #7C4A00;
+  --color-warning-content: #451A03;
   --color-error: #DC2626;
   --color-error-content: #FFFFFF;
 
@@ -70,9 +70,9 @@
   --color-info: #8B82E0;
   --color-info-content: #FFFFFF;
   --color-success: #4CAF50;
-  --color-success-content: #166534;
+  --color-success-content: #052E16;
   --color-warning: #E8A820;
-  --color-warning-content: #7C4A00;
+  --color-warning-content: #451A03;
   --color-error: #DC2626;
   --color-error-content: #FFFFFF;
 
@@ -88,6 +88,19 @@
 
 :root {
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
 }
 
 /* Soft chip tokens — for PR/review metadata pills */
