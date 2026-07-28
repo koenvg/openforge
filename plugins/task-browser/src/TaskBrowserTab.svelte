@@ -177,7 +177,7 @@
         title={surfaceState.loading ? 'Stop loading' : 'Reload page'}
         disabled={opening || session === null}
         onclick={() => void runSurfaceAction(activeSession => surfaceState.loading
-          ? activeSession.surface.stop()
+          ? activeSession.stop()
           : activeSession.surface.reload())}
       >
         {#if surfaceState.loading}

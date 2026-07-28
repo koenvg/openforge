@@ -7,12 +7,13 @@ import {
   type TaskBrowserSurfaceState,
 } from '@openforge-app/plugin-sdk/frontend'
 
-export const DEFAULT_BROWSER_URL = 'https://example.com/'
 const LAST_BROWSER_URL_KEY = 'lastBrowserUrl'
+const LEGACY_DEFAULT_BROWSER_URL = 'https://example.com/'
 
 export interface BrowserTabSession {
   readonly surface: TaskBrowserSurfaceController
   navigate(address: string): Promise<TaskBrowserSurfaceState>
+  stop(): Promise<TaskBrowserSurfaceState>
   dispose(): Promise<void>
 }
 
@@ -37,9 +38,14 @@ export function normalizeBrowserAddress(input: string): string {
   return new URL(candidate).toString()
 }
 
-async function savedInitialUrl(api: FrontendOpenForgeAPI, taskId: string): Promise<string> {
-  const saved = await api.storage.task(taskId).get<string>(LAST_BROWSER_URL_KEY)
-  return saved !== null && isAllowedBrowserSurfaceUrl(saved) ? saved : DEFAULT_BROWSER_URL
+async function savedInitialUrl(api: FrontendOpenForgeAPI, taskId: string): Promise<string | undefined> {
+  const storage = api.storage.task(taskId)
+  const saved = await storage.get<string>(LAST_BROWSER_URL_KEY)
+  if (saved === LEGACY_DEFAULT_BROWSER_URL) {
+    await storage.delete(LAST_BROWSER_URL_KEY)
+    return undefined
+  }
+  return saved !== null && isAllowedBrowserSurfaceUrl(saved) ? saved : undefined
 }
 
 export async function createBrowserTabSession({
@@ -49,16 +55,25 @@ export async function createBrowserTabSession({
   onStateChanged,
 }: CreateBrowserTabSessionOptions): Promise<BrowserTabSession> {
   const taskStorage = api.storage.task(taskId)
+  const initialUrl = await savedInitialUrl(api, taskId)
   const surface = await api.browserSurfaces.getOrCreate({
     taskId,
     id: 'main',
-    initialUrl: await savedInitialUrl(api, taskId),
+    ...(initialUrl === undefined ? {} : { initialUrl }),
   })
 
   let persistence = Promise.resolve()
+  let latestState: TaskBrowserSurfaceState | null = null
+  let persistenceSuppression: 'none' | 'awaiting-stop-settle' | 'awaiting-next-load' = 'none'
   let subscription: Disposable | null = surface.onStateChanged((state) => {
+    latestState = state
+    if (persistenceSuppression === 'awaiting-stop-settle' && !state.loading) {
+      persistenceSuppression = 'awaiting-next-load'
+    } else if (persistenceSuppression === 'awaiting-next-load' && state.loading) {
+      persistenceSuppression = 'none'
+    }
     onStateChanged(state)
-    if (isAllowedBrowserSurfaceUrl(state.url) && state.error === null) {
+    if (persistenceSuppression === 'none' && !state.loading && isAllowedBrowserSurfaceUrl(state.url) && state.error === null) {
       persistence = persistence
         .then(() => taskStorage.set(LAST_BROWSER_URL_KEY, state.url))
         .catch(() => undefined)
@@ -68,7 +83,8 @@ export async function createBrowserTabSession({
 
   try {
     attachment = await surface.attach(element)
-    onStateChanged(await surface.getState())
+    latestState = await surface.getState()
+    onStateChanged(latestState)
   } catch (error) {
     const resources = [attachment, subscription]
     attachment = null
@@ -82,6 +98,18 @@ export async function createBrowserTabSession({
     surface,
     navigate(address) {
       return surface.navigate(normalizeBrowserAddress(address))
+    },
+    async stop() {
+      const shouldSuppressPersistence = latestState?.loading === true
+      if (shouldSuppressPersistence) persistenceSuppression = 'awaiting-stop-settle'
+      try {
+        const state = await surface.stop()
+        latestState = state
+        return state
+      } catch (error) {
+        if (shouldSuppressPersistence) persistenceSuppression = 'none'
+        throw error
+      }
     },
     async dispose() {
       if (disposed) return
