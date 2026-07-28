@@ -10,6 +10,7 @@ import type {
   TaskBrowserNavigationError,
   TaskBrowserSurfaceCreateOptions,
 } from './taskBrowserSurfaceManager.js'
+import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 
 function allowedTopLevelUrl(value: string): boolean {
   try {
@@ -76,11 +77,69 @@ export function sanitizeTaskBrowserDownloadFilename(suggestedFilename: string): 
   return sanitized || 'download'
 }
 
-const securedTaskBrowserSessions = new WeakSet<Session>()
+const DENY_TASK_BROWSER_PERMISSIONS: TaskBrowserPermissionSessionHandler = {
+  check: () => false,
+  request: async () => false,
+}
+
+type PermissionOwner = {
+  windowId: number
+  handler: TaskBrowserPermissionSessionHandler
+}
+
+class ElectronTaskBrowserPermissionRouter {
+  private readonly owners = new Map<WebContents, PermissionOwner>()
+
+  constructor(browserSession: Session) {
+    browserSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      if (!webContents) return false
+      const owner = this.owners.get(webContents)
+      if (!owner) return false
+      try {
+        return owner.handler.check({ permission, requestingOrigin, details })
+      } catch {
+        return false
+      }
+    })
+    browserSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      const owner = this.owners.get(webContents)
+      if (!owner) {
+        callback(false)
+        return
+      }
+      try {
+        void owner.handler.request({ windowId: owner.windowId, permission, details })
+          .then(decision => callback(decision === true), () => callback(false))
+      } catch {
+        callback(false)
+      }
+    })
+  }
+
+  register(webContents: WebContents, owner: PermissionOwner): void {
+    this.owners.set(webContents, owner)
+  }
+
+  unregister(webContents: WebContents): void {
+    this.owners.delete(webContents)
+  }
+}
+
+const taskBrowserPermissionRouters = new WeakMap<Session, ElectronTaskBrowserPermissionRouter>()
+
+function permissionRouterFor(browserSession: Session): ElectronTaskBrowserPermissionRouter {
+  let router = taskBrowserPermissionRouters.get(browserSession)
+  if (!router) {
+    router = new ElectronTaskBrowserPermissionRouter(browserSession)
+    taskBrowserPermissionRouters.set(browserSession, router)
+  }
+  return router
+}
 
 class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private readonly view: WebContentsView
   private readonly browserSession: Session
+  private readonly permissionRouter: ElectronTaskBrowserPermissionRouter
   private readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
   private readonly childWindows = new Set<BrowserWindow>()
   private readonly activeDownloads = new Map<DownloadItem, () => void>()
@@ -93,11 +152,11 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       webPreferences: this.secureWebPreferences(),
     })
     this.browserSession = this.view.webContents.session
-    if (!securedTaskBrowserSessions.has(this.browserSession)) {
-      securedTaskBrowserSessions.add(this.browserSession)
-      this.browserSession.setPermissionCheckHandler(() => false)
-      this.browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
-    }
+    this.permissionRouter = permissionRouterFor(this.browserSession)
+    this.permissionRouter.register(this.view.webContents, {
+      windowId: this.options.windowId,
+      handler: this.options.permissionHandler ?? DENY_TASK_BROWSER_PERMISSIONS,
+    })
     this.browserSession.on('will-download', this.handleWillDownload)
     this.configureSecurityPolicy(this.view.webContents)
     this.configureStatePublication(this.view.webContents)
@@ -178,6 +237,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     this.destroyed = true
     this.destroyChildWindows()
     this.browserSession.removeListener('will-download', this.handleWillDownload)
+    this.permissionRouter.unregister(this.view.webContents)
     this.cancelActiveDownloads()
     this.listeners.clear()
     if (!this.view.webContents.isDestroyed()) {
@@ -284,7 +344,14 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       return
     }
     this.childWindows.add(window)
-    window.on('closed', () => this.childWindows.delete(window))
+    this.permissionRouter.register(window.webContents, {
+      windowId: this.options.windowId,
+      handler: this.options.permissionHandler ?? DENY_TASK_BROWSER_PERMISSIONS,
+    })
+    window.on('closed', () => {
+      this.childWindows.delete(window)
+      this.permissionRouter.unregister(window.webContents)
+    })
     this.configureSecurityPolicy(window.webContents)
   }
 

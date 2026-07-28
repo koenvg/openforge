@@ -13,6 +13,7 @@ import type {
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceStateEvent,
 } from './taskBrowserSurfaceManager'
+import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy'
 import type {
   TaskBrowserPartitionRegistration,
   TaskBrowserPartitionRegistry,
@@ -166,21 +167,30 @@ function createManager(overrides: { authorize?: (pluginId: string, taskId: strin
   const factory = new FakeNativeFactory()
   const registry = new FakePartitionRegistry()
   const authorize = overrides.authorize ?? vi.fn(async () => undefined)
+  const permissionHandler: TaskBrowserPermissionSessionHandler = {
+    check: vi.fn(() => false),
+    request: vi.fn(async () => false),
+  }
+  const permissions = {
+    createSessionHandler: vi.fn(async () => permissionHandler),
+    clearSession: vi.fn(async () => undefined),
+  }
   const stateEvents: TaskBrowserSurfaceStateEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
     factory,
     registry,
+    permissions,
     authorize,
     onStateChanged: event => stateEvents.push(event),
   })
   manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
   manager.registerWindow(11, { x: 0, y: 0, width: 800, height: 600 })
-  return { manager, factory, registry, authorize, stateEvents }
+  return { manager, factory, registry, permissions, permissionHandler, authorize, stateEvents }
 }
 
 describe('Task Browser Surface Manager', () => {
   it('creates one secure live surface per window, plugin, Task, and local id', async () => {
-    const { manager, factory, authorize } = createManager()
+    const { manager, factory, permissions, permissionHandler, authorize } = createManager()
 
     const first = await manager.getOrCreate({
       windowId: 10,
@@ -214,6 +224,9 @@ describe('Task Browser Surface Manager', () => {
       partition: expect.stringMatching(/^persist:openforge-task-browser-/),
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
     })
+    expect(factory.creations[0].permissionHandler).toBe(permissionHandler)
+    expect(permissions.createSessionHandler).toHaveBeenCalledTimes(2)
+    expect(permissions.createSessionHandler).toHaveBeenCalledWith('browser', 'T-1')
     expect(factory.creations[1].partition).toBe(factory.creations[0].partition)
   })
 
@@ -282,7 +295,7 @@ describe('Task Browser Surface Manager', () => {
   })
 
   it('preserves Task Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
-    const { manager, factory } = createManager()
+    const { manager, factory, permissions } = createManager()
     const savedUrl = 'https://example.com/restored'
     const original = await manager.getOrCreate({
       windowId: 10,
@@ -349,6 +362,7 @@ describe('Task Browser Surface Manager', () => {
     const restartedManager = new TaskBrowserSurfaceManager({
       factory,
       registry: new FakePartitionRegistry(),
+      permissions,
       authorize: async () => undefined,
     })
     restartedManager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
@@ -843,7 +857,7 @@ describe('Task Browser Surface Manager', () => {
 
   it('purges a registered session across windows without reauthorizing a deleted Task', async () => {
     const authorize = vi.fn(async () => undefined)
-    const { manager, factory } = createManager({ authorize })
+    const { manager, factory, permissions } = createManager({ authorize })
     const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
     const second = await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
     const unrelated = await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-purge', id: 'main' })
@@ -854,6 +868,7 @@ describe('Task Browser Surface Manager', () => {
 
     expect(authorize).toHaveBeenCalledTimes(3)
     expect(factory.clearedPartitions).toEqual([partition])
+    expect(permissions.clearSession).toHaveBeenCalledWith('browser', 'T-purge')
     await expect(manager.getState(first.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     await expect(manager.getState(second.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     await expect(manager.getState(unrelated.surfaceId)).resolves.toBeDefined()
@@ -874,15 +889,17 @@ describe('Task Browser Surface Manager', () => {
   })
 
   it('clears durable session data only for an explicit session reset', async () => {
-    const { manager, factory } = createManager()
+    const { manager, factory, permissions } = createManager()
     const surface = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset', id: 'main' })
 
     await manager.resetSession('browser', 'T-reset')
 
     expect(factory.clearedPartitions).toEqual([factory.creations[0].partition])
+    expect(permissions.clearSession).toHaveBeenCalledWith('browser', 'T-reset')
     expect(factory.surfaces[0].destroyed).toBe(true)
     await expect(manager.getState(surface.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
+
 
   it('controls HTTP(S) navigation and returns complete history and loading snapshots', async () => {
     const { manager, factory, stateEvents } = createManager()

@@ -3,6 +3,7 @@ import type {
   TaskBrowserPartitionRegistration,
   TaskBrowserPartitionRegistry,
 } from './taskBrowserPartitionRegistry.js'
+import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 
 export type TaskBrowserSurfaceErrorCode =
   | 'HOST_UNAVAILABLE'
@@ -83,6 +84,7 @@ export interface TaskBrowserSurfaceCreateOptions {
   partition: TaskBrowserSessionPartition
   webPreferences: TaskBrowserWebPreferences
   popupPolicy: TaskBrowserPopupPolicy
+  permissionHandler?: TaskBrowserPermissionSessionHandler
 }
 
 export interface NativeTaskBrowserSurface {
@@ -109,10 +111,15 @@ export interface TaskBrowserSurfaceStateEvent {
   generation: number
   state: TaskBrowserNativeState
 }
+export interface TaskBrowserPermissionController {
+  createSessionHandler(pluginId: string, taskId: string): Promise<TaskBrowserPermissionSessionHandler>
+  clearSession(pluginId: string, taskId: string): Promise<void>
+}
 
 export interface TaskBrowserSurfaceManagerOptions {
   factory: NativeTaskBrowserSurfaceFactory
   registry: TaskBrowserPartitionRegistry
+  permissions: TaskBrowserPermissionController
   authorize(pluginId: string, taskId: string): Promise<void>
   onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
 }
@@ -496,6 +503,11 @@ export class TaskBrowserSurfaceManager {
       throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is unavailable')
     }
 
+    const permissionHandler = await this.options.permissions.createSessionHandler(request.pluginId, request.taskId)
+    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
+    }
+
     const partition = taskBrowserSessionPartition(request.pluginId, request.taskId)
     await this.options.registry.register({
       pluginId: request.pluginId,
@@ -510,6 +522,7 @@ export class TaskBrowserSurfaceManager {
       partition,
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+      permissionHandler,
     })
     const surfaceId = `task-browser-surface-${++this.surfaceSequence}`
     const generation = ++this.generationSequence
@@ -561,7 +574,12 @@ export class TaskBrowserSurfaceManager {
       await previousReset?.catch(() => undefined)
       if (authorize) await this.options.authorize(record.pluginId, record.taskId)
       this.destroyWhere(surface => surface.pluginId === record.pluginId && surface.taskId === record.taskId)
-      await this.options.factory.clearSession(record.partition)
+      const cleanupResults = await Promise.allSettled([
+        this.options.factory.clearSession(record.partition),
+        this.options.permissions.clearSession(record.pluginId, record.taskId),
+      ])
+      const failure = cleanupResults.find(result => result.status === 'rejected')
+      if (failure?.status === 'rejected') throw failure.reason
     })()
     this.sessionResets.set(sessionKey, reset)
     try {
