@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
@@ -218,6 +218,37 @@ describe('TaskBrowserSessionPurgeCoordinator', () => {
 
     expect(purgeSession).toHaveBeenCalledWith(record)
     expect(backend.acknowledged).toEqual([4])
+  })
+
+  it('keeps a purge pending when both initialized registry copies are missing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'openforge-browser-purge-missing-registry-'))
+    const path = join(directory, 'registry.json')
+    const registry = new FileTaskBrowserPartitionRegistry(path)
+    await registry.register({ pluginId: 'browser', taskId: 'T-1', partition: partition('a') })
+    await Promise.all([unlink(path), unlink(`${path}.backup`)])
+    const backend = new PendingBackend()
+    backend.intents.set(5, intent(5, 'task', 'T-1'))
+    const purgeSession = vi.fn(async () => undefined)
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const coordinator = new TaskBrowserSessionPurgeCoordinator({
+      backend,
+      registry: new FileTaskBrowserPartitionRegistry(path),
+      beginPurge: () => undefined,
+      purgeSession,
+      logger,
+    })
+
+    await expect(coordinator.drain()).resolves.toEqual({
+      acknowledgedIntentIds: [],
+      pendingIntentIds: [5],
+    })
+
+    expect(purgeSession).not.toHaveBeenCalled()
+    expect(backend.acknowledged).toEqual([])
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('cleanup remains pending'),
+      expect.objectContaining({ message: expect.stringMatching(/both registry copies are missing/i) }),
+    )
   })
 })
 

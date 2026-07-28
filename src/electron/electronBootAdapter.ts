@@ -97,6 +97,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
   const taskBrowserPartitionRegistry = new FileTaskBrowserPartitionRegistry(
     () => join(app.getPath('userData'), 'task-browser-partitions.json'),
+    { logger: developerLogSink },
   )
   const taskBrowserSurfaceManager = new TaskBrowserSurfaceManager({
     factory: new ElectronTaskBrowserSurfaceFactory(),
