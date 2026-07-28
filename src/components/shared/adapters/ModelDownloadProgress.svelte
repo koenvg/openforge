@@ -22,6 +22,7 @@
 
   let unlisten: DesktopUnlistenFn | null = null
   let completed = false
+  let destroyed = false
   function formatMB(bytes: number): string {
     return (bytes / 1024 / 1024).toFixed(0) + ' MB'
   }
@@ -35,6 +36,7 @@
 
     try {
       await downloadWhisperModel(modelSize)
+      if (destroyed) return
       if (!completed) {
         completed = true
         status = 'complete'
@@ -42,6 +44,7 @@
         onComplete?.()
       }
     } catch (e) {
+      if (destroyed) return
       status = 'error'
       errorMessage = 'Failed to download model. Please try again.'
       onError?.('Failed to download model. Please try again.')
@@ -49,9 +52,10 @@
   }
 
   onMount(async () => {
-    unlisten = await listenDesktopEvent<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
+    const registeredUnlisten = await listenDesktopEvent<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
       'whisper-download-progress',
       (event) => {
+        if (destroyed) return
         if (event.payload.model_size !== modelSize) return
         bytesDownloaded = event.payload.bytes_downloaded
         totalBytes = event.payload.total_bytes
@@ -64,11 +68,19 @@
       }
     )
 
+    if (destroyed) {
+      registeredUnlisten()
+      return
+    }
+
+    unlisten = registeredUnlisten
     await startDownload()
   })
 
   onDestroy(() => {
+    destroyed = true
     unlisten?.()
+    unlisten = null
   })
 </script>
 

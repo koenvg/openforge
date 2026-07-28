@@ -1,5 +1,5 @@
 import { render, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { requireElement } from '../../../test-utils/dom'
 import ResizableBottomPanel from './ResizableBottomPanel.svelte'
 
@@ -13,6 +13,10 @@ function getHandle(container: HTMLElement) {
 
 beforeEach(() => {
   localStorage.clear()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('ResizableBottomPanel', () => {
@@ -275,5 +279,30 @@ describe('ResizableBottomPanel', () => {
     const panel = getPanel(container)
 
     expect(panel.style.height).toBe('')
+  })
+
+  it('removes active document drag listeners when unmounted', async () => {
+    const { container, unmount } = render(ResizableBottomPanel, {
+      props: { storageKey: 'test-unmount', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
+    })
+    const handle = getHandle(container)
+    const panel = getPanel(container)
+    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, top: 250, bottom: 500,
+      width: 1000, height: 250, x: 0, y: 250, toJSON: () => {},
+    })
+    const addEventListener = vi.spyOn(document, 'addEventListener')
+    const removeEventListener = vi.spyOn(document, 'removeEventListener')
+
+    await fireEvent.mouseDown(handle, { clientY: 250 })
+    const mouseMoveListener = addEventListener.mock.calls.find(([eventName]) => eventName === 'mousemove')?.[1]
+    const mouseUpListener = addEventListener.mock.calls.find(([eventName]) => eventName === 'mouseup')?.[1]
+    expect(mouseMoveListener).toBeTypeOf('function')
+    expect(mouseUpListener).toBeTypeOf('function')
+
+    unmount()
+
+    expect(removeEventListener).toHaveBeenCalledWith('mousemove', mouseMoveListener)
+    expect(removeEventListener).toHaveBeenCalledWith('mouseup', mouseUpListener)
   })
 })
