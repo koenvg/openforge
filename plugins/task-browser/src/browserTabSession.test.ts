@@ -1,8 +1,7 @@
-import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
+import { BrowserSurfaceError, type TaskBrowserSurfaceState } from '@openforge-app/plugin-sdk/frontend'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  DEFAULT_BROWSER_URL,
   createBrowserTabSession,
   normalizeBrowserAddress,
 } from './browserTabSession'
@@ -52,7 +51,7 @@ describe('Task browser tab session', () => {
     expect(api.__testing.calls.browserSurfaceDestroys).toEqual([])
   })
 
-  it('uses a visible smoke-test page when the Task has no saved URL', async () => {
+  it('starts on the host-controlled blank page when the Task has no saved URL', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
     const session = await createBrowserTabSession({
       api,
@@ -61,9 +60,125 @@ describe('Task browser tab session', () => {
       onStateChanged: vi.fn(),
     })
 
-    expect(api.__testing.calls.browserSurfaceGetOrCreate[0]).toMatchObject({ initialUrl: DEFAULT_BROWSER_URL })
+    expect(api.__testing.calls.browserSurfaceGetOrCreate[0]).toEqual({
+      taskId: 'T-2',
+      id: 'main',
+    })
     await session.dispose()
   })
+
+  it('does not restore the legacy network-dependent default URL', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    await api.storage.task('T-legacy').set('lastBrowserUrl', 'https://example.com/')
+
+    const session = await createBrowserTabSession({
+      api,
+      taskId: 'T-legacy',
+      element: {} as HTMLElement,
+      onStateChanged: vi.fn(),
+    })
+
+    expect(api.__testing.calls.browserSurfaceGetOrCreate[0]).toEqual({
+      taskId: 'T-legacy',
+      id: 'main',
+    })
+    await expect(api.storage.task('T-legacy').get('lastBrowserUrl')).resolves.toBeNull()
+    await session.dispose()
+  })
+
+  it('does not persist a URL when navigation is explicitly stopped', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-loading', id: 'main' })
+    let resolveStop!: (state: TaskBrowserSurfaceState) => void
+    const stopResult = new Promise<TaskBrowserSurfaceState>((resolve) => { resolveStop = resolve })
+    vi.spyOn(surface, 'stop').mockReturnValue(stopResult)
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    const session = await createBrowserTabSession({
+      api,
+      taskId: 'T-loading',
+      element: {} as HTMLElement,
+      onStateChanged: vi.fn(),
+    })
+
+    api.__testing.registry.setBrowserSurfaceState('T-loading', 'main', {
+      url: 'https://offline.example/',
+      loading: true,
+      error: null,
+    })
+    const stopping = session.stop()
+    api.__testing.registry.setBrowserSurfaceState('T-loading', 'main', {
+      title: 'Late loading state',
+      loading: true,
+    })
+    api.__testing.registry.setBrowserSurfaceState('T-loading', 'main', {
+      url: 'https://redirected-offline.example/',
+      loading: false,
+      error: null,
+    })
+    resolveStop(await surface.getState())
+    await stopping
+    api.__testing.registry.setBrowserSurfaceState('T-loading', 'main', {
+      loading: false,
+    })
+    await session.dispose()
+
+    await expect(api.storage.task('T-loading').get('lastBrowserUrl')).resolves.toBeNull()
+  })
+
+  it('resumes URL persistence when a new navigation starts after a stop', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const session = await createBrowserTabSession({
+      api,
+      taskId: 'T-retry',
+      element: {} as HTMLElement,
+      onStateChanged: vi.fn(),
+    })
+
+    api.__testing.registry.setBrowserSurfaceState('T-retry', 'main', {
+      url: 'https://stopped.example/',
+      loading: true,
+      error: null,
+    })
+    await session.stop()
+    api.__testing.registry.setBrowserSurfaceState('T-retry', 'main', {
+      url: 'https://retry.example/',
+      loading: true,
+      error: null,
+    })
+    api.__testing.registry.setBrowserSurfaceState('T-retry', 'main', {
+      loading: false,
+    })
+    await session.dispose()
+
+    await expect(api.storage.task('T-retry').get('lastBrowserUrl')).resolves.toBe('https://retry.example/')
+  })
+
+  it('restores persistence when stopping the navigation fails', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-stop-failed', id: 'main' })
+    vi.spyOn(surface, 'stop').mockRejectedValue(new Error('stop failed'))
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    const session = await createBrowserTabSession({
+      api,
+      taskId: 'T-stop-failed',
+      element: {} as HTMLElement,
+      onStateChanged: vi.fn(),
+    })
+
+    api.__testing.registry.setBrowserSurfaceState('T-stop-failed', 'main', {
+      url: 'https://eventually-loaded.example/',
+      loading: true,
+      error: null,
+    })
+    await expect(session.stop()).rejects.toThrow('stop failed')
+    api.__testing.registry.setBrowserSurfaceState('T-stop-failed', 'main', {
+      loading: false,
+    })
+    await session.dispose()
+
+    await expect(api.storage.task('T-stop-failed').get('lastBrowserUrl')).resolves.toBe('https://eventually-loaded.example/')
+  })
+
 
   it('releases a state subscription when attachment fails', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
