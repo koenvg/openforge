@@ -2,6 +2,8 @@ use crate::db;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Map, Value};
+use sha1::{Digest, Sha1};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
@@ -238,30 +240,136 @@ pub async fn install_plugin_package_from_source_spec_async(
     install_acquired_package(acquired, managed_base_dir)
 }
 
-pub fn uninstall_managed_plugin(
-    plugin: &db::PluginRow,
-    managed_base_dir: &Path,
-) -> Result<(), String> {
-    if plugin.is_builtin || plugin.source_kind == "local" {
-        return Ok(());
-    }
+#[derive(Debug)]
+pub(crate) enum ManagedPluginUninstall {
+    NoPackage,
+    Staged {
+        install_path: PathBuf,
+        staged_path: PathBuf,
+    },
+}
 
-    let managed_root = managed_plugins_dir(managed_base_dir);
-    let install_path = PathBuf::from(&plugin.install_path);
-    if !install_path.starts_with(&managed_root) {
-        return Ok(());
-    }
+impl ManagedPluginUninstall {
+    pub(crate) fn rollback(self) -> Result<(), String> {
+        let Self::Staged {
+            install_path,
+            staged_path,
+        } = self
+        else {
+            return Ok(());
+        };
 
-    if install_path.exists() {
-        fs::remove_dir_all(&install_path).map_err(|error| {
+        if !managed_plugin_path_exists(&staged_path)? {
+            return Ok(());
+        }
+        if managed_plugin_path_exists(&install_path)? {
+            return Err(format!(
+                "cannot restore staged managed plugin directory {} because {} already exists",
+                staged_path.display(),
+                install_path.display()
+            ));
+        }
+
+        fs::rename(&staged_path, &install_path).map_err(|error| {
             format!(
-                "failed to remove managed plugin directory {}: {error}",
+                "failed to restore staged managed plugin directory {} to {}: {error}",
+                staged_path.display(),
                 install_path.display()
             )
-        })?;
+        })
     }
 
-    Ok(())
+    pub(crate) fn commit(self) -> Result<(), String> {
+        let Self::Staged { staged_path, .. } = self else {
+            return Ok(());
+        };
+
+        remove_staged_managed_plugin_directory(&staged_path)
+    }
+}
+
+pub(crate) fn stage_managed_plugin_uninstall(
+    plugin: &db::PluginRow,
+    managed_base_dir: &Path,
+) -> Result<ManagedPluginUninstall, String> {
+    if plugin.is_builtin || plugin.source_kind == "local" {
+        return Ok(ManagedPluginUninstall::NoPackage);
+    }
+
+    let install_path = PathBuf::from(&plugin.install_path);
+    let expected_install_path = managed_plugin_dir(managed_base_dir, &plugin.id);
+    if install_path != expected_install_path {
+        return Ok(ManagedPluginUninstall::NoPackage);
+    }
+
+    let staged_path = managed_plugin_uninstall_staging_path(managed_base_dir, &plugin.id);
+    if managed_plugin_path_exists(&staged_path)? {
+        if !managed_plugin_path_exists(&install_path)? {
+            return Ok(ManagedPluginUninstall::Staged {
+                install_path,
+                staged_path,
+            });
+        }
+        remove_staged_managed_plugin_directory(&staged_path)?;
+    }
+
+    if !managed_plugin_path_exists(&install_path)? {
+        return Ok(ManagedPluginUninstall::NoPackage);
+    }
+
+    fs::rename(&install_path, &staged_path).map_err(|error| {
+        format!(
+            "failed to stage managed plugin directory {} at {}: {error}",
+            install_path.display(),
+            staged_path.display()
+        )
+    })?;
+
+    Ok(ManagedPluginUninstall::Staged {
+        install_path,
+        staged_path,
+    })
+}
+
+pub(crate) fn cleanup_staged_managed_plugin_uninstall(
+    plugin_id: &str,
+    managed_base_dir: &Path,
+) -> Result<(), String> {
+    let staged_path = managed_plugin_uninstall_staging_path(managed_base_dir, plugin_id);
+    remove_staged_managed_plugin_directory(&staged_path)
+}
+
+fn managed_plugin_uninstall_staging_path(managed_base_dir: &Path, plugin_id: &str) -> PathBuf {
+    let plugin_id_digest = Sha1::digest(plugin_id.as_bytes());
+    let mut staging_directory_name = String::from(".uninstalling-");
+    for byte in plugin_id_digest {
+        write!(&mut staging_directory_name, "{byte:02x}")
+            .expect("writing a byte as hex to a String should not fail");
+    }
+
+    managed_plugins_dir(managed_base_dir).join(staging_directory_name)
+}
+
+fn managed_plugin_path_exists(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "failed to inspect managed plugin path {}: {error}",
+            path.display()
+        )),
+    }
+}
+
+fn remove_staged_managed_plugin_directory(staged_path: &Path) -> Result<(), String> {
+    match fs::remove_dir_all(staged_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "failed to remove staged managed plugin directory {}: {error}",
+            staged_path.display()
+        )),
+    }
 }
 
 fn install_acquired_package(
@@ -1150,6 +1258,19 @@ mod tests {
             permissions.set_mode(0o755);
             fs::set_permissions(path, permissions).expect("permissions should set");
         }
+    }
+
+    #[test]
+    fn staged_cleanup_reports_non_directory_tombstone() {
+        let temp_dir = tempdir().expect("cleanup tempdir should create");
+        let staged_path = temp_dir.path().join("staged-package");
+        fs::write(&staged_path, "not a directory").expect("staged file should write");
+
+        let error = remove_staged_managed_plugin_directory(&staged_path)
+            .expect_err("non-directory tombstone should fail cleanup");
+
+        assert!(error.contains("failed to remove staged managed plugin directory"));
+        assert!(staged_path.is_file());
     }
     #[test]
     fn command_output_details_reports_metadata_only() {

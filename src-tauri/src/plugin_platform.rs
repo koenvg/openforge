@@ -104,23 +104,55 @@ impl<'a> PluginPlatform<'a> {
     }
 
     pub(crate) fn uninstall_plugin(&self, plugin_id: &str) -> Result<(), String> {
-        let plugin = {
-            let db = db::acquire_db(self.db);
-            db.get_plugin(plugin_id)
-                .map_err(|error| format!("Failed to read plugin before uninstall: {error}"))?
-        };
+        // Keep the outer database guard through filesystem finalization so concurrent
+        // requests cannot act on the same staged package state.
+        let db = db::acquire_db(self.db);
+        let plugin = db
+            .get_plugin(plugin_id)
+            .map_err(|error| format!("Failed to read plugin before uninstall: {error}"))?;
 
-        if let Some(plugin) = plugin.as_ref() {
+        let staged_uninstall = if let Some(plugin) = plugin.as_ref() {
             if plugin.is_builtin || plugin.source_kind == "builtin" {
                 return Err("built-in plugins cannot be uninstalled".to_string());
             }
 
-            crate::plugin_installation::uninstall_managed_plugin(plugin, self.app_data_dir()?)?;
-        }
+            Some(crate::plugin_installation::stage_managed_plugin_uninstall(
+                plugin,
+                self.app_data_dir()?,
+            )?)
+        } else {
+            None
+        };
 
-        let db = db::acquire_db(self.db);
-        db.uninstall_plugin(plugin_id)
-            .map_err(|error| format!("Failed to uninstall plugin: {error}"))
+        let database_result = db
+            .uninstall_plugin(plugin_id)
+            .map_err(|error| format!("Failed to uninstall plugin: {error}"));
+
+        let result = match database_result {
+            Ok(()) => match staged_uninstall {
+                Some(staged_uninstall) => staged_uninstall.commit(),
+                None => match self.app_data_dir.as_deref() {
+                    Some(app_data_dir) =>
+                        crate::plugin_installation::cleanup_staged_managed_plugin_uninstall(
+                            plugin_id,
+                            app_data_dir,
+                        ),
+                    None => Ok(()),
+                },
+            },
+            Err(database_error) => match staged_uninstall {
+                Some(staged_uninstall) => match staged_uninstall.rollback() {
+                    Ok(()) => Err(database_error),
+                    Err(rollback_error) => Err(format!(
+                        "{database_error}; managed plugin package recovery also failed: {rollback_error}"
+                    )),
+                },
+                None => Err(database_error),
+            }
+        };
+
+        drop(db);
+        result
     }
 
     pub(crate) fn plugin(&self, plugin_id: &str) -> Result<Option<db::PluginRow>, String> {
@@ -331,4 +363,156 @@ fn resolve_backend_entry_path(install_root: &Path, backend_entry: &str) -> Resul
     }
 
     Ok(canonical_backend_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    const MANAGED_PLUGIN_ID: &str = "acme.managed";
+
+    fn managed_plugin(install_path: &Path) -> db::PluginRow {
+        db::PluginRow {
+            id: MANAGED_PLUGIN_ID.to_string(),
+            name: "Managed plugin".to_string(),
+            version: "1.0.0".to_string(),
+            api_version: 1,
+            description: "Managed plugin for uninstall tests".to_string(),
+            permissions: "[]".to_string(),
+            contributes: "{}".to_string(),
+            frontend_entry: "dist/frontend.js".to_string(),
+            backend_entry: None,
+            install_path: install_path.to_string_lossy().into_owned(),
+            source_kind: "npm".to_string(),
+            source_spec: "npm:@acme/managed@1.0.0".to_string(),
+            package_metadata: "{}".to_string(),
+            installed_at: 0,
+            is_builtin: false,
+        }
+    }
+
+    fn write_managed_plugin_package(app_data_dir: &Path) -> PathBuf {
+        let install_path =
+            crate::plugin_installation::managed_plugin_dir(app_data_dir, MANAGED_PLUGIN_ID);
+        fs::create_dir_all(install_path.join("dist"))
+            .expect("managed plugin directory should create");
+        fs::write(install_path.join("dist/frontend.js"), "export default {};")
+            .expect("managed plugin artifact should write");
+        install_path
+    }
+
+    fn database_with_managed_plugin(app_data_dir: &Path, install_path: &Path) -> db::Database {
+        let database = db::Database::new(app_data_dir.join("openforge.db"))
+            .expect("test database should create");
+        database
+            .install_plugin(&managed_plugin(install_path))
+            .expect("managed plugin row should install");
+        database
+    }
+
+    #[test]
+    fn uninstall_keeps_managed_package_when_database_delete_fails() {
+        let app_data_dir = tempdir().expect("app data tempdir should create");
+        let install_path = write_managed_plugin_package(app_data_dir.path());
+        let database = database_with_managed_plugin(app_data_dir.path(), &install_path);
+        {
+            let connection = database.connection();
+            let connection = connection.lock().expect("database connection should lock");
+            connection
+                .execute_batch(
+                    "CREATE TRIGGER fail_managed_plugin_uninstall
+                     BEFORE DELETE ON plugins
+                     WHEN OLD.id = 'acme.managed'
+                     BEGIN
+                       SELECT RAISE(ABORT, 'forced plugin uninstall failure');
+                     END;",
+                )
+                .expect("failure trigger should create");
+        }
+
+        let database = Mutex::new(database);
+        let platform =
+            PluginPlatform::new(&database, Some(app_data_dir.path().to_path_buf()), None);
+
+        let error = platform
+            .uninstall_plugin(MANAGED_PLUGIN_ID)
+            .expect_err("database failure should abort uninstall");
+
+        assert!(error.contains("Failed to uninstall plugin"));
+        assert!(platform
+            .plugin(MANAGED_PLUGIN_ID)
+            .expect("plugin row should remain readable")
+            .is_some());
+        assert!(install_path.join("dist/frontend.js").is_file());
+    }
+
+    #[test]
+    fn uninstall_removes_staged_package_when_plugin_row_is_already_gone() {
+        let app_data_dir = tempdir().expect("app data tempdir should create");
+        let install_path = write_managed_plugin_package(app_data_dir.path());
+        let plugin = managed_plugin(&install_path);
+        let _staged_uninstall = crate::plugin_installation::stage_managed_plugin_uninstall(
+            &plugin,
+            app_data_dir.path(),
+        )
+        .expect("managed plugin package should stage");
+        assert!(!install_path.exists());
+
+        let database = Mutex::new(
+            db::Database::new(app_data_dir.path().join("openforge.db"))
+                .expect("test database should create"),
+        );
+        let platform =
+            PluginPlatform::new(&database, Some(app_data_dir.path().to_path_buf()), None);
+        assert!(platform
+            .plugin(MANAGED_PLUGIN_ID)
+            .expect("plugin lookup should succeed")
+            .is_none());
+
+        platform
+            .uninstall_plugin(MANAGED_PLUGIN_ID)
+            .expect("retry should remove the staged package");
+
+        let managed_plugins_dir =
+            crate::plugin_installation::managed_plugins_dir(app_data_dir.path());
+        assert!(fs::read_dir(managed_plugins_dir)
+            .expect("managed plugins directory should remain readable")
+            .next()
+            .is_none());
+    }
+
+    #[test]
+    fn uninstall_preserves_traversal_install_path_target() {
+        let temp_dir = tempdir().expect("test tempdir should create");
+        let app_data_dir = temp_dir.path().join("app-data");
+        let declared_install_path =
+            crate::plugin_installation::managed_plugin_dir(&app_data_dir, MANAGED_PLUGIN_ID);
+        fs::create_dir_all(&declared_install_path).expect("declared install path should create");
+
+        let external_path = temp_dir.path().join("external");
+        fs::create_dir_all(&external_path).expect("external directory should create");
+        fs::write(external_path.join("keep.txt"), "keep").expect("external marker should write");
+
+        let traversal_install_path = declared_install_path.join("../../..").join("external");
+        assert!(traversal_install_path.join("keep.txt").is_file());
+        let database = db::Database::new(app_data_dir.join("openforge.db"))
+            .expect("test database should create");
+        database
+            .install_plugin(&managed_plugin(&traversal_install_path))
+            .expect("malformed plugin row should install");
+        let database = Mutex::new(database);
+        let platform = PluginPlatform::new(&database, Some(app_data_dir), None);
+
+        platform
+            .uninstall_plugin(MANAGED_PLUGIN_ID)
+            .expect("plugin row should uninstall without deleting external files");
+
+        assert!(external_path.join("keep.txt").is_file());
+        assert!(platform
+            .plugin(MANAGED_PLUGIN_ID)
+            .expect("plugin lookup should succeed")
+            .is_none());
+    }
 }
