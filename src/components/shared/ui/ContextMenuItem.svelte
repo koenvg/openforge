@@ -25,21 +25,23 @@
 {#if description}
   <HoverTooltip text={description}>
     <button
-      class="context-item block w-full text-left px-3 py-2 text-sm rounded {variantClasses}"
+      class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
       {onclick}
       {disabled}
       title={description}
       role="menuitem"
+      tabindex="-1"
     >
       {label}
     </button>
   </HoverTooltip>
 {:else}
   <button
-    class="context-item block w-full text-left px-3 py-2 text-sm rounded {variantClasses}"
+    class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
     {onclick}
     {disabled}
     role="menuitem"
+    tabindex="-1"
   >
     {label}
   </button>
