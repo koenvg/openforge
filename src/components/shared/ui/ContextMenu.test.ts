@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
 import ContextMenuTest from './ContextMenu.test.svelte'
 
@@ -32,5 +33,71 @@ describe('ContextMenu', () => {
     await fireEvent.click(screen.getByText('Test Item'))
     // The test harness sets a data attribute when clicked
     expect(screen.getByTestId('clicked-item').textContent).toBe('Test Item')
+  })
+
+  it('focuses the first enabled item when opened', async () => {
+    render(ContextMenuTest, { props: { visible: true, x: 0, y: 0, onClose: vi.fn() } })
+
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Test Item' }))
+  })
+
+  it('moves focus through enabled items with menu navigation keys', async () => {
+    render(ContextMenuTest, { props: { visible: true, x: 0, y: 0, onClose: vi.fn() } })
+    const firstItem = screen.getByRole('menuitem', { name: 'Test Item' })
+    const lastItem = screen.getByRole('menuitem', { name: 'Danger Item' })
+    await tick()
+
+    await fireEvent.keyDown(firstItem, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(lastItem)
+
+    await fireEvent.keyDown(lastItem, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(firstItem)
+
+    await fireEvent.keyDown(firstItem, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(lastItem)
+
+    await fireEvent.keyDown(lastItem, { key: 'Home' })
+    expect(document.activeElement).toBe(firstItem)
+
+    await fireEvent.keyDown(firstItem, { key: 'End' })
+    expect(document.activeElement).toBe(lastItem)
+  })
+
+  it('closes on Escape and restores focus to the invoking control', async () => {
+    const onClose = vi.fn()
+    const view = render(ContextMenuTest, {
+      props: { visible: false, x: 0, y: 0, onClose },
+    })
+    const trigger = screen.getByRole('button', { name: 'Menu trigger' })
+    trigger.focus()
+
+    await view.rerender({ visible: true, x: 0, y: 0, onClose })
+    await tick()
+    await fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Test Item' }), { key: 'Escape' })
+    await tick()
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('closes on Tab and lets browser focus navigation continue from the invoking control', async () => {
+    const onClose = vi.fn()
+    const view = render(ContextMenuTest, {
+      props: { visible: false, x: 0, y: 0, onClose },
+    })
+    const trigger = screen.getByRole('button', { name: 'Menu trigger' })
+    trigger.focus()
+
+    await view.rerender({ visible: true, x: 0, y: 0, onClose })
+    await tick()
+    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    screen.getByRole('menuitem', { name: 'Test Item' }).dispatchEvent(tabEvent)
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(tabEvent.defaultPrevented).toBe(false)
+    // jsdom does not perform Tab's default focus navigation. Chromium continues from this restored control.
+    expect(document.activeElement).toBe(trigger)
   })
 })

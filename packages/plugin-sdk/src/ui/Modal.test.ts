@@ -71,4 +71,36 @@ describe('plugin-sdk Modal', () => {
     await fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(last)
   })
+
+  it('restores focus to the pre-open control when unmounted', async () => {
+    const opener = document.createElement('button')
+    opener.textContent = 'Open plugin dialog'
+    document.body.append(opener)
+    opener.focus()
+
+    const view = render(ModalTestWrapper, { props: { onClose: vi.fn() } })
+    await tick()
+    expect(document.activeElement).toBe(screen.getByRole('dialog'))
+
+    view.unmount()
+
+    expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
+
+  it('does not override focus deliberately moved outside before unmounting', async () => {
+    const opener = document.createElement('button')
+    const destination = document.createElement('button')
+    document.body.append(opener, destination)
+    opener.focus()
+
+    const view = render(ModalTestWrapper, { props: { onClose: vi.fn() } })
+    await tick()
+    destination.focus()
+    view.unmount()
+
+    expect(document.activeElement).toBe(destination)
+    opener.remove()
+    destination.remove()
+  })
 })

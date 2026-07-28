@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
   import type { Snippet } from 'svelte'
 
   export type ModalInitialFocus = HTMLElement | string | (() => HTMLElement | null | undefined) | null | undefined
@@ -25,6 +25,22 @@
 
   let modalElement: HTMLDivElement | null = $state(null)
   let hasAppliedInitialFocus = false
+  const returnFocusTarget = typeof document !== 'undefined'
+    && document.activeElement instanceof HTMLElement
+    && document.activeElement !== document.body
+    ? document.activeElement
+    : null
+
+  onDestroy(() => {
+    if (!returnFocusTarget?.isConnected) return
+
+    const activeElement = document.activeElement
+    const focusRemainedInModal = activeElement === document.body
+      || (activeElement instanceof HTMLElement && !activeElement.isConnected)
+      || (activeElement instanceof Node && modalElement?.contains(activeElement))
+
+    if (focusRemainedInModal) returnFocusTarget.focus()
+  })
 
   function resolveInitialFocusTarget(): HTMLElement | null {
     if (!modalElement) return null
