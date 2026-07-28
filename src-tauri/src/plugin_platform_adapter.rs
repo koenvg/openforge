@@ -23,6 +23,7 @@ pub(crate) fn plugin_platform_for_state(
         state.db.as_ref(),
         app_data_dir,
         state.plugin_host.as_ref(),
+        &state.plugin_lifecycle_locks,
     ))
 }
 

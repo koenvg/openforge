@@ -172,6 +172,35 @@ struct AcquiredPackage {
     staging_root: Option<PathBuf>,
 }
 
+impl Drop for AcquiredPackage {
+    fn drop(&mut self) {
+        if let Some(staging_root) = self.staging_root.as_ref() {
+            let _ = fs::remove_dir_all(staging_root);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PreparedPluginInstallation {
+    acquired: AcquiredPackage,
+    plugin: db::PluginRow,
+    destination: Option<PathBuf>,
+}
+
+impl PreparedPluginInstallation {
+    pub(crate) fn plugin_id(&self) -> &str {
+        &self.plugin.id
+    }
+
+    pub(crate) fn finalize(self) -> Result<db::PluginRow, String> {
+        if let Some(destination) = self.destination.as_ref() {
+            replace_directory(&self.acquired.package_dir, destination)?;
+        }
+
+        Ok(self.plugin)
+    }
+}
+
 pub fn managed_plugins_dir(base_dir: &Path) -> PathBuf {
     base_dir.join("plugins")
 }
@@ -180,45 +209,53 @@ pub fn managed_plugin_dir(base_dir: &Path, plugin_id: &str) -> PathBuf {
     managed_plugins_dir(base_dir).join(plugin_id)
 }
 
-pub fn install_local_plugin_bundle(
+pub(crate) fn prepare_local_plugin_bundle(
     source_path: &Path,
     managed_base_dir: &Path,
-) -> Result<db::PluginRow, String> {
-    install_plugin_package_from_source_spec(&source_path.to_string_lossy(), managed_base_dir)
+) -> Result<PreparedPluginInstallation, String> {
+    prepare_plugin_package_from_source_spec(&source_path.to_string_lossy(), managed_base_dir)
 }
 
-pub async fn install_npm_plugin_bundle(
+pub(crate) async fn prepare_npm_plugin_bundle(
     package_name: &str,
     managed_base_dir: &Path,
-) -> Result<db::PluginRow, String> {
-    install_plugin_package_from_source_spec_async(
+) -> Result<PreparedPluginInstallation, String> {
+    prepare_plugin_package_from_source_spec_async(
         &format!("npm:{}", package_name.trim()),
         managed_base_dir,
     )
     .await
 }
 
-pub async fn install_git_plugin_bundle(
+pub(crate) async fn prepare_git_plugin_bundle(
     git_spec: &str,
     managed_base_dir: &Path,
-) -> Result<db::PluginRow, String> {
+) -> Result<PreparedPluginInstallation, String> {
     let source_spec = if git_spec.trim().starts_with("git:") {
         git_spec.trim().to_string()
     } else {
         format!("git:{}", git_spec.trim())
     };
-    install_plugin_package_from_source_spec_async(&source_spec, managed_base_dir).await
+    prepare_plugin_package_from_source_spec_async(&source_spec, managed_base_dir).await
 }
 
+#[cfg(test)]
 pub fn install_plugin_package_from_source_spec(
     source_spec: &str,
     managed_base_dir: &Path,
 ) -> Result<db::PluginRow, String> {
+    prepare_plugin_package_from_source_spec(source_spec, managed_base_dir)?.finalize()
+}
+
+pub(crate) fn prepare_plugin_package_from_source_spec(
+    source_spec: &str,
+    managed_base_dir: &Path,
+) -> Result<PreparedPluginInstallation, String> {
     let source = PackageSourceSpec::parse(source_spec)?;
     match source {
         PackageSourceSpec::Local { .. } => {
             let acquired = acquire_local_package(source)?;
-            install_acquired_package(acquired, managed_base_dir)
+            prepare_acquired_package(acquired, managed_base_dir)
         }
         PackageSourceSpec::Npm { .. } | PackageSourceSpec::Git { .. } => Err(
             "npm and git plugin package sources require the async package installer".to_string(),
@@ -226,10 +263,20 @@ pub fn install_plugin_package_from_source_spec(
     }
 }
 
+#[cfg(test)]
 pub async fn install_plugin_package_from_source_spec_async(
     source_spec: &str,
     managed_base_dir: &Path,
 ) -> Result<db::PluginRow, String> {
+    prepare_plugin_package_from_source_spec_async(source_spec, managed_base_dir)
+        .await?
+        .finalize()
+}
+
+pub(crate) async fn prepare_plugin_package_from_source_spec_async(
+    source_spec: &str,
+    managed_base_dir: &Path,
+) -> Result<PreparedPluginInstallation, String> {
     let source = PackageSourceSpec::parse(source_spec)?;
     let acquired = match source {
         PackageSourceSpec::Local { .. } => acquire_local_package(source)?,
@@ -237,7 +284,32 @@ pub async fn install_plugin_package_from_source_spec_async(
         PackageSourceSpec::Git { .. } => acquire_git_package(source, managed_base_dir).await?,
     };
 
-    install_acquired_package(acquired, managed_base_dir)
+    prepare_acquired_package(acquired, managed_base_dir)
+}
+
+#[cfg(test)]
+pub(crate) fn prepare_managed_plugin_bundle_for_test(
+    source_path: &Path,
+    managed_base_dir: &Path,
+) -> Result<PreparedPluginInstallation, String> {
+    let package_dir = source_path.canonicalize().map_err(|error| {
+        format!(
+            "failed to canonicalize test plugin package {}: {error}",
+            source_path.display()
+        )
+    })?;
+    prepare_acquired_package(
+        AcquiredPackage {
+            source: PackageSourceSpec::Npm {
+                package_spec: "@acme/managed@2.0.0".to_string(),
+                spec: "npm:@acme/managed@2.0.0".to_string(),
+            },
+            install_path: package_dir.clone(),
+            package_dir,
+            staging_root: None,
+        },
+        managed_base_dir,
+    )
 }
 
 #[derive(Debug)]
@@ -372,29 +444,27 @@ fn remove_staged_managed_plugin_directory(staged_path: &Path) -> Result<(), Stri
     }
 }
 
-fn install_acquired_package(
+fn prepare_acquired_package(
     mut acquired: AcquiredPackage,
     managed_base_dir: &Path,
-) -> Result<db::PluginRow, String> {
-    let result = (|| {
-        let loaded = load_package_from_dir(&acquired.package_dir)?;
-        validate_package(&loaded.package_json, &acquired.package_dir)?;
+) -> Result<PreparedPluginInstallation, String> {
+    let loaded = load_package_from_dir(&acquired.package_dir)?;
+    validate_package(&loaded.package_json, &acquired.package_dir)?;
 
-        if acquired.source.kind() != "local" {
-            let destination =
-                managed_plugin_dir(managed_base_dir, &loaded.package_json.openforge.id);
-            replace_directory(&acquired.package_dir, &destination)?;
-            acquired.install_path = destination;
-        }
+    let destination = if acquired.source.kind() == "local" {
+        None
+    } else {
+        let destination = managed_plugin_dir(managed_base_dir, &loaded.package_json.openforge.id);
+        acquired.install_path = destination.clone();
+        Some(destination)
+    };
+    let plugin = build_plugin_row(&loaded, &acquired.install_path, &acquired.source, false)?;
 
-        build_plugin_row(&loaded, &acquired.install_path, &acquired.source, false)
-    })();
-
-    if let Some(staging_root) = acquired.staging_root {
-        let _ = fs::remove_dir_all(staging_root);
-    }
-
-    result
+    Ok(PreparedPluginInstallation {
+        acquired,
+        plugin,
+        destination,
+    })
 }
 
 fn acquire_local_package(source: PackageSourceSpec) -> Result<AcquiredPackage, String> {
