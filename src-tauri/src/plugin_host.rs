@@ -105,6 +105,7 @@ impl PluginHost {
             pty_manager,
             github_client,
             plugin_host: Some(self.clone()),
+            plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: self.app_event_tx.clone(),
             app_event_bus: None,
             whisper: None,

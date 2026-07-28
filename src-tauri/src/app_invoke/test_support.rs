@@ -24,6 +24,7 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             pty_manager: Some(pty_manager),
             github_client: GitHubClient::new(),
             plugin_host: Some(PluginHost::new(AppHandle::new())),
+            plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: Some(app_event_tx),
             app_event_bus: None,
             whisper: Some(Arc::new(WhisperManager::with_active_model(
