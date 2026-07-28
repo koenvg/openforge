@@ -101,12 +101,14 @@ pub(crate) async fn start_implementation(
     _legacy_repo_path: &str,
     divergence_resolution: crate::git_worktree::DivergenceResolution,
     terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
+    prompt_prefix: Option<&str>,
 ) -> Result<serde_json::Value, (StatusCode, String)> {
     let execution = task_start_service(state)
         .start(crate::task_start::TaskStartRequest::desktop(
             task_id,
             divergence_resolution,
             terminal_image_protocol,
+            prompt_prefix,
         ))
         .await
         .map_err(map_task_start_error)?;
@@ -139,6 +141,9 @@ pub(super) async fn handle_app_start_implementation_command(
                 ));
             }
         };
+    // Optional: a one-off prefix chosen at start time. Absent means today's
+    // behavior exactly.
+    let prompt_prefix = payload_optional_string(&request.payload, "promptPrefix")?;
 
     Ok(Some(
         start_implementation(
@@ -147,6 +152,7 @@ pub(super) async fn handle_app_start_implementation_command(
             &repo_path,
             divergence_resolution,
             terminal_image_protocol,
+            prompt_prefix.as_deref(),
         )
         .await?,
     ))
