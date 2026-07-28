@@ -71,7 +71,9 @@ describe('macOS installer CLI helpers', () => {
     expect(embeddedHelperSnippet(installScript)).toBe(sharedHelper.trimEnd())
   })
 
-  it('waits for a stale sidecar to stop before replacing a closed Electron app', async () => {
+  // This integration-style assertion launches a real shell subprocess, so full-suite process
+  // contention can exceed Vitest's 5 s unit-test default despite deterministic fake probes.
+  it('waits for a stale sidecar to stop before replacing a closed Electron app', { timeout: 15_000 }, async () => {
     const root = await mkdtemp(join(tmpdir(), `openforge-electron-install-sidecar-${process.pid}-`))
     const home = join(root, 'home')
     const installDir = join(root, 'Applications')
