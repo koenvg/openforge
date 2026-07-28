@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { writeClipboardText } from '../../lib/ipc'
 
   interface Props {
@@ -11,18 +12,31 @@
 
   let copied = $state(false)
   let timer: ReturnType<typeof setTimeout> | null = null
+  let destroyed = false
 
   async function handleCopy() {
     if (copied) return
     try {
       await writeClipboardText(text)
+      if (destroyed) return
       copied = true
       if (timer) clearTimeout(timer)
-      timer = setTimeout(() => { copied = false }, timeout)
+      timer = setTimeout(() => {
+        copied = false
+        timer = null
+      }, timeout)
     } catch (e) {
       console.error('Failed to copy:', e)
     }
   }
+
+  onDestroy(() => {
+    destroyed = true
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  })
 </script>
 
 <button

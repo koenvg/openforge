@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { parseStrictFiniteNumber } from '../../../lib/numberParsing'
   import type { Snippet } from 'svelte'
 
@@ -64,28 +65,39 @@
 
   let height = $state(loadHeight())
   let isDragging = $state(false)
+  let removeDocumentDragListeners: (() => void) | null = null
 
   function onMouseDown(e: MouseEvent) {
     e.preventDefault()
-    isDragging = true
 
     const startY = e.clientY
     const startHeight = height
     const rect = panelEl?.getBoundingClientRect()
     if (!rect) return
 
+    removeDocumentDragListeners?.()
+    isDragging = true
+
     function onMouseMove(e: MouseEvent) {
       const delta = e.clientY - startY
       height = clamp(startHeight - delta)
     }
 
+    function removeListeners() {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      if (removeDocumentDragListeners === removeListeners) {
+        removeDocumentDragListeners = null
+      }
+    }
+
     function onMouseUp() {
       isDragging = false
       saveHeight(height)
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
+      removeListeners()
     }
 
+    removeDocumentDragListeners = removeListeners
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
   }
@@ -113,6 +125,11 @@
       saveHeight(height)
     }
   }
+
+  onDestroy(() => {
+    removeDocumentDragListeners?.()
+    removeDocumentDragListeners = null
+  })
 </script>
 
 <div

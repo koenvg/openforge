@@ -28,7 +28,12 @@
     portalEl = document.createElement('div')
     document.body.appendChild(portalEl)
     return () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer)
+        hoverTimer = null
+      }
       portalEl?.remove()
+      portalEl = null
     }
   })
 
