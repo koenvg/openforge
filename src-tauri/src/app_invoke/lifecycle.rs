@@ -190,6 +190,9 @@ fn load_start_implementation_context(
         .flatten()
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
+    crate::agent_lifecycle::ensure_handoff_notes_workflow_contribution(
+        &mut start_prompt_contributions,
+    );
     crate::agent_lifecycle::apply_project_handoff_notes_template(
         &mut start_prompt_contributions,
         handoff_notes_template.as_deref(),

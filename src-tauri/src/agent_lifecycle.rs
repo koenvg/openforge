@@ -98,6 +98,28 @@ fn escape_handoff_notes_template_delimiter(template: &str) -> String {
     template.replace("</handoff_notes_template>", "<\\/handoff_notes_template>")
 }
 
+/// Projects only persist the handoff workflow if the one-time backfill covered them, so a
+/// project created afterwards would silently start tasks without it. Synthesize the frozen
+/// default whenever nothing already owns the reserved ID; an entry that does exist — user
+/// disabled or plugin owned — is left exactly as stored.
+pub(crate) fn ensure_handoff_notes_workflow_contribution(
+    start_prompt_contributions: &mut Vec<StartPromptContribution>,
+) {
+    if start_prompt_contributions
+        .iter()
+        .any(|contribution| contribution.id == HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID)
+    {
+        return;
+    }
+
+    start_prompt_contributions.push(StartPromptContribution {
+        id: HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+        enabled: true,
+        content: legacy_handoff_notes_start_prompt_content(None),
+        order: 0,
+    });
+}
+
 pub(crate) fn apply_project_handoff_notes_template(
     start_prompt_contributions: &mut [StartPromptContribution],
     project_template: Option<&str>,
@@ -706,6 +728,83 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn handoff_notes_workflow_contribution_is_synthesized_when_project_has_none() {
+        let mut contributions: Vec<StartPromptContribution> = Vec::new();
+
+        ensure_handoff_notes_workflow_contribution(&mut contributions);
+
+        assert_eq!(contributions.len(), 1);
+        assert_eq!(contributions[0].id, HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID);
+        assert!(contributions[0].enabled);
+        assert!(contributions[0]
+            .content
+            .contains("<openforge_task_management>"));
+        assert!(contributions[0]
+            .content
+            .contains(DEFAULT_HANDOFF_NOTES_TEMPLATE));
+    }
+
+    #[test]
+    fn existing_handoff_notes_workflow_contribution_is_left_untouched() {
+        let mut contributions = vec![StartPromptContribution {
+            id: HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID.to_string(),
+            enabled: false,
+            content: "<plugin_handoff>owned by a plugin</plugin_handoff>".to_string(),
+            order: 3,
+        }];
+
+        ensure_handoff_notes_workflow_contribution(&mut contributions);
+
+        assert_eq!(contributions.len(), 1);
+        assert!(!contributions[0].enabled);
+        assert_eq!(
+            contributions[0].content,
+            "<plugin_handoff>owned by a plugin</plugin_handoff>"
+        );
+    }
+
+    #[test]
+    fn synthesized_handoff_notes_workflow_contribution_honors_project_template() {
+        let mut contributions: Vec<StartPromptContribution> = Vec::new();
+
+        ensure_handoff_notes_workflow_contribution(&mut contributions);
+        apply_project_handoff_notes_template(
+            &mut contributions,
+            Some("## Project Template\n- Project-specific section"),
+        );
+
+        assert!(contributions[0].content.contains("## Project Template"));
+        assert!(contributions[0]
+            .content
+            .contains("- Project-specific section"));
+        // Body text unique to the default template — the envelope's own example reuses
+        // headings like "## Decisions made", so headings cannot prove replacement.
+        assert!(!contributions[0]
+            .content
+            .contains("Key choices and trade-offs."));
+    }
+
+    #[test]
+    fn synthesizing_the_handoff_workflow_keeps_other_contributions() {
+        let mut contributions = vec![StartPromptContribution {
+            id: "some-plugin-workflow".to_string(),
+            enabled: true,
+            content: "<plugin>unrelated</plugin>".to_string(),
+            order: 0,
+        }];
+
+        ensure_handoff_notes_workflow_contribution(&mut contributions);
+
+        assert_eq!(contributions.len(), 2);
+        assert!(contributions
+            .iter()
+            .any(|contribution| contribution.id == "some-plugin-workflow"));
+        assert!(contributions
+            .iter()
+            .any(|contribution| contribution.id == HANDOFF_NOTES_WORKFLOW_CONTRIBUTION_ID));
     }
 
     #[test]

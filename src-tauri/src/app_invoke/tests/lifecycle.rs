@@ -364,8 +364,8 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
         "prompt should cross the provider boundary, got provider log: {log}"
     );
     assert!(
-        !log.contains("<openforge_task_management>"),
-        "handoff workflow should stay disabled until project config enables it, got provider log: {log}"
+        log.contains("<openforge_task_management>"),
+        "handoff workflow is on by default and no longer waits for project config, got provider log: {log}"
     );
 
     {
@@ -470,6 +470,63 @@ async fn start_implementation_injects_plugin_configured_handoff_workflow() {
         "got provider log: {log}"
     );
 
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_injects_handoff_workflow_without_stored_contributions() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_default_handoff_workflow");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Fresh Handoff Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Start without stored start prompt contributions",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    assert_eq!(response["task_id"], task_id);
+    let log = wait_for_provider_log_record(
+        &sandbox.log_path,
+        "pi",
+        "Start without stored start prompt contributions",
+    )
+    .await;
+    assert!(
+        log.contains("<openforge_task_management>") && log.contains("## Decisions made"),
+        "projects without persisted contributions should still get the handoff workflow, got provider log: {log}"
+    );
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
