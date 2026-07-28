@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
+import { TaskBrowserPermissionPolicy } from './taskBrowserPermissionPolicy.js'
+import { taskBrowserPermissionPromptOptions } from './taskBrowserPermissionPrompt.js'
+import { FileTaskBrowserPermissionStore } from './taskBrowserPermissionStore.js'
 import {
   TaskBrowserSessionPurgeCoordinator,
   invokeWithTaskBrowserSessionPurgeDrain,
@@ -99,9 +102,29 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     () => join(app.getPath('userData'), 'task-browser-partitions.json'),
     { logger: developerLogSink },
   )
+  const taskBrowserPermissionPolicy = new TaskBrowserPermissionPolicy({
+    store: new FileTaskBrowserPermissionStore(
+      () => join(app.getPath('userData'), 'task-browser-permissions.json'),
+    ),
+    prompt: async request => {
+      const window = BrowserWindow.fromId(request.windowId)
+      if (!window || window.isDestroyed()) return { decision: 'block', remember: false }
+      try {
+        const result = await dialog.showMessageBox(window, taskBrowserPermissionPromptOptions(request))
+        return {
+          decision: result.response === 0 ? 'allow' : 'block',
+          remember: result.checkboxChecked === true,
+        }
+      } catch (error) {
+        developerLogSink.error('[task-browser-permission] Failed to present permission prompt; request denied', error)
+        return { decision: 'block', remember: false }
+      }
+    },
+  })
   const taskBrowserSurfaceManager = new TaskBrowserSurfaceManager({
     factory: new ElectronTaskBrowserSurfaceFactory(),
     registry: taskBrowserPartitionRegistry,
+    permissions: taskBrowserPermissionPolicy,
     authorize: createTaskBrowserSurfaceAuthorizer(async (command, payload) => {
       if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
       return handleElectronInvoke({ command, payload }, createInvokeDeps(backendInvokeContext))
