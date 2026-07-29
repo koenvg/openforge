@@ -35,6 +35,15 @@ describe('ContextMenu', () => {
     expect(screen.getByTestId('clicked-item').textContent).toBe('Test Item')
   })
 
+  it('does not submit a surrounding form when a menu action is clicked', async () => {
+    render(ContextMenuTest, { props: { visible: true, x: 0, y: 0, onClose: vi.fn() } })
+
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Test Item' }))
+
+    expect(screen.getByTestId('clicked-item').textContent).toBe('Test Item')
+    expect(screen.getByTestId('form-submitted').textContent).toBe('false')
+  })
+
   it('focuses the first enabled item when opened', async () => {
     render(ContextMenuTest, { props: { visible: true, x: 0, y: 0, onClose: vi.fn() } })
 

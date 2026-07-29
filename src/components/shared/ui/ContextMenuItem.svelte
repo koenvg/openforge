@@ -24,7 +24,7 @@
 
 {#if description}
   <HoverTooltip text={description}>
-    <button
+    <button type="button"
       class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
       {onclick}
       {disabled}
@@ -36,7 +36,7 @@
     </button>
   </HoverTooltip>
 {:else}
-  <button
+  <button type="button"
     class="context-item block w-full text-left px-3 py-2 text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary {variantClasses}"
     {onclick}
     {disabled}
