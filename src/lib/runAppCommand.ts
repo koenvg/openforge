@@ -1,8 +1,6 @@
 import type { ShellLifecycleState, TaskTerminalTabsSession } from '@openforge-app/terminal-runtime'
 
-/**
- * project_config key holding the per-project command used to run the app locally.
- */
+/** project_config key holding the per-project command used to run the app locally. */
 export const RUN_COMMAND_CONFIG_KEY = 'run_command'
 
 /**
@@ -33,25 +31,6 @@ export interface RunAppCommandDeps {
   openTerminalView: () => void
 }
 
-export interface TaskRunAppRegistration {
-  taskId: string
-  available: boolean
-  run: () => Promise<void>
-}
-
-interface TaskRunAppAvailability {
-  workspacePath: string | null
-  command: string
-  terminalAvailable: boolean
-  isLaunching: boolean
-}
-
-export function isTaskRunAppAvailable(availability: TaskRunAppAvailability): boolean {
-  return availability.workspacePath !== null
-    && availability.command.trim() !== ''
-    && availability.terminalAvailable
-    && !availability.isLaunching
-}
 
 export interface RunAppCommandOptions {
   timeoutMs?: number

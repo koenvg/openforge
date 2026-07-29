@@ -42,7 +42,7 @@
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
   import { createTaskActionRunner } from './lib/taskActionRunner'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
-  import type { TaskRunAppRegistration } from './lib/runAppCommand'
+  import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
   import { hasActiveAgentSessions } from './lib/quitGuard'
   
   let unlisteners: DesktopUnlistenFn[] = []

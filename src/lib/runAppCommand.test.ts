@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ShellLifecycleState, TaskTerminalTabsSession } from '@openforge-app/terminal-runtime'
-import { activeShellKey, isTaskRunAppAvailable, runAppCommandInTaskTerminal, type RunAppCommandDeps } from './runAppCommand'
+import { activeShellKey, runAppCommandInTaskTerminal, type RunAppCommandDeps } from './runAppCommand'
 
 function makeSession(overrides: Partial<TaskTerminalTabsSession> = {}): TaskTerminalTabsSession {
   return {
@@ -53,17 +53,6 @@ describe('activeShellKey', () => {
   })
 })
 
-describe('isTaskRunAppAvailable', () => {
-  it.each([
-    ['available', '/tmp/worktree', 'pnpm dev', true, false, true],
-    ['missing workspace', null, 'pnpm dev', true, false, false],
-    ['missing command', '/tmp/worktree', '', true, false, false],
-    ['missing Terminal plugin', '/tmp/worktree', 'pnpm dev', false, false, false],
-    ['already launching', '/tmp/worktree', 'pnpm dev', true, true, false],
-  ])('is %s', (_case, workspacePath, command, terminalAvailable, isLaunching, expected) => {
-    expect(isTaskRunAppAvailable({ workspacePath, command, terminalAvailable, isLaunching })).toBe(expected)
-  })
-})
 
 describe('runAppCommandInTaskTerminal', () => {
   it('opens the terminal view and writes the command + carriage return when the shell is already active', async () => {
