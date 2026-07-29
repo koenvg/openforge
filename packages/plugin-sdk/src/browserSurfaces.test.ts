@@ -59,6 +59,29 @@ describe('browser surfaces SDK contract', () => {
     })
   })
 
+  it('keeps the testing fake aligned with the popup/download-free public method set', async () => {
+    const apiMethods = ['getOrCreate', 'resetSession'] as const
+    const controllerMethods = [
+      'attach',
+      'detach',
+      'destroy',
+      'getState',
+      'onStateChanged',
+      'navigate',
+      'goBack',
+      'goForward',
+      'reload',
+      'stop',
+    ] as const
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })
+
+    expect(Object.keys(api.browserSurfaces).sort()).toEqual([...apiMethods].sort())
+    for (const method of controllerMethods) {
+      expect(surface[method], method).toBeTypeOf('function')
+    }
+  })
+
   it('supports blank initial state, navigation errors, and Task Browser Session reset in tests', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
     const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-2', id: 'main' })

@@ -213,6 +213,18 @@ describe('Task Browser Surface Manager', () => {
       id: 'main',
     })
 
+    expect(first).toEqual({
+      surfaceId: 'task-browser-surface-1',
+      generation: 1,
+      state: {
+        url: 'https://example.com/first',
+        title: '',
+        loading: true,
+        canGoBack: true,
+        canGoForward: false,
+        error: null,
+      },
+    })
     expect(again.surfaceId).toBe(first.surfaceId)
     expect(otherWindow.surfaceId).not.toBe(first.surfaceId)
     expect(factory.creations).toHaveLength(2)

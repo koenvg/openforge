@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createHostBrowserSurfaces } from './taskBrowserSurfaces'
+import type { BrowserSurfacesAPI, TaskBrowserSurfaceController } from '@openforge-app/plugin-sdk/frontend'
 import type { OpenForgeDesktopBridge } from '../desktopIpc'
+import { createHostBrowserSurfaces } from './taskBrowserSurfaces'
 
 const blankState = {
   url: 'about:blank',
@@ -11,6 +12,9 @@ const blankState = {
   canGoForward: false,
   error: null,
 }
+
+type ExactKeys<T, Expected extends PropertyKey> =
+  [Exclude<keyof T, Expected>, Exclude<Expected, keyof T>] extends [never, never] ? true : false
 
 function domRect(x: number, y: number, width: number, height: number): DOMRect {
   return {
@@ -77,6 +81,28 @@ describe('renderer Task Browser Surface host adapter', () => {
     document.body.replaceChildren()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('limits the public contract to serializable lifecycle and navigation controls', () => {
+    const apiContractIsExact: ExactKeys<BrowserSurfacesAPI, 'getOrCreate' | 'resetSession'> = true
+    const controllerContractIsExact: ExactKeys<
+      TaskBrowserSurfaceController,
+      | 'attach'
+      | 'detach'
+      | 'destroy'
+      | 'getState'
+      | 'onStateChanged'
+      | 'navigate'
+      | 'goBack'
+      | 'goForward'
+      | 'reload'
+      | 'stop'
+    > = true
+
+    expect({ apiContractIsExact, controllerContractIsExact }).toEqual({
+      apiContractIsExact: true,
+      controllerContractIsExact: true,
+    })
   })
 
   it('qualifies requests, serializes DOM bounds, forwards state, and disposes attachments safely', async () => {
