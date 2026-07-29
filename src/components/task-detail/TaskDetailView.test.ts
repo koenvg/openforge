@@ -684,6 +684,32 @@ describe('TaskDetailView', () => {
     })
 
     expect(get(taskActiveView).get('T-42')).toBe('plugin.b:activity')
+
+    commandHeld.set(true)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Activity A/ }).textContent).toContain('⌘3')
+      expect(screen.getByRole('button', { name: /^Activity B/ }).textContent).toContain('⌘4')
+    })
+
+    await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Activity A/ }).getAttribute('aria-pressed')).toBe('true')
+    })
+
+    runtimeContributionSources.set(new Map([
+      ['plugin.a', { pluginId: 'plugin.a', taskPaneTabs: [{ id: 'activity', title: 'Activity A', order: 2 }] }],
+      ['plugin.b', { pluginId: 'plugin.b', taskPaneTabs: [{ id: 'activity', title: 'Activity B', order: 1 }] }],
+    ]))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Activity B/ }).textContent).toContain('⌘3')
+      expect(screen.getByRole('button', { name: /^Activity A/ }).textContent).toContain('⌘4')
+    })
+
+    await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Activity B/ }).getAttribute('aria-pressed')).toBe('true')
+    })
   })
 
   it('activates the terminal pane through view state when the terminal toggle is clicked', async () => {

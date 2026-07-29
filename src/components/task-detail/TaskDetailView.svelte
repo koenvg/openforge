@@ -17,6 +17,7 @@
   import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
+  import { getTaskPaneShortcut } from '../../lib/taskPaneShortcuts'
   import { releaseAllForTask } from '../../lib/terminalPool'
   // Session + shell lifecycle must come from the terminal PLUGIN runtime (the one
   // rendering the task-view terminal), not the app pool — see liveTerminalPool.
@@ -212,6 +213,7 @@
   )
 
   $effect(() => {
+    const registeredTaskPaneShortcuts: string[] = []
     if (workspacePath !== null) {
       taskShortcuts.register('⌘1', () => {
         setActiveView('agent')
@@ -220,11 +222,15 @@
         setActiveView('review')
       })
 
-      if (terminalTaskPaneTab !== null) {
-        taskShortcuts.register('⌘3', () => {
-          setActiveView(terminalTaskPaneTab.namespacedId)
+      sortedTaskPaneTabs.forEach((tab, index) => {
+        const shortcut = getTaskPaneShortcut(index)
+        if (shortcut === null) return
+
+        taskShortcuts.register(shortcut, () => {
+          setActiveView(tab.namespacedId)
         })
-      }
+        registeredTaskPaneShortcuts.push(shortcut)
+      })
 
       taskShortcuts.register('⌘/', () => {
         togglePanel()
@@ -234,7 +240,7 @@
     return () => {
       taskShortcuts.unregister('⌘1')
       taskShortcuts.unregister('⌘2')
-      taskShortcuts.unregister('⌘3')
+      registeredTaskPaneShortcuts.forEach((shortcut) => taskShortcuts.unregister(shortcut))
       taskShortcuts.unregister('⌘/')
     }
   })
@@ -407,12 +413,12 @@
             aria-pressed={activeView === 'review'}
             onclick={() => setActiveView('review')}
           >review {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
-          {#each sortedTaskPaneTabs as tab (tab.namespacedId)}
+          {#each sortedTaskPaneTabs as tab, index (tab.namespacedId)}
             <button
               class="btn btn-ghost btn-xs gap-1.5 {activeView === tab.namespacedId ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
               aria-pressed={activeView === tab.namespacedId}
               onclick={() => setActiveView(tab.namespacedId)}
-            >{tab.title}{#if $commandHeld && terminalTaskPaneTab?.namespacedId === tab.namespacedId}<kbd class="kbd kbd-xs opacity-50">⌘3</kbd>{/if}</button>
+            >{tab.title}{#if $commandHeld && getTaskPaneShortcut(index) !== null}<kbd class="kbd kbd-xs opacity-50">{getTaskPaneShortcut(index)}</kbd>{/if}</button>
           {/each}
           <span class="mx-1 text-base-content/20 select-none" aria-hidden="true">|</span>
           <button
