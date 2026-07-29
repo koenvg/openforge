@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager'
+import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager.js'
 import type {
   NativeTaskBrowserSurface,
   NativeTaskBrowserSurfaceFactory,
@@ -8,12 +8,12 @@ import type {
   TaskBrowserNativeState,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceStateEvent,
-} from './taskBrowserSurfaceManager'
-import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy'
+} from './taskBrowserSurfaceManager.js'
+import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 import type {
   TaskBrowserPartitionRegistration,
   TaskBrowserPartitionRegistry,
-} from './taskBrowserPartitionRegistry'
+} from './taskBrowserPartitionRegistry.js'
 
 export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
