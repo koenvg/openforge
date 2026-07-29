@@ -130,6 +130,7 @@ describe('AddTaskDialog', () => {
 
   it('renders create mode with a single primary Start Task action before text entry', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
+    expect(screen.getByRole('dialog', { name: 'Create Task' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('')

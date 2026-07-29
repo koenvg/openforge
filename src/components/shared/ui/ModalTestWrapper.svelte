@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from './Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
 
   interface Props {
     onClose: () => void

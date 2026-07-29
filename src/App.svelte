@@ -13,7 +13,7 @@
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
-  import Modal from './components/shared/ui/Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
@@ -689,7 +689,7 @@
 <BranchDivergenceModal />
 
 {#if showCloseConfirm}
-  <Modal onClose={handleCloseCancel} maxWidth="360px" initialFocus="[data-close-confirm-action='quit']">
+  <Modal onClose={handleCloseCancel} maxWidth="360px" initialFocus="[data-close-confirm-action='quit']" ariaLabel="Agents still running">
     {#snippet header()}
       <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Agents still running</h2>
     {/snippet}
@@ -705,7 +705,7 @@
 
 <!-- Keyboard shortcuts help dialog (global) -->
 {#if showShortcutsDialog}
-  <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
+  <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px" ariaLabel="Keyboard Shortcuts">
     {#snippet header()}
       <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Keyboard Shortcuts</h2>
     {/snippet}

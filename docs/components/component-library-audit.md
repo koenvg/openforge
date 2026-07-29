@@ -215,7 +215,7 @@ Assessment:
 
 3. **Modal/dialog chrome**
    - **Historical duplicates (2026-07-05):** `src/components/shared/ui/Modal.svelte`, `plugins/github-sync/src/shared/ui/Modal.svelte`, and modal shells in Roadmap's `CreateDialog.svelte`, `CardDrawer.svelte`, and `ColumnSettingsModal.svelte` repeated behavior and markup.
-   - **Current state (2026-07-13):** `packages/plugin-sdk/src/ui/Modal.svelte` is the canonical plugin-safe primitive. GitHub Sync's local copy is gone, and all three Roadmap dialogs import the SDK component. `src/components/shared/ui/Modal.svelte` remains the app-private renderer primitive, so the historical plugin-local duplicate set no longer exists.
+   - **Current state (2026-07-29):** `packages/plugin-sdk/src/ui/Modal.svelte` is the sole canonical implementation for both the core renderer and plugins. KVG-2802 removed the app-private copy, routed all renderer consumers through the stable SDK export, and added a source-parity guard that rejects renderer-local `Modal.svelte` implementations and non-canonical Modal imports.
 
 4. **Project page header**
    - **Historical duplicates (2026-07-05):** `plugins/github-sync/src/project/ProjectPageHeader.svelte` and `plugins/skills-viewer/src/ProjectPageHeader.svelte` were identical.

@@ -6,7 +6,7 @@
   import { deriveRepoNameFromUrl } from '../../lib/deriveRepoNameFromUrl'
   import { computeTargetPathPreview, canSubmitGithub, canSubmitNewRepo } from './projectSetupDialogLogic'
   import { Sparkles, GitBranch, FolderOpen } from '@lucide/svelte'
-  import Modal from '../shared/ui/Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
 
   interface Props {
     onClose?: () => void

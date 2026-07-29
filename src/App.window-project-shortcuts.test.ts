@@ -68,7 +68,7 @@ describe('App window and project shortcuts', () => {
 
       await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
 
-      const dialog = screen.getByRole('dialog')
+      const dialog = screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })
       expect(dialog).toBeTruthy()
       expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy()
       expect(screen.getByText('Global')).toBeTruthy()
@@ -187,7 +187,7 @@ describe('App window and project shortcuts', () => {
       await closeRequestedHandler({ preventDefault })
 
       expect(preventDefault).toHaveBeenCalled()
-      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect(screen.getByRole('dialog', { name: 'Agents still running' })).toBeTruthy()
       expect(screen.getByText('Agents still running')).toBeTruthy()
       expect(mockWindowDestroy).not.toHaveBeenCalled()
     })
