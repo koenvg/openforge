@@ -1,6 +1,4 @@
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
-import { dirname } from 'node:path'
-
+import { CrashSafeFilePersistence } from './crashSafeFilePersistence.js'
 import type { TaskBrowserSessionPartition } from './taskBrowserSurfaceManager.js'
 
 export interface TaskBrowserPartitionRegistration {
@@ -134,7 +132,7 @@ function recoveryFailure(
 
 export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionRegistry {
   private snapshot: RegistrySnapshot | null = null
-  private operation: Promise<void> = Promise.resolve()
+  private readonly persistence = new CrashSafeFilePersistence()
 
   constructor(
     private readonly pathSource: string | (() => string),
@@ -142,7 +140,7 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
   ) {}
 
   register(record: TaskBrowserPartitionRegistration): Promise<void> {
-    return this.exclusive(async () => {
+    return this.persistence.runExclusive(async () => {
       this.validateRegistration(record)
       const snapshot = await this.load()
       const recordKey = key(record.pluginId, record.taskId)
@@ -160,21 +158,21 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
   }
 
   listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]> {
-    return this.exclusive(async () => {
+    return this.persistence.runExclusive(async () => {
       const snapshot = await this.load()
       return [...snapshot.records.values()].filter(record => record.taskId === taskId).map(copy)
     })
   }
 
   listByPlugin(pluginId: string): Promise<TaskBrowserPartitionRegistration[]> {
-    return this.exclusive(async () => {
+    return this.persistence.runExclusive(async () => {
       const snapshot = await this.load()
       return [...snapshot.records.values()].filter(record => record.pluginId === pluginId).map(copy)
     })
   }
 
   remove(pluginId: string, taskId: string): Promise<void> {
-    return this.exclusive(async () => {
+    return this.persistence.runExclusive(async () => {
       const snapshot = await this.load()
       const records = new Map(snapshot.records)
       if (!records.delete(key(pluginId, taskId))) return
@@ -310,21 +308,19 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
 
   private async hasInitializationMarker(path: string): Promise<boolean> {
     try {
-      await readFile(path)
-      return true
+      return await this.persistence.readUtf8IfExists(path) !== null
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
       throw new Error(`Failed to read Task Browser partition registry initialization marker at ${path}`, { cause: error })
     }
   }
   private async readCandidate(path: string): Promise<RegistryCandidate> {
-    let content: string
+    let content: string | null
     try {
-      content = await readFile(path, 'utf8')
+      content = await this.persistence.readUtf8IfExists(path)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { status: 'missing' }
       throw new Error(`Failed to read Task Browser partition registry at ${path}`, { cause: error })
     }
+    if (content === null) return { status: 'missing' }
     try {
       return { status: 'valid', content, snapshot: parseRegistry(content, path) }
     } catch (error) {
@@ -339,7 +335,7 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     failureMessage: string,
   ): Promise<boolean> {
     try {
-      await this.writeAtomic(targetPath, content)
+      await this.persistence.writeUtf8Atomic(targetPath, content)
       if (warning) (this.options.logger ?? DEFAULT_LOGGER).warn(warning)
       return true
     } catch (error) {
@@ -370,9 +366,9 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     try {
       // The backup is committed first. If the process exits between renames, its higher
       // generation is authoritative and repairs the stale primary on the next load.
-      await this.writeAtomic(backupPath, content)
-      await this.writeAtomic(path, content)
-      await this.writeAtomic(markerPath, INITIALIZATION_MARKER)
+      await this.persistence.writeUtf8Atomic(backupPath, content)
+      await this.persistence.writeUtf8Atomic(path, content)
+      await this.persistence.writeUtf8Atomic(markerPath, INITIALIZATION_MARKER)
       this.snapshot = snapshot
     } catch (error) {
       throw new Error(
@@ -382,30 +378,6 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     }
   }
 
-  private async writeAtomic(path: string, content: string): Promise<void> {
-    const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`
-    await mkdir(dirname(path), { recursive: true })
-    let temporaryFile: Awaited<ReturnType<typeof open>> | null = null
-    try {
-      temporaryFile = await open(temporaryPath, 'w', 0o600)
-      await temporaryFile.writeFile(content, 'utf8')
-      await temporaryFile.sync()
-      await temporaryFile.close()
-      temporaryFile = null
-      await rename(temporaryPath, path)
-
-      const registryDirectory = await open(dirname(path), 'r')
-      try {
-        await registryDirectory.sync()
-      } finally {
-        await registryDirectory.close()
-      }
-    } catch (error) {
-      await temporaryFile?.close().catch(() => undefined)
-      await unlink(temporaryPath).catch(() => undefined)
-      throw error
-    }
-  }
 
   private validateRegistration(record: TaskBrowserPartitionRegistration): void {
     if (!record.pluginId.trim() || !record.taskId.trim() || !PARTITION_PATTERN.test(record.partition)) {
@@ -413,9 +385,4 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     }
   }
 
-  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.operation.then(operation, operation)
-    this.operation = result.then(() => undefined, () => undefined)
-    return result
-  }
 }

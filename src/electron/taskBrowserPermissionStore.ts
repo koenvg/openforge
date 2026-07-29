@@ -1,6 +1,4 @@
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
-import { dirname } from 'node:path'
-
+import { CrashSafeFilePersistence } from './crashSafeFilePersistence.js'
 import { isTaskBrowserPermissionDescriptor } from './taskBrowserPermissionPolicy.js'
 import type {
   TaskBrowserPermissionDecisionRecord,
@@ -84,16 +82,16 @@ function parsePermissionFile(content: string, path: string): TaskBrowserPermissi
 
 export class FileTaskBrowserPermissionStore implements TaskBrowserPermissionStore {
   private records: TaskBrowserPermissionDecisionRecord[] | null = null
-  private operation: Promise<void> = Promise.resolve()
+  private readonly persistence = new CrashSafeFilePersistence()
 
   constructor(private readonly pathSource: string | (() => string)) {}
 
   load(): Promise<TaskBrowserPermissionDecisionRecord[]> {
-    return this.exclusive(async () => (await this.loadInternal()).map(copyRecord))
+    return this.persistence.runExclusive(async () => (await this.loadInternal()).map(copyRecord))
   }
 
   replace(records: TaskBrowserPermissionDecisionRecord[]): Promise<void> {
-    return this.exclusive(async () => {
+    return this.persistence.runExclusive(async () => {
       await this.loadInternal()
       const next = records.map(record => validateRecord(record, this.path()))
       const unique = new Map(next.map(record => [recordKey(record), record]))
@@ -113,15 +111,15 @@ export class FileTaskBrowserPermissionStore implements TaskBrowserPermissionStor
   private async loadInternal(): Promise<TaskBrowserPermissionDecisionRecord[]> {
     if (this.records) return this.records
     const path = this.path()
-    let content: string
+    let content: string | null
     try {
-      content = await readFile(path, 'utf8')
+      content = await this.persistence.readUtf8IfExists(path)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        this.records = []
-        return this.records
-      }
       throw new Error(`Failed to read Task Browser permission store at ${path}`, { cause: error })
+    }
+    if (content === null) {
+      this.records = []
+      return this.records
     }
     this.records = parsePermissionFile(content, path)
     return this.records
@@ -129,34 +127,12 @@ export class FileTaskBrowserPermissionStore implements TaskBrowserPermissionStor
 
   private async persist(records: TaskBrowserPermissionDecisionRecord[]): Promise<void> {
     const path = this.path()
-    const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`
     const file: PermissionFile = { version: 1, decisions: records.map(copyRecord) }
-    await mkdir(dirname(path), { recursive: true })
-    let temporaryFile: Awaited<ReturnType<typeof open>> | null = null
     try {
-      temporaryFile = await open(temporaryPath, 'w', 0o600)
-      await temporaryFile.writeFile(`${JSON.stringify(file, null, 2)}\n`, 'utf8')
-      await temporaryFile.sync()
-      await temporaryFile.close()
-      temporaryFile = null
-      await rename(temporaryPath, path)
-
-      const directory = await open(dirname(path), 'r')
-      try {
-        await directory.sync()
-      } finally {
-        await directory.close()
-      }
+      await this.persistence.writeUtf8Atomic(path, `${JSON.stringify(file, null, 2)}\n`)
     } catch (error) {
-      await temporaryFile?.close().catch(() => undefined)
-      await unlink(temporaryPath).catch(() => undefined)
       throw new Error(`Failed to persist Task Browser permission store at ${path}`, { cause: error })
     }
   }
 
-  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.operation.then(operation, operation)
-    this.operation = result.then(() => undefined, () => undefined)
-    return result
-  }
 }
