@@ -14,7 +14,7 @@
   } from '../lib/taskPrompt'
   import type { TaskPromptImageReference } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
-  import Modal from './shared/ui/Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import SearchableSelect from './shared/ui/SearchableSelect.svelte'
   import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
   import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
@@ -41,6 +41,7 @@
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
   let { mode = 'create', task = null, projectPath = null, onClose, onTaskSaved, onRunAction }: Props = $props()
+  const dialogTitle = $derived(mode === 'create' ? 'Create Task' : 'Edit Task')
 
   let selectedPermissionMode = $state<PermissionMode>('default')
   let selectedWorktreeSource = $state<WorktreeSource>('newBranchFromMain')
@@ -435,9 +436,9 @@
   }
 </script>
 
-<Modal onClose={onClose} maxWidth="640px" overflowVisible initialFocus="textarea">
+<Modal onClose={onClose} maxWidth="640px" overflowVisible initialFocus="textarea" ariaLabel={dialogTitle}>
   {#snippet header()}
-    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
+    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{dialogTitle}</h2>
   {/snippet}
 
   <div class="p-4 overflow-visible">

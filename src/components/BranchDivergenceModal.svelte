@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from './shared/ui/Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { branchDivergenceRequest, resolveBranchDivergence } from '../lib/branchDivergenceModalStore'
   import type { CommitSummary } from '../lib/types'
 

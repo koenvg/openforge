@@ -1,6 +1,6 @@
 <script lang="ts">
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
-  import Modal from '../shared/ui/Modal.svelte'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
   import PaletteInput from '../shared/ui/PaletteInput.svelte'
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
