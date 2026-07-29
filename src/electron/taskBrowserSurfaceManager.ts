@@ -1,142 +1,52 @@
-import { createHash } from 'node:crypto'
+import type { TaskBrowserPartitionRegistration } from './taskBrowserPartitionRegistry.js'
+import {
+  TaskBrowserSurfaceError,
+} from './taskBrowserSurfaceContract.js'
 import type {
-  TaskBrowserPartitionRegistration,
-  TaskBrowserPartitionRegistry,
-} from './taskBrowserPartitionRegistry.js'
-import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
+  GetOrCreateTaskBrowserSurfaceRequest,
+  NativeTaskBrowserSurface,
+  TaskBrowserBounds,
+  TaskBrowserNativeState,
+  TaskBrowserSessionPartition,
+  TaskBrowserSurfaceManagerOptions,
+  TaskBrowserSurfaceReference,
+} from './taskBrowserSurfaceContract.js'
+import { TaskBrowserSurfaceLifecycle } from './taskBrowserSurfaceLifecycle.js'
+import {
+  SECURE_TASK_BROWSER_POPUP_POLICY,
+  SECURE_TASK_BROWSER_WEB_PREFERENCES,
+  constrainTaskBrowserBounds,
+  isTaskBrowserUrlAllowed,
+  isValidTaskBrowserBounds,
+  taskBrowserSessionPartition,
+  validateTaskBrowserSurfaceIdentity,
+} from './taskBrowserSurfacePolicy.js'
 
-export type TaskBrowserSurfaceErrorCode =
-  | 'HOST_UNAVAILABLE'
-  | 'INVALID_TASK'
-  | 'PLUGIN_NOT_ENABLED'
-  | 'INVALID_ID'
-  | 'INVALID_URL'
-  | 'INVALID_BOUNDS'
-  | 'SURFACE_DESTROYED'
-
-export class TaskBrowserSurfaceError extends Error {
-  readonly code: TaskBrowserSurfaceErrorCode
-
-  constructor(code: TaskBrowserSurfaceErrorCode, message: string) {
-    super(message)
-    this.name = 'TaskBrowserSurfaceError'
-    this.code = code
-  }
-}
-
-export interface TaskBrowserNavigationError {
-  code: string
-  message: string
-  url: string
-}
-
-export interface TaskBrowserNativeState {
-  url: string
-  title: string
-  loading: boolean
-  canGoBack: boolean
-  canGoForward: boolean
-  error: TaskBrowserNavigationError | null
-}
-
-export interface TaskBrowserBounds {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export interface TaskBrowserWebPreferences {
-  nodeIntegration: false
-  contextIsolation: true
-  sandbox: true
-  webSecurity: true
-  allowRunningInsecureContent: false
-  webviewTag: false
-  safeDialogs: true
-  navigateOnDragDrop: false
-}
-
-export const SECURE_TASK_BROWSER_WEB_PREFERENCES: TaskBrowserWebPreferences = Object.freeze({
-  nodeIntegration: false,
-  contextIsolation: true,
-  sandbox: true,
-  webSecurity: true,
-  allowRunningInsecureContent: false,
-  webviewTag: false,
-  safeDialogs: true,
-  navigateOnDragDrop: false,
-})
-
-export type TaskBrowserSessionPartition = `persist:${string}`
-
-export interface TaskBrowserPopupRequest {
-  url: string
-  features: string
-}
-
-export interface TaskBrowserPopupPolicy {
-  isAllowed(request: TaskBrowserPopupRequest): boolean
-}
-
-export interface TaskBrowserSurfaceCreateOptions {
-  windowId: number
-  partition: TaskBrowserSessionPartition
-  webPreferences: TaskBrowserWebPreferences
-  popupPolicy: TaskBrowserPopupPolicy
-  permissionHandler?: TaskBrowserPermissionSessionHandler
-}
-
-export interface NativeTaskBrowserSurface {
-  getState(): TaskBrowserNativeState
-  onStateChanged(listener: (state: TaskBrowserNativeState) => void): () => void
-  loadURL(url: string): Promise<void>
-  attach(windowId: number, bounds: TaskBrowserBounds): void
-  detach(): void
-  destroy(): void
-  goBack(): Promise<void>
-  goForward(): Promise<void>
-  reload(): Promise<void>
-  stop(): void
-}
-
-export interface NativeTaskBrowserSurfaceFactory {
-  createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface
-  clearSession(partition: TaskBrowserSessionPartition): Promise<void>
-}
-
-export interface TaskBrowserSurfaceStateEvent {
-  windowId: number
-  surfaceId: string
-  generation: number
-  state: TaskBrowserNativeState
-}
-export interface TaskBrowserPermissionController {
-  createSessionHandler(pluginId: string, taskId: string): Promise<TaskBrowserPermissionSessionHandler>
-  clearSession(pluginId: string, taskId: string): Promise<void>
-}
-
-export interface TaskBrowserSurfaceManagerOptions {
-  factory: NativeTaskBrowserSurfaceFactory
-  registry: TaskBrowserPartitionRegistry
-  permissions: TaskBrowserPermissionController
-  authorize(pluginId: string, taskId: string): Promise<void>
-  onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
-}
-
-export interface GetOrCreateTaskBrowserSurfaceRequest {
-  windowId: number
-  pluginId: string
-  taskId: string
-  id: string
-  initialUrl?: string
-}
-
-export interface TaskBrowserSurfaceReference {
-  surfaceId: string
-  generation: number
-  state: TaskBrowserNativeState
-}
+export { TaskBrowserSurfaceError } from './taskBrowserSurfaceContract.js'
+export type {
+  GetOrCreateTaskBrowserSurfaceRequest,
+  NativeTaskBrowserSurface,
+  NativeTaskBrowserSurfaceFactory,
+  TaskBrowserBounds,
+  TaskBrowserNavigationError,
+  TaskBrowserNativeState,
+  TaskBrowserPermissionController,
+  TaskBrowserPopupPolicy,
+  TaskBrowserPopupRequest,
+  TaskBrowserSessionPartition,
+  TaskBrowserSurfaceCreateOptions,
+  TaskBrowserSurfaceErrorCode,
+  TaskBrowserSurfaceManagerOptions,
+  TaskBrowserSurfaceReference,
+  TaskBrowserSurfaceStateEvent,
+  TaskBrowserWebPreferences,
+} from './taskBrowserSurfaceContract.js'
+export {
+  SECURE_TASK_BROWSER_POPUP_POLICY,
+  SECURE_TASK_BROWSER_WEB_PREFERENCES,
+  integerTaskBrowserBounds,
+  taskBrowserSessionPartition,
+} from './taskBrowserSurfacePolicy.js'
 
 type SurfaceRecord = {
   key: string
@@ -161,16 +71,6 @@ type PendingSurfaceCreation = {
   sessionEpoch: number
 }
 
-type CreationLifecycleEpoch = {
-  global: number
-  plugin: number
-  task: number
-  session: number
-  window: number
-}
-
-const LOCAL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
-
 function copyState(state: TaskBrowserNativeState): TaskBrowserNativeState {
   return { ...state, error: state.error ? { ...state.error } : null }
 }
@@ -179,107 +79,20 @@ function liveKey(request: Pick<GetOrCreateTaskBrowserSurfaceRequest, 'windowId' 
   return [request.windowId, request.pluginId, request.taskId, request.id].join('\u0000')
 }
 
-export function taskBrowserSessionPartition(pluginId: string, taskId: string): TaskBrowserSessionPartition {
-  const digest = createHash('sha256').update(`${pluginId}\u0000${taskId}`, 'utf8').digest('hex')
-  return `persist:openforge-task-browser-${digest}`
-}
-
-function allowedUrl(value: string): boolean {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-const NON_CONFIGURABLE_POPUP_PREFERENCES = new Set([
-  'allowrunninginsecurecontent',
-  'contextisolation',
-  'devtools',
-  'javascript',
-  'navigateondragdrop',
-  'nodeintegration',
-  'nodeintegrationinsubframes',
-  'nodeintegrationinworker',
-  'partition',
-  'preload',
-  'safedialogs',
-  'sandbox',
-  'session',
-  'webpreferences',
-  'websecurity',
-  'webviewtag',
-  'zoomfactor',
-])
-
-function requestsPopupPreferenceOverride(features: string): boolean {
-  return features.split(',').some(feature => {
-    const [name] = feature.split('=', 1)
-    return NON_CONFIGURABLE_POPUP_PREFERENCES.has(name.trim().toLowerCase())
-  })
-}
-
-export const SECURE_TASK_BROWSER_POPUP_POLICY: TaskBrowserPopupPolicy = Object.freeze({
-  isAllowed: ({ url, features }: TaskBrowserPopupRequest) => (
-    allowedUrl(url) && !requestsPopupPreferenceOverride(features)
-  ),
-})
-
-function validBounds(bounds: TaskBrowserBounds): boolean {
-  return [bounds.x, bounds.y, bounds.width, bounds.height, bounds.x + bounds.width, bounds.y + bounds.height]
-    .every(Number.isFinite)
-    && bounds.width >= 0
-    && bounds.height >= 0
-}
-
-function clampBounds(bounds: TaskBrowserBounds, content: TaskBrowserBounds): TaskBrowserBounds {
-  const contentRight = content.x + content.width
-  const contentBottom = content.y + content.height
-  const left = Math.min(Math.max(bounds.x, content.x), contentRight)
-  const top = Math.min(Math.max(bounds.y, content.y), contentBottom)
-  const right = Math.min(Math.max(bounds.x + bounds.width, content.x), contentRight)
-  const bottom = Math.min(Math.max(bounds.y + bounds.height, content.y), contentBottom)
-  return {
-    x: left,
-    y: top,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
-  }
-}
-
-export function integerTaskBrowserBounds(bounds: TaskBrowserBounds): TaskBrowserBounds {
-  const x = Math.round(bounds.x)
-  const y = Math.round(bounds.y)
-  const right = Math.round(bounds.x + bounds.width)
-  const bottom = Math.round(bounds.y + bounds.height)
-  return {
-    x,
-    y,
-    width: Math.max(0, right - x),
-    height: Math.max(0, bottom - y),
-  }
-}
-
 export class TaskBrowserSurfaceManager {
   private readonly windows = new Map<number, TaskBrowserBounds>()
   private readonly surfacesByKey = new Map<string, SurfaceRecord>()
   private readonly surfacesById = new Map<string, SurfaceRecord>()
   private readonly pending = new Map<string, PendingSurfaceCreation>()
-  private readonly sessionResets = new Map<string, Promise<void>>()
-  private readonly pluginEpochs = new Map<string, number>()
-  private readonly taskEpochs = new Map<string, number>()
-  private readonly sessionEpochs = new Map<string, number>()
-  private readonly windowEpochs = new Map<number, number>()
+  private readonly lifecycle = new TaskBrowserSurfaceLifecycle()
   private surfaceSequence = 0
   private generationSequence = 0
   private lruSequence = 0
-  private globalEpoch = 0
 
   constructor(private readonly options: TaskBrowserSurfaceManagerOptions) {}
 
   registerWindow(windowId: number, contentBounds: TaskBrowserBounds): void {
-    if (!Number.isInteger(windowId) || !validBounds(contentBounds) || contentBounds.width <= 0 || contentBounds.height <= 0) {
+    if (!Number.isInteger(windowId) || !isValidTaskBrowserBounds(contentBounds) || contentBounds.width <= 0 || contentBounds.height <= 0) {
       throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Task Browser Surface requires a valid owning OpenForge window')
     }
     this.windows.set(windowId, { ...contentBounds })
@@ -287,7 +100,7 @@ export class TaskBrowserSurfaceManager {
 
   updateWindowBounds(windowId: number, contentBounds: TaskBrowserBounds): void {
     if (!this.windows.has(windowId)) return
-    if (!validBounds(contentBounds) || contentBounds.width <= 0 || contentBounds.height <= 0) return
+    if (!isValidTaskBrowserBounds(contentBounds) || contentBounds.width <= 0 || contentBounds.height <= 0) return
     this.windows.set(windowId, { ...contentBounds })
     for (const surface of this.surfacesById.values()) {
       if (surface.windowId === windowId && surface.attachmentId && surface.requestedBounds) {
@@ -302,18 +115,17 @@ export class TaskBrowserSurfaceManager {
   }
 
   unregisterWindow(windowId: number): void {
-    this.windowEpochs.set(windowId, (this.windowEpochs.get(windowId) ?? 0) + 1)
+    this.lifecycle.invalidateWindow(windowId)
     this.destroyWhere(surface => surface.windowId === windowId)
     this.windows.delete(windowId)
   }
 
   async getOrCreate(request: GetOrCreateTaskBrowserSurfaceRequest): Promise<TaskBrowserSurfaceReference> {
-    this.validateIdentity(request)
-    const sessionKey = this.sessionEpochKey(request.pluginId, request.taskId)
-    let observedSessionEpoch = this.sessionEpochs.get(sessionKey) ?? 0
+    validateTaskBrowserSurfaceIdentity(request)
+    let observedSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId)
     while (true) {
-      await this.waitForSessionReset(request.pluginId, request.taskId)
-      const currentSessionEpoch = this.sessionEpochs.get(sessionKey) ?? 0
+      await this.lifecycle.waitForSessionReset(request.pluginId, request.taskId)
+      const currentSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId)
       if (currentSessionEpoch === observedSessionEpoch) break
       observedSessionEpoch = currentSessionEpoch
     }
@@ -328,7 +140,7 @@ export class TaskBrowserSurfaceManager {
     const existing = this.surfacesByKey.get(key)
     if (existing) {
       await this.options.authorize(request.pluginId, request.taskId)
-      if ((this.sessionEpochs.get(sessionKey) ?? 0) !== observedSessionEpoch) {
+      if (this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId) !== observedSessionEpoch) {
         return this.getOrCreate(request)
       }
       if (this.surfacesByKey.get(key) !== existing) {
@@ -369,7 +181,7 @@ export class TaskBrowserSurfaceManager {
     if (!Number.isSafeInteger(attachmentGeneration) || attachmentGeneration <= 0) {
       throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires a valid generation')
     }
-    if (bounds !== null && !validBounds(bounds)) {
+    if (bounds !== null && !isValidTaskBrowserBounds(bounds)) {
       throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment bounds are invalid')
     }
     const contentBounds = this.windows.get(surface.windowId)
@@ -389,8 +201,8 @@ export class TaskBrowserSurfaceManager {
       return
     }
 
-    const clamped = integerTaskBrowserBounds(clampBounds(bounds, contentBounds))
-    if (clamped.width === 0 || clamped.height === 0) {
+    const clamped = constrainTaskBrowserBounds(bounds, contentBounds)
+    if (clamped === null) {
       this.retainDetached(surface, replacesAttachment)
       return
     }
@@ -422,7 +234,7 @@ export class TaskBrowserSurfaceManager {
   }
 
   async navigate(surfaceId: string, url: string): Promise<TaskBrowserNativeState> {
-    if (!allowedUrl(url)) throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser Surfaces only allow HTTP(S) navigation')
+    if (!isTaskBrowserUrlAllowed(url)) throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser Surfaces only allow HTTP(S) navigation')
     const surface = this.requireSurface(surfaceId)
     await surface.native.loadURL(url)
     return copyState(surface.native.getState())
@@ -469,34 +281,27 @@ export class TaskBrowserSurfaceManager {
 
   destroyTask(taskId: string): void {
     if (!taskId.trim()) return
-    this.taskEpochs.set(taskId, (this.taskEpochs.get(taskId) ?? 0) + 1)
+    this.lifecycle.invalidateTask(taskId)
     this.destroyWhere(surface => surface.taskId === taskId)
   }
 
   destroyPlugin(pluginId: string): void {
-    this.pluginEpochs.set(pluginId, (this.pluginEpochs.get(pluginId) ?? 0) + 1)
+    this.lifecycle.invalidatePlugin(pluginId)
     this.destroyWhere(surface => surface.pluginId === pluginId)
   }
 
   destroyAll(): void {
-    this.globalEpoch += 1
+    this.lifecycle.invalidateAll()
     this.destroyWhere(() => true)
   }
 
   private async createSurface(request: GetOrCreateTaskBrowserSurfaceRequest, key: string): Promise<TaskBrowserSurfaceReference> {
-    if (request.initialUrl !== undefined && !allowedUrl(request.initialUrl)) {
+    if (request.initialUrl !== undefined && !isTaskBrowserUrlAllowed(request.initialUrl)) {
       throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser Surfaces only allow HTTP(S) initial URLs')
     }
-    const sessionKey = this.sessionEpochKey(request.pluginId, request.taskId)
-    const lifecycleEpoch: CreationLifecycleEpoch = {
-      global: this.globalEpoch,
-      plugin: this.pluginEpochs.get(request.pluginId) ?? 0,
-      task: this.taskEpochs.get(request.taskId) ?? 0,
-      session: this.sessionEpochs.get(sessionKey) ?? 0,
-      window: this.windowEpochs.get(request.windowId) ?? 0,
-    }
+    const lifecycleEpoch = this.lifecycle.capture(request)
     await this.options.authorize(request.pluginId, request.taskId)
-    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
+    if (!this.lifecycle.isCurrent(request, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
     if (!this.windows.has(request.windowId)) {
@@ -504,7 +309,7 @@ export class TaskBrowserSurfaceManager {
     }
 
     const permissionHandler = await this.options.permissions.createSessionHandler(request.pluginId, request.taskId)
-    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
+    if (!this.lifecycle.isCurrent(request, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
 
@@ -514,7 +319,7 @@ export class TaskBrowserSurfaceManager {
       taskId: request.taskId,
       partition,
     })
-    if (this.creationWasSuperseded(request, sessionKey, lifecycleEpoch)) {
+    if (!this.lifecycle.isCurrent(request, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
     const native = this.options.factory.createSurface({
@@ -567,11 +372,7 @@ export class TaskBrowserSurfaceManager {
     record: TaskBrowserPartitionRegistration,
     authorize: boolean,
   ): Promise<void> {
-    const sessionKey = this.sessionEpochKey(record.pluginId, record.taskId)
-    this.sessionEpochs.set(sessionKey, (this.sessionEpochs.get(sessionKey) ?? 0) + 1)
-    const previousReset = this.sessionResets.get(sessionKey)
-    const reset = (async () => {
-      await previousReset?.catch(() => undefined)
+    await this.lifecycle.runSessionReset(record.pluginId, record.taskId, async () => {
       if (authorize) await this.options.authorize(record.pluginId, record.taskId)
       this.destroyWhere(surface => surface.pluginId === record.pluginId && surface.taskId === record.taskId)
       const cleanupResults = await Promise.allSettled([
@@ -580,46 +381,7 @@ export class TaskBrowserSurfaceManager {
       ])
       const failure = cleanupResults.find(result => result.status === 'rejected')
       if (failure?.status === 'rejected') throw failure.reason
-    })()
-    this.sessionResets.set(sessionKey, reset)
-    try {
-      await reset
-    } finally {
-      if (this.sessionResets.get(sessionKey) === reset) this.sessionResets.delete(sessionKey)
-    }
-  }
-
-  private async waitForSessionReset(pluginId: string, taskId: string): Promise<void> {
-    const sessionKey = this.sessionEpochKey(pluginId, taskId)
-    let reset = this.sessionResets.get(sessionKey)
-    while (reset) {
-      await reset.catch(() => undefined)
-      reset = this.sessionResets.get(sessionKey)
-    }
-  }
-
-  private sessionEpochKey(pluginId: string, taskId: string): string {
-    return `${pluginId}\u0000${taskId}`
-  }
-
-  private creationWasSuperseded(
-    request: GetOrCreateTaskBrowserSurfaceRequest,
-    sessionKey: string,
-    epoch: CreationLifecycleEpoch,
-  ): boolean {
-    return epoch.global !== this.globalEpoch
-      || epoch.plugin !== (this.pluginEpochs.get(request.pluginId) ?? 0)
-      || epoch.task !== (this.taskEpochs.get(request.taskId) ?? 0)
-      || epoch.session !== (this.sessionEpochs.get(sessionKey) ?? 0)
-      || epoch.window !== (this.windowEpochs.get(request.windowId) ?? 0)
-  }
-
-  private validateIdentity(request: GetOrCreateTaskBrowserSurfaceRequest): void {
-    if (!Number.isInteger(request.windowId)) throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is invalid')
-    if (!request.taskId.trim()) throw new TaskBrowserSurfaceError('INVALID_TASK', 'Task Browser Surface requires a non-empty Task ID')
-    if (!LOCAL_ID.test(request.pluginId) || !LOCAL_ID.test(request.id)) {
-      throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Surface plugin and local ids must be valid stable identifiers')
-    }
+    })
   }
 
   private requireSurface(surfaceId: string): SurfaceRecord {

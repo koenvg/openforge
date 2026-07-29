@@ -1,0 +1,187 @@
+import { vi } from 'vitest'
+
+import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager'
+import type {
+  NativeTaskBrowserSurface,
+  NativeTaskBrowserSurfaceFactory,
+  TaskBrowserBounds,
+  TaskBrowserNativeState,
+  TaskBrowserSurfaceCreateOptions,
+  TaskBrowserSurfaceStateEvent,
+} from './taskBrowserSurfaceManager'
+import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy'
+import type {
+  TaskBrowserPartitionRegistration,
+  TaskBrowserPartitionRegistry,
+} from './taskBrowserPartitionRegistry'
+
+export class FakeNativeSurface implements NativeTaskBrowserSurface {
+  readonly loadCalls: string[] = []
+  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop'> = []
+  readonly bounds: TaskBrowserBounds[] = []
+  readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
+  private readonly history = ['about:blank']
+  private historyIndex = 0
+  state: TaskBrowserNativeState = {
+    url: 'about:blank',
+    title: '',
+    loading: false,
+    canGoBack: false,
+    canGoForward: false,
+    error: null,
+  }
+  attachedWindowId: number | null = null
+  destroyed = false
+  loadGate: Promise<void> | null = null
+
+  getState(): TaskBrowserNativeState {
+    return { ...this.state }
+  }
+
+  onStateChanged(listener: (state: TaskBrowserNativeState) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  async loadURL(url: string): Promise<void> {
+    if (this.loadGate) await this.loadGate
+    this.loadCalls.push(url)
+    this.history.splice(this.historyIndex + 1)
+    this.history.push(url)
+    this.historyIndex = this.history.length - 1
+    this.emitHistoryState({ url, loading: true, error: null })
+  }
+
+  attach(windowId: number, bounds: TaskBrowserBounds): void {
+    this.attachedWindowId = windowId
+    this.bounds.push(bounds)
+  }
+
+  detach(): void {
+    this.attachedWindowId = null
+  }
+
+  destroy(): void {
+    this.destroyed = true
+    this.listeners.clear()
+  }
+
+  async goBack(): Promise<void> {
+    this.controlCalls.push('goBack')
+    if (this.historyIndex > 0) this.historyIndex -= 1
+    this.emitHistoryState({ url: this.history[this.historyIndex], loading: true, error: null })
+  }
+
+  async goForward(): Promise<void> {
+    this.controlCalls.push('goForward')
+    if (this.historyIndex < this.history.length - 1) this.historyIndex += 1
+    this.emitHistoryState({ url: this.history[this.historyIndex], loading: true, error: null })
+  }
+
+  async reload(): Promise<void> {
+    this.controlCalls.push('reload')
+    this.emitHistoryState({ loading: true, error: null })
+  }
+
+  stop(): void {
+    this.controlCalls.push('stop')
+    this.emitHistoryState({ loading: false })
+  }
+
+  emit(patch: Partial<TaskBrowserNativeState> = {}): void {
+    this.state = { ...this.state, ...patch }
+    for (const listener of this.listeners) listener(this.getState())
+  }
+
+  private emitHistoryState(patch: Partial<TaskBrowserNativeState>): void {
+    this.emit({
+      ...patch,
+      canGoBack: this.historyIndex > 0,
+      canGoForward: this.historyIndex < this.history.length - 1,
+    })
+  }
+}
+
+export class FakeNativeFactory implements NativeTaskBrowserSurfaceFactory {
+  readonly creations: TaskBrowserSurfaceCreateOptions[] = []
+  readonly surfaces: FakeNativeSurface[] = []
+  readonly clearedPartitions: string[] = []
+  readonly sessionDataByPartition = new Map<string, Map<string, string>>()
+  loadGate: Promise<void> | null = null
+  clearGate: Promise<void> | null = null
+  clearError: Error | null = null
+
+  createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface {
+    this.creations.push(options)
+    this.sessionDataFor(options.partition)
+    const surface = new FakeNativeSurface()
+    surface.loadGate = this.loadGate
+    this.surfaces.push(surface)
+    return surface
+  }
+
+  async clearSession(partition: string): Promise<void> {
+    this.clearedPartitions.push(partition)
+    if (this.clearGate) await this.clearGate
+    if (this.clearError) throw this.clearError
+    this.sessionDataFor(partition).clear()
+  }
+
+  sessionDataFor(partition: string): Map<string, string> {
+    let data = this.sessionDataByPartition.get(partition)
+    if (!data) {
+      data = new Map()
+      this.sessionDataByPartition.set(partition, data)
+    }
+    return data
+  }
+}
+
+export class FakePartitionRegistry implements TaskBrowserPartitionRegistry {
+  readonly registrations: TaskBrowserPartitionRegistration[] = []
+  readonly records = new Map<string, TaskBrowserPartitionRegistration>()
+
+  async register(record: TaskBrowserPartitionRegistration): Promise<void> {
+    this.registrations.push({ ...record })
+    this.records.set(`${record.pluginId}\u0000${record.taskId}`, { ...record })
+  }
+
+  async listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()].filter(record => record.taskId === taskId)
+  }
+
+  async listByPlugin(pluginId: string): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()].filter(record => record.pluginId === pluginId)
+  }
+
+  async remove(pluginId: string, taskId: string): Promise<void> {
+    this.records.delete(`${pluginId}\u0000${taskId}`)
+  }
+}
+
+export function createTaskBrowserSurfaceManagerFixture(
+  overrides: { authorize?: (pluginId: string, taskId: string) => Promise<void> } = {},
+) {
+  const factory = new FakeNativeFactory()
+  const registry = new FakePartitionRegistry()
+  const authorize = overrides.authorize ?? vi.fn(async () => undefined)
+  const permissionHandler: TaskBrowserPermissionSessionHandler = {
+    check: vi.fn(() => false),
+    request: vi.fn(async () => false),
+  }
+  const permissions = {
+    createSessionHandler: vi.fn(async () => permissionHandler),
+    clearSession: vi.fn<(pluginId: string, taskId: string) => Promise<void>>(async () => undefined),
+  }
+  const stateEvents: TaskBrowserSurfaceStateEvent[] = []
+  const manager = new TaskBrowserSurfaceManager({
+    factory,
+    registry,
+    permissions,
+    authorize,
+    onStateChanged: event => stateEvents.push(event),
+  })
+  manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
+  manager.registerWindow(11, { x: 0, y: 0, width: 800, height: 600 })
+  return { manager, factory, registry, permissions, permissionHandler, authorize, stateEvents }
+}
