@@ -230,11 +230,13 @@ A frontend browser plugin can register the handler during activation:
 context.subscriptions.add(openforge.taskLinks.registerHandler(async ({ taskId, url }) => {
   const surface = await openforge.browserSurfaces.getOrCreate({ taskId, id: 'main' })
   const state = await surface.navigate(url)
-  if (state.error !== null || state.loading) throw new Error(`Navigation failed: ${url}`)
+  if (state.error !== null) throw new Error(state.error.message)
   await openforge.navigation.navigate({ taskId, taskViewId: 'browser' })
   return 'handled'
 }))
 ```
+
+A successful `navigate(...)` call may return a state whose `loading` field is still `true`; this means the accepted navigation is in progress, not that it failed. Browser handlers should foreground their Task UI tab so it can display and observe that in-progress load. Only a non-null `error` reports navigation failure.
 
 Only one handler may be active in a renderer; duplicate registration fails. Disposing the registration restores the external fallback. `taskViewId` is plugin-local, requires a non-null `taskId`, and lets `navigation.navigate(...)` foreground one of the caller's own registered Task UI tabs. The testing fake records requests in `api.__testing.calls.taskLinkOpenRequests` and exercises a registered handler in memory.
 
@@ -250,7 +252,7 @@ const surface = await openforge.browserSurfaces.getOrCreate({
 })
 
 const stateSubscription = surface.onStateChanged(async state => {
-  if (state.error === null && state.url.startsWith('http')) {
+  if (!state.loading && state.error === null && state.url.startsWith('http')) {
     await openforge.storage.task(taskId).set('lastBrowserUrl', state.url)
   }
 })

@@ -74,6 +74,12 @@ export async function createBrowserTabSession({
   let persistence = Promise.resolve()
   let latestState: TaskBrowserSurfaceState | null = null
   let persistenceSuppression: 'none' | 'awaiting-stop-settle' | 'awaiting-next-load' = 'none'
+  function queueStatePersistence(state: TaskBrowserSurfaceState) {
+    persistence = persistence
+      .then(() => persistSuccessfulBrowserState(api, taskId, state))
+      .then(() => undefined)
+      .catch(() => undefined)
+  }
   let subscription: Disposable | null = surface.onStateChanged((state) => {
     latestState = state
     if (persistenceSuppression === 'awaiting-stop-settle' && !state.loading) {
@@ -83,10 +89,7 @@ export async function createBrowserTabSession({
     }
     onStateChanged(state)
     if (persistenceSuppression === 'none' && !state.loading) {
-      persistence = persistence
-        .then(() => persistSuccessfulBrowserState(api, taskId, state))
-        .then(() => undefined)
-        .catch(() => undefined)
+      queueStatePersistence(state)
     }
   })
   let attachment: Disposable | null = null
@@ -95,6 +98,7 @@ export async function createBrowserTabSession({
     attachment = await surface.attach(element)
     latestState = await surface.getState()
     onStateChanged(latestState)
+    if (!latestState.loading) queueStatePersistence(latestState)
   } catch (error) {
     const resources = [attachment, subscription]
     attachment = null

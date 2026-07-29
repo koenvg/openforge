@@ -12,6 +12,26 @@ describe('Task Browser link handler', () => {
     expect(api.__testing.calls.browserSurfaceGetOrCreate).toEqual([])
   })
 
+  it('foregrounds the Browser tab when accepted navigation is still loading', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })
+    const loadingState: TaskBrowserSurfaceState = {
+      url: 'https://openforge.dev/docs',
+      title: '',
+      loading: true,
+      canGoBack: false,
+      canGoForward: false,
+      error: null,
+    }
+    vi.spyOn(surface, 'navigate').mockResolvedValue(loadingState)
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    const handler = createTaskBrowserLinkHandler(api)
+
+    await expect(handler({ taskId: 'T-1', url: loadingState.url })).resolves.toBe('handled')
+    expect(api.__testing.calls.navigationRequests).toEqual([{ taskId: 'T-1', taskViewId: 'browser' }])
+    await expect(api.storage.task('T-1').get('lastBrowserUrl')).resolves.toBeNull()
+  })
+
   it('does not persist or foreground a failed navigation', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
     const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })
