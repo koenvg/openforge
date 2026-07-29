@@ -5,7 +5,8 @@
   import { Play } from '@lucide/svelte'
   import { activeProjectId, activeSessions, commandHeld, completingTasks, currentView, selectedTaskId, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
-  import { isTaskRunAppAvailable, RUN_COMMAND_CONFIG_KEY, runAppCommandInTaskTerminal, type TaskRunAppRegistration } from '../../lib/runAppCommand'
+  import type { TaskRunAppRegistration } from './taskRunAppController'
+  import { createTaskRunAppController, INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
   import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
@@ -53,8 +54,7 @@
   let activeView = $state('agent')
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
-  let runCommand = $state('')
-  let isRunningApp = $state(false)
+  let runAppState = $state({ ...INITIAL_TASK_RUN_APP_STATE })
   const taskShortcuts = useShortcutRegistry()
 
   const PANEL_HIDDEN_STORAGE_PREFIX = 'task-info-panel-hidden:'
@@ -83,6 +83,18 @@
     shortcuts: taskShortcuts,
     onActiveViewChange: (viewId) => { activeView = viewId },
     onTogglePanel: togglePanel,
+  })
+  const taskRunAppController = createTaskRunAppController({
+    getProjectConfig,
+    getSession: getTaskTerminalTabsSession,
+    getShellLifecycleState,
+    writePty,
+    openTerminalView: openTerminalViewForTask,
+    onStateChange: (state) => { runAppState = state },
+    onError: (operation, error) => {
+      const description = operation === 'load-config' ? 'load run command' : 'run app command'
+      console.error(`[TaskDetailView] Failed to ${description}:`, error)
+    },
   })
 
   let displayTitle = $derived(getTaskTitle(task))
@@ -154,49 +166,23 @@
   })
 
   $effect(() => {
-    const projectId = $activeProjectId
-    if (!projectId) {
-      runCommand = ''
-      return
-    }
-    getProjectConfig(projectId, RUN_COMMAND_CONFIG_KEY)
-      .then((value) => { runCommand = (value ?? '').trim() })
-      .catch((e) => { console.error('[TaskDetailView] Failed to load run command:', e) })
-  })
-
-  let hasRunCommand = $derived(runCommand !== '')
-  let canRunApp = $derived(isTaskRunAppAvailable({
-    workspacePath,
-    command: runCommand,
-    terminalAvailable: terminalTaskPaneTab !== null,
-    isLaunching: isRunningApp,
-  }))
-
-  $effect(() => {
-    const taskId = task.id
-    const command = runCommand
-    const terminalViewId = terminalTaskPaneTab?.namespacedId ?? null
-    const available = canRunApp
-
-    onRunAppRegistrationChange?.({
-      taskId,
-      available,
-      run: () => runAppForTask(taskId, command, terminalViewId),
+    taskRunAppController.sync({
+      taskId: task.id,
+      projectId: $activeProjectId,
+      workspacePath,
+      terminalViewId: terminalTaskPaneTab?.namespacedId ?? null,
+      onRegistrationChange: onRunAppRegistrationChange,
     })
   })
-  let runAppTitle = $derived(
-    terminalTaskPaneTab === null
-      ? 'Enable the Terminal plugin to run the app locally'
-      : hasRunCommand
-        ? `Run app locally: ${runCommand}`
-        : 'Set a run command in this project’s settings to run the app locally',
-  )
+  let canRunApp = $derived(runAppState.available)
+  let isRunningApp = $derived(runAppState.isLaunching)
+  let runAppTitle = $derived(runAppState.title)
 
 
   onDestroy(() => {
     taskPaneController.destroy()
     taskTerminalLifecycle.destroy()
-    onRunAppRegistrationChange?.(null)
+    taskRunAppController.destroy()
   })
 
   function handleBack() {
@@ -224,25 +210,8 @@
     }
   }
 
-  async function runAppForTask(taskId: string, command: string, terminalViewId: string | null): Promise<void> {
-    if (command === '' || isRunningApp || terminalViewId === null) return
-    isRunningApp = true
-    try {
-      await runAppCommandInTaskTerminal(taskId, command, {
-        getSession: getTaskTerminalTabsSession,
-        getShellLifecycleState,
-        writePty,
-        openTerminalView: () => openTerminalViewForTask(taskId, terminalViewId),
-      })
-    } catch (e) {
-      console.error('[TaskDetailView] Failed to run app command:', e)
-    } finally {
-      isRunningApp = false
-    }
-  }
-
   async function handleRunApp(): Promise<void> {
-    await runAppForTask(task.id, runCommand, terminalTaskPaneTab?.namespacedId ?? null)
+    await taskRunAppController.run()
   }
 
   function handleSendToAgent(prompt: string) {
