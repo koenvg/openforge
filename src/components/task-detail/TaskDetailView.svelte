@@ -18,6 +18,7 @@
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { getTaskPaneShortcut } from '../../lib/taskPaneShortcuts'
+  import { createTaskPaneController } from './taskPaneController'
   import { releaseAllForTask } from '../../lib/terminalPool'
   // Session + shell lifecycle must come from the terminal PLUGIN runtime (the one
   // rendering the task-view terminal), not the app pool — see liveTerminalPool.
@@ -77,6 +78,13 @@
     }
   }
 
+  const taskPaneController = createTaskPaneController({
+    activeViews: taskActiveView,
+    shortcuts: taskShortcuts,
+    onActiveViewChange: (viewId) => { activeView = viewId },
+    onTogglePanel: togglePanel,
+  })
+
   let displayTitle = $derived(getTaskTitle(task))
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
@@ -84,43 +92,10 @@
       .filter((source) => source !== undefined)
   )
   let pluginTaskPaneTabs = $derived(resolveContributions(enabledPluginContributionSources).taskPaneTabs)
-  let sortedTaskPaneTabs = $derived([...pluginTaskPaneTabs].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)))
+  let sortedTaskPaneTabs = $state<ResolvedTab[]>([])
   let terminalTaskPaneTab = $derived(
     sortedTaskPaneTabs.find((tab) => tab.pluginId === TERMINAL_PLUGIN_ID && tab.contributionId === 'terminal') ?? null
   )
-
-  function findTaskPaneTab(viewId: string): ResolvedTab | null {
-    return sortedTaskPaneTabs.find((tab) => tab.namespacedId === viewId) ?? null
-  }
-
-  function isPluginTaskPaneView(viewId: string): boolean {
-    return findTaskPaneTab(viewId) !== null
-  }
-
-  function normalizeStoredActiveView(viewId: string): string {
-    if (viewId === 'agent' || viewId === 'review') {
-      return viewId
-    }
-
-    if (viewId === 'code') {
-      return 'agent'
-    }
-
-    const namespacedMatch = findTaskPaneTab(viewId)
-    if (namespacedMatch !== null) {
-      return namespacedMatch.namespacedId
-    }
-
-    const legacyMatch = sortedTaskPaneTabs.find((tab) => tab.contributionId === viewId)
-    return legacyMatch?.namespacedId ?? 'agent'
-  }
-
-  function setActiveView(view: string) {
-    activeView = view
-    const updated = new Map(get(taskActiveView) as Map<string, string>)
-    updated.set(task.id, view)
-    taskActiveView.set(updated)
-  }
 
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
@@ -145,12 +120,7 @@
     releaseAllForTask,
     setWorkspacePath: (path) => { workspacePath = path },
     onWorkspaceResolved: (taskId, path) => {
-      if (activeView !== 'agent' && activeView !== 'review' && path === null) {
-        const nextActiveViews = new Map(get(taskActiveView))
-        nextActiveViews.set(taskId, 'agent')
-        taskActiveView.set(nextActiveViews)
-        activeView = 'agent'
-      }
+      taskPaneController.handleWorkspaceResolved(taskId, path)
     },
     onWorkspaceLookupError: (taskId, lookupError) => {
       console.error(`[TaskDetailView] Failed to load workspace for ${taskId}:`, lookupError)
@@ -161,8 +131,6 @@
     const taskId = task.id
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
-      const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'agent'
-      activeView = normalizeStoredActiveView(stored)
       panelHidden = readPanelHidden(taskId)
     }
 
@@ -170,9 +138,12 @@
   })
 
   $effect(() => {
-    const stored = $taskActiveView.get(task.id) ?? 'agent'
-    const normalized = normalizeStoredActiveView(stored)
-    if (normalized !== activeView) activeView = normalized
+    taskPaneController.sync({
+      taskId: task.id,
+      workspacePath,
+      tabs: pluginTaskPaneTabs,
+    })
+    sortedTaskPaneTabs = [...taskPaneController.tabs]
   })
 
   $effect(() => {
@@ -221,40 +192,9 @@
         : 'Set a run command in this project’s settings to run the app locally',
   )
 
-  $effect(() => {
-    const registeredTaskPaneShortcuts: string[] = []
-    if (workspacePath !== null) {
-      taskShortcuts.register('⌘1', () => {
-        setActiveView('agent')
-      })
-      taskShortcuts.register('⌘2', () => {
-        setActiveView('review')
-      })
-
-      sortedTaskPaneTabs.forEach((tab, index) => {
-        const shortcut = getTaskPaneShortcut(index)
-        if (shortcut === null) return
-
-        taskShortcuts.register(shortcut, () => {
-          setActiveView(tab.namespacedId)
-        })
-        registeredTaskPaneShortcuts.push(shortcut)
-      })
-
-      taskShortcuts.register('⌘/', () => {
-        togglePanel()
-      })
-    }
-
-    return () => {
-      taskShortcuts.unregister('⌘1')
-      taskShortcuts.unregister('⌘2')
-      registeredTaskPaneShortcuts.forEach((shortcut) => taskShortcuts.unregister(shortcut))
-      taskShortcuts.unregister('⌘/')
-    }
-  })
 
   onDestroy(() => {
+    taskPaneController.destroy()
     taskTerminalLifecycle.destroy()
     onRunAppRegistrationChange?.(null)
   })
@@ -278,13 +218,7 @@
   }
 
   function openTerminalViewForTask(taskId: string, terminalViewId: string): void {
-    const updated = new Map(get(taskActiveView) as Map<string, string>)
-    updated.set(taskId, terminalViewId)
-    taskActiveView.set(updated)
-
-    if (task.id === taskId) {
-      activeView = terminalViewId
-    }
+    taskPaneController.selectForTask(taskId, terminalViewId)
     if (get(currentView) !== 'board' || get(selectedTaskId) !== taskId) {
       router.navigateToTask(taskId)
     }
@@ -335,13 +269,13 @@
     if (e.key === 'h' && workspacePath !== null) {
       e.preventDefault()
       e.stopPropagation()
-      setActiveView('agent')
+      taskPaneController.select('agent')
       return
     }
     if (e.key === 'l' && workspacePath !== null) {
       e.preventDefault()
       e.stopPropagation()
-      setActiveView('review')
+      taskPaneController.select('review')
       return
     }
   }
@@ -415,18 +349,18 @@
           <button
             class="btn btn-ghost btn-xs gap-1.5 {activeView === 'agent' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
             aria-pressed={activeView === 'agent'}
-            onclick={() => setActiveView('agent')}
+            onclick={() => taskPaneController.select('agent')}
           >agent {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
           <button
             class="btn btn-ghost btn-xs gap-1.5 {activeView === 'review' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
             aria-pressed={activeView === 'review'}
-            onclick={() => setActiveView('review')}
+            onclick={() => taskPaneController.select('review')}
           >review {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
           {#each sortedTaskPaneTabs as tab, index (tab.namespacedId)}
             <button
               class="btn btn-ghost btn-xs gap-1.5 {activeView === tab.namespacedId ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
               aria-pressed={activeView === tab.namespacedId}
-              onclick={() => setActiveView(tab.namespacedId)}
+              onclick={() => taskPaneController.select(tab.namespacedId)}
             >{tab.title}{#if $commandHeld && getTaskPaneShortcut(index) !== null}<kbd class="kbd kbd-xs opacity-50">{getTaskPaneShortcut(index)}</kbd>{/if}</button>
           {/each}
           <span class="mx-1 text-base-content/20 select-none" aria-hidden="true">|</span>
@@ -508,7 +442,7 @@
       </div>
     {/if}
 
-    {#if activeView !== 'agent' && activeView !== 'review' && isPluginTaskPaneView(activeView) && workspacePath !== null}
+    {#if activeView !== 'agent' && activeView !== 'review' && taskPaneController.isPluginView(activeView) && workspacePath !== null}
       <div class="flex flex-col flex-1 overflow-hidden">
         <PluginSlot
           slotType="taskPaneTabs"
