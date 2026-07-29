@@ -15,5 +15,5 @@
     "sourceMap": true
   },
   "include": ["src/electron/**/*.ts", "src/electron/**/*.cts"],
-  "exclude": ["src/electron/**/*.test.ts"]
+  "exclude": ["src/electron/**/*.test.ts", "src/electron/**/*.testUtils.ts"]
 }
