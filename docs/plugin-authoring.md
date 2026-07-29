@@ -143,7 +143,7 @@ Frontend-only registries and helpers:
 - `openforge.navigation.get()` / `openforge.navigation.navigate(...)`
 - `openforge.backend.whenReady()` / `openforge.backend.invoke(...)` for the same plugin's backend methods
 
-Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
+Svelte plugin components receive `api` and `context` props. Task UI tabs and sections also receive `taskId` and `projectId`. The host automatically assigns visible task UI tabs the remaining positional shortcuts after Agent (`⌘1`) and Review (`⌘2`): tabs receive `⌘3` through `⌘9`, then `⌘0`, in their current `order`/title sort order. Assignments update when enabled plugins or tab ordering changes; additional tabs remain clickable without a numeric shortcut. Task UI sections are rendered as plugin-owned content in the shared task information pane; they do not require a title, icon, heading, or host card. Use Svelte 5 runes in components and avoid importing app stores directly.
 
 ### Svelte build and CSS contract
 
