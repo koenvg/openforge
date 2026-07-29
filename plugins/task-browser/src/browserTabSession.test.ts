@@ -67,6 +67,30 @@ describe('Task browser tab session', () => {
     await session.dispose()
   })
 
+  it('persists a settled surface state observed when the foregrounded tab attaches', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-link', id: 'main' })
+    vi.spyOn(surface, 'getState').mockResolvedValue({
+      url: 'http://localhost:6382/',
+      title: 'Local app',
+      loading: false,
+      canGoBack: true,
+      canGoForward: false,
+      error: null,
+    })
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    const session = await createBrowserTabSession({
+      api,
+      taskId: 'T-link',
+      element: {} as HTMLElement,
+      onStateChanged: vi.fn(),
+    })
+    await session.dispose()
+
+    await expect(api.storage.task('T-link').get('lastBrowserUrl')).resolves.toBe('http://localhost:6382/')
+  })
+
   it('does not restore the legacy network-dependent default URL', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
     await api.storage.task('T-legacy').set('lastBrowserUrl', 'https://example.com/')
