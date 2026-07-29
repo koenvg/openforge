@@ -36,6 +36,12 @@ var openforgePackageMetadataSchema_default = {
 			"required": ["requires"]
 		},
 		"then": { "required": ["frontend"] }
+	}, {
+		"if": {
+			"properties": { "requires": { "contains": { "const": "taskLinks" } } },
+			"required": ["requires"]
+		},
+		"then": { "required": ["frontend"] }
 	}],
 	properties: {
 		"id": {
@@ -103,7 +109,8 @@ var openforgePackageMetadataSchema_default = {
 				"system.openUrl",
 				"config",
 				"projectConfig",
-				"browserSurfaces"
+				"browserSurfaces",
+				"taskLinks"
 			] }
 		}
 	}
@@ -250,6 +257,10 @@ function validateOpenForgePackageMetadata(data) {
 		path: "requires",
 		message: "browserSurfaces capability requires a frontend entry"
 	});
+	if (Array.isArray(data.requires) && data.requires.includes("taskLinks") && !isNonEmptyString(data.frontend)) errors.push({
+		path: "requires",
+		message: "taskLinks capability requires a frontend entry"
+	});
 	if (data.contributes !== void 0) errors.push({
 		path: "contributes",
 		message: "Manifest contribution arrays are not supported; register contributions at runtime"
@@ -300,6 +311,7 @@ function createTestingCalls() {
 		emittedEvents: [],
 		emittedGlobalEvents: [],
 		openUrl: [],
+		taskLinkOpenRequests: [],
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
@@ -1015,6 +1027,7 @@ var TestingFrontendContributionFake = class {
 	settingsSections = /* @__PURE__ */ new Map();
 	injectionPoints = /* @__PURE__ */ new Map();
 	browserSurfaces;
+	taskLinkHandler = null;
 	api = null;
 	constructor(services, invokeBackendMethod) {
 		this.services = services;
@@ -1025,6 +1038,29 @@ var TestingFrontendContributionFake = class {
 		if (this.api) return this.api;
 		const api = {
 			browserSurfaces: this.browserSurfaces.api,
+			taskLinks: {
+				open: async (request) => {
+					this.services.calls.taskLinkOpenRequests.push(request);
+					if (!isAllowedBrowserSurfaceUrl(request.url)) throw new Error("Task links must use a valid HTTP(S) URL");
+					if (this.taskLinkHandler === null) {
+						this.services.calls.openUrl.push(request.url);
+						return;
+					}
+					const result = await this.taskLinkHandler(request);
+					if (result === "declined") {
+						this.services.calls.openUrl.push(request.url);
+						return;
+					}
+					if (result !== "handled") throw new Error(`Task link handler returned an invalid result: ${String(result)}`);
+				},
+				registerHandler: (handler) => {
+					if (this.taskLinkHandler !== null) throw new Error("A Task link handler is already registered");
+					this.taskLinkHandler = handler;
+					return createDisposable(() => {
+						if (this.taskLinkHandler === handler) this.taskLinkHandler = null;
+					});
+				}
+			},
 			views: { register: (registration) => this.registerView(registration) },
 			taskUI: {
 				registerTab: (registration) => this.registerTaskPaneTab(registration),

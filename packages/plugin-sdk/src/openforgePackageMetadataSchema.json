@@ -18,6 +18,15 @@
         "required": ["requires"]
       },
       "then": { "required": ["frontend"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "requires": { "contains": { "const": "taskLinks" } }
+        },
+        "required": ["requires"]
+      },
+      "then": { "required": ["frontend"] }
     }
   ],
   "properties": {
@@ -89,7 +98,8 @@
           "system.openUrl",
           "config",
           "projectConfig",
-          "browserSurfaces"
+          "browserSurfaces",
+          "taskLinks"
         ]
       }
     }

@@ -1,4 +1,6 @@
+import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentView, selectedTaskId, taskActiveView } from '../stores'
 import { createPluginRuntimeHost, invokePluginHostCommand } from './pluginHostCommands'
 
 function installDesktopBridge(result: unknown = []): { invoke: ReturnType<typeof vi.fn> } {
@@ -14,6 +16,49 @@ function installDesktopBridge(result: unknown = []): { invoke: ReturnType<typeof
 describe('plugin host commands', () => {
   beforeEach(() => {
     delete window.openforge
+    currentView.set('board')
+    selectedTaskId.set(null)
+    taskActiveView.set(new Map())
+  })
+
+  it('navigates to a Task and foregrounds the requesting plugin’s local Task UI tab', async () => {
+    currentView.set('settings')
+    const host = createPluginRuntimeHost('com.openforge.task-browser')
+
+    await expect(host.navigate?.({
+      taskId: 'T-1',
+      taskViewId: 'browser',
+    })).resolves.toMatchObject({
+      currentView: 'board',
+      selectedTaskId: 'T-1',
+    })
+
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBe('T-1')
+    expect(get(taskActiveView).get('T-1')).toBe('com.openforge.task-browser:browser')
+  })
+
+  it('preserves an explicit app view when navigation also selects a Task without a Task UI tab', async () => {
+    const host = createPluginRuntimeHost('test-plugin')
+
+    await host.navigate?.({ viewId: 'settings', taskId: 'T-1' })
+
+    expect(get(currentView)).toBe('settings')
+    expect(get(selectedTaskId)).toBe('T-1')
+  })
+
+  it('validates Task UI navigation before mutating navigation state', async () => {
+    const host = createPluginRuntimeHost('test-plugin')
+
+    await expect(host.navigate?.({
+      viewId: 'settings',
+      taskId: 'T-1',
+      taskViewId: '   ',
+    })).rejects.toThrow(/taskViewId must be non-empty/)
+
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBeNull()
+    expect(get(taskActiveView)).toEqual(new Map())
   })
 
   it('routes plugin task creation and implementation starts through the approved host contract', async () => {

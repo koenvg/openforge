@@ -6,6 +6,8 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
   TaskBrowserSurfaceController,
+  TaskLinkHandler,
+  TaskLinkOpenRequest,
 } from '@openforge-app/plugin-sdk/frontend'
 import type {
   BackendMethodRegistration,
@@ -70,6 +72,8 @@ export type RuntimeHostBridge = {
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>
+  openTaskLink?(request: TaskLinkOpenRequest): Promise<void>
+  registerTaskLinkHandler?(pluginId: string, handler: TaskLinkHandler): Disposable
   getNavigation?(): OpenForgeNavigationSnapshot
   navigate?(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
   getConfig?(key: string): Promise<unknown>

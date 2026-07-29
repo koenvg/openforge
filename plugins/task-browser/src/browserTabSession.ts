@@ -48,13 +48,22 @@ async function savedInitialUrl(api: FrontendOpenForgeAPI, taskId: string): Promi
   return saved !== null && isAllowedBrowserSurfaceUrl(saved) ? saved : undefined
 }
 
+export async function persistSuccessfulBrowserState(
+  api: FrontendOpenForgeAPI,
+  taskId: string,
+  state: TaskBrowserSurfaceState,
+): Promise<boolean> {
+  if (state.loading || state.error !== null || !isAllowedBrowserSurfaceUrl(state.url)) return false
+  await api.storage.task(taskId).set(LAST_BROWSER_URL_KEY, state.url)
+  return true
+}
+
 export async function createBrowserTabSession({
   api,
   taskId,
   element,
   onStateChanged,
 }: CreateBrowserTabSessionOptions): Promise<BrowserTabSession> {
-  const taskStorage = api.storage.task(taskId)
   const initialUrl = await savedInitialUrl(api, taskId)
   const surface = await api.browserSurfaces.getOrCreate({
     taskId,
@@ -73,9 +82,10 @@ export async function createBrowserTabSession({
       persistenceSuppression = 'none'
     }
     onStateChanged(state)
-    if (persistenceSuppression === 'none' && !state.loading && isAllowedBrowserSurfaceUrl(state.url) && state.error === null) {
+    if (persistenceSuppression === 'none' && !state.loading) {
       persistence = persistence
-        .then(() => taskStorage.set(LAST_BROWSER_URL_KEY, state.url))
+        .then(() => persistSuccessfulBrowserState(api, taskId, state))
+        .then(() => undefined)
         .catch(() => undefined)
     }
   })

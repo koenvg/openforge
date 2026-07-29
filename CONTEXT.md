@@ -108,6 +108,14 @@ _Avoid_: Agent run settings, global task defaults, plugin task policy
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**Task Link**:
+An HTTP(S) URL activation associated with one **Task**, eligible for handling inside OpenForge while retaining external-browser fallback.
+_Avoid_: External URL, browser command, global link
+
+**Task Link Handler**:
+The one active **Trusted Plugin** integration that may claim or decline **Task Links** for in-app presentation.
+_Avoid_: URL interceptor, browser command handler, link priority
+
 **Task Browser Surface**:
 A browser presentation owned by a **Trusted Plugin** for one **Task** in one OpenForge window, identified within that window, plugin, and Task by a stable local surface identifier.
 _Avoid_: Webview, browser tab, raw WebContentsView
@@ -292,6 +300,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
+- A **Task Link** is offered to the active **Task Link Handler**; when no handler exists or it declines, OpenForge opens the URL externally.
+- A failed **Task Link Handler** does not also trigger external fallback because it may already have partially handled the link.
 - A live **Task Browser Surface** is uniquely identified by its owning OpenForge window, **Trusted Plugin**, **Task**, and plugin-local surface identifier.
 - Every **Task Browser Surface** for the same **Trusted Plugin** and **Task** shares one **Task Browser Session**; no browser session data is shared across plugins or Tasks.
 - Detaching a **Task Browser Surface** hides it while preserving its live, background-throttled page state; destroying it releases that live page without deleting its **Task Browser Session**.

@@ -20,6 +20,7 @@ import type {
   PluginViewRegistration,
   ShellSpawnRequest,
   StartTaskImplementationRequest,
+  TaskLinkOpenRequest,
 } from '../types'
 import type { Task } from '../domain'
 
@@ -52,6 +53,7 @@ export interface TestingOpenForgeApiCalls {
   emittedEvents: Array<{ event: string; qualifiedEvent: string; payload: unknown }>
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
+  taskLinkOpenRequests: TaskLinkOpenRequest[]
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]

@@ -143,8 +143,11 @@
     getWorkspacePath: (path) => path,
     releaseAllForTask,
     setWorkspacePath: (path) => { workspacePath = path },
-    onWorkspaceResolved: (_taskId, path) => {
+    onWorkspaceResolved: (taskId, path) => {
       if (activeView !== 'agent' && activeView !== 'review' && path === null) {
+        const nextActiveViews = new Map(get(taskActiveView))
+        nextActiveViews.set(taskId, 'agent')
+        taskActiveView.set(nextActiveViews)
         activeView = 'agent'
       }
     },
@@ -163,6 +166,12 @@
     }
 
     taskTerminalLifecycle.syncTask(taskId)
+  })
+
+  $effect(() => {
+    const stored = $taskActiveView.get(task.id) ?? 'agent'
+    const normalized = normalizeStoredActiveView(stored)
+    if (normalized !== activeView) activeView = normalized
   })
 
   $effect(() => {

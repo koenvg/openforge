@@ -25,7 +25,7 @@ import type {
 
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'
+  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'
 >
 
 export class RuntimeFrontendContributionRegistry {
@@ -52,6 +52,17 @@ export class RuntimeFrontendContributionRegistry {
         resetSession: async (taskId) => this.services.host.resetBrowserSession
           ? this.services.host.resetBrowserSession(this.services.pluginId, taskId)
           : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.resetSession')),
+      },
+      taskLinks: {
+        open: async (request) => this.services.host.openTaskLink
+          ? this.services.host.openTaskLink(request)
+          : Promise.reject(new Error('OpenForge host capability is unavailable: taskLinks.open')),
+        registerHandler: (handler) => {
+          if (!this.services.host.registerTaskLinkHandler) {
+            throw new Error('OpenForge host capability is unavailable: taskLinks.registerHandler')
+          }
+          return this.services.host.registerTaskLinkHandler(this.services.pluginId, handler)
+        },
       },
       views: {
         register: (registration) => this.registerView(registration),

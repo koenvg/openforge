@@ -627,6 +627,39 @@ describe('TaskDetailView', () => {
     })
   })
 
+  it('foregrounds a plugin Task UI tab when navigation updates the active Task view', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+    installedPlugins.set(new Map([['plugin.task-pane', {
+      manifest: {
+        id: 'plugin.task-pane',
+        name: 'Task Pane Plugin',
+        version: '1.0.0',
+        apiVersion: 1,
+        description: 'Adds a task tab',
+        permissions: [],
+        frontend: 'index.js',
+        backend: null,
+      },
+      state: 'installed',
+      error: null,
+    }]]))
+    enabledPluginIds.set(new Set(['plugin.task-pane']))
+    runtimeContributionSources.set(new Map([[
+      'plugin.task-pane',
+      { pluginId: 'plugin.task-pane', taskPaneTabs: [{ id: 'activity', title: 'Activity', order: 5 }] },
+    ]]))
+    registerRenderableContributionComponent('taskPaneTabs', 'plugin.task-pane:activity', PluginSlotTestView)
+
+    render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
+    taskActiveView.set(new Map([['T-42', 'plugin.task-pane:activity']]))
+
+    await waitFor(() => {
+      const slotHost = document.querySelector('[data-slot-type="taskPaneTabs"]')
+      expect(slotHost?.getAttribute('data-slot-id')).toBe('plugin.task-pane:activity')
+    })
+  })
+
   it('uses namespaced task-pane tab ids to avoid collisions across plugins', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
