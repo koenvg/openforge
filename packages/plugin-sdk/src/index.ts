@@ -96,6 +96,10 @@ export type {
   SubscriptionSink,
   SupportedOpenForgeApiVersion,
   SystemAPI,
+  TaskLinkHandler,
+  TaskLinkHandlerResult,
+  TaskLinkOpenRequest,
+  TaskLinksAPI,
   TasksAPI,
   ValidationError,
 } from './types'

@@ -206,13 +206,37 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
 | `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
-| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces` | Supported | Not exposed |
+| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces`, `taskLinks` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
 Current declared capability names are:
 
-`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`, `browserSurfaces`.
+`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`.
+
+## Task links
+
+Frontend Trusted Plugins can declare `"taskLinks"` to open HTTP(S) links associated with a Task without coupling the caller to a specific browser plugin:
+
+```ts
+await openforge.taskLinks.open({ taskId, url })
+```
+
+The host routes each request to the one registered Task link handler. If no handler is registered or the handler returns `"declined"`, OpenForge preserves compatibility by opening the URL externally. A handler failure is reported to the caller and does not also open externally, because the handler may already have partially navigated. `openforge.system.openUrl(url)` remains the explicit always-external path.
+
+A frontend browser plugin can register the handler during activation:
+
+```ts
+context.subscriptions.add(openforge.taskLinks.registerHandler(async ({ taskId, url }) => {
+  const surface = await openforge.browserSurfaces.getOrCreate({ taskId, id: 'main' })
+  const state = await surface.navigate(url)
+  if (state.error !== null || state.loading) throw new Error(`Navigation failed: ${url}`)
+  await openforge.navigation.navigate({ taskId, taskViewId: 'browser' })
+  return 'handled'
+}))
+```
+
+Only one handler may be active in a renderer; duplicate registration fails. Disposing the registration restores the external fallback. `taskViewId` is plugin-local, requires a non-null `taskId`, and lets `navigation.navigate(...)` foreground one of the caller's own registered Task UI tabs. The testing fake records requests in `api.__testing.calls.taskLinkOpenRequests` and exercises a registered handler in memory.
 
 ## Task Browser Surfaces
 
@@ -313,7 +337,8 @@ Behavior and limits:
 - Use `openforge.fs` for project-scoped file reads/writes/searches.
 - Use `openforge.shell` for task terminal sessions keyed by `{ taskId, terminalIndex }`.
 - Use `openforge.notifications.notify(...)` for host-mediated user notifications.
-- Use `openforge.system.openUrl(url)` for external links. Plugins should not call browser or Electron APIs directly.
+- Use `openforge.system.openUrl(url)` for links that must always open externally.
+- Use `openforge.taskLinks.open({ taskId, url })` for HTTP(S) links that should use the active in-app Task link handler when available and otherwise fall back externally.
 
 ## What is not available
 

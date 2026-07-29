@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
+import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TaskLinkHandler, TaskLinkOpenRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -30,10 +30,11 @@ import {
   updateTaskSummary,
   writePty,
 } from '../ipc'
-import { activeProjectId, currentView, selectedTaskId } from '../stores'
+import { activeProjectId, currentView, selectedTaskId, taskActiveView } from '../stores'
 import type { AppView } from '../types'
 import { installedPlugins } from './pluginStore'
 import { createHostBrowserSurfaces, destroyHostPluginBrowserSurfaces } from './taskBrowserSurfaces'
+import { taskLinkRouter } from './taskLinks'
 import { isPluginViewKey } from './types'
 import {
   emitPluginHostEvent,
@@ -261,12 +262,29 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     getAttention: () => getProjectAttention(),
     openUrl: (url: string) => openUrl(url),
+    openTaskLink: (request: TaskLinkOpenRequest) => taskLinkRouter.open(request),
+    registerTaskLinkHandler: (qualifiedPluginId: string, handler: TaskLinkHandler) => {
+      if (qualifiedPluginId !== pluginId) throw new Error('Task link handler plugin identity mismatch')
+      return taskLinkRouter.registerHandler(pluginId, handler)
+    },
     getNavigation: () => ({
       activeProjectId: get(activeProjectId),
       currentView: get(currentView),
       selectedTaskId: get(selectedTaskId),
     }),
-    navigate: async (request: { viewId?: string; projectId?: string | null; taskId?: string | null }) => {
+    navigate: async (request: { viewId?: string; projectId?: string | null; taskId?: string | null; taskViewId?: string }) => {
+      let qualifiedTaskViewId: string | null = null
+      if (request.taskViewId !== undefined) {
+        if (request.taskId === undefined || request.taskId === null) {
+          throw new Error('navigation.navigate taskViewId requires a non-null taskId')
+        }
+        const taskViewId = request.taskViewId.trim()
+        if (taskViewId.length === 0) {
+          throw new Error('navigation.navigate taskViewId must be non-empty')
+        }
+        qualifiedTaskViewId = `${pluginId}:${taskViewId}`
+      }
+
       // Change the project first: the projectViewSnapshots capture subscriber
       // (router.svelte.ts) snapshots the OUTGOING project when activeProjectId changes
       // and must read the view stores while they still reflect where the user was —
@@ -279,7 +297,14 @@ export function createPluginRuntimeHost(pluginId: string) {
         currentView.set(request.viewId)
       }
 
+      if (qualifiedTaskViewId !== null && request.taskId !== undefined && request.taskId !== null) {
+        const nextActiveViews = new Map(get(taskActiveView))
+        nextActiveViews.set(request.taskId, qualifiedTaskViewId)
+        taskActiveView.set(nextActiveViews)
+      }
+
       if (request.taskId !== undefined) {
+        if (qualifiedTaskViewId !== null) currentView.set('board')
         selectedTaskId.set(request.taskId)
       }
 

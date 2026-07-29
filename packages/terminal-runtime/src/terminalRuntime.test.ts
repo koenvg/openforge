@@ -26,6 +26,10 @@ const terminalMocks = vi.hoisted(() => ({
   }>,
 }))
 
+const webLinkMocks = vi.hoisted(() => ({
+  callbacks: [] as Array<(event: MouseEvent, uri: string) => void>,
+}))
+
 const imageAddonMocks = vi.hoisted(() => ({
   instances: [] as Array<{
     options: Record<string, unknown>
@@ -77,7 +81,8 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 
 vi.mock('@xterm/addon-web-links', () => ({
-  WebLinksAddon: vi.fn(function WebLinksAddon() {
+  WebLinksAddon: vi.fn(function WebLinksAddon(callback: (event: MouseEvent, uri: string) => void) {
+    webLinkMocks.callbacks.push(callback)
     return { dispose: vi.fn() }
   }),
 }))
@@ -126,6 +131,7 @@ function createHost(): TestHost {
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationFailures = new Set<string>()
+  const openLink = vi.fn(async () => undefined)
 
   return {
     themeMode: writable('dark'),
@@ -145,7 +151,7 @@ function createHost(): TestHost {
     },
     async writePty() {},
     async resizePty() {},
-    async openUrl() {},
+    openLink,
     emit<TPayload>(eventName: string, payload: TPayload) {
       for (const listener of listeners.get(eventName) ?? []) {
         listener({ payload })
@@ -183,6 +189,20 @@ describe('terminal runtime acquisition', () => {
   beforeEach(() => {
     terminalMocks.instances.length = 0
     imageAddonMocks.instances.length = 0
+    webLinkMocks.callbacks.length = 0
+  })
+
+  it('passes the owning Terminal Surface key when a web link is activated', async () => {
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+    await runtime.acquire('T-1-shell-2')
+    const event = { preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as MouseEvent
+
+    webLinkMocks.callbacks[0]?.(event, 'https://openforge.dev/docs')
+
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(event.stopPropagation).toHaveBeenCalledOnce()
+    expect(host.openLink).toHaveBeenCalledWith('T-1-shell-2', 'https://openforge.dev/docs')
   })
 
   it('deduplicates concurrent acquisitions for one terminal key', async () => {

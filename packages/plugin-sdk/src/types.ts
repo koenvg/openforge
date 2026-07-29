@@ -66,6 +66,7 @@ export type OpenForgePluginCapability =
   | 'config'
   | 'projectConfig'
   | 'browserSurfaces'
+  | 'taskLinks'
 
 export interface OpenForgePackageMetadata {
   id: string
@@ -120,11 +121,26 @@ export interface OpenForgeNavigationRequest {
   viewId?: string
   projectId?: string | null
   taskId?: string | null
+  /** Plugin-local Task UI tab id. Requires a non-null taskId. */
+  taskViewId?: string
 }
 
 export interface NavigationAPI {
   get(): OpenForgeNavigationSnapshot
   navigate(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
+}
+
+export interface TaskLinkOpenRequest {
+  taskId: string
+  url: string
+}
+
+export type TaskLinkHandlerResult = 'handled' | 'declined'
+export type TaskLinkHandler = (request: TaskLinkOpenRequest) => Promise<TaskLinkHandlerResult>
+
+export interface TaskLinksAPI {
+  open(request: TaskLinkOpenRequest): Promise<void>
+  registerHandler(handler: TaskLinkHandler): Disposable
 }
 
 export interface OpenForgePluginContext {
@@ -509,6 +525,7 @@ export interface OpenForgeCommonAPI {
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   browserSurfaces: BrowserSurfacesAPI
+  taskLinks: TaskLinksAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry
   taskUI: FrontendTaskUIRegistry

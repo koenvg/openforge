@@ -32,7 +32,7 @@ export interface TerminalRuntimeHost {
   getPtyBuffer(taskId: string): Promise<string | null>
   writePty(taskId: string, data: string): Promise<void>
   resizePty(taskId: string, cols: number, rows: number): Promise<void>
-  openUrl(url: string): Promise<void>
+  openLink(terminalKey: string, url: string): Promise<void>
   themeMode?: Readable<ThemeMode>
   loggerName?: string
   enableImages?: boolean
@@ -226,24 +226,24 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     })
   }
   
-  function openTerminalLink(event: MouseEvent, uri: string): void {
+  function openTerminalLink(terminalKey: string, event: MouseEvent, uri: string): void {
     event.preventDefault()
     event.stopPropagation()
-    host.openUrl(uri).catch(error => {
+    host.openLink(terminalKey, uri).catch(error => {
       console.error('[terminalPool] Failed to open terminal link:', error)
     })
   }
-  
-  function createTerminalLinkHandler(): ILinkHandler {
+
+  function createTerminalLinkHandler(terminalKey: string): ILinkHandler {
     return {
       allowNonHttpProtocols: false,
-      activate: (event, uri) => openTerminalLink(event, uri),
+      activate: (event, uri) => openTerminalLink(terminalKey, event, uri),
     }
   }
-  
-  function loadWebLinksAddon(terminal: Terminal): void {
+
+  function loadWebLinksAddon(terminalKey: string, terminal: Terminal): void {
     const webLinksAddon = new WebLinksAddon((event, uri) => {
-      openTerminalLink(event, uri)
+      openTerminalLink(terminalKey, event, uri)
     })
 
     terminal.loadAddon(webLinksAddon)
@@ -441,12 +441,12 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   async function initializeTerminal(taskId: string, acquisition: TerminalAcquisition): Promise<PoolEntry> {
     const terminal = new Terminal({
       ...getTerminalOptions(get(activeThemeMode)),
-      linkHandler: createTerminalLinkHandler(),
+      linkHandler: createTerminalLinkHandler(taskId),
     })
   
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    loadWebLinksAddon(terminal)
+    loadWebLinksAddon(taskId, terminal)
     const imageSupport = loadImageSupport(terminal)
   
     const hostDiv = createHostDiv()

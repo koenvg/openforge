@@ -7,15 +7,23 @@ import {
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
 import { listenDesktopEvent } from './desktopIpc'
-import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
+import { getPtyBuffer, resizePty, writePty } from './ipc'
+import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
+
+function taskIdFromTerminalKey(terminalKey: string): string {
+  return terminalKey.replace(/-shell-\d+$/, '')
+}
 
 const terminalRuntime = createTerminalRuntime({
   listenEvent: listenDesktopEvent,
   getPtyBuffer,
   writePty,
   resizePty,
-  openUrl,
+  openLink: (terminalKey, url) => taskLinkRouter.open({
+    taskId: taskIdFromTerminalKey(terminalKey),
+    url,
+  }),
   themeMode,
   loggerName: 'terminalPool',
 })

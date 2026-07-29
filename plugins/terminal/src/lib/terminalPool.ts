@@ -6,7 +6,7 @@ import {
   type TerminalRuntimeUnlistenFn,
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
-import { getPtyBuffer, listenOpenForgeEvent, openUrl, resizePty, writePty } from './ipc'
+import { getPtyBuffer, listenOpenForgeEvent, openTerminalLink, resizePty, writePty } from './ipc'
 import { themeMode } from './theme'
 
 const terminalRuntime = createTerminalRuntime({
@@ -14,7 +14,7 @@ const terminalRuntime = createTerminalRuntime({
   getPtyBuffer,
   writePty,
   resizePty,
-  openUrl,
+  openLink: openTerminalLink,
   themeMode,
   loggerName: 'terminalPluginPool',
 })

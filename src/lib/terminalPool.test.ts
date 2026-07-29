@@ -7,7 +7,7 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { getPtyBuffer, openUrl, writePty } from "./ipc";
+import { getPtyBuffer, writePty } from "./ipc";
 import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
 import {
 	_getPool,
@@ -49,6 +49,10 @@ const webglContextLossListeners: Array<() => void> = [];
 const webglContextLossDisposables: UnlistenMock[] = [];
 let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
+
+const { taskLinkOpenMock } = vi.hoisted(() => ({
+  taskLinkOpenMock: vi.fn().mockResolvedValue(undefined),
+}));
 
 interface TerminalMockOptions {
 	fontFamily?: string;
@@ -218,6 +222,10 @@ vi.mock("./ipc", () => ({
 	openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./plugin/taskLinks", () => ({
+  taskLinkRouter: { open: taskLinkOpenMock },
+}));
+
 const MockResizeObserver: typeof ResizeObserver = class MockResizeObserver
 	implements ResizeObserver
 {
@@ -328,10 +336,9 @@ describe("terminalPool", () => {
 		expect(listenCallbacks.has("pty-exit-task-3")).toBe(true);
 	});
 
-	it("acquire loads WebLinksAddon and routes detected web links through openUrl", async () => {
-		const entry = await acquire("task-links");
+	it("routes detected Agent Terminal Surface links with their Task context", async () => {
+		const entry = await acquire("T-42");
 		const { loadAddon: loadAddonSpy } = getTerminalMocks(entry);
-		const openUrlMock = vi.mocked(openUrl);
 		const event = new MouseEvent("click");
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
@@ -345,12 +352,11 @@ describe("terminalPool", () => {
 
 		expect(preventDefault).toHaveBeenCalled();
 		expect(stopPropagation).toHaveBeenCalled();
-		expect(openUrlMock).toHaveBeenCalledWith("https://example.com/pool");
+		expect(taskLinkOpenMock).toHaveBeenCalledWith({ taskId: "T-42", url: "https://example.com/pool" });
 	});
 
-	it("routes OSC 8 terminal hyperlinks through openUrl instead of xterm default browser handling", async () => {
-		const entry = await acquire("task-osc8-link");
-		const openUrlMock = vi.mocked(openUrl);
+	it("routes OSC 8 Agent Terminal Surface links instead of xterm default browser handling", async () => {
+		const entry = await acquire("T-43");
 		const event = new MouseEvent("click");
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
@@ -363,7 +369,7 @@ describe("terminalPool", () => {
 
 		expect(preventDefault).toHaveBeenCalled();
 		expect(stopPropagation).toHaveBeenCalled();
-		expect(openUrlMock).toHaveBeenCalledWith("https://example.com/osc8");
+		expect(taskLinkOpenMock).toHaveBeenCalledWith({ taskId: "T-43", url: "https://example.com/osc8" });
 	});
 
 	it("attach appends hostDiv to wrapper and marks attached", async () => {

@@ -287,6 +287,12 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
         throw new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: browserSurfaces.resetSession`)
       },
     },
+    taskLinks: {
+      open: unavailable('taskLinks.open'),
+      registerHandler: () => {
+        throw new Error(`OpenForge frontend runtime API is unavailable for plugin ${pluginId}: taskLinks.registerHandler`)
+      },
+    },
     commands: {
       register: () => ({ dispose: () => undefined }),
       invoke: unavailable('commands.invoke'),
