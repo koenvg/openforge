@@ -19,6 +19,7 @@ import {
   isTaskBrowserUrlAllowed,
   isValidTaskBrowserBounds,
   pluginBrowserSessionPartition,
+  scaleTaskBrowserBounds,
   validateTaskBrowserSurfaceIdentity,
 } from './taskBrowserSurfacePolicy.js'
 
@@ -59,7 +60,8 @@ type SurfaceRecord = {
   partition: PluginBrowserSessionPartition
   attachmentId: string | null
   attachmentGeneration: number
-  requestedBounds: TaskBrowserBounds | null
+  /** Last bounds reported by the renderer, kept in its CSS pixel space so replays re-read the zoom factor. */
+  requestedRendererBounds: TaskBrowserBounds | null
   attached: boolean
   lastDetachedAt: number
   native: NativeTaskBrowserSurface
@@ -103,12 +105,12 @@ export class TaskBrowserSurfaceManager {
     if (!isValidTaskBrowserBounds(contentBounds) || contentBounds.width <= 0 || contentBounds.height <= 0) return
     this.windows.set(windowId, { ...contentBounds })
     for (const surface of this.surfacesById.values()) {
-      if (surface.windowId === windowId && surface.attachmentId && surface.requestedBounds) {
+      if (surface.windowId === windowId && surface.attachmentId && surface.requestedRendererBounds) {
         this.attach(
           surface.surfaceId,
           surface.attachmentId,
           surface.attachmentGeneration,
-          surface.requestedBounds,
+          surface.requestedRendererBounds,
         )
       }
     }
@@ -170,18 +172,19 @@ export class TaskBrowserSurfaceManager {
     }
   }
 
+  /** `rendererBounds` are CSS pixels as measured by the owning window's renderer. */
   attach(
     surfaceId: string,
     attachmentId: string,
     attachmentGeneration: number,
-    bounds: TaskBrowserBounds | null,
+    rendererBounds: TaskBrowserBounds | null,
   ): void {
     const surface = this.requireSurface(surfaceId)
     if (!attachmentId.trim()) throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires an id')
     if (!Number.isSafeInteger(attachmentGeneration) || attachmentGeneration <= 0) {
       throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires a valid generation')
     }
-    if (bounds !== null && !isValidTaskBrowserBounds(bounds)) {
+    if (rendererBounds !== null && !isValidTaskBrowserBounds(rendererBounds)) {
       throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser Attachment bounds are invalid')
     }
     const contentBounds = this.windows.get(surface.windowId)
@@ -195,13 +198,16 @@ export class TaskBrowserSurfaceManager {
       surface.attachmentId = attachmentId
       surface.attachmentGeneration = attachmentGeneration
     }
-    surface.requestedBounds = bounds === null ? null : { ...bounds }
-    if (bounds === null) {
+    surface.requestedRendererBounds = rendererBounds === null ? null : { ...rendererBounds }
+    if (rendererBounds === null) {
       this.retainDetached(surface, replacesAttachment)
       return
     }
 
-    const clamped = constrainTaskBrowserBounds(bounds, contentBounds)
+    const clamped = constrainTaskBrowserBounds(
+      scaleTaskBrowserBounds(rendererBounds, this.options.rendererZoomFactor?.(surface.windowId) ?? 1),
+      contentBounds,
+    )
     if (clamped === null) {
       this.retainDetached(surface, replacesAttachment)
       return
@@ -219,7 +225,7 @@ export class TaskBrowserSurfaceManager {
       if (surface.attachmentId !== attachmentId || surface.attachmentGeneration !== attachmentGeneration) return
     }
     surface.attachmentId = null
-    surface.requestedBounds = null
+    surface.requestedRendererBounds = null
     this.retainDetached(surface, true)
   }
 
@@ -344,7 +350,7 @@ export class TaskBrowserSurfaceManager {
       partition,
       attachmentId: null,
       attachmentGeneration: 0,
-      requestedBounds: null,
+      requestedRendererBounds: null,
       attached: false,
       lastDetachedAt: ++this.lruSequence,
       native,

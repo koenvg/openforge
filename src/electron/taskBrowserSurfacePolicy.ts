@@ -108,6 +108,21 @@ function clampTaskBrowserBounds(bounds: TaskBrowserBounds, content: TaskBrowserB
   }
 }
 
+/**
+ * Renderers measure attachment bounds in CSS pixels, while the owning window positions native
+ * views in device-independent pixels. The two spaces differ by the renderer zoom factor, so
+ * bounds must be scaled before they are compared against the window content bounds.
+ */
+export function scaleTaskBrowserBounds(bounds: TaskBrowserBounds, rendererZoomFactor: number): TaskBrowserBounds {
+  if (!Number.isFinite(rendererZoomFactor) || rendererZoomFactor <= 0 || rendererZoomFactor === 1) return { ...bounds }
+  return {
+    x: bounds.x * rendererZoomFactor,
+    y: bounds.y * rendererZoomFactor,
+    width: bounds.width * rendererZoomFactor,
+    height: bounds.height * rendererZoomFactor,
+  }
+}
+
 export function integerTaskBrowserBounds(bounds: TaskBrowserBounds): TaskBrowserBounds {
   const x = Math.round(bounds.x)
   const y = Math.round(bounds.y)

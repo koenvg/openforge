@@ -167,6 +167,7 @@ export function createTaskBrowserSurfaceManagerFixture(
   overrides: {
     authorize?: (pluginId: string, taskId: string) => Promise<void>
     authorizePlugin?: (pluginId: string) => Promise<void>
+    rendererZoomFactor?: (windowId: number) => number
   } = {},
 ) {
   const factory = new FakeNativeFactory()
@@ -189,6 +190,7 @@ export function createTaskBrowserSurfaceManagerFixture(
     authorize,
     authorizePlugin,
     onStateChanged: event => stateEvents.push(event),
+    ...(overrides.rendererZoomFactor ? { rendererZoomFactor: overrides.rendererZoomFactor } : {}),
   })
   manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
   manager.registerWindow(11, { x: 0, y: 0, width: 800, height: 600 })

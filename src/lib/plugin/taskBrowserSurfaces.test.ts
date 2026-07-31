@@ -298,6 +298,46 @@ describe('renderer Task Browser Surface host adapter', () => {
     await attachment.dispose()
   })
 
+  it('republishes unchanged CSS bounds when the renderer zoom factor changes', async () => {
+    const raf = installAnimationFrameHarness()
+    installObserverHarness()
+    const invocations: Array<{ command: string; payload: unknown }> = []
+    window.openforge = {
+      version: 1,
+      async invoke(command, payload) {
+        invocations.push({ command, payload })
+        return command === 'task_browser_surface_get_or_create'
+          ? { ok: true, value: { surfaceId: 'surface-zoomed', generation: 1, state: blankState } }
+          : { ok: true, value: undefined }
+      },
+      onEvent: () => () => undefined,
+    }
+
+    const element = document.createElement('div')
+    document.body.append(element)
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(domRect(10, 20, 300, 200))
+    const controller = await createHostBrowserSurfaces('browser').getOrCreate({ taskId: 'T-1', id: 'zoomed' })
+    const attachment = await controller.attach(element)
+    const attachmentCalls = () => invocations.filter(call => call.command === 'task_browser_surface_attach')
+    const expectedBounds = { x: 10, y: 20, width: 300, height: 200 }
+
+    expect(attachmentCalls()).toHaveLength(1)
+    await raf.flush()
+    expect(attachmentCalls(), 'unchanged bounds must not be republished').toHaveLength(1)
+
+    // The host converts CSS pixels with the renderer zoom factor, which moves devicePixelRatio with it.
+    // A fixed-size attachment keeps its CSS rect across a zoom change, so the host still needs a fresh push.
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2.2 })
+    await raf.flush()
+    expect(attachmentCalls()).toHaveLength(2)
+    expect(attachmentCalls().at(-1)?.payload).toMatchObject({ bounds: expectedBounds })
+
+    await raf.flush()
+    expect(attachmentCalls()).toHaveLength(2)
+
+    await attachment.dispose()
+  })
+
   it('retries transient visible and hidden attachment update failures', async () => {
     const raf = installAnimationFrameHarness()
     const observers = installObserverHarness()
