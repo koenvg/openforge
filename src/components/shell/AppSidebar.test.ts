@@ -9,9 +9,9 @@ import type { AppView, Project } from '../../lib/types'
 import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
 import AppSidebar from './AppSidebar.svelte'
 
-// In production reviewRequestCountByProject is a `derived` (Readable) store, but this suite
-// mocks '../../lib/stores' with a writable so tests can drive per-project counts directly.
+// Production counts are derived; this suite mocks stores with writables to drive badges directly.
 const reviewCountByProject = reviewRequestCountByProject as unknown as Writable<Map<string, number>>
+const attentionCounts = attentionCountByProject as unknown as Writable<Map<string, number>>
 
 vi.mock('../../lib/stores', async () => {
   const { writable } = await import('svelte/store')
@@ -113,7 +113,7 @@ describe('AppSidebar', () => {
     projects.set(sampleProjects)
     hiddenProjectIds.set(new Set())
     activeProjectId.set('proj-1')
-    attentionCountByProject.set(new Map())
+    attentionCounts.set(new Map())
     reviewCountByProject.set(new Map())
   })
 
@@ -261,7 +261,7 @@ describe('AppSidebar', () => {
   })
 
   it('shows each project\'s attention count from the store and hides it at zero', () => {
-    attentionCountByProject.set(new Map([
+    attentionCounts.set(new Map([
       // A project whose only tasks are in-flight resolves to 0 — no indicator. The
       // exclusion of running agents / Out of Focus tasks lives in the count itself (attentionCounts.ts).
       ['proj-1', 0],
@@ -280,7 +280,7 @@ describe('AppSidebar', () => {
 
 
   it('does not render an attention indicator when nothing needs attention', () => {
-    attentionCountByProject.set(new Map())
+    attentionCounts.set(new Map())
     renderSidebar({ collapsed: false })
 
     expect(screen.queryByTitle(/needing attention/i)).toBeNull()

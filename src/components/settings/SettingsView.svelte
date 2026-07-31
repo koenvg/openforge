@@ -49,10 +49,11 @@
   interface Props {
     onClose: () => void
     onProjectDeleted: () => void
+    onProjectSettingsSaved?: () => void | Promise<void>
     mode: 'project' | 'global'
   }
 
-  let { onClose, onProjectDeleted, mode }: Props = $props()
+  let { onClose, onProjectDeleted, onProjectSettingsSaved, mode }: Props = $props()
 
   type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -499,6 +500,7 @@
     try {
       if (projectPayload) {
         await saveProjectSettings(projectPayload)
+        await onProjectSettingsSaved?.()
         if (isLatestProjectIdentityPayload(projectPayload)) {
           $projects = mergeUpdatedProject($projects, {
             id: projectPayload.projectId,

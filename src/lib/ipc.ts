@@ -2,7 +2,7 @@ import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -109,6 +109,10 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function getProjectAttention(): Promise<ProjectAttention[]> {
   return invoke<ProjectAttention[]>("get_project_attention");
+}
+
+export async function getTaskAttention(): Promise<TaskAttentionRow[]> {
+  return invoke<TaskAttentionRow[]>("get_task_attention");
 }
 
 export async function getProjectConfig(projectId: string, key: string): Promise<string | null> {

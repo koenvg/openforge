@@ -1,7 +1,8 @@
 import { writable, derived } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
+import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
 import type { BoardFilter } from './boardFilters'
 import { buildReviewRequestCountByProject, countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
+import { buildAttentionCountByProject } from './attentionCounts'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
@@ -46,11 +47,11 @@ export const hiddenProjectIds = writable<Set<string>>(new Set());
 export const activeProjectId = writable<string | null>(null);
 export const activeProjectColorId = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
-// Sidebar per-project attention count (the green dot): distinct Focus-tab tasks needing
-// attention, excluding in-flight (running) agents and Out of Focus tasks. Populated by the data
-// orchestrator using the board's own getFilterCounts, so the dot matches the board's Focus
-// count exactly. Keyed by project id; missing projects report zero.
-export const attentionCountByProject = writable<Map<string, number>>(new Map());
+// Backend-authoritative Task-only attention projection used by the Focus board and badges.
+export const taskAttentionRows = writable<TaskAttentionRow[]>([]);
+export const taskAttentionLoaded = writable(false);
+// Sidebar per-project attention count (the green dot), derived directly from the same rows.
+export const attentionCountByProject = derived(taskAttentionRows, buildAttentionCountByProject);
 // Rail "Board" icon badge (the green dot): the active project's Focus attention count,
 // scoped from attentionCountByProject exactly the way activeRepoReviewRequestCount scopes
 // the red PR badge. Zero when there is no active project or the project has no entry, so the

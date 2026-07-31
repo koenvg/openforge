@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, ReviewPullRequest, Task } from '../../lib/types'
+import type { Project, ReviewPullRequest, Task, TaskAttentionRow } from '../../lib/types'
 import {
   projects,
   reviewPrs,
@@ -8,15 +8,15 @@ import {
   hiddenProjectIds,
   globalExcludedPrRepos,
   activeProjectId,
-  attentionCountByProject,
+  taskAttentionRows,
 } from '../../lib/stores'
 import AttentionOverviewDialog from './AttentionOverviewDialog.svelte'
 
-// The dialog reads live tasks/sessions/config over IPC; the stores it subscribes to are
-// the real Svelte writables, driven directly here to simulate agent/PR activity.
+// The dialog reads the backend-owned task projection over IPC; the stores it subscribes
+// to are the real Svelte writables, driven directly here to simulate agent/PR activity.
 const ipc = vi.hoisted(() => ({
   getAllTasks: vi.fn(),
-  getLatestSessions: vi.fn(),
+  getTaskAttention: vi.fn(),
   getProjectConfig: vi.fn(),
   getConfig: vi.fn(),
   setConfig: vi.fn(),
@@ -51,6 +51,18 @@ function taskRecord(id: string, projectId: string, title: string): Task {
     created_at: 0,
     updated_at: 0,
   } as Task
+}
+
+function attentionRow(taskId: string, projectId: string, title: string): TaskAttentionRow {
+  return {
+    task_id: taskId,
+    project_id: projectId,
+    project_name: projectId,
+    title,
+    state: 'idle',
+    reason: 'No agent running. Start when ready.',
+    activity_at: 0,
+  }
 }
 
 function reviewPr(id: number, owner: string, name: string, title: string): ReviewPullRequest {
@@ -88,6 +100,14 @@ function renderDialog() {
   })
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
 describe('AttentionOverviewDialog — live refresh while open', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -97,10 +117,10 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     hiddenProjectIds.set(new Set())
     globalExcludedPrRepos.set(new Set())
     activeProjectId.set(null)
-    attentionCountByProject.set(new Map())
+    taskAttentionRows.set([])
 
     ipc.getAllTasks.mockResolvedValue([])
-    ipc.getLatestSessions.mockResolvedValue([])
+    ipc.getTaskAttention.mockResolvedValue([])
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)
     ipc.setConfig.mockResolvedValue(undefined)
@@ -130,13 +150,44 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     await vi.waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy())
 
     // Agent finished: the task is now an idle "doing" task that needs the user.
-    ipc.getAllTasks.mockResolvedValue([taskRecord('t1', 'p1', 'Investigate flaky test')])
-    ipc.getLatestSessions.mockResolvedValue([])
+    ipc.getAllTasks.mockResolvedValue([taskRecord('t1', 'p1', '')])
+    ipc.getTaskAttention.mockResolvedValue([attentionRow('t1', 'p1', 'Investigate flaky test')])
     // The orchestrator recomputes attentionCountByProject on the agent-finished event.
-    attentionCountByProject.set(new Map([['p1', 1]]))
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    taskAttentionRows.set([attentionRow('t1', 'p1', 'Investigate flaky test')])
+    taskAttentionRows.set([attentionRow('t1', 'p1', 'Task One')])
 
     await vi.waitFor(() => expect(screen.getByText('Investigate flaky test')).toBeTruthy())
+    expect(screen.getByText(/No agent running\. Start when ready\./)).toBeTruthy()
+  })
+
+  it('keeps the newest Task attention snapshot when refreshes finish out of order', async () => {
+    projects.set([projectRecord('p1', 'Project One')])
+    ipc.getAllTasks.mockResolvedValue([
+      taskRecord('older', 'p1', 'Older result'),
+      taskRecord('newer', 'p1', 'Newer result'),
+    ])
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText(/all caught up/i)).toBeTruthy())
+
+    const older = deferred<TaskAttentionRow[]>()
+    const newer = deferred<TaskAttentionRow[]>()
+    ipc.getTaskAttention
+      .mockImplementationOnce(() => older.promise)
+      .mockImplementationOnce(() => newer.promise)
+
+    taskAttentionRows.set([attentionRow('older', 'p1', 'Older result')])
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    taskAttentionRows.set([attentionRow('newer', 'p1', 'Newer result')])
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+
+    newer.resolve([attentionRow('newer', 'p1', 'Newer result')])
+    await vi.waitFor(() => expect(screen.getByText('Newer result')).toBeTruthy())
+    older.resolve([attentionRow('older', 'p1', 'Older result')])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('Newer result')).toBeTruthy()
+    expect(screen.queryByText('Older result')).toBeNull()
   })
 
   it('preserves the collapsed-project state across a refresh (does not re-read config)', async () => {
@@ -144,6 +195,10 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     ipc.getAllTasks.mockResolvedValue([
       taskRecord('t1', 'p1', 'Task One'),
       taskRecord('t2', 'p2', 'Task Two'),
+    ])
+    ipc.getTaskAttention.mockResolvedValue([
+      attentionRow('t1', 'p1', 'Task One'),
+      attentionRow('t2', 'p2', 'Task Two'),
     ])
     renderDialog()
     await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
@@ -155,7 +210,7 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
     await vi.waitFor(() => expect(screen.queryByText('Task One')).toBeNull())
 
     // A refresh fires (e.g. an agent elsewhere finished).
-    attentionCountByProject.set(new Map([['p1', 1]]))
+    taskAttentionRows.set([attentionRow('t1', 'p1', 'Task One')])
     await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
 
     expect(screen.queryByText('Task One')).toBeNull() // still collapsed

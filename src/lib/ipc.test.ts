@@ -20,6 +20,7 @@ import {
   enqueuePullRequest,
   fsSearchFiles,
   getAllTasks,
+  getTaskAttention,
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
   getDeveloperLogs,
@@ -89,6 +90,16 @@ describe("ipc resolved provider", () => {
     await expect(getResolvedAiProvider("P-1")).resolves.toBe("codex");
 
     expect(invokeMock).toHaveBeenCalledWith("resolve_ai_provider", { projectId: "P-1" });
+  });
+});
+
+describe("ipc task attention projection", () => {
+  it("requests the backend-owned Task-only attention rows", async () => {
+    invokeMock.mockResolvedValue([]);
+
+    await expect(getTaskAttention()).resolves.toEqual([]);
+
+    expect(invokeMock).toHaveBeenCalledWith("get_task_attention");
   });
 });
 

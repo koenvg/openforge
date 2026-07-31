@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import type { ProjectAttention, PullRequestInfo } from './types'
+import type { ProjectAttention, PullRequestInfo, TaskAttentionRow } from './types'
 
 vi.mock('./ipc', () => ({
   forceGithubSync: vi.fn(),
-  getAllTasks: vi.fn(),
+  getTaskAttention: vi.fn(),
   getConfig: vi.fn(),
   getLatestSessions: vi.fn(),
   getProjectAttention: vi.fn(),
@@ -17,12 +17,14 @@ vi.mock('./ipc', () => ({
 }))
 
 import { useAppDataOrchestrator } from './appDataOrchestrator.svelte'
-import type { AgentSession, Task } from './types'
+import type { Task } from './types'
 import {
   activeProjectId,
   activeResolvedRepo,
   activeSessions,
   attentionCountByProject,
+  taskAttentionLoaded,
+  taskAttentionRows,
   error,
   globalExcludedPrRepos,
   isLoading,
@@ -39,7 +41,7 @@ import {
 } from './stores'
 import {
   forceGithubSync,
-  getAllTasks,
+  getTaskAttention,
   getConfig,
   getLatestSessions,
   getProjectAttention,
@@ -74,23 +76,14 @@ function makeTask(id: string, projectId: string): Task {
   }
 }
 
-function makeSession(ticketId: string, status: string): AgentSession {
-  return {
-    id: `s-${ticketId}`,
-    ticket_id: ticketId,
-    opencode_session_id: null,
-    stage: 'implement',
-    status,
-    checkpoint_data: null,
-    pty_instance_id: null,
-    error_message: null,
-    created_at: 1000,
-    updated_at: 1000,
-    provider: 'claude-code',
-    claude_session_id: null,
-    pi_session_id: null,
-  }
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
 }
+
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -139,7 +132,8 @@ describe('useAppDataOrchestrator', () => {
     globalExcludedPrRepos.set(new Set())
     isLoading.set(false)
     projectAttention.set(new Map())
-    attentionCountByProject.set(new Map())
+    taskAttentionLoaded.set(false)
+    taskAttentionRows.set([])
     projectResolvedRepos.set(new Map())
     projects.set([])
     reviewPrs.set([])
@@ -147,7 +141,7 @@ describe('useAppDataOrchestrator', () => {
     tasks.set([])
     ticketPrs.set(new Map())
 
-    vi.mocked(getAllTasks).mockResolvedValue([])
+    vi.mocked(getTaskAttention).mockResolvedValue([])
     vi.mocked(getConfig).mockResolvedValue(null)
     vi.mocked(getLatestSessions).mockResolvedValue([])
     vi.mocked(getProjectAttention).mockResolvedValue([])
@@ -341,28 +335,63 @@ describe('useAppDataOrchestrator', () => {
     expect(counts.get('proj-api')).toBe(1)
   })
 
-  it('computes the per-project green-dot count with the board\'s focus semantics', async () => {
+  it('computes the per-project green-dot count from backend-authoritative rows', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
-    projects.set([{ id: 'P-1', name: 'Frontend', path: '/fe', created_at: 0, updated_at: 0 }])
-    // Three doing tasks: one running (in-flight), one Out of Focus, one plain agent-done.
-    vi.mocked(getAllTasks).mockResolvedValue([
-      makeTask('T-run', 'P-1'),
-      makeTask('T-out', 'P-1'),
-      makeTask('T-focus', 'P-1'),
-    ])
-    vi.mocked(getLatestSessions).mockResolvedValue([
-      makeSession('T-run', 'running'),
-      makeSession('T-out', 'completed'),
-      makeSession('T-focus', 'completed'),
-    ])
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) =>
-      key === 'low_fire_task_ids' ? JSON.stringify(['T-out']) : null,
-    )
+    const row: TaskAttentionRow = {
+      task_id: 'T-focus',
+      project_id: 'P-1',
+      project_name: 'Frontend',
+      title: 'Focus task',
+      state: 'agent-done',
+      reason: 'Agent completed — review the changes.',
+      activity_at: 10,
+    }
+    vi.mocked(getTaskAttention).mockResolvedValue([row])
 
     await orchestrator.refreshAttentionCounts()
 
-    // In-flight (T-run) and Out of Focus (T-out) are excluded — only T-focus needs attention.
+    expect(get(taskAttentionRows)).toEqual([row])
+    expect(get(taskAttentionLoaded)).toBe(true)
     expect(get(attentionCountByProject).get('P-1')).toBe(1)
+  })
+
+  it('does not treat a failed initial Task attention fetch as a loaded empty projection', async () => {
+    const logError = vi.fn()
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn(), logError })
+    vi.mocked(getTaskAttention).mockRejectedValue(new Error('attention unavailable'))
+
+    await orchestrator.refreshAttentionCounts()
+
+    expect(get(taskAttentionLoaded)).toBe(false)
+    expect(get(taskAttentionRows)).toEqual([])
+    expect(logError).toHaveBeenCalledOnce()
+  })
+
+  it('ignores an older Task attention response that finishes after a newer refresh', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    const older = deferred<TaskAttentionRow[]>()
+    const newer = deferred<TaskAttentionRow[]>()
+    const olderRow: TaskAttentionRow = {
+      task_id: 'T-old', project_id: 'P-1', project_name: 'Frontend', title: 'Old',
+      state: 'idle', reason: 'Old reason', activity_at: 1,
+    }
+    const newerRow: TaskAttentionRow = {
+      task_id: 'T-new', project_id: 'P-2', project_name: 'Backend', title: 'New',
+      state: 'failed', reason: 'New reason', activity_at: 2,
+    }
+    vi.mocked(getTaskAttention)
+      .mockImplementationOnce(() => older.promise)
+      .mockImplementationOnce(() => newer.promise)
+
+    const olderRefresh = orchestrator.refreshAttentionCounts()
+    const newerRefresh = orchestrator.refreshAttentionCounts()
+    newer.resolve([newerRow])
+    await newerRefresh
+    older.resolve([olderRow])
+    await olderRefresh
+
+    expect(get(taskAttentionRows)).toEqual([newerRow])
+    expect(get(attentionCountByProject)).toEqual(new Map([['P-2', 1]]))
   })
 
   it('coalesces concurrent project attention loads through the orchestrator owner', async () => {
@@ -396,7 +425,7 @@ describe('useAppDataOrchestrator', () => {
       await vi.advanceTimersByTimeAsync(200) // reaches the original ~500ms deadline
 
       // A resetting debounce would have pushed the fetch out to ~800ms and fired zero times here.
-      expect(getAllTasks).toHaveBeenCalledTimes(1)
+      expect(getTaskAttention).toHaveBeenCalledTimes(1)
     } finally {
       vi.useRealTimers()
     }

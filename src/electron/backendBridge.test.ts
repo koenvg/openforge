@@ -377,6 +377,7 @@ describe('Electron backend bridge command forwarding', () => {
   it('declares config/projects/tasks, PTY/session, GitHub/PR review, and Whisper commands as sidecar-backed for this slice', () => {
     expect(isSidecarBackedCommand('get_projects')).toBe(true)
     expect(isSidecarBackedCommand('get_project_attention')).toBe(true)
+    expect(isSidecarBackedCommand('get_task_attention')).toBe(true)
     expect(isSidecarBackedCommand('create_task')).toBe(true)
     expect(isSidecarBackedCommand('update_task_status')).toBe(true)
     expect(isSidecarBackedCommand('delete_task')).toBe(true)

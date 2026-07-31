@@ -4,7 +4,7 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
@@ -155,6 +155,7 @@
         projectPath: activeProject?.path ?? '',
         onCloseSettings: () => { router.navigate('board') },
         onProjectDeleted: appData.loadProjects,
+        onProjectSettingsSaved: appData.refreshAttentionCounts,
       }),
     }
   })
@@ -605,6 +606,8 @@
                 dependencyReferenceTasks={$dependencyReferenceTasks}
                 activeSessions={$activeSessions}
                 ticketPrs={$ticketPrs}
+                attentionRows={$taskAttentionRows}
+                attentionRowsLoaded={$taskAttentionLoaded}
                 onOpenTask={handleOpenTask}
                 onEditTask={openEditTask}
                 onTaskUpdated={async () => { await appData.loadTasks() }}

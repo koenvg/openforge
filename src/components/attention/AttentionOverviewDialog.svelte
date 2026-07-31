@@ -4,15 +4,13 @@
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
-  import { getAllTasks, getLatestSessions, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
-  import { loadOutOfFocusTaskIds, loadFocusFilterStates, DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
+  import { getAllTasks, getTaskAttention, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
   import type { ReviewPullRequest, Task } from '../../lib/types'
-  import type { TaskState } from '../../lib/taskState'
-  import { TASK_STATE_COMPACT_LABELS, getTaskReasonText } from '../../lib/taskStatePresentation'
+  import { TASK_STATE_COMPACT_LABELS } from '../../lib/taskStatePresentation'
 
   interface Props {
     onClose: () => void
@@ -47,6 +45,7 @@
   }
 
   let loading = $state(true)
+  let overviewRequestGeneration = 0
   let overview = $state<AttentionOverview | null>(null)
   let collapsedIds = $state<Set<string>>(new Set())
   let focusedIndex = $state(0)
@@ -217,27 +216,19 @@
     const projectList = get(projects)
     const nextActiveId = get(activeProjectId)
 
-    const allTasks = await getAllTasks()
-    const doingIds = allTasks.filter((task) => task.status === 'doing').map((task) => task.id)
-    const sessionList = doingIds.length > 0 ? await getLatestSessions(doingIds) : []
-    const sessions = new Map(sessionList.map((session) => [session.ticket_id, session]))
+    const [allTasks, taskAttentionRows] = await Promise.all([
+      getAllTasks(),
+      getTaskAttention(),
+    ])
 
     const resolvedRepoByProject = new Map<string, string | null>()
-    const outOfFocusByProject = new Map<string, Set<string>>()
-    const focusStatesByProject = new Map<string, TaskState[]>()
     await Promise.all(
       projectList.map(async (project) => {
-        const [repoRaw, outOfFocus, focusStates] = await Promise.all([
-          getProjectConfig(project.id, 'resolved_repo').catch(() => null),
-          loadOutOfFocusTaskIds(project.id).catch(() => new Set<string>()),
-          loadFocusFilterStates(project.id).catch(() => DEFAULT_FOCUS_STATES),
-        ])
+        const repoRaw = await getProjectConfig(project.id, 'resolved_repo').catch(() => null)
         resolvedRepoByProject.set(
           project.id,
           typeof repoRaw === 'string' && repoRaw.includes('/') ? repoRaw : null,
         )
-        if (outOfFocus.size > 0) outOfFocusByProject.set(project.id, outOfFocus)
-        focusStatesByProject.set(project.id, focusStates)
       }),
     )
 
@@ -245,10 +236,7 @@
       overview: buildAttentionOverview({
         projects: projectList,
         allTasks,
-        sessions,
-        ticketPrs: get(ticketPrs),
-        outOfFocusByProject,
-        focusStatesByProject,
+        taskAttentionRows,
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
@@ -259,19 +247,23 @@
   }
 
   async function loadData(): Promise<void> {
+    const generation = ++overviewRequestGeneration
     loading = true
     try {
       const collapsedRawPromise = getConfig(COLLAPSED_CONFIG_KEY)
       const gathered = await gatherOverview()
+      const collapsed = parseCollapsed(await collapsedRawPromise)
+      if (generation !== overviewRequestGeneration) return
       overview = gathered.overview
       activeId = gathered.activeId
-      collapsedIds = parseCollapsed(await collapsedRawPromise)
+      collapsedIds = collapsed
 
       await tick()
+      if (generation !== overviewRequestGeneration) return
       // Open on the first task/review of the project the user is currently viewing.
       focusedIndex = initialFocusIndex(rows, activeId, collapsedIds)
     } finally {
-      loading = false
+      if (generation === overviewRequestGeneration) loading = false
     }
   }
 
@@ -281,15 +273,18 @@
   // in-memory collapsedIds rather than re-reading config) so nothing jumps under the user.
   async function refreshData(): Promise<void> {
     if (loading) return // initial load in flight will produce fresh data anyway
+    const generation = ++overviewRequestGeneration
     const focusedRow = rows[focusedIndex]
     const previousKey = focusedRow ? rowKey(focusedRow) : null
     const previousIndex = focusedIndex
 
     const gathered = await gatherOverview()
+    if (generation !== overviewRequestGeneration) return
     overview = gathered.overview
     activeId = gathered.activeId
 
     await tick()
+    if (generation !== overviewRequestGeneration) return
     focusedIndex = resolveFocusedIndex(previousKey, rows.map(rowKey), previousIndex)
   }
 
@@ -333,10 +328,6 @@
     if (delta < 3600) return `${Math.max(1, Math.round(delta / 60))}m ago`
     if (delta < 86400) return `${Math.round(delta / 3600)}h ago`
     return `${Math.round(delta / 86400)}d ago`
-  }
-
-  function taskTitle(task: Task): string {
-    return task.title?.trim() || task.initial_prompt || 'Untitled task'
   }
 </script>
 
@@ -436,9 +427,9 @@
                         <Bot size={15} />
                       </span>
                       <div class="min-w-0 flex-1 flex flex-col gap-0.5">
-                        <span class="text-sm text-base-content truncate">{taskTitle(task)}</span>
+                        <span class="text-sm text-base-content truncate">{it.row.item.title}</span>
                         <span class="text-[11px] text-base-content/45 truncate">
-                          {TASK_STATE_COMPACT_LABELS[state] ?? state} · {getTaskReasonText(state, it.row.item.prs)}
+                          {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>
                       </div>
                       <span class="text-base-content/30 shrink-0">›</span>

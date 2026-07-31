@@ -13,6 +13,7 @@ export interface ViewContext {
   projectPath: string
   onCloseSettings: () => void
   onProjectDeleted: () => void
+  onProjectSettingsSaved: () => void | Promise<void>
 }
 
 export interface ViewEntry {
@@ -46,10 +47,11 @@ export function isCrossProjectView(view: AppView, sidebarPluginViewKeys: Readonl
 export const VIEWS: Record<StaticViewKey, ViewEntry> = {
   settings: {
     component: SettingsView,
-    getProps: ({ onCloseSettings, onProjectDeleted }) => ({
+    getProps: ({ onCloseSettings, onProjectDeleted, onProjectSettingsSaved }) => ({
       mode: 'project',
       onClose: onCloseSettings,
       onProjectDeleted,
+      onProjectSettingsSaved,
     }),
   },
   global_settings: {

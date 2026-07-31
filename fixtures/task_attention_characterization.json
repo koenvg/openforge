@@ -1,0 +1,65 @@
+{
+  "projects": [
+    { "id": "P-alpha", "name": "Alpha", "path": "/repos/alpha", "created_at": 1, "updated_at": 20 },
+    { "id": "P-beta", "name": "Beta", "path": "/repos/beta", "created_at": 2, "updated_at": 10 },
+    { "id": "P-empty", "name": "Empty", "path": "/repos/empty", "created_at": 3, "updated_at": 5 }
+  ],
+  "tasks": [
+    { "id": "T-input", "project_id": "P-alpha", "status": "doing", "title": "Needs a decision", "initial_prompt": "Input fallback", "created_at": 1, "updated_at": 100 },
+    { "id": "T-failed", "project_id": "P-alpha", "status": "doing", "title": null, "initial_prompt": "Repair failed automation", "created_at": 2, "updated_at": 200 },
+    { "id": "T-comments", "project_id": "P-alpha", "status": "doing", "title": "Review feedback", "initial_prompt": "Review feedback fallback", "created_at": 3, "updated_at": 700 },
+    { "id": "T-completed", "project_id": "P-alpha", "status": "doing", "title": "Completed changes", "initial_prompt": "Completed changes fallback", "created_at": 4, "updated_at": 400 },
+    { "id": "T-idle", "project_id": "P-alpha", "status": "doing", "title": "   ", "initial_prompt": "Fallback from prompt", "created_at": 5, "updated_at": 500 },
+    { "id": "T-running", "project_id": "P-alpha", "status": "doing", "title": "Running agent", "initial_prompt": "Running agent fallback", "created_at": 6, "updated_at": 1000 },
+    { "id": "T-set-aside", "project_id": "P-alpha", "status": "doing", "title": "Set aside", "initial_prompt": "Set aside fallback", "created_at": 7, "updated_at": 1100 },
+    { "id": "T-backlog", "project_id": "P-alpha", "status": "backlog", "title": "Backlog", "initial_prompt": "Backlog fallback", "created_at": 8, "updated_at": 1200 },
+    { "id": "T-done", "project_id": "P-alpha", "status": "done", "title": "Legacy done", "initial_prompt": "Legacy done fallback", "created_at": 9, "updated_at": 1300 },
+    { "id": "T-beta-idle", "project_id": "P-beta", "status": "doing", "title": "Configured out", "initial_prompt": "Configured out fallback", "created_at": 10, "updated_at": 600 },
+    { "id": "T-beta-failed", "project_id": "P-beta", "status": "doing", "title": "Configured failure", "initial_prompt": "Configured failure fallback", "created_at": 11, "updated_at": 50 }
+  ],
+  "sessions": [
+    { "id": "S-input", "ticket_id": "T-input", "status": "paused", "checkpoint_data": "{\"question\":\"Choose\"}", "created_at": 10, "updated_at": 900 },
+    { "id": "S-failed", "ticket_id": "T-failed", "status": "failed", "checkpoint_data": null, "created_at": 11, "updated_at": 800 },
+    { "id": "S-comments", "ticket_id": "T-comments", "status": "completed", "checkpoint_data": null, "created_at": 12, "updated_at": 650 },
+    { "id": "S-completed", "ticket_id": "T-completed", "status": "completed", "checkpoint_data": null, "created_at": 13, "updated_at": 750 },
+    { "id": "S-running", "ticket_id": "T-running", "status": "running", "checkpoint_data": null, "created_at": 14, "updated_at": 1400 },
+    { "id": "S-beta-failed", "ticket_id": "T-beta-failed", "status": "failed", "checkpoint_data": null, "created_at": 15, "updated_at": 300 }
+  ],
+  "pull_requests": [
+    {
+      "id": 101,
+      "pr_number": 101,
+      "ticket_id": "T-comments",
+      "repo_owner": "me",
+      "repo_name": "alpha",
+      "title": "Feedback PR",
+      "url": "https://example.invalid/101",
+      "state": "open",
+      "head_sha": "comments-sha",
+      "ci_status": "success",
+      "review_status": "approved",
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "merged_at": null,
+      "created_at": 100,
+      "updated_at": 700,
+      "draft": false,
+      "is_queued": false,
+      "unaddressed_comment_count": 3
+    }
+  ],
+  "out_of_focus_by_project": {
+    "P-alpha": ["T-set-aside"]
+  },
+  "focus_states_by_project": {
+    "P-beta": ["failed"]
+  },
+  "expected": [
+    { "task_id": "T-input", "project_id": "P-alpha", "project_name": "Alpha", "title": "Needs a decision", "state": "needs-input", "reason": "Agent needs your input to continue.", "activity_at": 900 },
+    { "task_id": "T-failed", "project_id": "P-alpha", "project_name": "Alpha", "title": "Repair failed automation", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 800 },
+    { "task_id": "T-completed", "project_id": "P-alpha", "project_name": "Alpha", "title": "Completed changes", "state": "agent-done", "reason": "Agent completed — review the changes.", "activity_at": 750 },
+    { "task_id": "T-comments", "project_id": "P-alpha", "project_name": "Alpha", "title": "Review feedback", "state": "ready-to-merge", "reason": "Ready to merge — all checks passed.", "activity_at": 650 },
+    { "task_id": "T-idle", "project_id": "P-alpha", "project_name": "Alpha", "title": "Fallback from prompt", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 500 },
+    { "task_id": "T-beta-failed", "project_id": "P-beta", "project_name": "Beta", "title": "Configured failure", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 300 }
+  ]
+}

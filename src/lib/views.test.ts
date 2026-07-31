@@ -22,12 +22,14 @@ describe('views registry', () => {
   it('builds props for settings views without task run callbacks', () => {
     const onCloseSettings = vi.fn()
     const onProjectDeleted = vi.fn()
+    const onProjectSettingsSaved = vi.fn()
     const viewContext = {
       projectId: 'proj-alpha',
       projectName: 'Project Alpha',
       projectPath: '/workspace/project-alpha',
       onCloseSettings,
       onProjectDeleted,
+      onProjectSettingsSaved,
     } satisfies ViewContext
 
     const settingsProps = VIEWS.settings.getProps(viewContext)
@@ -37,6 +39,7 @@ describe('views registry', () => {
       mode: 'project',
       onClose: onCloseSettings,
       onProjectDeleted,
+      onProjectSettingsSaved,
     })
     expect(globalSettingsProps).toMatchObject({
       mode: 'global',
@@ -189,6 +192,7 @@ describe('views registry', () => {
       projectPath: '/workspace/project-alpha',
       onCloseSettings: vi.fn(),
       onProjectDeleted: vi.fn(),
+      onProjectSettingsSaved: vi.fn(),
     })
 
     expect(props).toEqual({

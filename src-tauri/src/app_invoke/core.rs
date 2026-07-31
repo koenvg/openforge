@@ -472,6 +472,12 @@ pub(super) async fn handle_app_unmatched_command(
                 )
             })?)?
         }
+        "get_task_attention" => json_value(db.get_task_attention_rows().map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get task attention: {e}"),
+            )
+        })?)?,
         "get_app_mode" => json_value(if cfg!(debug_assertions) {
             "dev"
         } else {
