@@ -55,7 +55,7 @@ jobs:
         id: lint
         run: |
           set +e -o pipefail
-          pnpm lint 2>&1 | tee /tmp/lint.log
+          (pnpm mobile:contract:check && pnpm lint) 2>&1 | tee /tmp/lint.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Run tests

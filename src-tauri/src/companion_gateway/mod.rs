@@ -1,7 +1,9 @@
 mod contract;
+mod devices;
 mod identity;
 mod lifecycle;
 mod network;
+mod pairing;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
 
@@ -13,6 +15,7 @@ pub(crate) fn enabled_preference(database: &crate::db::Database) -> Result<bool,
 }
 
 pub(crate) use lifecycle::CompanionGatewayManager;
+pub(crate) use pairing::PairingDecision;
 
 #[cfg(test)]
 fn test_manager_with_store(
@@ -22,6 +25,7 @@ fn test_manager_with_store(
 
     CompanionGatewayManager::new(
         store,
+        Arc::new(devices::InMemoryCompanionDeviceStore::default()),
         Arc::new(network::FixedEndpointProvider::new(vec![(
             network::CompanionEndpointKind::Lan,
             IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
@@ -44,5 +48,7 @@ pub(crate) fn delayed_test_manager(delay: std::time::Duration) -> CompanionGatew
     )))
 }
 
+#[cfg(test)]
+mod pairing_tests;
 #[cfg(test)]
 mod tests;

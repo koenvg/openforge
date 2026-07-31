@@ -1,0 +1,27 @@
+{
+  "pairingSubmissionStatus": {
+    "requestId": "8f81fbb8-2807-4806-93eb-245e12083b0b",
+    "status": "pending",
+    "expiresAt": "2026-07-30T12:00:00Z"
+  },
+  "pairingPending": {
+    "status": "pending"
+  },
+  "pairingApproved": {
+    "status": "approved",
+    "deviceId": "50b26936-55a7-48e5-a1c7-65eaf08211ee",
+    "credential": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+  },
+  "hostStatus": {
+    "hostId": "65d91f21-6732-45a6-9418-3dfaf4c93f52",
+    "protocolVersion": 1,
+    "serverTime": "2026-07-30T12:00:01Z"
+  },
+  "error": {
+    "error": {
+      "code": "unauthenticated",
+      "message": "Companion device authentication is required",
+      "requestId": null
+    }
+  }
+}

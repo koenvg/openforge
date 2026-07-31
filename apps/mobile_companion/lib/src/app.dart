@@ -1,36 +1,185 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'connection/companion_connection_state.dart';
+import 'pairing/companion_pairing_controller.dart';
 
-class CompanionApp extends StatelessWidget {
-  const CompanionApp({this.initialState = const Unpaired(), super.key});
+class CompanionApp extends StatefulWidget {
+  const CompanionApp({
+    this.controller,
+    this.initialState = const Unpaired(),
+    super.key,
+  });
 
+  final CompanionPairingController? controller;
   final CompanionConnectionState initialState;
 
   @override
+  State<CompanionApp> createState() => _CompanionAppState();
+}
+
+class _CompanionAppState extends State<CompanionApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  late CompanionConnectionState _state;
+
+  @override
+  void initState() {
+    super.initState();
+    _state = widget.controller?.state ?? widget.initialState;
+    widget.controller?.addListener(_onControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    setState(() => _state = widget.controller!.state);
+  }
+
+  Future<void> _openScanner() async {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    final qrPayload = await navigator.push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const CompanionQrScannerScreen(),
+      ),
+    );
+    if (qrPayload == null || !mounted) return;
+    final platform = Platform.isIOS ? 'ios' : 'android';
+    final fallbackName = Platform.isIOS ? 'My iPhone' : 'My Android phone';
+    final suggestedName = Platform.localHostname.trim();
+    final deviceName = await _requestDeviceName(
+      _navigatorKey.currentContext!,
+      suggestedName.isEmpty || suggestedName == 'localhost'
+          ? fallbackName
+          : suggestedName,
+    );
+    if (deviceName == null || !mounted) return;
+    await controller.pairFromQr(
+      qrPayload: qrPayload,
+      deviceName: deviceName,
+      platform: platform,
+    );
+  }
+
+  Future<String?> _requestDeviceName(
+    BuildContext context,
+    String suggestedName,
+  ) async {
+    final textController = TextEditingController(text: suggestedName);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Name this phone'),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            labelText: 'Device name',
+            helperText: 'This name will appear on your OpenForge desktop.',
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = textController.text.trim();
+              if (name.isNotEmpty) Navigator.of(context).pop(name);
+            },
+            child: const Text('Send request'),
+          ),
+        ],
+      ),
+    );
+    textController.dispose();
+    return result;
+  }
+
+  Future<void> _forgetAndPairAgain() async {
+    final controller = widget.controller;
+    if (controller == null) return;
+    await controller.forgetAndReset();
+    if (mounted) await _openScanner();
+  }
+
+  Future<void> _retryConnection() async {
+    await widget.controller?.restore();
+  }
+
+  @override
   Widget build(BuildContext context) => MaterialApp(
+    navigatorKey: _navigatorKey,
     debugShowCheckedModeBanner: false,
     title: 'OpenForge Companion',
     theme: ThemeData(
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       useMaterial3: true,
     ),
-    home: ConnectionShell(state: initialState),
+    home: ConnectionShell(
+      state: _state,
+      onPair: widget.controller == null ? null : _openScanner,
+      onReset: widget.controller == null ? null : _forgetAndPairAgain,
+      onRetry: widget.controller == null ? null : _retryConnection,
+    ),
+  );
+}
+
+class CompanionQrScannerScreen extends StatefulWidget {
+  const CompanionQrScannerScreen({super.key});
+
+  @override
+  State<CompanionQrScannerScreen> createState() =>
+      _CompanionQrScannerScreenState();
+}
+
+class _CompanionQrScannerScreenState extends State<CompanionQrScannerScreen> {
+  bool _handled = false;
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final barcode in capture.barcodes) {
+      final payload = barcode.rawValue;
+      if (payload == null) continue;
+      _handled = true;
+      Navigator.of(context).pop(payload);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Scan desktop QR')),
+    body: Semantics(
+      label: 'Companion pairing QR scanner',
+      child: MobileScanner(onDetect: _onDetect),
+    ),
   );
 }
 
 class ConnectionShell extends StatelessWidget {
-  const ConnectionShell({required this.state, super.key});
+  const ConnectionShell({
+    required this.state,
+    this.onPair,
+    this.onReset,
+    this.onRetry,
+    super.key,
+  });
 
   final CompanionConnectionState state;
-
-  void _showPairingPlaceholder(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Pairing will be added in a later release.'),
-      ),
-    );
-  }
+  final VoidCallback? onPair;
+  final VoidCallback? onReset;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -68,13 +217,39 @@ class ConnectionShell extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge,
                       textAlign: TextAlign.center,
                     ),
-                    if (state is Unpaired) ...<Widget>[
+                    if (state is Connected) ...<Widget>[
+                      const SizedBox(height: 24),
+                      _ConnectedHostCard(state: state as Connected),
+                    ],
+                    if ((state is Unpaired ||
+                            state is PairingRejected ||
+                            state is PairingUnavailable) &&
+                        onPair != null) ...<Widget>[
                       const SizedBox(height: 32),
                       FilledButton.icon(
                         key: const Key('pair-with-desktop'),
-                        onPressed: () => _showPairingPlaceholder(context),
+                        onPressed: onPair,
                         icon: const Icon(Icons.qr_code_scanner),
                         label: const Text('Pair with desktop'),
+                      ),
+                    ],
+                    if ((state is Revoked || state is CertificateMismatch) &&
+                        onReset != null) ...<Widget>[
+                      const SizedBox(height: 32),
+                      FilledButton.icon(
+                        key: const Key('forget-and-pair-again'),
+                        onPressed: onReset,
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('Forget and pair again'),
+                      ),
+                    ],
+                    if (state is Unavailable && onRetry != null) ...<Widget>[
+                      const SizedBox(height: 32),
+                      FilledButton.icon(
+                        key: const Key('retry-connection'),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
                       ),
                     ],
                   ],
@@ -88,9 +263,35 @@ class ConnectionShell extends StatelessWidget {
   }
 }
 
+class _ConnectedHostCard extends StatelessWidget {
+  const _ConnectedHostCard({required this.state});
+
+  final Connected state;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: <Widget>[
+          Text('Host ${state.hostId}', textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text('Companion protocol v${state.protocolVersion}'),
+        ],
+      ),
+    ),
+  );
+}
+
 _ConnectionContent _contentFor(
   CompanionConnectionState state,
 ) => switch (state) {
+  Restoring() => const _ConnectionContent(
+    title: 'Restoring connection',
+    message: 'Checking securely stored desktop trust.',
+    icon: Icons.sync,
+    iconLabel: 'Restoring paired desktop connection',
+  ),
   Unpaired() => const _ConnectionContent(
     title: 'Not paired',
     message:
@@ -100,7 +301,7 @@ _ConnectionContent _contentFor(
   ),
   Pairing() => const _ConnectionContent(
     title: 'Pairing',
-    message: 'Preparing a secure connection to your OpenForge desktop.',
+    message: 'Verifying the desktop certificate and sending this device name.',
     icon: Icons.qr_code_scanner,
     iconLabel: 'Pairing in progress',
   ),
@@ -110,9 +311,24 @@ _ConnectionContent _contentFor(
     icon: Icons.approval_outlined,
     iconLabel: 'Waiting for approval',
   ),
+  PairingRejected() => const _ConnectionContent(
+    title: 'Pairing rejected',
+    message:
+        'The desktop rejected this device. Start a new pairing session to retry.',
+    icon: Icons.block_outlined,
+    iconLabel: 'Pairing request was rejected',
+  ),
+  PairingUnavailable() => const _ConnectionContent(
+    title: 'Pairing unavailable',
+    message:
+        'The pairing request could not be completed. Try a new QR session.',
+    icon: Icons.cloud_off_outlined,
+    iconLabel: 'Pairing request is unavailable',
+  ),
   Connected() => const _ConnectionContent(
     title: 'Connected',
-    message: 'This companion is connected to your OpenForge desktop.',
+    message:
+        'Authenticated read-only access to this OpenForge desktop is active.',
     icon: Icons.check_circle_outline,
     iconLabel: 'Desktop connected',
   ),

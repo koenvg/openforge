@@ -3,12 +3,88 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. This v1 foundation intentionally exposes no domain resources or mutations."
+    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. Pairing is the only unauthenticated bootstrap flow; the sole durable capability is authenticated read-only status."
   },
   "servers": [
     { "url": "/companion/v1" }
   ],
   "paths": {
+    "/pairing/requests": {
+      "post": {
+        "operationId": "submitCompanionPairingRequest",
+        "summary": "Submit a device request with a short-lived one-time pairing secret",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PairingSubmission" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The device is awaiting desktop approval",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PairingSubmissionStatus" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CompanionError" },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "413": { "$ref": "#/components/responses/CompanionError" },
+          "410": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
+    "/pairing/requests/{requestId}": {
+      "get": {
+        "operationId": "getCompanionPairingRequest",
+        "summary": "Poll for the trusted desktop's pairing decision",
+        "security": [],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^Pairing " }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request was approved and the one-time credential is returned",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PairingPoll" }
+              }
+            }
+          },
+          "202": {
+            "description": "The request is still awaiting desktop approval",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PairingPoll" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "403": { "$ref": "#/components/responses/CompanionError" },
+          "410": { "$ref": "#/components/responses/CompanionError" },
+          "413": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
     "/status": {
       "get": {
         "operationId": "getCompanionHostStatus",
@@ -41,6 +117,63 @@
       }
     },
     "schemas": {
+      "PairingSubmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["secret", "deviceName", "platform"],
+        "properties": {
+          "secret": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43,
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "deviceName": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "platform": { "type": "string", "enum": ["ios", "android"] }
+        }
+      },
+      "PairingSubmissionStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "status", "expiresAt"],
+        "properties": {
+          "requestId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "pending" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PairingPoll": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["pending", "approved"] },
+          "deviceId": { "type": "string", "format": "uuid" },
+          "credential": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43,
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "approved" } } },
+            "then": { "required": ["deviceId", "credential"] }
+          },
+          {
+            "if": { "properties": { "status": { "const": "pending" } } },
+            "then": {
+              "not": {
+                "anyOf": [
+                  { "required": ["deviceId"] },
+                  { "required": ["credential"] }
+                ]
+              }
+            }
+          }
+        ]
+      },
       "HostStatus": {
         "type": "object",
         "additionalProperties": false,
@@ -57,6 +190,7 @@
           "unauthenticated",
           "revoked",
           "incompatible_version",
+          "invalid_request",
           "not_found",
           "rate_limited",
           "temporarily_unavailable"

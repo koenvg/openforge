@@ -3,9 +3,11 @@ use super::{
         create_router, AllowAllAuthorizer, CompanionErrorEnvelope, CompanionHostStatus,
         PairingUnavailableAuthorizer,
     },
+    devices::InMemoryCompanionDeviceStore,
     identity::{CompanionIdentityStore, InMemoryIdentityStore},
     lifecycle::{CompanionGatewayManager, GatewayPhase},
     network::{CompanionEndpointKind, FixedEndpointProvider},
+    pairing::PairingCoordinator,
 };
 use axum::{body::Body, http::Request, response::Response};
 use std::{net::IpAddr, sync::Arc, time::Duration};
@@ -14,12 +16,20 @@ use tower::ServiceExt;
 fn test_manager(store: Arc<InMemoryIdentityStore>) -> CompanionGatewayManager {
     CompanionGatewayManager::new(
         store,
+        Arc::new(InMemoryCompanionDeviceStore::default()),
         Arc::new(FixedEndpointProvider::new(vec![(
             CompanionEndpointKind::Lan,
             IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         )])),
         0,
     )
+}
+
+fn test_pairing() -> Arc<PairingCoordinator> {
+    Arc::new(PairingCoordinator::new(
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Duration::from_secs(60),
+    ))
 }
 
 async fn response_json(response: Response) -> serde_json::Value {
@@ -92,6 +102,7 @@ async fn partial_multi_interface_startup_cannot_leave_an_untracked_listener() {
     let store = Arc::new(InMemoryIdentityStore::default());
     let manager = CompanionGatewayManager::new(
         store,
+        Arc::new(InMemoryCompanionDeviceStore::default()),
         Arc::new(FixedEndpointProvider::new(vec![
             (
                 CompanionEndpointKind::Lan,
@@ -218,12 +229,30 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 1);
+    assert_eq!(paths.len(), 3);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
         vec!["get"],
-        "v1 foundation must not expose mutation methods"
+        "authenticated v1 resources must remain read-only"
+    );
+    assert_eq!(
+        paths["/pairing/requests"]
+            .as_object()
+            .expect("pairing submission path")
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["post"],
+    );
+    assert_eq!(
+        paths["/pairing/requests/{requestId}"]
+            .as_object()
+            .expect("pairing poll path")
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
     );
     let documented_responses = status_path["get"]["responses"]
         .as_object()
@@ -236,6 +265,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     let success_response = create_router(
         CompanionHostStatus::new(host_id.to_string()),
         Arc::new(AllowAllAuthorizer),
+        test_pairing(),
     )
     .oneshot(
         Request::builder()
@@ -256,6 +286,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     let unauthorized_response = create_router(
         CompanionHostStatus::new(host_id.to_string()),
         Arc::new(PairingUnavailableAuthorizer),
+        test_pairing(),
     )
     .oneshot(
         Request::builder()
@@ -272,6 +303,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     let not_found_response = create_router(
         CompanionHostStatus::new(host_id.to_string()),
         Arc::new(AllowAllAuthorizer),
+        test_pairing(),
     )
     .oneshot(
         Request::builder()
@@ -304,6 +336,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         "unauthenticated",
         "revoked",
         "incompatible_version",
+        "invalid_request",
         "not_found",
         "rate_limited",
         "temporarily_unavailable",

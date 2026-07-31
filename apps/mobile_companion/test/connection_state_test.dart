@@ -4,10 +4,13 @@ import 'package:openforge_companion/src/connection/companion_connection_state.da
 void main() {
   test('models every connection state from the mobile design', () {
     const states = <CompanionConnectionState>[
+      Restoring(),
       Unpaired(),
       Pairing(),
       AwaitingApproval(),
-      Connected(),
+      PairingRejected(),
+      PairingUnavailable(),
+      Connected(hostId: 'desktop-host-1', protocolVersion: 1),
       Reconnecting(),
       Unavailable(),
       Revoked(),
@@ -15,7 +18,7 @@ void main() {
       IncompatibleProtocol(),
     ];
 
-    expect(states, hasLength(9));
-    expect(states.map((state) => state.runtimeType).toSet(), hasLength(9));
+    expect(states, hasLength(12));
+    expect(states.map((state) => state.runtimeType).toSet(), hasLength(12));
   });
 }

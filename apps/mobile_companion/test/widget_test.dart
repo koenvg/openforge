@@ -12,26 +12,55 @@ void main() {
       find.bySemanticsLabel('Connection state: Not paired'),
       findsOneWidget,
     );
-    expect(find.bySemanticsLabel('Pair with desktop'), findsOneWidget);
   });
 
-  testWidgets('pairing action is an honest placeholder', (tester) async {
-    await tester.pumpWidget(const CompanionApp());
+  testWidgets(
+    'connected state displays authenticated host identity and protocol',
+    (tester) async {
+      await tester.pumpWidget(
+        const CompanionApp(
+          initialState: Connected(hostId: 'desktop-host-1', protocolVersion: 1),
+        ),
+      );
 
-    await tester.tap(find.byKey(const Key('pair-with-desktop')));
-    await tester.pump();
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('Host desktop-host-1'), findsOneWidget);
+      expect(find.text('Companion protocol v1'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Connection state: Connected'),
+        findsOneWidget,
+      );
+    },
+  );
 
-    expect(
-      find.text('Pairing will be added in a later release.'),
-      findsOneWidget,
+  testWidgets('revoked state exposes a re-pair recovery action', (
+    tester,
+  ) async {
+    var reset = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectionShell(
+          state: const Revoked(),
+          onReset: () => reset = true,
+        ),
+      ),
     );
+
+    await tester.tap(find.text('Forget and pair again'));
+    expect(reset, isTrue);
   });
 
   for (final scenario in <({CompanionConnectionState state, String title})>[
+    (state: const Restoring(), title: 'Restoring connection'),
     (state: const Unpaired(), title: 'Not paired'),
     (state: const Pairing(), title: 'Pairing'),
     (state: const AwaitingApproval(), title: 'Awaiting desktop approval'),
-    (state: const Connected(), title: 'Connected'),
+    (state: const PairingRejected(), title: 'Pairing rejected'),
+    (state: const PairingUnavailable(), title: 'Pairing unavailable'),
+    (
+      state: const Connected(hostId: 'desktop-host-1', protocolVersion: 1),
+      title: 'Connected',
+    ),
     (state: const Reconnecting(), title: 'Reconnecting'),
     (state: const Unavailable(), title: 'Desktop unavailable'),
     (state: const Revoked(), title: 'Re-pair required'),

@@ -13,6 +13,8 @@ vi.mock("./desktopIpc", () => ({
 
 import * as ipcModule from "./ipc";
 import {
+  approveCompanionPairing,
+  cancelCompanionPairing,
   checkCodexInstalled,
   checkPiInstalled,
   createTask,
@@ -24,14 +26,18 @@ import {
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
   getDeveloperLogs,
+  getCompanionPairingStatus,
   getTaskBatchFileContents,
   getPtyBuffer,
   getResolvedAiProvider,
+  listCompanionDevices,
   listGitBranches,
   registerBuiltinPlugin,
   installPluginFromGit,
   installPluginFromLocal,
   installPluginFromNpm,
+  rejectCompanionPairing,
+  revokeCompanionDevice,
   installPluginFromSource,
   scanPluginFolder,
   killPty,
@@ -39,6 +45,7 @@ import {
   repoHasCommits,
   resizePty,
   spawnShellPty,
+  startCompanionPairing,
   startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
@@ -62,6 +69,33 @@ function ptyFixture(command: string, name: string): PtyPayloadFixture {
 	if (!fixture) throw new Error(`Missing PTY payload fixture ${command}/${name}`);
 	return fixture;
 }
+
+describe('ipc Companion pairing commands', () => {
+  beforeEach(() => {
+    invokeMock.mockReset()
+    invokeMock.mockResolvedValue(undefined)
+  })
+
+  it('keeps desktop pairing decisions behind narrow camelCase commands', async () => {
+    await startCompanionPairing()
+    await getCompanionPairingStatus()
+    await cancelCompanionPairing('session-1')
+    await approveCompanionPairing('request-1')
+    await rejectCompanionPairing('request-2')
+    await listCompanionDevices()
+    await revokeCompanionDevice('device-1')
+
+    expect(invokeMock.mock.calls).toEqual([
+      ['start_companion_pairing'],
+      ['get_companion_pairing_status'],
+      ['cancel_companion_pairing', { sessionId: 'session-1' }],
+      ['approve_companion_pairing', { requestId: 'request-1' }],
+      ['reject_companion_pairing', { requestId: 'request-2' }],
+      ['list_companion_devices'],
+      ['revoke_companion_device', { deviceId: 'device-1' }],
+    ])
+  })
+})
 
 describe("ipc GitHub pull request commands", () => {
   beforeEach(() => {

@@ -158,7 +158,8 @@ async fn start_http_server_with_app_state(
         std::env::var("OPENFORGE_BACKEND_PORT").ok(),
         std::env::var("AI_COMMAND_CENTER_PORT").ok(),
     );
-    let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production();
+    let companion_gateway =
+        crate::companion_gateway::CompanionGatewayManager::production(db.clone());
     let companion_enabled = {
         let database = crate::db::acquire_db(&db);
         match crate::companion_gateway::enabled_preference(&database) {

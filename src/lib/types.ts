@@ -62,3 +62,26 @@ export interface CompanionGatewayStatus {
   endpoints: CompanionGatewayEndpoint[]
   error: string | null
 }
+
+export interface CompanionPendingPairingRequest {
+  requestId: string
+  deviceName: string
+  platform: 'ios' | 'android'
+}
+
+export interface CompanionPairingSession {
+  sessionId: string
+  expiresAt: string
+  qrPayload: string
+  pendingRequest: CompanionPendingPairingRequest | null
+  deliveryPending: boolean
+}
+
+export interface CompanionPairedDevice {
+  deviceId: string
+  deviceName: string
+  platform: 'ios' | 'android'
+  pairedAt: string
+  lastSeenAt: string | null
+  revokedAt: string | null
+}
