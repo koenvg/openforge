@@ -2,7 +2,6 @@
   import { onMount, onDestroy, tick } from 'svelte'
   import { mergeVisiblePendingSelfReviewComments, selfReviewStateByTask, setPendingSelfReviewComments } from '../../lib/taskScopedSelfReviewState'
   import { getTaskFileContents, getTaskBatchFileContents, getCommitFileContents, getCommitBatchFileContents, openUrl } from '../../lib/ipc'
-  import { timeAgo } from '../../lib/timeAgo'
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
@@ -32,7 +31,8 @@
   import DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
-  import MarkdownContent from '../shared/adapters/MarkdownContent.svelte'
+  import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
+  import { buildPrCommentUrl } from '../../lib/prCommentLinks'
 
   interface Props {
     task: Task
@@ -580,69 +580,24 @@
                       <p class="m-0 text-xs text-base-content/50">All comments addressed</p>
                     </div>
                   {:else}
-                    <div class="flex-1 overflow-y-auto">
-                      {#each visibleComments as comment (comment.id)}
-                        {@const isSelected = commentSelection.selectedPrCommentIds.has(comment.id)}
-                        <div class="px-4 py-3.5 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-50' : ''}">
-                          <div class="flex items-start gap-2">
-                            {#if comment.addressed === 0}
-                              <input
-                                type="checkbox"
-                                class="checkbox checkbox-xs checkbox-primary mt-0.5 shrink-0"
-                                checked={isSelected}
-                                onchange={() => commentSelection.toggleSelected(comment.id)}
-                              />
-                            {/if}
-                            <div class="flex-1 min-w-0">
-                              <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
-                                  {comment.author.charAt(0).toUpperCase()}
-                                </div>
-                                <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
-                                {#if comment.addressed === 1}<span class="badge badge-success badge-xs">Addressed</span>{/if}
-                                <span class="text-[0.65rem] text-base-content/40 ml-auto">{timeAgo(comment.created_at * 1000)}</span>
-                              </div>
-                              {#if comment.file_path}
-                                <div class="flex items-center gap-1 mb-1.5">
-                                  {#if comment.line_number}
-                                    <button
-                                      class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors"
-                                      onclick={() => diffViewer?.scrollToComment(comment.file_path!, comment.line_number!)}
-                                    >{comment.file_path}:{comment.line_number}</button>
-                                  {:else}
-                                    <span class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}</span>
-                                  {/if}
-                                </div>
-                              {/if}
-                              <div class="text-sm text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1.5">
-                                <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} />
-                              </div>
-                              {#if comment.addressed === 0}
-                                {@const addressError = commentSelection.addressErrorFor(comment.id)}
-                                {@const isAddressing = commentSelection.isAddressing(comment.id)}
-                                <button
-                                  class="btn btn-ghost btn-xs mt-1.5 text-base-content/50 hover:text-success hover:bg-success/10"
-                                  disabled={isAddressing}
-                                  onclick={() => void commentSelection.markAddressed(comment.id)}
-                                >
-                                  {#if isAddressing}
-                                    Marking…
-                                  {:else if addressError}
-                                    Retry mark addressed
-                                  {:else}
-                                    ✓ Mark addressed
-                                  {/if}
-                                </button>
-                                {#if addressError}
-                                  <p class="m-0 mt-1 text-xs text-error" role="alert">{addressError}</p>
-                                {/if}
-                              {:else}
-                                <span class="text-[0.65rem] text-success font-medium mt-1">✓ Addressed</span>
-                              {/if}
-                            </div>
-                          </div>
-                        </div>
-                      {/each}
+                    <div class="flex-1 overflow-y-auto p-3">
+                      <PrCommentsList
+                        comments={visibleComments}
+                        imageBaseUrlForComment={() => markdownImageBaseUrl}
+                        showLocation={true}
+                        showMarkAddressed={true}
+                        onMarkAddressed={commentSelection.markAddressed}
+                        isAddressing={commentSelection.isAddressing}
+                        addressErrorFor={commentSelection.addressErrorFor}
+                        density="detail"
+                        selectable={true}
+                        selectedIds={commentSelection.selectedPrCommentIds}
+                        onToggleSelect={commentSelection.toggleSelected}
+                        commentUrl={(c) => buildPrCommentUrl(c, diffLoader.linkedPr?.url ?? '')}
+                        onCommentClick={(c) => { if (c.file_path && c.line_number != null) diffViewer?.scrollToComment(c.file_path, c.line_number) }}
+                        showAuthorFilter={true}
+                        showTimestamp={true}
+                      />
                     </div>
                   {/if}
                 {:else}
@@ -662,7 +617,6 @@
 
   <SendToAgentPanel
     taskId={task.id}
-    taskTitle={task.initial_prompt}
     {agentStatus}
     {onSendToAgent}
     onRefresh={diffLoader.refresh}

@@ -1552,6 +1552,38 @@ CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
     ON companion_devices(paired_at DESC, device_id);
         "#,
     ),
+    // AVIV-283: track GitHub's "outdated" state on PR comments. A review comment
+    // becomes outdated when its diff position goes null (the commented line
+    // changed). Refreshed by the poller; never clobbers the local `addressed` flag.
+    // Guarded on both table and column existence so it stays idempotent when the
+    // schema-repair path re-runs migrations, and safe when a legacy/partial DB
+    // skipped the base schema that creates pr_comments.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pr_comments'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if table_exists {
+            let has_outdated: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('pr_comments') WHERE name = 'outdated'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if !has_outdated {
+                tx.execute(
+                    "ALTER TABLE pr_comments ADD COLUMN outdated INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets

@@ -640,6 +640,7 @@ const basePrComment: PrComment = {
   file_path: 'src/main.ts',
   line_number: 10,
   addressed: 0,
+  outdated: 0,
   created_at: 1704067200, // 2024-01-01T00:00:00Z
 }
 

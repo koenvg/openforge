@@ -144,27 +144,11 @@ impl GitHubClient {
         let mut all_comments = Vec::new();
 
         for comment in review_comments.drain(..) {
-            all_comments.push(PrComment {
-                id: comment.id,
-                body: comment.body,
-                user: comment.user,
-                path: Some(comment.path),
-                line: comment.line,
-                comment_type: "review_comment".to_string(),
-                created_at: comment.created_at,
-            });
+            all_comments.push(comment.into_pr_comment());
         }
 
         for comment in issue_comments.drain(..) {
-            all_comments.push(PrComment {
-                id: comment.id,
-                body: comment.body,
-                user: comment.user,
-                path: None,
-                line: None,
-                comment_type: "issue_comment".to_string(),
-                created_at: comment.created_at,
-            });
+            all_comments.push(comment.into_pr_comment());
         }
 
         // Fetch review bodies (top-level summary comments from PR reviews).
@@ -202,6 +186,7 @@ impl GitHubClient {
                 path: None,
                 line: None,
                 comment_type: "review_body".to_string(),
+                outdated: false,
                 created_at: submitted_at,
             });
         }

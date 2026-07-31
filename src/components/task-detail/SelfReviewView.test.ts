@@ -906,6 +906,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		file_path: "src/main.rs",
 		line_number: 10,
 		addressed,
+		outdated: 0,
 		created_at: 1000 + id,
 	});
 

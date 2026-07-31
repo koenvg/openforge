@@ -94,6 +94,7 @@ pub struct PrCommentRow {
     pub file_path: Option<String>,
     pub line_number: Option<i32>,
     pub addressed: i32,
+    pub outdated: i32,
     pub created_at: i64,
 }
 
@@ -449,9 +450,9 @@ impl super::Database {
     pub fn get_comments_for_pr(&self, pr_id: i64) -> Result<Vec<PrCommentRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at 
-             FROM pr_comments 
-             WHERE pr_id = ?1 
+            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at
+             FROM pr_comments
+             WHERE pr_id = ?1
              ORDER BY created_at ASC"
         )?;
 
@@ -465,7 +466,8 @@ impl super::Database {
                 file_path: row.get(5)?,
                 line_number: row.get(6)?,
                 addressed: row.get(7)?,
-                created_at: row.get(8)?,
+                outdated: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })?;
 
@@ -482,6 +484,18 @@ impl super::Database {
         Ok(())
     }
 
+    /// Refresh a comment's `outdated` flag without touching its local
+    /// `addressed` state. Used by the poller when re-reading comments from
+    /// GitHub, so an addressed comment stays addressed even as it goes outdated.
+    pub fn update_comment_outdated(&self, id: i64, outdated: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pr_comments SET outdated = ?2 WHERE id = ?1",
+            rusqlite::params![id, if outdated { 1 } else { 0 }],
+        )?;
+        Ok(())
+    }
+
     pub fn get_pr_comments_by_ids(&self, ids: &[i64]) -> Result<Vec<PrCommentRow>> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -493,7 +507,7 @@ impl super::Database {
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
         let sql = format!(
-            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
+            "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
             placeholders.join(", ")
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -513,7 +527,8 @@ impl super::Database {
                 file_path: row.get(5)?,
                 line_number: row.get(6)?,
                 addressed: row.get(7)?,
-                created_at: row.get(8)?,
+                outdated: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })?;
         let mut result = Vec::new();
@@ -1482,6 +1497,68 @@ mod tests {
         assert_eq!(comments[0].addressed, 1);
         assert_eq!(comments[1].id, 702);
         assert_eq!(comments[1].addressed, 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_comment_outdated_preserves_addressed() {
+        let (db, path) = make_test_db("comment_outdated_preserves_addressed");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            110,
+            "T-100",
+            "acme",
+            "repo",
+            "PR title",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert pr failed");
+
+        // A comment the user has already addressed locally.
+        db.insert_pr_comment(
+            801,
+            110,
+            "reviewer",
+            "Please fix",
+            "review_comment",
+            Some("src/lib.rs"),
+            Some(10),
+            true,
+            2000,
+        )
+        .expect("insert comment failed");
+
+        // Newly inserted comments default to not-outdated.
+        let comments = db.get_comments_for_pr(110).expect("get comments failed");
+        assert_eq!(
+            comments[0].outdated, 0,
+            "new comments default to not outdated"
+        );
+        assert_eq!(comments[0].addressed, 1);
+
+        // The poller re-reads and finds it outdated — the local addressed flag must survive.
+        db.update_comment_outdated(801, true)
+            .expect("update outdated failed");
+        let comments = db.get_comments_for_pr(110).expect("get comments failed");
+        assert_eq!(comments[0].outdated, 1, "outdated flag updated");
+        assert_eq!(
+            comments[0].addressed, 1,
+            "addressed flag preserved through outdated update"
+        );
+
+        // And it can flip back without disturbing addressed.
+        db.update_comment_outdated(801, false)
+            .expect("clear outdated failed");
+        let comments = db.get_comments_for_pr(110).expect("get comments failed");
+        assert_eq!(comments[0].outdated, 0);
+        assert_eq!(comments[0].addressed, 1);
 
         drop(db);
         let _ = fs::remove_file(&path);

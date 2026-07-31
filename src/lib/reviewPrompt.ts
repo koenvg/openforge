@@ -1,10 +1,19 @@
 /**
  * Compiles inline code comments, general comment cards, and PR review comments into a single agent prompt string.
  * Pure function with no side effects.
+ *
+ * The prompt does NOT include the task's initial prompt — the agent already has
+ * that context from the session.
  */
 
+/**
+ * `address` — ask the agent to fix the comments.
+ * `analyze` — ask the agent to explain the comments without changing code.
+ */
+export type ReviewPromptMode = 'address' | 'analyze'
+
 export function compileReviewPrompt(
-  taskTitle: string,
+  mode: ReviewPromptMode,
   inlineComments: { path: string; line: number; body: string }[],
   generalComments: { body: string }[],
   prReviewComments: { body: string; author: string; file_path: string | null; line_number: number | null }[] = []
@@ -19,7 +28,11 @@ export function compileReviewPrompt(
   }
 
   const sections: string[] = [];
-  sections.push(`Please address the following review feedback for task "${taskTitle}":\n`);
+  sections.push(
+    mode === 'analyze'
+      ? "Please analyze the following review comments and give me your analysis of each — do not change any code yet.\n"
+      : "Please address the following review comments:\n"
+  );
 
   // Code Comments section
   if (hasInlineComments) {
@@ -52,12 +65,15 @@ export function compileReviewPrompt(
     sections.push("");
   }
 
-  // Closing instruction
-  sections.push("Please evaluate each review comment for validity and applicability before changing code.");
-  sections.push("Only apply fixes for comments that are valid for the current code and task context.");
-  sections.push("For valid code comments, fix the issue at the referenced location.");
-  sections.push("For valid general feedback, investigate and fix the described behavior.");
-  sections.push("If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.");
+  // Closing instruction — differs per mode
+  if (mode === 'analyze') {
+    sections.push("For each comment, explain what it's asking for, whether it's valid and applicable to the current code, and how you would address it.");
+    sections.push("Do not modify any code — just provide your analysis so I can decide.");
+  } else {
+    sections.push("Evaluate each comment for validity against the current code before changing anything.");
+    sections.push("Fix the valid ones at the referenced location.");
+    sections.push("If a comment is invalid, stale, or already addressed, don't change code for it — explain why.");
+  }
 
   return sections.join("\n");
 }

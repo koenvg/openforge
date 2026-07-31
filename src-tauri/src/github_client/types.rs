@@ -129,6 +129,11 @@ pub struct PrComment {
     pub line: Option<i32>,
     /// Type of comment: "review_comment" or "issue_comment"
     pub comment_type: String,
+    /// True when GitHub considers this comment outdated (its diff `position`
+    /// became null because the commented line changed). Only ever true for
+    /// review comments; issue comments and review bodies are never outdated.
+    #[serde(default)]
+    pub outdated: bool,
     pub created_at: String,
 }
 
@@ -159,8 +164,39 @@ pub(crate) struct ReviewComment {
     pub body: String,
     pub user: GitHubUser,
     pub path: String,
+    /// The line in the latest diff the comment maps to. GitHub sets this to
+    /// `null` when the comment is outdated — the commented line no longer exists
+    /// in the current diff. (Note: the older `position` field is NOT reliable
+    /// for this; it can stay non-null on an outdated comment.)
+    #[serde(default)]
     pub line: Option<i32>,
+    /// The line the comment was originally made on. Retained by GitHub even after
+    /// the comment goes outdated, so it's used for display/anchoring.
+    #[serde(default)]
+    pub original_line: Option<i32>,
     pub created_at: String,
+}
+
+impl ReviewComment {
+    /// Convert an inline review comment into the unified [`PrComment`].
+    ///
+    /// A line comment is "outdated" (GitHub's Conversation-tab chip) when its
+    /// current `line` no longer maps to the diff (`null`) while it still has an
+    /// `original_line`. The original line is kept for display so outdated
+    /// comments still show `path:line`.
+    pub(crate) fn into_pr_comment(self) -> PrComment {
+        let outdated = self.line.is_none() && self.original_line.is_some();
+        PrComment {
+            id: self.id,
+            body: self.body,
+            user: self.user,
+            path: Some(self.path),
+            line: self.line.or(self.original_line),
+            comment_type: "review_comment".to_string(),
+            outdated,
+            created_at: self.created_at,
+        }
+    }
 }
 
 /// Issue comment (general comment) from GitHub API
@@ -170,6 +206,23 @@ pub(crate) struct IssueComment {
     pub body: String,
     pub user: GitHubUser,
     pub created_at: String,
+}
+
+impl IssueComment {
+    /// Convert a general issue comment into the unified [`PrComment`].
+    /// Issue comments have no diff position and are never outdated.
+    pub(crate) fn into_pr_comment(self) -> PrComment {
+        PrComment {
+            id: self.id,
+            body: self.body,
+            user: self.user,
+            path: None,
+            line: None,
+            comment_type: "issue_comment".to_string(),
+            outdated: false,
+            created_at: self.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -887,6 +940,7 @@ mod tests {
             path: Some("src/main.rs".to_string()),
             line: Some(42),
             comment_type: "review_comment".to_string(),
+            outdated: false,
             created_at: "2024-01-01T00:00:00Z".to_string(),
         };
 
@@ -1714,5 +1768,83 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("Resource not accessible")));
+    }
+
+    #[test]
+    fn test_review_comment_outdated_when_line_null_but_original_line_present() {
+        // Real GitHub shape for an outdated comment: `line` is null (the commented
+        // line no longer exists in the diff), `original_line` retained, and note
+        // `position` stays NON-null — which is exactly why position is unreliable.
+        let json = r#"{
+            "id": 3682992964,
+            "body": "comment on line 21",
+            "user": { "login": "octocat" },
+            "path": "libs/assessments/main/src/types/Num.ts",
+            "line": null,
+            "original_line": 21,
+            "position": 1,
+            "original_position": 5,
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+        let rc: ReviewComment = serde_json::from_str(json).unwrap();
+        let pr = rc.into_pr_comment();
+        assert!(
+            pr.outdated,
+            "null line with an original_line must be outdated"
+        );
+        // The original line is preserved for display/anchoring.
+        assert_eq!(pr.line, Some(21));
+        assert_eq!(pr.comment_type, "review_comment");
+        assert_eq!(pr.id, 3682992964);
+    }
+
+    #[test]
+    fn test_review_comment_not_outdated_when_line_present() {
+        let json = r#"{
+            "id": 124,
+            "body": "ok",
+            "user": { "login": "octocat" },
+            "path": "src/lib.rs",
+            "line": 10,
+            "original_line": 10,
+            "position": 3,
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+        let rc: ReviewComment = serde_json::from_str(json).unwrap();
+        let pr = rc.into_pr_comment();
+        assert!(!pr.outdated, "a present line must not be outdated");
+        assert_eq!(pr.line, Some(10));
+    }
+
+    #[test]
+    fn test_review_comment_not_outdated_when_no_line_info() {
+        // File-level / non-line comments have neither line nor original_line and
+        // are not "outdated".
+        let json = r#"{
+            "id": 125,
+            "body": "file-level note",
+            "user": { "login": "octocat" },
+            "path": "src/lib.rs",
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+        let rc: ReviewComment = serde_json::from_str(json).unwrap();
+        let pr = rc.into_pr_comment();
+        assert!(!pr.outdated, "no line info must not be outdated");
+        assert_eq!(pr.line, None);
+    }
+
+    #[test]
+    fn test_issue_comment_is_never_outdated() {
+        let json = r#"{
+            "id": 200,
+            "body": "general note",
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-01T00:00:00Z"
+        }"#;
+        let ic: IssueComment = serde_json::from_str(json).unwrap();
+        let pr = ic.into_pr_comment();
+        assert!(!pr.outdated, "issue comments are never outdated");
+        assert_eq!(pr.comment_type, "issue_comment");
+        assert!(pr.path.is_none());
     }
 }
