@@ -8,5 +8,6 @@ The generated adapter will implement `CompanionClient` from the parent
 directory. Application code must depend on that single abstraction rather than
 importing generated types or SSE transport code directly.
 
-The gateway contract and generation step are intentionally deferred: this
-bootstrap does not implement pairing, networking, domain reads, or mutations.
+The source contract is `docs/contracts/companion-v1.openapi.json`. Dart generation
+remains deferred until the pairing/client-transport slice; this foundation does not
+implement pairing, domain reads, event streaming, or mutations.

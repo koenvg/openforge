@@ -104,6 +104,8 @@ export const ipcCommandContracts = [
   { functionName: 'checkClaudeInstalled', ipcCommand: 'check_claude_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getConfig', ipcCommand: 'get_config', payloadKeys: ['key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setConfig', ipcCommand: 'set_config', payloadKeys: ['key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'getCompanionGatewayStatus', ipcCommand: 'get_companion_gateway_status', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'setCompanionGatewayEnabled', ipcCommand: 'set_companion_gateway_enabled', payloadKeys: ['enabled'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getTaskDetail', ipcCommand: 'get_task_detail', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getLatestSession', ipcCommand: 'get_latest_session', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getLatestSessions', ipcCommand: 'get_latest_sessions', payloadKeys: ['taskIds'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

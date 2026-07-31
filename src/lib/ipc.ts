@@ -2,7 +2,7 @@ import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -333,6 +333,14 @@ export async function getConfig(key: string): Promise<string | null> {
 
 export async function setConfig(key: string, value: string): Promise<void> {
   return invoke("set_config", { key, value });
+}
+
+export async function getCompanionGatewayStatus(): Promise<CompanionGatewayStatus> {
+  return invoke<CompanionGatewayStatus>("get_companion_gateway_status");
+}
+
+export async function setCompanionGatewayEnabled(enabled: boolean): Promise<CompanionGatewayStatus> {
+  return invoke<CompanionGatewayStatus>("set_companion_gateway_enabled", { enabled });
 }
 
 export async function getTaskDetail(taskId: string): Promise<Task> {

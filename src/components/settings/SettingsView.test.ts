@@ -38,6 +38,15 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryAllByText(/credentials/i).length).toBeGreaterThan(0)
   })
 
+  it('renders the opt-in Companion section on the global page', async () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    expect(await screen.findByText('Companion')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Enable Companion Gateway' })).toBeTruthy()
+  })
+
   it('live-refreshes the full OpenForge log trace in the global Developer section', async () => {
     vi.useFakeTimers()
     activeProjectId.set(null)

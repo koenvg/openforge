@@ -91,6 +91,9 @@ async fn sidecar_shutdown_signal() {
 pub(super) async fn shutdown_sidecar_runtime(state: &AppState) {
     info!("[http_server] Rust sidecar shutdown cleanup started");
 
+    if let Some(companion_gateway) = &state.companion_gateway {
+        companion_gateway.shutdown().await;
+    }
     if let Some(plugin_host) = &state.plugin_host {
         if let Err(error) = plugin_host.stop_sidecar().await {
             warn!(
@@ -105,6 +108,21 @@ pub(super) async fn shutdown_sidecar_runtime(state: &AppState) {
     }
 
     info!("[http_server] Rust sidecar shutdown cleanup completed");
+}
+
+fn restore_companion_gateway_in_background(
+    manager: crate::companion_gateway::CompanionGatewayManager,
+    enabled: bool,
+) {
+    if !enabled {
+        return;
+    }
+    tokio::spawn(async move {
+        let status = manager.restore().await;
+        if let Some(error) = status.error {
+            warn!("[companion_gateway] Failed to restore enabled gateway: {error}");
+        }
+    });
 }
 
 pub async fn start_http_sidecar_server(
@@ -140,7 +158,17 @@ async fn start_http_server_with_app_state(
         std::env::var("OPENFORGE_BACKEND_PORT").ok(),
         std::env::var("AI_COMMAND_CENTER_PORT").ok(),
     );
-
+    let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production();
+    let companion_enabled = {
+        let database = crate::db::acquire_db(&db);
+        match crate::companion_gateway::enabled_preference(&database) {
+            Ok(enabled) => enabled,
+            Err(error) => {
+                warn!("[companion_gateway] {error}");
+                false
+            }
+        }
+    };
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let app_event_bus = AppEventBus::new(1024, 1024);
     let app_event_tx = app_event_bus.sender();
@@ -173,6 +201,7 @@ async fn start_http_server_with_app_state(
         app_event_bus: Some(app_event_bus),
         whisper,
         sidecar_readiness,
+        companion_gateway: Some(companion_gateway.clone()),
         task_claims,
         poll_context: poll_context.clone(),
     };
@@ -192,8 +221,13 @@ async fn start_http_server_with_app_state(
     info!("[http_server] Starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    // Signal that the server is listening before entering the serve loop
+    // Signal that the core loopback bridge is listening before independently
+    // restoring the optional Companion Gateway.
     let _ = ready_tx.send(());
+    restore_companion_gateway_in_background(
+        companion_gateway,
+        companion_enabled && is_electron_sidecar,
+    );
     if is_electron_sidecar {
         axum::serve(listener, router)
             .with_graceful_shutdown(sidecar_shutdown_signal())
@@ -216,4 +250,24 @@ async fn start_http_server_with_app_state(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod companion_restore_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn optional_companion_restore_does_not_block_core_startup() {
+        let manager = crate::companion_gateway::delayed_test_manager(Duration::from_millis(250));
+        let started_at = std::time::Instant::now();
+
+        restore_companion_gateway_in_background(manager.clone(), true);
+
+        assert!(
+            started_at.elapsed() < Duration::from_millis(50),
+            "optional gateway restoration must return control immediately"
+        );
+        tokio::time::sleep(Duration::from_millis(350)).await;
+        manager.shutdown().await;
+    }
 }

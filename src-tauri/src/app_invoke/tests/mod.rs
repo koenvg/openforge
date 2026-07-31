@@ -2,6 +2,7 @@ use super::test_support::{invoke, invoke_ok, test_state, test_state_with_backend
 use axum::http::StatusCode;
 use serde_json::json;
 
+mod companion;
 mod core;
 mod files_review;
 mod github_review;
