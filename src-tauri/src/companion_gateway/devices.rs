@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use subtle::ConstantTimeEq;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompanionDeviceRecord {
@@ -10,6 +11,25 @@ pub(crate) struct CompanionDeviceRecord {
     pub(crate) paired_at: i64,
     pub(crate) last_seen_at: Option<i64>,
     pub(crate) revoked_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CompanionDeviceAuthentication {
+    Active { device_id: String },
+    Revoked,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompanionDeviceRevocationBatch {
+    device_ids: Vec<String>,
+    revoked_at: i64,
+}
+
+impl CompanionDeviceRevocationBatch {
+    pub(crate) fn len(&self) -> usize {
+        self.device_ids.len()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -42,11 +62,51 @@ fn timestamp(seconds: i64) -> String {
         .to_rfc3339()
 }
 
+fn read_records(connection: &rusqlite::Connection) -> Result<Vec<CompanionDeviceRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT device_id, device_name, platform, credential_verifier,
+                    paired_at, last_seen_at, revoked_at
+             FROM companion_devices
+             ORDER BY paired_at DESC, device_id",
+        )
+        .map_err(|error| format!("failed to prepare Companion device query: {error}"))?;
+    let rows = statement
+        .query_map([], |row| {
+            let verifier: Vec<u8> = row.get(3)?;
+            let credential_verifier = verifier.try_into().map_err(|value: Vec<u8>| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    value.len(),
+                    rusqlite::types::Type::Blob,
+                    "Companion credential verifier must be 32 bytes".into(),
+                )
+            })?;
+            Ok(CompanionDeviceRecord {
+                device_id: row.get(0)?,
+                device_name: row.get(1)?,
+                platform: row.get(2)?,
+                credential_verifier,
+                paired_at: row.get(4)?,
+                last_seen_at: row.get(5)?,
+                revoked_at: row.get(6)?,
+            })
+        })
+        .map_err(|error| format!("failed to read Companion devices: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to decode Companion device: {error}"))
+}
+
 pub(crate) trait CompanionDeviceStore: Send + Sync {
     fn save(&self, record: &CompanionDeviceRecord) -> Result<(), String>;
     fn list(&self) -> Result<Vec<CompanionDeviceRecord>, String>;
-    fn mark_seen(&self, device_id: &str, seen_at: i64) -> Result<(), String>;
+    fn authenticate(
+        &self,
+        credential_verifier: &[u8; 32],
+        seen_at: i64,
+    ) -> Result<CompanionDeviceAuthentication, String>;
     fn revoke(&self, device_id: &str, revoked_at: i64) -> Result<bool, String>;
+    fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String>;
+    fn rollback_revoke_all(&self, batch: &CompanionDeviceRevocationBatch) -> Result<(), String>;
 }
 
 #[derive(Clone)]
@@ -98,51 +158,42 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
         let connection = connection
             .lock()
             .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
-        let mut statement = connection
-            .prepare(
-                "SELECT device_id, device_name, platform, credential_verifier,
-                        paired_at, last_seen_at, revoked_at
-                 FROM companion_devices
-                 ORDER BY paired_at DESC, device_id",
-            )
-            .map_err(|error| format!("failed to prepare Companion device query: {error}"))?;
-        let rows = statement
-            .query_map([], |row| {
-                let verifier: Vec<u8> = row.get(3)?;
-                let credential_verifier = verifier.try_into().map_err(|value: Vec<u8>| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        value.len(),
-                        rusqlite::types::Type::Blob,
-                        "Companion credential verifier must be 32 bytes".into(),
-                    )
-                })?;
-                Ok(CompanionDeviceRecord {
-                    device_id: row.get(0)?,
-                    device_name: row.get(1)?,
-                    platform: row.get(2)?,
-                    credential_verifier,
-                    paired_at: row.get(4)?,
-                    last_seen_at: row.get(5)?,
-                    revoked_at: row.get(6)?,
-                })
-            })
-            .map_err(|error| format!("failed to read Companion devices: {error}"))?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("failed to decode Companion device: {error}"))
+        read_records(&connection)
     }
 
-    fn mark_seen(&self, device_id: &str, seen_at: i64) -> Result<(), String> {
+    fn authenticate(
+        &self,
+        credential_verifier: &[u8; 32],
+        seen_at: i64,
+    ) -> Result<CompanionDeviceAuthentication, String> {
         let connection = self.connection()?;
         let connection = connection
             .lock()
             .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let records = read_records(&connection)?;
+        let matched = records.iter().fold(None, |matched, record| {
+            if bool::from(record.credential_verifier.ct_eq(credential_verifier)) {
+                Some(record)
+            } else {
+                matched
+            }
+        });
+        let Some(record) = matched else {
+            return Ok(CompanionDeviceAuthentication::Missing);
+        };
+        if record.revoked_at.is_some() {
+            return Ok(CompanionDeviceAuthentication::Revoked);
+        }
         connection
             .execute(
-                "UPDATE companion_devices SET last_seen_at = ?2 WHERE device_id = ?1",
-                rusqlite::params![device_id, seen_at],
+                "UPDATE companion_devices SET last_seen_at = ?2
+                 WHERE device_id = ?1 AND revoked_at IS NULL",
+                rusqlite::params![record.device_id, seen_at],
             )
-            .map(|_| ())
-            .map_err(|error| format!("failed to update Companion device activity: {error}"))
+            .map_err(|error| format!("failed to update Companion device activity: {error}"))?;
+        Ok(CompanionDeviceAuthentication::Active {
+            device_id: record.device_id.clone(),
+        })
     }
 
     fn revoke(&self, device_id: &str, revoked_at: i64) -> Result<bool, String> {
@@ -160,12 +211,84 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
             .map(|changed| changed > 0)
             .map_err(|error| format!("failed to revoke Companion device: {error}"))
     }
+
+    fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String> {
+        let connection = self.connection()?;
+        let mut connection = connection
+            .lock()
+            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("failed to start Companion device revocation: {error}"))?;
+        let device_ids = {
+            let mut statement = transaction
+                .prepare("SELECT device_id FROM companion_devices WHERE revoked_at IS NULL")
+                .map_err(|error| {
+                    format!("failed to prepare Companion device revocation: {error}")
+                })?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("failed to read revocable Companion devices: {error}"))?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("failed to decode revocable Companion device: {error}"))?
+        };
+        transaction
+            .execute(
+                "UPDATE companion_devices SET revoked_at = ?1 WHERE revoked_at IS NULL",
+                rusqlite::params![revoked_at],
+            )
+            .map_err(|error| format!("failed to revoke Companion devices: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit Companion device revocation: {error}"))?;
+        Ok(CompanionDeviceRevocationBatch {
+            device_ids,
+            revoked_at,
+        })
+    }
+
+    fn rollback_revoke_all(&self, batch: &CompanionDeviceRevocationBatch) -> Result<(), String> {
+        let connection = self.connection()?;
+        let mut connection = connection
+            .lock()
+            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("failed to start Companion revocation rollback: {error}"))?;
+        for device_id in &batch.device_ids {
+            transaction
+                .execute(
+                    "UPDATE companion_devices SET revoked_at = NULL
+                     WHERE device_id = ?1 AND revoked_at = ?2",
+                    rusqlite::params![device_id, batch.revoked_at],
+                )
+                .map_err(|error| format!("failed to restore Companion device trust: {error}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("failed to commit Companion revocation rollback: {error}"))
+    }
 }
 
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct InMemoryCompanionDeviceStore {
     records: Mutex<Vec<CompanionDeviceRecord>>,
+    fail_next_revoke_all: std::sync::atomic::AtomicBool,
+    fail_next_rollback_revoke_all: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(test)]
+impl InMemoryCompanionDeviceStore {
+    pub(crate) fn fail_next_revoke_all(&self) {
+        self.fail_next_revoke_all
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn fail_next_rollback_revoke_all(&self) {
+        self.fail_next_rollback_revoke_all
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 #[cfg(test)]
@@ -185,17 +308,36 @@ impl CompanionDeviceStore for InMemoryCompanionDeviceStore {
             .map_err(|_| "test Companion device store lock was poisoned".to_string())
     }
 
-    fn mark_seen(&self, device_id: &str, seen_at: i64) -> Result<(), String> {
-        if let Some(record) = self
+    fn authenticate(
+        &self,
+        credential_verifier: &[u8; 32],
+        seen_at: i64,
+    ) -> Result<CompanionDeviceAuthentication, String> {
+        let mut records = self
             .records
             .lock()
-            .map_err(|_| "test Companion device store lock was poisoned".to_string())?
-            .iter_mut()
-            .find(|record| record.device_id == device_id)
-        {
-            record.last_seen_at = Some(seen_at);
+            .map_err(|_| "test Companion device store lock was poisoned".to_string())?;
+        let matched_index = records
+            .iter()
+            .enumerate()
+            .fold(None, |matched, (index, record)| {
+                if bool::from(record.credential_verifier.ct_eq(credential_verifier)) {
+                    Some(index)
+                } else {
+                    matched
+                }
+            });
+        let Some(index) = matched_index else {
+            return Ok(CompanionDeviceAuthentication::Missing);
+        };
+        let record = &mut records[index];
+        if record.revoked_at.is_some() {
+            return Ok(CompanionDeviceAuthentication::Revoked);
         }
-        Ok(())
+        record.last_seen_at = Some(seen_at);
+        Ok(CompanionDeviceAuthentication::Active {
+            device_id: record.device_id.clone(),
+        })
     }
 
     fn revoke(&self, device_id: &str, revoked_at: i64) -> Result<bool, String> {
@@ -211,5 +353,50 @@ impl CompanionDeviceStore for InMemoryCompanionDeviceStore {
         };
         record.revoked_at.get_or_insert(revoked_at);
         Ok(true)
+    }
+
+    fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String> {
+        if self
+            .fail_next_revoke_all
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err("test revoke-all failed".to_string());
+        }
+        let mut records = self
+            .records
+            .lock()
+            .map_err(|_| "test Companion device store lock was poisoned".to_string())?;
+        let mut device_ids = Vec::new();
+        for record in records
+            .iter_mut()
+            .filter(|record| record.revoked_at.is_none())
+        {
+            record.revoked_at = Some(revoked_at);
+            device_ids.push(record.device_id.clone());
+        }
+        Ok(CompanionDeviceRevocationBatch {
+            device_ids,
+            revoked_at,
+        })
+    }
+
+    fn rollback_revoke_all(&self, batch: &CompanionDeviceRevocationBatch) -> Result<(), String> {
+        if self
+            .fail_next_rollback_revoke_all
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err("test revoke-all rollback failed".to_string());
+        }
+        let mut records = self
+            .records
+            .lock()
+            .map_err(|_| "test Companion device store lock was poisoned".to_string())?;
+        for record in records.iter_mut().filter(|record| {
+            batch.device_ids.contains(&record.device_id)
+                && record.revoked_at == Some(batch.revoked_at)
+        }) {
+            record.revoked_at = None;
+        }
+        Ok(())
     }
 }

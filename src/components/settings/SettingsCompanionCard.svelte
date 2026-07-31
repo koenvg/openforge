@@ -4,6 +4,7 @@
     getCompanionGatewayStatus,
     listCompanionDevices,
     revokeCompanionDevice,
+    resetCompanionHostIdentity,
     setCompanionGatewayEnabled,
   } from '../../lib/ipc'
   import type { CompanionGatewayStatus, CompanionPairedDevice } from '../../lib/types'
@@ -74,6 +75,42 @@
     }
   }
 
+  async function resetIdentity() {
+    if (updating) return
+    const confirmed = window.confirm(
+      'Reset the Companion host identity? This revokes all paired devices and every phone must pair again.',
+    )
+    if (!confirmed) return
+    updating = true
+    requestError = null
+    feedback = null
+    try {
+      status = await resetCompanionHostIdentity()
+      pairingRefreshGeneration += 1
+      feedback = 'Companion identity reset. All devices must pair again.'
+    } catch (error) {
+      let message = errorMessage(error)
+      try {
+        status = await getCompanionGatewayStatus()
+        pairingRefreshGeneration += 1
+        await refreshDevices()
+      } catch (refreshError) {
+        message = `${message}. Current trust state could not be refreshed: ${errorMessage(refreshError)}`
+      }
+      requestError = message
+      updating = false
+      return
+    }
+
+    try {
+      await refreshDevices()
+    } catch (error) {
+      requestError = `Identity reset succeeded, but paired devices could not be refreshed: ${errorMessage(error)}`
+    } finally {
+      updating = false
+    }
+  }
+
   onMount(() => {
     void refresh()
   })
@@ -105,6 +142,21 @@
       />
 
       <CompanionPairedDevices {devices} {updating} onrevoke={revokeDevice} />
+
+      <section class="flex flex-col gap-2 border-t border-base-300 pt-4" aria-labelledby="companion-identity-reset-heading">
+        <div>
+          <h3 id="companion-identity-reset-heading" class="m-0 text-sm font-medium">Reset Companion identity</h3>
+          <p class="m-0 text-xs text-base-content/60">
+            Replace this desktop’s key and certificate, revoke every device, and require all phones to pair again.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="btn btn-outline btn-error btn-sm self-start"
+          disabled={updating}
+          onclick={resetIdentity}
+        >Reset Companion identity</button>
+      </section>
     {/if}
 
     {#if feedback}

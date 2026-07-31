@@ -5,7 +5,10 @@ use super::{
         CompanionHostStatus, PairingUnavailableAuthorizer,
     },
     devices::{DatabaseCompanionDeviceStore, InMemoryCompanionDeviceStore},
-    pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSubmission},
+    pairing::{
+        CompanionAuthenticatedDevice, PairingBootstrap, PairingCoordinator, PairingDecision,
+        PairingSubmission,
+    },
 };
 use crate::task_attention::TaskAttentionRow;
 use axum::{body::Body, http::Request, response::Response};
@@ -41,7 +44,10 @@ impl CompanionAttentionSource for FixedAttentionSource {
 struct RejectAuthorizer(CompanionErrorCode);
 
 impl CompanionAuthorizer for RejectAuthorizer {
-    fn authorize(&self, _headers: &axum::http::HeaderMap) -> Result<(), CompanionErrorCode> {
+    fn authorize(
+        &self,
+        _headers: &axum::http::HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
         Err(self.0)
     }
 }

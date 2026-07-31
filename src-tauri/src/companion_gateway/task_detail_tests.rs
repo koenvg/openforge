@@ -5,7 +5,7 @@ use super::{
         CompanionHostStatus,
     },
     devices::InMemoryCompanionDeviceStore,
-    pairing::PairingCoordinator,
+    pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
     task_detail::{
         CompanionTaskDetail, CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource,
     },
@@ -31,7 +31,10 @@ impl CompanionTaskDetailSource for FixedTaskDetailSource {
 struct RejectAuthorizer(CompanionErrorCode);
 
 impl CompanionAuthorizer for RejectAuthorizer {
-    fn authorize(&self, _headers: &axum::http::HeaderMap) -> Result<(), CompanionErrorCode> {
+    fn authorize(
+        &self,
+        _headers: &axum::http::HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
         Err(self.0)
     }
 }

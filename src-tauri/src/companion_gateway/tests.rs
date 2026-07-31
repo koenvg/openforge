@@ -7,11 +7,11 @@ use super::{
         create_router, AllowAllAuthorizer, CompanionErrorEnvelope, CompanionHostStatus,
         PairingUnavailableAuthorizer,
     },
-    devices::InMemoryCompanionDeviceStore,
-    identity::{CompanionIdentityStore, InMemoryIdentityStore},
+    devices::{CompanionDeviceRecord, CompanionDeviceStore, InMemoryCompanionDeviceStore},
+    identity::{CompanionIdentityStore, DelayedIdentityStore, InMemoryIdentityStore},
     lifecycle::{CompanionGatewayManager, GatewayPhase},
     network::{CompanionEndpointKind, FixedEndpointProvider},
-    pairing::PairingCoordinator,
+    pairing::{CompanionStreamTermination, PairingCoordinator},
 };
 use axum::{body::Body, http::Request, response::Response};
 use std::{
@@ -72,6 +72,44 @@ fn test_manager(store: Arc<InMemoryIdentityStore>) -> CompanionGatewayManager {
         Arc::new(NoopCompanionAdvertiser),
         0,
     )
+}
+
+struct RevocationObservingIdentityStore {
+    inner: InMemoryIdentityStore,
+    devices: Arc<InMemoryCompanionDeviceStore>,
+    all_devices_revoked_at_save: Mutex<Vec<bool>>,
+}
+
+impl RevocationObservingIdentityStore {
+    fn new(devices: Arc<InMemoryCompanionDeviceStore>) -> Self {
+        Self {
+            inner: InMemoryIdentityStore::default(),
+            devices,
+            all_devices_revoked_at_save: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn observations(&self) -> Vec<bool> {
+        self.all_devices_revoked_at_save
+            .lock()
+            .expect("identity observation lock")
+            .clone()
+    }
+}
+
+impl CompanionIdentityStore for RevocationObservingIdentityStore {
+    fn load(&self) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+        self.inner.load()
+    }
+
+    fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
+        let devices = self.devices.list()?;
+        self.all_devices_revoked_at_save
+            .lock()
+            .map_err(|_| "identity observation lock was poisoned".to_string())?
+            .push(devices.iter().all(|device| device.revoked_at.is_some()));
+        self.inner.save(identity)
+    }
 }
 
 fn test_pairing() -> Arc<PairingCoordinator> {
@@ -275,6 +313,402 @@ async fn host_identity_and_certificate_are_reused_after_reenable() {
     );
     assert_eq!(store.save_count(), 1);
     second_manager.disable().await;
+}
+
+#[tokio::test]
+async fn resetting_host_identity_replaces_certificate_and_revokes_every_device() {
+    let identity_store = Arc::new(InMemoryIdentityStore::default());
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    for (device_id, verifier_byte) in [("device-1", 1_u8), ("device-2", 2_u8)] {
+        device_store
+            .save(&CompanionDeviceRecord {
+                device_id: device_id.to_string(),
+                device_name: format!("Phone {verifier_byte}"),
+                platform: "ios".to_string(),
+                credential_verifier: [verifier_byte; 32],
+                paired_at: 1_722_340_800,
+                last_seen_at: None,
+                revoked_at: None,
+            })
+            .expect("seed paired device");
+    }
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let mut terminations = manager.subscribe_stream_terminations();
+    let first = manager.enable().await.expect("first identity");
+
+    let reset = manager.reset_host_identity().await.expect("identity reset");
+
+    assert!(reset.enabled);
+    assert_eq!(reset.phase, GatewayPhase::Running);
+    assert_ne!(reset.host_id, first.host_id);
+    assert_ne!(reset.certificate_fingerprint, first.certificate_fingerprint);
+    let devices = manager.devices().expect("paired devices");
+    assert_eq!(devices.len(), 2);
+    assert!(devices.iter().all(|device| device.revoked_at.is_some()));
+    assert_eq!(
+        terminations.recv().await.expect("revoke-all signal"),
+        CompanionStreamTermination::AllDevicesRevoked
+    );
+    assert_eq!(
+        terminations.recv().await.expect("gateway closing signal"),
+        CompanionStreamTermination::GatewayClosing
+    );
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn identity_reset_revokes_devices_before_persisting_replacement_identity() {
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    device_store
+        .save(&CompanionDeviceRecord {
+            device_id: "device-1".to_string(),
+            device_name: "Phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: [1_u8; 32],
+            paired_at: 1_722_340_800,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed paired device");
+    let identity_store = Arc::new(RevocationObservingIdentityStore::new(device_store.clone()));
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store;
+    let manager = CompanionGatewayManager::new(
+        manager_identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+
+    manager.enable().await.expect("gateway start");
+    assert_eq!(identity_store.observations(), vec![false]);
+
+    manager.reset_host_identity().await.expect("identity reset");
+    assert_eq!(identity_store.observations(), vec![false, true]);
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn identity_persistence_failure_leaves_gateway_and_device_trust_unchanged() {
+    let identity_store = Arc::new(InMemoryIdentityStore::default());
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    for (device_id, revoked_at) in [("device-1", None), ("device-2", Some(1_700_000_000))] {
+        device_store
+            .save(&CompanionDeviceRecord {
+                device_id: device_id.to_string(),
+                device_name: "Phone".to_string(),
+                platform: "ios".to_string(),
+                credential_verifier: if device_id == "device-1" {
+                    [1_u8; 32]
+                } else {
+                    [2_u8; 32]
+                },
+                paired_at: 1_722_340_800,
+                last_seen_at: None,
+                revoked_at,
+            })
+            .expect("seed paired device");
+    }
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        manager_identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let running = manager.enable().await.expect("gateway start");
+    let mut terminations = manager.subscribe_stream_terminations();
+    identity_store.fail_next_save();
+
+    assert!(manager.reset_host_identity().await.is_err());
+
+    let unchanged = manager.status().await;
+    assert_eq!(unchanged.phase, GatewayPhase::Running);
+    assert_eq!(unchanged.host_id, running.host_id);
+    assert_eq!(
+        unchanged.certificate_fingerprint,
+        running.certificate_fingerprint
+    );
+    let devices = device_store.list().expect("paired devices");
+    assert_eq!(
+        devices
+            .iter()
+            .find(|device| device.device_id == "device-1")
+            .expect("active device")
+            .revoked_at,
+        None
+    );
+    assert_eq!(
+        devices
+            .iter()
+            .find(|device| device.device_id == "device-2")
+            .expect("previously revoked device")
+            .revoked_at,
+        Some(1_700_000_000)
+    );
+    assert!(matches!(
+        terminations.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn revocation_rollback_failure_disables_gateway_fail_closed() {
+    let identity_store = Arc::new(InMemoryIdentityStore::default());
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    device_store
+        .save(&CompanionDeviceRecord {
+            device_id: "device-1".to_string(),
+            device_name: "Phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: [1_u8; 32],
+            paired_at: 1_722_340_800,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed paired device");
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        manager_identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let running = manager.enable().await.expect("gateway start");
+    identity_store.fail_next_save();
+    device_store.fail_next_rollback_revoke_all();
+
+    let error = manager
+        .reset_host_identity()
+        .await
+        .expect_err("reset must fail closed");
+
+    assert!(error.contains("failed to restore paired-device trust"));
+    let disabled = manager.status().await;
+    assert!(!disabled.enabled);
+    assert_eq!(disabled.phase, GatewayPhase::Disabled);
+    assert_eq!(
+        identity_store
+            .load()
+            .expect("identity read")
+            .expect("identity")
+            .host_id,
+        running.host_id.expect("running host")
+    );
+    assert!(device_store
+        .list()
+        .expect("paired devices")
+        .iter()
+        .all(|device| device.revoked_at.is_some()));
+}
+
+#[tokio::test]
+async fn revoke_all_failure_restores_previous_identity_without_stopping_gateway() {
+    let identity_store = Arc::new(InMemoryIdentityStore::default());
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    device_store
+        .save(&CompanionDeviceRecord {
+            device_id: "device-1".to_string(),
+            device_name: "Phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: [1_u8; 32],
+            paired_at: 1_722_340_800,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed paired device");
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        manager_identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let running = manager.enable().await.expect("gateway start");
+    device_store.fail_next_revoke_all();
+
+    assert!(manager.reset_host_identity().await.is_err());
+
+    let unchanged = manager.status().await;
+    assert_eq!(unchanged.phase, GatewayPhase::Running);
+    assert_eq!(unchanged.host_id, running.host_id);
+    assert_eq!(
+        identity_store
+            .load()
+            .expect("identity read")
+            .expect("identity")
+            .host_id,
+        running.host_id.expect("running host")
+    );
+    assert!(device_store
+        .list()
+        .expect("paired devices")
+        .iter()
+        .all(|device| device.revoked_at.is_none()));
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn disable_waits_for_identity_reset_and_remains_the_final_lifecycle_state() {
+    let identity_store: Arc<dyn CompanionIdentityStore> =
+        Arc::new(DelayedIdentityStore::new(Duration::from_millis(40)));
+    let manager = CompanionGatewayManager::new(
+        identity_store,
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    manager.enable().await.expect("gateway start");
+    let reset_manager = manager.clone();
+    let reset = tokio::spawn(async move { reset_manager.reset_host_identity().await });
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    let disable_manager = manager.clone();
+    let disable = tokio::spawn(async move { disable_manager.disable().await });
+
+    let reset_status = reset.await.expect("reset task").expect("identity reset");
+    let disabled_status = disable.await.expect("disable task");
+
+    assert_eq!(reset_status.phase, GatewayPhase::Running);
+    assert_eq!(disabled_status.phase, GatewayPhase::Disabled);
+    assert_eq!(manager.status().await.phase, GatewayPhase::Disabled);
+}
+
+#[tokio::test]
+async fn aborting_reset_caller_does_not_cancel_the_destructive_transition() {
+    let identity_store: Arc<dyn CompanionIdentityStore> =
+        Arc::new(DelayedIdentityStore::new(Duration::from_millis(40)));
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    device_store
+        .save(&CompanionDeviceRecord {
+            device_id: "device-1".to_string(),
+            device_name: "Phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: [1_u8; 32],
+            paired_at: 1_722_340_800,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed paired device");
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let first = manager.enable().await.expect("gateway start");
+    let reset_manager = manager.clone();
+    let reset = tokio::spawn(async move { reset_manager.reset_host_identity().await });
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    reset.abort();
+    let _ = reset.await;
+
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let completed = manager.status().await;
+    assert_eq!(completed.phase, GatewayPhase::Running);
+    assert_ne!(completed.host_id, first.host_id);
+    assert!(device_store
+        .list()
+        .expect("paired devices")
+        .iter()
+        .all(|device| device.revoked_at.is_some()));
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn revocation_signal_targets_only_the_selected_device() {
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    for (device_id, verifier_byte) in [("device-1", 1_u8), ("device-2", 2_u8)] {
+        device_store
+            .save(&CompanionDeviceRecord {
+                device_id: device_id.to_string(),
+                device_name: format!("Phone {verifier_byte}"),
+                platform: "ios".to_string(),
+                credential_verifier: [verifier_byte; 32],
+                paired_at: 1_722_340_800,
+                last_seen_at: None,
+                revoked_at: None,
+            })
+            .expect("seed paired device");
+    }
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(InMemoryIdentityStore::default()),
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let mut terminations = manager.subscribe_stream_terminations();
+
+    manager
+        .revoke_device("device-1")
+        .await
+        .expect("revoke selected device");
+
+    let signal = terminations.recv().await.expect("device revocation signal");
+    assert_eq!(
+        signal,
+        CompanionStreamTermination::DeviceRevoked {
+            device_id: "device-1".to_string(),
+        }
+    );
+    assert!(signal.terminates("device-1"));
+    assert!(!signal.terminates("device-2"));
+    let devices = device_store.list().expect("paired devices");
+    assert!(devices
+        .iter()
+        .find(|device| device.device_id == "device-1")
+        .expect("device 1")
+        .revoked_at
+        .is_some());
+    assert!(devices
+        .iter()
+        .find(|device| device.device_id == "device-2")
+        .expect("device 2")
+        .revoked_at
+        .is_none());
 }
 
 #[tokio::test]

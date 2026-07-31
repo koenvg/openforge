@@ -7,8 +7,8 @@ use super::{
     contract::{self, CompanionHostStatus},
     devices::{CompanionDeviceStore, DatabaseCompanionDeviceStore},
     identity::{
-        load_or_create_host_identity, CompanionHostIdentity, CompanionIdentityStore,
-        KeychainCompanionIdentityStore,
+        generate_host_identity, load_or_create_host_identity, CompanionHostIdentity,
+        CompanionIdentityStore, KeychainCompanionIdentityStore,
     },
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
@@ -174,6 +174,7 @@ impl GatewayRuntime {
 #[derive(Clone)]
 pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
+    operation_lock: Arc<tokio::sync::Mutex<()>>,
     identity_store: Arc<dyn CompanionIdentityStore>,
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
     advertiser: Arc<dyn CompanionAdvertiser>,
@@ -230,6 +231,7 @@ impl CompanionGatewayManager {
     ) -> Self {
         Self {
             runtime: Arc::new(tokio::sync::Mutex::new(GatewayRuntime::default())),
+            operation_lock: Arc::new(tokio::sync::Mutex::new(())),
             identity_store,
             endpoint_provider,
             advertiser,
@@ -247,6 +249,7 @@ impl CompanionGatewayManager {
             .as_ref()
             .is_some_and(RunningGateway::is_finished)
         {
+            self.pairing.notify_gateway_closing();
             if let Some(running) = runtime.running.take() {
                 running.stop().await;
             }
@@ -257,14 +260,21 @@ impl CompanionGatewayManager {
     }
 
     pub(crate) async fn enable(&self) -> Result<CompanionGatewayStatus, String> {
+        let _operation = self.operation_lock.lock().await;
+        self.enable_locked().await
+    }
+
+    async fn enable_locked(&self) -> Result<CompanionGatewayStatus, String> {
         let mut runtime = self.runtime.lock().await;
         runtime.enabled = true;
         runtime.error = None;
         if runtime.running.is_some() {
             runtime.phase = GatewayPhase::Running;
+            self.pairing.notify_gateway_running();
             return Ok(runtime.status());
         }
         runtime.phase = GatewayPhase::Starting;
+        self.pairing.mark_gateway_not_accepting_streams();
 
         let identity_store = Arc::clone(&self.identity_store);
         let endpoint_provider = Arc::clone(&self.endpoint_provider);
@@ -333,7 +343,14 @@ impl CompanionGatewayManager {
         running.advertisement = Some(advertisement_handle);
         runtime.running = Some(running);
         runtime.phase = GatewayPhase::Running;
-        Ok(runtime.status())
+        self.pairing.notify_gateway_running();
+        let status = runtime.status();
+        log::info!(
+            "[companion_gateway] gateway running host_id={} endpoints={}",
+            identity.host_id,
+            status.endpoints.len()
+        );
+        Ok(status)
     }
 
     pub(crate) async fn restore(&self) -> CompanionGatewayStatus {
@@ -355,11 +372,22 @@ impl CompanionGatewayManager {
     }
 
     pub(crate) async fn disable(&self) -> CompanionGatewayStatus {
+        let _operation = self.operation_lock.lock().await;
+        self.disable_locked().await
+    }
+
+    async fn disable_locked(&self) -> CompanionGatewayStatus {
         let mut runtime = self.runtime.lock().await;
         runtime.enabled = false;
         runtime.phase = GatewayPhase::Disabled;
         runtime.error = None;
         let _ = self.pairing.clear();
+        if runtime.running.is_some() {
+            self.pairing.notify_gateway_closing();
+            log::info!("[companion_gateway] gateway disabled");
+        } else {
+            self.pairing.mark_gateway_not_accepting_streams();
+        }
         if let Some(running) = runtime.running.take() {
             running.stop().await;
         }
@@ -367,16 +395,24 @@ impl CompanionGatewayManager {
     }
 
     pub(crate) async fn shutdown(&self) {
+        let _operation = self.operation_lock.lock().await;
         let mut runtime = self.runtime.lock().await;
         runtime.phase = GatewayPhase::Stopped;
         runtime.error = None;
         let _ = self.pairing.clear();
+        if runtime.running.is_some() {
+            self.pairing.notify_gateway_closing();
+            log::info!("[companion_gateway] gateway shutting down");
+        } else {
+            self.pairing.mark_gateway_not_accepting_streams();
+        }
         if let Some(running) = runtime.running.take() {
             running.stop().await;
         }
     }
 
     pub(crate) async fn start_pairing(&self) -> Result<PairingSessionStatus, String> {
+        let _operation = self.operation_lock.lock().await;
         let runtime = self.runtime.lock().await;
         if runtime.phase != GatewayPhase::Running {
             return Err("Companion Gateway must be running before pairing".to_string());
@@ -408,15 +444,17 @@ impl CompanionGatewayManager {
         self.pairing.status()
     }
 
-    pub(crate) fn cancel_pairing(&self, session_id: &str) -> Result<(), String> {
+    pub(crate) async fn cancel_pairing(&self, session_id: &str) -> Result<(), String> {
+        let _operation = self.operation_lock.lock().await;
         self.pairing.cancel(session_id)
     }
 
-    pub(crate) fn decide_pairing(
+    pub(crate) async fn decide_pairing(
         &self,
         request_id: &str,
         decision: PairingDecision,
     ) -> Result<(), String> {
+        let _operation = self.operation_lock.lock().await;
         self.pairing.decide(request_id, decision)
     }
 
@@ -424,8 +462,71 @@ impl CompanionGatewayManager {
         self.pairing.devices()
     }
 
-    pub(crate) fn revoke_device(&self, device_id: &str) -> Result<(), String> {
-        self.pairing.revoke(device_id)
+    #[cfg(test)]
+    pub(crate) fn subscribe_stream_terminations(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<super::pairing::CompanionStreamTermination> {
+        self.pairing.subscribe_stream_terminations()
+    }
+
+    pub(crate) async fn revoke_device(&self, device_id: &str) -> Result<(), String> {
+        let _operation = self.operation_lock.lock().await;
+        self.pairing.revoke(device_id)?;
+        log::info!("[companion_gateway] device revoked device_id={device_id}");
+        Ok(())
+    }
+
+    pub(crate) async fn reset_host_identity(&self) -> Result<CompanionGatewayStatus, String> {
+        let manager = self.clone();
+        tokio::spawn(async move { manager.reset_host_identity_owned().await })
+            .await
+            .map_err(|error| format!("Companion identity reset task failed: {error}"))?
+    }
+
+    async fn reset_host_identity_owned(&self) -> Result<CompanionGatewayStatus, String> {
+        let _operation = self.operation_lock.lock().await;
+        let was_enabled = self.runtime.lock().await.enabled;
+        let identity = tokio::task::spawn_blocking(generate_host_identity)
+            .await
+            .map_err(|error| format!("Companion identity generation task failed: {error}"))??;
+        let revoked_devices = self.pairing.revoke_all()?;
+
+        let identity_store = Arc::clone(&self.identity_store);
+        let identity_to_save = identity.clone();
+        if let Err(save_error) =
+            tokio::task::spawn_blocking(move || identity_store.save(&identity_to_save))
+                .await
+                .map_err(|error| format!("Companion identity persistence task failed: {error}"))
+                .and_then(|result| result)
+        {
+            if let Err(rollback_error) = self.pairing.rollback_revoke_all(&revoked_devices) {
+                self.disable_locked().await;
+                return Err(format!(
+                    "{save_error}; failed to restore paired-device trust: {rollback_error}"
+                ));
+            }
+            return Err(save_error);
+        }
+        self.pairing.notify_all_devices_revoked();
+        self.disable_locked().await;
+        {
+            let mut runtime = self.runtime.lock().await;
+            runtime.identity = Some(identity.clone());
+        }
+        log::info!(
+            "[companion_gateway] host identity reset host_id={} revoked_devices={}",
+            identity.host_id,
+            revoked_devices.len()
+        );
+
+        if was_enabled {
+            if let Err(error) = self.enable_locked().await {
+                log::warn!(
+                    "[companion_gateway] host identity reset completed but gateway restart failed: {error}"
+                );
+            }
+        }
+        Ok(self.status().await)
     }
 }
 

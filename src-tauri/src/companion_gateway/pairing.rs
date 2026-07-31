@@ -1,6 +1,9 @@
 use super::{
     contract::{CompanionAuthorizer, CompanionErrorCode},
-    devices::{CompanionDeviceRecord, CompanionDeviceStore, CompanionPairedDevice},
+    devices::{
+        CompanionDeviceAuthentication, CompanionDeviceRecord, CompanionDeviceRevocationBatch,
+        CompanionDeviceStore, CompanionPairedDevice,
+    },
 };
 use axum::http::HeaderMap;
 use base64::Engine;
@@ -135,6 +138,60 @@ pub(crate) enum PairingRequestKind {
     Poll,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompanionAuthenticatedDevice {
+    pub(crate) device_id: String,
+}
+
+/// Signals consumed by the canonical Companion SSE route so trust changes can
+/// close only the affected device stream without coupling trust storage to HTTP.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CompanionStreamTermination {
+    DeviceRevoked { device_id: String },
+    AllDevicesRevoked,
+    GatewayClosing,
+}
+
+impl CompanionStreamTermination {
+    pub(crate) fn terminates(&self, device_id: &str) -> bool {
+        match self {
+            Self::DeviceRevoked { device_id: revoked } => revoked == device_id,
+            Self::AllDevicesRevoked | Self::GatewayClosing => true,
+        }
+    }
+}
+
+/// Authenticated stream principal plus a race-safe trust termination subscription.
+#[allow(dead_code)] // Consumed by the canonical SSE route when KVG-2947 is integrated.
+pub(crate) struct CompanionStreamAuthorization {
+    principal: CompanionAuthenticatedDevice,
+    terminations: tokio::sync::broadcast::Receiver<CompanionStreamTermination>,
+}
+
+#[allow(dead_code)] // Consumed by the canonical SSE route when KVG-2947 is integrated.
+impl CompanionStreamAuthorization {
+    pub(crate) fn device_id(&self) -> &str {
+        &self.principal.device_id
+    }
+
+    pub(crate) async fn wait_for_termination(&mut self) -> CompanionStreamTermination {
+        loop {
+            match self.terminations.recv().await {
+                Ok(termination) if termination.terminates(self.device_id()) => return termination,
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    // Missing any trust event is unsafe. Force the stream closed so the
+                    // client reconnects and authenticates against current device state.
+                    return CompanionStreamTermination::AllDevicesRevoked;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    return CompanionStreamTermination::GatewayClosing;
+                }
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 struct PairingRateLimits {
     submission_by_peer: HashMap<IpAddr, VecDeque<Instant>>,
@@ -147,15 +204,20 @@ pub(crate) struct PairingCoordinator {
     state: Mutex<PairingState>,
     rate_limits: Mutex<PairingRateLimits>,
     devices: Arc<dyn CompanionDeviceStore>,
+    termination_tx: tokio::sync::broadcast::Sender<CompanionStreamTermination>,
+    gateway_accepting_streams: std::sync::atomic::AtomicBool,
     ttl: Duration,
 }
 
 impl PairingCoordinator {
     pub(crate) fn new(devices: Arc<dyn CompanionDeviceStore>, ttl: Duration) -> Self {
+        let (termination_tx, _) = tokio::sync::broadcast::channel(64);
         Self {
             state: Mutex::new(PairingState::default()),
             rate_limits: Mutex::new(PairingRateLimits::default()),
             devices,
+            termination_tx,
+            gateway_accepting_streams: std::sync::atomic::AtomicBool::new(false),
             ttl,
         }
     }
@@ -424,14 +486,110 @@ impl PairingCoordinator {
     }
 
     pub(crate) fn revoke(&self, device_id: &str) -> Result<(), String> {
-        if self
+        if !self
             .devices
             .revoke(device_id, chrono::Utc::now().timestamp())?
         {
-            Ok(())
-        } else {
-            Err("Companion device was not found".to_string())
+            return Err("Companion device was not found".to_string());
         }
+        let _ = self
+            .termination_tx
+            .send(CompanionStreamTermination::DeviceRevoked {
+                device_id: device_id.to_string(),
+            });
+        Ok(())
+    }
+
+    pub(crate) fn revoke_all(&self) -> Result<CompanionDeviceRevocationBatch, String> {
+        self.devices.revoke_all(chrono::Utc::now().timestamp())
+    }
+
+    pub(crate) fn notify_all_devices_revoked(&self) {
+        let _ = self
+            .termination_tx
+            .send(CompanionStreamTermination::AllDevicesRevoked);
+    }
+
+    pub(crate) fn rollback_revoke_all(
+        &self,
+        batch: &CompanionDeviceRevocationBatch,
+    ) -> Result<(), String> {
+        self.devices.rollback_revoke_all(batch)
+    }
+
+    #[allow(dead_code)] // Subscription is wired into the canonical SSE route by KVG-2947.
+    pub(crate) fn subscribe_stream_terminations(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<CompanionStreamTermination> {
+        self.termination_tx.subscribe()
+    }
+
+    pub(crate) fn notify_gateway_closing(&self) {
+        self.gateway_accepting_streams
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        let _ = self
+            .termination_tx
+            .send(CompanionStreamTermination::GatewayClosing);
+    }
+    pub(crate) fn mark_gateway_not_accepting_streams(&self) {
+        self.gateway_accepting_streams
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn notify_gateway_running(&self) {
+        self.gateway_accepting_streams
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn authorize_device(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
+        let credential = headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .filter(|value| !value.is_empty())
+            .ok_or(CompanionErrorCode::Unauthenticated)?;
+        let supplied_verifier = verifier(credential);
+        match self
+            .devices
+            .authenticate(&supplied_verifier, chrono::Utc::now().timestamp())
+            .map_err(|_| CompanionErrorCode::TemporarilyUnavailable)?
+        {
+            CompanionDeviceAuthentication::Active { device_id } => {
+                Ok(CompanionAuthenticatedDevice { device_id })
+            }
+            CompanionDeviceAuthentication::Revoked => Err(CompanionErrorCode::Revoked),
+            CompanionDeviceAuthentication::Missing => Err(CompanionErrorCode::Unauthenticated),
+        }
+    }
+
+    #[allow(dead_code)] // Wired into the canonical SSE route by KVG-2947.
+    pub(crate) fn authorize_stream(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<CompanionStreamAuthorization, CompanionErrorCode> {
+        // Subscribe first, then authorize. A revocation racing authorization is
+        // therefore either observed by the authorization read or queued for the stream.
+        let terminations = self.subscribe_stream_terminations();
+        if !self
+            .gateway_accepting_streams
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(CompanionErrorCode::TemporarilyUnavailable);
+        }
+        let principal = self.authorize_device(headers)?;
+        if !self
+            .gateway_accepting_streams
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(CompanionErrorCode::TemporarilyUnavailable);
+        }
+        Ok(CompanionStreamAuthorization {
+            principal,
+            terminations,
+        })
     }
 
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, PairingState>, String> {
@@ -442,30 +600,11 @@ impl PairingCoordinator {
 }
 
 impl CompanionAuthorizer for PairingCoordinator {
-    fn authorize(&self, headers: &HeaderMap) -> Result<(), CompanionErrorCode> {
-        let credential = headers
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .filter(|value| !value.is_empty())
-            .ok_or(CompanionErrorCode::Unauthenticated)?;
-        let supplied_verifier = verifier(credential);
-        let devices = self
-            .devices
-            .list()
-            .map_err(|_| CompanionErrorCode::TemporarilyUnavailable)?;
-        for device in devices {
-            if constant_time_equal(&device.credential_verifier, &supplied_verifier) {
-                if device.revoked_at.is_some() {
-                    return Err(CompanionErrorCode::Revoked);
-                }
-                self.devices
-                    .mark_seen(&device.device_id, chrono::Utc::now().timestamp())
-                    .map_err(|_| CompanionErrorCode::TemporarilyUnavailable)?;
-                return Ok(());
-            }
-        }
-        Err(CompanionErrorCode::Unauthenticated)
+    fn authorize(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
+        self.authorize_device(headers)
     }
 }
 

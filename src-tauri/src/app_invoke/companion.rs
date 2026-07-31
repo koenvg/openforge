@@ -1,6 +1,6 @@
 use super::*;
 
-const COMPANION_COMMANDS: [&str; 9] = [
+const COMPANION_COMMANDS: [&str; 10] = [
     "get_companion_gateway_status",
     "set_companion_gateway_enabled",
     "start_companion_pairing",
@@ -10,6 +10,7 @@ const COMPANION_COMMANDS: [&str; 9] = [
     "reject_companion_pairing",
     "list_companion_devices",
     "revoke_companion_device",
+    "reset_companion_host_identity",
 ];
 
 fn companion_operation_error(error: String) -> (StatusCode, String) {
@@ -70,6 +71,7 @@ pub(super) async fn handle_app_companion_command(
             let session_id = payload_string(&request.payload, "sessionId")?;
             manager
                 .cancel_pairing(&session_id)
+                .await
                 .map_err(companion_operation_error)?;
             serde_json::Value::Null
         }
@@ -82,6 +84,7 @@ pub(super) async fn handle_app_companion_command(
             };
             manager
                 .decide_pairing(&request_id, decision)
+                .await
                 .map_err(companion_operation_error)?;
             serde_json::Value::Null
         }
@@ -92,9 +95,16 @@ pub(super) async fn handle_app_companion_command(
             let device_id = payload_string(&request.payload, "deviceId")?;
             manager
                 .revoke_device(&device_id)
+                .await
                 .map_err(companion_operation_error)?;
             serde_json::Value::Null
         }
+        "reset_companion_host_identity" => json_value(
+            manager
+                .reset_host_identity()
+                .await
+                .map_err(companion_operation_error)?,
+        )?,
         _ => unreachable!("Companion command was checked above"),
     };
 

@@ -29,35 +29,49 @@ final class CompanionPairingController extends ChangeNotifier {
   final CompanionEndpointDiscovery _discovery;
   final Duration _pollInterval;
 
+  var _operationGeneration = 0;
+
   CompanionConnectionState _state = const Restoring();
   CompanionConnectionState get state => _state;
 
   Future<void> restore() async {
+    final generation = ++_operationGeneration;
     _setState(const Restoring());
     try {
       final trustRecord = await _storage.load();
+      if (!_isCurrent(generation)) return;
       if (trustRecord == null) {
         _setState(const Unpaired());
         return;
       }
-      await _connect(trustRecord);
+      await _connect(trustRecord, generation);
     } on FormatException {
+      if (!_isCurrent(generation)) return;
       try {
         await _storage.forget();
-        _setState(const Unpaired());
+        if (_isCurrent(generation)) _setState(const Unpaired());
       } on Object {
-        _setState(const Unavailable());
+        if (_isCurrent(generation)) _setState(const Unavailable());
       }
     } on Object {
-      _setState(const Unavailable());
+      if (_isCurrent(generation)) _setState(const Unavailable());
     }
   }
 
   Future<void> openLocalNetworkSettings() => _discovery.openSettings();
 
-  void authorizationLost() => _setState(const Revoked());
+  void authorizationLost() {
+    _operationGeneration += 1;
+    _setState(const Revoked());
+  }
+
+  void gatewayClosing() {
+    _operationGeneration += 1;
+    if (_state is Connected) _setState(const Reconnecting());
+  }
 
   Future<void> forgetAndReset() async {
+    _operationGeneration += 1;
     await _storage.forget();
     _setState(const Unpaired());
   }
@@ -67,6 +81,7 @@ final class CompanionPairingController extends ChangeNotifier {
     required String deviceName,
     required String platform,
   }) async {
+    final generation = ++_operationGeneration;
     _setState(const Pairing());
     try {
       final bootstrap = PairingBootstrap.parse(qrPayload);
@@ -75,6 +90,7 @@ final class CompanionPairingController extends ChangeNotifier {
         deviceName: deviceName,
         platform: platform,
       );
+      if (!_isCurrent(generation)) return;
       _setState(const AwaitingApproval());
 
       while (DateTime.now().isBefore(submission.expiresAt)) {
@@ -84,6 +100,7 @@ final class CompanionPairingController extends ChangeNotifier {
             bootstrap: bootstrap,
             requestId: submission.requestId,
           );
+          if (!_isCurrent(generation)) return;
         } on CompanionV1Exception catch (error) {
           if (error.statusCode == 401 ||
               error.statusCode == 403 ||
@@ -91,6 +108,7 @@ final class CompanionPairingController extends ChangeNotifier {
             rethrow;
           }
           await Future<void>.delayed(_pollInterval);
+          if (!_isCurrent(generation)) return;
           continue;
         } on CompanionCertificateMismatch {
           rethrow;
@@ -98,6 +116,7 @@ final class CompanionPairingController extends ChangeNotifier {
           rethrow;
         } on Object {
           await Future<void>.delayed(_pollInterval);
+          if (!_isCurrent(generation)) return;
           continue;
         }
         if (decision.status == 'approved') {
@@ -116,18 +135,22 @@ final class CompanionPairingController extends ChangeNotifier {
             deviceCredential: credential,
           );
           await _storage.save(trustRecord);
-          await _connect(trustRecord);
+          if (!_isCurrent(generation)) return;
+          await _connect(trustRecord, generation);
           if (_state is CertificateMismatch || _state is Revoked) {
             await _storage.forget();
           }
           return;
         }
         await Future<void>.delayed(_pollInterval);
+        if (!_isCurrent(generation)) return;
       }
-      _setState(const Unpaired());
+      if (_isCurrent(generation)) _setState(const Unpaired());
     } on CompanionCertificateMismatch {
+      if (!_isCurrent(generation)) return;
       _setState(const CertificateMismatch());
     } on CompanionV1Exception catch (error) {
+      if (!_isCurrent(generation)) return;
       _setState(switch (error.code) {
         'revoked' => const Revoked(),
         'incompatible_version' => const IncompatibleProtocol(),
@@ -137,14 +160,19 @@ final class CompanionPairingController extends ChangeNotifier {
         _ => const PairingUnavailable(),
       });
     } on FormatException {
+      if (!_isCurrent(generation)) return;
       _setState(const Unpaired());
       rethrow;
     } on Object {
+      if (!_isCurrent(generation)) return;
       _setState(const PairingUnavailable());
     }
   }
 
-  Future<void> _connect(CompanionTrustRecord trustRecord) async {
+  Future<void> _connect(
+    CompanionTrustRecord trustRecord,
+    int generation,
+  ) async {
     var permissionDenied = false;
     var discoveredEndpoints = const <Uri>[];
     try {
@@ -156,6 +184,7 @@ final class CompanionPairingController extends ChangeNotifier {
     } on Object {
       // Discovery is an endpoint hint. Stored candidates remain valid fallbacks.
     }
+    if (!_isCurrent(generation)) return;
 
     final candidates = _mergeEndpoints(
       discoveredEndpoints,
@@ -164,6 +193,7 @@ final class CompanionPairingController extends ChangeNotifier {
     final candidateRecord = trustRecord.withEndpointCandidates(candidates);
     try {
       final connection = await _client.fetchHostStatus(candidateRecord);
+      if (!_isCurrent(generation)) return;
       final status = connection.status;
       if (status.hostId != trustRecord.hostId) {
         _setState(const CertificateMismatch());
@@ -184,6 +214,7 @@ final class CompanionPairingController extends ChangeNotifier {
           // Endpoint preference is an optimization; trust is already verified.
         }
       }
+      if (!_isCurrent(generation)) return;
       _setState(
         Connected(
           hostId: status.hostId,
@@ -191,8 +222,10 @@ final class CompanionPairingController extends ChangeNotifier {
         ),
       );
     } on CompanionCertificateMismatch {
+      if (!_isCurrent(generation)) return;
       _setState(const CertificateMismatch());
     } on CompanionV1Exception catch (error) {
+      if (!_isCurrent(generation)) return;
       if (error.code == 'revoked' || error.code == 'unauthenticated') {
         _setState(const Revoked());
       } else if (error.code == 'incompatible_version') {
@@ -205,6 +238,7 @@ final class CompanionPairingController extends ChangeNotifier {
         );
       }
     } on Object {
+      if (!_isCurrent(generation)) return;
       _setState(
         permissionDenied
             ? const LocalNetworkPermissionDenied()
@@ -212,6 +246,8 @@ final class CompanionPairingController extends ChangeNotifier {
       );
     }
   }
+
+  bool _isCurrent(int generation) => generation == _operationGeneration;
 
   static List<Uri> _mergeEndpoints(List<Uri> preferred, List<Uri> fallbacks) {
     final merged = <Uri>[];
