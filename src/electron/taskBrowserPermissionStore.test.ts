@@ -16,14 +16,12 @@ describe('FileTaskBrowserPermissionStore', () => {
     const records = [
       {
         pluginId: 'browser',
-        taskId: 'T-1',
         origin: 'https://meet.example',
         descriptor: { permission: 'media' as const, mediaTypes: ['audio' as const] },
         decision: 'allow' as const,
       },
       {
         pluginId: 'browser',
-        taskId: 'T-2',
         origin: 'https://calendar.example',
         descriptor: { permission: 'notifications' as const },
         decision: 'block' as const,
@@ -42,7 +40,7 @@ describe('FileTaskBrowserPermissionStore', () => {
       store: new FileTaskBrowserPermissionStore(path),
       prompt: firstPrompt,
     })
-    const firstHandler = await first.createSessionHandler('browser', 'T-restart')
+    const firstHandler = await first.createSessionHandler('browser')
     await firstHandler.request({
       windowId: 10,
       permission: 'notifications',
@@ -53,7 +51,7 @@ describe('FileTaskBrowserPermissionStore', () => {
       store: new FileTaskBrowserPermissionStore(path),
       prompt: async () => { throw new Error('remembered decision should not prompt') },
     })
-    const restartedHandler = await restarted.createSessionHandler('browser', 'T-restart')
+    const restartedHandler = await restarted.createSessionHandler('browser')
 
     expect(restartedHandler.check({
       permission: 'notifications',
@@ -73,7 +71,6 @@ describe('FileTaskBrowserPermissionStore', () => {
       version: 1,
       decisions: [{
         pluginId: 'browser',
-        taskId: 'T-1',
         origin: 'https://meet.example',
         descriptor: { permission: 'media', mediaTypes: ['video', 'audio'] },
         decision: 'allow',

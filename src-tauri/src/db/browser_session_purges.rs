@@ -10,30 +10,9 @@ pub struct BrowserSessionPurgeIntentRow {
     pub created_at: i64,
 }
 
-pub(super) fn enqueue_task_purge_if_present(conn: &Connection, task_id: &str) -> Result<()> {
-    conn.execute(
-        "INSERT INTO browser_session_purge_intents (scope, owner_id, created_at)
-         SELECT 'task', ?1, unixepoch()
-         WHERE EXISTS (SELECT 1 FROM tasks WHERE id = ?1)
-         ON CONFLICT(scope, owner_id) DO NOTHING",
-        [task_id],
-    )?;
-    Ok(())
-}
-
-pub(super) fn enqueue_project_task_purges(conn: &Connection, project_id: &str) -> Result<()> {
-    conn.execute(
-        "INSERT INTO browser_session_purge_intents (scope, owner_id, created_at)
-         SELECT 'task', id, unixepoch()
-         FROM tasks
-         WHERE project_id = ?1
-         ORDER BY id
-         ON CONFLICT(scope, owner_id) DO NOTHING",
-        [project_id],
-    )?;
-    Ok(())
-}
-
+/// Plugin uninstall is the only remaining purge trigger: a Plugin Browser Session spans every Task,
+/// so nothing smaller than losing the plugin justifies destroying it. Rows with `scope = 'task'`
+/// written before ADR 0012 can still be present and are still drained by the Electron coordinator.
 pub(super) fn enqueue_plugin_purge_if_present(conn: &Connection, plugin_id: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO browser_session_purge_intents (scope, owner_id, created_at)
@@ -99,8 +78,10 @@ mod tests {
         }
     }
 
+    /// A Plugin Browser Session outlives every Task that browsed with it, so deleting a Task must
+    /// never schedule a purge — that would log the user out everywhere. See ADR 0012.
     #[test]
-    fn task_completion_records_one_durable_purge_intent_transactionally() {
+    fn task_deletion_records_no_browser_purge_intent() {
         let (db, path) = make_test_db("browser_purge_task_completion");
         insert_test_task(&db);
 
@@ -108,47 +89,20 @@ mod tests {
         db.delete_task("T-100")
             .expect("repeat delete is idempotent");
 
-        let intents = db
+        assert!(db
             .list_browser_session_purge_intents()
-            .expect("list purge intents");
-        assert_eq!(intents.len(), 1);
-        assert_eq!(intents[0].scope, "task");
-        assert_eq!(intents[0].owner_id, "T-100");
+            .expect("list purge intents")
+            .is_empty());
         std::fs::remove_file(path).ok();
     }
 
     #[test]
-    fn hard_task_deletion_records_a_durable_purge_intent() {
+    fn hard_task_deletion_records_no_browser_purge_intent() {
         let (db, path) = make_test_db("browser_purge_hard_task_delete");
         insert_test_task(&db);
 
         db.hard_delete_task("T-100").expect("hard delete task");
 
-        let intents = db
-            .list_browser_session_purge_intents()
-            .expect("list purge intents");
-        assert_eq!(intents.len(), 1);
-        assert_eq!(intents[0].scope, "task");
-        assert_eq!(intents[0].owner_id, "T-100");
-        std::fs::remove_file(path).ok();
-    }
-
-    #[test]
-    fn failed_task_deletion_rolls_back_its_purge_intent() {
-        let (db, path) = make_test_db("browser_purge_task_rollback");
-        insert_test_task(&db);
-        {
-            let conn = db.connection();
-            let conn = conn.lock().expect("lock database");
-            conn.execute_batch(
-                "CREATE TRIGGER fail_task_completion BEFORE UPDATE OF status ON tasks
-                 WHEN OLD.id = 'T-100'
-                 BEGIN SELECT RAISE(ABORT, 'forced task failure'); END;",
-            )
-            .expect("create failure trigger");
-        }
-
-        assert!(db.delete_task("T-100").is_err());
         assert!(db
             .list_browser_session_purge_intents()
             .expect("list purge intents")
@@ -198,52 +152,18 @@ mod tests {
     }
 
     #[test]
-    fn project_deletion_records_purge_intents_for_every_owned_task() {
+    fn project_deletion_records_no_browser_purge_intents_for_its_tasks() {
         let (db, path) = make_test_db("browser_purge_project_delete");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        let first = db
-            .create_task("First", "backlog", Some(&project.id), None, None)
+        db.create_task("First", "backlog", Some(&project.id), None, None)
             .expect("create first task");
-        let second = db
-            .create_task("Second", "backlog", Some(&project.id), None, None)
+        db.create_task("Second", "backlog", Some(&project.id), None, None)
             .expect("create second task");
 
         db.delete_project(&project.id).expect("delete project");
 
-        let intents = db
-            .list_browser_session_purge_intents()
-            .expect("list purge intents");
-        assert_eq!(
-            intents
-                .iter()
-                .map(|intent| intent.owner_id.as_str())
-                .collect::<Vec<_>>(),
-            vec![first.id.as_str(), second.id.as_str()],
-        );
-        std::fs::remove_file(path).ok();
-    }
-
-    #[test]
-    fn failed_project_deletion_rolls_back_task_purge_intents() {
-        let (db, path) = make_test_db("browser_purge_project_rollback");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-        db.create_task("First", "backlog", Some(&project.id), None, None)
-            .expect("create task");
-        {
-            let conn = db.connection();
-            let conn = conn.lock().expect("lock database");
-            conn.execute_batch(
-                "CREATE TRIGGER fail_project_task_delete BEFORE DELETE ON tasks
-                 BEGIN SELECT RAISE(ABORT, 'forced project failure'); END;",
-            )
-            .expect("create failure trigger");
-        }
-
-        assert!(db.delete_project(&project.id).is_err());
         assert!(db
             .list_browser_session_purge_intents()
             .expect("list purge intents")
@@ -254,8 +174,9 @@ mod tests {
     #[test]
     fn acknowledgement_is_idempotent() {
         let (db, path) = make_test_db("browser_purge_acknowledgement");
-        insert_test_task(&db);
-        db.delete_task("T-100").expect("delete task");
+        db.install_plugin(&plugin("browser"))
+            .expect("install plugin");
+        db.uninstall_plugin("browser").expect("uninstall plugin");
         let intent_id = db
             .list_browser_session_purge_intents()
             .expect("list purge intents")[0]

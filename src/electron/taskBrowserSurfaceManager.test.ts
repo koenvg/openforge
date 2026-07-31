@@ -52,13 +52,13 @@ describe('Task Browser Surface Manager', () => {
     expect(authorize).toHaveBeenCalledTimes(3)
     expect(factory.creations[0]).toMatchObject({
       windowId: 10,
-      partition: expect.stringMatching(/^persist:openforge-task-browser-/),
+      partition: expect.stringMatching(/^persist:openforge-plugin-browser-/),
       webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     expect(factory.creations[0].permissionHandler).toBe(permissionHandler)
     expect(permissions.createSessionHandler).toHaveBeenCalledTimes(2)
-    expect(permissions.createSessionHandler).toHaveBeenCalledWith('browser', 'T-1')
+    expect(permissions.createSessionHandler).toHaveBeenCalledWith('browser')
     expect(factory.creations[1].partition).toBe(factory.creations[0].partition)
   })
 

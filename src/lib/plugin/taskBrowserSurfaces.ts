@@ -190,11 +190,10 @@ export function createHostBrowserSurfaces(pluginId: string): BrowserSurfacesAPI 
       const reference = await invokeHost<BrowserSurfaceReference>('task_browser_surface_get_or_create', payload)
       return new HostTaskBrowserSurfaceController(bridge, reference, pluginId, request.taskId)
     },
-    async resetSession(taskId: string) {
-      await taskBrowserAttachments.cleanupTask(
+    async resetSession() {
+      await taskBrowserAttachments.cleanupPlugin(
         pluginId,
-        taskId,
-        () => invokeHost<void>('task_browser_surface_reset_session', { pluginId, taskId }),
+        () => invokeHost<void>('task_browser_surface_reset_session', { pluginId }),
       )
     },
   }

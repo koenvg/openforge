@@ -10,7 +10,7 @@ describe('Task Browser Surface permission cleanup lifecycle', () => {
     permissions.clearSession.mockImplementation(() => new Promise<void>(resolve => { releasePermissionClear = resolve }))
     await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-failure', id: 'main' })
 
-    const resetResult = manager.resetSession('browser', 'T-reset-failure').then(() => null, error => error)
+    const resetResult = manager.resetSession('browser').then(() => null, error => error)
     await vi.waitFor(() => expect(permissions.clearSession).toHaveBeenCalled())
     const reacquire = manager.getOrCreate({
       windowId: 10,

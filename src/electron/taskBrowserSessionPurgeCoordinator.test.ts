@@ -22,7 +22,11 @@ class MemoryRegistry implements TaskBrowserPartitionRegistry {
   readonly records = new Map<string, TaskBrowserPartitionRegistration>()
 
   async register(record: TaskBrowserPartitionRegistration): Promise<void> {
-    this.records.set(`${record.pluginId}\0${record.taskId}`, record)
+    this.records.set(record.partition, record)
+  }
+
+  async listAll(): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()]
   }
 
   async listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]> {
@@ -33,8 +37,8 @@ class MemoryRegistry implements TaskBrowserPartitionRegistry {
     return [...this.records.values()].filter(record => record.pluginId === pluginId)
   }
 
-  async remove(pluginId: string, taskId: string): Promise<void> {
-    this.records.delete(`${pluginId}\0${taskId}`)
+  async remove(partition: string): Promise<void> {
+    this.records.delete(partition)
   }
 }
 
@@ -150,7 +154,7 @@ describe('TaskBrowserSessionPurgeCoordinator', () => {
       beginPurge: () => undefined,
       logger,
       purgeSession: async record => {
-        attempts.push(record.taskId)
+        attempts.push(record.taskId ?? record.pluginId)
         if (record.taskId === 'T-2' && failSecond) throw new Error('clear failed')
       },
     })

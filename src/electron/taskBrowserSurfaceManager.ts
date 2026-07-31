@@ -7,7 +7,7 @@ import type {
   NativeTaskBrowserSurface,
   TaskBrowserBounds,
   TaskBrowserNativeState,
-  TaskBrowserSessionPartition,
+  PluginBrowserSessionPartition,
   TaskBrowserSurfaceManagerOptions,
   TaskBrowserSurfaceReference,
 } from './taskBrowserSurfaceContract.js'
@@ -18,7 +18,7 @@ import {
   constrainTaskBrowserBounds,
   isTaskBrowserUrlAllowed,
   isValidTaskBrowserBounds,
-  taskBrowserSessionPartition,
+  pluginBrowserSessionPartition,
   validateTaskBrowserSurfaceIdentity,
 } from './taskBrowserSurfacePolicy.js'
 
@@ -33,7 +33,7 @@ export type {
   TaskBrowserPermissionController,
   TaskBrowserPopupPolicy,
   TaskBrowserPopupRequest,
-  TaskBrowserSessionPartition,
+  PluginBrowserSessionPartition,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceErrorCode,
   TaskBrowserSurfaceManagerOptions,
@@ -45,7 +45,7 @@ export {
   SECURE_TASK_BROWSER_POPUP_POLICY,
   SECURE_TASK_BROWSER_WEB_PREFERENCES,
   integerTaskBrowserBounds,
-  taskBrowserSessionPartition,
+  pluginBrowserSessionPartition,
 } from './taskBrowserSurfacePolicy.js'
 
 type SurfaceRecord = {
@@ -56,7 +56,7 @@ type SurfaceRecord = {
   pluginId: string
   taskId: string
   id: string
-  partition: TaskBrowserSessionPartition
+  partition: PluginBrowserSessionPartition
   attachmentId: string | null
   attachmentGeneration: number
   requestedBounds: TaskBrowserBounds | null
@@ -122,10 +122,10 @@ export class TaskBrowserSurfaceManager {
 
   async getOrCreate(request: GetOrCreateTaskBrowserSurfaceRequest): Promise<TaskBrowserSurfaceReference> {
     validateTaskBrowserSurfaceIdentity(request)
-    let observedSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId)
+    let observedSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId)
     while (true) {
-      await this.lifecycle.waitForSessionReset(request.pluginId, request.taskId)
-      const currentSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId)
+      await this.lifecycle.waitForSessionReset(request.pluginId)
+      const currentSessionEpoch = this.lifecycle.currentSessionEpoch(request.pluginId)
       if (currentSessionEpoch === observedSessionEpoch) break
       observedSessionEpoch = currentSessionEpoch
     }
@@ -140,7 +140,7 @@ export class TaskBrowserSurfaceManager {
     const existing = this.surfacesByKey.get(key)
     if (existing) {
       await this.options.authorize(request.pluginId, request.taskId)
-      if (this.lifecycle.currentSessionEpoch(request.pluginId, request.taskId) !== observedSessionEpoch) {
+      if (this.lifecycle.currentSessionEpoch(request.pluginId) !== observedSessionEpoch) {
         return this.getOrCreate(request)
       }
       if (this.surfacesByKey.get(key) !== existing) {
@@ -264,17 +264,23 @@ export class TaskBrowserSurfaceManager {
     return copyState(surface.native.getState())
   }
 
-  async resetSession(pluginId: string, taskId: string): Promise<void> {
-    if (!taskId.trim()) throw new TaskBrowserSurfaceError('INVALID_TASK', 'Task Browser Session reset requires a Task ID')
+  /**
+   * Blast radius is the whole plugin: every Task loses its login, because they all share one
+   * Plugin Browser Session. See ADR 0012.
+   */
+  async resetSession(pluginId: string): Promise<void> {
+    if (!pluginId.trim()) {
+      throw new TaskBrowserSurfaceError('INVALID_ID', 'Plugin Browser Session reset requires a plugin ID')
+    }
     await this.clearBrowserSession(
-      { pluginId, taskId, partition: taskBrowserSessionPartition(pluginId, taskId) },
+      { pluginId, partition: pluginBrowserSessionPartition(pluginId) },
       true,
     )
   }
 
   async purgeRegisteredSession(record: TaskBrowserPartitionRegistration): Promise<void> {
-    if (!record.pluginId.trim() || !record.taskId.trim() || !record.partition.startsWith('persist:')) {
-      throw new Error('Task Browser Session purge requires a valid durable partition registration')
+    if (!record.pluginId.trim() || !record.partition.startsWith('persist:')) {
+      throw new Error('Plugin Browser Session purge requires a valid durable partition registration')
     }
     await this.clearBrowserSession(record, false)
   }
@@ -308,17 +314,13 @@ export class TaskBrowserSurfaceManager {
       throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', 'Owning OpenForge window is unavailable')
     }
 
-    const permissionHandler = await this.options.permissions.createSessionHandler(request.pluginId, request.taskId)
+    const permissionHandler = await this.options.permissions.createSessionHandler(request.pluginId)
     if (!this.lifecycle.isCurrent(request, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
 
-    const partition = taskBrowserSessionPartition(request.pluginId, request.taskId)
-    await this.options.registry.register({
-      pluginId: request.pluginId,
-      taskId: request.taskId,
-      partition,
-    })
+    const partition = pluginBrowserSessionPartition(request.pluginId)
+    await this.options.registry.register({ pluginId: request.pluginId, partition })
     if (!this.lifecycle.isCurrent(request, lifecycleEpoch)) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface creation was superseded by lifecycle cleanup')
     }
@@ -372,12 +374,12 @@ export class TaskBrowserSurfaceManager {
     record: TaskBrowserPartitionRegistration,
     authorize: boolean,
   ): Promise<void> {
-    await this.lifecycle.runSessionReset(record.pluginId, record.taskId, async () => {
-      if (authorize) await this.options.authorize(record.pluginId, record.taskId)
-      this.destroyWhere(surface => surface.pluginId === record.pluginId && surface.taskId === record.taskId)
+    await this.lifecycle.runSessionReset(record.pluginId, async () => {
+      if (authorize) await this.options.authorizePlugin(record.pluginId)
+      this.destroyWhere(surface => surface.pluginId === record.pluginId)
       const cleanupResults = await Promise.allSettled([
         this.options.factory.clearSession(record.partition),
-        this.options.permissions.clearSession(record.pluginId, record.taskId),
+        this.options.permissions.clearSession(record.pluginId),
       ])
       const failure = cleanupResults.find(result => result.status === 'rejected')
       if (failure?.status === 'rejected') throw failure.reason

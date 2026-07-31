@@ -1,6 +1,6 @@
 # Electron-main-owned task browser surfaces
 
-Status: Accepted
+Status: Accepted; session scoping superseded by ADR 0012
 Task: KVG-2441
 
 OpenForge plugins need to present task-scoped interactive browsers, but exposing Electron `WebContentsView`, `<webview>`, or raw `webContents` would couple trusted plugins to shell internals and let them bypass shared security and cleanup policy. OpenForge will instead provide a frontend-only `browserSurfaces` capability whose typed `getOrCreate({ taskId, id, initialUrl? })` controller delegates browser ownership to Electron main. The frontend plugin host qualifies plugin identity; Electron accepts browser requests only from the trusted OpenForge renderer and treats cross-plugin namespacing as a trusted-plugin contract, not a sandbox against malicious renderer code.

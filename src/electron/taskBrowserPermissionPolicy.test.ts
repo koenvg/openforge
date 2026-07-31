@@ -32,7 +32,7 @@ describe('Task Browser Permission policy', () => {
       remember: false,
     }))
     const policy = new TaskBrowserPermissionPolicy({ store: new MemoryPermissionStore(), prompt })
-    const handler = await policy.createSessionHandler('browser', 'T-1')
+    const handler = await policy.createSessionHandler('browser')
 
     await expect(handler.request({
       windowId: 10,
@@ -54,11 +54,11 @@ describe('Task Browser Permission policy', () => {
     })
   })
 
-  it('reuses remembered decisions only for the same plugin, Task, origin, and descriptor', async () => {
+  it('reuses remembered decisions across every Task of one plugin but never across plugins', async () => {
     const store = new MemoryPermissionStore()
     const prompt = vi.fn(async () => ({ decision: 'allow' as const, remember: true }))
     const policy = new TaskBrowserPermissionPolicy({ store, prompt })
-    const taskHandler = await policy.createSessionHandler('browser', 'T-1')
+    const taskHandler = await policy.createSessionHandler('browser')
 
     const request = {
       windowId: 10,
@@ -71,15 +71,17 @@ describe('Task Browser Permission policy', () => {
       requestingOrigin: 'https://calendar.example',
       details: { isMainFrame: true },
     })).toBe(true)
-    await expect(taskHandler.request(request)).resolves.toBe(true)
 
-    const otherTask = await policy.createSessionHandler('browser', 'T-2')
-    const otherPlugin = await policy.createSessionHandler('notes', 'T-1')
+    // A second surface of the same plugin serves a different Task, and inherits the decision.
+    const otherTask = await policy.createSessionHandler('browser')
     expect(otherTask.check({
       permission: 'notifications',
       requestingOrigin: 'https://calendar.example',
       details: { isMainFrame: true },
-    })).toBe(false)
+    })).toBe(true)
+    await expect(otherTask.request(request)).resolves.toBe(true)
+
+    const otherPlugin = await policy.createSessionHandler('notes')
     expect(otherPlugin.check({
       permission: 'notifications',
       requestingOrigin: 'https://calendar.example',
@@ -89,7 +91,6 @@ describe('Task Browser Permission policy', () => {
     expect(prompt).toHaveBeenCalledTimes(1)
     expect(store.records).toEqual([{
       pluginId: 'browser',
-      taskId: 'T-1',
       origin: 'https://calendar.example',
       descriptor: { permission: 'notifications' },
       decision: 'allow',
@@ -102,7 +103,7 @@ describe('Task Browser Permission policy', () => {
       .mockResolvedValueOnce({ decision: 'allow' as const, remember: true })
       .mockResolvedValue({ decision: 'block' as const, remember: false })
     const policy = new TaskBrowserPermissionPolicy({ store: new MemoryPermissionStore(), prompt })
-    const handler = await policy.createSessionHandler('browser', 'T-media')
+    const handler = await policy.createSessionHandler('browser')
 
     await expect(handler.request({
       windowId: 10,
@@ -172,7 +173,7 @@ describe('Task Browser Permission policy', () => {
   it('prompts for recognized permissions and denies unknown or malformed descriptors without prompting', async () => {
     const prompt = vi.fn(async () => ({ decision: 'block' as const, remember: false }))
     const policy = new TaskBrowserPermissionPolicy({ store: new MemoryPermissionStore(), prompt })
-    const handler = await policy.createSessionHandler('browser', 'T-policy')
+    const handler = await policy.createSessionHandler('browser')
 
     await expect(handler.request({
       windowId: 11,
@@ -204,26 +205,23 @@ describe('Task Browser Permission policy', () => {
     })
   })
 
-  it('clears remembered decisions by session, Task, and plugin without widening the cleanup scope', async () => {
+  it('clears every remembered decision of one plugin without touching another plugin', async () => {
     const store = new MemoryPermissionStore()
     store.records = [
       {
         pluginId: 'browser',
-        taskId: 'T-1',
         origin: 'https://one.example',
         descriptor: { permission: 'notifications' },
         decision: 'allow',
       },
       {
         pluginId: 'browser',
-        taskId: 'T-2',
         origin: 'https://two.example',
         descriptor: { permission: 'geolocation' },
         decision: 'block',
       },
       {
         pluginId: 'notes',
-        taskId: 'T-1',
         origin: 'https://three.example',
         descriptor: { permission: 'media', mediaTypes: ['audio'] },
         decision: 'allow',
@@ -231,9 +229,9 @@ describe('Task Browser Permission policy', () => {
     ]
     const prompt = vi.fn(async () => ({ decision: 'block' as const, remember: false }))
     const policy = new TaskBrowserPermissionPolicy({ store, prompt })
-    const browserTaskOne = await policy.createSessionHandler('browser', 'T-1')
-    const browserTaskTwo = await policy.createSessionHandler('browser', 'T-2')
-    const notesTaskOne = await policy.createSessionHandler('notes', 'T-1')
+    const browserTaskOne = await policy.createSessionHandler('browser')
+    const browserTaskTwo = await policy.createSessionHandler('browser')
+    const notesTaskOne = await policy.createSessionHandler('notes')
 
     expect(browserTaskOne.check({
       permission: 'notifications',
@@ -247,26 +245,28 @@ describe('Task Browser Permission policy', () => {
     })).resolves.toBe(false)
     expect(prompt).not.toHaveBeenCalled()
 
-    await policy.clearSession('browser', 'T-1')
+    // One reset clears the plugin's decisions for every Task at once, including the Task that was
+    // not the one the reset was triggered from.
+    await policy.clearSession('browser')
     expect(browserTaskOne.check({
       permission: 'notifications',
       requestingOrigin: 'https://one.example',
       details: { isMainFrame: true },
     })).toBe(false)
-    expect(store.records.map(record => `${record.pluginId}/${record.taskId}`)).toEqual([
-      'browser/T-2',
-      'notes/T-1',
-    ])
-
-    await policy.clearTask('T-1')
-    expect(notesTaskOne.check({
-      permission: 'media',
-      requestingOrigin: 'https://three.example',
-      details: { securityOrigin: 'https://three.example', mediaType: 'audio', isMainFrame: true },
+    expect(browserTaskTwo.check({
+      permission: 'notifications',
+      requestingOrigin: 'https://one.example',
+      details: { isMainFrame: true },
     })).toBe(false)
-    expect(store.records.map(record => `${record.pluginId}/${record.taskId}`)).toEqual(['browser/T-2'])
+    expect(store.records.map(record => record.pluginId)).toEqual(['notes'])
 
-    await policy.clearPlugin('browser')
+    expect(notesTaskOne.check({
+      permission: 'notifications',
+      requestingOrigin: 'https://three.example',
+      details: { isMainFrame: true },
+    })).toBe(false)
+
+    await policy.clearSession('notes')
     expect(store.records).toEqual([])
   })
 
@@ -275,7 +275,7 @@ describe('Task Browser Permission policy', () => {
     store.replaceError = new Error('disk unavailable')
     const prompt = vi.fn(async () => ({ decision: 'allow' as const, remember: true }))
     const policy = new TaskBrowserPermissionPolicy({ store, prompt })
-    const handler = await policy.createSessionHandler('browser', 'T-failure')
+    const handler = await policy.createSessionHandler('browser')
     const request = {
       windowId: 10,
       permission: 'notifications',
@@ -296,7 +296,7 @@ describe('Task Browser Permission policy', () => {
     store.replaceGate = new Promise<void>(resolve => { releasePersistence = resolve })
     const prompt = vi.fn(async () => ({ decision: 'allow' as const, remember: true }))
     const policy = new TaskBrowserPermissionPolicy({ store, prompt })
-    const handler = await policy.createSessionHandler('browser', 'T-pending')
+    const handler = await policy.createSessionHandler('browser')
 
     const decision = handler.request({
       windowId: 10,

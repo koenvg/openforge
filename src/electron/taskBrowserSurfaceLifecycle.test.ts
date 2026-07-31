@@ -59,18 +59,18 @@ describe('Task Browser Surface lifecycle', () => {
     let releaseSecond: (() => void) | null = null
     const order: string[] = []
 
-    const first = lifecycle.runSessionReset('browser', 'T-1', async () => {
+    const first = lifecycle.runSessionReset('browser', async () => {
       order.push('first:start')
       await new Promise<void>(resolve => { releaseFirst = resolve })
       order.push('first:end')
     })
-    const second = lifecycle.runSessionReset('browser', 'T-1', async () => {
+    const second = lifecycle.runSessionReset('browser', async () => {
       order.push('second:start')
       await new Promise<void>(resolve => { releaseSecond = resolve })
       order.push('second:end')
     })
-    const resetBarrier = lifecycle.waitForSessionReset('browser', 'T-1').then(() => (
-      lifecycle.currentSessionEpoch('browser', 'T-1')
+    const resetBarrier = lifecycle.waitForSessionReset('browser').then(() => (
+      lifecycle.currentSessionEpoch('browser')
     ))
 
     await vi.waitFor(() => expect(releaseFirst).not.toBeNull())
@@ -86,11 +86,11 @@ describe('Task Browser Surface lifecycle', () => {
   it('releases the reset barrier after failed cleanup', async () => {
     const lifecycle = new TaskBrowserSurfaceLifecycle()
 
-    await expect(lifecycle.runSessionReset('browser', 'T-1', async () => {
+    await expect(lifecycle.runSessionReset('browser', async () => {
       throw new Error('clear failed')
     })).rejects.toThrow('clear failed')
 
-    await expect(lifecycle.waitForSessionReset('browser', 'T-1')).resolves.toBeUndefined()
-    expect(lifecycle.currentSessionEpoch('browser', 'T-1')).toBe(1)
+    await expect(lifecycle.waitForSessionReset('browser')).resolves.toBeUndefined()
+    expect(lifecycle.currentSessionEpoch('browser')).toBe(1)
   })
 })

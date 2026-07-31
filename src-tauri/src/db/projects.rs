@@ -143,7 +143,6 @@ impl super::Database {
     pub fn delete_project(&self, id: &str) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
-        super::browser_session_purges::enqueue_project_task_purges(&tx, id)?;
         tx.execute(
             "DELETE FROM agent_sessions WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
             rusqlite::params![id],

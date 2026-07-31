@@ -53,7 +53,7 @@ export interface TaskBrowserWebPreferences {
   navigateOnDragDrop: false
 }
 
-export type TaskBrowserSessionPartition = `persist:${string}`
+export type PluginBrowserSessionPartition = `persist:${string}`
 
 export interface TaskBrowserPopupRequest {
   url: string
@@ -66,7 +66,7 @@ export interface TaskBrowserPopupPolicy {
 
 export interface TaskBrowserSurfaceCreateOptions {
   windowId: number
-  partition: TaskBrowserSessionPartition
+  partition: PluginBrowserSessionPartition
   webPreferences: TaskBrowserWebPreferences
   popupPolicy: TaskBrowserPopupPolicy
   permissionHandler?: TaskBrowserPermissionSessionHandler
@@ -87,7 +87,7 @@ export interface NativeTaskBrowserSurface {
 
 export interface NativeTaskBrowserSurfaceFactory {
   createSurface(options: TaskBrowserSurfaceCreateOptions): NativeTaskBrowserSurface
-  clearSession(partition: TaskBrowserSessionPartition): Promise<void>
+  clearSession(partition: PluginBrowserSessionPartition): Promise<void>
 }
 
 export interface TaskBrowserSurfaceStateEvent {
@@ -98,8 +98,8 @@ export interface TaskBrowserSurfaceStateEvent {
 }
 
 export interface TaskBrowserPermissionController {
-  createSessionHandler(pluginId: string, taskId: string): Promise<TaskBrowserPermissionSessionHandler>
-  clearSession(pluginId: string, taskId: string): Promise<void>
+  createSessionHandler(pluginId: string): Promise<TaskBrowserPermissionSessionHandler>
+  clearSession(pluginId: string): Promise<void>
 }
 
 export interface TaskBrowserSurfaceManagerOptions {
@@ -107,6 +107,8 @@ export interface TaskBrowserSurfaceManagerOptions {
   registry: TaskBrowserPartitionRegistry
   permissions: TaskBrowserPermissionController
   authorize(pluginId: string, taskId: string): Promise<void>
+  /** Authorizes a plugin-wide operation that names no Task, such as a session reset. */
+  authorizePlugin(pluginId: string): Promise<void>
   onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
 }
 

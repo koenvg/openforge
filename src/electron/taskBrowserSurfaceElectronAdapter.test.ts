@@ -437,7 +437,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
       .toEqual({ action: 'deny' })
   })
 
-  it('supports a deterministic OAuth-style handoff through one isolated Task Browser Session', () => {
+  it('supports a deterministic OAuth-style handoff through one shared Plugin Browser Session', () => {
     const factory = new ElectronTaskBrowserSurfaceFactory()
     factory.createSurface({
       windowId: 10,

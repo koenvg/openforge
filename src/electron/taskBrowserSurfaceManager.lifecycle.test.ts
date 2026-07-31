@@ -10,7 +10,7 @@ import {
 } from './taskBrowserSurfaceManager.testUtils'
 
 describe('Task Browser Surface Manager lifecycle', () => {
-  it('preserves Task Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
+  it('preserves Plugin Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
     const { manager, factory, permissions } = createManager()
     const savedUrl = 'https://example.com/restored'
     const original = await manager.getOrCreate({
@@ -80,6 +80,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
       registry: new FakePartitionRegistry(),
       permissions,
       authorize: async () => undefined,
+      authorizePlugin: async () => undefined,
     })
     restartedManager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
     await restartedManager.getOrCreate({
@@ -135,7 +136,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
         reacquireSettled = true
         return reference
       })
-    const reset = manager.resetSession('browser', 'T-reset-existing')
+    const reset = manager.resetSession('browser')
     for (let count = 0; count < 6; count += 1) await Promise.resolve()
     const settledBeforeResetFinished = reacquireSettled
 
@@ -177,7 +178,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
         return reference
       })
     for (let count = 0; count < 6 && releaseReauthorization === null; count += 1) await Promise.resolve()
-    const reset = manager.resetSession('browser', 'T-reset-during-authorization')
+    const reset = manager.resetSession('browser')
     for (let count = 0; count < 6; count += 1) await Promise.resolve()
     ;(releaseReauthorization as (() => void) | null)?.()
     for (let count = 0; count < 6; count += 1) await Promise.resolve()
@@ -204,7 +205,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
         getOrCreateSettled = true
         return reference
       })
-    const reset = manager.resetSession('browser', 'T-reset-same-turn')
+    const reset = manager.resetSession('browser')
     for (let count = 0; count < 6; count += 1) await Promise.resolve()
     const settledBeforeResetFinished = getOrCreateSettled
 
@@ -227,7 +228,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
     })
     const pendingReset = resetHarness.manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset', id: 'main' })
     await Promise.resolve()
-    await resetHarness.manager.resetSession('browser', 'T-reset')
+    await resetHarness.manager.resetSession('browser')
     ;(releaseResetCreation as (() => void) | null)?.()
     await expect(pendingReset).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     expect(resetHarness.factory.creations).toHaveLength(0)
@@ -267,7 +268,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
     })
     await Promise.resolve()
     await Promise.resolve()
-    await loadHarness.manager.resetSession('browser', 'T-load')
+    await loadHarness.manager.resetSession('browser')
     ;(releaseInitialLoad as (() => void) | null)?.()
     await expect(pendingLoad).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
@@ -287,7 +288,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
     for (let count = 0; count < 8 && factory.creations.length === 0; count += 1) await Promise.resolve()
     factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
 
-    const reset = manager.resetSession('browser', 'T-reset-pending')
+    const reset = manager.resetSession('browser')
     for (let count = 0; count < 8 && factory.clearedPartitions.length === 0; count += 1) await Promise.resolve()
     let reacquireSettled = false
     const reacquired = manager
@@ -318,13 +319,13 @@ describe('Task Browser Surface Manager lifecycle', () => {
     expect(reacquireOutcome.reference).not.toBeNull()
     await expect(manager.getState(reacquireOutcome.reference!.surfaceId)).resolves.toBeDefined()
   })
-  it('blocks new live surfaces until asynchronous Task Browser Session reset finishes', async () => {
+  it('blocks new live surfaces until asynchronous Plugin Browser Session reset finishes', async () => {
     let releaseClear: (() => void) | null = null
     const { manager, factory } = createManager()
     await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset-serialized', id: 'main' })
     factory.clearGate = new Promise<void>(resolve => { releaseClear = resolve })
 
-    const reset = manager.resetSession('browser', 'T-reset-serialized')
+    const reset = manager.resetSession('browser')
     for (let count = 0; count < 4; count += 1) await Promise.resolve()
     const duringReset = manager.getOrCreate({
       windowId: 10,
@@ -434,37 +435,44 @@ describe('Task Browser Surface Manager lifecycle', () => {
     expect(factory.clearedPartitions).toEqual([])
   })
 
-  it('registers allocated partitions durably without removing them on ordinary destruction or reset', async () => {
+  it('registers one durable plugin-scoped partition shared by every Task of that plugin', async () => {
     const { manager, factory, registry } = createManager()
     const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-registry', id: 'main' })
-    await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-registry', id: 'main' })
+    await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-other', id: 'main' })
+    const partition = factory.creations[0].partition
+
+    // Two different Tasks, one shared Plugin Browser Session: the login travels between them.
+    expect(factory.creations[1].partition).toBe(partition)
 
     await manager.destroy(first.surfaceId)
-    await manager.resetSession('browser', 'T-registry')
+    await manager.resetSession('browser')
 
     expect(registry.registrations).toEqual([
-      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
-      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
+      { pluginId: 'browser', partition },
+      { pluginId: 'browser', partition },
     ])
-    await expect(registry.listByTask('T-registry')).resolves.toEqual([
-      { pluginId: 'browser', taskId: 'T-registry', partition: factory.creations[0].partition },
+    await expect(registry.listByPlugin('browser')).resolves.toEqual([
+      { pluginId: 'browser', partition },
     ])
   })
 
-  it('purges a registered session across windows without reauthorizing a deleted Task', async () => {
+  it('purges a registered session across windows without reauthorizing an uninstalled plugin', async () => {
     const authorize = vi.fn(async () => undefined)
-    const { manager, factory, permissions } = createManager({ authorize })
+    const authorizePlugin = vi.fn(async () => undefined)
+    const { manager, factory, permissions } = createManager({ authorize, authorizePlugin })
     const first = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
     const second = await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-purge', id: 'main' })
     const unrelated = await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-purge', id: 'main' })
     const partition = factory.creations[0].partition
     authorize.mockRejectedValue(new Error('Task no longer exists'))
+    authorizePlugin.mockRejectedValue(new Error('Plugin no longer installed'))
 
-    await manager.purgeRegisteredSession({ pluginId: 'browser', taskId: 'T-purge', partition })
+    await manager.purgeRegisteredSession({ pluginId: 'browser', partition })
 
     expect(authorize).toHaveBeenCalledTimes(3)
+    expect(authorizePlugin).not.toHaveBeenCalled()
     expect(factory.clearedPartitions).toEqual([partition])
-    expect(permissions.clearSession).toHaveBeenCalledWith('browser', 'T-purge')
+    expect(permissions.clearSession).toHaveBeenCalledWith('browser')
     await expect(manager.getState(first.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     await expect(manager.getState(second.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
     await expect(manager.getState(unrelated.surfaceId)).resolves.toBeDefined()
@@ -473,7 +481,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
   it('keeps a failed host purge retryable and idempotent', async () => {
     const { manager, factory } = createManager()
     const surface = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-purge-retry', id: 'main' })
-    const record = { pluginId: 'browser', taskId: 'T-purge-retry', partition: factory.creations[0].partition }
+    const record = { pluginId: 'browser', partition: factory.creations[0].partition }
     factory.clearError = new Error('clear failed')
 
     await expect(manager.purgeRegisteredSession(record)).rejects.toThrow('clear failed')
@@ -484,16 +492,33 @@ describe('Task Browser Surface Manager lifecycle', () => {
     expect(factory.clearedPartitions).toEqual([record.partition, record.partition])
   })
 
-  it('clears durable session data only for an explicit session reset', async () => {
-    const { manager, factory, permissions } = createManager()
+  it('clears durable session data only for an explicit session reset, across every Task of the plugin', async () => {
+    const { manager, factory, permissions, authorizePlugin } = createManager()
     const surface = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-reset', id: 'main' })
+    const otherTask = await manager.getOrCreate({ windowId: 11, pluginId: 'browser', taskId: 'T-untouched', id: 'main' })
+    const otherPlugin = await manager.getOrCreate({ windowId: 10, pluginId: 'notes', taskId: 'T-reset', id: 'main' })
 
-    await manager.resetSession('browser', 'T-reset')
+    await manager.resetSession('browser')
 
+    expect(authorizePlugin).toHaveBeenCalledWith('browser')
     expect(factory.clearedPartitions).toEqual([factory.creations[0].partition])
-    expect(permissions.clearSession).toHaveBeenCalledWith('browser', 'T-reset')
+    expect(permissions.clearSession).toHaveBeenCalledWith('browser')
     expect(factory.surfaces[0].destroyed).toBe(true)
     await expect(manager.getState(surface.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    // The blast radius is the whole plugin: the Task that did not trigger the reset loses its
+    // surface too, because both browse with one Plugin Browser Session.
+    await expect(manager.getState(otherTask.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
+    await expect(manager.getState(otherPlugin.surfaceId)).resolves.toBeDefined()
+  })
+
+  it('refuses a session reset for a plugin that is no longer installed', async () => {
+    const authorizePlugin = vi.fn(async () => {
+      throw new TaskBrowserSurfaceError('PLUGIN_NOT_ENABLED', 'Plugin browser is not installed')
+    })
+    const { manager, factory } = createManager({ authorizePlugin })
+
+    await expect(manager.resetSession('browser')).rejects.toMatchObject({ code: 'PLUGIN_NOT_ENABLED' })
+    expect(factory.clearedPartitions).toEqual([])
   })
 
 

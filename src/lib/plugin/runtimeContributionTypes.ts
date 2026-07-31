@@ -87,7 +87,7 @@ export type RuntimeHostBridge = {
   invokeHostCommand?(command: string, payload?: unknown): Promise<unknown>
   onHostEvent?(event: string, handler: (payload: unknown) => void): () => void
   getOrCreateBrowserSurface?(pluginId: string, request: GetOrCreateBrowserSurfaceRequest): Promise<TaskBrowserSurfaceController>
-  resetBrowserSession?(pluginId: string, taskId: string): Promise<void>
+  resetBrowserSession?(pluginId: string): Promise<void>
   destroyPluginBrowserSurfaces?(pluginId: string): Promise<void>
 }
 

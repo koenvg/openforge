@@ -82,7 +82,7 @@ describe('browser surfaces SDK contract', () => {
     }
   })
 
-  it('supports blank initial state, navigation errors, and Task Browser Session reset in tests', async () => {
+  it('supports blank initial state, navigation errors, and Plugin Browser Session reset in tests', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
     const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-2', id: 'main' })
 
@@ -90,8 +90,8 @@ describe('browser surfaces SDK contract', () => {
     await expect(surface.navigate('file:///tmp/secret')).rejects.toBeInstanceOf(BrowserSurfaceError)
     await expect(surface.navigate('file:///tmp/secret')).rejects.toMatchObject({ code: 'INVALID_URL' })
 
-    await api.browserSurfaces.resetSession('T-2')
-    expect(api.__testing.calls.browserSurfaceSessionResets).toEqual([{ taskId: 'T-2' }])
+    await api.browserSurfaces.resetSession()
+    expect(api.__testing.calls.browserSurfaceSessionResets).toEqual([{}])
     await expect(surface.getState()).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 

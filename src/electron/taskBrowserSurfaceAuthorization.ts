@@ -22,6 +22,25 @@ function includesPlugin(value: unknown, pluginId: string): boolean {
   ))
 }
 
+/**
+ * Authorizes plugin-wide operations that name no Task, such as a Plugin Browser Session reset. The
+ * plugin must be installed; project enablement cannot apply because the operation spans projects.
+ */
+export function createPluginBrowserSessionAuthorizer(invoke: InvokeTaskBrowserAuthorizationCommand) {
+  return async (pluginId: string): Promise<void> => {
+    let plugins: unknown
+    try {
+      plugins = await invoke('list_plugins', {})
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', `Plugin Browser Session authorization is unavailable: ${message}`)
+    }
+    if (!includesPlugin(plugins, pluginId)) {
+      throw new TaskBrowserSurfaceError('PLUGIN_NOT_ENABLED', `Plugin ${pluginId} is not installed`)
+    }
+  }
+}
+
 export function createTaskBrowserSurfaceAuthorizer(invoke: InvokeTaskBrowserAuthorizationCommand) {
   return async (pluginId: string, taskId: string): Promise<void> => {
     let task: unknown

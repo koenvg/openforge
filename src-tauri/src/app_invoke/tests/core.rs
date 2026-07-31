@@ -598,11 +598,32 @@ async fn task_workspace_prefers_task_workspace_over_legacy_worktree() {
 }
 
 #[tokio::test]
-async fn lists_and_acknowledges_task_browser_session_purge_intents() {
+async fn lists_and_acknowledges_plugin_browser_session_purge_intents() {
     let (state, path) = test_state("app_invoke_browser_session_purges");
-    crate::db::test_helpers::insert_test_task(&crate::db::acquire_db(&state.db));
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.install_plugin(&crate::db::PluginRow {
+            id: "com.example.browser".to_string(),
+            name: "Browser".to_string(),
+            version: "1.0.0".to_string(),
+            api_version: 1,
+            description: String::new(),
+            permissions: "[]".to_string(),
+            contributes: "{}".to_string(),
+            frontend_entry: "index.js".to_string(),
+            backend_entry: None,
+            install_path: "/tmp/browser".to_string(),
+            source_kind: "local".to_string(),
+            source_spec: "/tmp/browser".to_string(),
+            package_metadata: "{}".to_string(),
+            installed_at: 1,
+            is_builtin: false,
+        })
+        .expect("install plugin");
+        db.uninstall_plugin("com.example.browser")
+            .expect("uninstall plugin");
+    }
 
-    invoke_ok(&state, "delete_task", json!({ "id": "T-100" })).await;
     let intents = invoke_ok(
         &state,
         "list_browser_session_purge_intents",
@@ -610,8 +631,8 @@ async fn lists_and_acknowledges_task_browser_session_purge_intents() {
     )
     .await;
     let intent = &intents.as_array().expect("purge intents")[0];
-    assert_eq!(intent["scope"], "task");
-    assert_eq!(intent["ownerId"], "T-100");
+    assert_eq!(intent["scope"], "plugin");
+    assert_eq!(intent["ownerId"], "com.example.browser");
 
     invoke_ok(
         &state,

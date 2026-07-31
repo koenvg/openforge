@@ -54,7 +54,6 @@ export interface TaskBrowserPermissionPromptResult {
 
 export interface TaskBrowserPermissionDecisionRecord {
   pluginId: string
-  taskId: string
   origin: string
   descriptor: TaskBrowserPermissionDescriptor
   decision: TaskBrowserPermissionDecision
@@ -166,47 +165,47 @@ function normalizePermissionCheck(request: TaskBrowserPermissionCheckRequest): N
 
 function decisionKey(
   pluginId: string,
-  taskId: string,
   permission: Pick<NormalizedPermission, 'origin' | 'descriptor'>,
 ): string {
-  return JSON.stringify([pluginId, taskId, permission.origin, permission.descriptor])
+  return JSON.stringify([pluginId, permission.origin, permission.descriptor])
 }
 
 export class TaskBrowserPermissionPolicy {
   private readonly records = new Map<string, TaskBrowserPermissionDecisionRecord>()
-  private readonly sessionOwners = new Map<string, { pluginId: string; taskId: string }>()
   private readonly sessionEpochs = new Map<string, number>()
   private initialization: Promise<void> | null = null
   private operation: Promise<void> = Promise.resolve()
   constructor(private readonly options: TaskBrowserPermissionPolicyOptions) {}
 
-  async createSessionHandler(pluginId: string, taskId: string): Promise<TaskBrowserPermissionSessionHandler> {
+  /**
+   * Decisions are remembered per plugin and origin, never per Task, because every Task shares one
+   * Plugin Browser Session. Approving a site in one Task approves it in all of them. See ADR 0012.
+   */
+  async createSessionHandler(pluginId: string): Promise<TaskBrowserPermissionSessionHandler> {
     await this.initialize()
-    const sessionKey = this.trackSession(pluginId, taskId)
     return {
       check: request => {
         const normalized = normalizePermissionCheck(request)
         if (!normalized) return false
-        return this.records.get(decisionKey(pluginId, taskId, normalized))?.decision === 'allow'
+        return this.records.get(decisionKey(pluginId, normalized))?.decision === 'allow'
       },
       request: async request => {
         const normalized = normalizePermissionRequest(request.permission, request.details)
         if (!normalized) return false
-        const key = decisionKey(pluginId, taskId, normalized)
+        const key = decisionKey(pluginId, normalized)
         const remembered = this.records.get(key)
         if (remembered) return remembered.decision === 'allow'
 
-        const observedEpoch = this.sessionEpochs.get(sessionKey) ?? 0
+        const observedEpoch = this.sessionEpochs.get(pluginId) ?? 0
         const result = await this.options.prompt({
           windowId: request.windowId,
           ...normalized,
         })
-        if (result.remember && (this.sessionEpochs.get(sessionKey) ?? 0) === observedEpoch) {
+        if (result.remember && (this.sessionEpochs.get(pluginId) ?? 0) === observedEpoch) {
           await this.exclusive(async () => {
-            if ((this.sessionEpochs.get(sessionKey) ?? 0) !== observedEpoch) return
+            if ((this.sessionEpochs.get(pluginId) ?? 0) !== observedEpoch) return
             const record: TaskBrowserPermissionDecisionRecord = {
               pluginId,
-              taskId,
               origin: normalized.origin,
               descriptor: normalized.descriptor,
               decision: result.decision,
@@ -222,26 +221,9 @@ export class TaskBrowserPermissionPolicy {
     }
   }
 
-  async clearSession(pluginId: string, taskId: string): Promise<void> {
-    const sessionKey = this.trackSession(pluginId, taskId)
-    this.bumpSessionEpoch(sessionKey)
+  async clearSession(pluginId: string): Promise<void> {
+    this.bumpSessionEpoch(pluginId)
     await this.initialize()
-    await this.removeWhere(record => record.pluginId === pluginId && record.taskId === taskId)
-  }
-
-  async clearTask(taskId: string): Promise<void> {
-    await this.initialize()
-    for (const [sessionKey, owner] of this.sessionOwners) {
-      if (owner.taskId === taskId) this.bumpSessionEpoch(sessionKey)
-    }
-    await this.removeWhere(record => record.taskId === taskId)
-  }
-
-  async clearPlugin(pluginId: string): Promise<void> {
-    await this.initialize()
-    for (const [sessionKey, owner] of this.sessionOwners) {
-      if (owner.pluginId === pluginId) this.bumpSessionEpoch(sessionKey)
-    }
     await this.removeWhere(record => record.pluginId === pluginId)
   }
 
@@ -249,22 +231,15 @@ export class TaskBrowserPermissionPolicy {
     if (!this.initialization) {
       this.initialization = (async () => {
         for (const record of await this.options.store.load()) {
-          this.trackSession(record.pluginId, record.taskId)
-          this.records.set(decisionKey(record.pluginId, record.taskId, record), record)
+          this.records.set(decisionKey(record.pluginId, record), record)
         }
       })()
     }
     await this.initialization
   }
 
-  private trackSession(pluginId: string, taskId: string): string {
-    const sessionKey = `${pluginId}\u0000${taskId}`
-    this.sessionOwners.set(sessionKey, { pluginId, taskId })
-    return sessionKey
-  }
-
-  private bumpSessionEpoch(sessionKey: string): void {
-    this.sessionEpochs.set(sessionKey, (this.sessionEpochs.get(sessionKey) ?? 0) + 1)
+  private bumpSessionEpoch(pluginId: string): void {
+    this.sessionEpochs.set(pluginId, (this.sessionEpochs.get(pluginId) ?? 0) + 1)
   }
 
   private async removeWhere(predicate: (record: TaskBrowserPermissionDecisionRecord) => boolean): Promise<void> {

@@ -5,10 +5,10 @@ import {
 } from './taskBrowserSurfaceContract.js'
 import type {
   GetOrCreateTaskBrowserSurfaceRequest,
+  PluginBrowserSessionPartition,
   TaskBrowserBounds,
   TaskBrowserPopupPolicy,
   TaskBrowserPopupRequest,
-  TaskBrowserSessionPartition,
   TaskBrowserWebPreferences,
 } from './taskBrowserSurfaceContract.js'
 
@@ -45,9 +45,23 @@ export const SECURE_TASK_BROWSER_WEB_PREFERENCES: TaskBrowserWebPreferences = Ob
   navigateOnDragDrop: false,
 })
 
-export function taskBrowserSessionPartition(pluginId: string, taskId: string): TaskBrowserSessionPartition {
-  const digest = createHash('sha256').update(`${pluginId}\u0000${taskId}`, 'utf8').digest('hex')
-  return `persist:openforge-task-browser-${digest}`
+/**
+ * One durable partition per plugin, spanning every Task and project, so a login performed in one
+ * Task is available in all of them. See ADR 0012, which supersedes ADR 0009's per-Task scoping.
+ */
+export function pluginBrowserSessionPartition(pluginId: string): PluginBrowserSessionPartition {
+  const digest = createHash('sha256').update(pluginId, 'utf8').digest('hex')
+  return `persist:openforge-plugin-browser-${digest}`
+}
+
+const LEGACY_TASK_PARTITION = /^persist:openforge-task-browser-[a-f0-9]{64}$/
+
+/**
+ * Identifies partitions written under ADR 0009's per-Task scheme. No surface can bind to one and no
+ * session reset can reach one, so first launch purges them instead of leaving credentials on disk.
+ */
+export function isSupersededTaskBrowserPartition(partition: string): boolean {
+  return LEGACY_TASK_PARTITION.test(partition)
 }
 
 export function isTaskBrowserUrlAllowed(value: string): boolean {
