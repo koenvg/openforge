@@ -45,6 +45,29 @@ final class CompanionTrustRecord {
   final String deviceId;
   final String deviceCredential;
 
+  static const maxPersistedEndpointCandidates = 8;
+
+  CompanionTrustRecord withEndpointCandidates(List<Uri> endpoints) =>
+      CompanionTrustRecord(
+        hostId: hostId,
+        certificateSha256: certificateSha256,
+        endpointCandidates: endpoints,
+        deviceId: deviceId,
+        deviceCredential: deviceCredential,
+      );
+
+  CompanionTrustRecord withPreferredEndpoint(
+    Uri preferred,
+    List<Uri> candidates,
+  ) {
+    final ordered = <Uri>[preferred];
+    for (final candidate in candidates) {
+      if (!ordered.contains(candidate)) ordered.add(candidate);
+      if (ordered.length == maxPersistedEndpointCandidates) break;
+    }
+    return withEndpointCandidates(ordered);
+  }
+
   Map<String, Object> toJson() => <String, Object>{
     'hostId': hostId,
     'certificateSha256': certificateSha256,

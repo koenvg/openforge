@@ -1,9 +1,8 @@
-#[cfg(test)]
 use super::{
-    attention::UnavailableCompanionAttentionSource,
-    task_detail::UnavailableCompanionTaskDetailSource,
-};
-use super::{
+    advertisement::{
+        CompanionAdvertisement, CompanionAdvertisementHandle, CompanionAdvertiser,
+        MdnsCompanionAdvertiser,
+    },
     attention::{CompanionAttentionSource, DatabaseCompanionAttentionSource},
     contract::{self, CompanionHostStatus},
     devices::{CompanionDeviceStore, DatabaseCompanionDeviceStore},
@@ -14,6 +13,11 @@ use super::{
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
+};
+#[cfg(test)]
+use super::{
+    attention::UnavailableCompanionAttentionSource,
+    task_detail::UnavailableCompanionTaskDetailSource,
 };
 use axum_server::{tls_rustls::RustlsConfig, Handle};
 use serde::{Deserialize, Serialize};
@@ -78,6 +82,8 @@ impl Drop for GatewayListener {
 struct RunningGateway {
     listeners: Vec<GatewayListener>,
     endpoints: Vec<CompanionGatewayEndpoint>,
+    addresses: Vec<SocketAddr>,
+    advertisement: Option<Box<dyn CompanionAdvertisementHandle>>,
 }
 
 impl RunningGateway {
@@ -86,6 +92,9 @@ impl RunningGateway {
     }
 
     async fn stop(mut self) {
+        if let Some(advertisement) = self.advertisement.take() {
+            let _ = tokio::task::spawn_blocking(move || drop(advertisement)).await;
+        }
         for listener in &self.listeners {
             listener
                 .handle
@@ -167,6 +176,7 @@ pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
     identity_store: Arc<dyn CompanionIdentityStore>,
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+    advertiser: Arc<dyn CompanionAdvertiser>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
@@ -185,6 +195,7 @@ impl CompanionGatewayManager {
             Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
             Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
             Arc::new(PrivateInterfaceEndpointProvider),
+            Arc::new(MdnsCompanionAdvertiser),
             port,
         )
     }
@@ -194,6 +205,7 @@ impl CompanionGatewayManager {
         identity_store: Arc<dyn CompanionIdentityStore>,
         device_store: Arc<dyn CompanionDeviceStore>,
         endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+        advertiser: Arc<dyn CompanionAdvertiser>,
         port: u16,
     ) -> Self {
         Self::new_with_sources(
@@ -202,6 +214,7 @@ impl CompanionGatewayManager {
             Arc::new(UnavailableCompanionAttentionSource),
             Arc::new(UnavailableCompanionTaskDetailSource),
             endpoint_provider,
+            advertiser,
             port,
         )
     }
@@ -212,12 +225,14 @@ impl CompanionGatewayManager {
         attention: Arc<dyn CompanionAttentionSource>,
         task_detail: Arc<dyn CompanionTaskDetailSource>,
         endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+        advertiser: Arc<dyn CompanionAdvertiser>,
         port: u16,
     ) -> Self {
         Self {
             runtime: Arc::new(tokio::sync::Mutex::new(GatewayRuntime::default())),
             identity_store,
             endpoint_provider,
+            advertiser,
             pairing: Arc::new(PairingCoordinator::new(device_store, PAIRING_SESSION_TTL)),
             attention,
             task_detail,
@@ -270,7 +285,7 @@ impl CompanionGatewayManager {
         };
         runtime.identity = Some(identity.clone());
 
-        let running = match start_tls_listeners(
+        let mut running = match start_tls_listeners(
             &identity,
             bind_endpoints,
             self.port,
@@ -287,6 +302,35 @@ impl CompanionGatewayManager {
                 return Err(error);
             }
         };
+        let advertisement = CompanionAdvertisement {
+            host_id: identity.host_id.clone(),
+            protocol_version: contract::PROTOCOL_VERSION,
+            addresses: running
+                .addresses
+                .iter()
+                .map(|address| address.ip())
+                .collect(),
+            port: running
+                .addresses
+                .first()
+                .map(SocketAddr::port)
+                .ok_or_else(|| "Companion Gateway has no LAN endpoints to advertise".to_string())?,
+        };
+        let advertiser = Arc::clone(&self.advertiser);
+        let advertisement_handle =
+            tokio::task::spawn_blocking(move || advertiser.advertise(advertisement))
+                .await
+                .map_err(|error| format!("Companion mDNS startup task failed: {error}"));
+        let advertisement_handle = match advertisement_handle {
+            Ok(Ok(handle)) => handle,
+            Ok(Err(error)) | Err(error) => {
+                running.stop().await;
+                runtime.phase = GatewayPhase::Error;
+                runtime.error = Some(error.clone());
+                return Err(error);
+            }
+        };
+        running.advertisement = Some(advertisement_handle);
         runtime.running = Some(running);
         runtime.phase = GatewayPhase::Running;
         Ok(runtime.status())
@@ -428,6 +472,8 @@ async fn start_tls_listeners(
     let mut running = RunningGateway {
         listeners: Vec::with_capacity(bound_listeners.len()),
         endpoints: Vec::with_capacity(bound_listeners.len()),
+        addresses: Vec::with_capacity(bound_listeners.len()),
+        advertisement: None,
     };
     for (kind, listener, local_address) in bound_listeners {
         let handle = Handle::new();
@@ -448,6 +494,7 @@ async fn start_tls_listeners(
             kind,
             url: endpoint_url(local_address),
         });
+        running.addresses.push(local_address);
     }
 
     for index in 0..running.listeners.len() {
@@ -469,7 +516,10 @@ async fn start_tls_listeners(
             )
         });
         match listening {
-            Ok(address) => running.endpoints[index].url = endpoint_url(address),
+            Ok(address) => {
+                running.endpoints[index].url = endpoint_url(address);
+                running.addresses[index] = address;
+            }
             Err(error) => {
                 running.stop().await;
                 return Err(error);

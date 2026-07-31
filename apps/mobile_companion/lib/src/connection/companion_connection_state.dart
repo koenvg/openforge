@@ -42,6 +42,10 @@ final class Unavailable extends CompanionConnectionState {
   const Unavailable();
 }
 
+final class LocalNetworkPermissionDenied extends CompanionConnectionState {
+  const LocalNetworkPermissionDenied();
+}
+
 final class Revoked extends CompanionConnectionState {
   const Revoked();
 }

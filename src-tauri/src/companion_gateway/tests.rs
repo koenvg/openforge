@@ -1,4 +1,8 @@
 use super::{
+    advertisement::{
+        CompanionAdvertisement, CompanionAdvertisementHandle, CompanionAdvertiser,
+        NoopCompanionAdvertiser,
+    },
     contract::{
         create_router, AllowAllAuthorizer, CompanionErrorEnvelope, CompanionHostStatus,
         PairingUnavailableAuthorizer,
@@ -10,8 +14,52 @@ use super::{
     pairing::PairingCoordinator,
 };
 use axum::{body::Body, http::Request, response::Response};
-use std::{net::IpAddr, sync::Arc, time::Duration};
+use std::{
+    net::IpAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tower::ServiceExt;
+
+#[derive(Clone, Default)]
+struct RecordingAdvertiser {
+    state: Arc<Mutex<AdvertisementState>>,
+}
+
+#[derive(Default)]
+struct AdvertisementState {
+    announcements: Vec<CompanionAdvertisement>,
+    active: usize,
+    stops: usize,
+}
+
+struct RecordingAdvertisementHandle {
+    state: Arc<Mutex<AdvertisementState>>,
+}
+
+impl Drop for RecordingAdvertisementHandle {
+    fn drop(&mut self) {
+        let mut state = self.state.lock().expect("advertisement state");
+        state.active -= 1;
+        state.stops += 1;
+    }
+}
+
+impl CompanionAdvertisementHandle for RecordingAdvertisementHandle {}
+
+impl CompanionAdvertiser for RecordingAdvertiser {
+    fn advertise(
+        &self,
+        advertisement: CompanionAdvertisement,
+    ) -> Result<Box<dyn CompanionAdvertisementHandle>, String> {
+        let mut state = self.state.lock().expect("advertisement state");
+        state.announcements.push(advertisement);
+        state.active += 1;
+        Ok(Box::new(RecordingAdvertisementHandle {
+            state: Arc::clone(&self.state),
+        }))
+    }
+}
 
 fn test_manager(store: Arc<InMemoryIdentityStore>) -> CompanionGatewayManager {
     CompanionGatewayManager::new(
@@ -21,6 +69,7 @@ fn test_manager(store: Arc<InMemoryIdentityStore>) -> CompanionGatewayManager {
             CompanionEndpointKind::Lan,
             IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         )])),
+        Arc::new(NoopCompanionAdvertiser),
         0,
     )
 }
@@ -94,6 +143,60 @@ async fn enabling_and_disabling_controls_a_separate_tls_listener() {
 }
 
 #[tokio::test]
+async fn advertisement_follows_gateway_enable_disable_and_shutdown_lifecycle() {
+    let advertiser = RecordingAdvertiser::default();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(advertiser.clone()),
+        0,
+    );
+
+    let first = manager.enable().await.expect("gateway should advertise");
+    {
+        let state = advertiser.state.lock().expect("advertisement state");
+        assert_eq!(state.active, 1);
+        assert_eq!(state.announcements.len(), 1);
+        assert_eq!(
+            state.announcements[0].host_id,
+            first.host_id.clone().unwrap()
+        );
+        assert_eq!(state.announcements[0].protocol_version, 1);
+        assert_eq!(
+            state.announcements[0].addresses.as_slice(),
+            &[IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)]
+        );
+        assert_eq!(
+            state.announcements[0].port,
+            first.endpoints[0]
+                .url
+                .rsplit(':')
+                .next()
+                .unwrap()
+                .parse::<u16>()
+                .unwrap()
+        );
+    }
+
+    manager.disable().await;
+    {
+        let state = advertiser.state.lock().expect("advertisement state");
+        assert_eq!(state.active, 0);
+        assert_eq!(state.stops, 1);
+    }
+
+    manager.enable().await.expect("gateway should re-advertise");
+    manager.shutdown().await;
+    let state = advertiser.state.lock().expect("advertisement state");
+    assert_eq!(state.active, 0);
+    assert_eq!(state.stops, 2);
+}
+
+#[tokio::test]
 async fn partial_multi_interface_startup_cannot_leave_an_untracked_listener() {
     let probe =
         std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserve test port");
@@ -113,6 +216,7 @@ async fn partial_multi_interface_startup_cannot_leave_an_untracked_listener() {
                 IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
             ),
         ])),
+        Arc::new(NoopCompanionAdvertiser),
         port,
     );
 

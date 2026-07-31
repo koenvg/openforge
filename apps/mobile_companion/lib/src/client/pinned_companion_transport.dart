@@ -18,7 +18,12 @@ bool certificateMatchesPin(Uint8List certificateDer, String expectedSha256) {
   return actual == normalizedCertificateFingerprint(expectedSha256);
 }
 
-final class PinnedCompanionTransport implements CompanionV1Transport {
+abstract interface class CloseableCompanionV1Transport
+    implements CompanionV1Transport {
+  void close();
+}
+
+final class PinnedCompanionTransport implements CloseableCompanionV1Transport {
   factory PinnedCompanionTransport({
     required String certificateSha256,
     HttpClient? client,
@@ -88,6 +93,7 @@ final class PinnedCompanionTransport implements CompanionV1Transport {
     }
   }
 
+  @override
   void close() => _client.close(force: true);
 }
 

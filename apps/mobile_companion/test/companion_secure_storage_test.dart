@@ -88,4 +88,30 @@ void main() {
 
     expect(await storage.load(), isNull);
   });
+
+  test('preferred endpoint history is deduplicated and bounded', () {
+    final record = CompanionTrustRecord(
+      hostId: 'host-1',
+      certificateSha256: 'AA:BB:CC',
+      endpointCandidates: List<Uri>.generate(
+        12,
+        (index) => Uri.parse('https://192.168.1.${index + 1}:17424'),
+      ),
+      deviceId: 'device-1',
+      deviceCredential: 'secret-credential',
+    );
+    final preferred = Uri.parse('https://192.168.1.99:17424');
+
+    final updated = record.withPreferredEndpoint(
+      preferred,
+      record.endpointCandidates,
+    );
+
+    expect(updated.endpointCandidates.first, preferred);
+    expect(
+      updated.endpointCandidates,
+      hasLength(CompanionTrustRecord.maxPersistedEndpointCandidates),
+    );
+    expect(updated.endpointCandidates.toSet(), hasLength(8));
+  });
 }

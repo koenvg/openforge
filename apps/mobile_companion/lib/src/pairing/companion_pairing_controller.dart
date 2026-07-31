@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../client/companion_client.dart';
 import '../client/pinned_companion_transport.dart';
 import '../connection/companion_connection_state.dart';
+import '../discovery/companion_discovery.dart';
 import '../generated/companion_v1_client.dart';
 import '../storage/companion_secure_storage.dart';
 import 'pairing_bootstrap.dart';
@@ -11,13 +12,21 @@ final class CompanionPairingController extends ChangeNotifier {
   factory CompanionPairingController({
     required CompanionClient client,
     required CompanionSecureStorage storage,
+    CompanionEndpointDiscovery discovery =
+        const NoopCompanionEndpointDiscovery(),
     Duration pollInterval = const Duration(seconds: 1),
-  }) => CompanionPairingController._(client, storage, pollInterval);
+  }) => CompanionPairingController._(client, storage, discovery, pollInterval);
 
-  CompanionPairingController._(this._client, this._storage, this._pollInterval);
+  CompanionPairingController._(
+    this._client,
+    this._storage,
+    this._discovery,
+    this._pollInterval,
+  );
 
   final CompanionClient _client;
   final CompanionSecureStorage _storage;
+  final CompanionEndpointDiscovery _discovery;
   final Duration _pollInterval;
 
   CompanionConnectionState _state = const Restoring();
@@ -43,6 +52,8 @@ final class CompanionPairingController extends ChangeNotifier {
       _setState(const Unavailable());
     }
   }
+
+  Future<void> openLocalNetworkSettings() => _discovery.openSettings();
 
   void authorizationLost() => _setState(const Revoked());
 
@@ -134,8 +145,26 @@ final class CompanionPairingController extends ChangeNotifier {
   }
 
   Future<void> _connect(CompanionTrustRecord trustRecord) async {
+    var permissionDenied = false;
+    var discoveredEndpoints = const <Uri>[];
     try {
-      final status = await _client.fetchHostStatus(trustRecord);
+      discoveredEndpoints = await _discovery.findTrustedEndpoints(
+        trustRecord.hostId,
+      );
+    } on CompanionDiscoveryPermissionDenied {
+      permissionDenied = true;
+    } on Object {
+      // Discovery is an endpoint hint. Stored candidates remain valid fallbacks.
+    }
+
+    final candidates = _mergeEndpoints(
+      discoveredEndpoints,
+      trustRecord.endpointCandidates,
+    );
+    final candidateRecord = trustRecord.withEndpointCandidates(candidates);
+    try {
+      final connection = await _client.fetchHostStatus(candidateRecord);
+      final status = connection.status;
       if (status.hostId != trustRecord.hostId) {
         _setState(const CertificateMismatch());
         return;
@@ -143,6 +172,17 @@ final class CompanionPairingController extends ChangeNotifier {
       if (status.protocolVersion != 1) {
         _setState(const IncompatibleProtocol());
         return;
+      }
+      final updatedRecord = trustRecord.withPreferredEndpoint(
+        connection.endpoint,
+        trustRecord.endpointCandidates,
+      );
+      if (updatedRecord != trustRecord) {
+        try {
+          await _storage.save(updatedRecord);
+        } on Object {
+          // Endpoint preference is an optimization; trust is already verified.
+        }
       }
       _setState(
         Connected(
@@ -158,11 +198,27 @@ final class CompanionPairingController extends ChangeNotifier {
       } else if (error.code == 'incompatible_version') {
         _setState(const IncompatibleProtocol());
       } else {
-        _setState(const Unavailable());
+        _setState(
+          permissionDenied
+              ? const LocalNetworkPermissionDenied()
+              : const Unavailable(),
+        );
       }
     } on Object {
-      _setState(const Unavailable());
+      _setState(
+        permissionDenied
+            ? const LocalNetworkPermissionDenied()
+            : const Unavailable(),
+      );
     }
+  }
+
+  static List<Uri> _mergeEndpoints(List<Uri> preferred, List<Uri> fallbacks) {
+    final merged = <Uri>[];
+    for (final endpoint in <Uri>[...preferred, ...fallbacks]) {
+      if (!merged.contains(endpoint)) merged.add(endpoint);
+    }
+    return List<Uri>.unmodifiable(merged);
   }
 
   void _setState(CompanionConnectionState state) {

@@ -1,3 +1,4 @@
+mod advertisement;
 mod attention;
 mod contract;
 mod devices;
@@ -32,6 +33,7 @@ fn test_manager_with_store(
             network::CompanionEndpointKind::Lan,
             IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         )])),
+        Arc::new(advertisement::NoopCompanionAdvertiser),
         0,
     )
 }

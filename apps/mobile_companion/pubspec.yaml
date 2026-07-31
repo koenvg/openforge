@@ -33,6 +33,7 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   crypto: ^3.0.6
   mobile_scanner: ^7.4.0
+  bonsoir: ^7.1.4
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +51,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # Keep plugin integration on CocoaPods for CI's Swift 5.10 toolchain.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

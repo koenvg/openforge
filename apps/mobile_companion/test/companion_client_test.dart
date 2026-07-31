@@ -28,6 +28,27 @@ final class _RecordingTransport implements CompanionV1Transport {
   }
 }
 
+final class _EndpointTransport implements CloseableCompanionV1Transport {
+  _EndpointTransport(this.outcomes);
+
+  final Map<String, Object> outcomes;
+
+  @override
+  Future<CompanionV1HttpResponse> send({
+    required String method,
+    required Uri uri,
+    required Map<String, String> headers,
+    String? body,
+  }) async {
+    final outcome = outcomes[uri.host];
+    if (outcome is Exception) throw outcome;
+    return outcome! as CompanionV1HttpResponse;
+  }
+
+  @override
+  void close() {}
+}
+
 void main() {
   test(
     'generated client matches pairing, status, and attention contracts',
@@ -289,4 +310,121 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'trusted status connection fails over and reports the verified endpoint',
+    () async {
+      final outcomes = <String, Object>{
+        '192.168.1.20': const SocketException('unreachable'),
+        '192.168.1.21': CompanionV1HttpResponse(
+          statusCode: 200,
+          body: jsonEncode(<String, Object>{
+            'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+            'protocolVersion': 1,
+            'serverTime': '2026-07-30T12:00:01Z',
+          }),
+        ),
+      };
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) => CompanionEndpointTransport(
+          transport: _EndpointTransport(outcomes),
+          close: () {},
+        ),
+      );
+      final trustRecord = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: <Uri>[
+          Uri.parse('https://192.168.1.20:17424'),
+          Uri.parse('https://192.168.1.21:17424'),
+        ],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+
+      final connection = await client.fetchHostStatus(trustRecord);
+
+      expect(connection.endpoint, Uri.parse('https://192.168.1.21:17424'));
+      expect(connection.status.hostId, trustRecord.hostId);
+    },
+  );
+
+  test(
+    'certificate mismatch wins when no trusted candidate connects',
+    () async {
+      final outcomes = <String, Object>{
+        '192.168.1.20': const SocketException('unreachable'),
+        '192.168.1.21': const CompanionCertificateMismatch(),
+      };
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) => CompanionEndpointTransport(
+          transport: _EndpointTransport(outcomes),
+          close: () {},
+        ),
+      );
+      final trustRecord = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: <Uri>[
+          Uri.parse('https://192.168.1.20:17424'),
+          Uri.parse('https://192.168.1.21:17424'),
+        ],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+
+      await expectLater(
+        client.fetchHostStatus(trustRecord),
+        throwsA(isA<CompanionCertificateMismatch>()),
+      );
+    },
+  );
+
+  for (final terminal in <({int status, String code})>[
+    (status: 401, code: 'revoked'),
+    (status: 409, code: 'incompatible_version'),
+  ]) {
+    test('${terminal.code} response stops endpoint failover', () async {
+      final outcomes = <String, Object>{
+        '192.168.1.20': CompanionV1HttpResponse(
+          statusCode: terminal.status,
+          body: jsonEncode(<String, Object>{
+            'error': <String, Object?>{
+              'code': terminal.code,
+              'message': 'Authoritative host response',
+              'requestId': null,
+            },
+          }),
+        ),
+        '192.168.1.21': const SocketException('stale fallback'),
+      };
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) => CompanionEndpointTransport(
+          transport: _EndpointTransport(outcomes),
+          close: () {},
+        ),
+      );
+      final trustRecord = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: <Uri>[
+          Uri.parse('https://192.168.1.20:17424'),
+          Uri.parse('https://192.168.1.21:17424'),
+        ],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+
+      await expectLater(
+        client.fetchHostStatus(trustRecord),
+        throwsA(
+          isA<CompanionV1Exception>().having(
+            (error) => error.code,
+            'code',
+            terminal.code,
+          ),
+        ),
+      );
+    });
+  }
 }

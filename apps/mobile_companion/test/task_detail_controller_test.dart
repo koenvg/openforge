@@ -53,8 +53,9 @@ final class _FakeClient implements CompanionClient {
       throw UnsupportedError('not used');
 
   @override
-  Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord) =>
-      throw UnsupportedError('not used');
+  Future<CompanionHostConnection> fetchHostStatus(
+    CompanionTrustRecord trustRecord,
+  ) => throw UnsupportedError('not used');
 
   @override
   Future<PairingPoll> pollPairing({

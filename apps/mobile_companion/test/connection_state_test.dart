@@ -13,12 +13,13 @@ void main() {
       Connected(hostId: 'desktop-host-1', protocolVersion: 1),
       Reconnecting(),
       Unavailable(),
+      LocalNetworkPermissionDenied(),
       Revoked(),
       CertificateMismatch(),
       IncompatibleProtocol(),
     ];
 
-    expect(states, hasLength(12));
-    expect(states.map((state) => state.runtimeType).toSet(), hasLength(12));
+    expect(states, hasLength(13));
+    expect(states.map((state) => state.runtimeType).toSet(), hasLength(13));
   });
 }

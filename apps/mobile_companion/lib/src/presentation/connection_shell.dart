@@ -9,6 +9,7 @@ class ConnectionShell extends StatelessWidget {
     this.onPair,
     this.onReset,
     this.onRetry,
+    this.onOpenSettings,
     super.key,
   });
 
@@ -16,6 +17,7 @@ class ConnectionShell extends StatelessWidget {
   final VoidCallback? onPair;
   final VoidCallback? onReset;
   final VoidCallback? onRetry;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +85,26 @@ class ConnectionShell extends StatelessWidget {
                       const SizedBox(height: 32),
                       FilledButton.icon(
                         key: const Key('retry-connection'),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                    if (state is LocalNetworkPermissionDenied &&
+                        onOpenSettings != null) ...<Widget>[
+                      const SizedBox(height: 32),
+                      FilledButton.icon(
+                        key: const Key('open-local-network-settings'),
+                        onPressed: onOpenSettings,
+                        icon: const Icon(Icons.settings_outlined),
+                        label: const Text('Open settings'),
+                      ),
+                    ],
+                    if (state is LocalNetworkPermissionDenied &&
+                        onRetry != null) ...<Widget>[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        key: const Key('retry-local-network-discovery'),
                         onPressed: onRetry,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retry'),
@@ -159,6 +181,13 @@ _ConnectionContent _contentFor(
     message: 'OpenForge must be running and reachable to show current data.',
     icon: Icons.cloud_off_outlined,
     iconLabel: 'Desktop is unavailable',
+  ),
+  LocalNetworkPermissionDenied() => const _ConnectionContent(
+    title: 'Local network access needed',
+    message:
+        'Allow Local Network access in Settings to find your paired OpenForge desktop.',
+    icon: Icons.wifi_off_outlined,
+    iconLabel: 'Local network discovery permission was denied',
   ),
   Revoked() => const _ConnectionContent(
     title: 'Re-pair required',

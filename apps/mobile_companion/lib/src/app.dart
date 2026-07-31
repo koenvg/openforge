@@ -94,6 +94,10 @@ class _CompanionAppState extends State<CompanionApp> {
     if (mounted) await _openScanner();
   }
 
+  Future<void> _openLocalNetworkSettings() async {
+    await widget.controller?.openLocalNetworkSettings();
+  }
+
   Future<void> _retryConnection() async {
     await widget.controller?.restore();
   }
@@ -131,6 +135,9 @@ class _CompanionAppState extends State<CompanionApp> {
             onPair: widget.controller == null ? null : _openScanner,
             onReset: widget.controller == null ? null : _forgetAndPairAgain,
             onRetry: widget.controller == null ? null : _retryConnection,
+            onOpenSettings: widget.controller == null
+                ? null
+                : _openLocalNetworkSettings,
           ),
   );
 }

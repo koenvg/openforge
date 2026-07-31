@@ -123,6 +123,28 @@ void main() {
     expect(reset, isTrue);
   });
 
+  testWidgets('local network denial opens app settings recovery', (
+    tester,
+  ) async {
+    var openedSettings = false;
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectionShell(
+          state: const LocalNetworkPermissionDenied(),
+          onOpenSettings: () => openedSettings = true,
+          onRetry: () => retried = true,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.tap(find.text('Retry'));
+
+    expect(openedSettings, isTrue);
+    expect(retried, isTrue);
+  });
+
   for (final scenario in <({CompanionConnectionState state, String title})>[
     (state: const Restoring(), title: 'Restoring connection'),
     (state: const Unpaired(), title: 'Not paired'),
@@ -136,6 +158,10 @@ void main() {
     ),
     (state: const Reconnecting(), title: 'Reconnecting'),
     (state: const Unavailable(), title: 'Desktop unavailable'),
+    (
+      state: const LocalNetworkPermissionDenied(),
+      title: 'Local network access needed',
+    ),
     (state: const Revoked(), title: 'Re-pair required'),
     (state: const CertificateMismatch(), title: 'Certificate mismatch'),
     (state: const IncompatibleProtocol(), title: 'Update required'),

@@ -29,7 +29,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the short-lived pairing QR shown by your OpenForge desktop.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Connect directly to your paired OpenForge desktop on your private network.</string>
+	<string>Find and securely reconnect to your paired OpenForge desktop on this local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_openforge._tcp</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
