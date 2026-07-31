@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+app_dir="$repo_root/apps/mobile_companion"
+flutter_bin="${FLUTTER_BIN:-flutter}"
+flutter_path="$(command -v "$flutter_bin" 2>/dev/null || true)"
+
+if [[ -z "$flutter_path" ]]; then
+  echo "Flutter is required. Install Flutter 3.44.8 or set FLUTTER_BIN." >&2
+  exit 1
+fi
+
+dart_bin="${DART_BIN:-$(dirname "$flutter_path")/dart}"
+if [[ ! -x "$dart_bin" ]]; then
+  echo "Dart was not found next to the selected Flutter executable." >&2
+  exit 1
+fi
+
+cd "$app_dir"
+
+case "${1:-}" in
+  pub-get)
+    "$flutter_path" pub get
+    ;;
+  format)
+    "$dart_bin" format lib test
+    ;;
+  format-check)
+    "$dart_bin" format --output=none --set-exit-if-changed lib test
+    ;;
+  analyze)
+    "$flutter_path" analyze
+    ;;
+  test)
+    "$flutter_path" test
+    ;;
+  check)
+    "$flutter_path" pub get
+    "$dart_bin" format --output=none --set-exit-if-changed lib test
+    "$flutter_path" analyze
+    "$flutter_path" test
+    ;;
+  build-android)
+    "$flutter_path" build apk --debug
+    ;;
+  build-ios)
+    "$flutter_path" build ios --simulator --debug
+    ;;
+  run)
+    shift
+    "$flutter_path" run "$@"
+    ;;
+  *)
+    cat >&2 <<'USAGE'
+Usage: ./scripts/mobile-companion <command>
+
+Commands:
+  pub-get       Resolve Flutter dependencies
+  format        Format handwritten Dart code
+  format-check  Verify Dart formatting without changing files
+  analyze       Run Flutter static analysis
+  test          Run Flutter unit and widget tests
+  check         Run dependency, format, analysis, and test checks
+  build-android Build a debug Android APK
+  build-ios     Build an unsigned iOS Simulator app (macOS only)
+  run [args]    Launch the companion with optional flutter run arguments
+USAGE
+    exit 2
+    ;;
+esac
