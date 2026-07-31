@@ -41,6 +41,7 @@
   import { loadAppStartupData } from './lib/appStartup'
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
   import { createTaskActionRunner } from './lib/taskActionRunner'
+  import { pendingComposeRequest, settleTaskCompose } from './lib/taskCompose'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
   import { hasActiveAgentSessions } from './lib/quitGuard'
@@ -625,6 +626,26 @@
             onTaskSaved={async () => { await appData.loadTasks() }}
             onRunAction={async (taskId, actionPrompt, agent) => {
               await appData.loadTasks()
+              router.resetToBoard()
+              router.navigateToTask(taskId)
+              await handleRunAction({ taskId, actionPrompt, agent })
+            }}
+          />
+        {/if}
+
+        {#if $pendingComposeRequest}
+          <AddTaskDialog
+            mode="create"
+            projectPath={activeProject?.path ?? null}
+            promptSeed={$pendingComposeRequest.request.initialPrompt}
+            sourceTicketUrlSeed={$pendingComposeRequest.request.sourceTicketUrl ?? null}
+            titleSeed={$pendingComposeRequest.request.title ?? null}
+            onClose={() => settleTaskCompose(null)}
+            onTaskSaved={async (task, options) => {
+              await appData.loadTasks()
+              if (task) settleTaskCompose({ task, started: options?.started ?? false })
+            }}
+            onRunAction={async (taskId, actionPrompt, agent) => {
               router.resetToBoard()
               router.navigateToTask(taskId)
               await handleRunAction({ taskId, actionPrompt, agent })
