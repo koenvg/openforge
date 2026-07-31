@@ -1,11 +1,15 @@
-#[cfg(test)]
-use super::attention::UnavailableCompanionAttentionSource;
 use super::{
     attention::CompanionAttentionSource,
     pairing::{
         PairingCoordinator, PairingError, PairingPollResponse, PairingRequestKind,
         PairingSubmission,
     },
+    task_detail::CompanionTaskDetailSource,
+};
+#[cfg(test)]
+use super::{
+    attention::UnavailableCompanionAttentionSource,
+    task_detail::UnavailableCompanionTaskDetailSource,
 };
 use axum::{
     extract::{
@@ -112,6 +116,22 @@ pub(crate) struct CompanionAttentionSnapshot {
     pub(crate) items: Vec<CompanionAttentionItem>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskDetailResponse {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
+    pub(crate) board_status: String,
+    pub(crate) handoff_notes: Option<String>,
+    pub(crate) agent_state: String,
+    pub(crate) agent_error_summary: Option<String>,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
+    pub(crate) agent_updated_at: Option<String>,
+}
+
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(&self, headers: &HeaderMap) -> Result<(), CompanionErrorCode>;
 }
@@ -144,6 +164,7 @@ struct CompanionRouterState {
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
 }
 
 fn error_response(status: StatusCode, code: CompanionErrorCode, message: &str) -> Response {
@@ -321,6 +342,81 @@ async fn attention_handler(
     .into_response()
 }
 
+fn detail_timestamp(timestamp: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp(timestamp, 0).map(|value| value.to_rfc3339())
+}
+
+async fn task_detail_handler(
+    State(state): State<CompanionRouterState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(code) = state.authorizer.authorize(&headers) {
+        return authorization_error_response(code);
+    }
+
+    let detail = match state.task_detail.get(&task_id) {
+        Ok(Some(detail)) => detail,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                CompanionErrorCode::NotFound,
+                "Task was not found",
+            );
+        }
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                "Task detail is temporarily unavailable",
+            );
+        }
+    };
+
+    let Some(created_at) = detail_timestamp(detail.created_at) else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            CompanionErrorCode::TemporarilyUnavailable,
+            "Task detail is temporarily unavailable",
+        );
+    };
+    let Some(updated_at) = detail_timestamp(detail.updated_at) else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            CompanionErrorCode::TemporarilyUnavailable,
+            "Task detail is temporarily unavailable",
+        );
+    };
+    let agent_updated_at = match detail.agent_updated_at {
+        Some(timestamp) => {
+            let Some(timestamp) = detail_timestamp(timestamp) else {
+                return error_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    CompanionErrorCode::TemporarilyUnavailable,
+                    "Task detail is temporarily unavailable",
+                );
+            };
+            Some(timestamp)
+        }
+        None => None,
+    };
+
+    Json(CompanionTaskDetailResponse {
+        task_id: detail.task_id,
+        title: detail.title,
+        project_id: detail.project_id,
+        project_name: detail.project_name,
+        board_status: detail.board_status,
+        handoff_notes: detail.handoff_notes,
+        agent_state: detail.agent_state,
+        agent_error_summary: detail.agent_error_summary,
+        created_at,
+        updated_at,
+        agent_updated_at,
+    })
+    .into_response()
+}
+
 async fn submit_pairing_handler(
     State(state): State<CompanionRouterState>,
     submission: Result<Json<PairingSubmission>, JsonRejection>,
@@ -379,19 +475,37 @@ pub(crate) fn create_router(
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
 ) -> Router {
-    create_router_with_attention(
+    create_router_with_sources(
         host,
         authorizer,
         pairing,
         Arc::new(UnavailableCompanionAttentionSource),
+        Arc::new(UnavailableCompanionTaskDetailSource),
     )
 }
 
+#[cfg(test)]
 pub(crate) fn create_router_with_attention(
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+) -> Router {
+    create_router_with_sources(
+        host,
+        authorizer,
+        pairing,
+        attention,
+        Arc::new(UnavailableCompanionTaskDetailSource),
+    )
+}
+
+pub(crate) fn create_router_with_sources(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
 ) -> Router {
     let pairing_routes = Router::new()
         .route(
@@ -411,6 +525,7 @@ pub(crate) fn create_router_with_attention(
     Router::new()
         .route("/companion/v1/status", get(status_handler))
         .route("/companion/v1/attention", get(attention_handler))
+        .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
         .merge(pairing_routes)
         .fallback(not_found_handler)
         .with_state(CompanionRouterState {
@@ -418,5 +533,6 @@ pub(crate) fn create_router_with_attention(
             authorizer,
             pairing,
             attention,
+            task_detail,
         })
 }

@@ -7,11 +7,13 @@ class AttentionHome extends StatelessWidget {
   const AttentionHome({
     required this.state,
     required this.onRefresh,
+    this.onTaskSelected,
     super.key,
   });
 
   final AttentionViewState state;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onTaskSelected;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -26,16 +28,25 @@ class AttentionHome extends StatelessWidget {
       ],
     ),
     body: SafeArea(
-      child: _AttentionBody(state: state, onRefresh: onRefresh),
+      child: _AttentionBody(
+        state: state,
+        onRefresh: onRefresh,
+        onTaskSelected: onTaskSelected,
+      ),
     ),
   );
 }
 
 class _AttentionBody extends StatelessWidget {
-  const _AttentionBody({required this.state, required this.onRefresh});
+  const _AttentionBody({
+    required this.state,
+    required this.onRefresh,
+    required this.onTaskSelected,
+  });
 
   final AttentionViewState state;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onTaskSelected;
 
   @override
   Widget build(BuildContext context) => switch (state) {
@@ -52,7 +63,10 @@ class _AttentionBody extends StatelessWidget {
     ),
     AttentionLoaded(:final snapshot) when snapshot.items.isEmpty =>
       const _AttentionEmpty(),
-    AttentionLoaded(:final snapshot) => _AttentionList(items: snapshot.items),
+    AttentionLoaded(:final snapshot) => _AttentionList(
+      items: snapshot.items,
+      onTaskSelected: onTaskSelected,
+    ),
   };
 }
 
@@ -144,9 +158,10 @@ class _AttentionError extends StatelessWidget {
 }
 
 class _AttentionList extends StatelessWidget {
-  const _AttentionList({required this.items});
+  const _AttentionList({required this.items, required this.onTaskSelected});
 
   final List<AttentionItem> items;
+  final ValueChanged<String>? onTaskSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -154,19 +169,22 @@ class _AttentionList extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       itemCount: groups.length,
-      itemBuilder: (context, index) => _ProjectSection(group: groups[index]),
+      itemBuilder: (context, index) =>
+          _ProjectSection(group: groups[index], onTaskSelected: onTaskSelected),
     );
   }
 }
 
 class _ProjectSection extends StatelessWidget {
-  const _ProjectSection({required this.group});
+  const _ProjectSection({required this.group, required this.onTaskSelected});
 
   final AttentionProjectGroup group;
+  final ValueChanged<String>? onTaskSelected;
 
   @override
   Widget build(BuildContext context) => Semantics(
     container: true,
+    explicitChildNodes: true,
     label:
         'Project ${group.projectName}, ${group.items.length} attention Tasks',
     child: Column(
@@ -179,16 +197,24 @@ class _ProjectSection extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
-        ...group.items.map((item) => _AttentionRow(item: item)),
+        ...group.items.map(
+          (item) => _AttentionRow(
+            item: item,
+            onTap: onTaskSelected == null
+                ? null
+                : () => onTaskSelected!(item.taskId),
+          ),
+        ),
       ],
     ),
   );
 }
 
 class _AttentionRow extends StatelessWidget {
-  const _AttentionRow({required this.item});
+  const _AttentionRow({required this.item, required this.onTap});
 
   final AttentionItem item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -196,34 +222,39 @@ class _AttentionRow extends StatelessWidget {
     final activityLabel = _activityLabel(context, item.activityAt);
     return Semantics(
       container: true,
+      button: onTap != null,
       label: 'Task ${item.title}, $stateLabel, ${item.reason}, $activityLabel',
       child: ExcludeSemantics(
         child: Card(
           margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  item.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  stateLabel,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    item.title,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(item.reason),
-                const SizedBox(height: 12),
-                Text(
-                  activityLabel,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    stateLabel,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(item.reason),
+                  const SizedBox(height: 12),
+                  Text(
+                    activityLabel,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

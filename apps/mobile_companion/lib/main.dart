@@ -5,6 +5,7 @@ import 'src/attention/attention_controller.dart';
 import 'src/client/companion_client.dart';
 import 'src/pairing/companion_pairing_controller.dart';
 import 'src/storage/companion_secure_storage.dart';
+import 'src/task_detail/task_detail_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,12 @@ void main() {
     CompanionApp(
       controller: pairingController,
       attentionController: attentionController,
+      taskDetailControllerFactory: (taskId) => TaskDetailController(
+        taskId: taskId,
+        client: client,
+        storage: storage,
+        onAuthorizationLost: pairingController.authorizationLost,
+      ),
     ),
   );
   pairingController.restore();

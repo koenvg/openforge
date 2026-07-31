@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '4a06807755ce40b6941dc575fc8152166d56f5ef2a12f5457ab7a0d99cb8dc8d';
+    '215e39ddd54732d6d113d31273f518ae5e9fd01043feaddc49423e8768a63997';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({
@@ -208,6 +208,89 @@ final class AttentionItem {
   final DateTime activityAt;
 }
 
+final class TaskDetail {
+  const TaskDetail({
+    required this.taskId,
+    required this.title,
+    required this.projectId,
+    required this.projectName,
+    required this.boardStatus,
+    required this.handoffNotes,
+    required this.agentState,
+    required this.agentErrorSummary,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.agentUpdatedAt,
+  });
+
+  factory TaskDetail.fromJson(Map<String, Object?> json) {
+    const fields = <String>{
+      'taskId',
+      'title',
+      'projectId',
+      'projectName',
+      'boardStatus',
+      'handoffNotes',
+      'agentState',
+      'agentErrorSummary',
+      'createdAt',
+      'updatedAt',
+      'agentUpdatedAt',
+    };
+    json.expectOnly(fields);
+    if (!json.keys.toSet().containsAll(fields)) {
+      throw const FormatException('Task detail is missing required fields.');
+    }
+    final taskId = json.string('taskId');
+    final title = json.string('title');
+    final projectId = json.string('projectId');
+    final projectName = json.string('projectName');
+    final boardStatus = json.string('boardStatus');
+    final agentState = json.string('agentState');
+    if (<String>[
+          taskId,
+          title,
+          projectId,
+          projectName,
+        ].any((value) => value.isEmpty) ||
+        !const <String>{'backlog', 'doing', 'done'}.contains(boardStatus) ||
+        !const <String>{
+          'waiting',
+          'running',
+          'blocked',
+          'failed',
+          'complete',
+        }.contains(agentState)) {
+      throw const FormatException('Invalid Task detail.');
+    }
+    return TaskDetail(
+      taskId: taskId,
+      title: title,
+      projectId: projectId,
+      projectName: projectName,
+      boardStatus: boardStatus,
+      handoffNotes: json.requiredNullableString('handoffNotes'),
+      agentState: agentState,
+      agentErrorSummary: json.requiredNullableString('agentErrorSummary'),
+      createdAt: json.dateTime('createdAt'),
+      updatedAt: json.dateTime('updatedAt'),
+      agentUpdatedAt: json.nullableDateTime('agentUpdatedAt'),
+    );
+  }
+
+  final String taskId;
+  final String title;
+  final String projectId;
+  final String projectName;
+  final String boardStatus;
+  final String? handoffNotes;
+  final String agentState;
+  final String? agentErrorSummary;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? agentUpdatedAt;
+}
+
 final class CompanionV1Client {
   const CompanionV1Client({required this.baseUrl, required this.transport});
 
@@ -266,6 +349,20 @@ final class CompanionV1Client {
       headers: <String, String>{'authorization': 'Bearer $credential'},
     );
     return AttentionSnapshot.fromJson(_successJson(response, const <int>{200}));
+  }
+
+  Future<TaskDetail> getCompanionTaskDetail({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve(
+        '/companion/v1/tasks/${Uri.encodeComponent(taskId)}',
+      ),
+      headers: <String, String>{'authorization': 'Bearer $credential'},
+    );
+    return TaskDetail.fromJson(_successJson(response, const <int>{200}));
   }
 }
 
@@ -345,6 +442,27 @@ extension on Map<String, Object?> {
     final value = this[key];
     if (value is! String) throw FormatException('Expected string field $key.');
     return value;
+  }
+
+  String? requiredNullableString(String key) {
+    final value = this[key];
+    if (value == null) return null;
+    if (value is! String) throw FormatException('Expected string field $key.');
+    return value;
+  }
+
+  DateTime? nullableDateTime(String key) {
+    final value = this[key];
+    if (value == null) return null;
+    if (value is! String) {
+      throw FormatException('Expected date-time field $key.');
+    }
+    if (!RegExp(
+      r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$',
+    ).hasMatch(value)) {
+      throw FormatException('Expected RFC 3339 field $key.');
+    }
+    return DateTime.parse(value);
   }
 
   int integer(String key) {

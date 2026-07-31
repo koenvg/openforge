@@ -19,6 +19,11 @@ abstract interface class CompanionClient {
   Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord);
 
   Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord);
+
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
 }
 
 typedef CompanionEndpointTransportFactory =
@@ -104,6 +109,20 @@ final class GeneratedCompanionClient implements CompanionClient {
           credential: trustRecord.deviceCredential,
         ),
       );
+
+  @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => _tryEndpoints(
+    transportFactory: _transportFactory,
+    endpoints: trustRecord.endpointCandidates,
+    certificateSha256: trustRecord.certificateSha256,
+    operation: (client) => client.getCompanionTaskDetail(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
 }
 
 Future<T> _tryEndpoints<T>({
