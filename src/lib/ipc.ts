@@ -372,6 +372,10 @@ export async function revokeCompanionDevice(deviceId: string): Promise<void> {
   return invoke('revoke_companion_device', { deviceId })
 }
 
+export async function resetCompanionHostIdentity(): Promise<CompanionGatewayStatus> {
+  return invoke<CompanionGatewayStatus>('reset_companion_host_identity')
+}
+
 export async function getTaskDetail(taskId: string): Promise<Task> {
   const task = await invoke<RawTask>("get_task_detail", { taskId });
   return normalizeTask(task)

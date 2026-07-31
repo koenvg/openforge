@@ -72,6 +72,27 @@ async fn companion_gateway_commands_persist_opt_in_and_report_lifecycle_state() 
     )
     .await
     .is_null(),);
+    let reset = invoke_ok(
+        &state,
+        "reset_companion_host_identity",
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(reset["enabled"], true);
+    assert_eq!(reset["phase"], "running");
+    assert_ne!(reset["hostId"], running["hostId"]);
+    assert_ne!(
+        reset["certificateFingerprint"],
+        running["certificateFingerprint"]
+    );
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_config(crate::companion_gateway::COMPANION_GATEWAY_ENABLED_CONFIG)
+            .expect("read persisted preference after reset")
+            .as_deref(),
+        Some("true")
+    );
+
     assert!(
         invoke_ok(
             &state,

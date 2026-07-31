@@ -395,6 +395,7 @@ describe('Electron backend bridge command forwarding', () => {
       'reject_companion_pairing',
       'list_companion_devices',
       'revoke_companion_device',
+      'reset_companion_host_identity',
     ]) {
       expect(isSidecarBackedCommand(command)).toBe(true)
     }

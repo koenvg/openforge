@@ -48,7 +48,7 @@ fn certificate_fingerprint(der: &[u8]) -> String {
         .join(":")
 }
 
-fn create_host_identity() -> Result<CompanionHostIdentity, String> {
+pub(crate) fn generate_host_identity() -> Result<CompanionHostIdentity, String> {
     let host_id = uuid::Uuid::new_v4().to_string();
     let certified_key = generate_simple_self_signed(vec![
         "localhost".to_string(),
@@ -72,7 +72,7 @@ pub(crate) fn load_or_create_host_identity(
         return Ok(identity);
     }
 
-    let identity = create_host_identity()?;
+    let identity = generate_host_identity()?;
     store.save(&identity)?;
     Ok(identity)
 }
@@ -82,12 +82,18 @@ pub(crate) fn load_or_create_host_identity(
 pub(crate) struct InMemoryIdentityStore {
     identity: std::sync::Mutex<Option<CompanionHostIdentity>>,
     saves: std::sync::atomic::AtomicUsize,
+    fail_next_save: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(test)]
 impl InMemoryIdentityStore {
     pub(crate) fn save_count(&self) -> usize {
         self.saves.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn fail_next_save(&self) {
+        self.fail_next_save
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -101,6 +107,12 @@ impl CompanionIdentityStore for InMemoryIdentityStore {
     }
 
     fn save(&self, identity: &CompanionHostIdentity) -> Result<(), String> {
+        if self
+            .fail_next_save
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err("test identity save failed".to_string());
+        }
         *self
             .identity
             .lock()
@@ -136,6 +148,7 @@ impl CompanionIdentityStore for DelayedIdentityStore {
     }
 
     fn save(&self, identity: &CompanionHostIdentity) -> Result<(), String> {
+        std::thread::sleep(self.delay);
         self.inner.save(identity)
     }
 }

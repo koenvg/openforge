@@ -24,11 +24,29 @@
     <ul class="m-0 flex list-none flex-col gap-2 p-0">
       {#each devices as device (device.deviceId)}
         <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-base-300 px-3 py-2">
-          <div>
+          <div class="min-w-0 flex-1">
             <div class="text-sm font-medium">{device.deviceName}</div>
-            <div class="text-xs text-base-content/60">
-              {platformLabel(device.platform)} · Paired {formattedDate(device.pairedAt)}
-            </div>
+            <div class="text-xs text-base-content/60">{platformLabel(device.platform)}</div>
+            <dl class="mt-1 grid gap-0.5 text-xs text-base-content/60">
+              <div class="flex flex-wrap gap-1">
+                <dt class="font-medium">Device ID</dt>
+                <dd class="m-0 break-all font-mono">{device.deviceId}</dd>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <dt class="font-medium">Paired</dt>
+                <dd class="m-0">{formattedDate(device.pairedAt)}</dd>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <dt class="font-medium">Last seen</dt>
+                <dd class="m-0">{device.lastSeenAt ? formattedDate(device.lastSeenAt) : 'never'}</dd>
+              </div>
+              {#if device.revokedAt}
+                <div class="flex flex-wrap gap-1">
+                  <dt class="font-medium">Revoked</dt>
+                  <dd class="m-0">{formattedDate(device.revokedAt)}</dd>
+                </div>
+              {/if}
+            </dl>
           </div>
           {#if device.revokedAt}
             <span class="badge badge-error badge-outline">Revoked</span>

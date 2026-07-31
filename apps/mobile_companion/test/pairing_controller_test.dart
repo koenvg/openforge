@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +27,7 @@ final class _FakeClient implements CompanionClient {
   Object? pollError;
   final pollErrors = <Object>[];
   Object? hostStatusError;
+  Completer<CompanionHostConnection>? hostStatusCompleter;
   PairingPoll poll = const PairingPoll(
     status: 'approved',
     deviceId: 'device-1',
@@ -76,6 +78,8 @@ final class _FakeClient implements CompanionClient {
     fetchedTrustRecord = trustRecord;
     final error = hostStatusError;
     if (error != null) throw error;
+    final completer = hostStatusCompleter;
+    if (completer != null) return completer.future;
     return CompanionHostConnection(
       endpoint: connectedEndpoint ?? trustRecord.endpointCandidates.first,
       status: hostStatus,
@@ -317,6 +321,117 @@ void main() {
     expect(controller.state, isA<Unpaired>());
     expect(storage.record, isNull);
   });
+
+  test(
+    'gateway stream closure preserves trust for disable and later re-enable',
+    () async {
+      final client = _FakeClient();
+      final storage = _FakeStorage()
+        ..record = CompanionTrustRecord(
+          hostId: _hostId,
+          certificateSha256: _fingerprint,
+          endpointCandidates: <Uri>[Uri.parse('https://192.168.1.20:17424')],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        );
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+      );
+
+      await controller.restore();
+      expect(controller.state, isA<Connected>());
+
+      controller.gatewayClosing();
+      expect(controller.state, isA<Reconnecting>());
+      expect(storage.record, isNotNull);
+
+      client.hostStatusError = const SocketException('gateway disabled');
+      await controller.restore();
+      expect(controller.state, isA<Unavailable>());
+      expect(storage.record, isNotNull);
+
+      client.hostStatusError = null;
+      await controller.restore();
+      expect(controller.state, isA<Connected>());
+      expect(storage.record?.deviceId, 'device-1');
+    },
+  );
+
+  test('authorization termination enters re-pair required', () async {
+    final controller = CompanionPairingController(
+      client: _FakeClient(),
+      storage: _FakeStorage(),
+    );
+
+    controller.authorizationLost();
+
+    expect(controller.state, isA<Revoked>());
+  });
+
+  test('authorization termination wins over an in-flight restore', () async {
+    final pendingStatus = Completer<CompanionHostConnection>();
+    final client = _FakeClient()..hostStatusCompleter = pendingStatus;
+    final storage = _FakeStorage()
+      ..record = CompanionTrustRecord(
+        hostId: _hostId,
+        certificateSha256: _fingerprint,
+        endpointCandidates: <Uri>[Uri.parse('https://192.168.1.20:17424')],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+    final controller = CompanionPairingController(
+      client: client,
+      storage: storage,
+    );
+    final restore = controller.restore();
+    await Future<void>.delayed(Duration.zero);
+
+    controller.authorizationLost();
+    pendingStatus.complete(
+      CompanionHostConnection(
+        endpoint: storage.record!.endpointCandidates.first,
+        status: client.hostStatus,
+      ),
+    );
+    await restore;
+
+    expect(controller.state, isA<Revoked>());
+  });
+
+  test(
+    'authorization termination wins over an in-flight paired connection',
+    () async {
+      final pendingStatus = Completer<CompanionHostConnection>();
+      final client = _FakeClient()..hostStatusCompleter = pendingStatus;
+      final storage = _FakeStorage();
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+        pollInterval: Duration.zero,
+      );
+      final pairing = controller.pairFromQr(
+        qrPayload: _qrPayload,
+        deviceName: 'Pixel 9',
+        platform: 'android',
+      );
+      while (client.fetchedTrustRecord == null) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      controller.authorizationLost();
+      pendingStatus.complete(
+        CompanionHostConnection(
+          endpoint: client.fetchedTrustRecord!.endpointCandidates.first,
+          status: client.hostStatus,
+        ),
+      );
+      await pairing;
+
+      expect(controller.state, isA<Revoked>());
+      expect(storage.record, isNull);
+    },
+  );
 
   test('corrupt secure storage is forgotten and returns to unpaired', () async {
     final storage = _FakeStorage()

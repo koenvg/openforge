@@ -6,7 +6,7 @@ use super::{
 use axum::{
     body::Body,
     extract::connect_info::ConnectInfo,
-    http::{header::AUTHORIZATION, Request, StatusCode},
+    http::{header::AUTHORIZATION, HeaderMap, HeaderValue, Request, StatusCode},
     response::Response,
 };
 use base64::Engine;
@@ -251,6 +251,16 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
         .await
         .get("credential")
         .is_none());
+    let mut stream_headers = HeaderMap::new();
+    stream_headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {credential}")).expect("authorization header"),
+    );
+    coordinator.notify_gateway_running();
+    let mut stream_authorization = coordinator
+        .authorize_stream(&stream_headers)
+        .expect("authorized stream context");
+    assert_eq!(stream_authorization.device_id(), device_id);
 
     let status_response = router
         .clone()
@@ -281,6 +291,13 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
     );
 
     coordinator.revoke(&device_id).expect("revoke device");
+    let termination = stream_authorization.wait_for_termination().await;
+    assert!(termination.terminates(&device_id));
+    coordinator.notify_gateway_closing();
+    assert!(matches!(
+        coordinator.authorize_stream(&stream_headers),
+        Err(super::contract::CompanionErrorCode::TemporarilyUnavailable)
+    ));
     let revoked = router
         .oneshot(
             Request::builder()

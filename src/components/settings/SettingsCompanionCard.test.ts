@@ -8,6 +8,7 @@ import {
   listCompanionDevices,
   rejectCompanionPairing,
   revokeCompanionDevice,
+  resetCompanionHostIdentity,
   setCompanionGatewayEnabled,
   startCompanionPairing,
 } from '../../lib/ipc'
@@ -27,6 +28,7 @@ vi.mock('../../lib/ipc', () => ({
   rejectCompanionPairing: vi.fn(),
   listCompanionDevices: vi.fn(),
   revokeCompanionDevice: vi.fn(),
+  resetCompanionHostIdentity: vi.fn(),
 }))
 
 const disabledStatus = {
@@ -70,6 +72,11 @@ describe('SettingsCompanionCard', () => {
     vi.mocked(approveCompanionPairing).mockResolvedValue()
     vi.mocked(rejectCompanionPairing).mockResolvedValue()
     vi.mocked(revokeCompanionDevice).mockResolvedValue()
+    vi.mocked(resetCompanionHostIdentity).mockResolvedValue({
+      ...runningStatus,
+      hostId: 'desktop-host-2',
+      certificateFingerprint: 'DD:EE:FF',
+    })
   })
 
   it('shows that Companion connectivity is off by default and requires OpenForge to remain running', async () => {
@@ -167,6 +174,85 @@ describe('SettingsCompanionCard', () => {
 
     expect(confirm).toHaveBeenCalled()
     expect(revokeCompanionDevice).toHaveBeenCalledWith('device-1')
+    expect(screen.getByText('Device ID')).toBeTruthy()
+    expect(screen.getByText('device-1')).toBeTruthy()
+    expect(screen.getByText('Last seen')).toBeTruthy()
+    expect(screen.getByText('never')).toBeTruthy()
+    confirm.mockRestore()
+  })
+
+  it('resets host identity only after a separate destructive confirmation', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    vi.mocked(listCompanionDevices).mockResolvedValue([
+      {
+        deviceId: 'device-1',
+        deviceName: "Koen's iPhone",
+        platform: 'ios',
+        pairedAt: '2026-07-30T12:00:00Z',
+        lastSeenAt: '2026-07-30T12:30:00Z',
+        revokedAt: null,
+      },
+    ])
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Reset Companion identity' }),
+    )
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringMatching(/all paired devices.*pair again/i),
+    )
+    expect(resetCompanionHostIdentity).toHaveBeenCalledOnce()
+    expect(await screen.findByText(/Companion identity reset/i)).toBeTruthy()
+    expect(screen.getByText('desktop-host-2')).toBeTruthy()
+    confirm.mockRestore()
+  })
+
+  it('does not reset identity when destructive confirmation is declined', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Reset Companion identity' }),
+    )
+
+    expect(resetCompanionHostIdentity).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('keeps reset success visible when the device refresh fails afterward', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    vi.mocked(listCompanionDevices)
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('device list unavailable'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Reset Companion identity' }),
+    )
+
+    expect(resetCompanionHostIdentity).toHaveBeenCalledOnce()
+    expect(await screen.findByText(/Companion identity reset/i)).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toMatch(/reset succeeded.*could not be refreshed/i)
+    confirm.mockRestore()
+  })
+
+  it('refreshes authoritative trust state after a reset operation fails', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    vi.mocked(resetCompanionHostIdentity).mockRejectedValue(new Error('identity save failed'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Reset Companion identity' }),
+    )
+
+    expect((await screen.findByRole('alert')).textContent).toContain('identity save failed')
+    expect(getCompanionGatewayStatus).toHaveBeenCalledTimes(2)
+    expect(listCompanionDevices).toHaveBeenCalledTimes(2)
     confirm.mockRestore()
   })
 

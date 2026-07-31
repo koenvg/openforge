@@ -2,8 +2,8 @@ use super::{
     attention::CompanionAttentionSource,
     live_events::{companion_event_stream, CompanionStreamAccess},
     pairing::{
-        PairingCoordinator, PairingError, PairingPollResponse, PairingRequestKind,
-        PairingSubmission,
+        CompanionAuthenticatedDevice, PairingCoordinator, PairingError, PairingPollResponse,
+        PairingRequestKind, PairingSubmission,
     },
     task_detail::CompanionTaskDetailSource,
 };
@@ -135,7 +135,10 @@ pub(crate) struct CompanionTaskDetailResponse {
 }
 
 pub(crate) trait CompanionAuthorizer: Send + Sync {
-    fn authorize(&self, headers: &HeaderMap) -> Result<(), CompanionErrorCode>;
+    fn authorize(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode>;
 }
 
 #[cfg(test)]
@@ -144,7 +147,10 @@ pub(crate) struct PairingUnavailableAuthorizer;
 
 #[cfg(test)]
 impl CompanionAuthorizer for PairingUnavailableAuthorizer {
-    fn authorize(&self, _headers: &HeaderMap) -> Result<(), CompanionErrorCode> {
+    fn authorize(
+        &self,
+        _headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
         Err(CompanionErrorCode::Unauthenticated)
     }
 }
@@ -155,8 +161,13 @@ pub(crate) struct AllowAllAuthorizer;
 
 #[cfg(test)]
 impl CompanionAuthorizer for AllowAllAuthorizer {
-    fn authorize(&self, _headers: &HeaderMap) -> Result<(), CompanionErrorCode> {
-        Ok(())
+    fn authorize(
+        &self,
+        _headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
+        Ok(CompanionAuthenticatedDevice {
+            device_id: "test-device".to_string(),
+        })
     }
 }
 
