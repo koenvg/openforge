@@ -73,7 +73,7 @@ export class TaskBrowserSessionPurgeCoordinator {
     try {
       intents = await this.options.backend.listPending()
     } catch (error) {
-      logger.error('[task-browser-purge] Failed to list pending Task Browser Session purge intents; cleanup remains pending', error)
+      logger.error('[task-browser-purge] Failed to list pending Plugin Browser Session purge intents; cleanup remains pending', error)
       return { acknowledgedIntentIds: [], pendingIntentIds: [] }
     }
 
@@ -112,7 +112,7 @@ export class TaskBrowserSessionPurgeCoordinator {
     for (const record of records) {
       try {
         await this.options.purgeSession(record)
-        await this.options.registry.remove(record.pluginId, record.taskId)
+        await this.options.registry.remove(record.partition)
       } catch (error) {
         failed = true
         logger.error(
@@ -125,7 +125,7 @@ export class TaskBrowserSessionPurgeCoordinator {
 
     try {
       await this.options.backend.acknowledge(intent.id)
-      logger.info(`[task-browser-purge] Acknowledged Task Browser Session purge intent ${intent.id}`)
+      logger.info(`[task-browser-purge] Acknowledged Plugin Browser Session purge intent ${intent.id}`)
       return true
     } catch (error) {
       logger.error(`[task-browser-purge] Failed to acknowledge purge intent ${intent.id}; acknowledgement will retry`, error)

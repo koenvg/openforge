@@ -1,17 +1,22 @@
 import { CrashSafeFilePersistence } from './crashSafeFilePersistence.js'
-import type { TaskBrowserSessionPartition } from './taskBrowserSurfaceManager.js'
+import type { PluginBrowserSessionPartition } from './taskBrowserSurfaceManager.js'
 
 export interface TaskBrowserPartitionRegistration {
   pluginId: string
-  taskId: string
-  partition: TaskBrowserSessionPartition
+  /**
+   * Present only on superseded per-Task registrations written before ADR 0012. New registrations are
+   * plugin-scoped, so a partition is identified by its plugin alone.
+   */
+  taskId?: string
+  partition: PluginBrowserSessionPartition
 }
 
 export interface TaskBrowserPartitionRegistry {
   register(record: TaskBrowserPartitionRegistration): Promise<void>
+  listAll(): Promise<TaskBrowserPartitionRegistration[]>
   listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]>
   listByPlugin(pluginId: string): Promise<TaskBrowserPartitionRegistration[]>
-  remove(pluginId: string, taskId: string): Promise<void>
+  remove(partition: string): Promise<void>
 }
 
 export interface TaskBrowserPartitionRegistryLogger {
@@ -39,13 +44,11 @@ type RegistryCandidate =
   | { status: 'invalid'; error: Error }
   | { status: 'valid'; content: string; snapshot: RegistrySnapshot }
 
-const PARTITION_PATTERN = /^persist:openforge-task-browser-[a-f0-9]{64}$/
+// Accepts both the plugin-scoped scheme and the superseded per-Task scheme, so a registry written
+// before ADR 0012 still loads and its stale partitions can be purged rather than stranded.
+const PARTITION_PATTERN = /^persist:openforge-(plugin|task)-browser-[a-f0-9]{64}$/
 const INITIALIZATION_MARKER = 'openforge-task-browser-partition-registry-v1\n'
 const DEFAULT_LOGGER: TaskBrowserPartitionRegistryLogger = console
-
-function key(pluginId: string, taskId: string): string {
-  return `${pluginId}\u0000${taskId}`
-}
 
 function copy(record: TaskBrowserPartitionRegistration): TaskBrowserPartitionRegistration {
   return { ...record }
@@ -76,20 +79,18 @@ function parseRegistry(content: string, path: string): RegistrySnapshot {
       || candidate === null
       || typeof candidate.pluginId !== 'string'
       || candidate.pluginId.trim() === ''
-      || typeof candidate.taskId !== 'string'
-      || candidate.taskId.trim() === ''
+      || (candidate.taskId !== undefined && (typeof candidate.taskId !== 'string' || candidate.taskId.trim() === ''))
       || typeof candidate.partition !== 'string'
       || !PARTITION_PATTERN.test(candidate.partition)
     ) {
       throw new Error(`Task Browser partition registry at ${path} contains an invalid registration`)
     }
     const record = candidate as TaskBrowserPartitionRegistration
-    const recordKey = key(record.pluginId, record.taskId)
-    const existing = records.get(recordKey)
-    if (existing && existing.partition !== record.partition) {
+    const existing = records.get(record.partition)
+    if (existing && existing.pluginId !== record.pluginId) {
       throw new Error(`Task Browser partition registry at ${path} contains conflicting registrations`)
     }
-    records.set(recordKey, copy(record))
+    records.set(record.partition, copy(record))
   }
   return { generation: file.generation ?? 0, records }
 }
@@ -98,7 +99,7 @@ function snapshotsHaveSameRecords(left: RegistrySnapshot, right: RegistrySnapsho
   if (left.records.size !== right.records.size) return false
   for (const [recordKey, record] of left.records) {
     const other = right.records.get(recordKey)
-    if (!other || other.partition !== record.partition) return false
+    if (!other || other.pluginId !== record.pluginId || other.taskId !== record.taskId) return false
   }
   return true
 }
@@ -143,17 +144,28 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     return this.persistence.runExclusive(async () => {
       this.validateRegistration(record)
       const snapshot = await this.load()
-      const recordKey = key(record.pluginId, record.taskId)
-      const existing = snapshot.records.get(recordKey)
-      if (existing) {
-        if (existing.partition !== record.partition) {
-          throw new Error(`Task Browser partition registry already maps ${record.pluginId}/${record.taskId} to another partition`)
-        }
-        return
+      const existing = snapshot.records.get(record.partition)
+      if (existing) return
+
+      // A plugin owns exactly one live partition. Superseded per-Task records are exempt because
+      // they coexist with the new shared partition until first-launch cleanup purges them.
+      const conflicting = [...snapshot.records.values()].find(
+        candidate => candidate.pluginId === record.pluginId && candidate.taskId === undefined,
+      )
+      if (conflicting) {
+        throw new Error(`Task Browser partition registry already maps ${record.pluginId} to another partition`)
       }
+
       const records = new Map(snapshot.records)
-      records.set(recordKey, copy(record))
+      records.set(record.partition, copy(record))
       await this.persist(this.nextSnapshot(snapshot, records))
+    })
+  }
+
+  listAll(): Promise<TaskBrowserPartitionRegistration[]> {
+    return this.persistence.runExclusive(async () => {
+      const snapshot = await this.load()
+      return [...snapshot.records.values()].map(copy)
     })
   }
 
@@ -171,11 +183,11 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
     })
   }
 
-  remove(pluginId: string, taskId: string): Promise<void> {
+  remove(partition: string): Promise<void> {
     return this.persistence.runExclusive(async () => {
       const snapshot = await this.load()
       const records = new Map(snapshot.records)
-      if (!records.delete(key(pluginId, taskId))) return
+      if (!records.delete(partition)) return
       await this.persist(this.nextSnapshot(snapshot, records))
     })
   }
@@ -380,8 +392,8 @@ export class FileTaskBrowserPartitionRegistry implements TaskBrowserPartitionReg
 
 
   private validateRegistration(record: TaskBrowserPartitionRegistration): void {
-    if (!record.pluginId.trim() || !record.taskId.trim() || !PARTITION_PATTERN.test(record.partition)) {
-      throw new Error('Task Browser partition registry requires a valid plugin, Task, and persistent partition')
+    if (!record.pluginId.trim() || !PARTITION_PATTERN.test(record.partition)) {
+      throw new Error('Task Browser partition registry requires a valid plugin and persistent partition')
     }
   }
 

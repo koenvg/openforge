@@ -56,7 +56,7 @@ export interface TaskBrowserSurfaceController {
 
 export interface BrowserSurfacesAPI {
   getOrCreate(request: GetOrCreateBrowserSurfaceRequest): Promise<TaskBrowserSurfaceController>
-  resetSession(taskId: string): Promise<void>
+  resetSession(): Promise<void>
 }
 
 export function isAllowedBrowserSurfaceUrl(value: string): boolean {

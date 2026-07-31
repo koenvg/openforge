@@ -357,9 +357,9 @@ export function createPluginRuntimeHost(pluginId: string) {
       if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Surface plugin identity mismatch')
       return browserSurfaces.getOrCreate(request)
     },
-    resetBrowserSession: (qualifiedPluginId: string, taskId: string) => {
-      if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Session plugin identity mismatch')
-      return browserSurfaces.resetSession(taskId)
+    resetBrowserSession: (qualifiedPluginId: string) => {
+      if (qualifiedPluginId !== pluginId) throw new Error('Plugin Browser Session plugin identity mismatch')
+      return browserSurfaces.resetSession()
     },
     destroyPluginBrowserSurfaces: (qualifiedPluginId: string) => {
       if (qualifiedPluginId !== pluginId) throw new Error('Task Browser Surface plugin identity mismatch')

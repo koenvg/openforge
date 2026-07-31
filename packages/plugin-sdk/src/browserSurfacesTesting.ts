@@ -17,7 +17,7 @@ export interface TestingBrowserSurfaceCalls {
   browserSurfaceDestroys: Array<{ taskId: string; id: string }>
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
-  browserSurfaceSessionResets: Array<{ taskId: string }>
+  browserSurfaceSessionResets: Array<Record<string, never>>
 }
 
 export interface TestingBrowserSurfaces {
@@ -200,11 +200,9 @@ export function createTestingBrowserSurfaces(calls: TestingBrowserSurfaceCalls):
       }
       return surface
     },
-    async resetSession(taskId) {
-      if (!taskId.trim()) throw new BrowserSurfaceError('INVALID_TASK', 'Task Browser Session reset requires a non-empty Task ID')
-      calls.browserSurfaceSessionResets.push({ taskId })
-      const matching = Array.from(surfaces.values()).filter(surface => surface.taskId === taskId)
-      for (const surface of matching) await surface.destroy()
+    async resetSession() {
+      calls.browserSurfaceSessionResets.push({})
+      for (const surface of Array.from(surfaces.values())) await surface.destroy()
     },
   }
 

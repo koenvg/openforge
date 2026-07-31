@@ -262,7 +262,7 @@ const attachment = await surface.attach(browserRegionElement)
 await attachment.dispose() // detaches but keeps the live page when capacity permits
 await stateSubscription.dispose()
 
-// To release the live page while retaining its durable Task Browser Session:
+// To release the live page while retaining its durable Plugin Browser Session:
 await surface.destroy()
 ```
 
@@ -270,9 +270,9 @@ await surface.destroy()
 
 Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds, scrolling, resizing, visibility, and disconnection. A newer attachment atomically replaces an older one, and disposing stale attachment cleanup cannot detach the newer attachment. Detaching may preserve the background-throttled live page; each OpenForge window retains at most four detached surfaces before least-recently-used eviction. Attached surfaces are protected. After destruction or eviction, reacquire with `getOrCreate` and the URL saved in task-scoped plugin storage.
 
-All surfaces for one plugin and Task share a durable, isolated Task Browser Session. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, and app restart; sessions are isolated across plugins and Tasks. `openforge.browserSurfaces.resetSession(taskId)` destroys that plugin's live surfaces for the Task and clears browser session data and remembered site permissions without clearing plugin task storage.
+All surfaces of one plugin share a single durable Plugin Browser Session, spanning every Task and project, so a login performed in one Task is available in all of them. Sessions are isolated across plugins, never within a plugin. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, Task deletion, and app restart. `openforge.browserSurfaces.resetSession()` takes no Task: it destroys that plugin's live surfaces in every Task and clears the shared browser session data and remembered site permissions, without clearing plugin task storage. Warn the user before calling it — it signs them out everywhere at once. See [ADR 0012](./adr/0012-plugin-scoped-browser-sessions.md).
 
-Electron main owns the non-configurable sandboxed browser security baseline, top-level HTTP(S)-only policy, native bounds, resource limits, and cleanup. Recognized site permissions are mediated by host-owned prompts; unknown or malformed permission requests fail closed. Policy-approved HTTP(S) popups may open for ordinary browsing and authentication as host-owned child windows. Those children share the parent Task Browser Session and its secure navigation, permission, and download policy, and close with the parent surface. Popup requests using unsupported schemes or trying to override protected web preferences are denied.
+Electron main owns the non-configurable sandboxed browser security baseline, top-level HTTP(S)-only policy, native bounds, resource limits, and cleanup. Recognized site permissions are mediated by host-owned prompts; unknown or malformed permission requests fail closed. Policy-approved HTTP(S) popups may open for ordinary browsing and authentication as host-owned child windows. Those children share the parent Plugin Browser Session and its secure navigation, permission, and download policy, and close with the parent surface. Popup requests using unsupported schemes or trying to override protected web preferences are denied.
 
 Every download is mediated by an Electron-main-owned native Save dialog. The host sanitizes the page's suggested filename, while the user decides whether and where to save; canceling the dialog, losing the owning window, or failing to configure the dialog cancels the download. The public plugin API has no direct popup or download controls: plugins cannot auto-accept popups or downloads, choose or learn download destinations, or access Electron, preload IPC, `WebContentsView`, `webContents`, session objects, popup handles, child-window handles, download items, file paths, script injection, DOM inspection, CDP, or DevTools policy. Do not import desktop IPC wrappers or Electron APIs directly.
 

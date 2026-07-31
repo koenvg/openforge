@@ -49,8 +49,8 @@ export class RuntimeFrontendContributionRegistry {
         getOrCreate: async (request) => this.services.host.getOrCreateBrowserSurface
           ? this.services.host.getOrCreateBrowserSurface(this.services.pluginId, request)
           : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.getOrCreate')),
-        resetSession: async (taskId) => this.services.host.resetBrowserSession
-          ? this.services.host.resetBrowserSession(this.services.pluginId, taskId)
+        resetSession: async () => this.services.host.resetBrowserSession
+          ? this.services.host.resetBrowserSession(this.services.pluginId)
           : Promise.reject(new BrowserSurfaceError('CAPABILITY_UNAVAILABLE', 'OpenForge host capability is unavailable: browserSurfaces.resetSession')),
       },
       taskLinks: {

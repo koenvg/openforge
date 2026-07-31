@@ -4,22 +4,30 @@ import {
   SECURE_TASK_BROWSER_POPUP_POLICY,
   constrainTaskBrowserBounds,
   isTaskBrowserUrlAllowed,
-  taskBrowserSessionPartition,
+  isSupersededTaskBrowserPartition,
+  pluginBrowserSessionPartition,
   validateTaskBrowserSurfaceIdentity,
 } from './taskBrowserSurfacePolicy'
 import { TaskBrowserSurfaceError } from './taskBrowserSurfaceContract'
 
 describe('Task Browser Surface policy', () => {
-  it('derives stable isolated partitions from plugin and Task identity', () => {
-    expect(taskBrowserSessionPartition('browser', 'T-1')).toBe(
-      'persist:openforge-task-browser-f3c7a3c60de8e74b261b9e88aeaf2593e6ff954e58b3a1c5b3849f6731f97ba0',
+  it('derives one stable partition per plugin so every Task shares its login', () => {
+    expect(pluginBrowserSessionPartition('browser')).toBe(
+      'persist:openforge-plugin-browser-d4c3e8a11256ab82a4fc72560eb4a2b0e87bad820c290dd9b03616de240aa6db',
     )
-    expect(taskBrowserSessionPartition('browser', 'T-2')).toBe(
-      'persist:openforge-task-browser-70819d092c2822b2e0555899dd6e86a1836fb0b8f9e5b62867d356511acd7697',
+    expect(pluginBrowserSessionPartition('notes')).toBe(
+      'persist:openforge-plugin-browser-ab5aa97074c454a0632057e704220d9a6678fbf773a0a5806fc09b8173b07309',
     )
-    expect(taskBrowserSessionPartition('notes', 'T-1')).toBe(
-      'persist:openforge-task-browser-c8eb76f24facb80fa89c177bdfc4d94a7ab2b5d1129767299dbea3828eb7798c',
-    )
+  })
+
+  it('isolates partitions between plugins but never between Tasks', () => {
+    expect(pluginBrowserSessionPartition('browser')).not.toBe(pluginBrowserSessionPartition('notes'))
+  })
+
+  it('recognizes superseded per-Task partitions so first launch can purge them', () => {
+    const legacy = 'persist:openforge-task-browser-f3c7a3c60de8e74b261b9e88aeaf2593e6ff954e58b3a1c5b3849f6731f97ba0'
+    expect(isSupersededTaskBrowserPartition(legacy)).toBe(true)
+    expect(isSupersededTaskBrowserPartition(pluginBrowserSessionPartition('browser'))).toBe(false)
   })
 
   it('allows HTTP(S) navigation and popups without privileged preference overrides', () => {

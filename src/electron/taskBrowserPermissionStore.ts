@@ -29,7 +29,7 @@ function copyRecord(record: TaskBrowserPermissionDecisionRecord): TaskBrowserPer
 }
 
 function recordKey(record: TaskBrowserPermissionDecisionRecord): string {
-  return JSON.stringify([record.pluginId, record.taskId, record.origin, record.descriptor])
+  return JSON.stringify([record.pluginId, record.origin, record.descriptor])
 }
 
 function validateRecord(value: unknown, path: string): TaskBrowserPermissionDecisionRecord {
@@ -40,8 +40,6 @@ function validateRecord(value: unknown, path: string): TaskBrowserPermissionDeci
   if (
     typeof candidate.pluginId !== 'string'
     || !candidate.pluginId.trim()
-    || typeof candidate.taskId !== 'string'
-    || !candidate.taskId.trim()
     || typeof candidate.origin !== 'string'
     || !normalizedOrigin(candidate.origin)
     || !isTaskBrowserPermissionDescriptor(candidate.descriptor)

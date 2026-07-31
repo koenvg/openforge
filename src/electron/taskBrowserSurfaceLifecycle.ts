@@ -31,7 +31,7 @@ export class TaskBrowserSurfaceLifecycle {
       global: this.globalEpoch,
       plugin: this.pluginEpochs.get(identity.pluginId) ?? 0,
       task: this.taskEpochs.get(identity.taskId) ?? 0,
-      session: this.sessionEpochs.get(this.sessionKey(identity.pluginId, identity.taskId)) ?? 0,
+      session: this.sessionEpochs.get(identity.pluginId) ?? 0,
       window: this.windowEpochs.get(identity.windowId) ?? 0,
     }
   }
@@ -64,41 +64,34 @@ export class TaskBrowserSurfaceLifecycle {
     this.globalEpoch += 1
   }
 
-  currentSessionEpoch(pluginId: string, taskId: string): number {
-    return this.sessionEpochs.get(this.sessionKey(pluginId, taskId)) ?? 0
+  currentSessionEpoch(pluginId: string): number {
+    return this.sessionEpochs.get(pluginId) ?? 0
   }
 
-  async waitForSessionReset(pluginId: string, taskId: string): Promise<void> {
-    const key = this.sessionKey(pluginId, taskId)
-    let reset = this.sessionResets.get(key)
+  async waitForSessionReset(pluginId: string): Promise<void> {
+    let reset = this.sessionResets.get(pluginId)
     while (reset) {
       await reset.catch(() => undefined)
-      reset = this.sessionResets.get(key)
+      reset = this.sessionResets.get(pluginId)
     }
   }
 
   async runSessionReset(
     pluginId: string,
-    taskId: string,
     cleanup: () => Promise<void>,
   ): Promise<void> {
-    const key = this.sessionKey(pluginId, taskId)
-    this.sessionEpochs.set(key, (this.sessionEpochs.get(key) ?? 0) + 1)
-    const previousReset = this.sessionResets.get(key)
+    this.sessionEpochs.set(pluginId, (this.sessionEpochs.get(pluginId) ?? 0) + 1)
+    const previousReset = this.sessionResets.get(pluginId)
     const reset = (async () => {
       await previousReset?.catch(() => undefined)
       await cleanup()
     })()
-    this.sessionResets.set(key, reset)
+    this.sessionResets.set(pluginId, reset)
     try {
       await reset
     } finally {
-      if (this.sessionResets.get(key) === reset) this.sessionResets.delete(key)
+      if (this.sessionResets.get(pluginId) === reset) this.sessionResets.delete(pluginId)
     }
-  }
-
-  private sessionKey(pluginId: string, taskId: string): string {
-    return `${pluginId}\u0000${taskId}`
   }
 }
 

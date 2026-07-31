@@ -120,13 +120,13 @@ _Avoid_: URL interceptor, browser command handler, link priority
 A browser presentation owned by a **Trusted Plugin** for one **Task** in one OpenForge window, identified within that window, plugin, and Task by a stable local surface identifier.
 _Avoid_: Webview, browser tab, raw WebContentsView
 
-**Task Browser Session**:
-The durable browsing identity and site data shared by a **Trusted Plugin's** browser surfaces within one **Task**, isolated from every other plugin and Task.
-_Avoid_: Global browser profile, shared login, surface state
+**Plugin Browser Session**:
+The durable browsing identity and site data shared by all of a **Trusted Plugin's** browser surfaces, spanning every **Task** and project, isolated from every other plugin.
+_Avoid_: Task Browser Session, per-task login, surface state
 
-**Task Browser Permission**:
-A user-approved site privilege scoped to one requesting origin and **Task Browser Session**. Its identity includes security-relevant request details, such as the exact requested media types.
-_Avoid_: Plugin permission, global site grant, automatic permission
+**Plugin Browser Permission**:
+A user-approved site privilege scoped to one requesting origin and **Plugin Browser Session**. Its identity includes security-relevant request details, such as the exact requested media types.
+_Avoid_: Task Browser Permission, plugin permission, automatic permission
 
 **Task Browser Attachment**:
 The temporary binding between a **Task Browser Surface** and the visible plugin-owned UI region where OpenForge presents it.
@@ -303,23 +303,24 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task Link** is offered to the active **Task Link Handler**; when no handler exists or it declines, OpenForge opens the URL externally.
 - A failed **Task Link Handler** does not also trigger external fallback because it may already have partially handled the link.
 - A live **Task Browser Surface** is uniquely identified by its owning OpenForge window, **Trusted Plugin**, **Task**, and plugin-local surface identifier.
-- Every **Task Browser Surface** for the same **Trusted Plugin** and **Task** shares one **Task Browser Session**; no browser session data is shared across plugins or Tasks.
-- Detaching a **Task Browser Surface** hides it while preserving its live, background-throttled page state; destroying it releases that live page without deleting its **Task Browser Session**.
+- Every **Task Browser Surface** owned by the same **Trusted Plugin** shares one **Plugin Browser Session** regardless of **Task** or project, so a login performed in one Task is available in every other; no browser session data is shared across plugins.
+- Detaching a **Task Browser Surface** hides it while preserving its live, background-throttled page state; destroying it releases that live page without deleting its **Plugin Browser Session**.
 - OpenForge destroys live **Task Browser Surfaces** when their owning plugin deactivates, reloads, or is uninstalled; when their owning **Task** is permanently deleted; or when their OpenForge window closes, even if the plugin omitted cleanup.
-- A **Task Browser Session** survives surface destruction, app restart, and plugin disablement or reload; OpenForge purges it when its **Task** is permanently deleted or its plugin is uninstalled, and clears it on explicit session reset.
-- OpenForge mediates every **Task Browser Permission** request; plugins cannot grant permissions, unknown permissions are denied, and approved permissions are limited to the requesting origin, **Task Browser Session**, and exact permission descriptor.
-- A user may remember an allow or block decision for one origin and exact permission descriptor in a **Task Browser Session**; unremembered decisions apply only to the current request, and resetting the session clears remembered decisions.
-- Resetting a **Task Browser Session** destroys its plugin's live surfaces and popups for the Task and clears site data, cache, service workers, and remembered permissions without deleting plugin-owned task storage.
-- HTTP(S) popups requested by a **Task Browser Surface** are host-owned child windows that share its **Task Browser Session** and security policies; plugins cannot access the child window directly, and unsupported schemes or window options are rejected.
+- A **Plugin Browser Session** survives surface destruction, app restart, plugin disablement or reload, and permanent **Task** deletion; OpenForge purges it only when its plugin is uninstalled, and clears it on explicit session reset.
+- OpenForge mediates every **Plugin Browser Permission** request; plugins cannot grant permissions, unknown permissions are denied, and approved permissions are limited to the requesting origin, **Plugin Browser Session**, and exact permission descriptor.
+- A user may remember an allow or block decision for one origin and exact permission descriptor in a **Plugin Browser Session**; a remembered decision therefore applies in every **Task**, unremembered decisions apply only to the current request, and resetting the session clears remembered decisions.
+- Resetting a **Plugin Browser Session** destroys that plugin's live surfaces and popups across every **Task** and clears site data, cache, service workers, and remembered permissions without deleting plugin-owned task storage; there is no way to reset one **Task's** browsing identity alone.
+- HTTP(S) popups requested by a **Task Browser Surface** are host-owned child windows that share its **Plugin Browser Session** and security policies; plugins cannot access the child window directly, and unsupported schemes or window options are rejected.
 - A **Task Browser Surface** permits only HTTP(S) top-level navigation, with `about:blank` reserved for host startup; filesystem, executable, app-internal, custom, malformed, and other schemes are blocked.
-- A **Task Browser Session** persists site data only; its plugin persists each surface's last committed URL in task-scoped plugin storage and supplies that URL when recreating the surface.
+- A **Plugin Browser Session** persists site data only; its plugin persists each surface's last committed URL in task-scoped plugin storage and supplies that URL when recreating the surface, so browsing history and open pages stay per-**Task** while the login does not.
 - A plugin creates a **Task Browser Attachment** by giving OpenForge a visible DOM element; OpenForge tracks and clamps that element's bounds and detaches the surface when the element is hidden, disconnected, or explicitly released.
 - A **Task Browser Surface** reports URL, title, loading, history availability, and navigation failure as one current state snapshot so plugins do not reconcile independently ordered event fragments.
 - Downloads from a **Task Browser Surface** require a host-owned save prompt for each file; plugins cannot choose download paths, auto-accept downloads, or access Electron download handles.
 - Every **Task Browser Surface** and host-owned child window uses a non-configurable sandboxed browser configuration with no Node integration, preload script, webview embedding, insecure-content override, drag-drop navigation, or packaged-build DevTools access.
-- Each OpenForge window keeps at most four detached **Task Browser Surfaces** alive; when capacity is exceeded, OpenForge destroys the least-recently-used detached surface while preserving its durable session and restorable URL.
+- Each OpenForge window keeps at most four detached **Task Browser Surfaces** alive; when capacity is exceeded, OpenForge destroys the least-recently-used detached surface while preserving its **Plugin Browser Session** and restorable URL.
 - The frontend-only browser-surface capability qualifies the owning plugin, requires a valid Task and plugin-local surface identifier, and returns only typed controls after verifying the plugin is enabled for the Task's project.
-- Permanent Task deletion and plugin uninstall durably schedule their **Task Browser Session** purges until Electron completes and acknowledges them.
+- Plugin uninstall durably schedules its **Plugin Browser Session** purge until Electron completes and acknowledges it; permanent **Task** deletion schedules no browser purge.
+- On first launch after adopting **Plugin Browser Sessions**, OpenForge clears every legacy per-**Task** browser partition in its registry so no site data remains that no surface can reach and no reset can clear.
 - A plugin may omit a surface's initial URL; newly created surfaces start at `about:blank` until the plugin navigates them.
 - `getOrCreate` communicates that requesting an existing **Task Browser Surface** returns control of that live surface; an initial URL applies only when no live surface exists.
 - Attaching a **Task Browser Surface** to a new element atomically replaces its previous attachment; releasing an older attachment cannot detach a newer one.

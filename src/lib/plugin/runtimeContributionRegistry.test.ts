@@ -456,11 +456,11 @@ describe('runtime contribution registry', () => {
     const api = registry.getFrontendApi()
 
     await expect(api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })).resolves.toBe(controller)
-    await api.browserSurfaces.resetSession('T-1')
+    await api.browserSurfaces.resetSession()
     await registry.deactivate()
 
     expect(host.getOrCreateBrowserSurface).toHaveBeenCalledWith('browser', { taskId: 'T-1', id: 'main' })
-    expect(host.resetBrowserSession).toHaveBeenCalledWith('browser', 'T-1')
+    expect(host.resetBrowserSession).toHaveBeenCalledWith('browser')
     expect(host.destroyPluginBrowserSurfaces).toHaveBeenCalledWith('browser')
   })
 

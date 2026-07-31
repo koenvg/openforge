@@ -113,7 +113,7 @@ export class TaskBrowserSurfaceIpcRouter {
 
       if (command === 'task_browser_surface_reset_session') {
         this.manager.assertWindowRegistered(windowId)
-        await this.manager.resetSession(stringField(payload, 'pluginId'), stringField(payload, 'taskId'))
+        await this.manager.resetSession(stringField(payload, 'pluginId'))
         return { ok: true, value: undefined }
       }
 

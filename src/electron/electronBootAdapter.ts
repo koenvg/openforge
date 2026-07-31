@@ -10,7 +10,11 @@ import {
   TaskBrowserSessionPurgeCoordinator,
   invokeWithTaskBrowserSessionPurgeDrain,
 } from './taskBrowserSessionPurgeCoordinator.js'
-import { createTaskBrowserSurfaceAuthorizer } from './taskBrowserSurfaceAuthorization.js'
+import { purgeSupersededTaskBrowserPartitions } from './supersededTaskBrowserPartitionCleanup.js'
+import {
+  createPluginBrowserSessionAuthorizer,
+  createTaskBrowserSurfaceAuthorizer,
+} from './taskBrowserSurfaceAuthorization.js'
 import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter.js'
 import { TaskBrowserSurfaceIpcRouter, isTaskBrowserSurfaceCommand } from './taskBrowserSurfaceIpc.js'
 import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager.js'
@@ -43,7 +47,7 @@ export interface ElectronBootAdapterOptions {
 }
 
 function taskBrowserSessionPurgeIntents(value: unknown): TaskBrowserSessionPurgeIntent[] {
-  if (!Array.isArray(value)) throw new Error('Rust sidecar returned an invalid Task Browser Session purge intent list')
+  if (!Array.isArray(value)) throw new Error('Rust sidecar returned an invalid Plugin Browser Session purge intent list')
   return value.map(candidate => {
     if (
       typeof candidate !== 'object'
@@ -55,7 +59,7 @@ function taskBrowserSessionPurgeIntents(value: unknown): TaskBrowserSessionPurge
       || !(candidate as Record<string, string>).ownerId.trim()
       || typeof (candidate as Record<string, unknown>).createdAt !== 'number'
     ) {
-      throw new Error('Rust sidecar returned an invalid Task Browser Session purge intent')
+      throw new Error('Rust sidecar returned an invalid Plugin Browser Session purge intent')
     }
     return candidate as TaskBrowserSessionPurgeIntent
   })
@@ -121,14 +125,16 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       }
     },
   })
+  const invokeForTaskBrowserAuthorization = async (command: string, payload: unknown) => {
+    if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
+    return handleElectronInvoke({ command, payload }, createInvokeDeps(backendInvokeContext))
+  }
   const taskBrowserSurfaceManager = new TaskBrowserSurfaceManager({
     factory: new ElectronTaskBrowserSurfaceFactory(),
     registry: taskBrowserPartitionRegistry,
     permissions: taskBrowserPermissionPolicy,
-    authorize: createTaskBrowserSurfaceAuthorizer(async (command, payload) => {
-      if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
-      return handleElectronInvoke({ command, payload }, createInvokeDeps(backendInvokeContext))
-    }),
+    authorize: createTaskBrowserSurfaceAuthorizer(invokeForTaskBrowserAuthorization),
+    authorizePlugin: createPluginBrowserSessionAuthorizer(invokeForTaskBrowserAuthorization),
     onStateChanged: event => {
       const window = BrowserWindow.fromId(event.windowId)
       if (!window || window.isDestroyed()) return
@@ -170,6 +176,11 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     if (backendInvokeContext?.getSidecarConfig()) {
       await taskBrowserSessionPurgeCoordinator.drain()
     }
+    await purgeSupersededTaskBrowserPartitions({
+      registry: taskBrowserPartitionRegistry,
+      clearSession: record => taskBrowserSurfaceManager.purgeRegisteredSession(record),
+      logger: developerLogSink,
+    })
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
     const updateTaskBrowserWindowBounds = () => {

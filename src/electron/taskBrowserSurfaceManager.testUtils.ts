@@ -143,7 +143,11 @@ export class FakePartitionRegistry implements TaskBrowserPartitionRegistry {
 
   async register(record: TaskBrowserPartitionRegistration): Promise<void> {
     this.registrations.push({ ...record })
-    this.records.set(`${record.pluginId}\u0000${record.taskId}`, { ...record })
+    this.records.set(record.partition, { ...record })
+  }
+
+  async listAll(): Promise<TaskBrowserPartitionRegistration[]> {
+    return [...this.records.values()]
   }
 
   async listByTask(taskId: string): Promise<TaskBrowserPartitionRegistration[]> {
@@ -154,24 +158,28 @@ export class FakePartitionRegistry implements TaskBrowserPartitionRegistry {
     return [...this.records.values()].filter(record => record.pluginId === pluginId)
   }
 
-  async remove(pluginId: string, taskId: string): Promise<void> {
-    this.records.delete(`${pluginId}\u0000${taskId}`)
+  async remove(partition: string): Promise<void> {
+    this.records.delete(partition)
   }
 }
 
 export function createTaskBrowserSurfaceManagerFixture(
-  overrides: { authorize?: (pluginId: string, taskId: string) => Promise<void> } = {},
+  overrides: {
+    authorize?: (pluginId: string, taskId: string) => Promise<void>
+    authorizePlugin?: (pluginId: string) => Promise<void>
+  } = {},
 ) {
   const factory = new FakeNativeFactory()
   const registry = new FakePartitionRegistry()
   const authorize = overrides.authorize ?? vi.fn(async () => undefined)
+  const authorizePlugin = overrides.authorizePlugin ?? vi.fn(async () => undefined)
   const permissionHandler: TaskBrowserPermissionSessionHandler = {
     check: vi.fn(() => false),
     request: vi.fn(async () => false),
   }
   const permissions = {
     createSessionHandler: vi.fn(async () => permissionHandler),
-    clearSession: vi.fn<(pluginId: string, taskId: string) => Promise<void>>(async () => undefined),
+    clearSession: vi.fn<(pluginId: string) => Promise<void>>(async () => undefined),
   }
   const stateEvents: TaskBrowserSurfaceStateEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
@@ -179,9 +187,19 @@ export function createTaskBrowserSurfaceManagerFixture(
     registry,
     permissions,
     authorize,
+    authorizePlugin,
     onStateChanged: event => stateEvents.push(event),
   })
   manager.registerWindow(10, { x: 0, y: 0, width: 800, height: 600 })
   manager.registerWindow(11, { x: 0, y: 0, width: 800, height: 600 })
-  return { manager, factory, registry, permissions, permissionHandler, authorize, stateEvents }
+  return {
+    manager,
+    factory,
+    registry,
+    permissions,
+    permissionHandler,
+    authorize,
+    authorizePlugin,
+    stateEvents,
+  }
 }
