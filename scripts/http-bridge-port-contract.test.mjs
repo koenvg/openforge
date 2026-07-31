@@ -63,7 +63,7 @@ describe('OpenForge HTTP bridge port contract', () => {
       'export const DEFAULT_DEV_BACKEND_PORT = DEFAULT_DEV_HTTP_BRIDGE_PORT',
     )
     const layout = resolveRustSidecarLayout()
-    expect(read(`${layout.backendCrateRootPath}/src/http_server.rs`)).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/http_server/server_lifecycle.rs`)).toContain(
       'unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)',
     )
     expect(read(`${layout.backendCrateRootPath}/src/claude_hooks.rs`)).toContain(
