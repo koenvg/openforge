@@ -12,6 +12,17 @@ import type {
 } from './taskBrowserSurfaceManager.js'
 import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 
+/**
+ * Zoom factor of the window's own renderer, which is how many device-independent pixels one of the
+ * CSS pixels it measures Task Browser Attachment bounds in is worth.
+ */
+export function electronRendererZoomFactor(windowId: number): number {
+  const window = BrowserWindow.fromId(windowId)
+  if (!window || window.isDestroyed()) return 1
+  const zoomFactor = window.webContents.getZoomFactor()
+  return Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1
+}
+
 function allowedTopLevelUrl(value: string): boolean {
   try {
     const url = new URL(value)

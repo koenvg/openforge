@@ -182,6 +182,31 @@ describe('Task Browser Surface Manager', () => {
     await expect(manager.getState(created.surfaceId)).rejects.toMatchObject({ code: 'SURFACE_DESTROYED' })
   })
 
+  it('converts renderer CSS pixel attachment bounds with the current renderer zoom factor', async () => {
+    const zoomFactors = new Map<number, number>([[10, 1.25]])
+    const { manager, factory } = createManager({ rendererZoomFactor: windowId => zoomFactors.get(windowId) ?? 1 })
+    const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-zoom', id: 'main' })
+    const native = factory.surfaces[0]
+
+    // A pane covering device-independent pixels 300,200 -> 800,600 of the zoomed window measures 400x320 CSS pixels.
+    manager.attach(created.surfaceId, 'main', 1, { x: 240, y: 160, width: 400, height: 320 })
+    expect(native.bounds.at(-1)).toEqual({ x: 300, y: 200, width: 500, height: 400 })
+
+    // Zooming out grows the same pane's CSS pixel measurements, but it still covers the same window region.
+    zoomFactors.set(10, 0.8)
+    manager.attach(created.surfaceId, 'main', 1, { x: 375, y: 250, width: 625, height: 500 })
+    expect(native.bounds.at(-1)).toEqual({ x: 300, y: 200, width: 500, height: 400 })
+
+    // Window resizes replay the last renderer measurement, so they must re-read the zoom factor rather than reuse a scaled rect.
+    zoomFactors.set(10, 1.25)
+    manager.updateWindowBounds(10, { x: 0, y: 0, width: 800, height: 600 })
+    expect(native.bounds.at(-1)).toEqual({ x: 469, y: 313, width: 331, height: 287 })
+
+    // Bounds are clamped after conversion, so a pane that only fits unscaled must not be attached.
+    manager.attach(created.surfaceId, 'main', 1, { x: 700, y: 500, width: 200, height: 200 })
+    expect(native.attachedWindowId).toBeNull()
+  })
+
   it('controls HTTP(S) navigation and returns complete history and loading snapshots', async () => {
     const { manager, factory, stateEvents } = createManager()
     const created = await manager.getOrCreate({ windowId: 10, pluginId: 'browser', taskId: 'T-nav', id: 'main' })

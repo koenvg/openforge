@@ -96,6 +96,7 @@ const electronFakes = vi.hoisted(() => {
     url = ''
     title = ''
     loading = false
+    zoomFactor = 1
     historyIndex = 0
     historyLength = 1
     destroyed = false
@@ -117,6 +118,7 @@ const electronFakes = vi.hoisted(() => {
 
     getURL(): string { return this.url }
     getTitle(): string { return this.title }
+    getZoomFactor(): number { return this.zoomFactor }
     isLoading(): boolean { return this.loading }
     isDestroyed(): boolean { return this.destroyed }
 
@@ -252,6 +254,7 @@ vi.mock('electron', () => ({
 
 import {
   ElectronTaskBrowserSurfaceFactory,
+  electronRendererZoomFactor,
   sanitizeTaskBrowserDownloadFilename,
 } from './taskBrowserSurfaceElectronAdapter'
 function preventableEvent() {
@@ -293,6 +296,18 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
     surface.destroy()
     expect(view.webContents.destroyed).toBe(true)
+  })
+
+  it('reports the renderer zoom factor of the owning window and falls back to unzoomed', () => {
+    const window = electronFakes.registerWindow(10)
+
+    expect(electronRendererZoomFactor(10)).toBe(1)
+    window.webContents.zoomFactor = 1.2
+    expect(electronRendererZoomFactor(10)).toBe(1.2)
+
+    expect(electronRendererZoomFactor(99)).toBe(1)
+    window.destroy()
+    expect(electronRendererZoomFactor(10)).toBe(1)
   })
 
   it('reuses persistent Electron sessions across surfaces, destruction, and factory lifetimes', async () => {

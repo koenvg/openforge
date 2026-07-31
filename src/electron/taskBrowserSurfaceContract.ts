@@ -110,6 +110,12 @@ export interface TaskBrowserSurfaceManagerOptions {
   /** Authorizes a plugin-wide operation that names no Task, such as a session reset. */
   authorizePlugin(pluginId: string): Promise<void>
   onStateChanged?(event: TaskBrowserSurfaceStateEvent): void
+  /**
+   * Current zoom factor of the window's renderer, used to convert the CSS pixel attachment bounds
+   * it reports into the device-independent pixels the window positions native views with.
+   * Defaults to an unzoomed renderer.
+   */
+  rendererZoomFactor?(windowId: number): number
 }
 
 export interface GetOrCreateTaskBrowserSurfaceRequest {
