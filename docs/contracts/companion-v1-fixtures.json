@@ -17,6 +17,20 @@
     "protocolVersion": 1,
     "serverTime": "2026-07-30T12:00:01Z"
   },
+  "attentionSnapshot": {
+    "snapshotAt": "2026-07-30T12:00:02Z",
+    "items": [
+      {
+        "taskId": "KVG-2945",
+        "projectId": "P-4",
+        "projectName": "OpenForge",
+        "title": "Show the attention-first mobile home",
+        "state": "needs-input",
+        "reason": "Agent needs your input to continue.",
+        "activityAt": "2026-07-30T11:59:00Z"
+      }
+    ]
+  },
   "error": {
     "error": {
       "code": "unauthenticated",

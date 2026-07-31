@@ -17,10 +17,41 @@ abstract interface class CompanionClient {
   });
 
   Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord);
+
+  Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord);
+}
+
+typedef CompanionEndpointTransportFactory =
+    CompanionEndpointTransport Function(String certificateSha256);
+
+final class CompanionEndpointTransport {
+  const CompanionEndpointTransport({
+    required this.transport,
+    required this.close,
+  });
+
+  final CompanionV1Transport transport;
+  final void Function() close;
+}
+
+CompanionEndpointTransport _pinnedTransport(String certificateSha256) {
+  final transport = PinnedCompanionTransport(
+    certificateSha256: certificateSha256,
+  );
+  return CompanionEndpointTransport(
+    transport: transport,
+    close: transport.close,
+  );
 }
 
 final class GeneratedCompanionClient implements CompanionClient {
-  const GeneratedCompanionClient();
+  factory GeneratedCompanionClient({
+    CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
+  }) => GeneratedCompanionClient._(transportFactory);
+
+  GeneratedCompanionClient._(this._transportFactory);
+
+  final CompanionEndpointTransportFactory _transportFactory;
 
   @override
   Future<PairingSubmissionStatus> submitPairing({
@@ -28,6 +59,7 @@ final class GeneratedCompanionClient implements CompanionClient {
     required String deviceName,
     required String platform,
   }) => _tryEndpoints(
+    transportFactory: _transportFactory,
     endpoints: bootstrap.endpointCandidates,
     certificateSha256: bootstrap.certificateSha256,
     operation: (client) => client.submitCompanionPairingRequest(
@@ -42,6 +74,7 @@ final class GeneratedCompanionClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String requestId,
   }) => _tryEndpoints(
+    transportFactory: _transportFactory,
     endpoints: bootstrap.endpointCandidates,
     certificateSha256: bootstrap.certificateSha256,
     operation: (client) => client.getCompanionPairingRequest(
@@ -53,15 +86,28 @@ final class GeneratedCompanionClient implements CompanionClient {
   @override
   Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord) =>
       _tryEndpoints(
+        transportFactory: _transportFactory,
         endpoints: trustRecord.endpointCandidates,
         certificateSha256: trustRecord.certificateSha256,
         operation: (client) => client.getCompanionHostStatus(
           credential: trustRecord.deviceCredential,
         ),
       );
+
+  @override
+  Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord) =>
+      _tryEndpoints(
+        transportFactory: _transportFactory,
+        endpoints: trustRecord.endpointCandidates,
+        certificateSha256: trustRecord.certificateSha256,
+        operation: (client) => client.getCompanionAttention(
+          credential: trustRecord.deviceCredential,
+        ),
+      );
 }
 
 Future<T> _tryEndpoints<T>({
+  required CompanionEndpointTransportFactory transportFactory,
   required List<Uri> endpoints,
   required String certificateSha256,
   required Future<T> Function(CompanionV1Client client) operation,
@@ -69,20 +115,23 @@ Future<T> _tryEndpoints<T>({
   Object? lastError;
   var certificateMismatches = 0;
   for (final endpoint in endpoints) {
-    final transport = PinnedCompanionTransport(
-      certificateSha256: certificateSha256,
-    );
+    final transportHandle = transportFactory(certificateSha256);
     try {
       return await operation(
-        CompanionV1Client(baseUrl: endpoint, transport: transport),
+        CompanionV1Client(
+          baseUrl: endpoint,
+          transport: transportHandle.transport,
+        ),
       );
     } on CompanionCertificateMismatch catch (error) {
       certificateMismatches += 1;
       lastError = error;
+    } on CompanionV1Exception {
+      rethrow;
     } on Object catch (error) {
       lastError = error;
     } finally {
-      transport.close();
+      transportHandle.close();
     }
   }
   if (certificateMismatches == endpoints.length) {

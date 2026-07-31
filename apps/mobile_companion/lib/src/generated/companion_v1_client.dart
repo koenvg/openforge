@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '1d8c959c7eb09a384f4e410c5ea3f772da5e707f49f74eeb5d1db337b31c01b4';
+    '4a06807755ce40b6941dc575fc8152166d56f5ef2a12f5457ab7a0d99cb8dc8d';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({
@@ -124,6 +124,90 @@ final class HostStatus {
   final DateTime serverTime;
 }
 
+final class AttentionSnapshot {
+  AttentionSnapshot({
+    required this.snapshotAt,
+    required List<AttentionItem> items,
+  }) : items = List<AttentionItem>.unmodifiable(items);
+
+  factory AttentionSnapshot.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'snapshotAt', 'items'});
+    final rawItems = json['items'];
+    if (rawItems is! List<Object?>) {
+      throw const FormatException('Expected an attention item list.');
+    }
+    return AttentionSnapshot(
+      snapshotAt: json.dateTime('snapshotAt'),
+      items: rawItems.map((item) {
+        if (item is! Map<String, Object?>) {
+          throw const FormatException('Expected an attention item object.');
+        }
+        return AttentionItem.fromJson(item);
+      }).toList(),
+    );
+  }
+
+  final DateTime snapshotAt;
+  final List<AttentionItem> items;
+}
+
+final class AttentionItem {
+  const AttentionItem({
+    required this.taskId,
+    required this.projectId,
+    required this.projectName,
+    required this.title,
+    required this.state,
+    required this.reason,
+    required this.activityAt,
+  });
+
+  factory AttentionItem.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{
+      'taskId',
+      'projectId',
+      'projectName',
+      'title',
+      'state',
+      'reason',
+      'activityAt',
+    });
+    final taskId = json.string('taskId');
+    final projectId = json.string('projectId');
+    final projectName = json.string('projectName');
+    final title = json.string('title');
+    final state = json.string('state');
+    final reason = json.string('reason');
+    if (<String>[
+      taskId,
+      projectId,
+      projectName,
+      title,
+      state,
+      reason,
+    ].any((value) => value.isEmpty)) {
+      throw const FormatException('Attention fields must not be empty.');
+    }
+    return AttentionItem(
+      taskId: taskId,
+      projectId: projectId,
+      projectName: projectName,
+      title: title,
+      state: state,
+      reason: reason,
+      activityAt: json.dateTime('activityAt'),
+    );
+  }
+
+  final String taskId;
+  final String projectId;
+  final String projectName;
+  final String title;
+  final String state;
+  final String reason;
+  final DateTime activityAt;
+}
+
 final class CompanionV1Client {
   const CompanionV1Client({required this.baseUrl, required this.transport});
 
@@ -171,6 +255,17 @@ final class CompanionV1Client {
       headers: <String, String>{'authorization': 'Bearer $credential'},
     );
     return HostStatus.fromJson(_successJson(response, const <int>{200}));
+  }
+
+  Future<AttentionSnapshot> getCompanionAttention({
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve('/companion/v1/attention'),
+      headers: <String, String>{'authorization': 'Bearer $credential'},
+    );
+    return AttentionSnapshot.fromJson(_successJson(response, const <int>{200}));
   }
 }
 

@@ -1,3 +1,4 @@
+mod attention;
 mod contract;
 mod devices;
 mod identity;
@@ -48,6 +49,8 @@ pub(crate) fn delayed_test_manager(delay: std::time::Duration) -> CompanionGatew
     )))
 }
 
+#[cfg(test)]
+mod attention_tests;
 #[cfg(test)]
 mod pairing_tests;
 #[cfg(test)]

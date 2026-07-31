@@ -247,6 +247,46 @@ fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     .to_string()
 }
 
+fn is_image_reference_definition(line: &str) -> bool {
+    let Some(rest) = line.trim().strip_prefix("[image#") else {
+        return false;
+    };
+    let Some((index, data_url)) = rest.split_once("]:") else {
+        return false;
+    };
+    if index.is_empty() || !index.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+    let Some((mime_subtype, payload)) = data_url
+        .trim_start()
+        .strip_prefix("data:image/")
+        .and_then(|data| data.split_once(";base64,"))
+    else {
+        return false;
+    };
+    !mime_subtype.is_empty()
+        && mime_subtype
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'+' | b'-'))
+        && !payload.is_empty()
+        && payload
+            .trim_end()
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+}
+
+fn task_display_title(task_id: &str, title: Option<&str>, initial_prompt: &str) -> String {
+    if let Some(title) = title.map(str::trim).filter(|title| !title.is_empty()) {
+        return title.to_string();
+    }
+    initial_prompt
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !is_image_reference_definition(line))
+        .unwrap_or(task_id)
+        .to_string()
+}
+
 pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAttentionRow> {
     let sessions: HashMap<&str, &TaskAttentionSession> = input
         .sessions
@@ -306,16 +346,7 @@ pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAtten
                 continue;
             }
 
-            let trimmed_title = task.title.as_deref().map(str::trim).unwrap_or_default();
-            let title = if trimmed_title.is_empty() {
-                if task.initial_prompt.is_empty() {
-                    "Untitled task".to_string()
-                } else {
-                    task.initial_prompt.clone()
-                }
-            } else {
-                trimmed_title.to_string()
-            };
+            let title = task_display_title(&task.id, task.title.as_deref(), &task.initial_prompt);
             rows.push(TaskAttentionRow {
                 task_id: task.id.clone(),
                 project_id: project.id.clone(),
@@ -520,5 +551,22 @@ mod tests {
 
         assert_eq!(pr_state(&[&ci_failed, &draft]), Some("ci-failed"));
         assert_eq!(pr_state(&[&draft, &ci_failed]), Some("pr-draft"));
+    }
+
+    #[test]
+    fn display_title_fallback_skips_image_definitions_and_uses_first_text_line() {
+        assert_eq!(
+            task_display_title(
+                "T-42",
+                None,
+                "\n[image#1]: data:image/png;base64,c2VjcmV0\n  Review the generated changes  ",
+            ),
+            "Review the generated changes"
+        );
+        assert_eq!(
+            task_display_title("T-42", None, "[image#1]: data:image/png;base64,c2VjcmV0",),
+            "T-42"
+        );
+        assert_eq!(task_display_title("T-42", None, "\n\r\n"), "T-42");
     }
 }

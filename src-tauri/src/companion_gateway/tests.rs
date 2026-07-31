@@ -229,12 +229,23 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 3);
+    assert_eq!(paths.len(), 4);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
         vec!["get"],
         "authenticated v1 resources must remain read-only"
+    );
+    let attention_path = paths["/attention"]
+        .as_object()
+        .expect("attention path item");
+    assert_eq!(
+        attention_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
+        "attention must expose no mutation or generic command capability"
     );
     assert_eq!(
         paths["/pairing/requests"]
@@ -260,6 +271,23 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     for status in ["200", "401", "404", "409", "429", "503"] {
         assert!(documented_responses.contains_key(status));
     }
+    let attention_responses = attention_path["get"]["responses"]
+        .as_object()
+        .expect("attention responses");
+    for status in ["200", "401", "409", "429", "503"] {
+        assert!(attention_responses.contains_key(status));
+    }
+
+    let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../docs/contracts/companion-v1-fixtures.json"
+    ))
+    .expect("Companion v1 fixtures");
+    let mut attention_schema = contract["components"]["schemas"]["AttentionSnapshot"].clone();
+    *attention_schema
+        .pointer_mut("/properties/items/items")
+        .expect("attention item schema") =
+        contract["components"]["schemas"]["AttentionItem"].clone();
+    assert_schema_accepts(&attention_schema, &fixtures["attentionSnapshot"]);
 
     let host_id = "65d91f21-6732-45a6-9418-3dfaf4c93f52";
     let success_response = create_router(
