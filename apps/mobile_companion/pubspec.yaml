@@ -34,7 +34,8 @@ dependencies:
   crypto: ^3.0.6
   mobile_scanner: ^7.4.0
   bonsoir: ^7.1.4
-  app_settings: ^8.0.3
+  # 8.x is SwiftPM-only and requires Swift 6; 7.0.0 retains the CocoaPods fallback.
+  app_settings: 7.0.0
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +53,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # CI's macOS 14/Xcode 15 runner has Swift 5.10, so use plugin podspecs.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
