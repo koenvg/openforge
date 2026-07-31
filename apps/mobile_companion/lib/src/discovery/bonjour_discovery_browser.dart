@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:app_settings/app_settings.dart';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/services.dart';
 
 import 'companion_discovery.dart';
+
+const _settingsChannel = MethodChannel('app.openforge.companion/settings');
 
 final class BonjourCompanionDiscoveryBrowser
     implements CompanionDiscoveryBrowser {
@@ -69,7 +70,8 @@ final class BonjourCompanionDiscoveryBrowser
   }
 
   @override
-  Future<void> openSettings() => AppSettings.openAppSettings();
+  Future<void> openSettings() =>
+      _settingsChannel.invokeMethod<void>('openAppSettings');
 
   static void _recordService(
     Map<String, DiscoveredCompanionService> resolved,

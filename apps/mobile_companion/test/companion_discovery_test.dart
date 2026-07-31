@@ -4,6 +4,7 @@ import 'package:openforge_companion/src/discovery/bonjour_discovery_browser.dart
 import 'package:openforge_companion/src/discovery/companion_discovery.dart';
 
 const _trustedHostId = '65d91f21-6732-45a6-9418-3dfaf4c93f52';
+const _settingsChannel = MethodChannel('app.openforge.companion/settings');
 
 final class _FakeDiscoveryBrowser implements CompanionDiscoveryBrowser {
   List<DiscoveredCompanionService> services = const [];
@@ -29,6 +30,27 @@ final class _FakeDiscoveryBrowser implements CompanionDiscoveryBrowser {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('Bonjour settings recovery invokes the platform channel', () async {
+    final calls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(_settingsChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(_settingsChannel, null),
+    );
+
+    await const BonjourCompanionDiscoveryBrowser().openSettings();
+
+    expect(calls, hasLength(1));
+    expect(calls.single.method, 'openAppSettings');
+    expect(calls.single.arguments, isNull);
+  });
+
   test(
     'discovery selects every address only for the already paired host',
     () async {
