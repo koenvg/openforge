@@ -17,7 +17,7 @@ android {
     defaultConfig {
         // Provisional private-build identifier; release signing is intentionally deferred.
         applicationId = "app.openforge.openforge_companion"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
