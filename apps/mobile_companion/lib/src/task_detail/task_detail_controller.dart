@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../client/companion_client.dart';
+import '../client/companion_refresh_outcome.dart';
 import '../generated/companion_v1_client.dart';
 import '../storage/companion_secure_storage.dart';
 
@@ -55,51 +56,66 @@ final class TaskDetailController extends ChangeNotifier {
   final VoidCallback? _onAuthorizationLost;
 
   var _generation = 0;
+  var _disposed = false;
   TaskDetailViewState _state = const TaskDetailLoading();
   TaskDetailViewState get state => _state;
 
   Future<void> refresh() async {
+    await refreshWithOutcome();
+  }
+
+  Future<CompanionRefreshOutcome> refreshWithOutcome() async {
     final generation = ++_generation;
     _setState(const TaskDetailLoading());
     try {
       final trustRecord = await _storage.load();
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
       if (trustRecord == null) {
         _authorizationLost();
-        return;
+        return CompanionRefreshOutcome.authorizationRequired;
       }
       final detail = await _client.fetchTaskDetail(trustRecord, taskId);
-      if (_isCurrent(generation)) _setState(TaskDetailLoaded(detail));
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
+      _setState(TaskDetailLoaded(detail));
+      return CompanionRefreshOutcome.loaded;
     } on CompanionV1Exception catch (error) {
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
       switch (error.code) {
         case 'revoked':
         case 'unauthenticated':
           _authorizationLost();
-          return;
+          return CompanionRefreshOutcome.authorizationRequired;
         case 'not_found':
           _setState(const TaskDetailNotFound());
-          return;
+          return CompanionRefreshOutcome.notFound;
         case 'incompatible_version':
           _setState(const TaskDetailIncompatible());
-          return;
+          return CompanionRefreshOutcome.incompatible;
         default:
           _setState(const TaskDetailUnavailable());
+          return CompanionRefreshOutcome.unavailable;
       }
     } on Object {
-      if (_isCurrent(generation)) {
-        _setState(const TaskDetailUnavailable());
-      }
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
+      _setState(const TaskDetailUnavailable());
+      return CompanionRefreshOutcome.unavailable;
     }
+  }
+
+  void clear() {
+    if (_disposed) return;
+    _generation += 1;
+    _setState(const TaskDetailLoading());
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _generation += 1;
     super.dispose();
   }
 
-  bool _isCurrent(int generation) => generation == _generation;
+  bool _isCurrent(int generation) => !_disposed && generation == _generation;
 
   void _authorizationLost() {
     _setState(const TaskDetailAuthorizationRequired());
@@ -107,6 +123,7 @@ final class TaskDetailController extends ChangeNotifier {
   }
 
   void _setState(TaskDetailViewState state) {
+    if (_disposed) return;
     _state = state;
     notifyListeners();
   }

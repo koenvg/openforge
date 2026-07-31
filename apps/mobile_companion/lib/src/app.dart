@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'attention/attention_controller.dart';
 import 'attention/attention_home.dart';
 import 'connection/companion_connection_state.dart';
+import 'live/live_updates_controller.dart';
 import 'pairing/companion_pairing_capture.dart';
 import 'pairing/companion_pairing_controller.dart';
 import 'presentation/connection_shell.dart';
@@ -22,6 +23,7 @@ class CompanionApp extends StatefulWidget {
     this.controller,
     this.attentionController,
     this.taskDetailControllerFactory,
+    this.liveUpdatesController,
     this.initialState = const Unpaired(),
     super.key,
   });
@@ -29,13 +31,15 @@ class CompanionApp extends StatefulWidget {
   final CompanionPairingController? controller;
   final AttentionController? attentionController;
   final TaskDetailControllerFactory? taskDetailControllerFactory;
+  final LiveUpdatesController? liveUpdatesController;
   final CompanionConnectionState initialState;
 
   @override
   State<CompanionApp> createState() => _CompanionAppState();
 }
 
-class _CompanionAppState extends State<CompanionApp> {
+class _CompanionAppState extends State<CompanionApp>
+    with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late CompanionConnectionState _state;
   late AttentionViewState _attentionState;
@@ -43,22 +47,31 @@ class _CompanionAppState extends State<CompanionApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _state = widget.controller?.state ?? widget.initialState;
     _attentionState =
         widget.attentionController?.state ?? const AttentionLoading();
     widget.controller?.addListener(_onControllerChanged);
     widget.attentionController?.addListener(_onAttentionControllerChanged);
-    if (_state is Connected && widget.attentionController != null) {
+    if (_state is Connected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(widget.attentionController!.refresh());
+        if (!mounted) return;
+        final live = widget.liveUpdatesController;
+        if (live != null) {
+          live.start();
+        } else if (widget.attentionController != null) {
+          unawaited(widget.attentionController!.refresh());
+        }
       });
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller?.removeListener(_onControllerChanged);
     widget.attentionController?.removeListener(_onAttentionControllerChanged);
+    unawaited(widget.liveUpdatesController?.suspend());
     super.dispose();
   }
 
@@ -69,9 +82,17 @@ class _CompanionAppState extends State<CompanionApp> {
     final attentionController = widget.attentionController;
     if (attentionController == null) return;
     if (next is Connected && previous is! Connected) {
-      unawaited(attentionController.refresh());
+      final live = widget.liveUpdatesController;
+      if (live != null) {
+        live.start();
+      } else {
+        unawaited(attentionController.refresh());
+      }
     } else if (next is! Connected && previous is Connected) {
       attentionController.clear();
+      if (next is! Reconnecting) {
+        unawaited(widget.liveUpdatesController?.stop());
+      }
     }
   }
 
@@ -103,14 +124,35 @@ class _CompanionAppState extends State<CompanionApp> {
   }
 
   void _openTaskDetail(String taskId) {
+    unawaited(_pushTaskDetail(taskId));
+  }
+
+  Future<void> _pushTaskDetail(String taskId) async {
     final factory = widget.taskDetailControllerFactory;
     final navigator = _navigatorKey.currentState;
     if (factory == null || navigator == null) return;
-    navigator.push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => TaskDetailScreen(controller: factory(taskId)),
-      ),
-    );
+    final controller = factory(taskId);
+    widget.liveUpdatesController?.setOpenTask(controller);
+    try {
+      await navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => TaskDetailScreen(controller: controller),
+        ),
+      );
+    } finally {
+      widget.liveUpdatesController?.setOpenTask(null);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final live = widget.liveUpdatesController;
+    if (live == null) return;
+    if (state == AppLifecycleState.resumed) {
+      if (_state is Connected || _state is Reconnecting) live.resume();
+    } else {
+      unawaited(live.suspend());
+    }
   }
 
   @override

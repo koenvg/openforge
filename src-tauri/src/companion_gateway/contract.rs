@@ -1,5 +1,6 @@
 use super::{
     attention::CompanionAttentionSource,
+    live_events::{companion_event_stream, CompanionStreamAccess},
     pairing::{
         PairingCoordinator, PairingError, PairingPollResponse, PairingRequestKind,
         PairingSubmission,
@@ -8,16 +9,17 @@ use super::{
 };
 #[cfg(test)]
 use super::{
-    attention::UnavailableCompanionAttentionSource,
+    attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
+use crate::app_events::{AppEventBus, AppEventCursor};
 use axum::{
     extract::{
         connect_info::ConnectInfo, rejection::JsonRejection, DefaultBodyLimit, Path, Request, State,
     },
     http::{header::AUTHORIZATION, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{sse::KeepAlive, IntoResponse, Response, Sse},
     routing::{get, post},
     Json, Router,
 };
@@ -165,6 +167,8 @@ struct CompanionRouterState {
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    events: AppEventBus,
+    stream_access: Arc<dyn CompanionStreamAccess>,
 }
 
 fn error_response(status: StatusCode, code: CompanionErrorCode, message: &str) -> Response {
@@ -290,6 +294,37 @@ async fn status_handler(State(state): State<CompanionRouterState>, headers: Head
         server_time: chrono::Utc::now().to_rfc3339(),
     })
     .into_response()
+}
+
+async fn events_handler(State(state): State<CompanionRouterState>, headers: HeaderMap) -> Response {
+    let access = match state.stream_access.open(&headers) {
+        Ok(access) => access,
+        Err(code) => return authorization_error_response(code),
+    };
+    let cursor = match headers.get("last-event-id") {
+        Some(value) => {
+            let Some(cursor) = value.to_str().ok().and_then(AppEventCursor::parse) else {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    CompanionErrorCode::InvalidRequest,
+                    "Companion event cursor is invalid",
+                );
+            };
+            Some(cursor)
+        }
+        None => None,
+    };
+    let stream = match companion_event_stream(&state.events, cursor, access) {
+        Ok(stream) => stream,
+        Err(code) => return authorization_error_response(code),
+    };
+    Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .text("openforge-companion-keepalive"),
+        )
+        .into_response()
 }
 fn attention_activity_at(timestamp: i64) -> Option<String> {
     chrono::DateTime::from_timestamp(timestamp, 0).map(|value| value.to_rfc3339())
@@ -500,12 +535,53 @@ pub(crate) fn create_router_with_attention(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn create_router_with_sources(
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+) -> Router {
+    create_router_with_sources_and_events(
+        host,
+        authorizer,
+        pairing,
+        attention,
+        task_detail,
+        AppEventBus::new(16, 8),
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn create_router_with_sources_and_events(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    events: AppEventBus,
+) -> Router {
+    let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
+    create_router_with_sources_and_event_access(
+        host,
+        authorizer,
+        pairing,
+        attention,
+        task_detail,
+        events,
+        stream_access,
+    )
+}
+
+pub(crate) fn create_router_with_sources_and_event_access(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    events: AppEventBus,
+    stream_access: Arc<dyn CompanionStreamAccess>,
 ) -> Router {
     let pairing_routes = Router::new()
         .route(
@@ -525,6 +601,7 @@ pub(crate) fn create_router_with_sources(
     Router::new()
         .route("/companion/v1/status", get(status_handler))
         .route("/companion/v1/attention", get(attention_handler))
+        .route("/companion/v1/events", get(events_handler))
         .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
         .merge(pairing_routes)
         .fallback(not_found_handler)
@@ -534,5 +611,7 @@ pub(crate) fn create_router_with_sources(
             pairing,
             attention,
             task_detail,
+            events,
+            stream_access,
         })
 }

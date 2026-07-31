@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/attention/attention_controller.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
+import 'package:openforge_companion/src/client/companion_refresh_outcome.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
@@ -36,6 +37,12 @@ final class _FakeClient implements CompanionClient {
   final pendingSnapshots = <Completer<AttentionSnapshot>>[];
   Object? error;
   var attentionCalls = 0;
+
+  @override
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  }) => throw UnsupportedError('not used');
 
   @override
   Future<AttentionSnapshot> fetchAttention(
@@ -225,9 +232,9 @@ void main() {
       storage: _FakeStorage(),
     );
 
-    final olderRefresh = controller.refresh();
+    final olderRefresh = controller.refreshWithOutcome();
     await Future<void>.delayed(Duration.zero);
-    final newerRefresh = controller.refresh();
+    final newerRefresh = controller.refreshWithOutcome();
     await Future<void>.delayed(Duration.zero);
     newer.complete(
       AttentionSnapshot(
@@ -242,7 +249,7 @@ void main() {
         ],
       ),
     );
-    await newerRefresh;
+    expect(await newerRefresh, CompanionRefreshOutcome.loaded);
     older.complete(
       AttentionSnapshot(
         snapshotAt: DateTime.utc(2026, 7, 30, 12, 1),
@@ -256,7 +263,7 @@ void main() {
         ],
       ),
     );
-    await olderRefresh;
+    expect(await olderRefresh, CompanionRefreshOutcome.superseded);
 
     expect(
       (controller.state as AttentionLoaded).snapshot.items.single.taskId,

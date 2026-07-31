@@ -10,6 +10,7 @@ use super::{
         load_or_create_host_identity, CompanionHostIdentity, CompanionIdentityStore,
         KeychainCompanionIdentityStore,
     },
+    live_events::{CompanionStreamAccess, GatewayCompanionStreamAccess},
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
@@ -19,6 +20,7 @@ use super::{
     attention::UnavailableCompanionAttentionSource,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
+use crate::app_events::AppEventBus;
 use axum_server::{tls_rustls::RustlsConfig, Handle};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -171,6 +173,21 @@ impl GatewayRuntime {
     }
 }
 
+struct CompanionGatewayNetwork {
+    endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+    advertiser: Arc<dyn CompanionAdvertiser>,
+    port: u16,
+}
+
+#[derive(Clone)]
+struct CompanionGatewayRouteSources {
+    pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    events: AppEventBus,
+    stream_access: Arc<dyn CompanionStreamAccess>,
+}
+
 #[derive(Clone)]
 pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
@@ -180,11 +197,16 @@ pub(crate) struct CompanionGatewayManager {
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    events: AppEventBus,
+    stream_access: Arc<dyn CompanionStreamAccess>,
     port: u16,
 }
 
 impl CompanionGatewayManager {
-    pub(crate) fn production(database: Arc<std::sync::Mutex<crate::db::Database>>) -> Self {
+    pub(crate) fn production(
+        database: Arc<std::sync::Mutex<crate::db::Database>>,
+        events: AppEventBus,
+    ) -> Self {
         let port = std::env::var(COMPANION_GATEWAY_PORT_ENV)
             .ok()
             .and_then(|value| value.parse().ok())
@@ -194,9 +216,12 @@ impl CompanionGatewayManager {
             Arc::new(DatabaseCompanionDeviceStore::new(Arc::clone(&database))),
             Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
             Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
-            Arc::new(PrivateInterfaceEndpointProvider),
-            Arc::new(MdnsCompanionAdvertiser),
-            port,
+            events,
+            CompanionGatewayNetwork {
+                endpoint_provider: Arc::new(PrivateInterfaceEndpointProvider),
+                advertiser: Arc::new(MdnsCompanionAdvertiser),
+                port,
+            },
         )
     }
 
@@ -213,9 +238,12 @@ impl CompanionGatewayManager {
             device_store,
             Arc::new(UnavailableCompanionAttentionSource),
             Arc::new(UnavailableCompanionTaskDetailSource),
-            endpoint_provider,
-            advertiser,
-            port,
+            AppEventBus::new(16, 8),
+            CompanionGatewayNetwork {
+                endpoint_provider,
+                advertiser,
+                port,
+            },
         )
     }
 
@@ -224,18 +252,26 @@ impl CompanionGatewayManager {
         device_store: Arc<dyn CompanionDeviceStore>,
         attention: Arc<dyn CompanionAttentionSource>,
         task_detail: Arc<dyn CompanionTaskDetailSource>,
-        endpoint_provider: Arc<dyn CompanionEndpointProvider>,
-        advertiser: Arc<dyn CompanionAdvertiser>,
-        port: u16,
+        events: AppEventBus,
+        network: CompanionGatewayNetwork,
     ) -> Self {
+        let CompanionGatewayNetwork {
+            endpoint_provider,
+            advertiser,
+            port,
+        } = network;
+        let pairing = Arc::new(PairingCoordinator::new(device_store, PAIRING_SESSION_TTL));
+        let stream_access = Arc::new(GatewayCompanionStreamAccess::new(pairing.clone()));
         Self {
             runtime: Arc::new(tokio::sync::Mutex::new(GatewayRuntime::default())),
             identity_store,
             endpoint_provider,
             advertiser,
-            pairing: Arc::new(PairingCoordinator::new(device_store, PAIRING_SESSION_TTL)),
+            pairing,
             attention,
             task_detail,
+            events,
+            stream_access,
             port,
         }
     }
@@ -289,9 +325,13 @@ impl CompanionGatewayManager {
             &identity,
             bind_endpoints,
             self.port,
-            Arc::clone(&self.pairing),
-            Arc::clone(&self.attention),
-            Arc::clone(&self.task_detail),
+            CompanionGatewayRouteSources {
+                pairing: Arc::clone(&self.pairing),
+                attention: Arc::clone(&self.attention),
+                task_detail: Arc::clone(&self.task_detail),
+                events: self.events.clone(),
+                stream_access: Arc::clone(&self.stream_access),
+            },
         )
         .await
         {
@@ -361,6 +401,7 @@ impl CompanionGatewayManager {
         runtime.error = None;
         let _ = self.pairing.clear();
         if let Some(running) = runtime.running.take() {
+            self.stream_access.gateway_closing();
             running.stop().await;
         }
         runtime.status()
@@ -372,6 +413,7 @@ impl CompanionGatewayManager {
         runtime.error = None;
         let _ = self.pairing.clear();
         if let Some(running) = runtime.running.take() {
+            self.stream_access.gateway_closing();
             running.stop().await;
         }
     }
@@ -440,9 +482,7 @@ async fn start_tls_listeners(
     identity: &CompanionHostIdentity,
     bind_endpoints: Vec<(CompanionEndpointKind, std::net::IpAddr)>,
     port: u16,
-    pairing: Arc<PairingCoordinator>,
-    attention: Arc<dyn CompanionAttentionSource>,
-    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    sources: CompanionGatewayRouteSources,
 ) -> Result<RunningGateway, String> {
     let tls_config = RustlsConfig::from_pem(
         identity.certificate_pem.clone().into_bytes(),
@@ -450,12 +490,21 @@ async fn start_tls_listeners(
     )
     .await
     .map_err(|error| format!("failed to configure Companion TLS: {error}"))?;
-    let router = contract::create_router_with_sources(
+    let CompanionGatewayRouteSources {
+        pairing,
+        attention,
+        task_detail,
+        events,
+        stream_access,
+    } = sources;
+    let router = contract::create_router_with_sources_and_event_access(
         CompanionHostStatus::new(identity.host_id.clone()),
         pairing.clone(),
         pairing,
         attention,
         task_detail,
+        events,
+        stream_access,
     );
     let mut bound_listeners = Vec::with_capacity(bind_endpoints.len());
     for (kind, address) in bind_endpoints {

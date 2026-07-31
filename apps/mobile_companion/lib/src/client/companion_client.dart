@@ -1,7 +1,10 @@
 import '../generated/companion_v1_client.dart';
 import '../pairing/pairing_bootstrap.dart';
 import '../storage/companion_secure_storage.dart';
+import 'companion_live_events.dart';
 import 'pinned_companion_transport.dart';
+
+export 'companion_live_events.dart';
 
 typedef CompanionEndpointTransportFactory =
     CompanionEndpointTransport Function(String certificateSha256);
@@ -56,16 +59,23 @@ abstract interface class CompanionClient {
     CompanionTrustRecord trustRecord,
     String taskId,
   );
+
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  });
 }
 
 final class GeneratedCompanionClient implements CompanionClient {
   factory GeneratedCompanionClient({
     CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
-  }) => GeneratedCompanionClient._(transportFactory);
+    CompanionEventConnector eventConnector = openPinnedCompanionEvents,
+  }) => GeneratedCompanionClient._(transportFactory, eventConnector);
 
-  GeneratedCompanionClient._(this._transportFactory);
+  GeneratedCompanionClient._(this._transportFactory, this._eventConnector);
 
   final CompanionEndpointTransportFactory _transportFactory;
+  final CompanionEventConnector _eventConnector;
 
   @override
   Future<PairingSubmissionStatus> submitPairing({
@@ -139,6 +149,20 @@ final class GeneratedCompanionClient implements CompanionClient {
       credential: trustRecord.deviceCredential,
     ),
   )).value;
+
+  @override
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  }) async => (await _tryEndpointCandidates(
+    endpoints: trustRecord.endpointCandidates,
+    operation: (endpoint) => _eventConnector(
+      endpoint: endpoint,
+      certificateSha256: trustRecord.certificateSha256,
+      credential: trustRecord.deviceCredential,
+      lastEventId: lastEventId,
+    ),
+  )).value;
 }
 
 final class _EndpointResult<T> {
@@ -153,19 +177,35 @@ Future<_EndpointResult<T>> _tryEndpoints<T>({
   required List<Uri> endpoints,
   required String certificateSha256,
   required Future<T> Function(CompanionV1Client client) operation,
-}) async {
-  Object? lastError;
-  var sawCertificateMismatch = false;
-  for (final endpoint in endpoints) {
+}) => _tryEndpointCandidates(
+  endpoints: endpoints,
+  operation: (endpoint) async {
     final transportHandle = transportFactory(certificateSha256);
     try {
-      final value = await operation(
+      return await operation(
         CompanionV1Client(
           baseUrl: endpoint,
           transport: transportHandle.transport,
         ),
       );
-      return _EndpointResult(endpoint: endpoint, value: value);
+    } finally {
+      transportHandle.close();
+    }
+  },
+);
+
+Future<_EndpointResult<T>> _tryEndpointCandidates<T>({
+  required List<Uri> endpoints,
+  required Future<T> Function(Uri endpoint) operation,
+}) async {
+  Object? lastError;
+  var sawCertificateMismatch = false;
+  for (final endpoint in endpoints) {
+    try {
+      return _EndpointResult(
+        endpoint: endpoint,
+        value: await operation(endpoint),
+      );
     } on CompanionCertificateMismatch catch (error) {
       sawCertificateMismatch = true;
       lastError = error;
@@ -176,8 +216,6 @@ Future<_EndpointResult<T>> _tryEndpoints<T>({
       rethrow;
     } on Object catch (error) {
       lastError = error;
-    } finally {
-      transportHandle.close();
     }
   }
   if (sawCertificateMismatch) {
