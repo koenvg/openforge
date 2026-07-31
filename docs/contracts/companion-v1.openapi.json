@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. Pairing is the only unauthenticated bootstrap flow; the sole durable capability is authenticated read-only status."
+    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. Pairing is the only unauthenticated bootstrap flow; durable device credentials can read only purpose-built status and Task attention resources."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -106,6 +106,57 @@
           "503": { "$ref": "#/components/responses/CompanionError" }
         }
       }
+    },
+    "/attention": {
+      "get": {
+        "operationId": "getCompanionAttention",
+        "summary": "Read the backend-authoritative Task Needs Attention snapshot",
+        "security": [{ "companionDeviceBearer": [] }],
+        "responses": {
+          "200": {
+            "description": "Current normalized Task attention rows in authoritative order",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AttentionSnapshot" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
+    "/tasks/{taskId}": {
+      "get": {
+        "operationId": "getCompanionTaskDetail",
+        "summary": "Read the approved Task detail fields",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current read-only Task detail",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskDetail" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
     }
   },
   "components": {
@@ -182,6 +233,76 @@
           "hostId": { "type": "string", "format": "uuid" },
           "protocolVersion": { "type": "integer", "const": 1 },
           "serverTime": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AttentionSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshotAt", "items"],
+        "properties": {
+          "snapshotAt": { "type": "string", "format": "date-time" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AttentionItem" }
+          }
+        }
+      },
+      "AttentionItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "projectId",
+          "projectName",
+          "title",
+          "state",
+          "reason",
+          "activityAt"
+        ],
+        "properties": {
+          "taskId": { "type": "string", "minLength": 1 },
+          "projectId": { "type": "string", "minLength": 1 },
+          "projectName": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "state": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "activityAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TaskDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "title",
+          "projectId",
+          "projectName",
+          "boardStatus",
+          "handoffNotes",
+          "agentState",
+          "agentErrorSummary",
+          "createdAt",
+          "updatedAt",
+          "agentUpdatedAt"
+        ],
+        "properties": {
+          "taskId": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "projectId": { "type": "string", "minLength": 1 },
+          "projectName": { "type": "string", "minLength": 1 },
+          "boardStatus": {
+            "type": "string",
+            "enum": ["backlog", "doing", "done"]
+          },
+          "handoffNotes": { "type": ["string", "null"] },
+          "agentState": {
+            "type": "string",
+            "enum": ["waiting", "running", "blocked", "failed", "complete"]
+          },
+          "agentErrorSummary": { "type": ["string", "null"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }
         }
       },
       "ErrorCode": {

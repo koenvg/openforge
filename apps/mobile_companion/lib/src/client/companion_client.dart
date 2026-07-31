@@ -3,12 +3,28 @@ import '../pairing/pairing_bootstrap.dart';
 import '../storage/companion_secure_storage.dart';
 import 'pinned_companion_transport.dart';
 
-typedef CompanionTransportFactory =
-    CloseableCompanionV1Transport Function(String certificateSha256);
+typedef CompanionEndpointTransportFactory =
+    CompanionEndpointTransport Function(String certificateSha256);
 
-CloseableCompanionV1Transport _createPinnedTransport(
-  String certificateSha256,
-) => PinnedCompanionTransport(certificateSha256: certificateSha256);
+final class CompanionEndpointTransport {
+  const CompanionEndpointTransport({
+    required this.transport,
+    required this.close,
+  });
+
+  final CompanionV1Transport transport;
+  final void Function() close;
+}
+
+CompanionEndpointTransport _pinnedTransport(String certificateSha256) {
+  final transport = PinnedCompanionTransport(
+    certificateSha256: certificateSha256,
+  );
+  return CompanionEndpointTransport(
+    transport: transport,
+    close: transport.close,
+  );
+}
 
 final class CompanionHostConnection {
   const CompanionHostConnection({required this.endpoint, required this.status});
@@ -33,14 +49,23 @@ abstract interface class CompanionClient {
   Future<CompanionHostConnection> fetchHostStatus(
     CompanionTrustRecord trustRecord,
   );
+
+  Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord);
+
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
 }
 
 final class GeneratedCompanionClient implements CompanionClient {
-  const GeneratedCompanionClient({
-    this.transportFactory = _createPinnedTransport,
-  });
+  factory GeneratedCompanionClient({
+    CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
+  }) => GeneratedCompanionClient._(transportFactory);
 
-  final CompanionTransportFactory transportFactory;
+  GeneratedCompanionClient._(this._transportFactory);
+
+  final CompanionEndpointTransportFactory _transportFactory;
 
   @override
   Future<PairingSubmissionStatus> submitPairing({
@@ -48,9 +73,9 @@ final class GeneratedCompanionClient implements CompanionClient {
     required String deviceName,
     required String platform,
   }) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
     endpoints: bootstrap.endpointCandidates,
     certificateSha256: bootstrap.certificateSha256,
-    transportFactory: transportFactory,
     operation: (client) => client.submitCompanionPairingRequest(
       secret: bootstrap.oneTimeSecret,
       deviceName: deviceName,
@@ -63,9 +88,9 @@ final class GeneratedCompanionClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String requestId,
   }) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
     endpoints: bootstrap.endpointCandidates,
     certificateSha256: bootstrap.certificateSha256,
-    transportFactory: transportFactory,
     operation: (client) => client.getCompanionPairingRequest(
       requestId: requestId,
       secret: bootstrap.oneTimeSecret,
@@ -77,9 +102,9 @@ final class GeneratedCompanionClient implements CompanionClient {
     CompanionTrustRecord trustRecord,
   ) async {
     final result = await _tryEndpoints(
+      transportFactory: _transportFactory,
       endpoints: trustRecord.endpointCandidates,
       certificateSha256: trustRecord.certificateSha256,
-      transportFactory: transportFactory,
       operation: (client) => client.getCompanionHostStatus(
         credential: trustRecord.deviceCredential,
       ),
@@ -89,6 +114,31 @@ final class GeneratedCompanionClient implements CompanionClient {
       status: result.value,
     );
   }
+
+  @override
+  Future<AttentionSnapshot> fetchAttention(
+    CompanionTrustRecord trustRecord,
+  ) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
+    endpoints: trustRecord.endpointCandidates,
+    certificateSha256: trustRecord.certificateSha256,
+    operation: (client) =>
+        client.getCompanionAttention(credential: trustRecord.deviceCredential),
+  )).value;
+
+  @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
+    endpoints: trustRecord.endpointCandidates,
+    certificateSha256: trustRecord.certificateSha256,
+    operation: (client) => client.getCompanionTaskDetail(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  )).value;
 }
 
 final class _EndpointResult<T> {
@@ -99,18 +149,21 @@ final class _EndpointResult<T> {
 }
 
 Future<_EndpointResult<T>> _tryEndpoints<T>({
+  required CompanionEndpointTransportFactory transportFactory,
   required List<Uri> endpoints,
   required String certificateSha256,
-  required CompanionTransportFactory transportFactory,
   required Future<T> Function(CompanionV1Client client) operation,
 }) async {
   Object? lastError;
   var sawCertificateMismatch = false;
   for (final endpoint in endpoints) {
-    final transport = transportFactory(certificateSha256);
+    final transportHandle = transportFactory(certificateSha256);
     try {
       final value = await operation(
-        CompanionV1Client(baseUrl: endpoint, transport: transport),
+        CompanionV1Client(
+          baseUrl: endpoint,
+          transport: transportHandle.transport,
+        ),
       );
       return _EndpointResult(endpoint: endpoint, value: value);
     } on CompanionCertificateMismatch catch (error) {
@@ -124,7 +177,7 @@ Future<_EndpointResult<T>> _tryEndpoints<T>({
     } on Object catch (error) {
       lastError = error;
     } finally {
-      transport.close();
+      transportHandle.close();
     }
   }
   if (sawCertificateMismatch) {

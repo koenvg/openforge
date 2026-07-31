@@ -1,21 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'attention/attention_controller.dart';
+import 'attention/attention_home.dart';
 import 'connection/companion_connection_state.dart';
 import 'pairing/companion_pairing_capture.dart';
 import 'pairing/companion_pairing_controller.dart';
 import 'presentation/connection_shell.dart';
+import 'task_detail/task_detail_controller.dart';
+import 'task_detail/task_detail_screen.dart';
 
 export 'pairing/companion_pairing_capture.dart' show CompanionQrScannerScreen;
 export 'presentation/connection_shell.dart' show ConnectionShell;
 
+typedef TaskDetailControllerFactory =
+    TaskDetailController Function(String taskId);
+
 class CompanionApp extends StatefulWidget {
   const CompanionApp({
     this.controller,
+    this.attentionController,
+    this.taskDetailControllerFactory,
     this.initialState = const Unpaired(),
     super.key,
   });
 
   final CompanionPairingController? controller;
+  final AttentionController? attentionController;
+  final TaskDetailControllerFactory? taskDetailControllerFactory;
   final CompanionConnectionState initialState;
 
   @override
@@ -25,22 +38,45 @@ class CompanionApp extends StatefulWidget {
 class _CompanionAppState extends State<CompanionApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late CompanionConnectionState _state;
+  late AttentionViewState _attentionState;
 
   @override
   void initState() {
     super.initState();
     _state = widget.controller?.state ?? widget.initialState;
+    _attentionState =
+        widget.attentionController?.state ?? const AttentionLoading();
     widget.controller?.addListener(_onControllerChanged);
+    widget.attentionController?.addListener(_onAttentionControllerChanged);
+    if (_state is Connected && widget.attentionController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(widget.attentionController!.refresh());
+      });
+    }
   }
 
   @override
   void dispose() {
     widget.controller?.removeListener(_onControllerChanged);
+    widget.attentionController?.removeListener(_onAttentionControllerChanged);
     super.dispose();
   }
 
   void _onControllerChanged() {
-    setState(() => _state = widget.controller!.state);
+    final previous = _state;
+    final next = widget.controller!.state;
+    setState(() => _state = next);
+    final attentionController = widget.attentionController;
+    if (attentionController == null) return;
+    if (next is Connected && previous is! Connected) {
+      unawaited(attentionController.refresh());
+    } else if (next is! Connected && previous is Connected) {
+      attentionController.clear();
+    }
+  }
+
+  void _onAttentionControllerChanged() {
+    setState(() => _attentionState = widget.attentionController!.state);
   }
 
   Future<void> _openScanner() async {
@@ -66,6 +102,17 @@ class _CompanionAppState extends State<CompanionApp> {
     await widget.controller?.restore();
   }
 
+  void _openTaskDetail(String taskId) {
+    final factory = widget.taskDetailControllerFactory;
+    final navigator = _navigatorKey.currentState;
+    if (factory == null || navigator == null) return;
+    navigator.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TaskDetailScreen(controller: factory(taskId)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     navigatorKey: _navigatorKey,
@@ -75,14 +122,22 @@ class _CompanionAppState extends State<CompanionApp> {
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       useMaterial3: true,
     ),
-    home: ConnectionShell(
-      state: _state,
-      onPair: widget.controller == null ? null : _openScanner,
-      onReset: widget.controller == null ? null : _forgetAndPairAgain,
-      onRetry: widget.controller == null ? null : _retryConnection,
-      onOpenSettings: widget.controller == null
-          ? null
-          : _openLocalNetworkSettings,
-    ),
+    home: _state is Connected && widget.attentionController != null
+        ? AttentionHome(
+            state: _attentionState,
+            onRefresh: widget.attentionController!.refresh,
+            onTaskSelected: widget.taskDetailControllerFactory == null
+                ? null
+                : _openTaskDetail,
+          )
+        : ConnectionShell(
+            state: _state,
+            onPair: widget.controller == null ? null : _openScanner,
+            onReset: widget.controller == null ? null : _forgetAndPairAgain,
+            onRetry: widget.controller == null ? null : _retryConnection,
+            onOpenSettings: widget.controller == null
+                ? null
+                : _openLocalNetworkSettings,
+          ),
   );
 }

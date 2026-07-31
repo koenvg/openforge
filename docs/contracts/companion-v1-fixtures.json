@@ -17,6 +17,33 @@
     "protocolVersion": 1,
     "serverTime": "2026-07-30T12:00:01Z"
   },
+  "attentionSnapshot": {
+    "snapshotAt": "2026-07-30T12:00:02Z",
+    "items": [
+      {
+        "taskId": "KVG-2945",
+        "projectId": "P-4",
+        "projectName": "OpenForge",
+        "title": "Show the attention-first mobile home",
+        "state": "needs-input",
+        "reason": "Agent needs your input to continue.",
+        "activityAt": "2026-07-30T11:59:00Z"
+      }
+    ]
+  },
+  "taskDetail": {
+    "taskId": "KVG-2946",
+    "title": "Add mobile Task detail",
+    "projectId": "P-4",
+    "projectName": "OpenForge",
+    "boardStatus": "doing",
+    "handoffNotes": "Ready for review.",
+    "agentState": "failed",
+    "agentErrorSummary": "Agent failed. Review details on the desktop.",
+    "createdAt": "2026-07-30T10:00:00Z",
+    "updatedAt": "2026-07-30T11:58:00Z",
+    "agentUpdatedAt": "2026-07-30T11:59:00Z"
+  },
   "error": {
     "error": {
       "code": "unauthenticated",

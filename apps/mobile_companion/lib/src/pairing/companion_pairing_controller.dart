@@ -55,6 +55,8 @@ final class CompanionPairingController extends ChangeNotifier {
 
   Future<void> openLocalNetworkSettings() => _discovery.openSettings();
 
+  void authorizationLost() => _setState(const Revoked());
+
   Future<void> forgetAndReset() async {
     await _storage.forget();
     _setState(const Unpaired());
@@ -175,7 +177,13 @@ final class CompanionPairingController extends ChangeNotifier {
         connection.endpoint,
         trustRecord.endpointCandidates,
       );
-      if (updatedRecord != trustRecord) await _storage.save(updatedRecord);
+      if (updatedRecord != trustRecord) {
+        try {
+          await _storage.save(updatedRecord);
+        } on Object {
+          // Endpoint preference is an optimization; trust is already verified.
+        }
+      }
       _setState(
         Connected(
           hostId: status.hostId,

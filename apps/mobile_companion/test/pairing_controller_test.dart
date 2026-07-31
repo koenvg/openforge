@@ -81,6 +81,20 @@ final class _FakeClient implements CompanionClient {
       status: hostStatus,
     );
   }
+
+  @override
+  Future<AttentionSnapshot> fetchAttention(
+    CompanionTrustRecord trustRecord,
+  ) async => AttentionSnapshot(
+    snapshotAt: DateTime.utc(2026, 7, 30),
+    items: const <AttentionItem>[],
+  );
+
+  @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
 }
 
 final class _FakeDiscovery implements CompanionEndpointDiscovery {
@@ -104,6 +118,7 @@ final class _FakeDiscovery implements CompanionEndpointDiscovery {
 final class _FakeStorage implements CompanionSecureStorage {
   CompanionTrustRecord? record;
   Object? loadError;
+  Object? saveError;
   var saveCalls = 0;
   var forgetCalls = 0;
 
@@ -123,6 +138,8 @@ final class _FakeStorage implements CompanionSecureStorage {
   @override
   Future<void> save(CompanionTrustRecord value) async {
     saveCalls += 1;
+    final error = saveError;
+    if (error != null) throw error;
     record = value;
   }
 }
@@ -371,6 +388,36 @@ void main() {
   );
 
   test(
+    'verified failover stays connected when endpoint persistence fails',
+    () async {
+      final oldEndpoint = Uri.parse('https://192.168.1.20:17424');
+      final newEndpoint = Uri.parse('https://192.168.1.40:17424');
+      final discovery = _FakeDiscovery()..endpoints = <Uri>[newEndpoint];
+      final client = _FakeClient()..connectedEndpoint = newEndpoint;
+      final storage = _FakeStorage()
+        ..record = CompanionTrustRecord(
+          hostId: _hostId,
+          certificateSha256: _fingerprint,
+          endpointCandidates: <Uri>[oldEndpoint],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        )
+        ..saveError = const FileSystemException('secure storage unavailable');
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+        discovery: discovery,
+      );
+
+      await controller.restore();
+
+      expect(controller.state, isA<Connected>());
+      expect(storage.saveCalls, 1);
+      expect(storage.record?.endpointCandidates, <Uri>[oldEndpoint]);
+    },
+  );
+
+  test(
     'permission denial has typed recovery after stored endpoints fail',
     () async {
       final discovery = _FakeDiscovery()
@@ -427,5 +474,16 @@ void main() {
 
     expect(controller.state, isA<CertificateMismatch>());
     expect(storage.record?.deviceCredential, 'credential-1');
+  });
+
+  test('domain authorization loss enters the re-pair-required state', () {
+    final controller = CompanionPairingController(
+      client: _FakeClient(),
+      storage: _FakeStorage(),
+    );
+
+    controller.authorizationLost();
+
+    expect(controller.state, isA<Revoked>());
   });
 }
