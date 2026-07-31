@@ -55,6 +55,8 @@ export type {
   CommandRegistry,
   CommandRegistration,
   CommandShortcutMetadata,
+  ComposeTaskRequest,
+  ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   Disposable,

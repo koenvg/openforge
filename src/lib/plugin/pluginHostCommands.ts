@@ -1,6 +1,6 @@
 import { get } from 'svelte/store'
 import { TaskFollowUpError } from '@openforge-app/plugin-sdk'
-import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, SendTaskFollowUpRequest, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TaskFollowUpReceipt, TaskLinkHandler, TaskLinkOpenRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
+import type { BackendReadyState, ComposeTaskRequest, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, SendTaskFollowUpRequest, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TaskFollowUpReceipt, TaskLinkHandler, TaskLinkOpenRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -33,6 +33,7 @@ import {
   writePty,
 } from '../ipc'
 import { activeProjectId, currentView, selectedTaskId, taskActiveView } from '../stores'
+import { requestTaskCompose } from '../taskCompose'
 import type { AppView } from '../types'
 import { installedPlugins } from './pluginStore'
 import { createHostBrowserSurfaces, destroyHostPluginBrowserSurfaces } from './taskBrowserSurfaces'
@@ -253,6 +254,16 @@ export function createPluginRuntimeHost(pluginId: string) {
     listTasks: (request?: { projectId?: string | null; includeDone?: boolean }) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     getTask: (taskId: string) => getTaskDetail(taskId),
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
+    composeTask: async (request: ComposeTaskRequest) => {
+      const projectId = request?.projectId
+      if (!projectId) throw new Error('composeTask requires a projectId')
+      // The dialog creates against whichever project is active, so move there
+      // first rather than silently writing the task to the wrong project.
+      if (get(activeProjectId) !== projectId) {
+        activeProjectId.set(projectId)
+      }
+      return requestTaskCompose(request)
+    },
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
     listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),

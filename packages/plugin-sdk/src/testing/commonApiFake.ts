@@ -85,6 +85,17 @@ export class TestingCommonApiFake {
             updated_at: 0,
           }
         },
+        // The fake stands in for the host dialog: it records the request and
+        // reports a created-but-not-started task, so consumers can assert what
+        // they asked for without a UI. Override per test for the other outcomes.
+        compose: async (request) => {
+          this.services.calls.taskComposes.push(request)
+          const task = await api.tasks.create({
+            projectId: request.projectId,
+            initialPrompt: request.initialPrompt,
+          })
+          return { task, started: false }
+        },
         updateSummary: async (taskId, summary) => {
           this.services.calls.taskSummaryUpdates.push({ taskId, summary })
         },

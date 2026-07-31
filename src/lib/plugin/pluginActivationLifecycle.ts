@@ -354,6 +354,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       list: unavailable('tasks.list'),
       get: unavailable('tasks.get'),
       create: unavailable('tasks.create'),
+      compose: unavailable('tasks.compose'),
       updateSummary: unavailable('tasks.updateSummary'),
       updateStatus: unavailable('tasks.updateStatus'),
       listStartPromptContributions: unavailable('tasks.listStartPromptContributions'),

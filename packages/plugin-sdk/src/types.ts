@@ -490,6 +490,20 @@ export interface CreateTaskRequest {
   labelNames?: string[]
 }
 
+export interface ComposeTaskRequest {
+  projectId: string
+  /** Seeds the dialog's prompt field; the user edits it before saving. */
+  initialPrompt: string
+  sourceTicketUrl?: string | null
+  title?: string | null
+}
+
+export interface ComposeTaskResult {
+  task: Task
+  /** True when the user chose Start Task rather than plain Create. */
+  started: boolean
+}
+
 export interface StartPromptContribution {
   id: string
   enabled: boolean
@@ -554,6 +568,12 @@ export interface TasksAPI {
   list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
+  /**
+   * Opens the host's create-task dialog pre-filled, letting the user edit the
+   * prompt — including inserting injectables — before the task exists.
+   * Resolves null if they dismiss it.
+   */
+  compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
   listStartPromptContributions(projectId: string): Promise<StartPromptContribution[]>

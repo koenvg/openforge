@@ -6,6 +6,7 @@ import type {
   BackgroundServiceRegistration,
   CommandRegistration,
   CommandShortcutMetadata,
+  ComposeTaskRequest,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   FrontendOpenForgeAPI,
@@ -60,6 +61,7 @@ export interface TestingOpenForgeApiCalls {
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]
+  taskComposes: ComposeTaskRequest[]
   startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]

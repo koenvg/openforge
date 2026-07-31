@@ -123,6 +123,9 @@ export class RuntimeCommonApiRegistry {
         create: async (request) => this.services.host.createTask ? this.services.host.createTask(request) : unavailableCapability('tasks.create'),
         updateSummary: async (taskId, summary) => this.services.host.updateTaskSummary ? this.services.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
         updateStatus: async (taskId, status) => this.services.host.updateTaskStatus ? this.services.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
+        compose: async (request) => this.services.host.composeTask
+          ? this.services.host.composeTask(request)
+          : unavailableCapability('tasks.compose'),
         listStartPromptContributions: async (projectId) => this.services.host.listStartPromptContributions ? this.services.host.listStartPromptContributions(projectId) : unavailableCapability('tasks.listStartPromptContributions'),
         configureStartPromptContribution: async (request) => this.services.host.configureStartPromptContribution ? this.services.host.configureStartPromptContribution(request) : unavailableCapability('tasks.configureStartPromptContribution'),
         startImplementation: async (request) => this.services.host.startTaskImplementation ? this.services.host.startTaskImplementation(request) : unavailableCapability('tasks.startImplementation'),
