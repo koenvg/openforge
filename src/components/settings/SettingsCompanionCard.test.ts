@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   approveCompanionPairing,
@@ -179,6 +179,19 @@ describe('SettingsCompanionCard', () => {
 
     expect(setCompanionGatewayEnabled).toHaveBeenCalledWith(false)
     expect(await screen.findByText('Disabled')).toBeTruthy()
+  })
+
+  it('retries a failed pairing status request from the Retry action', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    vi.mocked(getCompanionPairingStatus)
+      .mockRejectedValueOnce(new Error('Pairing status unavailable'))
+      .mockResolvedValue(null)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(getCompanionGatewayStatus).toHaveBeenCalledTimes(2))
+    expect(getCompanionPairingStatus).toHaveBeenCalledTimes(2)
   })
 
   it('surfaces gateway lifecycle failures', async () => {
