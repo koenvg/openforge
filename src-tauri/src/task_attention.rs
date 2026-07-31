@@ -1,3 +1,4 @@
+use crate::db::{PullRequestReadinessInput, PullRequestReadinessStatus, PullRequestReadinessView};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -87,161 +88,25 @@ pub(crate) struct TaskAttentionRow {
     pub activity_at: i64,
 }
 
-#[derive(Debug)]
-struct Readiness {
-    status: String,
-    blockers: HashSet<String>,
-    warnings: HashSet<String>,
-}
-
-fn parse_detail_codes(raw: Option<&str>) -> HashSet<String> {
-    let Some(raw) = raw else {
-        return HashSet::new();
+fn readiness(pr: &TaskAttentionPullRequest) -> PullRequestReadinessView {
+    let input = PullRequestReadinessInput {
+        head_sha: &pr.head_sha,
+        ci_status: pr.ci_status.as_deref(),
+        review_status: pr.review_status.as_deref(),
+        mergeable: pr.mergeable,
+        mergeable_state: pr.mergeable_state.as_deref(),
+        updated_at: pr.updated_at,
+        draft: pr.draft,
+        is_queued: pr.is_queued,
+        unaddressed_comment_count: pr.unaddressed_comment_count,
+        merge_readiness_status: pr.merge_readiness_status.as_deref(),
+        merge_readiness_action: pr.merge_readiness_action.as_deref(),
+        merge_readiness_blockers: pr.merge_readiness_blockers.as_deref(),
+        merge_readiness_warnings: pr.merge_readiness_warnings.as_deref(),
+        readiness_source_head_sha: pr.readiness_source_head_sha.as_deref(),
+        readiness_updated_at: pr.readiness_updated_at,
     };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return HashSet::new();
-    };
-    let Some(details) = value.as_array() else {
-        return HashSet::new();
-    };
-
-    details
-        .iter()
-        .filter_map(|detail| {
-            detail.get("message")?.as_str()?;
-            detail.get("code")?.as_str().map(ToOwned::to_owned)
-        })
-        .collect()
-}
-
-fn persisted_readiness(pr: &TaskAttentionPullRequest) -> Option<Readiness> {
-    let status = pr.merge_readiness_status.as_deref()?;
-    let action = pr.merge_readiness_action.as_deref()?;
-    if !matches!(
-        status,
-        "ready_to_merge"
-            | "ready_to_enqueue"
-            | "queued_pull_request"
-            | "readiness_unknown"
-            | "blocked"
-    ) || !matches!(
-        action,
-        "merge" | "enqueue" | "wait_for_queue" | "wait_for_github" | "resolve_blockers"
-    ) {
-        return None;
-    }
-    if pr.readiness_source_head_sha.as_deref() != Some(pr.head_sha.as_str())
-        || pr.readiness_updated_at.is_none()
-        || pr.readiness_updated_at < Some(pr.updated_at)
-    {
-        return None;
-    }
-
-    let mut blockers = parse_detail_codes(pr.merge_readiness_blockers.as_deref());
-    let mut warnings = parse_detail_codes(pr.merge_readiness_warnings.as_deref());
-    let no_published_checks = matches!(pr.ci_status.as_deref(), None | Some("none"));
-    if pr.mergeable_state.as_deref() == Some("unstable")
-        && no_published_checks
-        && blockers.remove("checks_failed")
-    {
-        blockers.insert("checks_pending".to_string());
-    }
-    if pr.unaddressed_comment_count == 0
-        && (blockers.contains("unresolved_conversations")
-            || warnings.contains("unresolved_conversations"))
-    {
-        blockers.remove("unresolved_conversations");
-        warnings.remove("unresolved_conversations");
-        if status == "blocked" && blockers.is_empty() {
-            return None;
-        }
-    }
-
-    Some(Readiness {
-        status: status.to_string(),
-        blockers,
-        warnings,
-    })
-}
-
-fn fallback_readiness(pr: &TaskAttentionPullRequest) -> Readiness {
-    let mergeable_state = pr.mergeable_state.as_deref().map(str::to_ascii_lowercase);
-    let ci_status = pr.ci_status.as_deref().map(str::to_ascii_lowercase);
-    let review_status = pr.review_status.as_deref().map(str::to_ascii_lowercase);
-    let mut blockers = HashSet::new();
-    let mut warnings = HashSet::new();
-
-    if pr.draft {
-        blockers.insert("draft".to_string());
-    }
-    if review_status.as_deref() == Some("changes_requested") {
-        blockers.insert("changes_requested".to_string());
-    }
-    match ci_status.as_deref() {
-        Some("pending" | "queued" | "in_progress") => {
-            blockers.insert("checks_pending".to_string());
-        }
-        Some("failure" | "error" | "cancelled" | "timed_out" | "action_required") => {
-            blockers.insert("checks_failed".to_string());
-        }
-        _ => {}
-    }
-    if mergeable_state.as_deref() == Some("unstable")
-        && !blockers.contains("checks_failed")
-        && !blockers.contains("checks_pending")
-    {
-        blockers.insert(if matches!(ci_status.as_deref(), None | Some("none")) {
-            "checks_pending".to_string()
-        } else {
-            "checks_failed".to_string()
-        });
-    }
-    match mergeable_state.as_deref() {
-        Some("dirty" | "conflicting") => {
-            blockers.insert("merge_conflict".to_string());
-        }
-        Some("blocked") => {
-            blockers.insert("mergeability_blocked".to_string());
-        }
-        Some("behind") => {
-            warnings.insert("branch_behind".to_string());
-        }
-        _ => {}
-    }
-    if pr.unaddressed_comment_count > 0 {
-        warnings.insert("unresolved_conversations".to_string());
-    }
-
-    let status = if !blockers.is_empty() {
-        "blocked"
-    } else if pr.is_queued {
-        "queued_pull_request"
-    } else if matches!(mergeable_state.as_deref(), Some("clean" | "behind"))
-        || (mergeable_state.is_none()
-            && pr.mergeable == Some(true)
-            && matches!(ci_status.as_deref(), None | Some("none"))
-            && matches!(review_status.as_deref(), None | Some("none")))
-    {
-        "ready_to_merge"
-    } else if mergeable_state.as_deref() == Some("unknown")
-        || pr.mergeable.is_none()
-        || (mergeable_state.is_none() && pr.mergeable != Some(false))
-    {
-        "readiness_unknown"
-    } else {
-        blockers.insert("mergeability_blocked".to_string());
-        "blocked"
-    };
-
-    Readiness {
-        status: status.to_string(),
-        blockers,
-        warnings,
-    }
-}
-
-fn readiness(pr: &TaskAttentionPullRequest) -> Readiness {
-    persisted_readiness(pr).unwrap_or_else(|| fallback_readiness(pr))
+    PullRequestReadinessView::from(&input)
 }
 
 fn readiness_priority(pr: &TaskAttentionPullRequest) -> i32 {
@@ -250,19 +115,18 @@ fn readiness_priority(pr: &TaskAttentionPullRequest) -> i32 {
     }
 
     let readiness = readiness(pr);
-    match readiness.status.as_str() {
-        "ready_to_merge" => 600,
-        "ready_to_enqueue" => 590,
-        "blocked" => {
-            if readiness.blockers.len() == 1 && readiness.blockers.contains("checks_pending") {
+    match readiness.status() {
+        PullRequestReadinessStatus::ReadyToMerge => 600,
+        PullRequestReadinessStatus::ReadyToEnqueue => 590,
+        PullRequestReadinessStatus::Blocked => {
+            if readiness.blocker_count() == 1 && readiness.has_blocker("checks_pending") {
                 350
             } else {
                 500
             }
         }
-        "readiness_unknown" => 300,
-        "queued_pull_request" => 250,
-        _ => 0,
+        PullRequestReadinessStatus::ReadinessUnknown => 300,
+        PullRequestReadinessStatus::QueuedPullRequest => 250,
     }
 }
 
@@ -294,24 +158,30 @@ fn pr_state(prs: &[&TaskAttentionPullRequest]) -> Option<&'static str> {
     }
 
     let readiness = readiness(pr);
-    match readiness.status.as_str() {
-        "ready_to_merge" => Some("ready-to-merge"),
-        "ready_to_enqueue" => Some("ready-to-enqueue"),
-        "queued_pull_request" => Some("pr-queued"),
-        "blocked" if readiness.blockers.contains("checks_failed") => Some("ci-failed"),
-        "blocked" if readiness.blockers.contains("changes_requested") => Some("changes-requested"),
-        "blocked" if readiness.blockers.contains("merge_conflict") => Some("merge-conflict"),
-        "blocked"
-            if readiness.blockers.contains("unresolved_conversations")
-                || readiness.warnings.contains("unresolved_conversations") =>
+    match readiness.status() {
+        PullRequestReadinessStatus::ReadyToMerge => Some("ready-to-merge"),
+        PullRequestReadinessStatus::ReadyToEnqueue => Some("ready-to-enqueue"),
+        PullRequestReadinessStatus::QueuedPullRequest => Some("pr-queued"),
+        PullRequestReadinessStatus::Blocked if readiness.has_blocker("checks_failed") => {
+            Some("ci-failed")
+        }
+        PullRequestReadinessStatus::Blocked if readiness.has_blocker("changes_requested") => {
+            Some("changes-requested")
+        }
+        PullRequestReadinessStatus::Blocked if readiness.has_blocker("merge_conflict") => {
+            Some("merge-conflict")
+        }
+        PullRequestReadinessStatus::Blocked
+            if readiness.has_blocker("unresolved_conversations")
+                || readiness.has_warning("unresolved_conversations") =>
         {
             Some("unaddressed-comments")
         }
-        "blocked" if readiness.blockers.contains("draft") => Some("pr-draft"),
-        "blocked" if readiness.blockers.contains("checks_pending") => Some("ci-running"),
-        _ if readiness.warnings.contains("unresolved_conversations") => {
-            Some("unaddressed-comments")
+        PullRequestReadinessStatus::Blocked if readiness.has_blocker("draft") => Some("pr-draft"),
+        PullRequestReadinessStatus::Blocked if readiness.has_blocker("checks_pending") => {
+            Some("ci-running")
         }
+        _ if readiness.has_warning("unresolved_conversations") => Some("unaddressed-comments"),
         _ if pr.review_status.as_deref() == Some("review_required") => Some("review-pending"),
         _ => Some("pr-open"),
     }
@@ -495,17 +365,6 @@ mod tests {
         });
 
         assert_eq!(actual, fixture.expected);
-    }
-
-    #[test]
-    fn persisted_readiness_details_require_code_and_message_like_desktop() {
-        assert!(parse_detail_codes(Some(r#"[{"code":"checks_failed"}]"#)).is_empty());
-        assert_eq!(
-            parse_detail_codes(Some(
-                r#"[{"code":"checks_failed","message":"Required checks are failing."}]"#
-            )),
-            HashSet::from(["checks_failed".to_string()])
-        );
     }
 
     fn pull_request() -> TaskAttentionPullRequest {
