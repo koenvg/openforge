@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../client/companion_client.dart';
+import '../client/companion_refresh_outcome.dart';
 import '../generated/companion_v1_client.dart';
 import '../storage/companion_secure_storage.dart';
 
@@ -43,26 +44,37 @@ final class AttentionController extends ChangeNotifier {
   AttentionViewState get state => _state;
 
   Future<void> refresh() async {
+    await refreshWithOutcome();
+  }
+
+  Future<CompanionRefreshOutcome> refreshWithOutcome() async {
     final generation = ++_generation;
     _setState(const AttentionLoading());
     try {
       final trustRecord = await _storage.load();
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
       if (trustRecord == null) {
         _authorizationLost();
-        return;
+        return CompanionRefreshOutcome.authorizationRequired;
       }
       final snapshot = await _client.fetchAttention(trustRecord);
-      if (_isCurrent(generation)) _setState(AttentionLoaded(snapshot));
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
+      _setState(AttentionLoaded(snapshot));
+      return CompanionRefreshOutcome.loaded;
     } on CompanionV1Exception catch (error) {
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
       if (error.code == 'revoked' || error.code == 'unauthenticated') {
         _authorizationLost();
-      } else {
-        _setLoadError();
+        return CompanionRefreshOutcome.authorizationRequired;
       }
+      _setLoadError();
+      return error.code == 'incompatible_version'
+          ? CompanionRefreshOutcome.incompatible
+          : CompanionRefreshOutcome.unavailable;
     } on Object {
-      if (_isCurrent(generation)) _setLoadError();
+      if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
+      _setLoadError();
+      return CompanionRefreshOutcome.unavailable;
     }
   }
 

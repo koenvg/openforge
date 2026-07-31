@@ -157,6 +157,58 @@
           "503": { "$ref": "#/components/responses/CompanionError" }
         }
       }
+    },
+    "/events": {
+      "get": {
+        "operationId": "streamCompanionEvents",
+        "summary": "Stream coarse Task and attention resource invalidations while foregrounded",
+        "description": "Authenticated SSE stream backed by the OpenForge App Event Bus. Event data never contains internal event payloads, Handoff Notes, credentials, provider identifiers, or Agent-session identifiers. Clients refetch the named resources. Last-Event-ID resumes from the App Event Bus replay cursor when available; stream-gap requires discarding in-memory domain views and fetching fresh snapshots.",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "description": "Opaque cursor from the last received SSE id field.",
+            "schema": { "type": "string", "minLength": 3 }
+          }
+        ],
+        "x-sse-events": [
+          {
+            "event": "resources-invalidated",
+            "dataSchema": { "$ref": "#/components/schemas/ResourceInvalidationData" }
+          },
+          {
+            "event": "stream-gap",
+            "dataSchema": { "$ref": "#/components/schemas/StreamGapData" }
+          },
+          {
+            "event": "authorization-revoked",
+            "dataSchema": { "$ref": "#/components/schemas/AuthorizationRevokedData" },
+            "terminal": true
+          },
+          {
+            "event": "gateway-closing",
+            "dataSchema": { "$ref": "#/components/schemas/GatewayClosingData" },
+            "terminal": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE invalidation stream. Every replayable event has an opaque id cursor.",
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CompanionError" },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
     }
   },
   "components": {
@@ -304,6 +356,54 @@
           "updatedAt": { "type": "string", "format": "date-time" },
           "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }
         }
+      },
+      "ResourceInvalidationData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resources"],
+        "properties": {
+          "resources": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind"],
+                  "properties": { "kind": { "const": "attention" } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "id"],
+                  "properties": {
+                    "kind": { "const": "task" },
+                    "id": { "type": "string", "minLength": 1 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "StreamGapData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["refreshRequired"],
+        "properties": { "refreshRequired": { "const": true } }
+      },
+      "AuthorizationRevokedData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": { "reason": { "const": "revoked" } }
+      },
+      "GatewayClosingData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": { "reason": { "const": "shutdown" } }
       },
       "ErrorCode": {
         "type": "string",

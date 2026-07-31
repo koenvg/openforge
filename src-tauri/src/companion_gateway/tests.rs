@@ -333,7 +333,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 5);
+    assert_eq!(paths.len(), 6);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -361,6 +361,27 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
             .collect::<Vec<_>>(),
         vec!["get"],
         "Task detail must expose no mutation or generic command capability"
+    );
+    let events_path = paths["/events"].as_object().expect("events path item");
+    assert_eq!(
+        events_path.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec!["get"],
+        "live events must expose no mutation or generic command capability"
+    );
+    let public_events = events_path["get"]["x-sse-events"]
+        .as_array()
+        .expect("documented SSE vocabulary");
+    assert_eq!(
+        public_events
+            .iter()
+            .map(|event| event["event"].as_str().expect("SSE event name"))
+            .collect::<Vec<_>>(),
+        vec![
+            "resources-invalidated",
+            "stream-gap",
+            "authorization-revoked",
+            "gateway-closing",
+        ]
     );
     assert_eq!(
         paths["/pairing/requests"]
@@ -397,6 +418,12 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         .expect("Task detail responses");
     for status in ["200", "401", "404", "409", "429", "503"] {
         assert!(task_detail_responses.contains_key(status));
+    }
+    let event_responses = events_path["get"]["responses"]
+        .as_object()
+        .expect("event responses");
+    for status in ["200", "400", "401", "409", "429", "503"] {
+        assert!(event_responses.contains_key(status));
     }
 
     let fixtures: serde_json::Value = serde_json::from_str(include_str!(

@@ -84,6 +84,7 @@ void main() {
       expect(encodedContract, contains('getCompanionHostStatus'));
       expect(encodedContract, contains('getCompanionAttention'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
+      expect(encodedContract, contains('streamCompanionEvents'));
       final paths = contract['paths']! as Map<String, Object?>;
       expect(
         paths.keys,
@@ -93,11 +94,30 @@ void main() {
           '/status',
           '/attention',
           '/tasks/{taskId}',
+          '/events',
         ]),
       );
       for (final path in paths.values.cast<Map<String, Object?>>()) {
         expect(path.keys, everyElement(anyOf('get', 'post')));
       }
+      final eventsPath = paths['/events']! as Map<String, Object?>;
+      final eventsOperation = eventsPath['get']! as Map<String, Object?>;
+      final eventVocabulary = eventsOperation['x-sse-events']! as List<Object?>;
+      expect(
+        eventVocabulary.map(
+          (event) => (event! as Map<String, Object?>)['event'],
+        ),
+        <String>[
+          'resources-invalidated',
+          'stream-gap',
+          'authorization-revoked',
+          'gateway-closing',
+        ],
+      );
+      expect(
+        jsonEncode(eventsOperation),
+        isNot(anyOf(contains('handoffNotes'), contains('providerSessionId'))),
+      );
       final components = contract['components']! as Map<String, Object?>;
       final schemas = components['schemas']! as Map<String, Object?>;
       final detailSchema = schemas['TaskDetail']! as Map<String, Object?>;

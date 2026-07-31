@@ -290,7 +290,7 @@ impl AppEventBus {
 
         if let Some(cursor) = cursor {
             if let (Some(oldest), Some(newest)) = (oldest, newest) {
-                if cursor.epoch != newest.epoch || cursor.seq + 1 < oldest.seq {
+                if cursor.epoch != newest.epoch || cursor.seq.saturating_add(1) < oldest.seq {
                     queued.push_back(AppEventFrame::Gap(AppEventGap {
                         requested_after: cursor,
                         oldest_available: oldest,
@@ -843,5 +843,22 @@ mod tests {
         assert_eq!(gap.requested_after.seq, 1);
         assert_eq!(gap.oldest_available.seq, 3);
         assert_eq!(gap.newest_available.seq, 3);
+    }
+
+    #[test]
+    fn test_app_event_bus_accepts_maximum_sequence_cursor_without_overflow() {
+        let bus = AppEventBus::new(16, 1);
+        let receipt = bus
+            .tasks()
+            .updated("T-1", None)
+            .expect("event should publish");
+        let subscription = bus
+            .subscribe(Some(AppEventCursor {
+                epoch: receipt.id.epoch,
+                seq: u64::MAX,
+            }))
+            .expect("maximum cursor should not overflow");
+
+        assert!(subscription.queued.is_empty());
     }
 }

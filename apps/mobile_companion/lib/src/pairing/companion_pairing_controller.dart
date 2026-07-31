@@ -30,6 +30,7 @@ final class CompanionPairingController extends ChangeNotifier {
   final Duration _pollInterval;
 
   CompanionConnectionState _state = const Restoring();
+  Connected? _lastConnected;
   CompanionConnectionState get state => _state;
 
   Future<void> restore() async {
@@ -56,6 +57,23 @@ final class CompanionPairingController extends ChangeNotifier {
   Future<void> openLocalNetworkSettings() => _discovery.openSettings();
 
   void authorizationLost() => _setState(const Revoked());
+
+  void liveReconnecting() {
+    if (_state is Connected || _state is Reconnecting) {
+      _setState(const Reconnecting());
+    }
+  }
+
+  void liveConnected() {
+    final connected = _lastConnected;
+    if (connected != null && _state is Reconnecting) _setState(connected);
+  }
+
+  void liveUnavailable() => _setState(const Unavailable());
+
+  void liveCertificateMismatch() => _setState(const CertificateMismatch());
+
+  void liveIncompatible() => _setState(const IncompatibleProtocol());
 
   Future<void> forgetAndReset() async {
     await _storage.forget();
@@ -222,6 +240,7 @@ final class CompanionPairingController extends ChangeNotifier {
   }
 
   void _setState(CompanionConnectionState state) {
+    if (state is Connected) _lastConnected = state;
     _state = state;
     notifyListeners();
   }

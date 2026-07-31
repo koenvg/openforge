@@ -158,8 +158,11 @@ async fn start_http_server_with_app_state(
         std::env::var("OPENFORGE_BACKEND_PORT").ok(),
         std::env::var("AI_COMMAND_CENTER_PORT").ok(),
     );
-    let companion_gateway =
-        crate::companion_gateway::CompanionGatewayManager::production(db.clone());
+    let app_event_bus = AppEventBus::new(1024, 1024);
+    let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production(
+        db.clone(),
+        app_event_bus.clone(),
+    );
     let companion_enabled = {
         let database = crate::db::acquire_db(&db);
         match crate::companion_gateway::enabled_preference(&database) {
@@ -171,7 +174,6 @@ async fn start_http_server_with_app_state(
         }
     };
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let app_event_bus = AppEventBus::new(1024, 1024);
     let app_event_tx = app_event_bus.sender();
     if let Some(app) = app.as_ref() {
         app.set_app_event_adapter(std::sync::Arc::new(InMemoryAppEventAdapter::new(

@@ -83,6 +83,12 @@ final class _FakeClient implements CompanionClient {
   }
 
   @override
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  }) => throw UnsupportedError('not used');
+
+  @override
   Future<AttentionSnapshot> fetchAttention(
     CompanionTrustRecord trustRecord,
   ) async => AttentionSnapshot(

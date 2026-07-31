@@ -71,20 +71,34 @@ final class PinnedCompanionTransport implements CloseableCompanionV1Transport {
     required Map<String, String> headers,
     String? body,
   }) async {
+    final response = await openStream(
+      method: method,
+      uri: uri,
+      headers: headers,
+      body: body,
+    );
+    final responseBody = await utf8.decoder
+        .bind(response)
+        .join()
+        .timeout(timeout);
+    return CompanionV1HttpResponse(
+      statusCode: response.statusCode,
+      body: responseBody,
+    );
+  }
+
+  Future<HttpClientResponse> openStream({
+    required String method,
+    required Uri uri,
+    required Map<String, String> headers,
+    String? body,
+  }) async {
     try {
       final request = await _client.openUrl(method, uri).timeout(timeout);
       request.followRedirects = false;
       headers.forEach((name, value) => request.headers.set(name, value));
       if (body != null) request.write(body);
-      final response = await request.close().timeout(timeout);
-      final responseBody = await utf8.decoder
-          .bind(response)
-          .join()
-          .timeout(timeout);
-      return CompanionV1HttpResponse(
-        statusCode: response.statusCode,
-        body: responseBody,
-      );
+      return await request.close().timeout(timeout);
     } on HandshakeException {
       if (_pinDecision.rejected) {
         throw const CompanionCertificateMismatch();

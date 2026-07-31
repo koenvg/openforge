@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '215e39ddd54732d6d113d31273f518ae5e9fd01043feaddc49423e8768a63997';
+    '7e079ffb1d77f51b4a26d8323c7be60a3639a9a337b5f5471c160e871bbdc614';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({

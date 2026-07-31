@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
+import 'package:openforge_companion/src/client/companion_refresh_outcome.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
@@ -34,6 +35,12 @@ final class _FakeClient implements CompanionClient {
   Object result = _detail;
   Completer<TaskDetail>? pendingDetail;
   var taskDetailCalls = 0;
+
+  @override
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  }) => throw UnsupportedError('not used');
 
   @override
   Future<TaskDetail> fetchTaskDetail(
@@ -153,13 +160,13 @@ void main() {
       client: client,
       storage: _FakeStorage(),
     );
-    final refresh = controller.refresh();
+    final refresh = controller.refreshWithOutcome();
     await Future<void>.delayed(Duration.zero);
     expect(client.taskDetailCalls, 1);
 
     controller.dispose();
     client.pendingDetail!.complete(_detail);
 
-    await expectLater(refresh, completes);
+    expect(await refresh, CompanionRefreshOutcome.superseded);
   });
 }
