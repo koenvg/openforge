@@ -1,6 +1,7 @@
 pub(crate) mod payload;
 
 mod agent_generate;
+mod companion;
 mod core;
 mod files_review;
 mod github_review;
@@ -101,6 +102,13 @@ fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
     );
 }
 
+pub(crate) async fn handle_companion_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<Option<serde_json::Value>> {
+    companion::handle_app_companion_command(state, request).await
+}
+
 pub(crate) async fn handle_core_task_project_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -176,6 +184,9 @@ pub(crate) async fn handle_command(
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
     if let Some(value) = handle_whisper_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_companion_command(state, request).await? {
         return Ok(value);
     }
     if let Some(value) = handle_core_task_project_command(state, request).await? {

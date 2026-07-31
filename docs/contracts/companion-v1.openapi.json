@@ -1,0 +1,94 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenForge Companion API",
+    "version": "1.0.0",
+    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. This v1 foundation intentionally exposes no domain resources or mutations."
+  },
+  "servers": [
+    { "url": "/companion/v1" }
+  ],
+  "paths": {
+    "/status": {
+      "get": {
+        "operationId": "getCompanionHostStatus",
+        "summary": "Read the paired desktop host identity and protocol status",
+        "security": [{ "companionDeviceBearer": [] }],
+        "responses": {
+          "200": {
+            "description": "The Companion Gateway is available",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HostStatus" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "companionDeviceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "OpenForge companion device credential"
+      }
+    },
+    "schemas": {
+      "HostStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hostId", "protocolVersion", "serverTime"],
+        "properties": {
+          "hostId": { "type": "string", "format": "uuid" },
+          "protocolVersion": { "type": "integer", "const": 1 },
+          "serverTime": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "unauthenticated",
+          "revoked",
+          "incompatible_version",
+          "not_found",
+          "rate_limited",
+          "temporarily_unavailable"
+        ]
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "requestId"],
+            "properties": {
+              "code": { "$ref": "#/components/schemas/ErrorCode" },
+              "message": { "type": "string" },
+              "requestId": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "CompanionError": {
+        "description": "Stable Companion API error envelope",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    }
+  }
+}

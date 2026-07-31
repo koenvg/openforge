@@ -24,6 +24,25 @@ async fn sidecar_runtime_shutdown_cleanup_is_safe_and_idempotent_without_live_ch
 }
 
 #[tokio::test]
+async fn coordinated_sidecar_shutdown_closes_the_companion_gateway_within_budget() {
+    let (mut state, _path) = test_state("sidecar_runtime_shutdown_companion_gateway");
+    let manager = crate::companion_gateway::test_manager();
+    manager.enable().await.expect("gateway should start");
+    state.companion_gateway = Some(manager.clone());
+
+    tokio::time::timeout(
+        SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+        shutdown_sidecar_runtime(&state),
+    )
+    .await
+    .expect("coordinated shutdown should remain within its budget");
+
+    let status = serde_json::to_value(manager.status().await).expect("serialize status");
+    assert_eq!(status["phase"], "stopped");
+    assert_eq!(status["enabled"], true);
+}
+
+#[tokio::test]
 async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
     let (state, _path) = test_state("sidecar_runtime_shutdown_live_shell");
     let workspace = tempfile::tempdir().expect("workspace temp dir");

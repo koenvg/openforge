@@ -83,6 +83,7 @@ pub struct AppState {
     pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
     pub sidecar_readiness: SidecarReadinessState,
+    pub companion_gateway: Option<crate::companion_gateway::CompanionGatewayManager>,
     pub task_claims: TaskClaims,
     pub poll_context: crate::github_poller::PollContext,
 }

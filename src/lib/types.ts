@@ -45,3 +45,20 @@ export interface GitStatusSummary {
   untracked_files: number
   untracked_insertions: number
 }
+
+export type CompanionGatewayPhase = 'disabled' | 'starting' | 'running' | 'error' | 'stopped'
+export type CompanionGatewayEndpointKind = 'lan' | 'tailscale'
+
+export interface CompanionGatewayEndpoint {
+  kind: CompanionGatewayEndpointKind
+  url: string
+}
+
+export interface CompanionGatewayStatus {
+  enabled: boolean
+  phase: CompanionGatewayPhase
+  hostId: string | null
+  certificateFingerprint: string | null
+  endpoints: CompanionGatewayEndpoint[]
+  error: string | null
+}

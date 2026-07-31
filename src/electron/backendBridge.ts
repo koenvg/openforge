@@ -80,6 +80,8 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'reset_project_settings_to_global',
   'get_config',
   'set_config',
+  'get_companion_gateway_status',
+  'set_companion_gateway_enabled',
   'get_task_config',
   'set_task_config',
   'get_app_mode',

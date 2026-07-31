@@ -40,6 +40,7 @@
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
+  import SettingsCompanionCard from './SettingsCompanionCard.svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
@@ -771,6 +772,8 @@
           onToggleDefault={handleGlobalPluginToggle}
           disabled={!globalSettingsLoaded}
         />
+
+        <SettingsCompanionCard />
 
         <SettingsDeveloperLogsCard />
       {/if}
