@@ -23,6 +23,7 @@ import type {
   FrontendSettingsRegistry,
   FrontendTaskPaneRegistry,
   FrontendInjectionPointRegistry,
+  FrontendTaskStartRegistry,
   FrontendTaskUIRegistry,
   FrontendViewRegistry,
   InjectionPointLocation,
@@ -48,6 +49,8 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TaskStartPrefixContext,
+  TaskStartPrefixProviderRegistration,
   TerminalImageProtocol,
 } from './types'
 
@@ -94,6 +97,7 @@ export type {
   FrontendSettingsRegistry,
   FrontendTaskPaneRegistry,
   FrontendInjectionPointRegistry,
+  FrontendTaskStartRegistry,
   FrontendTaskUIRegistry,
   FrontendViewRegistry,
   InjectionPointLocation,
@@ -119,5 +123,7 @@ export type {
   PluginTaskUISectionRegistration,
   PluginViewProps,
   PluginViewRegistration,
+  TaskStartPrefixContext,
+  TaskStartPrefixProviderRegistration,
   TerminalImageProtocol,
 }

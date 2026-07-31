@@ -10,6 +10,7 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
   TaskLinkHandler,
+  TaskStartPrefixProviderRegistration,
 } from '../types'
 import {
   assertFunction,
@@ -19,6 +20,7 @@ import {
 } from './support'
 import type {
   TestingInjectionPointContribution,
+  TestingTaskStartPrefixProviderContribution,
   TestingSettingsSectionContribution,
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
@@ -27,7 +29,7 @@ import type {
 
 type TestingFrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints'
+  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
 >
 
 export class TestingFrontendContributionFake {
@@ -36,6 +38,7 @@ export class TestingFrontendContributionFake {
   private readonly taskUISections = new Map<string, TestingTaskUISectionContribution>()
   private readonly settingsSections = new Map<string, TestingSettingsSectionContribution>()
   private readonly injectionPoints = new Map<string, TestingInjectionPointContribution>()
+  private readonly taskStartPrefixProviders = new Map<string, TestingTaskStartPrefixProviderContribution>()
   private readonly browserSurfaces: TestingBrowserSurfaces
   private taskLinkHandler: TaskLinkHandler | null = null
   private api: TestingFrontendContributionApi | null = null
@@ -106,6 +109,9 @@ export class TestingFrontendContributionFake {
       injectionPoints: {
         register: (registration) => this.registerInjectionPoint(registration),
       },
+      taskStart: {
+        registerPrefixProvider: (registration) => this.registerTaskStartPrefixProvider(registration),
+      },
     }
 
     this.api = api
@@ -122,6 +128,7 @@ export class TestingFrontendContributionFake {
     taskUISections: TestingTaskUISectionContribution[]
     settingsSections: TestingSettingsSectionContribution[]
     injectionPoints: TestingInjectionPointContribution[]
+    taskStartPrefixProviders: TestingTaskStartPrefixProviderContribution[]
   } {
     return {
       views: Array.from(this.views.values()),
@@ -129,6 +136,9 @@ export class TestingFrontendContributionFake {
       taskUISections: Array.from(this.taskUISections.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
+      taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort(
+        (left, right) => left.order - right.order || left.id.localeCompare(right.id),
+      ),
     }
   }
 
@@ -215,6 +225,20 @@ export class TestingFrontendContributionFake {
     return createDisposable(() => {
       this.settingsSections.delete(qualifiedId)
       this.services.claims.release('settings', qualifiedId)
+    })
+  }
+
+  private registerTaskStartPrefixProvider(
+    registration: TaskStartPrefixProviderRegistration,
+  ): Disposable {
+    this.taskStartPrefixProviders.set(registration.id, {
+      id: registration.id,
+      title: registration.title,
+      order: registration.order ?? 0,
+      provide: (context) => registration.provide(context),
+    })
+    return createDisposable(() => {
+      this.taskStartPrefixProviders.delete(registration.id)
     })
   }
 

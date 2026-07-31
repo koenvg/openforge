@@ -4,6 +4,8 @@ export {
   executePluginCommand,
   getPluginRenderProps,
   listInjectionPointsAcrossPlugins,
+  listTaskStartPrefixProvidersAcrossPlugins,
+  requestTaskStartPrefix,
 } from './pluginActivationLifecycle'
 export { emitPluginHostEvent } from './pluginHostEvents'
 export {

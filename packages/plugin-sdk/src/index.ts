@@ -97,6 +97,8 @@ export type {
   ProjectsAPI,
   ShellAPI,
   ShellResizeRequest,
+  TaskStartPrefixContext,
+  TaskStartPrefixProviderRegistration,
   TerminalImageProtocol,
   ShellSessionRequest,
   ShellSpawnRequest,

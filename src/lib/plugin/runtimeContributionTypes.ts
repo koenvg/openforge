@@ -39,13 +39,14 @@ import type {
   StartTaskImplementationRequest,
   TaskFollowUpReceipt,
   Task,
+  TaskStartPrefixContext,
   TaskWorkspaceInfo,
   WritableBoardStatus,
   Disposable,
 } from '@openforge-app/plugin-sdk'
 
 export type MaybePromise<T> = T | Promise<T>
-export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints'
+export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
 export type RuntimeScope = 'global' | 'project' | 'task'
 export type RuntimeHandler = (
   payload?: unknown,
@@ -139,6 +140,12 @@ export type RuntimeInjectionPointContribution = RuntimeContributionBase & {
   component: PluginInjectionPointRegistration['component']
 }
 
+export type RuntimeTaskStartPrefixProviderContribution = RuntimeContributionBase & {
+  title: string
+  order: number
+  provide(context: TaskStartPrefixContext): MaybePromise<string | null>
+}
+
 export type RuntimeBackgroundServiceContribution = RuntimeContributionBase & BackgroundServiceRegistration & {
   started: boolean
 }
@@ -155,6 +162,7 @@ export type RuntimeContributionSnapshot = {
   taskUISections: RuntimeTaskUISectionContribution[]
   settingsSections: RuntimeSettingsSectionContribution[]
   injectionPoints: RuntimeInjectionPointContribution[]
+  taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
   commands: RuntimeCommandContribution[]
   eventListeners: RuntimeEventListenerContribution[]
   backendMethods: RuntimeBackendMethodContribution[]

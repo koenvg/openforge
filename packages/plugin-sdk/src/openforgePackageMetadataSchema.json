@@ -83,6 +83,7 @@
           "views",
           "injectionPoints",
           "taskPane",
+          "taskStart",
           "settings",
           "background",
           "backend",

@@ -23,6 +23,7 @@ import type {
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
   TaskLinkOpenRequest,
+  TaskStartPrefixContext,
 } from '../types'
 import type { Task } from '../domain'
 
@@ -125,6 +126,13 @@ export interface TestingInjectionPointContribution {
   location: InjectionPointLocation
 }
 
+export interface TestingTaskStartPrefixProviderContribution {
+  id: string
+  title: string
+  order: number
+  provide(context: TaskStartPrefixContext): TestingMaybePromise<string | null>
+}
+
 export interface TestingOpenForgeRegistrySnapshot {
   pluginId: string
   projectId: string | null
@@ -137,6 +145,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   backendMethods: TestingBackendMethodContribution[]
   backgroundServices: TestingBackgroundServiceContribution[]
   injectionPoints: TestingInjectionPointContribution[]
+  taskStartPrefixProviders: TestingTaskStartPrefixProviderContribution[]
 }
 
 export type MockFrontendOpenForgeAPI = FrontendOpenForgeAPI & {

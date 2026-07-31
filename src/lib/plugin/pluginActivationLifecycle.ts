@@ -386,6 +386,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
     injectionPoints: { register: () => ({ dispose: () => undefined }) },
+    taskStart: { registerPrefixProvider: () => ({ dispose: () => undefined }) },
     backend: {
       state: 'missing',
       whenReady: unavailable('backend.whenReady'),
@@ -426,6 +427,41 @@ export function listInjectionPointsAcrossPlugins(
     }
   }
   return result
+}
+
+export function listTaskStartPrefixProvidersAcrossPlugins(
+  enabledIds: Iterable<string>,
+): import('./runtimeContributionRegistry').RuntimeTaskStartPrefixProviderContribution[] {
+  const result: import('./runtimeContributionRegistry').RuntimeTaskStartPrefixProviderContribution[] = []
+  for (const pluginId of enabledIds) {
+    const registry = activeRuntimeRegistries.get(pluginId)
+    if (registry) {
+      result.push(...registry.listTaskStartPrefixProviders())
+    }
+  }
+  // Sort across plugins too, so the menu order does not depend on activation order.
+  return result.sort(
+    (left, right) => left.order - right.order || left.qualifiedId.localeCompare(right.qualifiedId),
+  )
+}
+
+/**
+ * Asks one provider for a prefix. Resolves null when the provider is gone, the
+ * user cancelled, or the answer was blank — all of which mean "start nothing".
+ */
+export async function requestTaskStartPrefix(
+  pluginId: string,
+  providerId: string,
+  context: import('@openforge-app/plugin-sdk').TaskStartPrefixContext,
+): Promise<string | null> {
+  const registry = activeRuntimeRegistries.get(pluginId)
+  const provider = registry
+    ?.listTaskStartPrefixProviders()
+    .find((candidate) => candidate.id === providerId)
+  if (!provider) return null
+
+  const prefix = await provider.provide(context)
+  return typeof prefix === 'string' && prefix.trim().length > 0 ? prefix : null
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {

@@ -28,6 +28,7 @@ import type {
   RuntimeContributionSnapshot,
   RuntimeInjectionPointContribution,
   RuntimeOptions,
+  RuntimeTaskStartPrefixProviderContribution,
 } from './runtimeContributionTypes'
 
 export type {
@@ -40,6 +41,7 @@ export type {
   RuntimeInjectionPointContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
+  RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
 } from './runtimeContributionTypes'
@@ -161,6 +163,10 @@ class RuntimeContributionRegistry {
 
   listInjectionPoints(location: InjectionPointLocation): RuntimeInjectionPointContribution[] {
     return this.frontendContributions.listInjectionPoints(location)
+  }
+
+  listTaskStartPrefixProviders(): RuntimeTaskStartPrefixProviderContribution[] {
+    return this.frontendContributions.listTaskStartPrefixProviders()
   }
 
   getContextSnapshot(): OpenForgeContextSnapshot {

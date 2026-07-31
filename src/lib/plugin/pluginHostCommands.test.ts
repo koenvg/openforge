@@ -123,6 +123,7 @@ describe('plugin host commands', () => {
       repoPath: '/repo',
       divergenceResolution: null,
       terminalImageProtocol: null,
+      promptPrefix: null,
     })
   })
   it('routes typed Task follow-ups through the Agent Session host lifecycle', async () => {

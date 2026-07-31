@@ -50,6 +50,7 @@ export type OpenForgePluginCapability =
   | 'events'
   | 'views'
   | 'taskPane'
+  | 'taskStart'
   | 'settings'
   | 'background'
   | 'backend'
@@ -367,6 +368,30 @@ export interface PluginInjectionPointRegistration {
     | PluginComponent<PluginInjectionPointProps>
 }
 
+export interface TaskStartPrefixContext {
+  /** The task being started, or null when the caller is authoring a new one. */
+  taskId: string | null
+  projectId: string | null
+}
+
+export interface TaskStartPrefixProviderRegistration {
+  id: string
+  /** Menu label, e.g. 'Start with injectable…'. */
+  title: string
+  /** Lower sorts first. Defaults to 0. */
+  order?: number
+  /**
+   * Asks the user for a prefix. Returning null means they cancelled, and the
+   * task is not started. The host — not the provider — starts the task, so the
+   * diverged-branch gate, starting spinner and terminal handling all still run.
+   */
+  provide(context: TaskStartPrefixContext): MaybePromise<string | null>
+}
+
+export interface FrontendTaskStartRegistry {
+  registerPrefixProvider(registration: TaskStartPrefixProviderRegistration): Disposable
+}
+
 export interface FrontendInjectionPointRegistry {
   register(registration: PluginInjectionPointRegistration): Disposable
 }
@@ -596,6 +621,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   settings: FrontendSettingsRegistry
   backend: FrontendBackendBridge
   injectionPoints: FrontendInjectionPointRegistry
+  taskStart: FrontendTaskStartRegistry
 }
 
 export interface BackendOpenForgeAPI extends OpenForgeCommonAPI {
