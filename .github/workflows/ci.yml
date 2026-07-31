@@ -173,6 +173,51 @@ jobs:
         if: steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
         run: exit 1
 
+  mobile-checks:
+    name: Mobile Companion Checks
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Check Flutter companion
+        run: ./scripts/mobile-companion check
+
+  mobile-builds:
+    name: Mobile Companion ${{ matrix.name }} Build
+    timeout-minutes: 25
+    needs: mobile-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Android
+            runner: ubuntu-latest
+            command: build-android
+          - name: iOS
+            runner: macos-14
+            command: build-ios
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Build companion
+        run: ./scripts/mobile-companion ${{ matrix.command }}
+
   rust:
     name: Rust Tests
     timeout-minutes: 10

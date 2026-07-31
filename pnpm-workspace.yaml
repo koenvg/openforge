@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - '!apps/mobile_companion'
   - packages/*
   - plugins/*
 # pnpm minimumReleaseAge is in minutes; 7200 minutes equals 5 days.
