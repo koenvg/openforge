@@ -3,6 +3,7 @@ import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -341,6 +342,34 @@ export async function getCompanionGatewayStatus(): Promise<CompanionGatewayStatu
 
 export async function setCompanionGatewayEnabled(enabled: boolean): Promise<CompanionGatewayStatus> {
   return invoke<CompanionGatewayStatus>("set_companion_gateway_enabled", { enabled });
+}
+
+export async function startCompanionPairing(): Promise<CompanionPairingSession> {
+  return invoke<CompanionPairingSession>('start_companion_pairing')
+}
+
+export async function getCompanionPairingStatus(): Promise<CompanionPairingSession | null> {
+  return invoke<CompanionPairingSession | null>('get_companion_pairing_status')
+}
+
+export async function cancelCompanionPairing(sessionId: string): Promise<void> {
+  return invoke('cancel_companion_pairing', { sessionId })
+}
+
+export async function approveCompanionPairing(requestId: string): Promise<void> {
+  return invoke('approve_companion_pairing', { requestId })
+}
+
+export async function rejectCompanionPairing(requestId: string): Promise<void> {
+  return invoke('reject_companion_pairing', { requestId })
+}
+
+export async function listCompanionDevices(): Promise<CompanionPairedDevice[]> {
+  return invoke<CompanionPairedDevice[]>('list_companion_devices')
+}
+
+export async function revokeCompanionDevice(deviceId: string): Promise<void> {
+  return invoke('revoke_companion_device', { deviceId })
 }
 
 export async function getTaskDetail(taskId: string): Promise<Task> {

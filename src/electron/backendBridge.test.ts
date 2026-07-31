@@ -385,8 +385,19 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('acknowledge_browser_session_purge_intent')).toBe(true)
     expect(isSidecarBackedCommand('delete_project')).toBe(true)
     expect(isSidecarBackedCommand('get_config')).toBe(true)
-    expect(isSidecarBackedCommand('get_companion_gateway_status')).toBe(true)
-    expect(isSidecarBackedCommand('set_companion_gateway_enabled')).toBe(true)
+    for (const command of [
+      'get_companion_gateway_status',
+      'set_companion_gateway_enabled',
+      'start_companion_pairing',
+      'get_companion_pairing_status',
+      'cancel_companion_pairing',
+      'approve_companion_pairing',
+      'reject_companion_pairing',
+      'list_companion_devices',
+      'revoke_companion_device',
+    ]) {
+      expect(isSidecarBackedCommand(command)).toBe(true)
+    }
     expect(isSidecarBackedCommand('resolve_ai_provider')).toBe(true)
     expect(isSidecarBackedCommand('get_app_mode')).toBe(true)
     expect(isSidecarBackedCommand('get_git_branch')).toBe(true)

@@ -41,6 +41,7 @@ rcgen = "0.13"
 sha2 = "0.10"
 if-addrs = "0.13"
 sysinfo = "0.37.2"
+subtle = "2.6.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

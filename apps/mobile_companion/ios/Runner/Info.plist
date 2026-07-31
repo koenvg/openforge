@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the short-lived pairing QR shown by your OpenForge desktop.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect directly to your paired OpenForge desktop on your private network.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

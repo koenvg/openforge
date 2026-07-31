@@ -1535,6 +1535,23 @@ CREATE INDEX IF NOT EXISTS idx_browser_session_purge_intents_created
     ON browser_session_purge_intents(created_at, id);
         "#,
     ),
+    // Companion device credentials are one-way verified. Pairing sessions and clear
+    // credentials never enter SQLite.
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS companion_devices (
+    device_id TEXT PRIMARY KEY,
+    device_name TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+    credential_verifier BLOB NOT NULL UNIQUE CHECK (length(credential_verifier) = 32),
+    paired_at INTEGER NOT NULL,
+    last_seen_at INTEGER,
+    revoked_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
+    ON companion_devices(paired_at DESC, device_id);
+        "#,
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets

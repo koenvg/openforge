@@ -29,6 +29,49 @@ async fn companion_gateway_commands_persist_opt_in_and_report_lifecycle_state() 
             .as_deref(),
         Some("true")
     );
+
+    let pairing = invoke_ok(&state, "start_companion_pairing", serde_json::Value::Null).await;
+    let qr: serde_json::Value =
+        serde_json::from_str(pairing["qrPayload"].as_str().expect("pairing QR payload"))
+            .expect("pairing QR JSON");
+    assert_eq!(qr["protocolVersion"], 1);
+    assert_eq!(qr["hostId"], running["hostId"]);
+    assert_eq!(
+        qr.as_object()
+            .expect("pairing QR object")
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::collections::BTreeSet::from([
+            "certificateSha256",
+            "endpointCandidates",
+            "hostId",
+            "oneTimeSecret",
+            "protocolVersion",
+        ]),
+    );
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "get_companion_pairing_status",
+            serde_json::Value::Null,
+        )
+        .await["sessionId"],
+        pairing["sessionId"],
+    );
+    invoke_ok(
+        &state,
+        "cancel_companion_pairing",
+        json!({ "sessionId": pairing["sessionId"] }),
+    )
+    .await;
+    assert!(invoke_ok(
+        &state,
+        "get_companion_pairing_status",
+        serde_json::Value::Null,
+    )
+    .await
+    .is_null(),);
     assert!(
         invoke_ok(
             &state,

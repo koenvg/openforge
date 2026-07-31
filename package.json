@@ -26,6 +26,7 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs && node scripts/check-plugin-import-boundaries.mjs",
+    "mobile:contract:check": "node scripts/check-companion-dart-contract.mjs",
     "packages:build": "pnpm --filter @openforge-app/plugin-sdk build",
     "packages:test": "pnpm --filter @openforge-app/plugin-sdk test",
     "packages:metadata:check": "node scripts/check-workspace-package-metadata.mjs",
@@ -55,6 +56,7 @@
     "es-module-lexer": "2.3.1",
     "marked": "^18.0.7",
     "nerdfonts-web": "^1.0.1",
+    "qrcode": "^1.5.4",
     "svelte": "^5.56.7",
     "tailwindcss": "^4.3.3"
   },
@@ -64,6 +66,7 @@
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
     "@types/node": "^26.1.1",
+    "@types/qrcode": "^1.5.6",
     "electron": "^43.2.0",
     "jsdom": "^29.1.1",
     "playwright": "^1.61.1",
