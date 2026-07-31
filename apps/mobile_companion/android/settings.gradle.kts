@@ -20,7 +20,7 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.1.0" apply false
-    // Version the KGP runtime used by AGP Built-in Kotlin without applying the legacy plugin.
+    // Runtime for plugins that still require the temporary legacy-KGP fallback.
     id("org.jetbrains.kotlin.android") version "2.4.0" apply false
 }
 

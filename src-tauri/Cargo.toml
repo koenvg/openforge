@@ -42,6 +42,7 @@ sha2 = "0.10"
 if-addrs = "0.13"
 sysinfo = "0.37.2"
 subtle = "2.6.1"
+mdns-sd = "0.17.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

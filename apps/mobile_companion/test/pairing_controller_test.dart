@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/client/pinned_companion_transport.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
+import 'package:openforge_companion/src/discovery/companion_discovery.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/pairing/companion_pairing_controller.dart';
 import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
@@ -35,6 +38,8 @@ final class _FakeClient implements CompanionClient {
   );
   String? submittedDeviceName;
   String? submittedPlatform;
+  CompanionTrustRecord? fetchedTrustRecord;
+  Uri? connectedEndpoint;
 
   @override
   Future<PairingSubmissionStatus> submitPairing({
@@ -65,10 +70,34 @@ final class _FakeClient implements CompanionClient {
   }
 
   @override
-  Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord) async {
+  Future<CompanionHostConnection> fetchHostStatus(
+    CompanionTrustRecord trustRecord,
+  ) async {
+    fetchedTrustRecord = trustRecord;
     final error = hostStatusError;
     if (error != null) throw error;
-    return hostStatus;
+    return CompanionHostConnection(
+      endpoint: connectedEndpoint ?? trustRecord.endpointCandidates.first,
+      status: hostStatus,
+    );
+  }
+}
+
+final class _FakeDiscovery implements CompanionEndpointDiscovery {
+  List<Uri> endpoints = const <Uri>[];
+  Object? error;
+  var settingsCalls = 0;
+
+  @override
+  Future<List<Uri>> findTrustedEndpoints(String hostId) async {
+    final discoveryError = error;
+    if (discoveryError != null) throw discoveryError;
+    return endpoints;
+  }
+
+  @override
+  Future<void> openSettings() async {
+    settingsCalls += 1;
   }
 }
 
@@ -299,5 +328,104 @@ void main() {
     );
 
     expect(controller.state, isA<Unpaired>());
+  });
+
+  test(
+    'discovered DHCP endpoint is preferred, verified, and persisted without re-pairing',
+    () async {
+      final oldEndpoint = Uri.parse('https://192.168.1.20:17424');
+      final newEndpoint = Uri.parse('https://192.168.1.40:17424');
+      final fallbackEndpoint = Uri.parse('https://192.168.1.41:17424');
+      final discovery = _FakeDiscovery()
+        ..endpoints = <Uri>[newEndpoint, fallbackEndpoint];
+      final client = _FakeClient()..connectedEndpoint = fallbackEndpoint;
+      final storage = _FakeStorage()
+        ..record = CompanionTrustRecord(
+          hostId: _hostId,
+          certificateSha256: _fingerprint,
+          endpointCandidates: <Uri>[oldEndpoint],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        );
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+        discovery: discovery,
+      );
+
+      await controller.restore();
+
+      expect(controller.state, isA<Connected>());
+      expect(client.fetchedTrustRecord?.endpointCandidates, <Uri>[
+        newEndpoint,
+        fallbackEndpoint,
+        oldEndpoint,
+      ]);
+      expect(storage.record?.endpointCandidates, <Uri>[
+        fallbackEndpoint,
+        oldEndpoint,
+      ]);
+      expect(storage.record?.endpointCandidates, isNot(contains(newEndpoint)));
+      expect(storage.record?.deviceCredential, 'credential-1');
+    },
+  );
+
+  test(
+    'permission denial has typed recovery after stored endpoints fail',
+    () async {
+      final discovery = _FakeDiscovery()
+        ..error = const CompanionDiscoveryPermissionDenied();
+      final client = _FakeClient()
+        ..hostStatusError = const SocketException('unreachable');
+      final storage = _FakeStorage()
+        ..record = CompanionTrustRecord(
+          hostId: _hostId,
+          certificateSha256: _fingerprint,
+          endpointCandidates: <Uri>[Uri.parse('https://192.168.1.20:17424')],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        );
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+        discovery: discovery,
+      );
+
+      await controller.restore();
+      expect(controller.state, isA<LocalNetworkPermissionDenied>());
+
+      await controller.openLocalNetworkSettings();
+      expect(discovery.settingsCalls, 1);
+
+      discovery.error = null;
+      client.hostStatusError = null;
+      await controller.restore();
+      expect(controller.state, isA<Connected>());
+    },
+  );
+
+  test('mismatched discovered certificate remains a security state', () async {
+    final discovery = _FakeDiscovery()
+      ..endpoints = <Uri>[Uri.parse('https://192.168.1.40:17424')];
+    final client = _FakeClient()
+      ..hostStatusError = const CompanionCertificateMismatch();
+    final storage = _FakeStorage()
+      ..record = CompanionTrustRecord(
+        hostId: _hostId,
+        certificateSha256: _fingerprint,
+        endpointCandidates: <Uri>[Uri.parse('https://192.168.1.20:17424')],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+    final controller = CompanionPairingController(
+      client: client,
+      storage: storage,
+      discovery: discovery,
+    );
+
+    await controller.restore();
+
+    expect(controller.state, isA<CertificateMismatch>());
+    expect(storage.record?.deviceCredential, 'credential-1');
   });
 }
