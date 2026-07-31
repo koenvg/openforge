@@ -964,6 +964,33 @@ mod tests {
             .count()
     }
 
+    async fn release_test_child_and_wait_for_exit(
+        child: &mut (dyn portable_pty::Child + Send + Sync),
+        exit_gate: &Path,
+    ) {
+        std::fs::write(exit_gate, b"release").expect("test exit gate should release");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+
+        loop {
+            match child
+                .try_wait()
+                .expect("test child status should be readable")
+            {
+                Some(status) => {
+                    assert!(
+                        status.success(),
+                        "test fixture must exit successfully before EOF cleanup"
+                    );
+                    return;
+                }
+                None if std::time::Instant::now() < deadline => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+                None => panic!("test child should exit before EOF cleanup"),
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
         let manager = PtyManager::new();
@@ -1115,6 +1142,8 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
         let manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let exit_gate = tmp_dir.path().join("shell-exit-gate");
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: 24,
@@ -1124,14 +1153,22 @@ mod tests {
         };
         let pair = pty_system.openpty(size).expect("openpty should succeed");
 
-        let shell = get_shell_path();
-        let mut cmd = CommandBuilder::new(&shell);
-        cmd.arg("-lc");
-        cmd.arg("true");
-        let child = pair
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c");
+        cmd.env(
+            "OPENFORGE_TEST_EXIT_GATE",
+            exit_gate.to_string_lossy().to_string(),
+        );
+        cmd.arg("while [ ! -e \"$OPENFORGE_TEST_EXIT_GATE\" ]; do sleep 0.01; done");
+        let mut child = pair
             .slave
             .spawn_command(cmd)
             .expect("spawn command should succeed");
+        let managed_process =
+            ManagedProcessIdentity::capture(child.process_id().expect("test child PID"))
+                .expect("test process identity");
+
+        release_test_child_and_wait_for_exit(child.as_mut(), &exit_gate).await;
         drop(pair.slave);
 
         let writer = pair
@@ -1145,10 +1182,7 @@ mod tests {
             sessions.insert(
                 key.to_string(),
                 PtySession {
-                    managed_process: ManagedProcessIdentity::capture(
-                        child.process_id().expect("test child PID"),
-                    )
-                    .expect("test process identity"),
+                    managed_process,
                     child,
                     master: pair.master,
                     writer,
@@ -1171,7 +1205,6 @@ mod tests {
             times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
         }
 
-        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("task-1-shell-0.pid");
         write_test_session_metadata(&manager, key, &pid_file).await;
 
@@ -1245,9 +1278,8 @@ mod tests {
         };
         let pair = pty_system.openpty(size).expect("openpty should succeed");
 
-        let shell = get_shell_path();
-        let mut cmd = CommandBuilder::new(&shell);
-        cmd.arg("-lc");
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c");
         cmd.env(
             "OPENFORGE_TEST_EXIT_GATE",
             exit_gate.to_string_lossy().to_string(),
@@ -1261,24 +1293,7 @@ mod tests {
         let managed_process =
             ManagedProcessIdentity::capture(child.process_id().expect("test child PID"))
                 .expect("test process identity");
-        std::fs::write(&exit_gate, b"release").expect("test exit gate should release");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        let exit_status = loop {
-            match child
-                .try_wait()
-                .expect("test child status should be readable")
-            {
-                Some(status) => break status,
-                None if std::time::Instant::now() < deadline => {
-                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                }
-                None => panic!("test child should exit before EOF cleanup"),
-            }
-        };
-        assert!(
-            exit_status.success(),
-            "test fixture must exit successfully before EOF cleanup"
-        );
+        release_test_child_and_wait_for_exit(child.as_mut(), &exit_gate).await;
         let writer = pair
             .master
             .take_writer()

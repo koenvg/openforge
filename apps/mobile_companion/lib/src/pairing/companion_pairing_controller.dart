@@ -44,6 +44,8 @@ final class CompanionPairingController extends ChangeNotifier {
     }
   }
 
+  void authorizationLost() => _setState(const Revoked());
+
   Future<void> forgetAndReset() async {
     await _storage.forget();
     _setState(const Unpaired());

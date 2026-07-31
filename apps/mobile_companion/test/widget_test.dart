@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:openforge_companion/src/app.dart';
+import 'package:openforge_companion/src/attention/attention_controller.dart';
+import 'package:openforge_companion/src/attention/attention_home.dart';
+import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
 
 void main() {
@@ -149,6 +152,166 @@ void main() {
       );
     });
   }
+
+  testWidgets('QR scanner returns the first detected non-null payload', (
+    tester,
+  ) async {
+    final scannerPlatform = _FakeMobileScannerPlatform();
+    _installScannerPlatform(scannerPlatform);
+    addTearDown(scannerPlatform.close);
+
+    late BuildContext launcherContext;
+    String? scannedPayload;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            launcherContext = context;
+            return const Scaffold(body: Text('Pairing launcher'));
+          },
+        ),
+      ),
+    );
+
+    final scan = Navigator.of(launcherContext).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const CompanionQrScannerScreen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    scannerPlatform.addBarcode(const BarcodeCapture());
+    await tester.pump();
+    expect(find.text('Scan desktop QR'), findsOneWidget);
+
+    scannerPlatform.addBarcode(
+      const BarcodeCapture(
+        barcodes: <Barcode>[
+          Barcode(format: BarcodeFormat.qrCode),
+          Barcode(
+            format: BarcodeFormat.qrCode,
+            rawValue: 'openforge-pairing-payload',
+          ),
+        ],
+      ),
+    );
+    scannedPayload = await scan;
+    await tester.pumpAndSettle();
+
+    expect(scannedPayload, 'openforge-pairing-payload');
+    expect(find.text('Pairing launcher'), findsOneWidget);
+  });
+
+  testWidgets('attention home groups minimal Task context by Project', (
+    tester,
+  ) async {
+    final snapshot = AttentionSnapshot(
+      snapshotAt: DateTime.utc(2026, 7, 30, 12),
+      items: <AttentionItem>[
+        AttentionItem(
+          taskId: 'T-2',
+          projectId: 'P-1',
+          projectName: 'Alpha',
+          title: 'Review agent question',
+          state: 'needs-input',
+          reason: 'Agent needs your input to continue.',
+          activityAt: DateTime.utc(2026, 7, 30, 11, 59),
+        ),
+        AttentionItem(
+          taskId: 'T-3',
+          projectId: 'P-2',
+          projectName: 'Beta',
+          title: 'Inspect failed change',
+          state: 'failed',
+          reason: 'Agent failed — check the error log.',
+          activityAt: DateTime.utc(2026, 7, 30, 11, 58),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AttentionHome(
+          state: AttentionLoaded(snapshot),
+          onRefresh: () async {},
+        ),
+      ),
+    );
+
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Beta'), findsOneWidget);
+    expect(find.text('Review agent question'), findsOneWidget);
+    expect(find.text('Needs input'), findsOneWidget);
+    expect(find.text('Agent needs your input to continue.'), findsOneWidget);
+    final taskSemantics = find.bySemanticsLabel(
+      RegExp(
+        r'^Task Review agent question, Needs input, Agent needs your input to continue\.,',
+      ),
+    );
+    expect(taskSemantics, findsOneWidget);
+    expect(tester.getSemantics(taskSemantics).label, contains('Jul 30'));
+  });
+
+  testWidgets(
+    'attention home exposes accessible loading and calm empty states',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AttentionHome(
+            state: const AttentionLoading(),
+            onRefresh: () async {},
+          ),
+        ),
+      );
+      expect(
+        find.bySemanticsLabel('Loading Tasks that need attention'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AttentionHome(
+            state: AttentionLoaded(
+              AttentionSnapshot(
+                snapshotAt: DateTime.utc(2026, 7, 30),
+                items: const <AttentionItem>[],
+              ),
+            ),
+            onRefresh: () async {},
+          ),
+        ),
+      );
+      expect(find.text("You're all caught up"), findsOneWidget);
+      expect(find.text('No Tasks need your attention.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('attention refresh and error recovery request a fresh snapshot', (
+    tester,
+  ) async {
+    var refreshes = 0;
+    Future<void> refresh() async => refreshes += 1;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        home: AttentionHome(
+          state: const AttentionLoadError(
+            'Current attention could not be loaded.',
+          ),
+          onRefresh: refresh,
+        ),
+      ),
+    );
+    expect(find.text('Couldn’t refresh'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    expect(refreshes, 1);
+
+    await tester.tap(find.byTooltip('Refresh attention'));
+    await tester.pump();
+    expect(refreshes, 2);
+  });
 }
 
 Future<void> _openScanner(WidgetTester tester) async {
@@ -190,6 +353,7 @@ void _installScannerPlatform(MobileScannerPlatform platform) {
 class _FakeMobileScannerPlatform extends MobileScannerPlatform {
   final StreamController<BarcodeCapture> _barcodes =
       StreamController<BarcodeCapture>.broadcast();
+  bool _closed = false;
 
   int startCalls = 0;
   int stopCalls = 0;
@@ -229,7 +393,13 @@ class _FakeMobileScannerPlatform extends MobileScannerPlatform {
   }
 
   @override
-  Future<void> dispose() => _barcodes.close();
+  Future<void> dispose() => close();
+
+  Future<void> close() {
+    if (_closed) return Future<void>.value();
+    _closed = true;
+    return _barcodes.close();
+  }
 }
 
 final class _BlockingStopMobileScannerPlatform

@@ -6,6 +6,7 @@ import {
   isTaskBrowserUrlAllowed,
   isSupersededTaskBrowserPartition,
   pluginBrowserSessionPartition,
+  scaleTaskBrowserBounds,
   validateTaskBrowserSurfaceIdentity,
 } from './taskBrowserSurfacePolicy'
 import { TaskBrowserSurfaceError } from './taskBrowserSurfaceContract'
@@ -98,5 +99,35 @@ describe('Task Browser Surface policy', () => {
       { x: 900, y: 700, width: 10, height: 10 },
       { x: 0, y: 0, width: 800, height: 600 },
     )).toBeNull()
+  })
+
+  it('scales renderer CSS pixel bounds into the window device-independent pixel space', () => {
+    expect(scaleTaskBrowserBounds({ x: 250, y: 200, width: 1000, height: 800 }, 1)).toEqual({
+      x: 250,
+      y: 200,
+      width: 1000,
+      height: 800,
+    })
+    expect(scaleTaskBrowserBounds({ x: 250, y: 200, width: 1000, height: 800 }, 1.25)).toEqual({
+      x: 312.5,
+      y: 250,
+      width: 1250,
+      height: 1000,
+    })
+    expect(scaleTaskBrowserBounds({ x: 400, y: 320, width: 1600, height: 1280 }, 0.5)).toEqual({
+      x: 200,
+      y: 160,
+      width: 800,
+      height: 640,
+    })
+
+    for (const unusable of [0, -1.25, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(scaleTaskBrowserBounds({ x: 10, y: 20, width: 30, height: 40 }, unusable), String(unusable)).toEqual({
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40,
+      })
+    }
   })
 })

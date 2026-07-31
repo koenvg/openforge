@@ -70,6 +70,14 @@ final class _FakeClient implements CompanionClient {
     if (error != null) throw error;
     return hostStatus;
   }
+
+  @override
+  Future<AttentionSnapshot> fetchAttention(
+    CompanionTrustRecord trustRecord,
+  ) async => AttentionSnapshot(
+    snapshotAt: DateTime.utc(2026, 7, 30),
+    items: const <AttentionItem>[],
+  );
 }
 
 final class _FakeStorage implements CompanionSecureStorage {
@@ -299,5 +307,16 @@ void main() {
     );
 
     expect(controller.state, isA<Unpaired>());
+  });
+
+  test('domain authorization loss enters the re-pair-required state', () {
+    final controller = CompanionPairingController(
+      client: _FakeClient(),
+      storage: _FakeStorage(),
+    );
+
+    controller.authorizationLost();
+
+    expect(controller.state, isA<Revoked>());
   });
 }

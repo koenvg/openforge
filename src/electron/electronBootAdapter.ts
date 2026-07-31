@@ -15,7 +15,7 @@ import {
   createPluginBrowserSessionAuthorizer,
   createTaskBrowserSurfaceAuthorizer,
 } from './taskBrowserSurfaceAuthorization.js'
-import { ElectronTaskBrowserSurfaceFactory } from './taskBrowserSurfaceElectronAdapter.js'
+import { ElectronTaskBrowserSurfaceFactory, electronRendererZoomFactor } from './taskBrowserSurfaceElectronAdapter.js'
 import { TaskBrowserSurfaceIpcRouter, isTaskBrowserSurfaceCommand } from './taskBrowserSurfaceIpc.js'
 import { TaskBrowserSurfaceManager } from './taskBrowserSurfaceManager.js'
 import { handleTaskBrowserSurfaceLifecycleEvent } from './taskBrowserSurfaceLifecycle.js'
@@ -135,6 +135,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     permissions: taskBrowserPermissionPolicy,
     authorize: createTaskBrowserSurfaceAuthorizer(invokeForTaskBrowserAuthorization),
     authorizePlugin: createPluginBrowserSessionAuthorizer(invokeForTaskBrowserAuthorization),
+    rendererZoomFactor: electronRendererZoomFactor,
     onStateChanged: event => {
       const window = BrowserWindow.fromId(event.windowId)
       if (!window || window.isDestroyed()) return

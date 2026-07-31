@@ -261,7 +261,10 @@ class TaskBrowserAttachmentLifecycle {
       const rect = element.getBoundingClientRect()
       const bounds = intersecting ? visibleElementBounds(element, rect) : null
       shouldTrackPosition = bounds !== null
-      const boundsKey = JSON.stringify(bounds)
+      // These bounds are CSS pixels; the host converts them with the renderer zoom factor, which moves
+      // devicePixelRatio with it. A fixed-size attachment keeps its CSS rect across a zoom change, so the
+      // ratio belongs in the key that decides whether the host still needs a fresh push.
+      const boundsKey = JSON.stringify([bounds, window.devicePixelRatio])
       if (boundsKey === lastBoundsKey) {
         failedBoundsKey = undefined
         failedBoundsAttempts = 0

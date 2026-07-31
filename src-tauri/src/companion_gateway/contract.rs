@@ -1,5 +1,11 @@
-use super::pairing::{
-    PairingCoordinator, PairingError, PairingPollResponse, PairingRequestKind, PairingSubmission,
+#[cfg(test)]
+use super::attention::UnavailableCompanionAttentionSource;
+use super::{
+    attention::CompanionAttentionSource,
+    pairing::{
+        PairingCoordinator, PairingError, PairingPollResponse, PairingRequestKind,
+        PairingSubmission,
+    },
 };
 use axum::{
     extract::{
@@ -27,7 +33,7 @@ impl CompanionHostStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CompanionErrorCode {
     Unauthenticated,
@@ -87,6 +93,25 @@ pub(crate) struct CompanionHostStatusResponse {
     pub(crate) server_time: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionAttentionItem {
+    pub(crate) task_id: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
+    pub(crate) title: String,
+    pub(crate) state: String,
+    pub(crate) reason: String,
+    pub(crate) activity_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionAttentionSnapshot {
+    pub(crate) snapshot_at: String,
+    pub(crate) items: Vec<CompanionAttentionItem>,
+}
+
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(&self, headers: &HeaderMap) -> Result<(), CompanionErrorCode>;
 }
@@ -118,10 +143,40 @@ struct CompanionRouterState {
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
 }
 
 fn error_response(status: StatusCode, code: CompanionErrorCode, message: &str) -> Response {
     (status, Json(CompanionErrorEnvelope::new(code, message))).into_response()
+}
+fn authorization_error_response(code: CompanionErrorCode) -> Response {
+    let (status, message) = match code {
+        CompanionErrorCode::Unauthenticated | CompanionErrorCode::Revoked => (
+            StatusCode::UNAUTHORIZED,
+            "Companion device authentication is required",
+        ),
+        CompanionErrorCode::IncompatibleVersion => (
+            StatusCode::CONFLICT,
+            "Companion protocol version is incompatible",
+        ),
+        CompanionErrorCode::InvalidRequest => (
+            StatusCode::BAD_REQUEST,
+            "Companion authorization request is invalid",
+        ),
+        CompanionErrorCode::NotFound => (
+            StatusCode::NOT_FOUND,
+            "Companion authorization record was not found",
+        ),
+        CompanionErrorCode::RateLimited => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Companion authorization is rate limited",
+        ),
+        CompanionErrorCode::TemporarilyUnavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Companion authorization is temporarily unavailable",
+        ),
+    };
+    error_response(status, code, message)
 }
 
 fn pairing_error_response(error: PairingError) -> Response {
@@ -205,11 +260,7 @@ async fn pairing_request_guard(
 
 async fn status_handler(State(state): State<CompanionRouterState>, headers: HeaderMap) -> Response {
     if let Err(code) = state.authorizer.authorize(&headers) {
-        return error_response(
-            StatusCode::UNAUTHORIZED,
-            code,
-            "Companion device authentication is required",
-        );
+        return authorization_error_response(code);
     }
 
     Json(CompanionHostStatusResponse {
@@ -219,6 +270,57 @@ async fn status_handler(State(state): State<CompanionRouterState>, headers: Head
     })
     .into_response()
 }
+fn attention_activity_at(timestamp: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp(timestamp, 0).map(|value| value.to_rfc3339())
+}
+
+async fn attention_handler(
+    State(state): State<CompanionRouterState>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(code) = state.authorizer.authorize(&headers) {
+        return authorization_error_response(code);
+    }
+
+    let rows = match state.attention.snapshot() {
+        Ok(rows) => rows,
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                "Task attention is temporarily unavailable",
+            );
+        }
+    };
+    let items = rows
+        .into_iter()
+        .map(|row| {
+            Some(CompanionAttentionItem {
+                task_id: row.task_id,
+                project_id: row.project_id,
+                project_name: row.project_name,
+                title: row.title,
+                state: row.state,
+                reason: row.reason,
+                activity_at: attention_activity_at(row.activity_at)?,
+            })
+        })
+        .collect::<Option<Vec<_>>>();
+    let Some(items) = items else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            CompanionErrorCode::TemporarilyUnavailable,
+            "Task attention is temporarily unavailable",
+        );
+    };
+
+    Json(CompanionAttentionSnapshot {
+        snapshot_at: chrono::Utc::now().to_rfc3339(),
+        items,
+    })
+    .into_response()
+}
+
 async fn submit_pairing_handler(
     State(state): State<CompanionRouterState>,
     submission: Result<Json<PairingSubmission>, JsonRejection>,
@@ -271,10 +373,25 @@ async fn not_found_handler() -> Response {
     )
 }
 
+#[cfg(test)]
 pub(crate) fn create_router(
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
+) -> Router {
+    create_router_with_attention(
+        host,
+        authorizer,
+        pairing,
+        Arc::new(UnavailableCompanionAttentionSource),
+    )
+}
+
+pub(crate) fn create_router_with_attention(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    attention: Arc<dyn CompanionAttentionSource>,
 ) -> Router {
     let pairing_routes = Router::new()
         .route(
@@ -293,11 +410,13 @@ pub(crate) fn create_router(
 
     Router::new()
         .route("/companion/v1/status", get(status_handler))
+        .route("/companion/v1/attention", get(attention_handler))
         .merge(pairing_routes)
         .fallback(not_found_handler)
         .with_state(CompanionRouterState {
             host,
             authorizer,
             pairing,
+            attention,
         })
 }
