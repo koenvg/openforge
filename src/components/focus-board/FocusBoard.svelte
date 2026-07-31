@@ -2,12 +2,11 @@
   import { onMount, untrack } from 'svelte'
   import { get } from 'svelte/store'
   import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from '../../lib/boardFilters'
+  import { filterTasks, getFilterCounts, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
-  import type { TaskState } from '../../lib/taskState'
   import { sortBySessionActivity } from '../../lib/taskSort'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
@@ -17,7 +16,7 @@
   import TaskDetailPane from './TaskDetailPane.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
-  import type { Task, AgentSession, PullRequestInfo, TaskLabel } from '../../lib/types'
+  import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, TaskLabel } from '../../lib/types'
 
   interface Props {
     projectId: string | null
@@ -26,6 +25,8 @@
     dependencyReferenceTasks?: Task[]
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
+    attentionRows?: TaskAttentionRow[]
+    attentionRowsLoaded?: boolean
     onOpenTask: (taskId: string) => void
     onEditTask?: (taskId: string) => void
     onTaskUpdated?: () => void | Promise<void>
@@ -33,7 +34,7 @@
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { projectId, projectName, tasks, dependencyReferenceTasks = [], activeSessions, ticketPrs, onOpenTask, onEditTask, onTaskUpdated, onProjectAttentionChanged, onRunAction }: Props = $props()
+  let { projectId, projectName, tasks, dependencyReferenceTasks = [], activeSessions, ticketPrs, attentionRows = [], attentionRowsLoaded = true, onOpenTask, onEditTask, onTaskUpdated, onProjectAttentionChanged, onRunAction }: Props = $props()
   let dependencyResolutionTasks = $derived([...tasks, ...dependencyReferenceTasks])
   type TaskRow = {
     task: Task
@@ -58,14 +59,11 @@
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectLabels = $state<TaskLabel[]>([])
-  let focusStates = $state<TaskState[]>(DEFAULT_FOCUS_STATES)
-  let loadedFocusStatesProjectId: string | null = $state(null)
   let loadedOutOfFocusProjectId: string | null = $state(null)
   let fallbackFilter: BoardFilter = $state('focus')
   let previousProjectId: string | null | undefined = undefined
   let labelLoadRequest = 0
   let labelLoadProjectId: string | null = null
-  let focusStateLoadRequest = 0
   let outOfFocusLoadRequest = 0
 
   let activeFilter = $derived.by(() => {
@@ -82,30 +80,46 @@
     if (!projectId) return new Set<string>()
     return $outOfFocusTaskIdsByProject.get(projectId) ?? new Set<string>()
   })
+  let projectAttentionRows = $derived(
+    projectId ? attentionRows.filter((row) => row.project_id === projectId) : [],
+  )
+  let attentionTaskIds = $derived(new Set(projectAttentionRows.map((row) => row.task_id)))
+  let attentionByTaskId = $derived(new Map(projectAttentionRows.map((row) => [row.task_id, row])))
+  let attentionOrder = $derived(new Map(projectAttentionRows.map((row, index) => [row.task_id, index])))
 
-  let boardMetadataReady = $derived(!projectId || (loadedFocusStatesProjectId === projectId && loadedOutOfFocusProjectId === projectId))
+  let boardMetadataReady = $derived(
+    (!projectId || loadedOutOfFocusProjectId === projectId) && attentionRowsLoaded,
+  )
 
   let tasksWithReadyAttentionMetadata = $derived.by(() =>
-    boardMetadataReady ? tasks : tasks.filter((task) => task.status === 'backlog')
+    boardMetadataReady ? tasks : tasks.filter((task) => task.status === 'backlog'),
   )
 
   let visibleTasks = $derived.by(() => {
     const tasksToFilter = activeFilter === 'backlog' ? tasks : tasksWithReadyAttentionMetadata
-    const filtered = filterTasks(tasksToFilter, activeFilter, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds)
+    const filtered = filterTasks(tasksToFilter, activeFilter, attentionTaskIds, outOfFocusTaskIds)
     const labelFiltered = activeFilter === 'backlog'
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
 
+    if (activeFilter === 'focus') {
+      return labelFiltered.slice().sort((left, right) =>
+        (attentionOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+          - (attentionOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+      )
+    }
     return sortBySessionActivity(labelFiltered, activeSessions)
   })
 
   let visibleRows = $derived.by<TaskRow[]>(() =>
-    visibleTasks.map((task, taskIndex) => ({ task, taskIndex }))
+    visibleTasks.map((task, taskIndex) => ({ task, taskIndex })),
   )
 
   let navigableCount = $derived(visibleTasks.length)
 
-  let filterCounts = $derived.by(() => getFilterCounts(tasksWithReadyAttentionMetadata, activeSessions, ticketPrs, focusStates, outOfFocusTaskIds))
+  let filterCounts = $derived.by(() =>
+    getFilterCounts(tasksWithReadyAttentionMetadata, attentionTaskIds, outOfFocusTaskIds),
+  )
   let displayProjectLabels = $derived.by(() => {
     const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
     for (const task of tasks) {
@@ -248,30 +262,6 @@
     }
   })
 
-  $effect(() => {
-    const currentProjectId = projectId
-    const requestId = ++focusStateLoadRequest
-
-    loadedFocusStatesProjectId = null
-    focusStates = []
-    if (!currentProjectId) {
-      focusStates = DEFAULT_FOCUS_STATES
-      loadedFocusStatesProjectId = null
-      return
-    }
-
-    loadFocusFilterStates(currentProjectId)
-      .then(states => {
-        if (requestId !== focusStateLoadRequest) return
-        focusStates = states
-        loadedFocusStatesProjectId = currentProjectId
-      })
-      .catch(() => {
-        if (requestId !== focusStateLoadRequest) return
-        focusStates = DEFAULT_FOCUS_STATES
-        loadedFocusStatesProjectId = currentProjectId
-      })
-  })
 
   $effect(() => {
     const currentProjectId = projectId
@@ -451,14 +441,15 @@
             {@const task = row.task}
             {@const session = activeSessions.get(task.id) ?? null}
             {@const pullRequests = ticketPrs.get(task.id) ?? []}
-            {@const state = computeTaskState(task, session, pullRequests)}
+            {@const attentionRow = attentionByTaskId.get(task.id)}
+            {@const state = attentionRow?.state ?? computeTaskState(task, session, pullRequests)}
             <div>
               <TaskListItem
                 {task}
                 {state}
                 {session}
                 {pullRequests}
-                reasonText={getTaskReasonText(state, pullRequests)}
+                reasonText={attentionRow?.reason ?? getTaskReasonText(state, pullRequests)}
                 dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
                 showLabels={activeFilter === 'backlog'}
                 isSelected={selectedTaskIdLocal === task.id}

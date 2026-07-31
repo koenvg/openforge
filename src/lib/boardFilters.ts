@@ -1,6 +1,5 @@
-import type { Task, AgentSession, PullRequestInfo } from './types'
+import type { Task } from './types'
 import type { TaskState } from './taskState'
-import { computeTaskState, ALL_TASK_STATES } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 export type BoardFilter = 'focus' | 'in-flight' | 'out-of-focus' | 'backlog'
@@ -32,7 +31,27 @@ const LEGACY_DEFAULT_FOCUS_STATE_SETS: TaskState[][] = [
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
 const OUT_OF_FOCUS_TASK_IDS_CONFIG_KEY = 'low_fire_task_ids'
 
-export const FOCUS_FILTER_STATES: TaskState[] = ALL_TASK_STATES.filter((state) => state !== 'active')
+export const FOCUS_FILTER_STATES: TaskState[] = [
+  'idle',
+  'needs-input',
+  'paused',
+  'agent-done',
+  'failed',
+  'interrupted',
+  'pr-draft',
+  'pr-open',
+  'ci-running',
+  'review-pending',
+  'ci-failed',
+  'changes-requested',
+  'unaddressed-comments',
+  'ready-to-merge',
+  'ready-to-enqueue',
+  'pr-queued',
+  'pr-merged',
+  'pr-closed',
+  'merge-conflict',
+]
 
 function removeNonFocusableStates(states: TaskState[]): TaskState[] {
   return states.filter((state) => FOCUS_FILTER_STATES.includes(state))
@@ -41,58 +60,40 @@ function removeNonFocusableStates(states: TaskState[]): TaskState[] {
 function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
   return LEGACY_DEFAULT_FOCUS_STATE_SETS.some((legacyStates) =>
     states.length === legacyStates.length
-      && legacyStates.every((state, index) => states[index] === state)
+      && legacyStates.every((state, index) => states[index] === state),
   )
 }
 
-export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[], focusStates: TaskState[] = DEFAULT_FOCUS_STATES): boolean {
-  if (state === 'done' || state === 'active') {
-    return false
-  }
-
-  if (focusStates.includes(state)) {
-    return true
-  }
-
-  return prs.some(pr => pr.unaddressed_comment_count > 0)
-}
-
+/**
+ * Partition Tasks using the backend-authoritative attention membership. The renderer still
+ * owns the non-attention lanes, but it no longer derives whether a Task needs user action.
+ */
 export function filterTasks(
   tasks: Task[],
   filter: BoardFilter,
-  sessions: Map<string, AgentSession>,
-  prs: Map<string, PullRequestInfo[]>,
-  focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
-  outOfFocusTaskIds: Set<string> = new Set()
+  attentionTaskIds: ReadonlySet<string>,
+  outOfFocusTaskIds: ReadonlySet<string> = new Set(),
 ): Task[] {
   if (filter === 'backlog') {
-    return tasks.filter(task => task.status === 'backlog')
+    return tasks.filter((task) => task.status === 'backlog')
   }
 
-  return tasks.filter(task => {
-    if (task.status === 'done' || task.status === 'backlog') return false
+  return tasks.filter((task) => {
+    if (task.status !== 'doing') return false
 
     const isManuallyOutOfFocus = outOfFocusTaskIds.has(task.id)
     if (filter === 'out-of-focus') return isManuallyOutOfFocus
     if (isManuallyOutOfFocus) return false
-
-    const session = sessions.get(task.id) ?? null
-    const taskPrs = prs.get(task.id) ?? []
-    const state = computeTaskState(task, session, taskPrs)
-    const needsAttention = isFocusTask(task, state, taskPrs, focusStates)
-
-    if (filter === 'focus') return needsAttention
-    if (filter === 'in-flight') return !needsAttention
+    if (filter === 'focus') return attentionTaskIds.has(task.id)
+    if (filter === 'in-flight') return !attentionTaskIds.has(task.id)
     return false
   })
 }
 
 export function getFilterCounts(
   tasks: Task[],
-  sessions: Map<string, AgentSession>,
-  prs: Map<string, PullRequestInfo[]>,
-  focusStates: TaskState[] = DEFAULT_FOCUS_STATES,
-  outOfFocusTaskIds: Set<string> = new Set()
+  attentionTaskIds: ReadonlySet<string>,
+  outOfFocusTaskIds: ReadonlySet<string> = new Set(),
 ): Record<BoardFilter, number> {
   const counts: Record<BoardFilter, number> = {
     focus: 0,
@@ -106,18 +107,10 @@ export function getFilterCounts(
       counts.backlog++
       continue
     }
-    if (task.status === 'done') {
-      // Legacy completed tasks are hidden: never produced anymore, never surfaced.
-      continue
-    }
-    // task is doing — check if it's a focus task
-    const session = sessions.get(task.id) ?? null
-    const taskPrs = prs.get(task.id) ?? []
-    const state = computeTaskState(task, session, taskPrs)
-    const needsAttention = isFocusTask(task, state, taskPrs, focusStates)
+    if (task.status !== 'doing') continue
     if (outOfFocusTaskIds.has(task.id)) {
       counts['out-of-focus']++
-    } else if (needsAttention) {
+    } else if (attentionTaskIds.has(task.id)) {
       counts.focus++
     } else {
       counts['in-flight']++
@@ -132,7 +125,7 @@ export async function loadFocusFilterStates(projectId: string): Promise<TaskStat
   if (!stored) return DEFAULT_FOCUS_STATES
   try {
     const parsed = JSON.parse(stored)
-    if (Array.isArray(parsed) && parsed.every((s: string) => ALL_TASK_STATES.includes(s as TaskState))) {
+    if (Array.isArray(parsed) && parsed.every((state: string) => FOCUS_FILTER_STATES.includes(state as TaskState) || state === 'active')) {
       const parsedStates = parsed as TaskState[]
       if (isLegacyDefaultFocusStateSet(parsedStates)) {
         return DEFAULT_FOCUS_STATES

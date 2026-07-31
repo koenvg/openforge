@@ -108,6 +108,7 @@ vi.mock('../../lib/stores', () => ({
 export const defaultProps = {
   onClose: vi.fn(),
   onProjectDeleted: vi.fn(),
+  onProjectSettingsSaved: vi.fn(),
   mode: 'project' as const,
 }
 

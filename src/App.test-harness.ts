@@ -143,6 +143,7 @@ vi.mock('./lib/stores', () => {
   const activeResolvedRepo = writable<string | null>(null)
   const globalExcludedPrRepos = writable<ReadonlySet<string>>(new Set())
   const projectResolvedRepos = writable<Map<string, string | null>>(new Map())
+  const attentionCountByProject = writable<Map<string, number>>(new Map())
   return {
   tasks: writable<Task[]>([]),
   dependencyReferenceTasks: writable<Task[]>([]),
@@ -173,6 +174,13 @@ vi.mock('./lib/stores', () => {
   activeProjectId: mockActiveProjectIdStore,
   activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
+  taskAttentionRows: writable([]),
+  taskAttentionLoaded: writable(false),
+  attentionCountByProject,
+  activeProjectAttentionCount: derived(
+    [attentionCountByProject, mockActiveProjectIdStore],
+    ([$counts, $projectId]) => ($projectId ? ($counts.get($projectId) ?? 0) : 0),
+  ),
   agentEvents: writable<Map<string, any>>(new Map()),
   taskRuntimeInfo: writable(new Map()),
   currentView: mockCurrentViewStore,
@@ -216,6 +224,7 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getAllTasks')
     return []
   }),
+  getTaskAttention: vi.fn(async () => []),
   getOpenCodeStatus: vi.fn(async () => {
     callOrder.push('getOpenCodeStatus')
     return { installed: false, running: false, session_count: 0 }

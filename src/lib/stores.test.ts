@@ -1,14 +1,22 @@
 import { get } from 'svelte/store'
 import { describe, expect, it } from 'vitest'
-import { activeProjectId, attentionCountByProject, activeProjectAttentionCount, backlogLabelFilters } from './stores'
+import { activeProjectId, activeProjectAttentionCount, backlogLabelFilters, taskAttentionRows } from './stores'
+import type { TaskAttentionRow } from './types'
+
+function attentionRows(projectId: string, count: number): TaskAttentionRow[] {
+  return Array.from({ length: count }, (_, index) => ({
+    task_id: `${projectId}-${index}`, project_id: projectId, project_name: projectId,
+    title: `Task ${index}`, state: 'idle', reason: 'Needs attention', activity_at: index,
+  }))
+}
 
 describe('activeProjectAttentionCount', () => {
   it("reports the active project's Focus attention count and reacts to store changes", () => {
     activeProjectId.set(null)
-    attentionCountByProject.set(new Map())
+    taskAttentionRows.set([])
     expect(get(activeProjectAttentionCount)).toBe(0)
 
-    attentionCountByProject.set(new Map([['project-a', 4], ['project-b', 2]]))
+    taskAttentionRows.set([...attentionRows('project-a', 4), ...attentionRows('project-b', 2)])
     activeProjectId.set('project-a')
     expect(get(activeProjectAttentionCount)).toBe(4)
 
@@ -17,7 +25,7 @@ describe('activeProjectAttentionCount', () => {
   })
 
   it('reports zero when the active project has no attention entry', () => {
-    attentionCountByProject.set(new Map([['project-a', 4]]))
+    taskAttentionRows.set(attentionRows('project-a', 4))
     activeProjectId.set('project-without-tasks')
     expect(get(activeProjectAttentionCount)).toBe(0)
   })

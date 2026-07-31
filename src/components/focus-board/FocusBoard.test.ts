@@ -3,7 +3,9 @@ import { get } from 'svelte/store'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
-import type { Task, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
+import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
+import { computeTaskState } from '../../lib/taskState'
+import { getTaskReasonText } from '../../lib/taskStatePresentation'
 import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, tasks as taskStore } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
@@ -17,13 +19,6 @@ vi.mock('../../lib/ipc', () => ({
   getProjectTaskLabels: vi.fn().mockResolvedValue([]),
 }))
 
-vi.mock('../../lib/boardFilters', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/boardFilters')>()
-  return {
-    ...actual,
-    loadFocusFilterStates: vi.fn().mockResolvedValue(['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged', 'merge-conflict']),
-  }
-})
 
 const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug' }
 const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui' }
@@ -125,6 +120,7 @@ function renderBoard(overrides?: {
   tasks?: Task[]
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
+  attentionRows?: TaskAttentionRow[]
   dependencyReferenceTasks?: Task[]
   onProjectAttentionChanged?: () => void | Promise<void>
 }) {
@@ -136,6 +132,23 @@ function renderBoard(overrides?: {
   ])
   const dependencyReferenceTasks = overrides?.dependencyReferenceTasks ?? []
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
+  const attentionRows = overrides?.attentionRows ?? tasks
+    .filter((task) => task.status === 'doing')
+    .flatMap((task): TaskAttentionRow[] => {
+      const session = sessions.get(task.id) ?? null
+      const taskPrs = prs.get(task.id) ?? []
+      const state = computeTaskState(task, session, taskPrs)
+      if (state === 'active') return []
+      return [{
+        task_id: task.id,
+        project_id: projectId ?? task.project_id ?? '',
+        project_name: 'Test Project',
+        title: task.title?.trim() || task.initial_prompt || 'Untitled task',
+        state: state as TaskAttentionRow['state'],
+        reason: getTaskReasonText(state, taskPrs),
+        activity_at: session?.updated_at ?? task.updated_at,
+      }]
+    })
   taskStore.set(tasks)
 
   return render(FocusBoard, {
@@ -145,6 +158,7 @@ function renderBoard(overrides?: {
       tasks,
       activeSessions: sessions,
       ticketPrs: prs,
+      attentionRows,
       dependencyReferenceTasks,
       onOpenTask,
       onRunAction,

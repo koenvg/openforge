@@ -100,6 +100,18 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         "doing"
     );
 
+    let task_attention = invoke_ok(&state, "get_task_attention", serde_json::Value::Null).await;
+    let task_attention_rows = task_attention.as_array().expect("task attention rows");
+    assert_eq!(task_attention_rows.len(), 1);
+    assert_eq!(task_attention_rows[0]["task_id"], task_id);
+    assert_eq!(task_attention_rows[0]["project_id"], project_id);
+    assert_eq!(task_attention_rows[0]["title"], "Plan migration");
+    assert_eq!(task_attention_rows[0]["state"], "idle");
+    assert_eq!(
+        task_attention_rows[0]["reason"],
+        "No agent running. Start when ready."
+    );
+
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
     let completed = crate::db::acquire_db(&state.db)
         .get_task(task_id)

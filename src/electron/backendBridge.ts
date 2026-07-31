@@ -71,6 +71,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'create_project_from_new_repo',
   'get_projects',
   'get_project_attention',
+  'get_task_attention',
   'update_project',
   'delete_project',
   'get_project_config',

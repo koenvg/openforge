@@ -704,6 +704,38 @@ export interface ProjectAttention {
   completed_agents: number;
 }
 
+export type TaskAttentionState =
+  | 'idle'
+  | 'needs-input'
+  | 'paused'
+  | 'agent-done'
+  | 'failed'
+  | 'interrupted'
+  | 'pr-draft'
+  | 'pr-open'
+  | 'ci-failed'
+  | 'changes-requested'
+  | 'unaddressed-comments'
+  | 'ready-to-merge'
+  | 'ready-to-enqueue'
+  | 'pr-queued'
+  | 'pr-merged'
+  | 'pr-closed'
+  | 'ci-running'
+  | 'review-pending'
+  | 'merge-conflict';
+
+/** Backend-owned, Task-only Needs Attention read model. */
+export interface TaskAttentionRow {
+  task_id: string;
+  project_id: string;
+  project_name: string;
+  title: string;
+  state: TaskAttentionState;
+  reason: string;
+  activity_at: number;
+}
+
 export interface WorktreeInfo {
   id: number;
   task_id: string;

@@ -42,6 +42,7 @@ mod secure_store;
 mod self_review_runtime;
 mod sidecar_logger;
 mod startup_resume;
+mod task_attention;
 mod task_metadata_refresh;
 mod user_environment;
 mod whisper_manager;

@@ -38,6 +38,7 @@ describe('SettingsView auto-save', () => {
 
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(updateProject).mockClear()
+      defaultProps.onProjectSettingsSaved.mockClear()
 
       expect(screen.getByText('Autosaves changes')).toBeTruthy()
 
@@ -56,6 +57,7 @@ describe('SettingsView auto-save', () => {
 
       await vi.waitFor(() => {
         expect(screen.getByText('All changes saved')).toBeTruthy()
+        expect(defaultProps.onProjectSettingsSaved).toHaveBeenCalledOnce()
       })
     })
 
