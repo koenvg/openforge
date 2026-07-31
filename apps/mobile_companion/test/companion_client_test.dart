@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/client/pinned_companion_transport.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
+import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 
 final class _RecordingTransport implements CompanionV1Transport {
   final List<
@@ -27,7 +30,7 @@ final class _RecordingTransport implements CompanionV1Transport {
 
 void main() {
   test(
-    'generated client matches pairing and authenticated status contract',
+    'generated client matches pairing, status, and attention contracts',
     () async {
       final contract =
           jsonDecode(
@@ -43,10 +46,22 @@ void main() {
                 ).readAsStringSync(),
               )
               as Map<String, Object?>;
+      expect(
+        companionV1OpenApiSha256,
+        sha256
+            .convert(
+              File(
+                '../../docs/contracts/companion-v1.openapi.json',
+              ).readAsBytesSync(),
+            )
+            .toString(),
+        reason: 'checked-in generated client must match the OpenAPI source',
+      );
       final encodedContract = jsonEncode(contract);
       expect(encodedContract, contains('submitCompanionPairingRequest'));
       expect(encodedContract, contains('getCompanionPairingRequest'));
       expect(encodedContract, contains('getCompanionHostStatus'));
+      expect(encodedContract, contains('getCompanionAttention'));
 
       final transport = _RecordingTransport()
         ..responses = <CompanionV1HttpResponse>[
@@ -61,6 +76,10 @@ void main() {
           CompanionV1HttpResponse(
             statusCode: 200,
             body: jsonEncode(fixtures['hostStatus']),
+          ),
+          CompanionV1HttpResponse(
+            statusCode: 200,
+            body: jsonEncode(fixtures['attentionSnapshot']),
           ),
         ];
       final client = CompanionV1Client(
@@ -80,9 +99,15 @@ void main() {
       final status = await client.getCompanionHostStatus(
         credential: approval.credential!,
       );
+      final attention = await client.getCompanionAttention(
+        credential: approval.credential!,
+      );
 
       expect(status.hostId, '65d91f21-6732-45a6-9418-3dfaf4c93f52');
       expect(status.protocolVersion, 1);
+      expect(attention.items.single.taskId, 'KVG-2945');
+      expect(attention.items.single.projectName, 'OpenForge');
+      expect(attention.items.single.state, 'needs-input');
       expect(transport.requests[0].uri.path, '/companion/v1/pairing/requests');
       expect(
         jsonDecode(transport.requests[0].body!)['deviceName'],
@@ -94,6 +119,11 @@ void main() {
       );
       expect(
         transport.requests[2].headers['authorization'],
+        'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
+      expect(transport.requests[3].uri.path, '/companion/v1/attention');
+      expect(
+        transport.requests[3].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
     },
@@ -123,6 +153,61 @@ void main() {
       }),
       throwsFormatException,
     );
+    expect(
+      () => AttentionItem.fromJson(<String, Object?>{
+        'taskId': 'KVG-2945',
+        'projectId': 'P-4',
+        'projectName': 'OpenForge',
+        'title': 'Attention home',
+        'state': 'needs-input',
+        'reason': 'Agent needs input.',
+        'activityAt': '2026-07-30T12:00:01Z',
+        'pullRequest': <String, Object?>{'number': 42},
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('endpoint fallback preserves authoritative revocation errors', () async {
+    final transport = _RecordingTransport()
+      ..responses = <CompanionV1HttpResponse>[
+        const CompanionV1HttpResponse(
+          statusCode: 401,
+          body:
+              '{"error":{"code":"revoked","message":"Pair again","requestId":null}}',
+        ),
+        const CompanionV1HttpResponse(
+          statusCode: 200,
+          body: '{"snapshotAt":"2026-07-30T12:00:02Z","items":[]}',
+        ),
+      ];
+    final client = GeneratedCompanionClient(
+      transportFactory: (_) =>
+          CompanionEndpointTransport(transport: transport, close: () {}),
+    );
+    final trust = CompanionTrustRecord(
+      hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+      certificateSha256:
+          '9F:64:A7:47:E1:B9:7F:13:1F:AB:B6:B4:47:29:6C:9B:6F:02:01:E7:9F:B3:C5:35:6E:6C:77:E8:9B:6A:80:6A',
+      endpointCandidates: <Uri>[
+        Uri.parse('https://192.168.1.20:17424'),
+        Uri.parse('https://openforge.tailnet:17424'),
+      ],
+      deviceId: '50b26936-55a7-48e5-a1c7-65eaf08211ee',
+      deviceCredential: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    );
+
+    await expectLater(
+      client.fetchAttention(trust),
+      throwsA(
+        isA<CompanionV1Exception>().having(
+          (error) => error.code,
+          'code',
+          'revoked',
+        ),
+      ),
+    );
+    expect(transport.requests, hasLength(1));
   });
 
   test('certificate pinning accepts only the exact SHA-256 fingerprint', () {
