@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -77,18 +78,54 @@ class CompanionQrScannerScreen extends StatefulWidget {
       _CompanionQrScannerScreenState();
 }
 
-class _CompanionQrScannerScreenState extends State<CompanionQrScannerScreen> {
+class _CompanionQrScannerScreenState extends State<CompanionQrScannerScreen>
+    with WidgetsBindingObserver {
+  final MobileScannerController _scannerController = MobileScannerController();
   bool _handled = false;
 
-  void _onDetect(BarcodeCapture capture) {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_handled) return;
     for (final barcode in capture.barcodes) {
       final payload = barcode.rawValue;
       if (payload == null) continue;
       _handled = true;
-      Navigator.of(context).pop(payload);
+      try {
+        await _scannerController.stop();
+      } on Object catch (error, stackTrace) {
+        debugPrint('Failed to stop the QR scanner: $error\n$stackTrace');
+      }
+      if (mounted) Navigator.of(context).pop(payload);
       return;
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_handled || !_scannerController.value.hasCameraPermission) return;
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(_scannerController.start());
+      case AppLifecycleState.inactive:
+        unawaited(_scannerController.stop());
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        return;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+    unawaited(_scannerController.dispose());
   }
 
   @override
@@ -96,7 +133,7 @@ class _CompanionQrScannerScreenState extends State<CompanionQrScannerScreen> {
     appBar: AppBar(title: const Text('Scan desktop QR')),
     body: Semantics(
       label: 'Companion pairing QR scanner',
-      child: MobileScanner(onDetect: _onDetect),
+      child: MobileScanner(controller: _scannerController, onDetect: _onDetect),
     ),
   );
 }
