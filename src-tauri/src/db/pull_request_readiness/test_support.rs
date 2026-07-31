@@ -1,0 +1,37 @@
+use super::super::PrRow;
+
+pub(super) fn make_github_readiness_pr() -> PrRow {
+    PrRow {
+        id: 42,
+        pr_number: 7,
+        ticket_id: "T-42".to_string(),
+        repo_owner: "acme".to_string(),
+        repo_name: "repo".to_string(),
+        title: "Readiness".to_string(),
+        url: "https://github.com/acme/repo/pull/7".to_string(),
+        state: "open".to_string(),
+        head_sha: "head-sha".to_string(),
+        ci_status: None,
+        ci_check_runs: None,
+        review_status: None,
+        mergeable: Some(true),
+        mergeable_state: Some("clean".to_string()),
+        merged_at: None,
+        created_at: 1,
+        updated_at: 2,
+        draft: false,
+        is_queued: false,
+        merge_readiness_status: None,
+        merge_readiness_action: None,
+        merge_readiness_blockers: None,
+        merge_readiness_warnings: None,
+        readiness_source_head_sha: None,
+        merge_group_sha: None,
+        required_checks_policy_known: None,
+        required_reviews_policy_known: None,
+        merge_queue_required: None,
+        merge_queue_state: None,
+        readiness_updated_at: None,
+        unaddressed_comment_count: 0,
+    }
+}
