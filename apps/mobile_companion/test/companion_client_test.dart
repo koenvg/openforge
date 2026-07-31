@@ -51,7 +51,7 @@ final class _EndpointTransport implements CloseableCompanionV1Transport {
 
 void main() {
   test(
-    'generated client matches pairing, status, and attention contracts',
+    'generated client matches pairing, status, snapshot, and event contracts',
     () async {
       final contract =
           jsonDecode(
@@ -198,6 +198,13 @@ void main() {
         taskId: 'KVG-2946',
         credential: approval.credential!,
       );
+      final eventRequest = client.streamCompanionEvents(
+        credential: approval.credential!,
+        lastEventId: 'epoch:12',
+      );
+      final eventRequestWithoutCursor = client.streamCompanionEvents(
+        credential: approval.credential!,
+      );
 
       expect(status.hostId, '65d91f21-6732-45a6-9418-3dfaf4c93f52');
       expect(status.protocolVersion, 1);
@@ -231,6 +238,18 @@ void main() {
         transport.requests[4].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
+      expect(eventRequest.method, 'GET');
+      expect(eventRequest.uri.path, '/companion/v1/events');
+      expect(eventRequest.headers, <String, String>{
+        'accept': 'text/event-stream',
+        'authorization': 'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'last-event-id': 'epoch:12',
+      });
+      expect(
+        eventRequestWithoutCursor.headers,
+        isNot(contains('last-event-id')),
+      );
+      expect(transport.requests, hasLength(5));
     },
   );
 

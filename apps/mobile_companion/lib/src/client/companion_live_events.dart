@@ -73,15 +73,14 @@ Future<CompanionLiveConnection> openPinnedCompanionEvents({
     certificateSha256: certificateSha256,
   );
   try {
-    final headers = <String, String>{
-      HttpHeaders.acceptHeader: 'text/event-stream',
-      HttpHeaders.authorizationHeader: 'Bearer $credential',
-      'last-event-id': ?lastEventId,
-    };
+    final request = CompanionV1Client(
+      baseUrl: endpoint,
+      transport: transport,
+    ).streamCompanionEvents(credential: credential, lastEventId: lastEventId);
     final response = await transport.openStream(
-      method: 'GET',
-      uri: endpoint.resolve('/companion/v1/events'),
-      headers: headers,
+      method: request.method,
+      uri: request.uri,
+      headers: request.headers,
     );
     if (response.statusCode != HttpStatus.ok) {
       final body = await utf8.decoder.bind(response).join();
@@ -160,34 +159,19 @@ CompanionLiveEvent? _decodeEvent(
 };
 
 CompanionResourcesInvalidated _decodeResources(String? eventId, String data) {
-  final json = jsonDecode(data);
-  if (json is! Map<String, Object?> ||
-      json.keys.length != 1 ||
-      json['resources'] is! List<Object?>) {
-    throw const FormatException('Invalid Companion resource invalidation.');
-  }
-  final resources = (json['resources']! as List<Object?>)
-      .map((resource) {
-        if (resource is! Map<String, Object?>) {
-          throw const FormatException('Invalid Companion resource identity.');
-        }
-        return switch (resource['kind']) {
-          'attention' when resource.length == 1 =>
+  final payload = ResourceInvalidationData.fromJson(
+    _decodeDataObject(data, 'Invalid Companion resource invalidation.'),
+  );
+  final resources = payload.resources
+      .map(
+        (resource) => switch (resource) {
+          AttentionResourceIdentityData() =>
             const CompanionResourceInvalidation.attention(),
-          'task'
-              when resource.length == 2 &&
-                  resource['id'] is String &&
-                  (resource['id']! as String).isNotEmpty =>
-            CompanionResourceInvalidation.task(resource['id']! as String),
-          _ => throw const FormatException(
-            'Invalid Companion resource identity.',
-          ),
-        };
-      })
+          TaskResourceIdentityData(:final id) =>
+            CompanionResourceInvalidation.task(id),
+        },
+      )
       .toList(growable: false);
-  if (resources.isEmpty) {
-    throw const FormatException('Companion invalidation has no resources.');
-  }
   return CompanionResourcesInvalidated(
     eventId: _requiredEventId(eventId),
     resources: List<CompanionResourceInvalidation>.unmodifiable(resources),
@@ -195,45 +179,30 @@ CompanionResourcesInvalidated _decodeResources(String? eventId, String data) {
 }
 
 CompanionStreamGap _decodeGap(String? eventId, String data) {
-  _decodeExactConstantData(
-    data,
-    key: 'refreshRequired',
-    value: true,
-    message: 'Invalid Companion stream gap.',
+  StreamGapData.fromJson(
+    _decodeDataObject(data, 'Invalid Companion stream gap.'),
   );
   return CompanionStreamGap(eventId: _requiredEventId(eventId));
 }
 
 CompanionAuthorizationRevoked _decodeAuthorizationRevoked(String data) {
-  _decodeExactConstantData(
-    data,
-    key: 'reason',
-    value: 'revoked',
-    message: 'Invalid Companion authorization termination.',
+  AuthorizationRevokedData.fromJson(
+    _decodeDataObject(data, 'Invalid Companion authorization termination.'),
   );
   return const CompanionAuthorizationRevoked();
 }
 
 CompanionGatewayClosing _decodeGatewayClosing(String data) {
-  _decodeExactConstantData(
-    data,
-    key: 'reason',
-    value: 'shutdown',
-    message: 'Invalid Companion gateway termination.',
+  GatewayClosingData.fromJson(
+    _decodeDataObject(data, 'Invalid Companion gateway termination.'),
   );
   return const CompanionGatewayClosing();
 }
 
-void _decodeExactConstantData(
-  String data, {
-  required String key,
-  required Object value,
-  required String message,
-}) {
+Map<String, Object?> _decodeDataObject(String data, String message) {
   final json = jsonDecode(data);
-  if (json is! Map<String, Object?> || json.length != 1 || json[key] != value) {
-    throw FormatException(message);
-  }
+  if (json is! Map<String, Object?>) throw FormatException(message);
+  return json;
 }
 
 String _requiredEventId(String? eventId) {

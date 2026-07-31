@@ -22,6 +22,18 @@ final class CompanionV1HttpResponse {
   final String body;
 }
 
+final class CompanionV1StreamRequest {
+  CompanionV1StreamRequest({
+    required this.method,
+    required this.uri,
+    required Map<String, String> headers,
+  }) : headers = Map<String, String>.unmodifiable(headers);
+
+  final String method;
+  final Uri uri;
+  final Map<String, String> headers;
+}
+
 final class CompanionV1Exception implements Exception {
   const CompanionV1Exception({
     required this.statusCode,
@@ -291,6 +303,107 @@ final class TaskDetail {
   final DateTime? agentUpdatedAt;
 }
 
+sealed class CompanionResourceIdentityData {
+  const CompanionResourceIdentityData();
+
+  factory CompanionResourceIdentityData.fromJson(Map<String, Object?> json) {
+    final kind = json.string('kind');
+    switch (kind) {
+      case 'attention':
+        json.expectOnly(const <String>{'kind'});
+        return const AttentionResourceIdentityData();
+      case 'task':
+        json.expectOnly(const <String>{'kind', 'id'});
+        final id = json.string('id');
+        if (id.isEmpty) {
+          throw const FormatException('Task resource id must not be empty.');
+        }
+        return TaskResourceIdentityData(id);
+      default:
+        throw const FormatException('Invalid Companion resource kind.');
+    }
+  }
+}
+
+final class AttentionResourceIdentityData
+    extends CompanionResourceIdentityData {
+  const AttentionResourceIdentityData();
+}
+
+final class TaskResourceIdentityData extends CompanionResourceIdentityData {
+  const TaskResourceIdentityData(this.id);
+
+  final String id;
+}
+
+final class ResourceInvalidationData {
+  ResourceInvalidationData({
+    required List<CompanionResourceIdentityData> resources,
+  }) : resources = List<CompanionResourceIdentityData>.unmodifiable(resources);
+
+  factory ResourceInvalidationData.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'resources'});
+    final resources = json['resources'];
+    if (resources is! List<Object?> || resources.isEmpty) {
+      throw const FormatException('Companion invalidation requires resources.');
+    }
+    return ResourceInvalidationData(
+      resources: resources.map((resource) {
+        if (resource is! Map<String, Object?>) {
+          throw const FormatException('Invalid Companion resource identity.');
+        }
+        return CompanionResourceIdentityData.fromJson(resource);
+      }).toList(),
+    );
+  }
+
+  final List<CompanionResourceIdentityData> resources;
+}
+
+final class StreamGapData {
+  const StreamGapData() : refreshRequired = true;
+
+  factory StreamGapData.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'refreshRequired'});
+    if (json['refreshRequired'] != true) {
+      throw const FormatException('Invalid Companion stream gap.');
+    }
+    return const StreamGapData();
+  }
+
+  final bool refreshRequired;
+}
+
+final class AuthorizationRevokedData {
+  const AuthorizationRevokedData() : reason = 'revoked';
+
+  factory AuthorizationRevokedData.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'reason'});
+    if (json['reason'] != 'revoked') {
+      throw const FormatException(
+        'Invalid Companion authorization termination.',
+      );
+    }
+    return const AuthorizationRevokedData();
+  }
+
+  final String reason;
+}
+
+final class GatewayClosingData {
+  const GatewayClosingData() : reason = 'shutdown';
+
+  factory GatewayClosingData.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'reason'});
+    if (json['reason'] != 'shutdown') {
+      throw const FormatException('Invalid Companion gateway termination.');
+    }
+    return const GatewayClosingData();
+  }
+
+  final String reason;
+}
+
 final class CompanionV1Client {
   const CompanionV1Client({required this.baseUrl, required this.transport});
 
@@ -364,6 +477,19 @@ final class CompanionV1Client {
     );
     return TaskDetail.fromJson(_successJson(response, const <int>{200}));
   }
+
+  CompanionV1StreamRequest streamCompanionEvents({
+    required String credential,
+    String? lastEventId,
+  }) => CompanionV1StreamRequest(
+    method: 'GET',
+    uri: baseUrl.resolve('/companion/v1/events'),
+    headers: <String, String>{
+      'accept': 'text/event-stream',
+      'authorization': 'Bearer $credential',
+      'last-event-id': ?lastEventId,
+    },
+  );
 }
 
 Map<String, Object?> _successJson(
