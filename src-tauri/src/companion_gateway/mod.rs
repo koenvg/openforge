@@ -5,6 +5,7 @@ mod identity;
 mod lifecycle;
 mod network;
 mod pairing;
+mod task_detail;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
 
@@ -53,5 +54,7 @@ pub(crate) fn delayed_test_manager(delay: std::time::Duration) -> CompanionGatew
 mod attention_tests;
 #[cfg(test)]
 mod pairing_tests;
+#[cfg(test)]
+mod task_detail_tests;
 #[cfg(test)]
 mod tests;

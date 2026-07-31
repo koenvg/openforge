@@ -78,6 +78,12 @@ final class _FakeClient implements CompanionClient {
     snapshotAt: DateTime.utc(2026, 7, 30),
     items: const <AttentionItem>[],
   );
+
+  @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
 }
 
 final class _FakeStorage implements CompanionSecureStorage {

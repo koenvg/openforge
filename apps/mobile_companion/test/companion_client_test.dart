@@ -62,6 +62,53 @@ void main() {
       expect(encodedContract, contains('getCompanionPairingRequest'));
       expect(encodedContract, contains('getCompanionHostStatus'));
       expect(encodedContract, contains('getCompanionAttention'));
+      expect(encodedContract, contains('getCompanionTaskDetail'));
+      final paths = contract['paths']! as Map<String, Object?>;
+      expect(
+        paths.keys,
+        unorderedEquals(<String>[
+          '/pairing/requests',
+          '/pairing/requests/{requestId}',
+          '/status',
+          '/attention',
+          '/tasks/{taskId}',
+        ]),
+      );
+      for (final path in paths.values.cast<Map<String, Object?>>()) {
+        expect(path.keys, everyElement(anyOf('get', 'post')));
+      }
+      final components = contract['components']! as Map<String, Object?>;
+      final schemas = components['schemas']! as Map<String, Object?>;
+      final detailSchema = schemas['TaskDetail']! as Map<String, Object?>;
+      final detailProperties =
+          detailSchema['properties']! as Map<String, Object?>;
+      expect(
+        detailProperties.keys,
+        unorderedEquals(<String>[
+          'taskId',
+          'title',
+          'projectId',
+          'projectName',
+          'boardStatus',
+          'handoffNotes',
+          'agentState',
+          'agentErrorSummary',
+          'createdAt',
+          'updatedAt',
+          'agentUpdatedAt',
+        ]),
+      );
+      for (final forbidden in <String>[
+        'prompt',
+        'filesystemPath',
+        'worktree',
+        'diff',
+        'terminalBuffer',
+        'providerSessionId',
+        'token',
+      ]) {
+        expect(detailProperties, isNot(contains(forbidden)));
+      }
 
       final transport = _RecordingTransport()
         ..responses = <CompanionV1HttpResponse>[
@@ -80,6 +127,10 @@ void main() {
           CompanionV1HttpResponse(
             statusCode: 200,
             body: jsonEncode(fixtures['attentionSnapshot']),
+          ),
+          CompanionV1HttpResponse(
+            statusCode: 200,
+            body: jsonEncode(fixtures['taskDetail']),
           ),
         ];
       final client = CompanionV1Client(
@@ -102,12 +153,20 @@ void main() {
       final attention = await client.getCompanionAttention(
         credential: approval.credential!,
       );
+      final detail = await client.getCompanionTaskDetail(
+        taskId: 'KVG-2946',
+        credential: approval.credential!,
+      );
 
       expect(status.hostId, '65d91f21-6732-45a6-9418-3dfaf4c93f52');
       expect(status.protocolVersion, 1);
       expect(attention.items.single.taskId, 'KVG-2945');
       expect(attention.items.single.projectName, 'OpenForge');
       expect(attention.items.single.state, 'needs-input');
+      expect(detail.title, 'Add mobile Task detail');
+      expect(detail.boardStatus, 'doing');
+      expect(detail.handoffNotes, 'Ready for review.');
+      expect(detail.agentState, 'failed');
       expect(transport.requests[0].uri.path, '/companion/v1/pairing/requests');
       expect(
         jsonDecode(transport.requests[0].body!)['deviceName'],
@@ -124,6 +183,11 @@ void main() {
       expect(transport.requests[3].uri.path, '/companion/v1/attention');
       expect(
         transport.requests[3].headers['authorization'],
+        'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
+      expect(transport.requests[4].uri.path, '/companion/v1/tasks/KVG-2946');
+      expect(
+        transport.requests[4].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
     },

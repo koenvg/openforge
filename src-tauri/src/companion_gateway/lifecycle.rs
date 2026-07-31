@@ -1,5 +1,8 @@
 #[cfg(test)]
-use super::attention::UnavailableCompanionAttentionSource;
+use super::{
+    attention::UnavailableCompanionAttentionSource,
+    task_detail::UnavailableCompanionTaskDetailSource,
+};
 use super::{
     attention::{CompanionAttentionSource, DatabaseCompanionAttentionSource},
     contract::{self, CompanionHostStatus},
@@ -10,6 +13,7 @@ use super::{
     },
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
+    task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
 };
 use axum_server::{tls_rustls::RustlsConfig, Handle};
 use serde::{Deserialize, Serialize};
@@ -165,6 +169,7 @@ pub(crate) struct CompanionGatewayManager {
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
     port: u16,
 }
 
@@ -174,10 +179,11 @@ impl CompanionGatewayManager {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(DEFAULT_COMPANION_GATEWAY_PORT);
-        Self::new_with_attention(
+        Self::new_with_sources(
             Arc::new(KeychainCompanionIdentityStore),
             Arc::new(DatabaseCompanionDeviceStore::new(Arc::clone(&database))),
-            Arc::new(DatabaseCompanionAttentionSource::new(database)),
+            Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
+            Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
             Arc::new(PrivateInterfaceEndpointProvider),
             port,
         )
@@ -190,19 +196,21 @@ impl CompanionGatewayManager {
         endpoint_provider: Arc<dyn CompanionEndpointProvider>,
         port: u16,
     ) -> Self {
-        Self::new_with_attention(
+        Self::new_with_sources(
             identity_store,
             device_store,
             Arc::new(UnavailableCompanionAttentionSource),
+            Arc::new(UnavailableCompanionTaskDetailSource),
             endpoint_provider,
             port,
         )
     }
 
-    fn new_with_attention(
+    fn new_with_sources(
         identity_store: Arc<dyn CompanionIdentityStore>,
         device_store: Arc<dyn CompanionDeviceStore>,
         attention: Arc<dyn CompanionAttentionSource>,
+        task_detail: Arc<dyn CompanionTaskDetailSource>,
         endpoint_provider: Arc<dyn CompanionEndpointProvider>,
         port: u16,
     ) -> Self {
@@ -212,6 +220,7 @@ impl CompanionGatewayManager {
             endpoint_provider,
             pairing: Arc::new(PairingCoordinator::new(device_store, PAIRING_SESSION_TTL)),
             attention,
+            task_detail,
             port,
         }
     }
@@ -267,6 +276,7 @@ impl CompanionGatewayManager {
             self.port,
             Arc::clone(&self.pairing),
             Arc::clone(&self.attention),
+            Arc::clone(&self.task_detail),
         )
         .await
         {
@@ -388,6 +398,7 @@ async fn start_tls_listeners(
     port: u16,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
 ) -> Result<RunningGateway, String> {
     let tls_config = RustlsConfig::from_pem(
         identity.certificate_pem.clone().into_bytes(),
@@ -395,11 +406,12 @@ async fn start_tls_listeners(
     )
     .await
     .map_err(|error| format!("failed to configure Companion TLS: {error}"))?;
-    let router = contract::create_router_with_attention(
+    let router = contract::create_router_with_sources(
         CompanionHostStatus::new(identity.host_id.clone()),
         pairing.clone(),
         pairing,
         attention,
+        task_detail,
     );
     let mut bound_listeners = Vec::with_capacity(bind_endpoints.len());
     for (kind, address) in bind_endpoints {

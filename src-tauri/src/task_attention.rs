@@ -275,7 +275,11 @@ fn is_image_reference_definition(line: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
 }
 
-fn task_display_title(task_id: &str, title: Option<&str>, initial_prompt: &str) -> String {
+pub(crate) fn task_display_title(
+    task_id: &str,
+    title: Option<&str>,
+    initial_prompt: &str,
+) -> String {
     if let Some(title) = title.map(str::trim).filter(|title| !title.is_empty()) {
         return title.to_string();
     }

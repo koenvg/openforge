@@ -8,20 +8,27 @@ import 'connection/companion_connection_state.dart';
 import 'pairing/companion_pairing_capture.dart';
 import 'pairing/companion_pairing_controller.dart';
 import 'presentation/connection_shell.dart';
+import 'task_detail/task_detail_controller.dart';
+import 'task_detail/task_detail_screen.dart';
 
 export 'pairing/companion_pairing_capture.dart' show CompanionQrScannerScreen;
 export 'presentation/connection_shell.dart' show ConnectionShell;
+
+typedef TaskDetailControllerFactory =
+    TaskDetailController Function(String taskId);
 
 class CompanionApp extends StatefulWidget {
   const CompanionApp({
     this.controller,
     this.attentionController,
+    this.taskDetailControllerFactory,
     this.initialState = const Unpaired(),
     super.key,
   });
 
   final CompanionPairingController? controller;
   final AttentionController? attentionController;
+  final TaskDetailControllerFactory? taskDetailControllerFactory;
   final CompanionConnectionState initialState;
 
   @override
@@ -91,6 +98,17 @@ class _CompanionAppState extends State<CompanionApp> {
     await widget.controller?.restore();
   }
 
+  void _openTaskDetail(String taskId) {
+    final factory = widget.taskDetailControllerFactory;
+    final navigator = _navigatorKey.currentState;
+    if (factory == null || navigator == null) return;
+    navigator.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TaskDetailScreen(controller: factory(taskId)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     navigatorKey: _navigatorKey,
@@ -104,6 +122,9 @@ class _CompanionAppState extends State<CompanionApp> {
         ? AttentionHome(
             state: _attentionState,
             onRefresh: widget.attentionController!.refresh,
+            onTaskSelected: widget.taskDetailControllerFactory == null
+                ? null
+                : _openTaskDetail,
           )
         : ConnectionShell(
             state: _state,

@@ -51,6 +51,12 @@ final class _FakeClient implements CompanionClient {
   }
 
   @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
+
+  @override
   Future<HostStatus> fetchHostStatus(CompanionTrustRecord trustRecord) =>
       throw UnsupportedError('not used');
 
