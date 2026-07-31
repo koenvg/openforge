@@ -344,6 +344,10 @@ export async function setCompanionGatewayEnabled(enabled: boolean): Promise<Comp
   return invoke<CompanionGatewayStatus>("set_companion_gateway_enabled", { enabled });
 }
 
+export async function setCompanionTailscaleHostname(hostname: string): Promise<CompanionGatewayStatus> {
+  return invoke<CompanionGatewayStatus>('set_companion_tailscale_hostname', { hostname })
+}
+
 export async function startCompanionPairing(): Promise<CompanionPairingSession> {
   return invoke<CompanionPairingSession>('start_companion_pairing')
 }

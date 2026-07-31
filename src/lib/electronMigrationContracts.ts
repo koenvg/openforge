@@ -106,6 +106,7 @@ export const ipcCommandContracts = [
   { functionName: 'setConfig', ipcCommand: 'set_config', payloadKeys: ['key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getCompanionGatewayStatus', ipcCommand: 'get_companion_gateway_status', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setCompanionGatewayEnabled', ipcCommand: 'set_companion_gateway_enabled', payloadKeys: ['enabled'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'setCompanionTailscaleHostname', ipcCommand: 'set_companion_tailscale_hostname', payloadKeys: ['hostname'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'startCompanionPairing', ipcCommand: 'start_companion_pairing', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getCompanionPairingStatus', ipcCommand: 'get_companion_pairing_status', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'cancelCompanionPairing', ipcCommand: 'cancel_companion_pairing', payloadKeys: ['sessionId'], targetOwner: 'rust-sidecar', domain: 'config' },

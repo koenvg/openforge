@@ -82,6 +82,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'set_config',
   'get_companion_gateway_status',
   'set_companion_gateway_enabled',
+  'set_companion_tailscale_hostname',
   'start_companion_pairing',
   'get_companion_pairing_status',
   'cancel_companion_pairing',

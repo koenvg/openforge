@@ -388,6 +388,7 @@ describe('Electron backend bridge command forwarding', () => {
     for (const command of [
       'get_companion_gateway_status',
       'set_companion_gateway_enabled',
+      'set_companion_tailscale_hostname',
       'start_companion_pairing',
       'get_companion_pairing_status',
       'cancel_companion_pairing',

@@ -4,9 +4,11 @@ use super::{
         create_router_with_sources_and_event_access, create_router_with_sources_and_events,
         CompanionAuthorizer, CompanionErrorCode, CompanionHostStatus,
     },
-    devices::InMemoryCompanionDeviceStore,
-    live_events::{CompanionStreamAccess, CompanionStreamTermination},
-    pairing::PairingCoordinator,
+    devices::{CompanionDeviceRecord, CompanionDeviceStore, InMemoryCompanionDeviceStore},
+    live_events::{
+        CompanionStreamAccess, CompanionStreamTermination, PairingCompanionStreamAccess,
+    },
+    pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::{AppEvent, AppEventBus, AppEventCursor, DeliveryClass};
@@ -16,6 +18,7 @@ use axum::{
     response::Response,
 };
 use futures::StreamExt;
+use sha2::{Digest, Sha256};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -39,9 +42,14 @@ impl MutableAuthorizer {
 }
 
 impl CompanionAuthorizer for MutableAuthorizer {
-    fn authorize(&self, _headers: &HeaderMap) -> Result<(), CompanionErrorCode> {
+    fn authorize(
+        &self,
+        _headers: &HeaderMap,
+    ) -> Result<CompanionAuthenticatedDevice, CompanionErrorCode> {
         if self.authorized.load(Ordering::SeqCst) {
-            Ok(())
+            Ok(CompanionAuthenticatedDevice {
+                device_id: "test-device".to_string(),
+            })
         } else {
             Err(CompanionErrorCode::Revoked)
         }
@@ -119,9 +127,17 @@ fn test_router_with_access(
 }
 
 async fn open_events(router: axum::Router, cursor: Option<String>) -> Response {
+    open_events_with_credential(router, cursor, "test-device").await
+}
+
+async fn open_events_with_credential(
+    router: axum::Router,
+    cursor: Option<String>,
+    credential: &str,
+) -> Response {
     let mut request = Request::builder()
         .uri("/companion/v1/events")
-        .header("authorization", "Bearer test-device");
+        .header("authorization", format!("Bearer {credential}"));
     if let Some(cursor) = cursor {
         request = request.header("last-event-id", cursor);
     }
@@ -266,6 +282,59 @@ async fn revoked_streams_emit_typed_terminal_state_and_close() {
     assert!(chunk.contains("event: authorization-revoked"));
     assert!(chunk.contains("\"reason\":\"revoked\""));
     assert!(!chunk.contains("T-must-not-leak-after-revocation"));
+}
+
+#[tokio::test]
+async fn revoking_one_device_closes_only_that_devices_canonical_sse_stream() {
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    for (device_id, credential) in [
+        ("device-1", "credential-one"),
+        ("device-2", "credential-two"),
+    ] {
+        device_store
+            .save(&CompanionDeviceRecord {
+                device_id: device_id.to_string(),
+                device_name: device_id.to_string(),
+                platform: "ios".to_string(),
+                credential_verifier: Sha256::digest(credential.as_bytes()).into(),
+                paired_at: 1_722_340_800,
+                last_seen_at: None,
+                revoked_at: None,
+            })
+            .expect("seed paired device");
+    }
+    let pairing = Arc::new(PairingCoordinator::new(
+        device_store,
+        Duration::from_secs(120),
+    ));
+    pairing.notify_gateway_running();
+    let events = AppEventBus::new(16, 8);
+    let stream_access = Arc::new(PairingCompanionStreamAccess::new(pairing.clone()));
+    let router = create_router_with_sources_and_event_access(
+        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
+        pairing.clone(),
+        pairing.clone(),
+        Arc::new(UnavailableCompanionAttentionSource),
+        Arc::new(UnavailableCompanionTaskDetailSource),
+        events.clone(),
+        stream_access,
+    );
+    let revoked_response =
+        open_events_with_credential(router.clone(), None, "credential-one").await;
+    let active_response = open_events_with_credential(router, None, "credential-two").await;
+
+    pairing.revoke("device-1").expect("revoke first device");
+
+    let revoked_chunk = next_sse_chunk(revoked_response).await;
+    assert!(revoked_chunk.contains("event: authorization-revoked"));
+    events
+        .tasks()
+        .updated("T-visible-to-active-device", None)
+        .expect("publish invalidation");
+    let active_chunk = next_sse_chunk(active_response).await;
+    assert!(active_chunk.contains("event: resources-invalidated"));
+    assert!(active_chunk.contains("T-visible-to-active-device"));
+    assert!(!active_chunk.contains("authorization-revoked"));
 }
 
 #[tokio::test]

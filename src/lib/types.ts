@@ -54,12 +54,19 @@ export interface CompanionGatewayEndpoint {
   url: string
 }
 
+export interface CompanionTailscaleStatus {
+  detectedHostname: string | null
+  configuredHostname: string | null
+  effectiveHostname: string | null
+}
+
 export interface CompanionGatewayStatus {
   enabled: boolean
   phase: CompanionGatewayPhase
   hostId: string | null
   certificateFingerprint: string | null
   endpoints: CompanionGatewayEndpoint[]
+  tailscale: CompanionTailscaleStatus
   error: string | null
 }
 

@@ -7,9 +7,12 @@ mod lifecycle;
 mod live_events;
 mod network;
 mod pairing;
+mod tailscale;
 mod task_detail;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
+pub(crate) const COMPANION_TAILSCALE_HOSTNAME_CONFIG: &str =
+    "companion_tailscale_magicdns_hostname";
 
 pub(crate) fn enabled_preference(database: &crate::db::Database) -> Result<bool, String> {
     database
@@ -18,8 +21,19 @@ pub(crate) fn enabled_preference(database: &crate::db::Database) -> Result<bool,
         .map_err(|error| format!("failed to read Companion Gateway preference: {error}"))
 }
 
+pub(crate) fn tailscale_hostname_preference(
+    database: &crate::db::Database,
+) -> Result<Option<String>, String> {
+    database
+        .get_config(COMPANION_TAILSCALE_HOSTNAME_CONFIG)
+        .map_err(|error| format!("failed to read Companion Tailscale hostname: {error}"))?
+        .map(|hostname| tailscale::normalize_magicdns_hostname(&hostname))
+        .transpose()
+}
+
 pub(crate) use lifecycle::CompanionGatewayManager;
 pub(crate) use pairing::PairingDecision;
+pub(crate) use tailscale::normalize_magicdns_hostname;
 
 #[cfg(test)]
 fn test_manager_with_store(

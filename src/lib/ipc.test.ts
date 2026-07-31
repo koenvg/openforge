@@ -46,6 +46,7 @@ import {
   resizePty,
   spawnShellPty,
   startCompanionPairing,
+  setCompanionTailscaleHostname,
   startImplementation,
   transcribeAudio,
   updateTaskInitialPrompt,
@@ -78,6 +79,7 @@ describe('ipc Companion pairing commands', () => {
 
   it('keeps desktop pairing decisions behind narrow camelCase commands', async () => {
     await startCompanionPairing()
+    await setCompanionTailscaleHostname('forge-mac.example.ts.net')
     await getCompanionPairingStatus()
     await cancelCompanionPairing('session-1')
     await approveCompanionPairing('request-1')
@@ -87,6 +89,7 @@ describe('ipc Companion pairing commands', () => {
 
     expect(invokeMock.mock.calls).toEqual([
       ['start_companion_pairing'],
+      ['set_companion_tailscale_hostname', { hostname: 'forge-mac.example.ts.net' }],
       ['get_companion_pairing_status'],
       ['cancel_companion_pairing', { sessionId: 'session-1' }],
       ['approve_companion_pairing', { requestId: 'request-1' }],

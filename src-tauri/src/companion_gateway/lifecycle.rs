@@ -10,20 +10,23 @@ use super::{
         generate_host_identity, load_or_create_host_identity, CompanionHostIdentity,
         CompanionIdentityStore, KeychainCompanionIdentityStore,
     },
-    live_events::{CompanionStreamAccess, GatewayCompanionStreamAccess},
+    live_events::{CompanionStreamAccess, PairingCompanionStreamAccess},
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
+    tailscale::{
+        DetectedTailscaleHostname, LocalTailscaleHostnameProvider, TailscaleHostnameProvider,
+    },
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
 };
 #[cfg(test)]
 use super::{
-    attention::UnavailableCompanionAttentionSource,
+    attention::UnavailableCompanionAttentionSource, tailscale::FixedTailscaleHostnameProvider,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
 use axum_server::{tls_rustls::RustlsConfig, Handle};
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration};
 
 const DEFAULT_COMPANION_GATEWAY_PORT: u16 = 17_424;
 const COMPANION_GATEWAY_PORT_ENV: &str = "OPENFORGE_COMPANION_PORT";
@@ -50,6 +53,14 @@ pub(crate) struct CompanionGatewayEndpoint {
     pub(crate) url: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTailscaleStatus {
+    pub(crate) detected_hostname: Option<String>,
+    pub(crate) configured_hostname: Option<String>,
+    pub(crate) effective_hostname: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionGatewayStatus {
@@ -58,6 +69,7 @@ pub(crate) struct CompanionGatewayStatus {
     pub(crate) host_id: Option<String>,
     pub(crate) certificate_fingerprint: Option<String>,
     pub(crate) endpoints: Vec<CompanionGatewayEndpoint>,
+    pub(crate) tailscale: CompanionTailscaleStatus,
     pub(crate) error: Option<String>,
 }
 
@@ -130,11 +142,31 @@ impl RunningGateway {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+enum TailscaleDetection {
+    #[default]
+    NotAttempted,
+    Detecting,
+    Unavailable,
+    Detected(String),
+}
+
+impl TailscaleDetection {
+    fn hostname(&self) -> Option<&str> {
+        match self {
+            Self::Detected(hostname) => Some(hostname),
+            Self::NotAttempted | Self::Detecting | Self::Unavailable => None,
+        }
+    }
+}
+
 struct GatewayRuntime {
     enabled: bool,
     phase: GatewayPhase,
     identity: Option<CompanionHostIdentity>,
     running: Option<RunningGateway>,
+    tailscale_detection: TailscaleDetection,
+    configured_tailscale_hostname: Option<String>,
     error: Option<String>,
 }
 
@@ -145,6 +177,8 @@ impl Default for GatewayRuntime {
             phase: GatewayPhase::Disabled,
             identity: None,
             running: None,
+            tailscale_detection: TailscaleDetection::NotAttempted,
+            configured_tailscale_hostname: None,
             error: None,
         }
     }
@@ -166,8 +200,16 @@ impl GatewayRuntime {
             endpoints: self
                 .running
                 .as_ref()
-                .map(|running| running.endpoints.clone())
+                .map(|running| unique_offered_endpoints(&running.endpoints))
                 .unwrap_or_default(),
+            tailscale: CompanionTailscaleStatus {
+                detected_hostname: self.tailscale_detection.hostname().map(str::to_string),
+                configured_hostname: self.configured_tailscale_hostname.clone(),
+                effective_hostname: self
+                    .configured_tailscale_hostname
+                    .clone()
+                    .or_else(|| self.tailscale_detection.hostname().map(str::to_string)),
+            },
             error: self.error.clone(),
         }
     }
@@ -175,6 +217,7 @@ impl GatewayRuntime {
 
 struct CompanionGatewayNetwork {
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+    tailscale_hostname_provider: Arc<dyn TailscaleHostnameProvider>,
     advertiser: Arc<dyn CompanionAdvertiser>,
     port: u16,
 }
@@ -192,8 +235,10 @@ struct CompanionGatewayRouteSources {
 pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
     operation_lock: Arc<tokio::sync::Mutex<()>>,
+    tailscale_detection_notify: Arc<tokio::sync::Notify>,
     identity_store: Arc<dyn CompanionIdentityStore>,
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+    tailscale_hostname_provider: Arc<dyn TailscaleHostnameProvider>,
     advertiser: Arc<dyn CompanionAdvertiser>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
@@ -212,6 +257,12 @@ impl CompanionGatewayManager {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(DEFAULT_COMPANION_GATEWAY_PORT);
+        let configured_tailscale_hostname = {
+            let database = crate::db::acquire_db(&database);
+            super::tailscale_hostname_preference(&database)
+                .ok()
+                .flatten()
+        };
         Self::new_with_sources(
             Arc::new(KeychainCompanionIdentityStore),
             Arc::new(DatabaseCompanionDeviceStore::new(Arc::clone(&database))),
@@ -220,9 +271,11 @@ impl CompanionGatewayManager {
             events,
             CompanionGatewayNetwork {
                 endpoint_provider: Arc::new(PrivateInterfaceEndpointProvider),
+                tailscale_hostname_provider: Arc::new(LocalTailscaleHostnameProvider),
                 advertiser: Arc::new(MdnsCompanionAdvertiser),
                 port,
             },
+            configured_tailscale_hostname,
         )
     }
 
@@ -242,9 +295,37 @@ impl CompanionGatewayManager {
             AppEventBus::new(16, 8),
             CompanionGatewayNetwork {
                 endpoint_provider,
+                tailscale_hostname_provider: Arc::new(FixedTailscaleHostnameProvider::unavailable()),
                 advertiser,
                 port,
             },
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_tailscale(
+        identity_store: Arc<dyn CompanionIdentityStore>,
+        device_store: Arc<dyn CompanionDeviceStore>,
+        endpoint_provider: Arc<dyn CompanionEndpointProvider>,
+        advertiser: Arc<dyn CompanionAdvertiser>,
+        tailscale_hostname_provider: Arc<dyn TailscaleHostnameProvider>,
+        configured_tailscale_hostname: Option<String>,
+        port: u16,
+    ) -> Self {
+        Self::new_with_sources(
+            identity_store,
+            device_store,
+            Arc::new(UnavailableCompanionAttentionSource),
+            Arc::new(UnavailableCompanionTaskDetailSource),
+            AppEventBus::new(16, 8),
+            CompanionGatewayNetwork {
+                endpoint_provider,
+                tailscale_hostname_provider,
+                advertiser,
+                port,
+            },
+            configured_tailscale_hostname,
         )
     }
 
@@ -255,19 +336,27 @@ impl CompanionGatewayManager {
         task_detail: Arc<dyn CompanionTaskDetailSource>,
         events: AppEventBus,
         network: CompanionGatewayNetwork,
+        configured_tailscale_hostname: Option<String>,
     ) -> Self {
         let CompanionGatewayNetwork {
             endpoint_provider,
+            tailscale_hostname_provider,
             advertiser,
             port,
         } = network;
         let pairing = Arc::new(PairingCoordinator::new(device_store, PAIRING_SESSION_TTL));
-        let stream_access = Arc::new(GatewayCompanionStreamAccess::new(pairing.clone()));
+        let stream_access = Arc::new(PairingCompanionStreamAccess::new(pairing.clone()));
+        let runtime = GatewayRuntime {
+            configured_tailscale_hostname,
+            ..GatewayRuntime::default()
+        };
         Self {
-            runtime: Arc::new(tokio::sync::Mutex::new(GatewayRuntime::default())),
+            runtime: Arc::new(tokio::sync::Mutex::new(runtime)),
             operation_lock: Arc::new(tokio::sync::Mutex::new(())),
+            tailscale_detection_notify: Arc::new(tokio::sync::Notify::new()),
             identity_store,
             endpoint_provider,
+            tailscale_hostname_provider,
             advertiser,
             pairing,
             attention,
@@ -278,14 +367,65 @@ impl CompanionGatewayManager {
         }
     }
 
+    async fn detect_tailscale_hostname(&self) -> Option<String> {
+        let endpoint_provider = Arc::clone(&self.endpoint_provider);
+        let tailscale_hostname_provider = Arc::clone(&self.tailscale_hostname_provider);
+        tokio::task::spawn_blocking(move || {
+            let bind_endpoints = endpoint_provider.bind_endpoints().ok()?;
+            confirmed_tailscale_hostname(
+                &bind_endpoints,
+                tailscale_hostname_provider.detect().ok().flatten(),
+            )
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
+    async fn ensure_tailscale_detection(&self) {
+        loop {
+            let notified = self.tailscale_detection_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let should_spawn = {
+                let mut runtime = self.runtime.lock().await;
+                match runtime.tailscale_detection {
+                    TailscaleDetection::NotAttempted => {
+                        runtime.tailscale_detection = TailscaleDetection::Detecting;
+                        true
+                    }
+                    TailscaleDetection::Detecting => false,
+                    TailscaleDetection::Unavailable | TailscaleDetection::Detected(_) => return,
+                }
+            };
+            if should_spawn {
+                let manager = self.clone();
+                tokio::spawn(async move {
+                    let detected_hostname = manager.detect_tailscale_hostname().await;
+                    let mut runtime = manager.runtime.lock().await;
+                    if runtime.tailscale_detection == TailscaleDetection::Detecting {
+                        runtime.tailscale_detection = detected_hostname.map_or(
+                            TailscaleDetection::Unavailable,
+                            TailscaleDetection::Detected,
+                        );
+                    }
+                    drop(runtime);
+                    manager.tailscale_detection_notify.notify_waiters();
+                });
+            }
+            notified.await;
+        }
+    }
+
     pub(crate) async fn status(&self) -> CompanionGatewayStatus {
+        self.ensure_tailscale_detection().await;
         let mut runtime = self.runtime.lock().await;
         if runtime
             .running
             .as_ref()
             .is_some_and(RunningGateway::is_finished)
         {
-            self.pairing.notify_gateway_closing();
+            self.stream_access.gateway_closing();
             if let Some(running) = runtime.running.take() {
                 running.stop().await;
             }
@@ -301,14 +441,24 @@ impl CompanionGatewayManager {
     }
 
     async fn enable_locked(&self) -> Result<CompanionGatewayStatus, String> {
+        {
+            let mut runtime = self.runtime.lock().await;
+            runtime.enabled = true;
+            runtime.error = None;
+            if runtime.running.is_some() {
+                runtime.phase = GatewayPhase::Running;
+                self.pairing.notify_gateway_running();
+                return Ok(runtime.status());
+            }
+            if runtime.tailscale_detection == TailscaleDetection::Unavailable {
+                runtime.tailscale_detection = TailscaleDetection::NotAttempted;
+            }
+        }
+        self.ensure_tailscale_detection().await;
+
         let mut runtime = self.runtime.lock().await;
         runtime.enabled = true;
         runtime.error = None;
-        if runtime.running.is_some() {
-            runtime.phase = GatewayPhase::Running;
-            self.pairing.notify_gateway_running();
-            return Ok(runtime.status());
-        }
         runtime.phase = GatewayPhase::Starting;
         self.pairing.mark_gateway_not_accepting_streams();
 
@@ -330,6 +480,11 @@ impl CompanionGatewayManager {
             }
         };
         runtime.identity = Some(identity.clone());
+        let tailscale_hostname = runtime
+            .configured_tailscale_hostname
+            .as_deref()
+            .or(runtime.tailscale_detection.hostname())
+            .map(str::to_string);
 
         let mut running = match start_tls_listeners(
             &identity,
@@ -352,6 +507,9 @@ impl CompanionGatewayManager {
                 return Err(error);
             }
         };
+        if let Some(hostname) = tailscale_hostname {
+            apply_tailscale_hostname(&mut running, Some(&hostname));
+        }
         let advertisement = CompanionAdvertisement {
             host_id: identity.host_id.clone(),
             protocol_version: contract::PROTOCOL_VERSION,
@@ -423,7 +581,6 @@ impl CompanionGatewayManager {
         runtime.error = None;
         let _ = self.pairing.clear();
         if runtime.running.is_some() {
-            self.pairing.notify_gateway_closing();
             log::info!("[companion_gateway] gateway disabled");
         } else {
             self.pairing.mark_gateway_not_accepting_streams();
@@ -442,7 +599,6 @@ impl CompanionGatewayManager {
         runtime.error = None;
         let _ = self.pairing.clear();
         if runtime.running.is_some() {
-            self.pairing.notify_gateway_closing();
             log::info!("[companion_gateway] gateway shutting down");
         } else {
             self.pairing.mark_gateway_not_accepting_streams();
@@ -467,10 +623,9 @@ impl CompanionGatewayManager {
             .running
             .as_ref()
             .map(|running| {
-                running
-                    .endpoints
-                    .iter()
-                    .map(|endpoint| endpoint.url.clone())
+                unique_offered_endpoints(&running.endpoints)
+                    .into_iter()
+                    .map(|endpoint| endpoint.url)
                     .collect()
             })
             .unwrap_or_default();
@@ -480,6 +635,24 @@ impl CompanionGatewayManager {
             certificate_sha256: identity.certificate_fingerprint.clone(),
             endpoint_candidates: endpoints,
         })
+    }
+
+    pub(crate) async fn configure_tailscale_hostname(
+        &self,
+        hostname: String,
+    ) -> CompanionGatewayStatus {
+        let _operation = self.operation_lock.lock().await;
+        let mut runtime = self.runtime.lock().await;
+        runtime.configured_tailscale_hostname = Some(hostname);
+        let effective_hostname = runtime
+            .configured_tailscale_hostname
+            .clone()
+            .or_else(|| runtime.tailscale_detection.hostname().map(str::to_string));
+        if let Some(running) = runtime.running.as_mut() {
+            apply_tailscale_hostname(running, effective_hostname.as_deref());
+        }
+        let _ = self.pairing.clear();
+        runtime.status()
     }
 
     pub(crate) fn pairing_status(&self) -> Result<Option<PairingSessionStatus>, String> {
@@ -569,6 +742,43 @@ impl CompanionGatewayManager {
             }
         }
         Ok(self.status().await)
+    }
+}
+
+pub(super) fn unique_offered_endpoints(
+    endpoints: &[CompanionGatewayEndpoint],
+) -> Vec<CompanionGatewayEndpoint> {
+    let mut seen_urls = HashSet::new();
+    endpoints
+        .iter()
+        .filter(|endpoint| seen_urls.insert(endpoint.url.clone()))
+        .cloned()
+        .collect()
+}
+
+fn confirmed_tailscale_hostname(
+    bind_endpoints: &[(CompanionEndpointKind, std::net::IpAddr)],
+    detected: Option<DetectedTailscaleHostname>,
+) -> Option<String> {
+    detected
+        .filter(|detected| {
+            detected.addresses.iter().any(|address| {
+                bind_endpoints.iter().any(|(kind, bound_address)| {
+                    *kind == CompanionEndpointKind::Tailscale && bound_address == address
+                })
+            })
+        })
+        .map(|detected| detected.hostname)
+}
+
+fn apply_tailscale_hostname(running: &mut RunningGateway, hostname: Option<&str>) {
+    for (endpoint, address) in running.endpoints.iter_mut().zip(&running.addresses) {
+        if endpoint.kind == CompanionEndpointKind::Tailscale {
+            endpoint.url = hostname.map_or_else(
+                || endpoint_url(*address),
+                |hostname| format!("https://{hostname}:{}", address.port()),
+            );
+        }
     }
 }
 

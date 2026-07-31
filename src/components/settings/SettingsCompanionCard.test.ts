@@ -10,6 +10,7 @@ import {
   revokeCompanionDevice,
   resetCompanionHostIdentity,
   setCompanionGatewayEnabled,
+  setCompanionTailscaleHostname,
   startCompanionPairing,
 } from '../../lib/ipc'
 import SettingsCompanionCard from './SettingsCompanionCard.svelte'
@@ -21,6 +22,7 @@ vi.mock('qrcode', () => ({
 vi.mock('../../lib/ipc', () => ({
   getCompanionGatewayStatus: vi.fn(),
   setCompanionGatewayEnabled: vi.fn(),
+  setCompanionTailscaleHostname: vi.fn(),
   startCompanionPairing: vi.fn(),
   getCompanionPairingStatus: vi.fn(),
   cancelCompanionPairing: vi.fn(),
@@ -37,6 +39,11 @@ const disabledStatus = {
   hostId: null,
   certificateFingerprint: null,
   endpoints: [],
+  tailscale: {
+    detectedHostname: null,
+    configuredHostname: null,
+    effectiveHostname: null,
+  },
   error: null,
 }
 
@@ -47,8 +54,13 @@ const runningStatus = {
   certificateFingerprint: 'AA:BB:CC',
   endpoints: [
     { kind: 'lan' as const, url: 'https://192.168.1.20:17424' },
-    { kind: 'tailscale' as const, url: 'https://100.64.0.20:17424' },
+    { kind: 'tailscale' as const, url: 'https://forge-mac.example.ts.net:17424' },
   ],
+  tailscale: {
+    detectedHostname: 'forge-mac.example.ts.net',
+    configuredHostname: null,
+    effectiveHostname: 'forge-mac.example.ts.net',
+  },
   error: null,
 }
 
@@ -65,6 +77,18 @@ describe('SettingsCompanionCard', () => {
     vi.clearAllMocks()
     vi.mocked(getCompanionGatewayStatus).mockResolvedValue(disabledStatus)
     vi.mocked(setCompanionGatewayEnabled).mockResolvedValue(runningStatus)
+    vi.mocked(setCompanionTailscaleHostname).mockImplementation(async (hostname) => ({
+      ...runningStatus,
+      tailscale: {
+        ...runningStatus.tailscale,
+        configuredHostname: hostname,
+        effectiveHostname: hostname,
+      },
+      endpoints: [
+        runningStatus.endpoints[0],
+        { kind: 'tailscale', url: `https://${hostname}:17424` },
+      ],
+    }))
     vi.mocked(startCompanionPairing).mockResolvedValue(pairingSession)
     vi.mocked(getCompanionPairingStatus).mockResolvedValue(null)
     vi.mocked(listCompanionDevices).mockResolvedValue([])
@@ -95,8 +119,51 @@ describe('SettingsCompanionCard', () => {
     expect(setCompanionGatewayEnabled).toHaveBeenCalledWith(true)
     expect(await screen.findByText('Running')).toBeTruthy()
     expect(screen.getByText('https://192.168.1.20:17424')).toBeTruthy()
-    expect(screen.getByText('https://100.64.0.20:17424')).toBeTruthy()
+    expect(screen.getByText('https://forge-mac.example.ts.net:17424')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Disable Companion Gateway' })).toBeTruthy()
+  })
+
+  it('offers the detected MagicDNS hostname for confirmation and saves a correction', async () => {
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(runningStatus)
+    render(SettingsCompanionCard)
+
+    const hostname = await screen.findByRole('textbox', { name: 'Tailscale MagicDNS hostname' })
+    expect((hostname as HTMLInputElement).value).toBe('forge-mac.example.ts.net')
+    await fireEvent.input(hostname, { target: { value: 'forge-mac-corrected.example.ts.net' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Tailscale hostname' }))
+
+    expect(setCompanionTailscaleHostname).toHaveBeenCalledWith('forge-mac-corrected.example.ts.net')
+    expect(await screen.findByText(/Tailscale hostname saved/i)).toBeTruthy()
+    expect(screen.getByText(/OpenForge operates no central server/i)).toBeTruthy()
+  })
+
+  it('explains that pairing cannot include the hostname until Tailscale is offered', async () => {
+    const noTailscaleEndpoint = {
+      ...runningStatus,
+      endpoints: [runningStatus.endpoints[0]],
+      tailscale: {
+        detectedHostname: null,
+        configuredHostname: null,
+        effectiveHostname: null,
+      },
+    }
+    vi.mocked(getCompanionGatewayStatus).mockResolvedValue(noTailscaleEndpoint)
+    vi.mocked(setCompanionTailscaleHostname).mockResolvedValue({
+      ...noTailscaleEndpoint,
+      tailscale: {
+        ...noTailscaleEndpoint.tailscale,
+        configuredHostname: 'forge-mac.example.ts.net',
+        effectiveHostname: 'forge-mac.example.ts.net',
+      },
+    })
+    render(SettingsCompanionCard)
+
+    const hostname = await screen.findByRole('textbox', { name: 'Tailscale MagicDNS hostname' })
+    await fireEvent.input(hostname, { target: { value: 'forge-mac.example.ts.net' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Tailscale hostname' }))
+
+    expect(await screen.findByText(/Connect Tailscale on this Mac and re-enable the gateway before pairing/i)).toBeTruthy()
+    expect(screen.queryByText(/New pairing codes will include this endpoint/i)).toBeNull()
   })
 
   it('starts and cancels a short-lived QR pairing session', async () => {

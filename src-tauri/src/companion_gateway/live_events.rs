@@ -1,4 +1,9 @@
-use super::contract::{CompanionAuthorizer, CompanionErrorCode};
+#[cfg(test)]
+use super::contract::CompanionAuthorizer;
+use super::{
+    contract::CompanionErrorCode,
+    pairing::{CompanionStreamTermination as PairingStreamTermination, PairingCoordinator},
+};
 use crate::app_events::{AppEventBus, AppEventFrame, AppEventSubscription};
 use axum::{http::HeaderMap, response::sse::Event};
 use futures::Stream;
@@ -7,8 +12,6 @@ use std::{convert::Infallible, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CompanionStreamTermination {
-    // Constructed by KVG-2950's device-targeted trust-lifecycle implementation.
-    #[allow(dead_code)]
     AuthorizationRevoked,
     GatewayClosing,
 }
@@ -27,13 +30,14 @@ pub(crate) trait CompanionStreamAccess: Send + Sync {
     fn gateway_closing(&self);
 }
 
-/// Default composition until paired-device lifecycle supplies device-targeted cancellation.
-/// Authorization happens once at stream creation; the bearer header is not retained.
+/// Test fallback for routers that inject a standalone authorizer.
+#[cfg(test)]
 pub(crate) struct GatewayCompanionStreamAccess {
     authorizer: Arc<dyn CompanionAuthorizer>,
     gateway_closing: tokio::sync::broadcast::Sender<()>,
 }
 
+#[cfg(test)]
 impl GatewayCompanionStreamAccess {
     pub(crate) fn new(authorizer: Arc<dyn CompanionAuthorizer>) -> Self {
         let (gateway_closing, _) = tokio::sync::broadcast::channel(16);
@@ -44,6 +48,7 @@ impl GatewayCompanionStreamAccess {
     }
 }
 
+#[cfg(test)]
 impl CompanionStreamAccess for GatewayCompanionStreamAccess {
     fn open(
         &self,
@@ -68,6 +73,50 @@ impl CompanionStreamAccess for GatewayCompanionStreamAccess {
 
     fn gateway_closing(&self) {
         let _ = self.gateway_closing.send(());
+    }
+}
+
+/// Production stream access backed by the paired-device trust lifecycle.
+pub(crate) struct PairingCompanionStreamAccess {
+    pairing: Arc<PairingCoordinator>,
+}
+
+impl PairingCompanionStreamAccess {
+    pub(crate) fn new(pairing: Arc<PairingCoordinator>) -> Self {
+        Self { pairing }
+    }
+}
+
+impl CompanionStreamAccess for PairingCompanionStreamAccess {
+    fn open(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>, CompanionErrorCode>
+    {
+        let mut authorization = self.pairing.authorize_stream(headers)?;
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = sender.closed() => {}
+                termination = authorization.wait_for_termination() => {
+                    let termination = match termination {
+                        PairingStreamTermination::DeviceRevoked { .. }
+                        | PairingStreamTermination::AllDevicesRevoked => {
+                            CompanionStreamTermination::AuthorizationRevoked
+                        }
+                        PairingStreamTermination::GatewayClosing => {
+                            CompanionStreamTermination::GatewayClosing
+                        }
+                    };
+                    let _ = sender.send(termination);
+                }
+            }
+        });
+        Ok(receiver)
+    }
+
+    fn gateway_closing(&self) {
+        self.pairing.notify_gateway_closing();
     }
 }
 
