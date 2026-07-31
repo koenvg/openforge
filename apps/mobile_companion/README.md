@@ -12,7 +12,7 @@ mutations, analytics, or an offline domain cache.
 
 ## Prerequisites
 
-- Flutter 3.44.8 (stable) with its bundled Dart SDK
+- Flutter 3.47.0-0.3.pre (beta) with its bundled Dart SDK
 - Android Studio/Android SDK for Android builds
 - Xcode for iOS Simulator or device builds
 
