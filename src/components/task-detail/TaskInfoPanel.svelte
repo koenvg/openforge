@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
-  import { deriveTaskAttention } from '../../lib/taskAttention'
+  import { deriveTaskDetailSignal, type TaskDetailSignalTone } from '../../lib/taskDetailSignal'
   import { activeSessions, dependencyReferenceTasks, tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { addTaskLabel, getPullRequests, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
@@ -42,14 +42,14 @@
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, dependencyTaskList))
   let dependents = $derived(getTaskDependentSummaries(task, activeTaskList, dependencyTaskList))
   let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
-  let attention = $derived(deriveTaskAttention(taskPrs, waitingDependencyCount))
+  let detailSignal = $derived(deriveTaskDetailSignal(taskPrs, waitingDependencyCount))
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name]))
   }
 
-  function chipClass(tone: 'error' | 'warning' | 'success' | 'info'): string {
+  function chipClass(tone: TaskDetailSignalTone): string {
     if (tone === 'error') return 'badge-error badge-outline'
     if (tone === 'warning') return 'badge-warning badge-outline'
     if (tone === 'success') return 'badge-success badge-outline'
@@ -106,10 +106,10 @@
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
-  {#if attention}
+  {#if detailSignal}
     <CollapsibleInfoSection sectionKey="attention" title="Attention" cardId="attention">
       <div class="flex flex-wrap items-center gap-1.5 px-3 py-2">
-        <span class="badge badge-sm rounded-md {chipClass(attention.tone)}">{attention.message}</span>
+        <span class="badge badge-sm rounded-md {chipClass(detailSignal.tone)}">{detailSignal.message}</span>
       </div>
     </CollapsibleInfoSection>
   {/if}

@@ -1,25 +1,25 @@
 import type { PullRequestInfo } from './types'
 import { getMergeReadiness, getMostAttentionWorthyPullRequest } from './types'
 
-export type AttentionTone = 'error' | 'warning' | 'success' | 'info'
+export type TaskDetailSignalTone = 'error' | 'warning' | 'success' | 'info'
 
-export interface TaskAttention {
+export interface TaskDetailSignal {
   message: string
-  tone: AttentionTone
+  tone: TaskDetailSignalTone
 }
 
 /**
- * Derive the single most important actionable signal for a task, or `null` when
- * nothing needs attention. Drives the panel's conditional Attention banner so it
- * stays quiet when calm and names the next action when something matters.
+ * Derive the highest-priority PR/dependency signal for the Task detail panel's
+ * conditional Attention banner, or `null` when that narrow banner is calm.
  *
- * The live agent checkpoint is intentionally NOT handled here — it lives in the
- * always-visible control-row status pill, not the (hideable) panel.
+ * This presentation helper does not determine membership in the backend-owned
+ * Task Needs Attention projection. Agent checkpoints and other membership signals
+ * intentionally remain outside this detail-panel banner.
  */
-export function deriveTaskAttention(
+export function deriveTaskDetailSignal(
   prs: PullRequestInfo[],
   waitingDependencyCount: number,
-): TaskAttention | null {
+): TaskDetailSignal | null {
   const drivingPr = getMostAttentionWorthyPullRequest(prs.filter((pr) => pr.state === 'open'))
   if (drivingPr) {
     const readiness = getMergeReadiness(drivingPr)
