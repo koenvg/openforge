@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:openforge_companion/src/app.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
 
@@ -79,4 +82,88 @@ void main() {
       );
     });
   }
+
+  testWidgets('QR scanner returns the first detected non-null payload', (
+    tester,
+  ) async {
+    final previousPlatform = MobileScannerPlatform.instance;
+    final scannerPlatform = _FakeMobileScannerPlatform();
+    MobileScannerPlatform.instance = scannerPlatform;
+    addTearDown(() async {
+      MobileScannerPlatform.instance = previousPlatform;
+      await scannerPlatform.close();
+    });
+
+    late BuildContext launcherContext;
+    String? scannedPayload;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            launcherContext = context;
+            return const Scaffold(body: Text('Pairing launcher'));
+          },
+        ),
+      ),
+    );
+
+    final scan = Navigator.of(launcherContext).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const CompanionQrScannerScreen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    scannerPlatform.addBarcode(const BarcodeCapture());
+    await tester.pump();
+    expect(find.text('Scan desktop QR'), findsOneWidget);
+
+    scannerPlatform.addBarcode(
+      const BarcodeCapture(
+        barcodes: <Barcode>[
+          Barcode(format: BarcodeFormat.qrCode),
+          Barcode(
+            format: BarcodeFormat.qrCode,
+            rawValue: 'openforge-pairing-payload',
+          ),
+        ],
+      ),
+    );
+    scannedPayload = await scan;
+    await tester.pumpAndSettle();
+
+    expect(scannedPayload, 'openforge-pairing-payload');
+    expect(find.text('Pairing launcher'), findsOneWidget);
+  });
+}
+
+final class _FakeMobileScannerPlatform extends MobileScannerPlatform {
+  final StreamController<BarcodeCapture> _barcodes =
+      StreamController<BarcodeCapture>.broadcast();
+
+  @override
+  Stream<BarcodeCapture?> get barcodesStream => _barcodes.stream;
+
+  @override
+  Stream<TorchState> get torchStateStream =>
+      Stream<TorchState>.value(TorchState.unavailable);
+
+  @override
+  Stream<double> get zoomScaleStateStream => Stream<double>.value(1);
+
+  @override
+  Future<MobileScannerViewAttributes> start(StartOptions startOptions) async =>
+      const MobileScannerViewAttributes(
+        cameraDirection: CameraFacing.back,
+        currentTorchMode: TorchState.unavailable,
+        size: Size(200, 200),
+        numberOfCameras: 1,
+      );
+
+  @override
+  Widget buildCameraView() => const SizedBox.square(dimension: 100);
+
+  void addBarcode(BarcodeCapture capture) => _barcodes.add(capture);
+
+  Future<void> close() => _barcodes.close();
 }

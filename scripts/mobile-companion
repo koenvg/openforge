@@ -7,7 +7,7 @@ flutter_bin="${FLUTTER_BIN:-flutter}"
 flutter_path="$(command -v "$flutter_bin" 2>/dev/null || true)"
 
 if [[ -z "$flutter_path" ]]; then
-  echo "Flutter is required. Install Flutter 3.44.8 or set FLUTTER_BIN." >&2
+  echo "Flutter is required. Install Flutter 3.47.0-0.3.pre (beta) or set FLUTTER_BIN." >&2
   exit 1
 fi
 
