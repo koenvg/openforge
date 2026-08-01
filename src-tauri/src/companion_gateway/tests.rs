@@ -84,7 +84,10 @@ struct BlockingIdentityStore {
 }
 
 impl CompanionIdentityStore for BlockingIdentityStore {
-    fn load(&self) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
         if let Some(entered) = self
             .entered
             .lock()
@@ -93,16 +96,73 @@ impl CompanionIdentityStore for BlockingIdentityStore {
         {
             let _ = entered.send(());
         }
-        self.release
+        let release = self
+            .release
             .lock()
-            .map_err(|_| "blocking identity release lock was poisoned".to_string())?
-            .recv()
-            .map_err(|_| "blocking identity release signal was dropped".to_string())?;
-        self.inner.load()
+            .map_err(|_| "blocking identity release lock was poisoned".to_string())?;
+        loop {
+            if cancellation.is_cancelled() {
+                return Err("Companion identity read was cancelled".to_string());
+            }
+            match release.recv_timeout(Duration::from_millis(10)) {
+                Ok(()) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("blocking identity release signal was dropped".to_string());
+                }
+            }
+        }
+        self.inner.load(cancellation)
     }
 
     fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
         self.inner.save(identity)
+    }
+}
+
+struct CommitThenBlockIdentityStore {
+    inner: InMemoryIdentityStore,
+    entered: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
+
+impl CompanionIdentityStore for CommitThenBlockIdentityStore {
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+        self.inner.load(cancellation)
+    }
+
+    fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
+        self.inner.save(identity)
+    }
+
+    fn save_with_cancellation(
+        &self,
+        identity: &super::identity::CompanionHostIdentity,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<(), crate::secure_store::SecretStoreWriteError> {
+        self.inner
+            .save(identity)
+            .map_err(crate::secure_store::SecretStoreWriteError::NotCommitted)?;
+        if let Some(entered) = self
+            .entered
+            .lock()
+            .map_err(|error| {
+                crate::secure_store::SecretStoreWriteError::NotCommitted(format!(
+                    "blocking identity save lock was poisoned: {error}"
+                ))
+            })?
+            .take()
+        {
+            let _ = entered.send(());
+        }
+        while !cancellation.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        Err(crate::secure_store::SecretStoreWriteError::CommitUnknown(
+            "Companion identity persistence may have committed".to_string(),
+        ))
     }
 }
 
@@ -130,8 +190,11 @@ impl RevocationObservingIdentityStore {
 }
 
 impl CompanionIdentityStore for RevocationObservingIdentityStore {
-    fn load(&self) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
-        self.inner.load()
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+        self.inner.load(cancellation)
     }
 
     fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
@@ -275,6 +338,80 @@ async fn gateway_status_stays_responsive_while_platform_trust_is_blocked() {
         .expect("enable task")
         .expect("gateway should eventually start");
     manager.shutdown().await;
+}
+
+#[tokio::test]
+async fn gateway_shutdown_cancels_blocked_platform_trust_initialization() {
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(BlockingIdentityStore {
+            inner: InMemoryIdentityStore::default(),
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(release_rx),
+        }),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let enabling_manager = manager.clone();
+    let enabling = tokio::spawn(async move { enabling_manager.enable().await });
+    entered_rx
+        .await
+        .expect("platform trust initialization must begin");
+
+    let shutdown_completed = tokio::time::timeout(Duration::from_millis(250), manager.shutdown())
+        .await
+        .is_ok();
+    if !shutdown_completed {
+        let _ = release_tx.send(());
+        manager.shutdown().await;
+    }
+
+    assert!(
+        shutdown_completed,
+        "gateway shutdown must cancel blocked platform trust initialization"
+    );
+    assert_eq!(manager.status().await.phase, GatewayPhase::Stopped);
+    assert!(
+        enabling.await.expect("enable task").is_err(),
+        "cancelled gateway startup must not finish successfully"
+    );
+}
+
+#[tokio::test]
+async fn gateway_shutdown_cancels_blocked_identity_persistence() {
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(CommitThenBlockIdentityStore {
+            inner: InMemoryIdentityStore::default(),
+            entered: Mutex::new(Some(entered_tx)),
+        }),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let enabling_manager = manager.clone();
+    let enabling = tokio::spawn(async move { enabling_manager.enable().await });
+    entered_rx.await.expect("identity persistence must begin");
+
+    tokio::time::timeout(Duration::from_millis(250), manager.shutdown())
+        .await
+        .expect("gateway shutdown must cancel blocked identity persistence");
+
+    assert_eq!(manager.status().await.phase, GatewayPhase::Stopped);
+    assert!(
+        enabling.await.expect("enable task").is_err(),
+        "cancelled identity persistence must not start the gateway"
+    );
 }
 
 #[test]
@@ -849,6 +986,70 @@ async fn identity_persistence_failure_leaves_gateway_and_device_trust_unchanged(
 }
 
 #[tokio::test]
+async fn ambiguous_identity_commit_keeps_paired_devices_revoked() {
+    let inner = InMemoryIdentityStore::default();
+    let initial_identity = super::identity::generate_host_identity().expect("initial identity");
+    inner
+        .save(&initial_identity)
+        .expect("seed initial identity");
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let identity_store = Arc::new(CommitThenBlockIdentityStore {
+        inner,
+        entered: Mutex::new(Some(entered_tx)),
+    });
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    device_store
+        .save(&CompanionDeviceRecord {
+            device_id: "device-1".to_string(),
+            device_name: "Phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: [1_u8; 32],
+            paired_at: 1_722_340_800,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed paired device");
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        manager_identity_store,
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    manager.enable().await.expect("gateway start");
+    let resetting_manager = manager.clone();
+    let reset = tokio::spawn(async move { resetting_manager.reset_host_identity().await });
+    entered_rx
+        .await
+        .expect("replacement identity must commit before cancellation");
+
+    manager.shutdown().await;
+    let error = reset
+        .await
+        .expect("identity reset task")
+        .expect_err("ambiguous persistence must fail closed");
+
+    assert!(error.contains("paired-device trust remains revoked"));
+    assert!(device_store
+        .list()
+        .expect("paired devices")
+        .iter()
+        .all(|device| device.revoked_at.is_some()));
+    let committed_identity = identity_store
+        .inner
+        .load(&crate::secure_store::SecretStoreCancellation::default())
+        .expect("identity store read")
+        .expect("committed replacement identity");
+    assert_ne!(committed_identity.host_id, initial_identity.host_id);
+    assert_eq!(manager.status().await.phase, GatewayPhase::Stopped);
+}
+
+#[tokio::test]
 async fn revocation_rollback_failure_disables_gateway_fail_closed() {
     let identity_store = Arc::new(InMemoryIdentityStore::default());
     let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
@@ -890,7 +1091,7 @@ async fn revocation_rollback_failure_disables_gateway_fail_closed() {
     assert_eq!(disabled.phase, GatewayPhase::Disabled);
     assert_eq!(
         identity_store
-            .load()
+            .load(&crate::secure_store::SecretStoreCancellation::default())
             .expect("identity read")
             .expect("identity")
             .host_id,
@@ -940,7 +1141,7 @@ async fn revoke_all_failure_restores_previous_identity_without_stopping_gateway(
     assert_eq!(unchanged.host_id, running.host_id);
     assert_eq!(
         identity_store
-            .load()
+            .load(&crate::secure_store::SecretStoreCancellation::default())
             .expect("identity read")
             .expect("identity")
             .host_id,
@@ -1191,7 +1392,7 @@ async fn process_level_tls_gateway_accepts_only_pinned_authenticated_companions(
     let manager = test_manager(Arc::clone(&store));
     let status = manager.enable().await.expect("gateway should start");
     let identity = store
-        .load()
+        .load(&crate::secure_store::SecretStoreCancellation::default())
         .expect("identity store read")
         .expect("identity should exist");
     let certificate = reqwest::Certificate::from_pem(identity.certificate_pem.as_bytes())
