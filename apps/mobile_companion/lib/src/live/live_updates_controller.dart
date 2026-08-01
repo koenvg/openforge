@@ -20,28 +20,31 @@ final class LiveUpdatesController {
     this.reconnectMaxDelay = const Duration(seconds: 8),
     this.reconnectStabilityWindow = const Duration(seconds: 10),
     LiveReconnectDelay? delay,
-    this.onReconnecting,
-    this.onConnected,
-    this.onUnavailable,
-    this.onAuthorizationLost,
-    this.onCertificateMismatch,
-    this.onIncompatible,
-  }) : _delay = delay ?? _defaultDelay;
+    void Function()? onReconnecting,
+    void Function()? onConnected,
+    void Function()? onUnavailable,
+    void Function()? onAuthorizationLost,
+    void Function()? onCertificateMismatch,
+    void Function()? onIncompatible,
+  }) : _callbacks = _LiveConnectionCallbacks(
+         onReconnecting: onReconnecting,
+         onConnected: onConnected,
+         onUnavailable: onUnavailable,
+         onAuthorizationLost: onAuthorizationLost,
+         onCertificateMismatch: onCertificateMismatch,
+         onIncompatible: onIncompatible,
+       ),
+       _delay = delay ?? _defaultDelay;
 
   final CompanionClient _client;
   final CompanionSecureStorage _storage;
-  final AttentionController _attention;
+  AttentionController? _attention;
   final LiveReconnectDelay _delay;
   final int maxReconnectAttempts;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
   final Duration reconnectStabilityWindow;
-  final void Function()? onReconnecting;
-  final void Function()? onConnected;
-  final void Function()? onUnavailable;
-  final void Function()? onAuthorizationLost;
-  final void Function()? onCertificateMismatch;
-  final void Function()? onIncompatible;
+  final _LiveConnectionCallbacks _callbacks;
 
   TaskDetailController? _openTask;
   CompanionLiveConnection? _connection;
@@ -49,6 +52,26 @@ final class LiveUpdatesController {
   var _foreground = false;
   var _running = false;
   String? _lastEventId;
+
+  void setConnectionCallbacks({
+    required void Function()? onReconnecting,
+    required void Function()? onConnected,
+    required void Function()? onUnavailable,
+    required void Function()? onAuthorizationLost,
+    required void Function()? onCertificateMismatch,
+    required void Function()? onIncompatible,
+  }) {
+    _callbacks.onReconnecting = onReconnecting;
+    _callbacks.onConnected = onConnected;
+    _callbacks.onUnavailable = onUnavailable;
+    _callbacks.onAuthorizationLost = onAuthorizationLost;
+    _callbacks.onCertificateMismatch = onCertificateMismatch;
+    _callbacks.onIncompatible = onIncompatible;
+  }
+
+  void setAttentionController(AttentionController? controller) {
+    _attention = controller;
+  }
 
   void setOpenTask(TaskDetailController? controller) {
     _openTask = controller;
@@ -112,7 +135,7 @@ final class LiveUpdatesController {
         await _refreshViews(clearFirst: reconnecting);
         if (!_isCurrent(generation)) return;
         connectedAt = DateTime.now();
-        onConnected?.call();
+        _callbacks.onConnected?.call();
         reconnecting = false;
         await for (final event in connection.events) {
           if (!_isCurrent(generation)) return;
@@ -181,7 +204,7 @@ final class LiveUpdatesController {
       if (!reconnecting) {
         reconnecting = true;
         _clearViews();
-        onReconnecting?.call();
+        _callbacks.onReconnecting?.call();
       }
       await _delay(_backoff(reconnectAttempts));
     }
@@ -189,10 +212,12 @@ final class LiveUpdatesController {
 
   Future<void> _handleInvalidation(CompanionResourcesInvalidated event) async {
     final refreshes = <Future<CompanionRefreshOutcome>>[];
-    if (event.resources.any(
-      (resource) => resource.kind == CompanionResourceKind.attention,
-    )) {
-      refreshes.add(_attention.refreshWithOutcome());
+    final attention = _attention;
+    if (attention != null &&
+        event.resources.any(
+          (resource) => resource.kind == CompanionResourceKind.attention,
+        )) {
+      refreshes.add(attention.refreshWithOutcome());
     }
     final openTask = _openTask;
     if (openTask != null &&
@@ -208,9 +233,9 @@ final class LiveUpdatesController {
 
   Future<void> _refreshViews({required bool clearFirst}) async {
     if (clearFirst) _clearViews();
-    final refreshes = <Future<CompanionRefreshOutcome>>[
-      _attention.refreshWithOutcome(),
-    ];
+    final refreshes = <Future<CompanionRefreshOutcome>>[];
+    final attention = _attention;
+    if (attention != null) refreshes.add(attention.refreshWithOutcome());
     final openTask = _openTask;
     if (openTask != null) refreshes.add(openTask.refreshWithOutcome());
     _requireCurrentSnapshots(await Future.wait(refreshes));
@@ -229,32 +254,32 @@ final class LiveUpdatesController {
   }
 
   void _clearViews() {
-    _attention.clear();
+    _attention?.clear();
     _openTask?.clear();
   }
 
   Future<void> _authorizationLost() async {
     _lastEventId = null;
     _clearViews();
-    onAuthorizationLost?.call();
+    _callbacks.onAuthorizationLost?.call();
     await _terminateLoop();
   }
 
   Future<void> _terminalUnavailable() async {
     _clearViews();
-    onUnavailable?.call();
+    _callbacks.onUnavailable?.call();
     await _terminateLoop();
   }
 
   Future<void> _certificateMismatch() async {
     _clearViews();
-    onCertificateMismatch?.call();
+    _callbacks.onCertificateMismatch?.call();
     await _terminateLoop();
   }
 
   Future<void> _incompatible() async {
     _clearViews();
-    onIncompatible?.call();
+    _callbacks.onIncompatible?.call();
     await _terminateLoop();
   }
 
@@ -288,6 +313,24 @@ final class LiveUpdatesController {
 }
 
 Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
+
+final class _LiveConnectionCallbacks {
+  _LiveConnectionCallbacks({
+    this.onReconnecting,
+    this.onConnected,
+    this.onUnavailable,
+    this.onAuthorizationLost,
+    this.onCertificateMismatch,
+    this.onIncompatible,
+  });
+
+  void Function()? onReconnecting;
+  void Function()? onConnected;
+  void Function()? onUnavailable;
+  void Function()? onAuthorizationLost;
+  void Function()? onCertificateMismatch;
+  void Function()? onIncompatible;
+}
 
 final class _GatewayClosing implements Exception {
   const _GatewayClosing();

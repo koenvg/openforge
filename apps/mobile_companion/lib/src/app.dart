@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import 'attention/attention_controller.dart';
@@ -43,25 +44,26 @@ class _CompanionAppState extends State<CompanionApp>
   final _navigatorKey = GlobalKey<NavigatorState>();
   late CompanionConnectionState _state;
   late AttentionViewState _attentionState;
+  TaskDetailController? _openTaskController;
+  var _pairingFlowActive = false;
+  late bool _isForeground;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _isForeground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _state = widget.controller?.state ?? widget.initialState;
     _attentionState =
         widget.attentionController?.state ?? const AttentionLoading();
     widget.controller?.addListener(_onControllerChanged);
     widget.attentionController?.addListener(_onAttentionControllerChanged);
+    _configureLiveController(widget.liveUpdatesController);
     if (_state is Connected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final live = widget.liveUpdatesController;
-        if (live != null) {
-          live.start();
-        } else if (widget.attentionController != null) {
-          unawaited(widget.attentionController!.refresh());
-        }
+        if (mounted) _resumeUpdatesForCurrentState();
       });
     }
   }
@@ -69,19 +71,60 @@ class _CompanionAppState extends State<CompanionApp>
   @override
   void didUpdateWidget(covariant CompanionApp oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller == widget.controller) return;
+    final previousState = _state;
+    final controllerChanged = oldWidget.controller != widget.controller;
+    final attentionChanged =
+        oldWidget.attentionController != widget.attentionController;
+    final liveChanged =
+        oldWidget.liveUpdatesController != widget.liveUpdatesController;
 
-    oldWidget.controller?.removeListener(_onControllerChanged);
-    widget.controller?.addListener(_onControllerChanged);
-    _state = widget.controller?.state ?? widget.initialState;
+    if (controllerChanged) {
+      oldWidget.controller?.cancelPendingOperation();
+      oldWidget.controller?.removeListener(_onControllerChanged);
+      widget.controller?.addListener(_onControllerChanged);
+      _state = widget.controller?.state ?? widget.initialState;
+    }
+
+    if (attentionChanged) {
+      oldWidget.attentionController?.removeListener(
+        _onAttentionControllerChanged,
+      );
+      widget.attentionController?.addListener(_onAttentionControllerChanged);
+      _attentionState =
+          widget.attentionController?.state ?? const AttentionLoading();
+    }
+    if (attentionChanged && !liveChanged) {
+      widget.liveUpdatesController?.setAttentionController(
+        widget.attentionController,
+      );
+    }
+
+    if (liveChanged) {
+      _releaseLiveController(oldWidget.liveUpdatesController);
+    } else if (controllerChanged) {
+      _clearLiveCallbacks(widget.liveUpdatesController);
+      unawaited(widget.liveUpdatesController?.stop());
+    } else if (attentionChanged) {
+      unawaited(widget.liveUpdatesController?.suspend());
+    }
+
+    _configureLiveController(widget.liveUpdatesController);
+
+    if (controllerChanged || attentionChanged || liveChanged) {
+      _reconcileConnectionState(
+        previousState,
+        ownershipChanged: controllerChanged || attentionChanged || liveChanged,
+      );
+    }
   }
 
   @override
   void dispose() {
+    _isForeground = false;
     WidgetsBinding.instance.removeObserver(this);
     widget.controller?.removeListener(_onControllerChanged);
     widget.attentionController?.removeListener(_onAttentionControllerChanged);
-    unawaited(widget.liveUpdatesController?.suspend());
+    _releaseLiveController(widget.liveUpdatesController);
     super.dispose();
   }
 
@@ -89,21 +132,72 @@ class _CompanionAppState extends State<CompanionApp>
     final previous = _state;
     final next = widget.controller!.state;
     setState(() => _state = next);
+    _reconcileConnectionState(previous);
+  }
+
+  void _reconcileConnectionState(
+    CompanionConnectionState previous, {
+    bool ownershipChanged = false,
+  }) {
+    final wasActive = previous is Connected || previous is Reconnecting;
+    final isActive = _state is Connected || _state is Reconnecting;
+    final becameConnected = _state is Connected && previous is! Connected;
+
+    if (_state is! Connected && previous is Connected) {
+      widget.attentionController?.clear();
+    }
+    if (wasActive && !isActive) {
+      unawaited(widget.liveUpdatesController?.stop());
+    }
+    if ((isActive && !wasActive) || becameConnected || ownershipChanged) {
+      _resumeUpdatesForCurrentState();
+    }
+  }
+
+  void _resumeUpdatesForCurrentState() {
+    if (!_isForeground) return;
     final attentionController = widget.attentionController;
     if (attentionController == null) return;
-    if (next is Connected && previous is! Connected) {
-      final live = widget.liveUpdatesController;
-      if (live != null) {
-        live.start();
-      } else {
-        unawaited(attentionController.refresh());
-      }
-    } else if (next is! Connected && previous is Connected) {
-      attentionController.clear();
-      if (next is! Reconnecting) {
-        unawaited(widget.liveUpdatesController?.stop());
-      }
+
+    final live = widget.liveUpdatesController;
+    if (live != null) {
+      _configureLiveController(live);
+      if (_state is Connected || _state is Reconnecting) live.resume();
+    } else if (_state is Connected) {
+      unawaited(attentionController.refresh());
     }
+  }
+
+  void _configureLiveController(LiveUpdatesController? live) {
+    if (live == null) return;
+    live.setConnectionCallbacks(
+      onReconnecting: widget.controller?.liveReconnecting,
+      onConnected: widget.controller?.liveConnected,
+      onUnavailable: widget.controller?.liveUnavailable,
+      onAuthorizationLost: widget.controller?.authorizationLost,
+      onCertificateMismatch: widget.controller?.liveCertificateMismatch,
+      onIncompatible: widget.controller?.liveIncompatible,
+    );
+    live.setAttentionController(widget.attentionController);
+    live.setOpenTask(_openTaskController);
+  }
+
+  void _clearLiveCallbacks(LiveUpdatesController? live) {
+    live?.setConnectionCallbacks(
+      onReconnecting: null,
+      onConnected: null,
+      onUnavailable: null,
+      onAuthorizationLost: null,
+      onCertificateMismatch: null,
+      onIncompatible: null,
+    );
+  }
+
+  void _releaseLiveController(LiveUpdatesController? live) {
+    live?.setOpenTask(null);
+    live?.setAttentionController(null);
+    _clearLiveCallbacks(live);
+    unawaited(live?.suspend());
   }
 
   void _onAttentionControllerChanged() {
@@ -115,7 +209,43 @@ class _CompanionAppState extends State<CompanionApp>
     if (controller == null) return;
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    await captureCompanionPairing(navigator: navigator, controller: controller);
+    await _runPairingFlow(
+      () => captureCompanionPairing(
+        navigator: navigator,
+        controller: controller,
+        isControllerCurrent: () =>
+            mounted && identical(widget.controller, controller),
+      ),
+    );
+  }
+
+  Future<void> _openManualPairing() async {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    await _runPairingFlow(
+      () => enterCompanionPairingBootstrap(
+        navigator: navigator,
+        controller: controller,
+        isControllerCurrent: () =>
+            mounted && identical(widget.controller, controller),
+      ),
+    );
+  }
+
+  Future<void> _runPairingFlow(Future<void> Function() flow) async {
+    if (_pairingFlowActive) return;
+    setState(() => _pairingFlowActive = true);
+    try {
+      await flow();
+    } finally {
+      if (mounted) {
+        setState(() => _pairingFlowActive = false);
+      } else {
+        _pairingFlowActive = false;
+      }
+    }
   }
 
   Future<void> _forgetAndPairAgain() async {
@@ -142,6 +272,7 @@ class _CompanionAppState extends State<CompanionApp>
     final navigator = _navigatorKey.currentState;
     if (factory == null || navigator == null) return;
     final controller = factory(taskId);
+    _openTaskController = controller;
     widget.liveUpdatesController?.setOpenTask(controller);
     try {
       await navigator.push<void>(
@@ -150,18 +281,20 @@ class _CompanionAppState extends State<CompanionApp>
         ),
       );
     } finally {
-      widget.liveUpdatesController?.setOpenTask(null);
+      if (identical(_openTaskController, controller)) {
+        widget.liveUpdatesController?.setOpenTask(null);
+        _openTaskController = null;
+      }
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final live = widget.liveUpdatesController;
-    if (live == null) return;
-    if (state == AppLifecycleState.resumed) {
-      if (_state is Connected || _state is Reconnecting) live.resume();
+    _isForeground = state == AppLifecycleState.resumed;
+    if (_isForeground) {
+      _resumeUpdatesForCurrentState();
     } else {
-      unawaited(live.suspend());
+      unawaited(widget.liveUpdatesController?.suspend());
     }
   }
 
@@ -184,7 +317,13 @@ class _CompanionAppState extends State<CompanionApp>
           )
         : ConnectionShell(
             state: _state,
-            onPair: widget.controller == null ? null : _openScanner,
+            onPair: widget.controller == null || _pairingFlowActive
+                ? null
+                : _openScanner,
+            onManualPair:
+                widget.controller == null || !kDebugMode || _pairingFlowActive
+                ? null
+                : _openManualPairing,
             onReset: widget.controller == null ? null : _forgetAndPairAgain,
             onRetry: widget.controller == null ? null : _retryConnection,
             onOpenSettings: widget.controller == null

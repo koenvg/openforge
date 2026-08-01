@@ -317,6 +317,42 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
 }
 
 #[tokio::test]
+async fn identical_pairing_submission_retry_returns_the_original_request() {
+    let (coordinator, path) = test_coordinator(
+        "companion_pairing_idempotent_submission",
+        Duration::from_secs(60),
+    );
+    let session = coordinator
+        .start(bootstrap())
+        .expect("start pairing session");
+    let qr: serde_json::Value = serde_json::from_str(&session.qr_payload).expect("pairing QR JSON");
+    let secret = qr["oneTimeSecret"].as_str().expect("pairing secret");
+    let router = create_router(
+        CompanionHostStatus::new(HOST_ID.to_string()),
+        coordinator.clone(),
+        coordinator,
+    );
+
+    let first = submit_request(&router, secret, "My Android phone", "android").await;
+    assert_eq!(first.status(), StatusCode::ACCEPTED);
+    let first_json = response_json(first).await;
+
+    let retry = submit_request(&router, secret, "My Android phone", "android").await;
+    assert_eq!(retry.status(), StatusCode::ACCEPTED);
+    let retry_json = response_json(retry).await;
+    assert_eq!(retry_json["requestId"], first_json["requestId"]);
+    assert_eq!(retry_json["expiresAt"], first_json["expiresAt"]);
+
+    let changed = submit_request(&router, secret, "Another Android", "android").await;
+    assert_eq!(changed.status(), StatusCode::GONE);
+
+    let changed_platform = submit_request(&router, secret, "My Android phone", "ios").await;
+    assert_eq!(changed_platform.status(), StatusCode::GONE);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn rejection_cancellation_expiry_and_secret_reuse_never_issue_credentials() {
     let (coordinator, path) = test_coordinator(
         "companion_pairing_router_rejection",

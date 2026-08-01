@@ -104,6 +104,7 @@ final class _FakeClient implements CompanionClient {
   Future<PairingPoll> pollPairing({
     required PairingBootstrap bootstrap,
     required String requestId,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) => throw UnsupportedError('not used');
 
   @override
@@ -111,6 +112,7 @@ final class _FakeClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String deviceName,
     required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) => throw UnsupportedError('not used');
 }
 
@@ -471,4 +473,23 @@ void main() {
 
     expect(client.cursors, hasLength(1));
   });
+
+  test(
+    'detaching attention prevents teardown from notifying its old owner',
+    () async {
+      final client = _FakeClient();
+      final storage = _FakeStorage();
+      final attention = AttentionController(client: client, storage: storage);
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        attention: attention,
+      );
+
+      live.setAttentionController(null);
+      attention.dispose();
+
+      await live.suspend();
+    },
+  );
 }

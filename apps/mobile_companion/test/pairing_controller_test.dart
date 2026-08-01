@@ -24,6 +24,7 @@ String get _qrPayload =>
 
 final class _FakeClient implements CompanionClient {
   Object? submitError;
+  Completer<PairingSubmissionStatus>? submitCompleter;
   Object? pollError;
   final pollErrors = <Object>[];
   Object? hostStatusError;
@@ -48,9 +49,12 @@ final class _FakeClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String deviceName,
     required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) async {
     final error = submitError;
     if (error != null) throw error;
+    final completer = submitCompleter;
+    if (completer != null) return await completer.future;
     submittedDeviceName = deviceName;
     submittedPlatform = platform;
     return PairingSubmissionStatus(
@@ -64,6 +68,7 @@ final class _FakeClient implements CompanionClient {
   Future<PairingPoll> pollPairing({
     required PairingBootstrap bootstrap,
     required String requestId,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) async {
     if (pollErrors.isNotEmpty) throw pollErrors.removeAt(0);
     final error = pollError;
@@ -188,6 +193,48 @@ void main() {
       expect(connected.protocolVersion, 1);
     },
   );
+
+  test('pairing submission deadline surfaces an actionable failure', () async {
+    final client = _FakeClient()
+      ..submitCompleter = Completer<PairingSubmissionStatus>();
+    final controller = CompanionPairingController(
+      client: client,
+      storage: _FakeStorage(),
+      pollInterval: Duration.zero,
+      submissionTimeout: const Duration(milliseconds: 10),
+    );
+    final diagnostics = <String>[];
+
+    await expectLater(
+      controller.pairFromQr(
+        qrPayload: _qrPayload,
+        deviceName: 'Pixel 9',
+        platform: 'android',
+        onDiagnostic: diagnostics.add,
+        propagateFailures: true,
+      ),
+      throwsA(
+        isA<TimeoutException>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('pinned endpoint'),
+            contains('Keep Tailscale connected'),
+          ),
+        ),
+      ),
+    );
+
+    expect(controller.state, isA<PairingUnavailable>());
+    expect(
+      diagnostics.join('\n'),
+      allOf(
+        contains('gateway request submission started'),
+        contains('gateway request submission failed'),
+        isNot(contains(_secret)),
+      ),
+    );
+  });
 
   test('transient poll failure keeps the original claimable request', () async {
     final client = _FakeClient()

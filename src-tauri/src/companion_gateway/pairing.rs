@@ -371,7 +371,16 @@ impl PairingCoordinator {
                 PairingError::Invalid
             });
         }
-        if session.request.is_some() {
+        if let Some(pending) = session.request.as_ref() {
+            if pending.request.device_name == submission.device_name
+                && pending.request.platform == submission.platform
+            {
+                return Ok(PairingSubmissionResponse {
+                    request_id: pending.request.request_id.clone(),
+                    status: "pending",
+                    expires_at: session.status.expires_at.clone(),
+                });
+            }
             return Err(PairingError::Gone);
         }
         let request_id = uuid::Uuid::new_v4().to_string();

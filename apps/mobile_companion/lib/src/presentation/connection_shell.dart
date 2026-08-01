@@ -7,6 +7,7 @@ class ConnectionShell extends StatelessWidget {
   const ConnectionShell({
     required this.state,
     this.onPair,
+    this.onManualPair,
     this.onReset,
     this.onRetry,
     this.onOpenSettings,
@@ -15,6 +16,7 @@ class ConnectionShell extends StatelessWidget {
 
   final CompanionConnectionState state;
   final VoidCallback? onPair;
+  final VoidCallback? onManualPair;
   final VoidCallback? onReset;
   final VoidCallback? onRetry;
   final VoidCallback? onOpenSettings;
@@ -69,6 +71,18 @@ class ConnectionShell extends StatelessWidget {
                         onPressed: onPair,
                         icon: const Icon(Icons.qr_code_scanner),
                         label: const Text('Pair with desktop'),
+                      ),
+                    ],
+                    if ((state is Unpaired ||
+                            state is PairingRejected ||
+                            state is PairingUnavailable) &&
+                        onManualPair != null) ...<Widget>[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        key: const Key('pair-manually'),
+                        onPressed: onManualPair,
+                        icon: const Icon(Icons.keyboard_alt_outlined),
+                        label: const Text('Enter pairing payload'),
                       ),
                     ],
                     if ((state is Revoked || state is CertificateMismatch) &&
@@ -159,7 +173,8 @@ _ConnectionContent _contentFor(
   PairingUnavailable() => const _ConnectionContent(
     title: 'Pairing unavailable',
     message:
-        'The pairing request could not be completed. Try a new QR session.',
+        'The secure pairing request could not be completed. Keep Tailscale '
+        'connected, generate a fresh pairing code, and retry.',
     icon: Icons.cloud_off_outlined,
     iconLabel: 'Pairing request is unavailable',
   ),
