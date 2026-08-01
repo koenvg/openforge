@@ -92,6 +92,30 @@ void main() {
     },
   );
 
+  test('secure persistence schema excludes all Companion domain snapshots', () {
+    final persisted = CompanionTrustRecord(
+      hostId: 'host-1',
+      certificateSha256: 'AA:BB:CC',
+      endpointCandidates: <Uri>[Uri.parse('https://openforge.local')],
+      deviceId: 'device-1',
+      deviceCredential: 'secret-credential',
+    ).toJson();
+
+    for (final forbiddenField in <String>[
+      'task',
+      'tasks',
+      'project',
+      'projects',
+      'agent',
+      'agents',
+      'handoffNotes',
+      'attention',
+    ]) {
+      expect(persisted, isNot(contains(forbiddenField)));
+    }
+    expect(jsonEncode(persisted), isNot(contains('Private Handoff Notes')));
+  });
+
   test('forget removes the complete persisted trust record', () async {
     final backend = _MemorySecureStorage();
     final storage = PlatformCompanionSecureStorage(storage: backend);

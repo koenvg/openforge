@@ -234,21 +234,34 @@ void main() {
         transport.requests[2].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
+      expect(
+        transport.requests[2].headers['openforge-companion-protocol-version'],
+        '1',
+      );
       expect(transport.requests[3].uri.path, '/companion/v1/attention');
       expect(
         transport.requests[3].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
+      expect(
+        transport.requests[3].headers['openforge-companion-protocol-version'],
+        '1',
       );
       expect(transport.requests[4].uri.path, '/companion/v1/tasks/KVG-2946');
       expect(
         transport.requests[4].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
+      expect(
+        transport.requests[4].headers['openforge-companion-protocol-version'],
+        '1',
+      );
       expect(eventRequest.method, 'GET');
       expect(eventRequest.uri.path, '/companion/v1/events');
       expect(eventRequest.headers, <String, String>{
         'accept': 'text/event-stream',
         'authorization': 'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'openforge-companion-protocol-version': '1',
         'last-event-id': 'epoch:12',
       });
       expect(

@@ -4,7 +4,9 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '7e079ffb1d77f51b4a26d8323c7be60a3639a9a337b5f5471c160e871bbdc614';
+    '6dd0c50ac189e16e4e6dfa1384961a0a5a36af127a16e116ef001fa8d6a1c790';
+const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
+const companionV1ProtocolVersion = '1';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({
@@ -448,7 +450,10 @@ final class CompanionV1Client {
     final response = await transport.send(
       method: 'GET',
       uri: baseUrl.resolve('/companion/v1/status'),
-      headers: <String, String>{'authorization': 'Bearer $credential'},
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
     );
     return HostStatus.fromJson(_successJson(response, const <int>{200}));
   }
@@ -459,7 +464,10 @@ final class CompanionV1Client {
     final response = await transport.send(
       method: 'GET',
       uri: baseUrl.resolve('/companion/v1/attention'),
-      headers: <String, String>{'authorization': 'Bearer $credential'},
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
     );
     return AttentionSnapshot.fromJson(_successJson(response, const <int>{200}));
   }
@@ -473,7 +481,10 @@ final class CompanionV1Client {
       uri: baseUrl.resolve(
         '/companion/v1/tasks/${Uri.encodeComponent(taskId)}',
       ),
-      headers: <String, String>{'authorization': 'Bearer $credential'},
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
     );
     return TaskDetail.fromJson(_successJson(response, const <int>{200}));
   }
@@ -487,6 +498,7 @@ final class CompanionV1Client {
     headers: <String, String>{
       'accept': 'text/event-stream',
       'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       'last-event-id': ?lastEventId,
     },
   );

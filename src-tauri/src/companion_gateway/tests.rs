@@ -13,7 +13,7 @@ use super::{
         unique_offered_endpoints, CompanionGatewayEndpoint, CompanionGatewayManager, GatewayPhase,
     },
     network::{CompanionEndpointKind, FixedEndpointProvider},
-    pairing::{CompanionStreamTermination, PairingCoordinator},
+    pairing::{CompanionStreamTermination, PairingCoordinator, PairingDecision},
     tailscale::FixedTailscaleHostnameProvider,
 };
 use axum::{body::Body, http::Request, response::Response};
@@ -994,7 +994,105 @@ async fn revocation_signal_targets_only_the_selected_device() {
 }
 
 #[tokio::test]
-async fn tls_gateway_rejects_internal_bridge_credentials_and_has_no_invoke_route() {
+async fn incompatible_protocol_is_reported_only_after_device_authentication() {
+    let incompatible = create_router(
+        CompanionHostStatus::new("host-1".to_string()),
+        Arc::new(AllowAllAuthorizer),
+        test_pairing(),
+    )
+    .oneshot(
+        Request::builder()
+            .uri("/companion/v1/status")
+            .header("openforge-companion-protocol-version", "2")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await
+    .expect("router response");
+    assert_eq!(incompatible.status(), axum::http::StatusCode::CONFLICT);
+    let incompatible_error: CompanionErrorEnvelope =
+        serde_json::from_value(response_json(incompatible).await).expect("error envelope");
+    assert_eq!(
+        incompatible_error.error.code,
+        super::contract::CompanionErrorCode::IncompatibleVersion
+    );
+
+    let unauthenticated = create_router(
+        CompanionHostStatus::new("host-1".to_string()),
+        Arc::new(PairingUnavailableAuthorizer),
+        test_pairing(),
+    )
+    .oneshot(
+        Request::builder()
+            .uri("/companion/v1/status")
+            .header("openforge-companion-protocol-version", "2")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await
+    .expect("router response");
+    assert_eq!(
+        unauthenticated.status(),
+        axum::http::StatusCode::UNAUTHORIZED
+    );
+    let unauthenticated_error: CompanionErrorEnvelope =
+        serde_json::from_value(response_json(unauthenticated).await).expect("error envelope");
+    assert_eq!(
+        unauthenticated_error.error.code,
+        super::contract::CompanionErrorCode::Unauthenticated
+    );
+}
+
+#[tokio::test]
+async fn authenticated_routes_apply_a_conservative_per_peer_rate_limit() {
+    let router = create_router(
+        CompanionHostStatus::new("host-1".to_string()),
+        Arc::new(AllowAllAuthorizer),
+        test_pairing(),
+    );
+    let peer = axum::extract::connect_info::ConnectInfo(std::net::SocketAddr::from((
+        [192, 0, 2, 10],
+        48_000,
+    )));
+
+    for _ in 0..120 {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/companion/v1/status")
+                    .header("openforge-companion-protocol-version", "1")
+                    .extension(peer)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+    }
+
+    let limited = router
+        .oneshot(
+            Request::builder()
+                .uri("/companion/v1/status")
+                .header("openforge-companion-protocol-version", "1")
+                .extension(peer)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("router response");
+    assert_eq!(limited.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
+    let error: CompanionErrorEnvelope =
+        serde_json::from_value(response_json(limited).await).expect("error envelope");
+    assert_eq!(
+        error.error.code,
+        super::contract::CompanionErrorCode::RateLimited
+    );
+}
+
+#[tokio::test]
+async fn process_level_tls_gateway_accepts_only_pinned_authenticated_companions() {
     let store = Arc::new(InMemoryIdentityStore::default());
     let manager = test_manager(Arc::clone(&store));
     let status = manager.enable().await.expect("gateway should start");
@@ -1018,14 +1116,78 @@ async fn tls_gateway_rejects_internal_bridge_credentials_and_has_no_invoke_route
         "an unpinned client must reject the self-signed host certificate"
     );
 
+    let pairing = manager
+        .start_pairing()
+        .await
+        .expect("pairing session should start");
+    let qr: serde_json::Value = serde_json::from_str(&pairing.qr_payload).expect("pairing QR JSON");
+    let secret = qr["oneTimeSecret"].as_str().expect("pairing secret");
+    let submission: serde_json::Value = client
+        .post(format!("{base_url}/companion/v1/pairing/requests"))
+        .json(&serde_json::json!({
+            "secret": secret,
+            "deviceName": "TLS smoke test phone",
+            "platform": "ios"
+        }))
+        .send()
+        .await
+        .expect("pinned pairing request")
+        .json()
+        .await
+        .expect("pairing response");
+    let request_id = submission["requestId"]
+        .as_str()
+        .expect("pairing request id");
+    manager
+        .decide_pairing(request_id, PairingDecision::Approve)
+        .await
+        .expect("approve TLS smoke test device");
+    let approval: serde_json::Value = client
+        .get(format!(
+            "{base_url}/companion/v1/pairing/requests/{request_id}"
+        ))
+        .header(reqwest::header::AUTHORIZATION, format!("Pairing {secret}"))
+        .send()
+        .await
+        .expect("pinned pairing poll")
+        .json()
+        .await
+        .expect("pairing approval");
+    let credential = approval["credential"].as_str().expect("device credential");
+
     let status_response = client
         .get(format!("{base_url}/companion/v1/status"))
+        .header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        )
+        .bearer_auth(credential)
+        .send()
+        .await
+        .expect("pinned authenticated status request");
+    assert_eq!(status_response.status(), reqwest::StatusCode::OK);
+    let host_status: super::contract::CompanionHostStatusResponse =
+        status_response.json().await.expect("host status response");
+    assert_eq!(host_status.host_id, identity.host_id);
+
+    let internal_token_response = client
+        .get(format!("{base_url}/companion/v1/status"))
+        .header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        )
         .bearer_auth("internal-sidecar-token")
         .send()
         .await
         .expect("TLS request should complete");
-    assert_eq!(status_response.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let envelope: CompanionErrorEnvelope = status_response.json().await.expect("error envelope");
+    assert_eq!(
+        internal_token_response.status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
+    let envelope: CompanionErrorEnvelope = internal_token_response
+        .json()
+        .await
+        .expect("error envelope");
     assert_eq!(envelope.error.code.as_str(), "unauthenticated");
 
     let invoke_response = client
@@ -1117,6 +1279,34 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
             .collect::<Vec<_>>(),
         vec!["get"],
     );
+    let protocol_parameter = &contract["components"]["parameters"]["CompanionProtocolVersion"];
+    assert_eq!(
+        protocol_parameter["name"],
+        super::contract::PROTOCOL_VERSION_HEADER
+    );
+    assert_eq!(protocol_parameter["in"], "header");
+    assert_eq!(protocol_parameter["required"], true);
+    assert_eq!(
+        protocol_parameter["schema"]["const"],
+        super::contract::PROTOCOL_VERSION
+    );
+    for operation in [
+        &status_path["get"],
+        &attention_path["get"],
+        &task_detail_path["get"],
+        &events_path["get"],
+    ] {
+        assert!(
+            operation["parameters"]
+                .as_array()
+                .expect("authenticated operation parameters")
+                .iter()
+                .any(|parameter| parameter["$ref"]
+                    == "#/components/parameters/CompanionProtocolVersion"),
+            "authenticated resources must negotiate the Companion protocol version"
+        );
+    }
+
     let documented_responses = status_path["get"]["responses"]
         .as_object()
         .expect("status responses");
@@ -1178,6 +1368,10 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     .oneshot(
         Request::builder()
             .uri("/companion/v1/status")
+            .header(
+                super::contract::PROTOCOL_VERSION_HEADER,
+                super::contract::PROTOCOL_VERSION.to_string(),
+            )
             .body(Body::empty())
             .expect("request"),
     )

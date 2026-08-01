@@ -144,6 +144,7 @@ class _CompanionAppState extends State<CompanionApp>
     final becameConnected = _state is Connected && previous is! Connected;
 
     if (_state is! Connected && previous is Connected) {
+      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
       widget.attentionController?.clear();
     }
     if (wasActive && !isActive) {

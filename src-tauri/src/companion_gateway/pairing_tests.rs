@@ -267,6 +267,10 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/status")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .header(AUTHORIZATION, format!("Bearer {credential}"))
                 .body(Body::empty())
                 .expect("status request"),
@@ -302,6 +306,10 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/status")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .header(AUTHORIZATION, format!("Bearer {credential}"))
                 .body(Body::empty())
                 .expect("revoked status request"),

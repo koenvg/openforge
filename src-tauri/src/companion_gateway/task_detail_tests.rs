@@ -93,6 +93,10 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
     .oneshot(
         Request::builder()
             .uri("/companion/v1/tasks/KVG-2946")
+            .header(
+                super::contract::PROTOCOL_VERSION_HEADER,
+                super::contract::PROTOCOL_VERSION.to_string(),
+            )
             .body(Body::empty())
             .expect("request"),
     )
@@ -158,6 +162,10 @@ async fn task_detail_maps_authorization_not_found_and_source_failures_to_stable_
             .oneshot(
                 Request::builder()
                     .uri("/companion/v1/tasks/missing")
+                    .header(
+                        super::contract::PROTOCOL_VERSION_HEADER,
+                        super::contract::PROTOCOL_VERSION.to_string(),
+                    )
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -217,6 +225,10 @@ async fn sqlite_task_detail_matches_title_handoff_board_and_safe_agent_semantics
     .oneshot(
         Request::builder()
             .uri(format!("/companion/v1/tasks/{}", task.id))
+            .header(
+                super::contract::PROTOCOL_VERSION_HEADER,
+                super::contract::PROTOCOL_VERSION.to_string(),
+            )
             .body(Body::empty())
             .expect("request"),
     )

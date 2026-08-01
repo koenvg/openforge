@@ -104,6 +104,16 @@ class ConnectionShell extends StatelessWidget {
                         label: const Text('Retry'),
                       ),
                     ],
+                    if (state is IncompatibleProtocol &&
+                        onRetry != null) ...<Widget>[
+                      const SizedBox(height: 32),
+                      FilledButton.icon(
+                        key: const Key('check-protocol-again'),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Check again'),
+                      ),
+                    ],
                     if (state is LocalNetworkPermissionDenied &&
                         onOpenSettings != null) ...<Widget>[
                       const SizedBox(height: 32),
@@ -220,7 +230,7 @@ _ConnectionContent _contentFor(
   IncompatibleProtocol() => const _ConnectionContent(
     title: 'Update required',
     message:
-        'This companion and the desktop use incompatible protocol versions.',
+        'Update the companion or desktop, then check the secure connection again.',
     icon: Icons.system_update_outlined,
     iconLabel: 'Protocol version is incompatible',
   ),

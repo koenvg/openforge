@@ -103,6 +103,10 @@ async fn authenticated_attention_returns_only_normalized_task_rows_in_projection
     .oneshot(
         Request::builder()
             .uri("/companion/v1/attention")
+            .header(
+                super::contract::PROTOCOL_VERSION_HEADER,
+                super::contract::PROTOCOL_VERSION.to_string(),
+            )
             .body(Body::empty())
             .expect("request"),
     )
@@ -172,6 +176,10 @@ async fn attention_maps_authentication_and_authorization_store_failures() {
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/attention")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -195,6 +203,10 @@ async fn attention_maps_projection_failures_to_a_safe_unavailable_error() {
     .oneshot(
         Request::builder()
             .uri("/companion/v1/attention")
+            .header(
+                super::contract::PROTOCOL_VERSION_HEADER,
+                super::contract::PROTOCOL_VERSION.to_string(),
+            )
             .body(Body::empty())
             .expect("request"),
     )
@@ -342,7 +354,10 @@ async fn sqlite_projection_flows_through_production_authorization_and_attention_
     );
 
     for authorization in [None, Some("Bearer invalid".to_string())] {
-        let mut request = Request::builder().uri("/companion/v1/attention");
+        let mut request = Request::builder().uri("/companion/v1/attention").header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        );
         if let Some(authorization) = authorization {
             request = request.header(axum::http::header::AUTHORIZATION, authorization);
         }
@@ -359,6 +374,10 @@ async fn sqlite_projection_flows_through_production_authorization_and_attention_
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/attention")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .header(
                     axum::http::header::AUTHORIZATION,
                     format!("Bearer {credential}"),
@@ -406,6 +425,10 @@ async fn sqlite_projection_flows_through_production_authorization_and_attention_
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/attention")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .header(
                     axum::http::header::AUTHORIZATION,
                     format!("Bearer {credential}"),
