@@ -109,6 +109,7 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
     assert_eq!(json["boardStatus"], "doing");
     assert_eq!(json["handoffNotes"], "Ready for review.");
     assert_eq!(json["agentState"], "failed");
+    assert_eq!(json["agentTerminalAvailable"], false);
     assert_eq!(
         json.as_object()
             .expect("Task detail object")
@@ -118,6 +119,7 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
         vec![
             "agentErrorSummary",
             "agentState",
+            "agentTerminalAvailable",
             "agentUpdatedAt",
             "boardStatus",
             "createdAt",

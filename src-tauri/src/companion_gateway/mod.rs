@@ -10,6 +10,10 @@ mod pairing;
 mod rate_limit;
 mod tailscale;
 mod task_detail;
+mod terminal;
+mod terminal_protocol;
+#[cfg(test)]
+mod terminal_protocol_tests;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
 pub(crate) const COMPANION_TAILSCALE_HOSTNAME_CONFIG: &str =
@@ -76,5 +80,7 @@ mod live_events_tests;
 mod pairing_tests;
 #[cfg(test)]
 mod task_detail_tests;
+#[cfg(test)]
+mod terminal_tests;
 #[cfg(test)]
 mod tests;

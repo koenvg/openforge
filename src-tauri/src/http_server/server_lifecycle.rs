@@ -162,6 +162,7 @@ async fn start_http_server_with_app_state(
     let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production(
         db.clone(),
         app_event_bus.clone(),
+        pty_manager.clone(),
     );
     let companion_enabled = {
         let database = crate::db::acquire_db(&db);

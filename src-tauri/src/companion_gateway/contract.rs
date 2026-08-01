@@ -7,6 +7,7 @@ use super::{
     },
     rate_limit::{RateLimitError, SlidingWindowRateLimiter},
     task_detail::CompanionTaskDetailSource,
+    terminal::{serve_terminal_socket, CompanionTerminalRegistry},
 };
 #[cfg(test)]
 use super::{
@@ -16,7 +17,8 @@ use super::{
 use crate::app_events::{AppEventBus, AppEventCursor};
 use axum::{
     extract::{
-        connect_info::ConnectInfo, rejection::JsonRejection, DefaultBodyLimit, Path, Request, State,
+        connect_info::ConnectInfo, rejection::JsonRejection, DefaultBodyLimit, Path, Request,
+        State, WebSocketUpgrade,
     },
     http::{header::AUTHORIZATION, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
@@ -32,6 +34,7 @@ pub(crate) const PROTOCOL_VERSION_HEADER: &str = "openforge-companion-protocol-v
 const AUTHENTICATED_REQUESTS_PER_PEER_PER_MINUTE: usize = 120;
 const GLOBAL_AUTHENTICATED_REQUESTS_PER_MINUTE: usize = 4_096;
 const MAX_AUTHENTICATED_RATE_LIMIT_PEERS: usize = 1_024;
+const TERMINAL_CONTROL_MAX_BYTES: usize = 4 * 1_024;
 const AUTHENTICATED_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
@@ -134,6 +137,7 @@ pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) board_status: String,
     pub(crate) handoff_notes: Option<String>,
     pub(crate) agent_state: String,
+    pub(crate) agent_terminal_available: bool,
     pub(crate) agent_error_summary: Option<String>,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
@@ -178,14 +182,25 @@ impl CompanionAuthorizer for AllowAllAuthorizer {
 }
 
 #[derive(Clone)]
+pub(crate) struct CompanionRouterSources {
+    pub(crate) attention: Arc<dyn CompanionAttentionSource>,
+    pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pub(crate) pty_manager: crate::pty_manager::PtyManager,
+    pub(crate) events: AppEventBus,
+    pub(crate) stream_access: Arc<dyn CompanionStreamAccess>,
+}
+
+#[derive(Clone)]
 struct CompanionRouterState {
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
+    terminal_registry: CompanionTerminalRegistry,
 }
 
 fn error_response(status: StatusCode, code: CompanionErrorCode, message: &str) -> Response {
@@ -496,6 +511,7 @@ async fn task_detail_handler(
         }
         None => None,
     };
+    let agent_terminal_available = state.pty_manager.agent_terminal_available(&task_id).await;
 
     Json(CompanionTaskDetailResponse {
         task_id: detail.task_id,
@@ -505,12 +521,52 @@ async fn task_detail_handler(
         board_status: detail.board_status,
         handoff_notes: detail.handoff_notes,
         agent_state: detail.agent_state,
+        agent_terminal_available,
         agent_error_summary: detail.agent_error_summary,
         created_at,
         updated_at,
         agent_updated_at,
     })
     .into_response()
+}
+
+async fn agent_terminal_handler(
+    State(state): State<CompanionRouterState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
+    let device = match state.authorizer.authorize(&headers) {
+        Ok(device) => device,
+        Err(code) => return authorization_error_response(code),
+    };
+    if let Err(code) = require_compatible_protocol(&headers) {
+        return authorization_error_response(code);
+    }
+    let cancellation = match state.stream_access.open(&headers) {
+        Ok(cancellation) => cancellation,
+        Err(code) => return authorization_error_response(code),
+    };
+    let upgrade = match upgrade {
+        Ok(upgrade) => upgrade,
+        Err(rejection) => return rejection.into_response(),
+    };
+    let pty_manager = state.pty_manager.clone();
+    let registry = state.terminal_registry.clone();
+    upgrade
+        .max_message_size(TERMINAL_CONTROL_MAX_BYTES)
+        .max_frame_size(TERMINAL_CONTROL_MAX_BYTES)
+        .on_upgrade(move |socket| {
+            serve_terminal_socket(
+                socket,
+                task_id,
+                device.device_id,
+                pty_manager,
+                cancellation,
+                registry,
+            )
+        })
+        .into_response()
 }
 
 async fn submit_pairing_handler(
@@ -635,6 +691,7 @@ pub(crate) fn create_router_with_sources_and_events(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn create_router_with_sources_and_event_access(
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
@@ -644,6 +701,33 @@ pub(crate) fn create_router_with_sources_and_event_access(
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
 ) -> Router {
+    create_router_with_sources_event_access_and_pty(
+        host,
+        authorizer,
+        pairing,
+        CompanionRouterSources {
+            attention,
+            task_detail,
+            events,
+            stream_access,
+            pty_manager: crate::pty_manager::PtyManager::new(),
+        },
+    )
+}
+
+pub(crate) fn create_router_with_sources_event_access_and_pty(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    sources: CompanionRouterSources,
+) -> Router {
+    let CompanionRouterSources {
+        attention,
+        task_detail,
+        pty_manager,
+        events,
+        stream_access,
+    } = sources;
     let pairing_routes = Router::new()
         .route(
             "/companion/v1/pairing/requests",
@@ -670,6 +754,10 @@ pub(crate) fn create_router_with_sources_and_event_access(
         .route("/companion/v1/attention", get(attention_handler))
         .route("/companion/v1/events", get(events_handler))
         .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
+        .route(
+            "/companion/v1/tasks/:task_id/agent-terminal",
+            get(agent_terminal_handler),
+        )
         .route_layer(middleware::from_fn_with_state(
             authenticated_rate_limit,
             authenticated_request_guard,
@@ -685,7 +773,9 @@ pub(crate) fn create_router_with_sources_and_event_access(
             pairing,
             attention,
             task_detail,
+            pty_manager,
             events,
             stream_access,
+            terminal_registry: CompanionTerminalRegistry::default(),
         })
 }

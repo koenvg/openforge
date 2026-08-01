@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
 use super::super::commands::get_shell_path;
 use super::super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
@@ -493,6 +494,15 @@ impl PtyManager {
             let mut buffers = self.output_buffers.lock().await;
             buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
         }
+        let attachment_hub = Arc::new(PtyAttachmentHub::new(
+            instance_id,
+            CLAUDE_BUFFER_CAPACITY,
+            COMPANION_ATTACHMENT_EVENT_CAPACITY,
+        ));
+        self.attachment_hubs
+            .lock()
+            .await
+            .insert(task_id.to_string(), Arc::clone(&attachment_hub));
         if !self
             .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
             .await
@@ -504,6 +514,13 @@ impl PtyManager {
                 .unwrap_or(false)
             {
                 buffers.remove(task_id);
+            }
+            let mut hubs = self.attachment_hubs.lock().await;
+            if hubs
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &attachment_hub))
+            {
+                hubs.remove(task_id);
             }
             return Err(PtyError::SpawnFailed(format!(
                 "{} PTY for task {} was replaced before output buffer registration completed",
@@ -517,6 +534,13 @@ impl PtyManager {
             .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
             .await
         {
+            let mut hubs = self.attachment_hubs.lock().await;
+            if hubs
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &attachment_hub))
+            {
+                hubs.remove(task_id);
+            }
             return Err(PtyError::SpawnFailed(format!(
                 "{} PTY for task {} was replaced before event streaming started",
                 adapter.label(),
@@ -537,6 +561,8 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
+                attachment_hub: Some(attachment_hub),
+                attachment_hubs: Some(Arc::clone(&self.attachment_hubs)),
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
@@ -741,6 +767,8 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
@@ -757,6 +785,72 @@ impl PtyManager {
         }
 
         Ok(instance_id)
+    }
+}
+
+#[cfg(test)]
+struct CompanionTestAgentAdapter {
+    script: String,
+}
+
+#[cfg(test)]
+impl AgentPtyProviderAdapter for CompanionTestAgentAdapter {
+    fn label(&self) -> &'static str {
+        "CompanionTest"
+    }
+
+    fn command_name(&self) -> &'static str {
+        "/bin/sh"
+    }
+
+    fn command_args(&self) -> Vec<String> {
+        vec!["-lc".to_string(), self.script.clone()]
+    }
+
+    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+        Ok(())
+    }
+
+    fn extra_env(
+        &self,
+        _task_id: &str,
+        _instance_id: u64,
+    ) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
+    }
+
+    fn pid_file_name(&self, task_id: &str) -> String {
+        format!("{task_id}-pty.pid")
+    }
+
+    fn track_last_output(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+impl PtyManager {
+    pub(crate) async fn spawn_companion_test_agent_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        script: &str,
+    ) -> Result<u64, PtyError> {
+        self.spawn_agent_pty(
+            CompanionTestAgentAdapter {
+                script: script.to_string(),
+            },
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            None,
+        )
+        .await
     }
 }
 
@@ -889,6 +983,65 @@ mod tests {
             !manager.last_output.lock().await.contains_key(task_id),
             "last-output tracking should be removed on explicit kill"
         );
+    }
+
+    #[tokio::test]
+    async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let task_id = "companion-agent-attachment";
+        let adapter = LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: None,
+            command_delay: Duration::ZERO,
+            output: "before;sleep 0.2;printf after",
+            check_lock: true,
+        };
+        manager
+            .spawn_agent_pty(
+                adapter,
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                None,
+            )
+            .await
+            .expect("agent PTY");
+
+        let mut attachment = loop {
+            let attachment = manager
+                .attach_agent_terminal(task_id)
+                .await
+                .expect("running Agent attachment");
+            if attachment.replay() == b"before" {
+                break attachment;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        };
+        assert!(manager.agent_terminal_available(task_id).await);
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), attachment.recv())
+                .await
+                .expect("live output deadline")
+                .expect("live output"),
+            crate::pty_manager::AgentTerminalEvent::Output(b"after".to_vec()),
+        );
+
+        manager.kill_pty(task_id).await.expect("PTY cleanup");
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), attachment.recv())
+                .await
+                .expect("exit deadline")
+                .expect("exit event"),
+            crate::pty_manager::AgentTerminalEvent::Exited,
+        );
+        assert!(!manager.agent_terminal_available(task_id).await);
     }
 
     #[tokio::test]

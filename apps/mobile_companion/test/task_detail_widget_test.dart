@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/attention/attention_controller.dart';
 import 'package:openforge_companion/src/attention/attention_home.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
+import 'package:openforge_companion/src/terminal/agent_terminal_controller.dart';
+import 'package:openforge_companion/src/terminal/agent_terminal_surface.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_screen.dart';
 
@@ -10,6 +12,7 @@ TaskDetail _detail({
   String title = 'Mobile Task detail',
   String? handoffNotes = 'Ready for review.',
   String agentState = 'running',
+  bool agentTerminalAvailable = false,
   String? agentErrorSummary,
 }) => TaskDetail(
   taskId: 'KVG-2946',
@@ -19,6 +22,7 @@ TaskDetail _detail({
   boardStatus: 'doing',
   handoffNotes: handoffNotes,
   agentState: agentState,
+  agentTerminalAvailable: agentTerminalAvailable,
   agentErrorSummary: agentErrorSummary,
   createdAt: DateTime.utc(2026, 7, 30, 10),
   updatedAt: DateTime.utc(2026, 7, 30, 11),
@@ -178,4 +182,75 @@ void main() {
       expect(find.text('Task 18'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'Details is initial and Terminal exposes distinct attachment states',
+    (tester) async {
+      final presentation = _TerminalPresentation();
+      final surface = AgentTerminalSurface(
+        presentation: presentation,
+        terminal: const ColoredBox(
+          key: Key('xterm-surface'),
+          color: Colors.black,
+        ),
+        dispose: () {},
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(agentTerminalAvailable: true)),
+            onRefresh: () async {},
+            terminalSurface: surface,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Details'), findsOneWidget);
+      expect(find.text('Terminal'), findsOneWidget);
+      expect(find.text('Mobile Task detail'), findsOneWidget);
+      expect(presentation.visible, isFalse);
+
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      expect(presentation.visible, isTrue);
+      expect(find.text('No active Agent terminal'), findsOneWidget);
+
+      presentation.setState(const AgentTerminalAttaching());
+      await tester.pump();
+      expect(find.text('Attaching to Agent terminal'), findsOneWidget);
+
+      presentation.setState(const AgentTerminalReady());
+      await tester.pump();
+      expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
+
+      presentation.setState(const AgentTerminalExited());
+      await tester.pump();
+      expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
+      expect(find.text('Exited'), findsOneWidget);
+    },
+  );
+}
+
+final class _TerminalPresentation extends ChangeNotifier
+    implements AgentTerminalPresentation {
+  AgentTerminalState _state = const AgentTerminalNoActiveSession();
+  bool visible = false;
+
+  @override
+  AgentTerminalState get state => _state;
+
+  void setState(AgentTerminalState state) {
+    _state = state;
+    notifyListeners();
+  }
+
+  @override
+  void setForeground(bool foreground) {}
+
+  @override
+  void setVisible(bool visible) => this.visible = visible;
+
+  @override
+  void updateAvailability(bool available) {}
 }

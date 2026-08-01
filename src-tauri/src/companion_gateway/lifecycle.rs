@@ -4,7 +4,7 @@ use super::{
         MdnsCompanionAdvertiser,
     },
     attention::{CompanionAttentionSource, DatabaseCompanionAttentionSource},
-    contract::{self, CompanionHostStatus},
+    contract::{self, CompanionHostStatus, CompanionRouterSources},
     devices::{CompanionDeviceStore, DatabaseCompanionDeviceStore},
     identity::{
         generate_host_identity, load_or_create_host_identity, CompanionHostIdentity,
@@ -222,11 +222,19 @@ struct CompanionGatewayNetwork {
     port: u16,
 }
 
+struct CompanionGatewayDomainSources {
+    attention: Arc<dyn CompanionAttentionSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pty_manager: crate::pty_manager::PtyManager,
+    events: AppEventBus,
+}
+
 #[derive(Clone)]
 struct CompanionGatewayRouteSources {
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
 }
@@ -243,6 +251,7 @@ pub(crate) struct CompanionGatewayManager {
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
     port: u16,
@@ -252,6 +261,7 @@ impl CompanionGatewayManager {
     pub(crate) fn production(
         database: Arc<std::sync::Mutex<crate::db::Database>>,
         events: AppEventBus,
+        pty_manager: crate::pty_manager::PtyManager,
     ) -> Self {
         let port = std::env::var(COMPANION_GATEWAY_PORT_ENV)
             .ok()
@@ -266,9 +276,12 @@ impl CompanionGatewayManager {
         Self::new_with_sources(
             Arc::new(KeychainCompanionIdentityStore),
             Arc::new(DatabaseCompanionDeviceStore::new(Arc::clone(&database))),
-            Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
-            Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
-            events,
+            CompanionGatewayDomainSources {
+                attention: Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
+                task_detail: Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
+                events,
+                pty_manager,
+            },
             CompanionGatewayNetwork {
                 endpoint_provider: Arc::new(PrivateInterfaceEndpointProvider),
                 tailscale_hostname_provider: Arc::new(LocalTailscaleHostnameProvider),
@@ -290,9 +303,12 @@ impl CompanionGatewayManager {
         Self::new_with_sources(
             identity_store,
             device_store,
-            Arc::new(UnavailableCompanionAttentionSource),
-            Arc::new(UnavailableCompanionTaskDetailSource),
-            AppEventBus::new(16, 8),
+            CompanionGatewayDomainSources {
+                attention: Arc::new(UnavailableCompanionAttentionSource),
+                task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+                events: AppEventBus::new(16, 8),
+                pty_manager: crate::pty_manager::PtyManager::new(),
+            },
             CompanionGatewayNetwork {
                 endpoint_provider,
                 tailscale_hostname_provider: Arc::new(FixedTailscaleHostnameProvider::unavailable()),
@@ -316,9 +332,12 @@ impl CompanionGatewayManager {
         Self::new_with_sources(
             identity_store,
             device_store,
-            Arc::new(UnavailableCompanionAttentionSource),
-            Arc::new(UnavailableCompanionTaskDetailSource),
-            AppEventBus::new(16, 8),
+            CompanionGatewayDomainSources {
+                attention: Arc::new(UnavailableCompanionAttentionSource),
+                task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+                events: AppEventBus::new(16, 8),
+                pty_manager: crate::pty_manager::PtyManager::new(),
+            },
             CompanionGatewayNetwork {
                 endpoint_provider,
                 tailscale_hostname_provider,
@@ -332,12 +351,16 @@ impl CompanionGatewayManager {
     fn new_with_sources(
         identity_store: Arc<dyn CompanionIdentityStore>,
         device_store: Arc<dyn CompanionDeviceStore>,
-        attention: Arc<dyn CompanionAttentionSource>,
-        task_detail: Arc<dyn CompanionTaskDetailSource>,
-        events: AppEventBus,
+        sources: CompanionGatewayDomainSources,
         network: CompanionGatewayNetwork,
         configured_tailscale_hostname: Option<String>,
     ) -> Self {
+        let CompanionGatewayDomainSources {
+            attention,
+            task_detail,
+            pty_manager,
+            events,
+        } = sources;
         let CompanionGatewayNetwork {
             endpoint_provider,
             tailscale_hostname_provider,
@@ -362,6 +385,7 @@ impl CompanionGatewayManager {
             attention,
             task_detail,
             events,
+            pty_manager,
             stream_access,
             port,
         }
@@ -494,6 +518,7 @@ impl CompanionGatewayManager {
                 pairing: Arc::clone(&self.pairing),
                 attention: Arc::clone(&self.attention),
                 task_detail: Arc::clone(&self.task_detail),
+                pty_manager: self.pty_manager.clone(),
                 events: self.events.clone(),
                 stream_access: Arc::clone(&self.stream_access),
             },
@@ -805,17 +830,21 @@ async fn start_tls_listeners(
         pairing,
         attention,
         task_detail,
+        pty_manager,
         events,
         stream_access,
     } = sources;
-    let router = contract::create_router_with_sources_and_event_access(
+    let router = contract::create_router_with_sources_event_access_and_pty(
         CompanionHostStatus::new(identity.host_id.clone()),
         pairing.clone(),
         pairing,
-        attention,
-        task_detail,
-        events,
-        stream_access,
+        CompanionRouterSources {
+            attention,
+            task_detail,
+            events,
+            stream_access,
+            pty_manager,
+        },
     );
     let mut bound_listeners = Vec::with_capacity(bind_endpoints.len());
     for (kind, address) in bind_endpoints {

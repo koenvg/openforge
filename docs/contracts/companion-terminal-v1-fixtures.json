@@ -1,0 +1,94 @@
+{
+  "valid": [
+    {
+      "name": "attach",
+      "direction": "client",
+      "message": { "type": "attach", "columns": 80, "rows": 24 }
+    },
+    {
+      "name": "resize",
+      "direction": "client",
+      "message": { "type": "resize", "columns": 120, "rows": 40 }
+    },
+    {
+      "name": "ready-replay",
+      "direction": "server",
+      "message": { "type": "ready", "initialState": "replay" }
+    },
+    {
+      "name": "exited",
+      "direction": "server",
+      "message": { "type": "exited" }
+    },
+    {
+      "name": "safe-error",
+      "direction": "server",
+      "message": {
+        "type": "error",
+        "code": "no_active_agent_terminal",
+        "message": "No active Agent terminal"
+      }
+    },
+    {
+      "name": "attachment-replaced",
+      "direction": "server",
+      "message": {
+        "type": "error",
+        "code": "attachment_replaced",
+        "message": "Terminal attachment was replaced"
+      }
+    },
+    {
+      "name": "authorization-revoked",
+      "direction": "server",
+      "message": { "type": "authorization_revoked" }
+    },
+    {
+      "name": "gateway-closing",
+      "direction": "server",
+      "message": { "type": "gateway_closing" }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "attach-zero-columns",
+      "direction": "client",
+      "message": { "type": "attach", "columns": 0, "rows": 24 }
+    },
+    {
+      "name": "resize-zero-rows",
+      "direction": "client",
+      "message": { "type": "resize", "columns": 80, "rows": 0 }
+    },
+    {
+      "name": "attach-extra-field",
+      "direction": "client",
+      "message": { "type": "attach", "columns": 80, "rows": 24, "sessionId": "secret" }
+    },
+    {
+      "name": "ready-snapshot-not-supported",
+      "direction": "server",
+      "message": { "type": "ready", "initialState": "snapshot" }
+    },
+    {
+      "name": "exited-extra-field",
+      "direction": "server",
+      "message": { "type": "exited", "instanceId": 42 }
+    },
+    {
+      "name": "unsafe-error-extra-detail",
+      "direction": "server",
+      "message": {
+        "type": "error",
+        "code": "internal",
+        "message": "failed",
+        "detail": "/Users/secret"
+      }
+    },
+    {
+      "name": "unknown-control",
+      "direction": "client",
+      "message": { "type": "kill" }
+    }
+  ]
+}

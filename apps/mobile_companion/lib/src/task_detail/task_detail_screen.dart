@@ -3,12 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../generated/companion_v1_client.dart';
+import '../terminal/agent_terminal_controller.dart';
+import '../terminal/agent_terminal_surface.dart';
 import 'task_detail_controller.dart';
 
 class TaskDetailScreen extends StatefulWidget {
-  const TaskDetailScreen({required this.controller, super.key});
+  const TaskDetailScreen({
+    required this.controller,
+    this.terminalSurface,
+    super.key,
+  });
 
   final TaskDetailController controller;
+  final AgentTerminalSurface? terminalSurface;
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -31,6 +38,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
     widget.controller.dispose();
+    widget.terminalSurface?.dispose();
     super.dispose();
   }
 
@@ -39,19 +47,86 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      TaskDetailView(state: _state, onRefresh: widget.controller.refresh);
+  Widget build(BuildContext context) => TaskDetailView(
+    state: _state,
+    onRefresh: widget.controller.refresh,
+    terminalSurface: widget.terminalSurface,
+  );
 }
 
-class TaskDetailView extends StatelessWidget {
+class TaskDetailView extends StatefulWidget {
   const TaskDetailView({
     required this.state,
     required this.onRefresh,
+    this.terminalSurface,
     super.key,
   });
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final AgentTerminalSurface? terminalSurface;
+
+  @override
+  State<TaskDetailView> createState() => _TaskDetailViewState();
+}
+
+class _TaskDetailViewState extends State<TaskDetailView>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final TabController _tabs;
+  var _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _tabs = TabController(length: 2, vsync: this)..addListener(_onTabChanged);
+    _syncAvailability();
+  }
+
+  @override
+  void didUpdateWidget(covariant TaskDetailView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.terminalSurface != widget.terminalSurface) {
+      oldWidget.terminalSurface?.presentation.setVisible(false);
+      widget.terminalSurface?.presentation.setVisible(_selectedTab == 1);
+    }
+    _syncAvailability();
+  }
+
+  @override
+  void dispose() {
+    widget.terminalSurface?.presentation.setVisible(false);
+    WidgetsBinding.instance.removeObserver(this);
+    _tabs
+      ..removeListener(_onTabChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _syncAvailability() {
+    final available = switch (widget.state) {
+      TaskDetailLoaded(:final detail) => detail.agentTerminalAvailable,
+      _ => false,
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.terminalSurface?.presentation.updateAvailability(available);
+      }
+    });
+  }
+
+  void _onTabChanged() {
+    if (_tabs.indexIsChanging || _selectedTab == _tabs.index) return;
+    setState(() => _selectedTab = _tabs.index);
+    widget.terminalSurface?.presentation.setVisible(_selectedTab == 1);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    widget.terminalSurface?.presentation.setForeground(
+      state == AppLifecycleState.resumed,
+    );
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -59,14 +134,123 @@ class TaskDetailView extends StatelessWidget {
       title: const Text('Task'),
       actions: <Widget>[
         IconButton(
-          onPressed: () => onRefresh(),
+          onPressed: () => widget.onRefresh(),
           tooltip: 'Refresh Task detail',
           icon: const Icon(Icons.refresh),
         ),
       ],
+      bottom: TabBar(
+        controller: _tabs,
+        tabs: const <Widget>[
+          Tab(text: 'Details'),
+          Tab(text: 'Terminal'),
+        ],
+      ),
     ),
     body: SafeArea(
-      child: _TaskDetailBody(state: state, onRefresh: onRefresh),
+      child: IndexedStack(
+        index: _selectedTab,
+        children: <Widget>[
+          _TaskDetailBody(state: widget.state, onRefresh: widget.onRefresh),
+          _AgentTerminalPane(surface: widget.terminalSurface),
+        ],
+      ),
+    ),
+  );
+}
+
+class _AgentTerminalPane extends StatelessWidget {
+  const _AgentTerminalPane({required this.surface});
+
+  final AgentTerminalSurface? surface;
+
+  @override
+  Widget build(BuildContext context) {
+    if (surface == null) {
+      return const _TerminalStatus(
+        label: 'No active Agent terminal',
+        icon: Icons.terminal_outlined,
+      );
+    }
+    return AnimatedBuilder(
+      animation: surface!.presentation,
+      builder: (context, _) => switch (surface!.presentation.state) {
+        AgentTerminalNoActiveSession() => const _TerminalStatus(
+          label: 'No active Agent terminal',
+          icon: Icons.terminal_outlined,
+        ),
+        AgentTerminalAttaching() => const _TerminalStatus(
+          label: 'Attaching to Agent terminal',
+          icon: Icons.sync,
+          progress: true,
+        ),
+        AgentTerminalReconnecting() => const _TerminalStatus(
+          label: 'Reconnecting Agent terminal',
+          icon: Icons.cloud_sync_outlined,
+          progress: true,
+        ),
+        AgentTerminalReady() => Semantics(
+          label: 'Agent terminal ready',
+          container: true,
+          child: surface!.terminal,
+        ),
+        AgentTerminalExited() => Stack(
+          children: <Widget>[
+            Positioned.fill(child: surface!.terminal),
+            Align(
+              alignment: Alignment.topRight,
+              child: Semantics(
+                label: 'Agent terminal exited',
+                liveRegion: true,
+                child: Card(
+                  margin: const EdgeInsets.all(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: const Text('Exited'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      },
+    );
+  }
+}
+
+class _TerminalStatus extends StatelessWidget {
+  const _TerminalStatus({
+    required this.label,
+    required this.icon,
+    this.progress = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool progress;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Semantics(
+      label: label,
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 48),
+            const SizedBox(height: 16),
+            Text(label, style: Theme.of(context).textTheme.titleMedium),
+            if (progress) ...<Widget>[
+              const SizedBox(height: 16),
+              const CircularProgressIndicator(),
+            ],
+          ],
+        ),
+      ),
     ),
   );
 }

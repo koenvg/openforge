@@ -39,6 +39,7 @@
     "boardStatus": "doing",
     "handoffNotes": "Ready for review.",
     "agentState": "failed",
+    "agentTerminalAvailable": true,
     "agentErrorSummary": "Agent failed. Review details on the desktop.",
     "createdAt": "2026-07-30T10:00:00Z",
     "updatedAt": "2026-07-30T11:58:00Z",
