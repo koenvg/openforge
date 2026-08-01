@@ -1,4 +1,5 @@
 use crate::db::{PullRequestReadinessInput, PullRequestReadinessStatus, PullRequestReadinessView};
+use crate::task_prompt::parse_image_reference_definition;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -247,34 +248,6 @@ fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     .to_string()
 }
 
-fn is_image_reference_definition(line: &str) -> bool {
-    let Some(rest) = line.trim().strip_prefix("[image#") else {
-        return false;
-    };
-    let Some((index, data_url)) = rest.split_once("]:") else {
-        return false;
-    };
-    if index.is_empty() || !index.bytes().all(|byte| byte.is_ascii_digit()) {
-        return false;
-    }
-    let Some((mime_subtype, payload)) = data_url
-        .trim_start()
-        .strip_prefix("data:image/")
-        .and_then(|data| data.split_once(";base64,"))
-    else {
-        return false;
-    };
-    !mime_subtype.is_empty()
-        && mime_subtype
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'+' | b'-'))
-        && !payload.is_empty()
-        && payload
-            .trim_end()
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
-}
-
 pub(crate) fn task_display_title(
     task_id: &str,
     title: Option<&str>,
@@ -285,8 +258,11 @@ pub(crate) fn task_display_title(
     }
     initial_prompt
         .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty() && !is_image_reference_definition(line))
+        .find_map(|line| {
+            let trimmed = line.trim();
+            (!trimmed.is_empty() && parse_image_reference_definition(line).is_none())
+                .then_some(trimmed)
+        })
         .unwrap_or(task_id)
         .to_string()
 }
@@ -572,5 +548,25 @@ mod tests {
             "T-42"
         );
         assert_eq!(task_display_title("T-42", None, "\n\r\n"), "T-42");
+    }
+
+    #[test]
+    fn display_title_fallback_keeps_noncanonical_image_like_lines() {
+        assert_eq!(
+            task_display_title(
+                "T-42",
+                None,
+                "[image#1]: data:image/png;base64,   \nReview the generated changes",
+            ),
+            "[image#1]: data:image/png;base64,"
+        );
+        assert_eq!(
+            task_display_title(
+                "T-42",
+                None,
+                "[image#1]: data:image/svg_xml;base64,YQ==\nReview the generated changes",
+            ),
+            "[image#1]: data:image/svg_xml;base64,YQ=="
+        );
     }
 }

@@ -45,6 +45,7 @@ mod sidecar_logger;
 mod startup_resume;
 mod task_attention;
 mod task_metadata_refresh;
+mod task_prompt;
 mod user_environment;
 mod whisper_manager;
 use log::{error, info, warn};

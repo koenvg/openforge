@@ -1,7 +1,6 @@
 use crate::db::{self, AgentSessionRow};
+use crate::task_prompt::parse_image_reference_definition;
 use base64::{engine::general_purpose, Engine as _};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -125,14 +124,6 @@ pub(crate) fn apply_project_handoff_notes_template(
         }
     }
 }
-
-static IMAGE_REFERENCE_LINE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"^(\[image#([0-9]+)\]):\s*data:(image/([A-Za-z0-9.+-]+));base64,([A-Za-z0-9+/=]+)\s*$",
-    )
-    .expect("image reference regex should compile")
-});
-
 fn safe_task_prompt_image_path_component(task_id: &str) -> String {
     let safe_id: String = task_id
         .chars()
@@ -201,43 +192,27 @@ fn materialize_task_prompt_image_reference_line(
     line: &str,
     attachment_dir: &Path,
 ) -> Result<Option<String>, String> {
-    let Some(captures) = IMAGE_REFERENCE_LINE_RE.captures(line) else {
+    let Some(reference) = parse_image_reference_definition(line) else {
         return Ok(None);
     };
 
-    let marker = captures
-        .get(1)
-        .map(|capture| capture.as_str())
-        .unwrap_or("[image]");
-    let image_number = captures
-        .get(2)
-        .map(|capture| capture.as_str())
-        .unwrap_or("0");
-    let mime_type = captures
-        .get(3)
-        .map(|capture| capture.as_str())
-        .unwrap_or("image");
-    let base64_payload = captures
-        .get(5)
-        .map(|capture| capture.as_str())
-        .unwrap_or_default();
-
     let bytes = general_purpose::STANDARD
-        .decode(base64_payload)
-        .map_err(|e| format!("failed to decode pasted image {marker}: {e}"))?;
+        .decode(reference.base64_payload)
+        .map_err(|e| format!("failed to decode pasted image {}: {e}", reference.marker))?;
     std::fs::create_dir_all(attachment_dir).map_err(|e| {
         format!("failed to create image attachment directory for task {task_id}: {e}")
     })?;
 
     let image_path = attachment_dir.join(format!(
-        "image-{image_number}.{}",
-        image_file_extension(mime_type)
+        "image-{}.{}",
+        reference.image_number,
+        image_file_extension(reference.mime_type)
     ));
     std::fs::write(&image_path, bytes)
-        .map_err(|e| format!("failed to write pasted image {marker}: {e}"))?;
-
+        .map_err(|e| format!("failed to write pasted image {}: {e}", reference.marker))?;
     Ok(Some(format!(
-        "{marker}: {}",
+        "{}: {}",
+        reference.marker,
         markdown_reference_path(&image_path)
     )))
 }
@@ -896,6 +871,20 @@ mod tests {
         assert!(materialized.contains("[image#1]: "));
         assert!(materialized.contains(image_path.to_string_lossy().as_ref()));
         assert!(!materialized.contains("data:image/png;base64"));
+    }
+
+    #[test]
+    fn materialize_task_prompt_images_leaves_noncanonical_references_untouched() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let attachment_dir = temp_dir.path().join("attachments");
+        let prompt =
+            "[image#1]: data:image/png;base64,   \n[image#2]: data:image/svg_xml;base64,YQ==\n";
+
+        let materialized = materialize_task_prompt_images("T-501", prompt, &attachment_dir)
+            .expect("ignore noncanonical references");
+
+        assert_eq!(materialized, prompt);
+        assert!(!attachment_dir.exists());
     }
 
     #[test]
