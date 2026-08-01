@@ -479,10 +479,12 @@ impl CompanionGatewayManager {
         }
         self.ensure_tailscale_detection().await;
 
-        let mut runtime = self.runtime.lock().await;
-        runtime.enabled = true;
-        runtime.error = None;
-        runtime.phase = GatewayPhase::Starting;
+        {
+            let mut runtime = self.runtime.lock().await;
+            runtime.enabled = true;
+            runtime.error = None;
+            runtime.phase = GatewayPhase::Starting;
+        }
         self.pairing.mark_gateway_not_accepting_streams();
 
         let identity_store = Arc::clone(&self.identity_store);
@@ -497,11 +499,13 @@ impl CompanionGatewayManager {
         let (identity, bind_endpoints) = match startup_material {
             Ok(Ok(material)) => material,
             Ok(Err(error)) | Err(error) => {
+                let mut runtime = self.runtime.lock().await;
                 runtime.phase = GatewayPhase::Error;
                 runtime.error = Some(error.clone());
                 return Err(error);
             }
         };
+        let mut runtime = self.runtime.lock().await;
         runtime.identity = Some(identity.clone());
         let tailscale_hostname = runtime
             .configured_tailscale_hostname

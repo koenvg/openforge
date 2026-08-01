@@ -19,7 +19,7 @@ use super::{
 use axum::{body::Body, http::Request, response::Response};
 use std::{
     net::IpAddr,
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     time::Duration,
 };
 use tower::ServiceExt;
@@ -75,6 +75,35 @@ fn test_manager(store: Arc<InMemoryIdentityStore>) -> CompanionGatewayManager {
         Arc::new(NoopCompanionAdvertiser),
         0,
     )
+}
+
+struct BlockingIdentityStore {
+    inner: InMemoryIdentityStore,
+    entered: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl CompanionIdentityStore for BlockingIdentityStore {
+    fn load(&self) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+        if let Some(entered) = self
+            .entered
+            .lock()
+            .map_err(|_| "blocking identity entry lock was poisoned".to_string())?
+            .take()
+        {
+            let _ = entered.send(());
+        }
+        self.release
+            .lock()
+            .map_err(|_| "blocking identity release lock was poisoned".to_string())?
+            .recv()
+            .map_err(|_| "blocking identity release signal was dropped".to_string())?;
+        self.inner.load()
+    }
+
+    fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
+        self.inner.save(identity)
+    }
 }
 
 struct RevocationObservingIdentityStore {
@@ -202,6 +231,49 @@ async fn restoring_an_enabled_gateway_waits_for_slow_platform_trust_initializati
     assert_eq!(status.phase, GatewayPhase::Running);
     assert!(status.error.is_none());
     assert_eq!(status.endpoints.len(), 1);
+    manager.shutdown().await;
+}
+
+#[tokio::test]
+async fn gateway_status_stays_responsive_while_platform_trust_is_blocked() {
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(BlockingIdentityStore {
+            inner: InMemoryIdentityStore::default(),
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(release_rx),
+        }),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+    let enabling_manager = manager.clone();
+    let enabling = tokio::spawn(async move { enabling_manager.enable().await });
+    let entered = tokio::time::timeout(Duration::from_secs(1), entered_rx).await;
+    if entered.is_err() {
+        let _ = release_tx.send(());
+    }
+    entered
+        .expect("platform trust initialization must begin")
+        .expect("platform trust entry signal");
+
+    let status = tokio::time::timeout(Duration::from_millis(50), manager.status()).await;
+    release_tx
+        .send(())
+        .expect("release platform trust initialization");
+    let status = status.expect("status must not wait for platform trust initialization");
+
+    assert!(status.enabled);
+    assert_eq!(status.phase, GatewayPhase::Starting);
+    enabling
+        .await
+        .expect("enable task")
+        .expect("gateway should eventually start");
     manager.shutdown().await;
 }
 
