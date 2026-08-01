@@ -56,6 +56,9 @@ void main() {
       expect(storage.forgetCount, 0);
 
       controller.dispose();
+      await _flush();
+      expect(terminal.output, isEmpty);
+      expect(channel.closed, isTrue);
     },
   );
 
@@ -118,6 +121,11 @@ void main() {
       expect(client.opens, 1);
 
       controller.updateAvailability(true);
+      controller.setVisible(false);
+      controller.setVisible(true);
+      controller.setForeground(false);
+      await _flush();
+      controller.setForeground(true);
       await _flush();
       expect(client.opens, 1);
 
@@ -172,12 +180,10 @@ void main() {
   );
 
   test(
-    'hiding rejects an in-flight attachment and showing reattaches',
+    'hiding preserves an in-flight attachment without enabling input',
     () async {
-      final closeGate = Completer<void>();
-      final rejectedChannel = _FakeChannel(closeGate: closeGate);
-      final acceptedChannel = _FakeChannel();
-      final client = _DelayedTerminalClient(acceptedChannel);
+      final channel = _FakeChannel();
+      final client = _DelayedTerminalClient(_FakeChannel());
       final controller =
           AgentTerminalController(
               taskId: 'KVG-3018',
@@ -192,25 +198,23 @@ void main() {
       expect(client.opens, 1);
 
       controller.setVisible(false);
-      client.complete(rejectedChannel);
+      client.complete(channel);
       await _flush();
 
-      expect(rejectedChannel.closed, isTrue);
-      expect(rejectedChannel.sent, isEmpty);
+      expect(channel.closed, isFalse);
+      expect(channel.sent, hasLength(1));
+      expect(
+        ClientTerminalControl.decode(channel.sent.single),
+        isA<AttachTerminalControl>(),
+      );
+      channel.add('{"type":"ready","initialState":"replay"}');
+      await _flush();
+      controller.sendInput(Uint8List.fromList('hidden'.codeUnits));
+      expect(channel.sentBinary, isEmpty);
 
       controller.setVisible(true);
       await _flush();
       expect(client.opens, 1);
-
-      closeGate.complete();
-      await _flush();
-      await _flush();
-      expect(client.opens, 2);
-      expect(acceptedChannel.sent, hasLength(1));
-      expect(
-        ClientTerminalControl.decode(acceptedChannel.sent.single),
-        isA<AttachTerminalControl>(),
-      );
 
       controller.dispose();
     },
@@ -316,6 +320,83 @@ void main() {
       controller.dispose();
     },
   );
+
+  test('authorization loss clears content and stops reconnecting', () async {
+    final terminal = _FakeTerminal()
+      ..writeOutput(Uint8List.fromList('stale'.codeUnits));
+    var authorizationLosses = 0;
+    final client = _AuthorizationTerminalClient();
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: client,
+            storage: _Storage(),
+            terminal: terminal,
+            reconnectDelay: Duration.zero,
+            delay: (_) => Completer<void>().future,
+            onAuthorizationLost: () => authorizationLosses += 1,
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+
+    await _flush();
+
+    expect(client.opens, 1);
+    expect(authorizationLosses, 1);
+    expect(terminal.output, isEmpty);
+    expect(controller.state, isA<AgentTerminalNoActiveSession>());
+
+    controller.setVisible(false);
+    controller.setVisible(true);
+    controller.setForeground(false);
+    await _flush();
+    controller.setForeground(true);
+    controller.updateAvailability(false);
+    controller.updateAvailability(true);
+    await _flush();
+    await _flush();
+    expect(client.opens, 1);
+    expect(authorizationLosses, 1);
+
+    controller.dispose();
+  });
+
+  test(
+    'a failed input send clears stale state and opens a fresh channel',
+    () async {
+      final channels = <_FakeChannel>[
+        _FakeChannel(throwOnBinarySend: true),
+        _FakeChannel(),
+      ];
+      final terminal = _FakeTerminal();
+      final controller =
+          AgentTerminalController(
+              taskId: 'KVG-3018',
+              client: _QueueTerminalClient(channels),
+              storage: _Storage(),
+              terminal: terminal,
+              reconnectDelay: Duration.zero,
+            )
+            ..updateAvailability(true)
+            ..setVisible(true);
+      await _flush();
+      channels.first.add(Uint8List.fromList('stale'.codeUnits));
+      channels.first.add('{"type":"ready","initialState":"replay"}');
+      await _flush();
+
+      controller.sendInput(Uint8List.fromList('discard me'.codeUnits));
+      await _flush();
+      await _flush();
+
+      expect(terminal.output, isEmpty);
+      expect(terminal.clearCount, 1);
+      expect(channels.first.sentBinary, isEmpty);
+      expect(channels.first.closed, isTrue);
+      expect(channels.last.sent, hasLength(1));
+
+      controller.dispose();
+    },
+  );
 }
 
 Future<void> _flush() async {
@@ -353,9 +434,10 @@ final class _FakeTerminal implements OpenForgeTerminal {
 }
 
 final class _FakeChannel implements CompanionAgentTerminalChannel {
-  _FakeChannel({this._closeGate});
+  _FakeChannel({this.throwOnBinarySend = false});
 
-  final Completer<void>? _closeGate;
+  final bool throwOnBinarySend;
+
   final _frames = StreamController<Object>.broadcast();
   final sent = <String>[];
   final sentBinary = <List<int>>[];
@@ -370,12 +452,14 @@ final class _FakeChannel implements CompanionAgentTerminalChannel {
   void sendText(String message) => sent.add(message);
 
   @override
-  void sendBinary(List<int> bytes) => sentBinary.add(List<int>.from(bytes));
+  void sendBinary(List<int> bytes) {
+    if (throwOnBinarySend) throw StateError('socket is closed');
+    sentBinary.add(List<int>.from(bytes));
+  }
 
   @override
   Future<void> close() async {
     closed = true;
-    await _closeGate?.future;
     await _frames.close();
   }
 }
@@ -413,6 +497,19 @@ final class _DelayedTerminalClient implements CompanionTerminalClient {
   ) {
     opens += 1;
     return opens == 1 ? _channel.future : Future.value(_subsequentChannel);
+  }
+}
+
+final class _AuthorizationTerminalClient implements CompanionTerminalClient {
+  var opens = 0;
+
+  @override
+  Future<CompanionAgentTerminalChannel> openAgentTerminal(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    opens += 1;
+    throw const CompanionTerminalAuthorizationRequired();
   }
 }
 

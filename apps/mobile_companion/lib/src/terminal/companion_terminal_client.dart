@@ -24,6 +24,10 @@ typedef CompanionTerminalConnector =
       TerminalConnectRequest request,
     );
 
+final class CompanionTerminalAuthorizationRequired implements Exception {
+  const CompanionTerminalAuthorizationRequired();
+}
+
 abstract interface class CompanionTerminalClient {
   Future<CompanionAgentTerminalChannel> openAgentTerminal(
     CompanionTrustRecord trustRecord,
@@ -80,6 +84,13 @@ Future<CompanionAgentTerminalChannel> openPinnedAgentTerminal(
   } on HandshakeException {
     client.close(force: true);
     if (certificateRejected) throw const CompanionCertificateMismatch();
+    rethrow;
+  } on WebSocketException catch (error) {
+    client.close(force: true);
+    if (error.httpStatusCode == HttpStatus.unauthorized ||
+        error.httpStatusCode == HttpStatus.forbidden) {
+      throw const CompanionTerminalAuthorizationRequired();
+    }
     rethrow;
   } on Object {
     client.close(force: true);

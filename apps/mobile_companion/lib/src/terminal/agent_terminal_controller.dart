@@ -104,6 +104,7 @@ final class AgentTerminalController extends ChangeNotifier
   var _disposed = false;
   var _terminalExited = false;
   var _protocolFailed = false;
+  var _authorizationFailed = false;
   var _handlingDisconnect = false;
   var _reconnectAttempts = 0;
 
@@ -149,12 +150,20 @@ final class AgentTerminalController extends ChangeNotifier
 
   void sendInput(Uint8List input) {
     if (!inputEnabled || input.isEmpty) return;
-    _channel!.sendBinary(input);
+    try {
+      _channel!.sendBinary(input);
+    } on Object {
+      _scheduleReconnect(_generation);
+    }
   }
 
   void resize(TerminalDimensions dimensions) {
     if (!inputEnabled) return;
-    _channel!.sendText(ResizeTerminalControl(dimensions).encode());
+    try {
+      _channel!.sendText(ResizeTerminalControl(dimensions).encode());
+    } on Object {
+      _scheduleReconnect(_generation);
+    }
   }
 
   void _reconcile() {
@@ -163,7 +172,8 @@ final class AgentTerminalController extends ChangeNotifier
         !_visible ||
         !_available ||
         _terminalExited ||
-        _protocolFailed) {
+        _protocolFailed ||
+        _authorizationFailed) {
       return;
     }
     if (_channel == null && !_connecting) unawaited(_attach());
@@ -187,8 +197,7 @@ final class AgentTerminalController extends ChangeNotifier
         return;
       }
       if (trustRecord == null) {
-        _setState(const AgentTerminalNoActiveSession());
-        _onAuthorizationLost?.call();
+        _authorizationLost();
         return;
       }
       final channel = await _client.openAgentTerminal(trustRecord, taskId);
@@ -208,6 +217,8 @@ final class AgentTerminalController extends ChangeNotifier
         onDone: () => _handleConnectionLoss(generation),
       );
       channel.sendText(AttachTerminalControl(_terminal.dimensions).encode());
+    } on CompanionTerminalAuthorizationRequired {
+      if (_isCurrent(generation)) _authorizationLost();
     } on Object {
       if (_isCurrent(generation)) _scheduleReconnect(generation);
     } finally {
@@ -261,13 +272,19 @@ final class AgentTerminalController extends ChangeNotifier
           _scheduleReconnect(generation);
         }
       case AuthorizationRevokedTerminalControl():
-        _terminal.clear();
-        _setState(const AgentTerminalNoActiveSession());
-        _onAuthorizationLost?.call();
-        unawaited(_closeCurrentChannel());
+        _authorizationLost();
       case GatewayClosingTerminalControl():
         _scheduleReconnect(generation);
     }
+  }
+
+  void _authorizationLost() {
+    if (_authorizationFailed) return;
+    _authorizationFailed = true;
+    _terminal.clear();
+    _setState(const AgentTerminalNoActiveSession());
+    _onAuthorizationLost?.call();
+    unawaited(_closeCurrentChannel());
   }
 
   void _protocolFailure(int generation) {
@@ -349,10 +366,10 @@ final class AgentTerminalController extends ChangeNotifier
   bool _mayCompleteAttach(int generation) =>
       _isCurrent(generation) &&
       _foreground &&
-      _visible &&
       _available &&
       !_terminalExited &&
-      !_protocolFailed;
+      !_protocolFailed &&
+      !_authorizationFailed;
 
   void _setState(AgentTerminalState state) {
     if (_disposed) return;

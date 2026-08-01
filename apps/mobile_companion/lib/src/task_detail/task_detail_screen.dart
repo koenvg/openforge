@@ -73,13 +73,18 @@ class TaskDetailView extends StatefulWidget {
 class _TaskDetailViewState extends State<TaskDetailView>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final TabController _tabs;
+  late bool _foreground;
   var _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _foreground =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
     _tabs = TabController(length: 2, vsync: this)..addListener(_onTabChanged);
+    widget.terminalSurface?.presentation.setForeground(_foreground);
     _syncAvailability();
   }
 
@@ -88,7 +93,9 @@ class _TaskDetailViewState extends State<TaskDetailView>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.terminalSurface != widget.terminalSurface) {
       oldWidget.terminalSurface?.presentation.setVisible(false);
-      widget.terminalSurface?.presentation.setVisible(_selectedTab == 1);
+      widget.terminalSurface?.presentation
+        ?..setForeground(_foreground)
+        ..setVisible(_selectedTab == 1);
     }
     _syncAvailability();
   }
@@ -123,9 +130,8 @@ class _TaskDetailViewState extends State<TaskDetailView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    widget.terminalSurface?.presentation.setForeground(
-      state == AppLifecycleState.resumed,
-    );
+    _foreground = state == AppLifecycleState.resumed;
+    widget.terminalSurface?.presentation.setForeground(_foreground);
   }
 
   @override

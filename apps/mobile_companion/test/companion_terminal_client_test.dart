@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
@@ -41,6 +42,53 @@ void main() {
       expect(attempts.last.credential, 'credential');
     },
   );
+
+  test('terminal authorization loss does not fail over or retry', () async {
+    final attempts = <TerminalConnectRequest>[];
+    final client = GeneratedCompanionClient(
+      terminalConnector: (request) async {
+        attempts.add(request);
+        throw const CompanionTerminalAuthorizationRequired();
+      },
+    );
+    final trust = CompanionTrustRecord(
+      hostId: 'host',
+      certificateSha256: 'abc123',
+      endpointCandidates: <Uri>[
+        Uri.parse('https://192.168.1.2:17424'),
+        Uri.parse('https://openforge.tailnet.ts.net:17424'),
+      ],
+      deviceId: 'device',
+      deviceCredential: 'revoked',
+    );
+
+    await expectLater(
+      client.openAgentTerminal(trust, 'KVG-3018'),
+      throwsA(isA<CompanionTerminalAuthorizationRequired>()),
+    );
+    expect(attempts, hasLength(1));
+  });
+
+  test('websocket 401 is classified as terminal authorization loss', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+    });
+
+    await expectLater(
+      openPinnedAgentTerminal(
+        TerminalConnectRequest(
+          endpoint: Uri.parse('http://${server.address.host}:${server.port}'),
+          certificateSha256: 'unused-for-http',
+          credential: 'revoked',
+          taskId: 'KVG-3018',
+        ),
+      ),
+      throwsA(isA<CompanionTerminalAuthorizationRequired>()),
+    );
+  });
 }
 
 final class SocketExceptionForTest implements Exception {
