@@ -522,3 +522,227 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
     server.abort();
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
+
+fn authenticated_terminal_request(address: std::net::SocketAddr) -> axum::http::Request<()> {
+    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
+        .into_client_request()
+        .expect("WebSocket request");
+    request.headers_mut().insert(
+        axum::http::header::AUTHORIZATION,
+        "Bearer paired-device-credential"
+            .parse()
+            .expect("authorization"),
+    );
+    request.headers_mut().insert(
+        PROTOCOL_VERSION_HEADER,
+        "1".parse().expect("protocol version"),
+    );
+    request
+}
+
+fn terminal_router(pty_manager: crate::pty_manager::PtyManager) -> axum::Router {
+    create_router_with_sources_event_access_and_pty(
+        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
+        Arc::new(BearerAuthorizer),
+        pairing(),
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            pty_manager,
+            events: crate::app_events::AppEventBus::new(16, 8),
+            stream_access: Arc::new(CancellationAccess::default()),
+        },
+    )
+}
+
+#[tokio::test]
+async fn terminal_websocket_sanitizes_replay_and_live_images_before_binary_frames() {
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("terminal tempdir");
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    pty_manager
+        .spawn_companion_test_agent_pty(
+            "KVG-3018",
+            temp_dir.path(),
+            "printf 'replay-before\\033]1337;File=size=12;inline=1:REPLAY_SECRET\\007replay-after'; sleep 2; printf 'live-before\\033]1337;File=size=10;inline=1:LIVE_SECRET\\007live-after'; sleep 5",
+        )
+        .await
+        .expect("test Agent PTY");
+
+    let replay_expected = b"replay-before\r\n[Image unavailable on mobile]\r\nreplay-after";
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let attachment = pty_manager
+                .attach_agent_terminal("KVG-3018")
+                .await
+                .expect("active Agent terminal");
+            if attachment.replay() == replay_expected {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("sanitized replay");
+
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("test listener");
+    let address = listener.local_addr().expect("listener address");
+    let cleanup_manager = pty_manager.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, terminal_router(pty_manager))
+            .await
+            .expect("test server");
+    });
+    let (mut socket, _) = tokio_tungstenite::connect_async(authenticated_terminal_request(address))
+        .await
+        .expect("WebSocket upgrade");
+    socket
+        .send(Message::Text(
+            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
+        ))
+        .await
+        .expect("attach control");
+
+    let mut output = Vec::new();
+    let mut ready = false;
+    tokio::time::timeout(Duration::from_secs(4), async {
+        loop {
+            let frame = socket
+                .next()
+                .await
+                .expect("terminal frame")
+                .expect("valid terminal frame");
+            match frame {
+                Message::Binary(bytes) => {
+                    std::str::from_utf8(&bytes).expect("UTF-8 terminal frame");
+                    output.extend_from_slice(&bytes);
+                }
+                Message::Text(control) => {
+                    let control: serde_json::Value =
+                        serde_json::from_str(&control).expect("control JSON");
+                    if control["type"] == "ready" {
+                        ready = true;
+                    }
+                }
+                _ => {}
+            }
+            if ready && output.ends_with(b"live-after") {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("sanitized live output");
+
+    let output = std::str::from_utf8(&output).expect("UTF-8 collected output");
+    assert_eq!(
+        output,
+        "replay-before\r\n[Image unavailable on mobile]\r\nreplay-afterlive-before\r\n[Image unavailable on mobile]\r\nlive-after"
+    );
+    assert!(!output.contains("REPLAY_SECRET"));
+    assert!(!output.contains("LIVE_SECRET"));
+
+    server.abort();
+    cleanup_manager
+        .kill_pty("KVG-3018")
+        .await
+        .expect("PTY cleanup");
+}
+
+#[tokio::test]
+async fn terminal_websocket_rejects_malformed_pty_utf8_with_safe_protocol_error() {
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("terminal tempdir");
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    pty_manager
+        .spawn_companion_test_agent_pty(
+            "KVG-3018",
+            temp_dir.path(),
+            "printf 'safe-replay'; printf '\\377'; sleep 5",
+        )
+        .await
+        .expect("test Agent PTY");
+
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let attachment = pty_manager
+                .attach_agent_terminal("KVG-3018")
+                .await
+                .expect("active Agent terminal");
+            if attachment.has_protocol_error() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("malformed output failure");
+
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("test listener");
+    let address = listener.local_addr().expect("listener address");
+    let cleanup_manager = pty_manager.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, terminal_router(pty_manager))
+            .await
+            .expect("test server");
+    });
+    let (mut socket, _) = tokio_tungstenite::connect_async(authenticated_terminal_request(address))
+        .await
+        .expect("WebSocket upgrade");
+    socket
+        .send(Message::Text(
+            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
+        ))
+        .await
+        .expect("attach control");
+
+    let mut saw_ready = false;
+    let error = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let frame = socket
+                .next()
+                .await
+                .expect("terminal frame")
+                .expect("valid terminal frame");
+            match frame {
+                Message::Binary(bytes) => {
+                    panic!(
+                        "failed attachment sent {} replay bytes before its error",
+                        bytes.len()
+                    );
+                }
+                Message::Text(control) => {
+                    let control: serde_json::Value =
+                        serde_json::from_str(&control).expect("control JSON");
+                    if control["type"] == "ready" {
+                        saw_ready = true;
+                    } else if control["type"] == "error" {
+                        break control;
+                    }
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("safe protocol error");
+
+    assert!(
+        !saw_ready,
+        "failed attachments must not advertise readiness"
+    );
+    assert_eq!(error["code"], "protocol_error");
+    assert_eq!(error["message"], "Invalid terminal protocol frame");
+    assert!(!error.to_string().contains("377"));
+    assert!(!error.to_string().contains("safe-replay"));
+
+    server.abort();
+    cleanup_manager
+        .kill_pty("KVG-3018")
+        .await
+        .expect("PTY cleanup");
+}

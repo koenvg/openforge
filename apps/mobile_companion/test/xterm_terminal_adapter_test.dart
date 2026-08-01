@@ -239,4 +239,30 @@ void main() {
     expect(app.theme?.brightness, Brightness.light);
     expect(app.darkTheme?.brightness, Brightness.dark);
   });
+
+  test('OpenForge xterm adapter rejects malformed UTF-8 frames', () {
+    final output = StringBuffer();
+    final decoder = IncrementalTerminalUtf8Decoder(output.write);
+
+    expect(
+      () => decoder.add(Uint8List.fromList(<int>[0x66, 0x80, 0x6f])),
+      throwsFormatException,
+    );
+    expect(output, isEmpty);
+  });
+
+  test('terminal links remain inert terminal text', () {
+    final input = <Uint8List>[];
+    final adapter = XtermOpenForgeTerminal(onInput: input.add);
+    expect(adapter.terminal.mouseHandler, isNull);
+
+    const links =
+        '\x1b]8;;https://example.com\x1b\\selectable\x1b]8;;\x1b\\ '
+        'https://example.org';
+    adapter.writeOutput(Uint8List.fromList(links.codeUnits));
+
+    expect(input, isEmpty);
+    expect(adapter.terminal.mouseHandler, isNull);
+    adapter.dispose();
+  });
 }

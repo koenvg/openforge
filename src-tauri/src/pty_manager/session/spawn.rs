@@ -552,6 +552,7 @@ impl PtyManager {
             reader,
             task_id.to_string(),
             last_output_time.as_ref().map(Arc::clone),
+            Some(Arc::clone(&attachment_hub)),
         );
         spawn_batched_pty_event_emitter(
             rx,
@@ -758,7 +759,12 @@ impl PtyManager {
         }
         let ring_buffer_emitter = Arc::clone(&ring_buffer);
 
-        let rx = spawn_pty_output_reader(reader, key.clone(), Some(Arc::clone(&last_output_time)));
+        let rx = spawn_pty_output_reader(
+            reader,
+            key.clone(),
+            Some(Arc::clone(&last_output_time)),
+            None,
+        );
         spawn_batched_pty_event_emitter(
             rx,
             PtyEventEmitterConfig {

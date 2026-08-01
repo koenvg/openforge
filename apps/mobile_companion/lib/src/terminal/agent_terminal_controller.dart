@@ -103,6 +103,7 @@ final class AgentTerminalController extends ChangeNotifier
   var _connecting = false;
   var _disposed = false;
   var _terminalExited = false;
+  var _protocolFailed = false;
   var _handlingDisconnect = false;
   var _reconnectAttempts = 0;
 
@@ -114,7 +115,10 @@ final class AgentTerminalController extends ChangeNotifier
     if (!available && _channel == null && !_connecting && !_terminalExited) {
       _setState(const AgentTerminalNoActiveSession());
     }
-    if (becameAvailable) _terminalExited = false;
+    if (becameAvailable) {
+      _terminalExited = false;
+      _protocolFailed = false;
+    }
     _reconcile();
   }
 
@@ -158,7 +162,8 @@ final class AgentTerminalController extends ChangeNotifier
         !_foreground ||
         !_visible ||
         !_available ||
-        _terminalExited) {
+        _terminalExited ||
+        _protocolFailed) {
       return;
     }
     if (_channel == null && !_connecting) unawaited(_attach());
@@ -218,7 +223,11 @@ final class AgentTerminalController extends ChangeNotifier
   void _handleFrame(int generation, Object frame) {
     if (!_isCurrent(generation)) return;
     if (frame is List<int>) {
-      _terminal.writeOutput(Uint8List.fromList(frame));
+      try {
+        _terminal.writeOutput(Uint8List.fromList(frame));
+      } on FormatException {
+        _protocolFailure(generation);
+      }
       return;
     }
     if (frame is! String) {
@@ -241,7 +250,9 @@ final class AgentTerminalController extends ChangeNotifier
         _setState(const AgentTerminalExited());
         unawaited(_closeCurrentChannel());
       case ErrorTerminalControl(:final code):
-        if (code == 'no_active_agent_terminal' ||
+        if (code == 'protocol_error') {
+          _protocolFailure(generation);
+        } else if (code == 'no_active_agent_terminal' ||
             code == 'attachment_replaced') {
           _terminal.clear();
           _setState(const AgentTerminalNoActiveSession());
@@ -259,7 +270,13 @@ final class AgentTerminalController extends ChangeNotifier
     }
   }
 
-  void _protocolFailure(int generation) => _scheduleReconnect(generation);
+  void _protocolFailure(int generation) {
+    if (!_isCurrent(generation) || _protocolFailed) return;
+    _protocolFailed = true;
+    _terminal.clear();
+    _setState(const AgentTerminalNoActiveSession());
+    unawaited(_closeCurrentChannel());
+  }
 
   void _handleConnectionLoss(int generation) {
     if (!_isCurrent(generation) || _handlingDisconnect || _terminalExited) {
@@ -334,7 +351,8 @@ final class AgentTerminalController extends ChangeNotifier
       _foreground &&
       _visible &&
       _available &&
-      !_terminalExited;
+      !_terminalExited &&
+      !_protocolFailed;
 
   void _setState(AgentTerminalState state) {
     if (_disposed) return;

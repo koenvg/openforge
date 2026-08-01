@@ -123,6 +123,20 @@ async fn serve_registered_socket(
             return;
         }
     };
+    if attachment.has_protocol_error() {
+        match initialization_step(
+            receiver,
+            cancellation,
+            replaced,
+            send_protocol_error(sender),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(stop) => send_initialization_stop(sender, stop).await,
+        }
+        return;
+    }
     match initialization_step(
         receiver,
         cancellation,
@@ -205,6 +219,10 @@ async fn serve_registered_socket(
                         if send_output(sender, output).await.is_err() {
                             break;
                         }
+                    }
+                    Ok(AgentTerminalEvent::ProtocolError) => {
+                        let _ = send_protocol_error(sender).await;
+                        break;
                     }
                     Ok(AgentTerminalEvent::Exited) => {
                         let _ = send_control(sender, ServerTerminalControl::Exited).await;

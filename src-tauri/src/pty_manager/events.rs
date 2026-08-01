@@ -139,6 +139,7 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
     tx: PtyOutputSender,
     session_key: &str,
     last_output: Option<Arc<AtomicU64>>,
+    attachment_hub: Option<Arc<PtyAttachmentHub>>,
 ) {
     let mut buffer = [0u8; PTY_READ_BUFFER_SIZE];
     let mut incomplete_utf8: Vec<u8> = Vec::new();
@@ -151,6 +152,9 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
                 break;
             }
             Ok(n) => {
+                if let Some(hub) = &attachment_hub {
+                    hub.publish_output(&buffer[..n]);
+                }
                 if let Some(last_output) = &last_output {
                     last_output.store(now_ms(), Ordering::Relaxed);
                 }
@@ -190,10 +194,11 @@ pub(super) fn spawn_pty_output_reader(
     mut reader: Box<dyn Read + Send>,
     session_key: String,
     last_output: Option<Arc<AtomicU64>>,
+    attachment_hub: Option<Arc<PtyAttachmentHub>>,
 ) -> PtyOutputReceiver {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::task::spawn_blocking(move || {
-        read_pty_output_loop(&mut reader, tx, &session_key, last_output);
+        read_pty_output_loop(&mut reader, tx, &session_key, last_output, attachment_hub);
     });
     rx
 }
@@ -307,16 +312,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
             tokio::time::interval(tokio::time::Duration::from_millis(PTY_FLUSH_INTERVAL_MS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        let output_hub = attachment_hub.clone();
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
-            if event_name.starts_with("pty-output-") {
-                if let (Some(hub), Some(output)) = (
-                    output_hub.as_ref(),
-                    payload.get("data").and_then(serde_json::Value::as_str),
-                ) {
-                    hub.publish_output(output.as_bytes());
-                }
-            }
             publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, event_name, payload);
             Ok(())
         };
