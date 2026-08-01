@@ -33,7 +33,6 @@ const COMPANION_GATEWAY_PORT_ENV: &str = "OPENFORGE_COMPANION_PORT";
 const LISTENER_START_TIMEOUT: Duration = Duration::from_secs(2);
 const LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
 const CONNECTION_DRAIN_TIMEOUT: Duration = Duration::from_millis(250);
-const RESTORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(4);
 const PAIRING_SESSION_TTL: Duration = Duration::from_secs(2 * 60);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -576,21 +575,17 @@ impl CompanionGatewayManager {
         Ok(status)
     }
 
+    /// Restore a persisted opt-in after the core loopback bridge is ready.
+    ///
+    /// Server lifecycle runs this in a background task, so waiting for platform
+    /// trust initialization cannot delay core readiness. Do not wrap `enable` in
+    /// a cancellation timeout: macOS Keychain can exceed a short cold-start budget,
+    /// and cancelling midway can leave an enabled gateway unavailable until a user
+    /// retries it manually.
     pub(crate) async fn restore(&self) -> CompanionGatewayStatus {
-        match tokio::time::timeout(RESTORE_STARTUP_TIMEOUT, self.enable()).await {
-            Ok(Ok(status)) => status,
-            Ok(Err(_)) => self.status().await,
-            Err(_) => {
-                let mut runtime = self.runtime.lock().await;
-                if runtime.running.is_none() {
-                    runtime.phase = GatewayPhase::Error;
-                    runtime.error = Some(format!(
-                        "Companion Gateway restore timed out after {:?}",
-                        RESTORE_STARTUP_TIMEOUT
-                    ));
-                }
-                runtime.status()
-            }
+        match self.enable().await {
+            Ok(status) => status,
+            Err(_) => self.status().await,
         }
     }
 

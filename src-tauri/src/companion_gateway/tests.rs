@@ -183,6 +183,28 @@ async fn enabling_and_disabling_controls_a_separate_tls_listener() {
     assert!(disabled.endpoints.is_empty());
 }
 
+#[tokio::test]
+async fn restoring_an_enabled_gateway_waits_for_slow_platform_trust_initialization() {
+    let manager = CompanionGatewayManager::new(
+        Arc::new(DelayedIdentityStore::new(Duration::from_millis(2_100))),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+
+    let status = manager.restore().await;
+
+    assert!(status.enabled);
+    assert_eq!(status.phase, GatewayPhase::Running);
+    assert!(status.error.is_none());
+    assert_eq!(status.endpoints.len(), 1);
+    manager.shutdown().await;
+}
+
 #[test]
 fn dual_stack_magicdns_listeners_offer_one_canonical_candidate() {
     let endpoints = vec![
