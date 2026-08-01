@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +50,46 @@ void main() {
       await _flush();
       expect(terminal.output, 'replay live hidden');
       expect(channel.closed, isFalse);
+
+      controller.dispose();
+    },
+  );
+
+  test(
+    'input and subsequent resizes are gated by ready and visibility',
+    () async {
+      final channel = _FakeChannel();
+      final controller =
+          AgentTerminalController(
+              taskId: 'KVG-3018',
+              client: _FakeTerminalClient(channel),
+              storage: _Storage(),
+              terminal: _FakeTerminal(),
+              reconnectDelay: Duration.zero,
+            )
+            ..updateAvailability(true)
+            ..setVisible(true);
+      await _flush();
+
+      controller.sendInput(Uint8List.fromList('before'.codeUnits));
+      controller.resize(const TerminalDimensions(columns: 100, rows: 30));
+      expect(channel.sentBinary, isEmpty);
+      expect(channel.sent, hasLength(1));
+
+      channel.add('{"type":"ready","initialState":"replay"}');
+      await _flush();
+      controller.sendInput(Uint8List.fromList(utf8.encode('hé\r')));
+      controller.resize(const TerminalDimensions(columns: 100, rows: 30));
+
+      expect(channel.sentBinary, <List<int>>[utf8.encode('hé\r')]);
+      expect(
+        ClientTerminalControl.decode(channel.sent.last),
+        isA<ResizeTerminalControl>(),
+      );
+
+      controller.setVisible(false);
+      controller.sendInput(Uint8List.fromList('hidden'.codeUnits));
+      expect(channel.sentBinary, hasLength(1));
 
       controller.dispose();
     },
@@ -235,6 +276,7 @@ final class _FakeChannel implements CompanionAgentTerminalChannel {
   final Completer<void>? _closeGate;
   final _frames = StreamController<Object>.broadcast();
   final sent = <String>[];
+  final sentBinary = <List<int>>[];
   var closed = false;
 
   @override
@@ -244,6 +286,9 @@ final class _FakeChannel implements CompanionAgentTerminalChannel {
 
   @override
   void sendText(String message) => sent.add(message);
+
+  @override
+  void sendBinary(List<int> bytes) => sentBinary.add(List<int>.from(bytes));
 
   @override
   Future<void> close() async {

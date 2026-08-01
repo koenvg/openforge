@@ -136,10 +136,21 @@ final class AgentTerminalController extends ChangeNotifier
     _reconcile();
   }
 
+  bool get inputEnabled =>
+      !_disposed &&
+      _foreground &&
+      _visible &&
+      _state is AgentTerminalReady &&
+      _channel != null;
+
+  void sendInput(Uint8List input) {
+    if (!inputEnabled || input.isEmpty) return;
+    _channel!.sendBinary(input);
+  }
+
   void resize(TerminalDimensions dimensions) {
-    final channel = _channel;
-    if (_disposed || channel == null || _state is! AgentTerminalReady) return;
-    channel.sendText(ResizeTerminalControl(dimensions).encode());
+    if (!inputEnabled) return;
+    _channel!.sendText(ResizeTerminalControl(dimensions).encode());
   }
 
   void _reconcile() {

@@ -3,8 +3,9 @@
 A dedicated Flutter application for iOS and Android. It is intentionally
 independent from the pnpm workspace and provides desktop-approved pairing, an
 attention-first home grouped by Project, read-only Task detail, foreground live
-updates, pinned-certificate host restoration, Bonjour/mDNS endpoint discovery,
-stable Tailscale MagicDNS fallback, and explicit connection and recovery states.
+updates, an interactive attachment to an already-running Task Agent terminal,
+pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
+Tailscale MagicDNS fallback, and explicit connection and recovery states.
 The approved
 [Mobile Companion — Design](../../docs/superpowers/specs/2026-07-30-mobile-companion-design.md)
 remains the source of truth.
@@ -19,8 +20,8 @@ secret. A discovered endpoint is accepted only when it belongs to the already
 paired host and presents the exact pinned certificate.
 
 After the user explicitly approves pairing on the desktop, the device credential
-can make only the authenticated, read-only requests in the versioned Companion
-API. Those requests may fetch:
+can make authenticated read-only HTTP requests in the versioned Companion API and
+attach interactively to the current Agent terminal for a Task. HTTP requests may fetch:
 
 - host identity, protocol version, and server time;
 - the Needs Attention snapshot time and rows: Task identity, title, normalized
@@ -33,10 +34,15 @@ API. Those requests may fetch:
   Invalidations identify attention or Task resources to refetch rather than
   carrying domain content.
 
-The API exposes no Task mutations, generic command dispatch, repository or
-terminal access, provider credentials, or internal Agent-session identifiers.
-Every post-pairing LAN or Tailscale request uses the same device credential and
-exact certificate pin.
+The dedicated Task-scoped terminal WebSocket attaches only to an already-running
+Agent PTY. It carries terminal output and ready-gated UTF-8 input, and it applies
+last-writer-wins resizes to the PTY shared with desktop surfaces and other paired
+devices. It cannot start, resume, abort, replace, or kill Agent Sessions.
+
+The API exposes no Task mutations, generic command dispatch, repository access,
+ordinary shell terminals, provider credentials, or internal Agent-session
+identifiers. Every post-pairing LAN or Tailscale request uses the same device
+credential and exact certificate pin.
 
 Only host trust (host identity and certificate fingerprint), endpoint candidates,
 and the device credential (device identity and bearer credential) persist in
@@ -102,6 +108,8 @@ builds are separate Flutter invocations and do not require `pnpm install`.
   paired host identifier and protocol version. Discovery never establishes trust.
 - `lib/src/attention/` and `lib/src/task_detail/` own the in-memory read-only
   views; `lib/src/live/` refreshes them from coarse foreground SSE invalidations.
+- `lib/src/terminal/` owns the dedicated Agent-terminal WebSocket, ready-gated
+  input/resize controller, and xterm.dart adapter. Terminal state is memory-only.
 - `lib/src/storage/` persists only the paired host trust record, endpoint
   candidates, device identity, and device credential in platform secure storage.
   Domain snapshots must never be added to preferences, files, SQLite, or another

@@ -61,6 +61,10 @@ void main() {
       );
 
       expect(find.text('Connected'), findsOneWidget);
+      expect(
+        find.textContaining('Interactive Agent terminal access is active'),
+        findsOneWidget,
+      );
       expect(find.text('Host desktop-host-1'), findsOneWidget);
       expect(find.text('Companion protocol v1'), findsOneWidget);
       expect(

@@ -191,7 +191,8 @@ _ConnectionContent _contentFor(
   Connected() => const _ConnectionContent(
     title: 'Connected',
     message:
-        'Authenticated read-only access to this OpenForge desktop is active.',
+        'Interactive Agent terminal access is active for this paired device. '
+        'Terminal input runs as your desktop user.',
     icon: Icons.check_circle_outline,
     iconLabel: 'Desktop connected',
   ),

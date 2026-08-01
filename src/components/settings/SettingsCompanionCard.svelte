@@ -139,11 +139,11 @@
 
 <SettingsSectionCard
   title="Companion"
-  description="Opt in to a dedicated, read-only mobile connection boundary."
+  description="Opt in to mobile Task access with interactive Agent terminal access."
 >
   <div class="flex flex-col gap-4">
     <p class="m-0 text-sm text-base-content/70">
-      OpenForge must remain running for the Mobile Companion to connect. The internal desktop and CLI bridge stays local to this Mac.
+      OpenForge must remain running for the Mobile Companion to connect. Paired phones can view Task data and type into running Agent terminals as your desktop user; they cannot start, stop, or replace Agent Sessions. The internal desktop and CLI bridge stays local to this Mac.
     </p>
 
     {#if loading && !status}

@@ -10,9 +10,9 @@ Clients send the existing bearer credential and `openforge-companion-protocol-ve
 
 - Client control and server control use UTF-8 JSON text frames.
 - Server terminal output uses binary frames containing valid UTF-8.
-- This milestone is read-only: client binary frames are rejected.
+- Client terminal input uses binary frames containing valid UTF-8 and is accepted only after `ready`.
 - Client messages and individual frames are limited to 4 KiB; controls are intentionally tiny.
-- Unknown fields, unknown control types, malformed JSON, malformed UTF-8, and non-positive dimensions are protocol errors.
+- Unknown fields, unknown control types, malformed JSON, malformed UTF-8, non-positive dimensions, input before `ready`, and resize before `ready` are protocol errors.
 
 ## Startup
 
@@ -20,9 +20,13 @@ Clients send the existing bearer credential and `openforge-companion-protocol-ve
 2. The server independently resolves the Task's currently running Agent PTY and applies the dimensions.
 3. The server sends at most 256 KiB of bounded replay as binary UTF-8.
 4. The server sends `{"type":"ready","initialState":"replay"}`.
-5. Gap-free live output continues as binary UTF-8. Later dimension changes use `{"type":"resize","columns":100,"rows":30}`.
+5. After `ready`, the client may send UTF-8 terminal input as binary frames and later dimension changes as `{"type":"resize","columns":100,"rows":30}`. Gap-free live output continues as binary UTF-8.
 
-The attachment remains bound to the concrete Agent process resolved at startup. It never follows the Task to a replacement Agent Session.
+The attachment remains bound to the concrete Agent process resolved at startup. It never follows the Task to a replacement Agent Session. The attachment capability can write and resize that PTY but cannot start, resume, abort, replace, or kill an Agent Session.
+
+## Shared PTY semantics
+
+Desktop terminal surfaces and all paired-device attachments write to the same PTY input stream in arrival order. There is no controller lease. The most recently applied resize from any desktop or mobile surface becomes the canonical PTY geometry.
 
 ## Server controls
 

@@ -54,6 +54,7 @@ void main() {
       agentTerminalSurfaceFactory: (taskId) {
         late AgentTerminalController terminalController;
         final adapter = XtermOpenForgeTerminal(
+          onInput: (input) => terminalController.sendInput(input),
           onResize: (dimensions) => terminalController.resize(dimensions),
         );
         terminalController = AgentTerminalController(
@@ -65,7 +66,11 @@ void main() {
         );
         return AgentTerminalSurface(
           presentation: terminalController,
-          terminal: OpenForgeTerminalView(adapter: adapter),
+          terminal: OpenForgeTerminalView(
+            adapter: adapter,
+            inputState: terminalController,
+            isInputEnabled: () => terminalController.inputEnabled,
+          ),
           dispose: terminalController.dispose,
         );
       },

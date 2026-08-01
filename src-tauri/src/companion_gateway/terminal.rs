@@ -4,6 +4,10 @@ use super::terminal_protocol::{
 };
 use crate::pty_manager::{AgentTerminalAttachmentError, AgentTerminalEvent, PtyManager};
 use axum::extract::ws::{Message, WebSocket};
+use futures::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,6 +17,9 @@ use tokio::sync::{oneshot, Mutex};
 
 const INITIAL_ATTACH_TIMEOUT: Duration = Duration::from_secs(10);
 const SOCKET_SEND_TIMEOUT: Duration = Duration::from_secs(2);
+
+type TerminalSocketSender = SplitSink<WebSocket, Message>;
+type TerminalSocketReceiver = SplitStream<WebSocket>;
 
 struct RegisteredAttachment {
     id: u64,
@@ -49,16 +56,18 @@ impl CompanionTerminalRegistry {
 }
 
 pub(crate) async fn serve_terminal_socket(
-    mut socket: WebSocket,
+    socket: WebSocket,
     task_id: String,
     device_id: String,
     pty_manager: PtyManager,
     mut cancellation: tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     registry: CompanionTerminalRegistry,
 ) {
+    let (mut sender, mut receiver) = socket.split();
     let (registration_id, mut replaced) = registry.register(&device_id).await;
     serve_registered_socket(
-        &mut socket,
+        &mut sender,
+        &mut receiver,
         &task_id,
         &pty_manager,
         &mut cancellation,
@@ -66,24 +75,26 @@ pub(crate) async fn serve_terminal_socket(
     )
     .await;
     registry.unregister(&device_id, registration_id).await;
-    let _ = tokio::time::timeout(SOCKET_SEND_TIMEOUT, socket.close()).await;
+    let _ = tokio::time::timeout(SOCKET_SEND_TIMEOUT, sender.close()).await;
 }
 
 async fn serve_registered_socket(
-    socket: &mut WebSocket,
+    sender: &mut TerminalSocketSender,
+    receiver: &mut TerminalSocketReceiver,
     task_id: &str,
     pty_manager: &PtyManager,
     cancellation: &mut tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     replaced: &mut oneshot::Receiver<()>,
 ) {
-    let dimensions = match receive_initial_attach(socket, cancellation, replaced).await {
+    let dimensions = match receive_initial_attach(receiver, cancellation, replaced).await {
         Ok(dimensions) => dimensions,
         Err(stop) => {
-            send_initialization_stop(socket, stop).await;
+            send_initialization_stop(sender, stop).await;
             return;
         }
     };
     let attachment_result = match initialization_step(
+        receiver,
         cancellation,
         replaced,
         pty_manager.attach_agent_terminal(task_id),
@@ -92,19 +103,19 @@ async fn serve_registered_socket(
     {
         Ok(result) => result,
         Err(stop) => {
-            send_initialization_stop(socket, stop).await;
+            send_initialization_stop(sender, stop).await;
             return;
         }
     };
     let mut attachment = match attachment_result {
         Ok(attachment) => attachment,
         Err(AgentTerminalAttachmentError::NoActiveAgentTerminal) => {
-            let _ = send_control(socket, ServerTerminalControl::no_active_agent_terminal()).await;
+            let _ = send_control(sender, ServerTerminalControl::no_active_agent_terminal()).await;
             return;
         }
         Err(_) => {
             let _ = send_error(
-                socket,
+                sender,
                 TerminalErrorCode::TemporarilyUnavailable,
                 "Agent terminal is temporarily unavailable",
             )
@@ -113,6 +124,7 @@ async fn serve_registered_socket(
         }
     };
     match initialization_step(
+        receiver,
         cancellation,
         replaced,
         attachment.resize(dimensions.columns, dimensions.rows),
@@ -121,36 +133,44 @@ async fn serve_registered_socket(
     {
         Ok(Ok(())) => {}
         Ok(Err(_)) => {
-            let _ = send_control(socket, ServerTerminalControl::no_active_agent_terminal()).await;
+            let _ = send_control(sender, ServerTerminalControl::no_active_agent_terminal()).await;
             return;
         }
         Err(stop) => {
-            send_initialization_stop(socket, stop).await;
+            send_initialization_stop(sender, stop).await;
             return;
         }
     }
     let replay = attachment.replay().to_vec();
     if !replay.is_empty() {
-        match initialization_step(cancellation, replaced, send_output(socket, replay)).await {
+        match initialization_step(
+            receiver,
+            cancellation,
+            replaced,
+            send_output(sender, replay),
+        )
+        .await
+        {
             Ok(Ok(())) => {}
             Ok(Err(())) => return,
             Err(stop) => {
-                send_initialization_stop(socket, stop).await;
+                send_initialization_stop(sender, stop).await;
                 return;
             }
         }
     }
     match initialization_step(
+        receiver,
         cancellation,
         replaced,
-        send_control(socket, ServerTerminalControl::ready()),
+        send_control(sender, ServerTerminalControl::ready()),
     )
     .await
     {
         Ok(Ok(())) => {}
         Ok(Err(())) => return,
         Err(stop) => {
-            send_initialization_stop(socket, stop).await;
+            send_initialization_stop(sender, stop).await;
             return;
         }
     }
@@ -168,12 +188,12 @@ async fn serve_registered_socket(
                     }
                     None => break,
                 };
-                let _ = send_control(socket, control).await;
+                let _ = send_control(sender, control).await;
                 break;
             }
             _ = &mut *replaced => {
                 let _ = send_error(
-                    socket,
+                    sender,
                     TerminalErrorCode::AttachmentReplaced,
                     "Terminal attachment was replaced",
                 ).await;
@@ -182,17 +202,17 @@ async fn serve_registered_socket(
             event = attachment.recv() => {
                 match event {
                     Ok(AgentTerminalEvent::Output(output)) => {
-                        if send_output(socket, output).await.is_err() {
+                        if send_output(sender, output).await.is_err() {
                             break;
                         }
                     }
                     Ok(AgentTerminalEvent::Exited) => {
-                        let _ = send_control(socket, ServerTerminalControl::Exited).await;
+                        let _ = send_control(sender, ServerTerminalControl::Exited).await;
                         break;
                     }
                     Err(AgentTerminalAttachmentError::SlowConsumer) => {
                         let _ = send_error(
-                            socket,
+                            sender,
                             TerminalErrorCode::SlowConsumer,
                             "Terminal output consumer is too slow",
                         ).await;
@@ -201,7 +221,7 @@ async fn serve_registered_socket(
                     Err(_) => break,
                 }
             }
-            message = socket.recv() => {
+            message = receiver.next() => {
                 let Some(Ok(message)) = message else {
                     break;
                 };
@@ -210,7 +230,7 @@ async fn serve_registered_socket(
                         let Ok(ClientTerminalControl::Resize(dimensions)) =
                             ClientTerminalControl::decode(&encoded)
                         else {
-                            let _ = send_protocol_error(socket).await;
+                            let _ = send_protocol_error(sender).await;
                             break;
                         };
                         if attachment.resize(dimensions.columns, dimensions.rows).await.is_err() {
@@ -218,15 +238,21 @@ async fn serve_registered_socket(
                         }
                     }
                     Message::Ping(payload) => {
-                        if send_message(socket, Message::Pong(payload)).await.is_err() {
+                        if send_message(sender, Message::Pong(payload)).await.is_err() {
                             break;
                         }
                     }
                     Message::Pong(_) => {}
                     Message::Close(_) => break,
-                    Message::Binary(_) => {
-                        let _ = send_protocol_error(socket).await;
-                        break;
+                    Message::Binary(input) => {
+                        match attachment.write_input(&input).await {
+                            Ok(()) => {}
+                            Err(AgentTerminalAttachmentError::InvalidUtf8) => {
+                                let _ = send_protocol_error(sender).await;
+                                break;
+                            }
+                            Err(_) => break,
+                        }
                     }
                 }
             }
@@ -254,6 +280,7 @@ fn termination_stop(termination: Option<CompanionStreamTermination>) -> Initiali
 }
 
 async fn initialization_step<T, F>(
+    receiver: &mut TerminalSocketReceiver,
     cancellation: &mut tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     replaced: &mut oneshot::Receiver<()>,
     future: F,
@@ -261,16 +288,25 @@ async fn initialization_step<T, F>(
 where
     F: Future<Output = T>,
 {
+    tokio::pin!(future);
     tokio::select! {
         biased;
         termination = cancellation.recv() => Err(termination_stop(termination)),
         _ = &mut *replaced => Err(InitializationStop::Replaced),
-        result = future => Ok(result),
+        message = receiver.next() => {
+            match message {
+                None | Some(Err(_)) | Some(Ok(Message::Close(_))) => {
+                    Err(InitializationStop::Closed)
+                }
+                Some(Ok(_)) => Err(InitializationStop::ProtocolError),
+            }
+        }
+        result = &mut future => Ok(result),
     }
 }
 
 async fn receive_initial_attach(
-    socket: &mut WebSocket,
+    receiver: &mut TerminalSocketReceiver,
     cancellation: &mut tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
     replaced: &mut oneshot::Receiver<()>,
 ) -> Result<TerminalDimensions, InitializationStop> {
@@ -281,7 +317,7 @@ async fn receive_initial_attach(
         termination = cancellation.recv() => return Err(termination_stop(termination)),
         _ = &mut *replaced => return Err(InitializationStop::Replaced),
         _ = &mut timeout => return Err(InitializationStop::Closed),
-        message = socket.recv() => message,
+        message = receiver.next() => message,
     };
     let message = message
         .ok_or(InitializationStop::Closed)?
@@ -295,29 +331,29 @@ async fn receive_initial_attach(
     }
 }
 
-async fn send_initialization_stop(socket: &mut WebSocket, stop: InitializationStop) {
+async fn send_initialization_stop(sender: &mut TerminalSocketSender, stop: InitializationStop) {
     match stop {
         InitializationStop::Control(control) => {
-            let _ = send_control(socket, control).await;
+            let _ = send_control(sender, control).await;
         }
         InitializationStop::Replaced => {
             let _ = send_error(
-                socket,
+                sender,
                 TerminalErrorCode::AttachmentReplaced,
                 "Terminal attachment was replaced",
             )
             .await;
         }
         InitializationStop::ProtocolError => {
-            let _ = send_protocol_error(socket).await;
+            let _ = send_protocol_error(sender).await;
         }
         InitializationStop::Closed => {}
     }
 }
 
-async fn send_protocol_error(socket: &mut WebSocket) -> Result<(), ()> {
+async fn send_protocol_error(sender: &mut TerminalSocketSender) -> Result<(), ()> {
     send_error(
-        socket,
+        sender,
         TerminalErrorCode::ProtocolError,
         "Invalid terminal protocol frame",
     )
@@ -325,12 +361,12 @@ async fn send_protocol_error(socket: &mut WebSocket) -> Result<(), ()> {
 }
 
 async fn send_error(
-    socket: &mut WebSocket,
+    sender: &mut TerminalSocketSender,
     code: TerminalErrorCode,
     message: &str,
 ) -> Result<(), ()> {
     send_control(
-        socket,
+        sender,
         ServerTerminalControl::Error {
             code,
             message: message.to_string(),
@@ -339,17 +375,20 @@ async fn send_error(
     .await
 }
 
-async fn send_control(socket: &mut WebSocket, control: ServerTerminalControl) -> Result<(), ()> {
+async fn send_control(
+    sender: &mut TerminalSocketSender,
+    control: ServerTerminalControl,
+) -> Result<(), ()> {
     let encoded = control.encode().map_err(|_| ())?;
-    send_message(socket, Message::Text(encoded)).await
+    send_message(sender, Message::Text(encoded)).await
 }
 
-async fn send_output(socket: &mut WebSocket, output: Vec<u8>) -> Result<(), ()> {
-    send_message(socket, Message::Binary(output)).await
+async fn send_output(sender: &mut TerminalSocketSender, output: Vec<u8>) -> Result<(), ()> {
+    send_message(sender, Message::Binary(output)).await
 }
 
-async fn send_message(socket: &mut WebSocket, message: Message) -> Result<(), ()> {
-    tokio::time::timeout(SOCKET_SEND_TIMEOUT, socket.send(message))
+async fn send_message(sender: &mut TerminalSocketSender, message: Message) -> Result<(), ()> {
+    tokio::time::timeout(SOCKET_SEND_TIMEOUT, sender.send(message))
         .await
         .map_err(|_| ())?
         .map_err(|_| ())
