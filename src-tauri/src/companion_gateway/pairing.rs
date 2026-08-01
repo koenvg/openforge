@@ -4,6 +4,7 @@ use super::{
         CompanionDeviceAuthentication, CompanionDeviceRecord, CompanionDeviceRevocationBatch,
         CompanionDeviceStore, CompanionPairedDevice,
     },
+    rate_limit::{RateLimitError, SlidingWindowRateLimiter},
 };
 use axum::http::HeaderMap;
 use base64::Engine;
@@ -11,7 +12,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     net::IpAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -190,17 +191,10 @@ impl CompanionStreamAuthorization {
     }
 }
 
-#[derive(Default)]
-struct PairingRateLimits {
-    submission_by_peer: HashMap<IpAddr, VecDeque<Instant>>,
-    poll_by_peer: HashMap<IpAddr, VecDeque<Instant>>,
-    global_submissions: VecDeque<Instant>,
-    global_polls: VecDeque<Instant>,
-}
-
 pub(crate) struct PairingCoordinator {
     state: Mutex<PairingState>,
-    rate_limits: Mutex<PairingRateLimits>,
+    submission_rate_limit: SlidingWindowRateLimiter,
+    poll_rate_limit: SlidingWindowRateLimiter,
     devices: Arc<dyn CompanionDeviceStore>,
     termination_tx: tokio::sync::broadcast::Sender<CompanionStreamTermination>,
     gateway_accepting_streams: std::sync::atomic::AtomicBool,
@@ -212,7 +206,18 @@ impl PairingCoordinator {
         let (termination_tx, _) = tokio::sync::broadcast::channel(64);
         Self {
             state: Mutex::new(PairingState::default()),
-            rate_limits: Mutex::new(PairingRateLimits::default()),
+            submission_rate_limit: SlidingWindowRateLimiter::new(
+                PAIRING_SUBMISSION_RATE_LIMIT,
+                GLOBAL_PAIRING_SUBMISSION_RATE_LIMIT,
+                MAX_RATE_LIMIT_PEERS,
+                PAIRING_RATE_WINDOW,
+            ),
+            poll_rate_limit: SlidingWindowRateLimiter::new(
+                PAIRING_POLL_RATE_LIMIT,
+                GLOBAL_PAIRING_POLL_RATE_LIMIT,
+                MAX_RATE_LIMIT_PEERS,
+                PAIRING_RATE_WINDOW,
+            ),
             devices,
             termination_tx,
             gateway_accepting_streams: std::sync::atomic::AtomicBool::new(false),
@@ -310,40 +315,14 @@ impl PairingCoordinator {
         peer: IpAddr,
         kind: PairingRequestKind,
     ) -> Result<(), PairingError> {
-        let mut limits = self
-            .rate_limits
-            .lock()
-            .map_err(|_| PairingError::Unavailable)?;
-        match kind {
-            PairingRequestKind::Submission => {
-                let PairingRateLimits {
-                    submission_by_peer,
-                    global_submissions,
-                    ..
-                } = &mut *limits;
-                admit_rate_limited_request(
-                    submission_by_peer,
-                    global_submissions,
-                    peer,
-                    PAIRING_SUBMISSION_RATE_LIMIT,
-                    GLOBAL_PAIRING_SUBMISSION_RATE_LIMIT,
-                )
-            }
-            PairingRequestKind::Poll => {
-                let PairingRateLimits {
-                    poll_by_peer,
-                    global_polls,
-                    ..
-                } = &mut *limits;
-                admit_rate_limited_request(
-                    poll_by_peer,
-                    global_polls,
-                    peer,
-                    PAIRING_POLL_RATE_LIMIT,
-                    GLOBAL_PAIRING_POLL_RATE_LIMIT,
-                )
-            }
-        }
+        let limiter = match kind {
+            PairingRequestKind::Submission => &self.submission_rate_limit,
+            PairingRequestKind::Poll => &self.poll_rate_limit,
+        };
+        limiter.admit(peer).map_err(|error| match error {
+            RateLimitError::Limited => PairingError::RateLimited,
+            RateLimitError::Unavailable => PairingError::Unavailable,
+        })
     }
 
     pub(crate) fn submit(
@@ -643,43 +622,6 @@ fn verifier(secret: &str) -> [u8; 32] {
 
 fn constant_time_equal(left: &[u8; 32], right: &[u8; 32]) -> bool {
     bool::from(left.ct_eq(right))
-}
-
-fn prune_attempts(attempts: &mut VecDeque<Instant>, now: Instant) {
-    while attempts
-        .front()
-        .is_some_and(|attempt| now.duration_since(*attempt) >= PAIRING_RATE_WINDOW)
-    {
-        attempts.pop_front();
-    }
-}
-
-fn admit_rate_limited_request(
-    by_peer: &mut HashMap<IpAddr, VecDeque<Instant>>,
-    global: &mut VecDeque<Instant>,
-    peer: IpAddr,
-    peer_limit: usize,
-    global_limit: usize,
-) -> Result<(), PairingError> {
-    let now = Instant::now();
-    prune_attempts(global, now);
-    if global.len() >= global_limit {
-        return Err(PairingError::RateLimited);
-    }
-    by_peer.retain(|_, attempts| {
-        prune_attempts(attempts, now);
-        !attempts.is_empty()
-    });
-    if !by_peer.contains_key(&peer) && by_peer.len() >= MAX_RATE_LIMIT_PEERS {
-        return Err(PairingError::RateLimited);
-    }
-    let attempts = by_peer.entry(peer).or_default();
-    if attempts.len() >= peer_limit {
-        return Err(PairingError::RateLimited);
-    }
-    attempts.push_back(now);
-    global.push_back(now);
-    Ok(())
 }
 
 fn expire_session(state: &mut PairingState) {

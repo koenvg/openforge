@@ -137,6 +137,10 @@ async fn open_events_with_credential(
 ) -> Response {
     let mut request = Request::builder()
         .uri("/companion/v1/events")
+        .header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        )
         .header("authorization", format!("Bearer {credential}"));
     if let Some(cursor) = cursor {
         request = request.header("last-event-id", cursor);
@@ -164,6 +168,10 @@ async fn companion_events_require_device_authorization() {
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/events")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .header("last-event-id", "malformed")
                 .body(Body::empty())
                 .expect("build request"),

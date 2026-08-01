@@ -90,6 +90,9 @@
         "operationId": "getCompanionHostStatus",
         "summary": "Read the paired desktop host identity and protocol status",
         "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" }
+        ],
         "responses": {
           "200": {
             "description": "The Companion Gateway is available",
@@ -112,6 +115,9 @@
         "operationId": "getCompanionAttention",
         "summary": "Read the backend-authoritative Task Needs Attention snapshot",
         "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" }
+        ],
         "responses": {
           "200": {
             "description": "Current normalized Task attention rows in authoritative order",
@@ -134,6 +140,7 @@
         "summary": "Read the approved Task detail fields",
         "security": [{ "companionDeviceBearer": [] }],
         "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
           {
             "name": "taskId",
             "in": "path",
@@ -165,6 +172,7 @@
         "description": "Authenticated SSE stream backed by the OpenForge App Event Bus. Event data never contains internal event payloads, Handoff Notes, credentials, provider identifiers, or Agent-session identifiers. Clients refetch the named resources. Last-Event-ID resumes from the App Event Bus replay cursor when available; stream-gap requires discarding in-memory domain views and fetching fresh snapshots.",
         "security": [{ "companionDeviceBearer": [] }],
         "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
           {
             "name": "Last-Event-ID",
             "in": "header",
@@ -217,6 +225,15 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "OpenForge companion device credential"
+      }
+    },
+    "parameters": {
+      "CompanionProtocolVersion": {
+        "name": "openforge-companion-protocol-version",
+        "in": "header",
+        "required": true,
+        "description": "Major Companion protocol version. Device authentication is evaluated before compatibility so this header never bypasses trust.",
+        "schema": { "type": "integer", "const": 1 }
       }
     },
     "schemas": {

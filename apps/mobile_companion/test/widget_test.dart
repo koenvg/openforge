@@ -5,13 +5,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:openforge_companion/src/app.dart';
-import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/attention/attention_controller.dart';
 import 'package:openforge_companion/src/attention/attention_home.dart';
-import 'package:openforge_companion/src/generated/companion_v1_client.dart';
+import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
+import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/pairing/companion_pairing_controller.dart';
+import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
+import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
 
 void main() {
   testWidgets('launches into an accessible unpaired screen', (tester) async {
@@ -149,6 +151,24 @@ void main() {
 
     await tester.tap(find.text('Forget and pair again'));
     expect(reset, isTrue);
+  });
+
+  testWidgets('incompatible state retries after the user updates either app', (
+    tester,
+  ) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectionShell(
+          state: const IncompatibleProtocol(),
+          onRetry: () => retried = true,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Check again'));
+
+    expect(retried, isTrue);
   });
 
   testWidgets('local network denial opens app settings recovery', (
@@ -366,6 +386,44 @@ void main() {
     await tester.pump();
     expect(refreshes, 2);
   });
+
+  testWidgets(
+    'losing the desktop removes an open Task and its domain content',
+    (tester) async {
+      final storage = _MemoryCompanionStorage(_trustRecord);
+      final client = _DomainCompanionClient();
+      final pairing = CompanionPairingController(
+        client: client,
+        storage: storage,
+      );
+      final attention = AttentionController(client: client, storage: storage);
+      await pairing.restore();
+      await attention.refresh();
+
+      await tester.pumpWidget(
+        CompanionApp(
+          controller: pairing,
+          attentionController: attention,
+          taskDetailControllerFactory: (taskId) => TaskDetailController(
+            taskId: taskId,
+            client: client,
+            storage: storage,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sensitive Task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Private Handoff Notes'), findsOneWidget);
+
+      pairing.liveUnavailable();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Desktop unavailable'), findsOneWidget);
+      expect(find.text('Sensitive Task'), findsNothing);
+      expect(find.text('Private Handoff Notes'), findsNothing);
+    },
+  );
 }
 
 Future<void> _openScanner(WidgetTester tester) async {
@@ -497,4 +555,98 @@ final class _UnusedCompanionSecureStorage implements CompanionSecureStorage {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnsupportedError('Storage method was not expected.');
+}
+
+final _trustRecord = CompanionTrustRecord(
+  hostId: 'host-1',
+  certificateSha256: 'AA:BB:CC',
+  endpointCandidates: <Uri>[Uri.parse('https://openforge.local:17424')],
+  deviceId: 'device-1',
+  deviceCredential: 'device-secret',
+);
+
+final class _MemoryCompanionStorage implements CompanionSecureStorage {
+  _MemoryCompanionStorage(this.record);
+
+  CompanionTrustRecord? record;
+
+  @override
+  Future<void> forget() async => record = null;
+
+  @override
+  Future<CompanionTrustRecord?> load() async => record;
+
+  @override
+  Future<void> save(CompanionTrustRecord record) async => this.record = record;
+}
+
+final class _DomainCompanionClient implements CompanionClient {
+  @override
+  Future<CompanionHostConnection> fetchHostStatus(
+    CompanionTrustRecord trustRecord,
+  ) async => CompanionHostConnection(
+    endpoint: trustRecord.endpointCandidates.single,
+    status: HostStatus(
+      hostId: trustRecord.hostId,
+      protocolVersion: 1,
+      serverTime: DateTime.utc(2026, 7, 30),
+    ),
+  );
+
+  @override
+  Future<AttentionSnapshot> fetchAttention(
+    CompanionTrustRecord trustRecord,
+  ) async => AttentionSnapshot(
+    snapshotAt: DateTime.utc(2026, 7, 30, 12),
+    items: <AttentionItem>[
+      AttentionItem(
+        taskId: 'T-private',
+        projectId: 'P-private',
+        projectName: 'Private Project',
+        title: 'Sensitive Task',
+        state: 'blocked',
+        reason: 'Needs input',
+        activityAt: DateTime.utc(2026, 7, 30, 11),
+      ),
+    ],
+  );
+
+  @override
+  Future<TaskDetail> fetchTaskDetail(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async => TaskDetail(
+    taskId: taskId,
+    title: 'Sensitive Task',
+    projectId: 'P-private',
+    projectName: 'Private Project',
+    boardStatus: 'doing',
+    handoffNotes: 'Private Handoff Notes',
+    agentState: 'blocked',
+    agentErrorSummary: null,
+    createdAt: DateTime.utc(2026, 7, 29),
+    updatedAt: DateTime.utc(2026, 7, 30),
+    agentUpdatedAt: DateTime.utc(2026, 7, 30),
+  );
+
+  @override
+  Future<CompanionLiveConnection> openLiveEvents(
+    CompanionTrustRecord trustRecord, {
+    String? lastEventId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<PairingPoll> pollPairing({
+    required PairingBootstrap bootstrap,
+    required String requestId,
+    CompanionPairingDiagnostic? onDiagnostic,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<PairingSubmissionStatus> submitPairing({
+    required PairingBootstrap bootstrap,
+    required String deviceName,
+    required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
+  }) => throw UnimplementedError();
 }

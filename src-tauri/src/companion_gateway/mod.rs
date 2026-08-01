@@ -7,6 +7,7 @@ mod lifecycle;
 mod live_events;
 mod network;
 mod pairing;
+mod rate_limit;
 mod tailscale;
 mod task_detail;
 

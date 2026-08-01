@@ -5,6 +5,7 @@ use super::{
         CompanionAuthenticatedDevice, PairingCoordinator, PairingError, PairingPollResponse,
         PairingRequestKind, PairingSubmission,
     },
+    rate_limit::{RateLimitError, SlidingWindowRateLimiter},
     task_detail::CompanionTaskDetailSource,
 };
 #[cfg(test)]
@@ -24,9 +25,14 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 pub(crate) const PROTOCOL_VERSION: u8 = 1;
+pub(crate) const PROTOCOL_VERSION_HEADER: &str = "openforge-companion-protocol-version";
+const AUTHENTICATED_REQUESTS_PER_PEER_PER_MINUTE: usize = 120;
+const GLOBAL_AUTHENTICATED_REQUESTS_PER_MINUTE: usize = 4_096;
+const MAX_AUTHENTICATED_RATE_LIMIT_PEERS: usize = 1_024;
+const AUTHENTICATED_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompanionHostStatus {
@@ -294,8 +300,49 @@ async fn pairing_request_guard(
     next.run(request).await
 }
 
+async fn authenticated_request_guard(
+    State(rate_limit): State<Arc<SlidingWindowRateLimiter>>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let peer = connect_info
+        .map(|ConnectInfo(address)| address.ip())
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    match rate_limit.admit(peer) {
+        Ok(()) => next.run(request).await,
+        Err(RateLimitError::Limited) => {
+            authorization_error_response(CompanionErrorCode::RateLimited)
+        }
+        Err(RateLimitError::Unavailable) => {
+            authorization_error_response(CompanionErrorCode::TemporarilyUnavailable)
+        }
+    }
+}
+
+fn require_compatible_protocol(headers: &HeaderMap) -> Result<(), CompanionErrorCode> {
+    let compatible = headers
+        .get(PROTOCOL_VERSION_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u8>().ok())
+        .is_some_and(|version| version == PROTOCOL_VERSION);
+    if compatible {
+        Ok(())
+    } else {
+        Err(CompanionErrorCode::IncompatibleVersion)
+    }
+}
+
+fn authorize_versioned_request(
+    state: &CompanionRouterState,
+    headers: &HeaderMap,
+) -> Result<(), CompanionErrorCode> {
+    state.authorizer.authorize(headers)?;
+    require_compatible_protocol(headers)
+}
+
 async fn status_handler(State(state): State<CompanionRouterState>, headers: HeaderMap) -> Response {
-    if let Err(code) = state.authorizer.authorize(&headers) {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
         return authorization_error_response(code);
     }
 
@@ -312,6 +359,9 @@ async fn events_handler(State(state): State<CompanionRouterState>, headers: Head
         Ok(access) => access,
         Err(code) => return authorization_error_response(code),
     };
+    if let Err(code) = require_compatible_protocol(&headers) {
+        return authorization_error_response(code);
+    }
     let cursor = match headers.get("last-event-id") {
         Some(value) => {
             let Some(cursor) = value.to_str().ok().and_then(AppEventCursor::parse) else {
@@ -345,7 +395,7 @@ async fn attention_handler(
     State(state): State<CompanionRouterState>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(code) = state.authorizer.authorize(&headers) {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
         return authorization_error_response(code);
     }
 
@@ -397,7 +447,7 @@ async fn task_detail_handler(
     Path(task_id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(code) = state.authorizer.authorize(&headers) {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
         return authorization_error_response(code);
     }
 
@@ -609,11 +659,24 @@ pub(crate) fn create_router_with_sources_and_event_access(
         ))
         .layer(DefaultBodyLimit::max(4_096));
 
-    Router::new()
+    let authenticated_rate_limit = Arc::new(SlidingWindowRateLimiter::new(
+        AUTHENTICATED_REQUESTS_PER_PEER_PER_MINUTE,
+        GLOBAL_AUTHENTICATED_REQUESTS_PER_MINUTE,
+        MAX_AUTHENTICATED_RATE_LIMIT_PEERS,
+        AUTHENTICATED_RATE_LIMIT_WINDOW,
+    ));
+    let authenticated_routes = Router::new()
         .route("/companion/v1/status", get(status_handler))
         .route("/companion/v1/attention", get(attention_handler))
         .route("/companion/v1/events", get(events_handler))
         .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
+        .route_layer(middleware::from_fn_with_state(
+            authenticated_rate_limit,
+            authenticated_request_guard,
+        ));
+
+    Router::new()
+        .merge(authenticated_routes)
         .merge(pairing_routes)
         .fallback(not_found_handler)
         .with_state(CompanionRouterState {
