@@ -38,7 +38,7 @@ final class LiveUpdatesController {
 
   final CompanionClient _client;
   final CompanionSecureStorage _storage;
-  AttentionController _attention;
+  AttentionController? _attention;
   final LiveReconnectDelay _delay;
   final int maxReconnectAttempts;
   final Duration reconnectBaseDelay;
@@ -69,7 +69,7 @@ final class LiveUpdatesController {
     _callbacks.onIncompatible = onIncompatible;
   }
 
-  void setAttentionController(AttentionController controller) {
+  void setAttentionController(AttentionController? controller) {
     _attention = controller;
   }
 
@@ -212,10 +212,12 @@ final class LiveUpdatesController {
 
   Future<void> _handleInvalidation(CompanionResourcesInvalidated event) async {
     final refreshes = <Future<CompanionRefreshOutcome>>[];
-    if (event.resources.any(
-      (resource) => resource.kind == CompanionResourceKind.attention,
-    )) {
-      refreshes.add(_attention.refreshWithOutcome());
+    final attention = _attention;
+    if (attention != null &&
+        event.resources.any(
+          (resource) => resource.kind == CompanionResourceKind.attention,
+        )) {
+      refreshes.add(attention.refreshWithOutcome());
     }
     final openTask = _openTask;
     if (openTask != null &&
@@ -231,9 +233,9 @@ final class LiveUpdatesController {
 
   Future<void> _refreshViews({required bool clearFirst}) async {
     if (clearFirst) _clearViews();
-    final refreshes = <Future<CompanionRefreshOutcome>>[
-      _attention.refreshWithOutcome(),
-    ];
+    final refreshes = <Future<CompanionRefreshOutcome>>[];
+    final attention = _attention;
+    if (attention != null) refreshes.add(attention.refreshWithOutcome());
     final openTask = _openTask;
     if (openTask != null) refreshes.add(openTask.refreshWithOutcome());
     _requireCurrentSnapshots(await Future.wait(refreshes));
@@ -252,7 +254,7 @@ final class LiveUpdatesController {
   }
 
   void _clearViews() {
-    _attention.clear();
+    _attention?.clear();
     _openTask?.clear();
   }
 

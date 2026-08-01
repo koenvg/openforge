@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import 'attention/attention_controller.dart';
@@ -44,6 +45,7 @@ class _CompanionAppState extends State<CompanionApp>
   late CompanionConnectionState _state;
   late AttentionViewState _attentionState;
   TaskDetailController? _openTaskController;
+  var _pairingFlowActive = false;
   late bool _isForeground;
 
   @override
@@ -89,6 +91,11 @@ class _CompanionAppState extends State<CompanionApp>
       widget.attentionController?.addListener(_onAttentionControllerChanged);
       _attentionState =
           widget.attentionController?.state ?? const AttentionLoading();
+    }
+    if (attentionChanged && !liveChanged) {
+      widget.liveUpdatesController?.setAttentionController(
+        widget.attentionController,
+      );
     }
 
     if (liveChanged) {
@@ -170,10 +177,7 @@ class _CompanionAppState extends State<CompanionApp>
       onCertificateMismatch: widget.controller?.liveCertificateMismatch,
       onIncompatible: widget.controller?.liveIncompatible,
     );
-    final attentionController = widget.attentionController;
-    if (attentionController != null) {
-      live.setAttentionController(attentionController);
-    }
+    live.setAttentionController(widget.attentionController);
     live.setOpenTask(_openTaskController);
   }
 
@@ -190,6 +194,7 @@ class _CompanionAppState extends State<CompanionApp>
 
   void _releaseLiveController(LiveUpdatesController? live) {
     live?.setOpenTask(null);
+    live?.setAttentionController(null);
     _clearLiveCallbacks(live);
     unawaited(live?.suspend());
   }
@@ -203,7 +208,43 @@ class _CompanionAppState extends State<CompanionApp>
     if (controller == null) return;
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    await captureCompanionPairing(navigator: navigator, controller: controller);
+    await _runPairingFlow(
+      () => captureCompanionPairing(
+        navigator: navigator,
+        controller: controller,
+        isControllerCurrent: () =>
+            mounted && identical(widget.controller, controller),
+      ),
+    );
+  }
+
+  Future<void> _openManualPairing() async {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    await _runPairingFlow(
+      () => enterCompanionPairingBootstrap(
+        navigator: navigator,
+        controller: controller,
+        isControllerCurrent: () =>
+            mounted && identical(widget.controller, controller),
+      ),
+    );
+  }
+
+  Future<void> _runPairingFlow(Future<void> Function() flow) async {
+    if (_pairingFlowActive) return;
+    setState(() => _pairingFlowActive = true);
+    try {
+      await flow();
+    } finally {
+      if (mounted) {
+        setState(() => _pairingFlowActive = false);
+      } else {
+        _pairingFlowActive = false;
+      }
+    }
   }
 
   Future<void> _forgetAndPairAgain() async {
@@ -275,7 +316,13 @@ class _CompanionAppState extends State<CompanionApp>
           )
         : ConnectionShell(
             state: _state,
-            onPair: widget.controller == null ? null : _openScanner,
+            onPair: widget.controller == null || _pairingFlowActive
+                ? null
+                : _openScanner,
+            onManualPair:
+                widget.controller == null || !kDebugMode || _pairingFlowActive
+                ? null
+                : _openManualPairing,
             onReset: widget.controller == null ? null : _forgetAndPairAgain,
             onRetry: widget.controller == null ? null : _retryConnection,
             onOpenSettings: widget.controller == null

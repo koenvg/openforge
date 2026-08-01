@@ -485,6 +485,79 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'releasing live updates detaches attention before its owner is disposed',
+    (tester) async {
+      final endpoint = Uri.parse(_tailscaleEndpoint);
+      final client = _SuccessfulTailscaleClient(endpoint);
+      final storage = _MemorySecureStorage();
+      final pairing = CompanionPairingController(
+        client: client,
+        storage: storage,
+        pollInterval: Duration.zero,
+      );
+      final oldAttention = AttentionController(
+        client: client,
+        storage: storage,
+      );
+      final newAttention = AttentionController(
+        client: client,
+        storage: storage,
+      );
+      final oldLive = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        attention: oldAttention,
+      );
+      final newLive = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        attention: newAttention,
+      );
+      var oldAttentionNotifications = 0;
+      oldAttention.addListener(() => oldAttentionNotifications += 1);
+      var oldAttentionDisposed = false;
+      addTearDown(() {
+        pairing.dispose();
+        if (!oldAttentionDisposed) oldAttention.dispose();
+        newAttention.dispose();
+      });
+
+      await tester.pumpWidget(
+        CompanionApp(
+          controller: pairing,
+          attentionController: oldAttention,
+          liveUpdatesController: oldLive,
+        ),
+      );
+      await pairing.pairFromQr(
+        qrPayload: _tailscaleQrPayload,
+        deviceName: 'Tailscale Android',
+        platform: 'android',
+      );
+      await tester.pumpAndSettle();
+      final notificationsBeforeRelease = oldAttentionNotifications;
+
+      await tester.pumpWidget(
+        CompanionApp(
+          controller: pairing,
+          attentionController: newAttention,
+          liveUpdatesController: newLive,
+        ),
+      );
+      await tester.pump();
+      expect(oldAttentionNotifications, notificationsBeforeRelease);
+
+      oldAttention.dispose();
+      oldAttentionDisposed = true;
+      await oldLive.suspend();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 }
 
 final class _SuccessfulTailscaleClient implements CompanionClient {
