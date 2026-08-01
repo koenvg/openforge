@@ -27,6 +27,10 @@ The compatibility handler validates base64, declared byte size, image signatures
 
 Images are reset with terminal buffer replay/new-session clearing and are released when the owning xterm instance is disposed. Detach/reattach, resize, and visibility refresh reuse the same terminal-owned image storage rather than creating overlay resources.
 
+## Mobile Companion behavior
+
+The milestone-one Companion Agent Terminal does not render inline images. Before terminal output or bounded replay enters a Companion Terminal WebSocket, the Companion Gateway consumes each iTerm2 inline-image sequence and substitutes `[Image unavailable on mobile]`. This per-attachment transformation leaves the desktop terminal stream and its image rendering unchanged while preventing multi-megabyte base64 image payloads from crossing to the phone. SIXEL and Kitty graphics remain unadvertised and unsupported as described above.
+
 ## Developer configuration
 
 `createTerminalRuntime` accepts `enableImages: false` for hosts that cannot or must not render images. Such runtimes do not load the image addon and `getTerminalImageProtocol(entry)` returns `null`; callers must omit PTY capability advertisement in that case.

@@ -112,6 +112,10 @@ _Avoid_: Sandboxed widget, project-only script
 An HTTP(S) URL activation associated with one **Task**, eligible for handling inside OpenForge while retaining external-browser fallback.
 _Avoid_: External URL, browser command, global link
 
+**Host-local URL**:
+An HTTP(S) URL emitted by a desktop tool whose loopback host refers to the OpenForge desktop rather than the paired phone.
+_Avoid_: Mobile localhost, public URL, Task Link
+
 **Task Link Handler**:
 The one active **Trusted Plugin** integration that may claim or decline **Task Links** for in-app presentation.
 _Avoid_: URL interceptor, browser command handler, link priority
@@ -183,6 +187,30 @@ _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal
 **Terminal Surface**:
 A plugin or core UI area that presents an interactive terminal through the **Terminal Runtime**.
 _Avoid_: PTY owner, terminal backend, shell manager
+
+**Companion Terminal**:
+A mobile **Terminal Surface** through which a paired device interacts with a desktop-owned terminal session.
+_Avoid_: Terminal output viewer, mobile shell, remote desktop
+
+**Companion Agent Terminal**:
+The first **Companion Terminal** capability, limited to the **Agent Session** attached to a **Task**.
+_Avoid_: General Companion Terminal, shell tab, agent chat
+
+**Companion Terminal Attachment**:
+A paired device's temporary interactive connection to an existing desktop-owned terminal session, without ownership of that session's lifecycle.
+_Avoid_: Mobile Agent Session, remote session, spawned terminal
+
+**Companion Terminal Channel**:
+The authenticated, bidirectional connection that carries terminal interaction for one **Companion Terminal Attachment**.
+_Avoid_: Companion event stream, generic command socket, terminal API
+
+**Terminal Replay**:
+Retained terminal output sent when a **Companion Terminal Attachment** begins, before live output continues.
+_Avoid_: Exact screen snapshot, durable terminal history, session transcript
+
+**Paired Companion Device**:
+A mobile device explicitly approved by the desktop to connect to that trusted OpenForge host.
+_Avoid_: Authenticated client, discovered device, terminal-only device
 
 **Shell Session Key**:
 The OpenForge identifier for one concrete terminal shell tab/session.
@@ -298,9 +326,17 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **Out of Focus** uses the same board-tab styling as **Focus**, **In-Flight Tasks**, and backlog; its meaning comes from placement and action language, not special visual treatment.
 - **Out of Focus** is part of the core **Task** board because it protects the default attention-only **Focus** promise; custom board workflows may later belong to **Trusted Plugins** when OpenForge exposes explicit capabilities for them.
 - An **Implementation Run** uses exactly one **Agent Session** at a time.
+- The **Companion Agent Terminal** is the first delivery slice of the **Companion Terminal**; later slices may include ordinary shell sessions.
+- A **Companion Terminal Attachment** connects to an existing terminal session without creating, resuming, aborting, replacing, or otherwise owning that session.
+- Ending a **Companion Terminal Attachment** does not end its desktop-owned terminal session.
+- A **Companion Agent Terminal** is addressed by **Task**; the desktop resolves the Task's current **Agent Session** without exposing provider-specific session identifiers to the paired device.
+- A **Companion Agent Terminal** is the same product concept across all supported Agent providers.
+- A **Companion Terminal Attachment** remains bound to the **Agent Session** resolved when it began; it ends with that session and never switches automatically to a later session for the same **Task**.
+- A **Paired Companion Device** may hold one **Companion Terminal Attachment** at a time; beginning another replaces that device's previous attachment without affecting attachments from other paired devices.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
 - A **Task Link** is offered to the active **Task Link Handler**; when no handler exists or it declines, OpenForge opens the URL externally.
+- A **Host-local URL** refers to the desktop host even when it is presented on a paired phone; it is not a **Task Link** or a URL on the phone's loopback interface.
 - A failed **Task Link Handler** does not also trigger external fallback because it may already have partially handled the link.
 - A live **Task Browser Surface** is uniquely identified by its owning OpenForge window, **Trusted Plugin**, **Task**, and plugin-local surface identifier.
 - Every **Task Browser Surface** owned by the same **Trusted Plugin** shares one **Plugin Browser Session** regardless of **Task** or project, so a login performed in one Task is available in every other; no browser session data is shared across plugins.
