@@ -9,15 +9,15 @@ describe('runtime registry — taskStart prefix providers', () => {
     const registry = createRegistry('com.example.a')
 
     registry.getFrontendApi().taskStart.registerPrefixProvider({
-      id: 'injectable',
-      title: 'Start with injectable…',
+      id: 'snippet',
+      title: 'Start with snippet…',
       provide: async () => 'prefix text',
     })
 
     const listed = registry.listTaskStartPrefixProviders()
     expect(listed).toHaveLength(1)
-    expect(listed[0].qualifiedId).toBe('com.example.a.injectable')
-    expect(listed[0].title).toBe('Start with injectable…')
+    expect(listed[0].qualifiedId).toBe('com.example.a.snippet')
+    expect(listed[0].title).toBe('Start with snippet…')
     expect(listed[0].order).toBe(0)
   })
 
@@ -25,8 +25,8 @@ describe('runtime registry — taskStart prefix providers', () => {
     const registry = createRegistry('com.example.a')
 
     const subscription = registry.getFrontendApi().taskStart.registerPrefixProvider({
-      id: 'injectable',
-      title: 'Start with injectable…',
+      id: 'snippet',
+      title: 'Start with snippet…',
       provide: async () => null,
     })
     subscription.dispose()
@@ -39,7 +39,7 @@ describe('runtime registry — taskStart prefix providers', () => {
 
     expect(() =>
       registry.getFrontendApi().taskStart.registerPrefixProvider({
-        id: 'injectable',
+        id: 'snippet',
         title: '',
         provide: async () => null,
       }),
@@ -51,8 +51,8 @@ describe('runtime registry — taskStart prefix providers', () => {
 
     expect(() =>
       registry.getFrontendApi().taskStart.registerPrefixProvider({
-        id: 'injectable',
-        title: 'Start with injectable…',
+        id: 'snippet',
+        title: 'Start with snippet…',
       } as never),
     ).toThrow()
   })
@@ -72,8 +72,8 @@ describe('runtime registry — taskStart prefix providers', () => {
     const provide = vi.fn().mockResolvedValue('chosen')
 
     registry.getFrontendApi().taskStart.registerPrefixProvider({
-      id: 'injectable',
-      title: 'Start with injectable…',
+      id: 'snippet',
+      title: 'Start with snippet…',
       provide,
     })
 

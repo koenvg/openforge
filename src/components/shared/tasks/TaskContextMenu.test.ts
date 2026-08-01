@@ -349,11 +349,11 @@ describe('TaskContextMenu', () => {
 
 describe('TaskContextMenu prefix providers', () => {
   const provider = {
-    id: 'injectable',
-    qualifiedId: 'com.openforge.injectables.injectable',
-    pluginId: 'com.openforge.injectables',
+    id: 'snippet',
+    qualifiedId: 'com.example.prefixer.snippet',
+    pluginId: 'com.example.prefixer',
     projectId: null,
-    title: 'Start with injectable…',
+    title: 'Start with snippet…',
     order: 0,
     provide: vi.fn(),
   }
@@ -369,7 +369,7 @@ describe('TaskContextMenu prefix providers', () => {
 
     renderMenu('backlog')
 
-    expect(screen.getByText('Start with injectable…')).toBeTruthy()
+    expect(screen.getByText('Start with snippet…')).toBeTruthy()
   })
 
   it('does not render provider items for doing tasks', () => {
@@ -377,14 +377,14 @@ describe('TaskContextMenu prefix providers', () => {
 
     renderMenu('doing')
 
-    expect(screen.queryByText('Start with injectable…')).toBeNull()
+    expect(screen.queryByText('Start with snippet…')).toBeNull()
   })
 
   it('leaves the menu unchanged when no provider is installed', () => {
     renderMenu('backlog')
 
     expect(screen.getByText('Start Task')).toBeTruthy()
-    expect(screen.queryByText('Start with injectable…')).toBeNull()
+    expect(screen.queryByText('Start with snippet…')).toBeNull()
   })
 
   it('starts the task with the prefix the provider returned', async () => {
@@ -392,12 +392,12 @@ describe('TaskContextMenu prefix providers', () => {
     vi.mocked(requestTaskStartPrefix).mockResolvedValue('Verify relevance.')
 
     const onStart = renderMenu('backlog')
-    await fireEvent.click(screen.getByText('Start with injectable…'))
+    await fireEvent.click(screen.getByText('Start with snippet…'))
 
     await waitFor(() => expect(onStart).toHaveBeenCalledWith('T-1', 'Verify relevance.'))
     expect(requestTaskStartPrefix).toHaveBeenCalledWith(
-      'com.openforge.injectables',
-      'injectable',
+      'com.example.prefixer',
+      'snippet',
       { taskId: 'T-1', projectId: null },
     )
   })
@@ -407,7 +407,7 @@ describe('TaskContextMenu prefix providers', () => {
     vi.mocked(requestTaskStartPrefix).mockResolvedValue(null)
 
     const onStart = renderMenu('backlog')
-    await fireEvent.click(screen.getByText('Start with injectable…'))
+    await fireEvent.click(screen.getByText('Start with snippet…'))
 
     await waitFor(() => expect(requestTaskStartPrefix).toHaveBeenCalled())
     expect(onStart).not.toHaveBeenCalled()
