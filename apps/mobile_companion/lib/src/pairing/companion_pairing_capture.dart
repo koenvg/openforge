@@ -56,8 +56,15 @@ Future<void> captureCompanionPairing({
     qrPayload: qrPayload,
     deviceName: deviceName,
     platform: platform,
+    onDiagnostic: (message) => _tracePairingLifecycle('QR $message'),
   );
-  _tracePairingLifecycle('controller pairing completed');
+  if (!(isControllerCurrent?.call() ?? true)) {
+    _tracePairingLifecycle('QR controller replaced during pairing');
+    return;
+  }
+  _tracePairingLifecycle(
+    'controller pairing returned with ${controller.state.runtimeType}',
+  );
 }
 
 Future<void> enterCompanionPairingBootstrap({
@@ -90,12 +97,76 @@ Future<void> enterCompanionPairingBootstrap({
     return;
   }
 
-  await controller.pairFromQr(
-    qrPayload: input.qrPayload,
-    deviceName: input.deviceName,
-    platform: platform,
+  final diagnostics = <String>[];
+  void recordDiagnostic(String message) {
+    diagnostics.add(message);
+    _tracePairingLifecycle('manual $message');
+  }
+
+  try {
+    await controller.pairFromQr(
+      qrPayload: input.qrPayload,
+      deviceName: input.deviceName,
+      platform: platform,
+      onDiagnostic: recordDiagnostic,
+      propagateFailures: true,
+    );
+    if (!(isControllerCurrent?.call() ?? true)) {
+      _tracePairingLifecycle('manual controller replaced during pairing');
+      return;
+    }
+    _tracePairingLifecycle(
+      'manual controller pairing returned with ${controller.state.runtimeType}',
+    );
+  } on Object catch (error) {
+    recordDiagnostic('failure surfaced — ${error.runtimeType}: $error');
+    if (!(isControllerCurrent?.call() ?? true)) {
+      _tracePairingLifecycle(
+        'manual controller replaced during pairing failure',
+      );
+      return;
+    }
+    if (!navigator.mounted) return;
+    await _showManualPairingFailure(navigator, diagnostics);
+  }
+}
+
+Future<void> _showManualPairingFailure(
+  NavigatorState navigator,
+  List<String> diagnostics,
+) async {
+  _tracePairingLifecycle('manual failure route push');
+  final route = DialogRoute<void>(
+    context: navigator.context,
+    builder: (_) => AlertDialog(
+      title: const Text('Direct pairing failed'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              'The request did not reach desktop approval. Keep Tailscale '
+              'connected, generate a fresh pairing code, and retry. '
+              'Endpoint diagnostics:',
+            ),
+            const SizedBox(height: 12),
+            SelectableText(diagnostics.join('\n')),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(navigator.context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
   );
-  _tracePairingLifecycle('manual controller pairing completed');
+  await navigator.push<void>(route);
+  _tracePairingLifecycle('manual failure route popped');
+  await route.completed;
+  _tracePairingLifecycle('manual failure route disposed');
 }
 
 Future<String?> _requestDeviceName(

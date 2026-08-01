@@ -173,7 +173,8 @@ _ConnectionContent _contentFor(
   PairingUnavailable() => const _ConnectionContent(
     title: 'Pairing unavailable',
     message:
-        'The pairing request could not be completed. Try a new QR session.',
+        'The secure pairing request could not be completed. Keep Tailscale '
+        'connected, generate a fresh pairing code, and retry.',
     icon: Icons.cloud_off_outlined,
     iconLabel: 'Pairing request is unavailable',
   ),

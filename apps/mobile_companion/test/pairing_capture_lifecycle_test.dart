@@ -138,7 +138,57 @@ void main() {
   );
 
   testWidgets(
-    'controller replacement cancels an in-flight manual pairing submission',
+    'manual pairing surfaces the exact pre-approval submission failure',
+    (tester) async {
+      final client = _SuccessfulPairingClient(
+        submitError: StateError('No route to 100.64.0.7:17424'),
+      );
+      final controller = CompanionPairingController(
+        client: client,
+        storage: _MemorySecureStorage(),
+        pollInterval: Duration.zero,
+      );
+      addTearDown(controller.dispose);
+      await controller.forgetAndReset();
+
+      await tester.pumpWidget(CompanionApp(controller: controller));
+      await tester.tap(find.byKey(const Key('pair-manually')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('manual-pairing-payload')),
+        _tailscaleQrPayload,
+      );
+      await tester.tap(find.byKey(const Key('submit-manual-pairing')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Direct pairing failed'), findsOneWidget);
+      expect(
+        find.textContaining('gateway request submission failed'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('endpoint started: $_tailscaleEndpoint'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('endpoint failed: $_tailscaleEndpoint'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('No route to 100.64.0.7:17424'),
+        findsOneWidget,
+      );
+      expect(find.textContaining(_secret), findsNothing);
+
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'controller replacement before route disposal cancels manual submission',
     (tester) async {
       final oldClient = _SuccessfulPairingClient();
       final newClient = _SuccessfulPairingClient();
@@ -175,6 +225,55 @@ void main() {
 
       expect(oldClient.submitCalls, 0);
       expect(newClient.submitCalls, 0);
+      expect(find.text('Not paired'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'controller replacement during submission cannot save stale trust',
+    (tester) async {
+      final oldClient = _SuccessfulPairingClient(blockSubmission: true);
+      final newClient = _SuccessfulPairingClient();
+      final oldStorage = _MemorySecureStorage();
+      final oldController = CompanionPairingController(
+        client: oldClient,
+        storage: oldStorage,
+        pollInterval: Duration.zero,
+      );
+      final newController = CompanionPairingController(
+        client: newClient,
+        storage: _MemorySecureStorage(),
+        pollInterval: Duration.zero,
+      );
+      addTearDown(() {
+        oldClient.completeSubmission();
+        oldController.dispose();
+        newController.dispose();
+      });
+      await oldController.forgetAndReset();
+      await newController.forgetAndReset();
+
+      await tester.pumpWidget(CompanionApp(controller: oldController));
+      await tester.tap(find.byKey(const Key('pair-manually')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('manual-pairing-payload')),
+        _tailscaleQrPayload,
+      );
+      await tester.tap(find.byKey(const Key('submit-manual-pairing')));
+      await _pumpUntil(tester, () => oldClient.submitCalls == 1);
+
+      await tester.pumpWidget(CompanionApp(controller: newController));
+      oldClient.completeSubmission();
+      await tester.pumpAndSettle();
+
+      expect(oldStorage.record, isNull);
+      expect(newClient.submitCalls, 0);
+      expect(find.text('Direct pairing failed'), findsNothing);
       expect(find.text('Not paired'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
@@ -258,11 +357,31 @@ final class _FakeMobileScannerPlatform extends MobileScannerPlatform {
 }
 
 final class _SuccessfulPairingClient implements CompanionClient {
-  _SuccessfulPairingClient({this.waitForApproval = false});
+  _SuccessfulPairingClient({
+    this.waitForApproval = false,
+    this.submitError,
+    bool blockSubmission = false,
+  }) : _submission = blockSubmission
+           ? Completer<PairingSubmissionStatus>()
+           : null;
 
   final bool waitForApproval;
+  final Object? submitError;
   final _approval = Completer<PairingPoll>();
+  final Completer<PairingSubmissionStatus>? _submission;
   var submitCalls = 0;
+
+  void completeSubmission() {
+    final submission = _submission;
+    if (submission == null || submission.isCompleted) return;
+    submission.complete(
+      PairingSubmissionStatus(
+        requestId: 'request-1',
+        status: 'pending',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      ),
+    );
+  }
 
   void approve() {
     if (!_approval.isCompleted) {
@@ -281,8 +400,21 @@ final class _SuccessfulPairingClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String deviceName,
     required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) async {
     submitCalls += 1;
+    final endpoint = bootstrap.endpointCandidates.first;
+    onDiagnostic?.call('endpoint started: $endpoint');
+    final error = submitError;
+    if (error != null) {
+      onDiagnostic?.call(
+        'endpoint failed: $endpoint — ${error.runtimeType}: $error',
+      );
+      throw error;
+    }
+    final submission = _submission;
+    if (submission != null) return await submission.future;
+    onDiagnostic?.call('endpoint succeeded: $endpoint');
     return PairingSubmissionStatus(
       requestId: 'request-1',
       status: 'pending',
@@ -294,6 +426,7 @@ final class _SuccessfulPairingClient implements CompanionClient {
   Future<PairingPoll> pollPairing({
     required PairingBootstrap bootstrap,
     required String requestId,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) {
     if (waitForApproval) return _approval.future;
     return Future<PairingPoll>.value(

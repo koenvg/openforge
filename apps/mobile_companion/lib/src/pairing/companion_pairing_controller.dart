@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../client/companion_client.dart';
@@ -15,19 +17,28 @@ final class CompanionPairingController extends ChangeNotifier {
     CompanionEndpointDiscovery discovery =
         const NoopCompanionEndpointDiscovery(),
     Duration pollInterval = const Duration(seconds: 1),
-  }) => CompanionPairingController._(client, storage, discovery, pollInterval);
+    Duration submissionTimeout = const Duration(seconds: 20),
+  }) => CompanionPairingController._(
+    client,
+    storage,
+    discovery,
+    pollInterval,
+    submissionTimeout,
+  );
 
   CompanionPairingController._(
     this._client,
     this._storage,
     this._discovery,
     this._pollInterval,
+    this._submissionTimeout,
   );
 
   final CompanionClient _client;
   final CompanionSecureStorage _storage;
   final CompanionEndpointDiscovery _discovery;
   final Duration _pollInterval;
+  final Duration _submissionTimeout;
 
   var _operationGeneration = 0;
 
@@ -88,6 +99,16 @@ final class CompanionPairingController extends ChangeNotifier {
 
   void liveIncompatible() => _setState(const IncompatibleProtocol());
 
+  void cancelPendingOperation() {
+    _operationGeneration += 1;
+  }
+
+  @override
+  void dispose() {
+    cancelPendingOperation();
+    super.dispose();
+  }
+
   Future<void> forgetAndReset() async {
     _operationGeneration += 1;
     await _storage.forget();
@@ -98,18 +119,47 @@ final class CompanionPairingController extends ChangeNotifier {
     required String qrPayload,
     required String deviceName,
     required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
+    bool propagateFailures = false,
   }) async {
     final generation = ++_operationGeneration;
+    var stage = 'payload parsing';
     _setState(const Pairing());
     try {
+      onDiagnostic?.call('$stage started');
       final bootstrap = PairingBootstrap.parse(qrPayload);
-      final submission = await _client.submitPairing(
-        bootstrap: bootstrap,
-        deviceName: deviceName,
-        platform: platform,
+      onDiagnostic?.call(
+        'payload parsed: host=${bootstrap.hostId}, endpoints='
+        '${bootstrap.endpointCandidates.join(', ')}',
       );
+      stage = 'gateway request submission';
+      onDiagnostic?.call(
+        '$stage started for device-name length '
+        '${deviceName.length}',
+      );
+      final submission = await _client
+          .submitPairing(
+            bootstrap: bootstrap,
+            deviceName: deviceName,
+            platform: platform,
+            onDiagnostic: onDiagnostic,
+          )
+          .timeout(
+            _submissionTimeout,
+            onTimeout: () => throw TimeoutException(
+              'Could not send the pairing request through a pinned endpoint '
+              'within ${_submissionTimeout.inSeconds}s. Keep Tailscale '
+              'connected and generate a fresh pairing code.',
+            ),
+          );
       if (!_isCurrent(generation)) return;
+      onDiagnostic?.call(
+        '$stage succeeded: request=${submission.requestId}, '
+        'expires=${submission.expiresAt.toUtc().toIso8601String()}',
+      );
       _setState(const AwaitingApproval());
+      stage = 'desktop approval polling';
+      onDiagnostic?.call('$stage started');
 
       while (DateTime.now().isBefore(submission.expiresAt)) {
         late PairingPoll decision;
@@ -117,6 +167,7 @@ final class CompanionPairingController extends ChangeNotifier {
           decision = await _client.pollPairing(
             bootstrap: bootstrap,
             requestId: submission.requestId,
+            onDiagnostic: onDiagnostic,
           );
           if (!_isCurrent(generation)) return;
         } on CompanionV1Exception catch (error) {
@@ -145,6 +196,7 @@ final class CompanionPairingController extends ChangeNotifier {
               'Approved pairing response omitted its credential.',
             );
           }
+          onDiagnostic?.call('desktop approval received');
           final trustRecord = CompanionTrustRecord(
             hostId: bootstrap.hostId,
             certificateSha256: bootstrap.certificateSha256,
@@ -154,21 +206,33 @@ final class CompanionPairingController extends ChangeNotifier {
           );
           await _storage.save(trustRecord);
           if (!_isCurrent(generation)) return;
+          stage = 'paired host connection';
           await _connect(trustRecord, generation);
           if (_state is CertificateMismatch || _state is Revoked) {
             await _storage.forget();
           }
+          onDiagnostic?.call('$stage completed with ${_state.runtimeType}');
           return;
         }
         await Future<void>.delayed(_pollInterval);
         if (!_isCurrent(generation)) return;
       }
       if (_isCurrent(generation)) _setState(const Unpaired());
-    } on CompanionCertificateMismatch {
+      final error = TimeoutException(
+        'Desktop approval was not received before the pairing request expired.',
+      );
+      onDiagnostic?.call('$stage failed — ${error.runtimeType}: $error');
+      if (propagateFailures) throw error;
+    } on CompanionCertificateMismatch catch (error, stackTrace) {
       if (!_isCurrent(generation)) return;
+      onDiagnostic?.call('$stage failed — ${error.runtimeType}: $error');
       _setState(const CertificateMismatch());
-    } on CompanionV1Exception catch (error) {
+      if (propagateFailures) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    } on CompanionV1Exception catch (error, stackTrace) {
       if (!_isCurrent(generation)) return;
+      onDiagnostic?.call('$stage failed — ${error.runtimeType}: $error');
       _setState(switch (error.code) {
         'revoked' => const Revoked(),
         'incompatible_version' => const IncompatibleProtocol(),
@@ -177,13 +241,21 @@ final class CompanionPairingController extends ChangeNotifier {
           const PairingRejected(),
         _ => const PairingUnavailable(),
       });
-    } on FormatException {
+      if (propagateFailures) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+    } on FormatException catch (error, stackTrace) {
       if (!_isCurrent(generation)) return;
+      onDiagnostic?.call('$stage failed — ${error.runtimeType}: $error');
       _setState(const Unpaired());
-      rethrow;
-    } on Object {
+      Error.throwWithStackTrace(error, stackTrace);
+    } on Object catch (error, stackTrace) {
       if (!_isCurrent(generation)) return;
+      onDiagnostic?.call('$stage failed — ${error.runtimeType}: $error');
       _setState(const PairingUnavailable());
+      if (propagateFailures) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     }
   }
 

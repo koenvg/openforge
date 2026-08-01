@@ -72,6 +72,7 @@ final class _FakeClient implements CompanionClient {
   Future<PairingPoll> pollPairing({
     required PairingBootstrap bootstrap,
     required String requestId,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) => throw UnsupportedError('not used');
 
   @override
@@ -79,6 +80,7 @@ final class _FakeClient implements CompanionClient {
     required PairingBootstrap bootstrap,
     required String deviceName,
     required String platform,
+    CompanionPairingDiagnostic? onDiagnostic,
   }) => throw UnsupportedError('not used');
 }
 

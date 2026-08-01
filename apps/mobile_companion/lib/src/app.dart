@@ -79,6 +79,7 @@ class _CompanionAppState extends State<CompanionApp>
         oldWidget.liveUpdatesController != widget.liveUpdatesController;
 
     if (controllerChanged) {
+      oldWidget.controller?.cancelPendingOperation();
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);
       _state = widget.controller?.state ?? widget.initialState;
