@@ -22,7 +22,7 @@ This contract keeps Electron quit cleanup from reporting false failures while st
 | Budget | Value | Owner | Purpose |
 | --- | ---: | --- | --- |
 | Electron event-stream teardown timeout | 250ms | `src/electron/shutdownBudgetContract.ts` | Bounds pre-SIGTERM event-stream settling so a hung stream cannot consume quit cleanup. |
-| Rust internal cleanup timeout | 5,000ms | `src-tauri/src/http_server.rs` | Bounds plugin-sidecar and PTY cleanup after Rust observes shutdown. |
+| Rust internal cleanup timeout | 5,000ms | `src-tauri/src/http_server/server_lifecycle.rs` | Bounds plugin-sidecar and PTY cleanup after Rust observes shutdown. |
 | Electron SIGTERM grace | 7,000ms | `src/electron/shutdownBudgetContract.ts` | Gives Rust cleanup time before Electron sends `SIGKILL`. |
 | Electron coordinator deadline | 8,000ms | `src/electron/shutdownBudgetContract.ts` | Bounds the whole sidecar shutdown adapter and leaves room for structured kill reporting. |
 
