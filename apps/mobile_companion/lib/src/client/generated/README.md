@@ -27,7 +27,7 @@ of the source contract.
 
 ## Implemented boundary
 
-`CompanionV1Client` implements the current Companion v1 read-only API surface:
+`CompanionV1Client` implements the current Companion v1 read-only HTTP API surface:
 
 - pairing request submission and approval polling;
 - authenticated host status;
@@ -35,7 +35,9 @@ of the source contract.
 - the authenticated event-stream request, with typed SSE decoding in
   `lib/src/client/companion_live_events.dart`.
 
+Interactive Agent terminal traffic is intentionally outside this generated HTTP client. `lib/src/terminal/companion_terminal_client.dart` owns the dedicated authenticated WebSocket boundary, which permits typed attach/resize controls plus validated UTF-8 binary terminal input only after `ready`.
+
 `GeneratedCompanionClient` in `lib/src/client/companion_client.dart` adapts those
 generated calls behind the application's `CompanionClient` seam and owns pinned
-endpoint failover. The boundary does not implement mutations, broad project,
-repository, or terminal APIs, or an offline domain cache.
+endpoint failover. The HTTP boundary does not implement mutations, broad project or
+repository APIs, generic command dispatch, or an offline domain cache.

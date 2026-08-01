@@ -21,6 +21,9 @@
 {#if devices.length > 0}
   <section class="flex flex-col gap-2" aria-labelledby="paired-devices-heading">
     <h3 id="paired-devices-heading" class="m-0 text-sm font-medium">Paired devices</h3>
+    <p class="m-0 text-xs text-base-content/60">
+      Paired devices can type into running Agent terminals as your desktop user until revoked.
+    </p>
     <ul class="m-0 flex list-none flex-col gap-2 p-0">
       {#each devices as device (device.deviceId)}
         <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-base-300 px-3 py-2">

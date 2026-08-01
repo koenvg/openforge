@@ -36,6 +36,8 @@ abstract interface class CompanionAgentTerminalChannel {
 
   void sendText(String message);
 
+  void sendBinary(List<int> bytes);
+
   Future<void> close();
 }
 
@@ -97,6 +99,9 @@ final class _IoCompanionAgentTerminalChannel
 
   @override
   void sendText(String message) => _socket.add(message);
+
+  @override
+  void sendBinary(List<int> bytes) => _socket.add(bytes);
 
   @override
   Future<void> close() async {

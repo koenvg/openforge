@@ -1,5 +1,6 @@
 use portable_pty::PtySize;
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
@@ -22,7 +23,9 @@ pub(crate) enum AgentTerminalAttachmentError {
     SlowConsumer,
     Closed,
     StaleAttachment,
+    InvalidUtf8,
     InvalidDimensions,
+    WriteFailed,
     ResizeFailed,
 }
 
@@ -159,6 +162,15 @@ impl AgentTerminalAttachment {
             Err(broadcast::error::RecvError::Closed) => Err(AgentTerminalAttachmentError::Closed),
         }
     }
+    pub(crate) async fn write_input(
+        &self,
+        input: &[u8],
+    ) -> Result<(), AgentTerminalAttachmentError> {
+        std::str::from_utf8(input).map_err(|_| AgentTerminalAttachmentError::InvalidUtf8)?;
+        self.manager
+            .write_agent_attachment(&self.task_id, self.instance_id, input)
+            .await
+    }
 
     pub(crate) async fn resize(
         &self,
@@ -226,6 +238,27 @@ impl PtyManager {
             events,
             manager: self.clone(),
         })
+    }
+    async fn write_agent_attachment(
+        &self,
+        task_id: &str,
+        instance_id: u64,
+        input: &[u8],
+    ) -> Result<(), AgentTerminalAttachmentError> {
+        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+        let mut sessions = self.sessions.lock().await;
+        let session = sessions
+            .get_mut(task_id)
+            .ok_or(AgentTerminalAttachmentError::StaleAttachment)?;
+        if session.instance_id != instance_id || !matches!(session.kind, PtySessionKind::Agent) {
+            return Err(AgentTerminalAttachmentError::StaleAttachment);
+        }
+        session
+            .writer
+            .write_all(input)
+            .and_then(|()| session.writer.flush())
+            .map_err(|_| AgentTerminalAttachmentError::WriteFailed)
     }
 
     async fn resize_agent_attachment(

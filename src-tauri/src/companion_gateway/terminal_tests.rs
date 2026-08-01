@@ -37,6 +37,51 @@ fn upgrade_request(protocol_version: Option<&str>) -> Request<Body> {
     request.body(Body::empty()).expect("upgrade request")
 }
 
+type TestTerminalSocket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+async fn connect_terminal(address: std::net::SocketAddr) -> TestTerminalSocket {
+    let mut request = format!("ws://{address}/companion/v1/tasks/KVG-3018/agent-terminal")
+        .into_client_request()
+        .expect("WebSocket request");
+    request.headers_mut().insert(
+        axum::http::header::AUTHORIZATION,
+        "Bearer paired-device-credential"
+            .parse()
+            .expect("authorization"),
+    );
+    request.headers_mut().insert(
+        PROTOCOL_VERSION_HEADER,
+        "1".parse().expect("protocol version"),
+    );
+    tokio_tungstenite::connect_async(request)
+        .await
+        .expect("WebSocket upgrade")
+        .0
+}
+
+async fn attach_and_wait_until_ready(socket: &mut TestTerminalSocket) {
+    socket
+        .send(Message::Text(
+            r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
+        ))
+        .await
+        .expect("attach control");
+    loop {
+        let frame = socket
+            .next()
+            .await
+            .expect("ready response")
+            .expect("ready frame");
+        if let Message::Text(control) = frame {
+            let control: serde_json::Value = serde_json::from_str(&control).expect("control JSON");
+            if control["type"] == "ready" {
+                return;
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn agent_terminal_upgrade_requires_device_authorization_and_protocol_version() {
     let unauthorized = create_router(
@@ -223,6 +268,168 @@ async fn terminal_websocket_rejects_oversized_text_and_binary_frames() {
     }
 
     server.abort();
+}
+
+#[tokio::test]
+async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("terminal tempdir");
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    pty_manager
+        .spawn_companion_test_agent_pty(
+            "KVG-3018",
+            temp_dir.path(),
+            r#"stty -echo; IFS= read -r line; printf 'received:%s' "$line"; sleep 5"#,
+        )
+        .await
+        .expect("test Agent PTY");
+    let access = Arc::new(CancellationAccess::default());
+    let router = create_router_with_sources_event_access_and_pty(
+        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
+        Arc::new(BearerAuthorizer),
+        pairing(),
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            pty_manager: pty_manager.clone(),
+            events: crate::app_events::AppEventBus::new(16, 8),
+            stream_access: access,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("test listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.expect("test server");
+    });
+
+    for pre_ready in [
+        Message::Binary(b"early".to_vec()),
+        Message::Text(r#"{"type":"resize","columns":100,"rows":30}"#.to_string()),
+    ] {
+        let mut early = connect_terminal(address).await;
+        early
+            .feed(Message::Text(
+                r#"{"type":"attach","columns":80,"rows":24}"#.to_string(),
+            ))
+            .await
+            .expect("queued attach control");
+        early.feed(pre_ready).await.expect("queued pre-ready frame");
+        early.flush().await.expect("flush pre-ready frames");
+        let early_error = early
+            .next()
+            .await
+            .expect("early response")
+            .expect("early control");
+        assert!(
+            matches!(early_error, Message::Text(control) if control.contains("protocol_error")),
+            "pre-ready frame must be rejected"
+        );
+    }
+
+    let mut malformed = connect_terminal(address).await;
+    attach_and_wait_until_ready(&mut malformed).await;
+    malformed
+        .send(Message::Binary(vec![0xff]))
+        .await
+        .expect("malformed binary frame");
+    let malformed_error = malformed
+        .next()
+        .await
+        .expect("malformed response")
+        .expect("malformed control");
+    assert!(
+        matches!(malformed_error, Message::Text(control) if control.contains("protocol_error"))
+    );
+
+    let mut interactive = connect_terminal(address).await;
+    attach_and_wait_until_ready(&mut interactive).await;
+    interactive
+        .send(Message::Binary("héllo\n".as_bytes().to_vec()))
+        .await
+        .expect("valid UTF-8 terminal input");
+    let mut output = String::new();
+    while !output.contains("received:héllo") {
+        let frame = tokio::time::timeout(Duration::from_secs(2), interactive.next())
+            .await
+            .expect("terminal input response timeout")
+            .expect("terminal input response")
+            .expect("terminal input frame");
+        if let Message::Binary(bytes) = frame {
+            output.push_str(std::str::from_utf8(&bytes).expect("valid terminal output"));
+        }
+    }
+
+    server.abort();
+    pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
+}
+
+#[tokio::test]
+async fn revocation_after_ready_prevents_further_terminal_input() {
+    let mut pty_manager = crate::pty_manager::PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("terminal tempdir");
+    pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
+    pty_manager
+        .spawn_companion_test_agent_pty(
+            "KVG-3018",
+            temp_dir.path(),
+            r#"stty -echo; IFS= read -r line; printf 'received:%s' "$line"; sleep 5"#,
+        )
+        .await
+        .expect("test Agent PTY");
+    let access = Arc::new(CancellationAccess::default());
+    let router = create_router_with_sources_event_access_and_pty(
+        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
+        Arc::new(BearerAuthorizer),
+        pairing(),
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            pty_manager: pty_manager.clone(),
+            events: crate::app_events::AppEventBus::new(16, 8),
+            stream_access: access.clone(),
+        },
+    );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("test listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.expect("test server");
+    });
+    let mut socket = connect_terminal(address).await;
+    attach_and_wait_until_ready(&mut socket).await;
+
+    access.cancel(CompanionStreamTermination::AuthorizationRevoked);
+    socket
+        .send(Message::Binary(b"must-not-cross\n".to_vec()))
+        .await
+        .expect("post-revocation input frame");
+    let response = socket
+        .next()
+        .await
+        .expect("revocation response")
+        .expect("revocation control");
+    assert!(matches!(
+        response,
+        Message::Text(control) if control.contains("authorization_revoked")
+    ));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let attachment = pty_manager
+        .attach_agent_terminal("KVG-3018")
+        .await
+        .expect("active Agent terminal");
+    assert!(
+        !attachment
+            .replay()
+            .windows(b"must-not-cross".len())
+            .any(|window| window == b"must-not-cross"),
+        "revoked input reached the Agent PTY"
+    );
+
+    server.abort();
+    pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
 
 #[tokio::test]

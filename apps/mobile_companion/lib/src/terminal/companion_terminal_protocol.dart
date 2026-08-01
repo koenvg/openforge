@@ -1,4 +1,22 @@
 import 'dart:convert';
+import 'dart:typed_data';
+
+const terminalFrameMaxBytes = 4096;
+
+List<Uint8List> encodeTerminalInputFrames(String input) {
+  final frames = <Uint8List>[];
+  var chunk = BytesBuilder(copy: false);
+  for (final rune in input.runes) {
+    final bytes = utf8.encode(String.fromCharCode(rune));
+    if (chunk.length + bytes.length > terminalFrameMaxBytes) {
+      frames.add(chunk.takeBytes());
+      chunk = BytesBuilder(copy: false);
+    }
+    chunk.add(bytes);
+  }
+  if (chunk.isNotEmpty) frames.add(chunk.takeBytes());
+  return frames;
+}
 
 final class TerminalDimensions {
   const TerminalDimensions({required this.columns, required this.rows})

@@ -57,6 +57,9 @@ final class _FakeChannel implements CompanionAgentTerminalChannel {
   void sendText(String message) {}
 
   @override
+  void sendBinary(List<int> bytes) {}
+
+  @override
   Future<void> close() async {
     await _frames.close();
   }
