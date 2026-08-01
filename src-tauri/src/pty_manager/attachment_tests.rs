@@ -49,33 +49,127 @@ async fn attachment_detects_a_slow_consumer_instead_of_dropping_silently() {
 }
 
 #[test]
-fn attachment_replaces_chunked_iterm_images_without_affecting_surrounding_output() {
-    let hub = PtyAttachmentHub::new(11, 1024, 8);
-    hub.publish_output(b"before\x1b]1337;Fi");
-    hub.publish_output(b"le=size=4;inline=1:AAAA");
-    hub.publish_output(b"\x1b");
-    hub.publish_output(b"\\after");
+fn attachment_replaces_complete_iterm_images_across_arbitrary_chunks() {
+    for terminator in [b"\x07".as_slice(), b"\x1b\\".as_slice()] {
+        let hub = PtyAttachmentHub::new(11, 1024, 256);
+        let sequence = [
+            b"before\x1b]1337;File=size=4;inline=1:AAAA".as_slice(),
+            terminator,
+            b"after".as_slice(),
+        ]
+        .concat();
 
-    let (replay, _) = hub.attach();
+        for byte in sequence {
+            hub.publish_output(&[byte]);
+        }
+
+        let (replay, _) = hub.attach();
+        assert_eq!(
+            std::str::from_utf8(&replay).expect("filtered replay"),
+            "before\r\n[Image unavailable on mobile]\r\nafter"
+        );
+    }
+}
+
+#[tokio::test]
+async fn attachment_live_frames_are_valid_utf8_and_preserve_controls_and_links() {
+    let hub = PtyAttachmentHub::new(12, 4096, 32);
+    let (_, mut receiver) = hub.attach();
+
+    hub.publish_output(&[0xc3]);
+    assert!(receiver.try_recv().is_err());
+    hub.publish_output(&[0xa9]);
     assert_eq!(
-        std::str::from_utf8(&replay).expect("filtered replay"),
-        "before\r\n[Image unavailable on mobile]\r\nafter"
+        receiver.recv().await.expect("complete UTF-8 output"),
+        AgentTerminalEvent::Output("é".as_bytes().to_vec())
+    );
+
+    let links = b"\x1b[31mred\x1b[0m \x1b]8;;https://example.com\x1b\\selectable\x1b]8;;\x1b\\ https://example.org";
+    hub.publish_output(links);
+    assert_eq!(
+        receiver.recv().await.expect("ANSI and link output"),
+        AgentTerminalEvent::Output(links.to_vec())
     );
 }
 
-#[test]
-fn attachment_filter_bounds_large_and_unterminated_image_payloads() {
-    let hub = PtyAttachmentHub::new(12, 1024, 8);
-    hub.publish_output(b"\x1b]1337;File=size=2097152;inline=1:");
-    hub.publish_output(&vec![b'A'; 2 * 1024 * 1024]);
-    assert!(hub.attach().0.is_empty());
+#[tokio::test]
+async fn attachment_rejects_malformed_utf8_without_replaying_or_emitting_it() {
+    let hub = PtyAttachmentHub::new(13, 1024, 8);
+    let (_, mut receiver) = hub.attach();
+    hub.publish_output(b"safe");
+    hub.publish_output(&[0xff, b'x']);
+    hub.publish_output(b"ignored after failure");
 
-    hub.publish_exit(12);
-    let (replay, _) = hub.attach();
     assert_eq!(
-        std::str::from_utf8(&replay).expect("filtered replay"),
-        "\r\n[Image unavailable on mobile]\r\n"
+        receiver.recv().await.expect("safe output"),
+        AgentTerminalEvent::Output(b"safe".to_vec())
     );
+    assert_eq!(
+        receiver.recv().await.expect("protocol failure"),
+        AgentTerminalEvent::ProtocolError
+    );
+    assert!(receiver.try_recv().is_err());
+    assert_eq!(hub.attach().0, b"safe");
+}
+
+#[tokio::test]
+async fn attachment_fails_oversized_image_without_buffering_or_emitting_payload() {
+    use super::attachment::MAX_ITERM_IMAGE_SEQUENCE_BYTES;
+
+    let hub = PtyAttachmentHub::new(14, 1024, 8);
+    let (_, mut receiver) = hub.attach();
+    hub.publish_output(b"before\x1b]1337;File=size=oversized;inline=1:");
+    hub.publish_output(&vec![b'A'; MAX_ITERM_IMAGE_SEQUENCE_BYTES + 1]);
+    hub.publish_output(b"\x07payload-must-not-escape");
+
+    assert_eq!(
+        receiver.recv().await.expect("safe prefix"),
+        AgentTerminalEvent::Output(b"before".to_vec())
+    );
+    assert_eq!(
+        receiver.recv().await.expect("bounded protocol failure"),
+        AgentTerminalEvent::ProtocolError
+    );
+    assert!(receiver.try_recv().is_err());
+    assert_eq!(hub.attach().0, b"before");
+}
+
+#[test]
+fn attachment_accepts_an_image_sequence_at_the_exact_byte_limit() {
+    use super::attachment::MAX_ITERM_IMAGE_SEQUENCE_BYTES;
+
+    const PREFIX: &[u8] = b"\x1b]1337;File=";
+    let mut sequence = Vec::with_capacity(MAX_ITERM_IMAGE_SEQUENCE_BYTES);
+    sequence.extend_from_slice(PREFIX);
+    sequence.resize(MAX_ITERM_IMAGE_SEQUENCE_BYTES - 1, b'A');
+    sequence.push(0x07);
+
+    let hub = PtyAttachmentHub::new(16, 1024, 8);
+    hub.publish_output(&sequence);
+
+    assert_eq!(hub.attach().0, b"\r\n[Image unavailable on mobile]\r\n");
+}
+
+#[tokio::test]
+async fn attachment_fails_unterminated_image_on_exit_without_a_placeholder() {
+    let hub = PtyAttachmentHub::new(15, 1024, 8);
+    let (_, mut receiver) = hub.attach();
+    hub.publish_output(b"before\x1b]1337;File=size=4;inline=1:AAAA");
+    hub.publish_exit(15);
+
+    assert_eq!(
+        receiver.recv().await.expect("safe prefix"),
+        AgentTerminalEvent::Output(b"before".to_vec())
+    );
+    assert_eq!(
+        receiver
+            .recv()
+            .await
+            .expect("unterminated protocol failure"),
+        AgentTerminalEvent::ProtocolError
+    );
+    assert!(receiver.try_recv().is_err());
+    assert_eq!(hub.attach().0, b"before");
 }
 
 #[tokio::test]

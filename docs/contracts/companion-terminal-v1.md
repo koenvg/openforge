@@ -11,7 +11,7 @@ Clients send the existing bearer credential and `openforge-companion-protocol-ve
 - Client control and server control use UTF-8 JSON text frames.
 - Server terminal output uses binary frames containing valid UTF-8.
 - Client terminal input uses binary frames containing valid UTF-8 and is accepted only after `ready`.
-- Client messages and individual frames are limited to 4 KiB; controls are intentionally tiny.
+- Client messages and frames are limited to 4 KiB; controls are intentionally tiny.
 - Unknown fields, unknown control types, malformed JSON, malformed UTF-8, non-positive dimensions, input before `ready`, and resize before `ready` are protocol errors.
 
 ## Startup
@@ -27,6 +27,19 @@ The attachment remains bound to the concrete Agent process resolved at startup. 
 ## Shared PTY semantics
 
 Desktop terminal surfaces and all paired-device attachments write to the same PTY input stream in arrival order. There is no controller lease. The most recently applied resize from any desktop or mobile surface becomes the canonical PTY geometry.
+
+## Terminal output sanitization
+
+Raw Agent PTY bytes are processed by a Companion-only streaming sanitizer before entering bounded replay or live WebSocket fan-out. Desktop PTY events remain unchanged.
+
+- Complete iTerm2 `OSC 1337;File=...` inline-image sequences, terminated by BEL or ST, become `\r\n[Image unavailable on mobile]\r\n`. Recognition and terminators may span arbitrary PTY reads.
+- A single image sequence may consume at most 1 MiB. Oversized or unterminated images and malformed UTF-8 stop the attachment with a safe `protocol_error`; image bytes are neither replayed nor sent.
+- Every output binary frame contains complete, valid UTF-8. Other ANSI and control sequences remain byte-for-byte intact.
+- OSC 8 labels and plain HTTP(S) URLs remain selectable/copyable terminal text. The client installs no browser or external-link activation handler, and terminal mouse reporting remains disabled.
+
+## Privacy
+
+Terminal input, output, replay, source text, image payloads, and bearer credentials are ephemeral and must not be written to preferences, files, SQLite, analytics, secure storage, logs, or diagnostic errors. Diagnostics may include only non-content attachment metadata and byte counts.
 
 ## Server controls
 

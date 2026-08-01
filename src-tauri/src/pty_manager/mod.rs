@@ -7,6 +7,8 @@ mod managed_process;
 mod pids;
 mod session;
 
+#[cfg(test)]
+use attachment::PtyAttachmentHub;
 use attachment::PtyAttachmentHubs;
 pub(crate) use attachment::{AgentTerminalAttachmentError, AgentTerminalEvent};
 use serde::{Deserialize, Serialize};
@@ -287,11 +289,37 @@ mod tests {
         let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        read_pty_output_loop(&mut reader, tx, "task-reader", None);
+        read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
 
         assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
         assert_eq!(rx.blocking_recv(), Some(Some("é world".to_string())));
         assert_eq!(rx.blocking_recv(), Some(None));
+    }
+
+    #[test]
+    fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
+        let hub = Arc::new(PtyAttachmentHub::new(1, 1024, 8));
+        let (_, mut companion_events) = hub.attach();
+        let mut reader = ChunkedReader::new(vec![b"desktop", &[0xff], b"tail"]);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        read_pty_output_loop(&mut reader, tx, "task-reader", None, Some(Arc::clone(&hub)));
+
+        assert_eq!(rx.blocking_recv(), Some(Some("desktop".to_string())));
+        assert_eq!(
+            companion_events.blocking_recv().expect("safe output"),
+            AgentTerminalEvent::Output(b"desktop".to_vec())
+        );
+        assert_eq!(
+            companion_events.blocking_recv().expect("protocol failure"),
+            AgentTerminalEvent::ProtocolError
+        );
+        assert!(companion_events.try_recv().is_err());
+        assert_eq!(
+            rx.blocking_recv(),
+            Some(None),
+            "desktop keeps its existing lossy-reader behavior and reaches EOF",
+        );
     }
 
     #[test]
@@ -305,6 +333,7 @@ mod tests {
             tx,
             "task-reader",
             Some(Arc::clone(&last_output)),
+            None,
         );
 
         assert_eq!(rx.blocking_recv(), Some(Some("output".to_string())));

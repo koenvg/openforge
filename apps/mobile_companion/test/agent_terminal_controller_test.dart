@@ -16,10 +16,11 @@ void main() {
       final channel = _FakeChannel();
       final client = _FakeTerminalClient(channel);
       final terminal = _FakeTerminal();
+      final storage = _Storage();
       final controller = AgentTerminalController(
         taskId: 'KVG-3018',
         client: client,
-        storage: _Storage(),
+        storage: storage,
         terminal: terminal,
         reconnectDelay: Duration.zero,
       );
@@ -50,6 +51,81 @@ void main() {
       await _flush();
       expect(terminal.output, 'replay live hidden');
       expect(channel.closed, isFalse);
+      expect(storage.loadCount, 1);
+      expect(storage.saveCount, 0);
+      expect(storage.forgetCount, 0);
+
+      controller.dispose();
+    },
+  );
+
+  test('malformed UTF-8 is a protocol failure and is never rendered', () async {
+    final channel = _FakeChannel();
+    final client = _FakeTerminalClient(channel);
+    final terminal = _FakeTerminal(rejectMalformedUtf8: true);
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: client,
+            storage: _Storage(),
+            terminal: terminal,
+            reconnectDelay: Duration.zero,
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+    await _flush();
+
+    channel.add(Uint8List.fromList(<int>[0x66, 0x80, 0x6f]));
+    await _flush();
+
+    expect(terminal.output, isEmpty);
+    expect(controller.state, isA<AgentTerminalNoActiveSession>());
+    expect(channel.closed, isTrue);
+
+    controller.updateAvailability(true);
+    await _flush();
+    expect(client.opens, 1);
+
+    controller.dispose();
+  });
+
+  test(
+    'server protocol errors stop reconnecting until availability changes',
+    () async {
+      final channels = <_FakeChannel>[_FakeChannel(), _FakeChannel()];
+      final client = _QueueTerminalClient(channels);
+      final controller =
+          AgentTerminalController(
+              taskId: 'KVG-3018',
+              client: client,
+              storage: _Storage(),
+              terminal: _FakeTerminal(),
+              reconnectDelay: Duration.zero,
+            )
+            ..updateAvailability(true)
+            ..setVisible(true);
+      await _flush();
+
+      channels.first.add(
+        '{"type":"error","code":"protocol_error",'
+        '"message":"Invalid terminal protocol frame"}',
+      );
+      await _flush();
+      await _flush();
+
+      expect(controller.state, isA<AgentTerminalNoActiveSession>());
+      expect(channels.first.closed, isTrue);
+      expect(client.opens, 1);
+
+      controller.updateAvailability(true);
+      await _flush();
+      expect(client.opens, 1);
+
+      controller.updateAvailability(false);
+      controller.updateAvailability(true);
+      await _flush();
+      expect(client.opens, 2);
+      expect(channels.last.sent, hasLength(1));
 
       controller.dispose();
     },
@@ -248,6 +324,9 @@ Future<void> _flush() async {
 }
 
 final class _FakeTerminal implements OpenForgeTerminal {
+  _FakeTerminal({this.rejectMalformedUtf8 = false});
+
+  final bool rejectMalformedUtf8;
   var output = '';
   var clearCount = 0;
 
@@ -266,7 +345,10 @@ final class _FakeTerminal implements OpenForgeTerminal {
 
   @override
   void writeOutput(Uint8List output) {
-    this.output += String.fromCharCodes(output);
+    final decoded = rejectMalformedUtf8
+        ? utf8.decode(output, allowMalformed: false)
+        : String.fromCharCodes(output);
+    this.output += decoded;
   }
 }
 
@@ -368,13 +450,23 @@ final class _Storage implements CompanionSecureStorage {
     deviceId: 'device',
     deviceCredential: 'credential',
   );
+  var loadCount = 0;
+  var saveCount = 0;
+  var forgetCount = 0;
 
   @override
-  Future<void> forget() async {}
+  Future<void> forget() async {
+    forgetCount += 1;
+  }
 
   @override
-  Future<CompanionTrustRecord?> load() async => record;
+  Future<CompanionTrustRecord?> load() async {
+    loadCount += 1;
+    return record;
+  }
 
   @override
-  Future<void> save(CompanionTrustRecord record) async {}
+  Future<void> save(CompanionTrustRecord record) async {
+    saveCount += 1;
+  }
 }
