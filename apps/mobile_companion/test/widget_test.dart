@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:openforge_companion/src/app.dart';
+import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/attention/attention_controller.dart';
 import 'package:openforge_companion/src/attention/attention_home.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
+import 'package:openforge_companion/src/pairing/companion_pairing_controller.dart';
+import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 
 void main() {
   testWidgets('launches into an accessible unpaired screen', (tester) async {
@@ -20,6 +23,31 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'replacing the pairing controller transfers state subscription ownership',
+    (tester) async {
+      final oldController = _pairingController();
+      final newController = _pairingController()..liveUnavailable();
+
+      await tester.pumpWidget(CompanionApp(controller: oldController));
+      expect(find.text('Restoring connection'), findsOneWidget);
+
+      await tester.pumpWidget(CompanionApp(controller: newController));
+      expect(find.text('Desktop unavailable'), findsOneWidget);
+
+      newController.authorizationLost();
+      await tester.pump();
+      expect(find.text('Re-pair required'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      oldController.liveUnavailable();
+      expect(tester.takeException(), isNull);
+
+      oldController.dispose();
+      newController.dispose();
+    },
+  );
 
   testWidgets(
     'connected state displays authenticated host identity and protocol',
@@ -452,4 +480,21 @@ final class _FailingStopMobileScannerPlatform
     stopCalls++;
     throw StateError('Native camera stop failed');
   }
+}
+
+CompanionPairingController _pairingController() => CompanionPairingController(
+  client: _UnusedCompanionClient(),
+  storage: _UnusedCompanionSecureStorage(),
+);
+
+final class _UnusedCompanionClient implements CompanionClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('Client method was not expected.');
+}
+
+final class _UnusedCompanionSecureStorage implements CompanionSecureStorage {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('Storage method was not expected.');
 }

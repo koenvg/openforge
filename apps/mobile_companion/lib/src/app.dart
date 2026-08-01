@@ -67,6 +67,16 @@ class _CompanionAppState extends State<CompanionApp>
   }
 
   @override
+  void didUpdateWidget(covariant CompanionApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+
+    oldWidget.controller?.removeListener(_onControllerChanged);
+    widget.controller?.addListener(_onControllerChanged);
+    _state = widget.controller?.state ?? widget.initialState;
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.controller?.removeListener(_onControllerChanged);
