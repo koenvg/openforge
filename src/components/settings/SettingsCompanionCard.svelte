@@ -6,10 +6,12 @@
     revokeCompanionDevice,
     resetCompanionHostIdentity,
     setCompanionGatewayEnabled,
+    setCompanionTailscaleHostname,
   } from '../../lib/ipc'
   import type { CompanionGatewayStatus, CompanionPairedDevice } from '../../lib/types'
   import CompanionGatewayHealth from './CompanionGatewayHealth.svelte'
   import CompanionPairedDevices from './CompanionPairedDevices.svelte'
+  import CompanionTailscaleEndpoint from './CompanionTailscaleEndpoint.svelte'
   import CompanionPairingSession from './CompanionPairingSession.svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
 
@@ -55,6 +57,25 @@
     } catch (error) {
       requestError = errorMessage(error)
       await refresh()
+    } finally {
+      updating = false
+    }
+  }
+
+  async function saveTailscaleHostname(hostname: string) {
+    if (updating) return
+    updating = true
+    requestError = null
+    feedback = null
+    try {
+      const nextStatus = await setCompanionTailscaleHostname(hostname)
+      status = nextStatus
+      pairingRefreshGeneration += 1
+      feedback = nextStatus.endpoints.some((endpoint) => endpoint.kind === 'tailscale')
+        ? 'Tailscale hostname saved. New pairing codes will include this endpoint.'
+        : 'Tailscale hostname saved. Connect Tailscale on this Mac and re-enable the gateway before pairing.'
+    } catch (error) {
+      requestError = errorMessage(error)
     } finally {
       updating = false
     }
@@ -129,6 +150,12 @@
       <p class="m-0 text-sm text-base-content/60" aria-live="polite">Loading Companion Gateway status…</p>
     {:else if status}
       <CompanionGatewayHealth {status} {updating} ontoggle={toggleGateway} />
+
+      <CompanionTailscaleEndpoint
+        status={status.tailscale}
+        {updating}
+        onsave={saveTailscaleHostname}
+      />
 
       <CompanionPairingSession
         gatewayEnabled={status.enabled}

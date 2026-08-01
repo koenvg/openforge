@@ -9,9 +9,12 @@ use super::{
     },
     devices::{CompanionDeviceRecord, CompanionDeviceStore, InMemoryCompanionDeviceStore},
     identity::{CompanionIdentityStore, DelayedIdentityStore, InMemoryIdentityStore},
-    lifecycle::{CompanionGatewayManager, GatewayPhase},
+    lifecycle::{
+        unique_offered_endpoints, CompanionGatewayEndpoint, CompanionGatewayManager, GatewayPhase,
+    },
     network::{CompanionEndpointKind, FixedEndpointProvider},
     pairing::{CompanionStreamTermination, PairingCoordinator},
+    tailscale::FixedTailscaleHostnameProvider,
 };
 use axum::{body::Body, http::Request, response::Response};
 use std::{
@@ -178,6 +181,285 @@ async fn enabling_and_disabling_controls_a_separate_tls_listener() {
     assert!(!disabled.enabled);
     assert_eq!(disabled.phase, GatewayPhase::Disabled);
     assert!(disabled.endpoints.is_empty());
+}
+
+#[test]
+fn dual_stack_magicdns_listeners_offer_one_canonical_candidate() {
+    let endpoints = vec![
+        CompanionGatewayEndpoint {
+            kind: CompanionEndpointKind::Lan,
+            url: "https://192.168.1.20:17424".to_string(),
+        },
+        CompanionGatewayEndpoint {
+            kind: CompanionEndpointKind::Tailscale,
+            url: "https://forge-mac.example.ts.net:17424".to_string(),
+        },
+        CompanionGatewayEndpoint {
+            kind: CompanionEndpointKind::Tailscale,
+            url: "https://forge-mac.example.ts.net:17424".to_string(),
+        },
+    ];
+
+    assert_eq!(
+        unique_offered_endpoints(&endpoints),
+        vec![endpoints[0].clone(), endpoints[1].clone()]
+    );
+}
+
+#[tokio::test]
+async fn unavailable_detection_is_single_flight_and_cached_across_status_calls() {
+    let detector = Arc::new(FixedTailscaleHostnameProvider::unavailable());
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Tailscale,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        detector.clone(),
+        None,
+        0,
+    );
+
+    let (first, second) = tokio::join!(manager.status(), manager.status());
+    let third = manager.status().await;
+
+    assert_eq!(first.tailscale.detected_hostname, None);
+    assert_eq!(second.tailscale.detected_hostname, None);
+    assert_eq!(third.tailscale.detected_hostname, None);
+    assert_eq!(detector.calls(), 1);
+}
+
+#[tokio::test]
+async fn canceling_the_first_status_waiter_does_not_strand_detection() {
+    let detector = Arc::new(FixedTailscaleHostnameProvider::delayed_unavailable(
+        Duration::from_millis(100),
+    ));
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Tailscale,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        detector.clone(),
+        None,
+        0,
+    );
+    let first_manager = manager.clone();
+    let first_waiter = tokio::spawn(async move { first_manager.status().await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while detector.calls() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("detection should start");
+
+    first_waiter.abort();
+    let _ = first_waiter.await;
+    let recovered = tokio::time::timeout(Duration::from_secs(1), manager.status())
+        .await
+        .expect("later status should observe the independent detection result");
+
+    assert_eq!(recovered.tailscale.detected_hostname, None);
+    assert_eq!(detector.calls(), 1);
+}
+
+#[tokio::test]
+async fn disabled_gateway_status_still_presents_a_reliable_magicdns_candidate() {
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Tailscale,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::detected(
+            "forge-mac.example.ts.net",
+            vec![IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)],
+        )),
+        None,
+        0,
+    );
+
+    let status = manager.status().await;
+
+    assert_eq!(status.phase, GatewayPhase::Disabled);
+    assert_eq!(
+        status.tailscale.detected_hostname.as_deref(),
+        Some("forge-mac.example.ts.net")
+    );
+    assert_eq!(
+        status.tailscale.effective_hostname.as_deref(),
+        Some("forge-mac.example.ts.net")
+    );
+    assert!(status.endpoints.is_empty());
+}
+
+#[tokio::test]
+async fn reliable_local_magicdns_hostname_is_offered_for_the_tailscale_listener() {
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![
+            (
+                CompanionEndpointKind::Lan,
+                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            ),
+            (
+                CompanionEndpointKind::Tailscale,
+                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            ),
+        ])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::detected(
+            "forge-mac.example.ts.net",
+            vec![IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)],
+        )),
+        None,
+        0,
+    );
+
+    let running = manager.enable().await.expect("gateway should start");
+
+    assert_eq!(
+        running.tailscale.detected_hostname.as_deref(),
+        Some("forge-mac.example.ts.net")
+    );
+    assert_eq!(
+        running.tailscale.effective_hostname.as_deref(),
+        Some("forge-mac.example.ts.net")
+    );
+    assert_eq!(running.tailscale.configured_hostname, None);
+    assert!(running.endpoints.iter().any(|endpoint| endpoint.kind
+        == CompanionEndpointKind::Tailscale
+        && endpoint
+            .url
+            .starts_with("https://forge-mac.example.ts.net:")));
+    let pairing = manager.start_pairing().await.expect("pairing session");
+    let qr: serde_json::Value = serde_json::from_str(&pairing.qr_payload).expect("pairing QR JSON");
+    assert!(qr["endpointCandidates"]
+        .as_array()
+        .expect("endpoint candidates")
+        .iter()
+        .any(|endpoint| endpoint
+            .as_str()
+            .is_some_and(|url| url.starts_with("https://forge-mac.example.ts.net:"))));
+
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn manual_magicdns_hostname_is_used_when_local_detection_is_unavailable() {
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![
+            (
+                CompanionEndpointKind::Lan,
+                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            ),
+            (
+                CompanionEndpointKind::Tailscale,
+                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            ),
+        ])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::unavailable()),
+        None,
+        0,
+    );
+    let running = manager.enable().await.expect("gateway should start");
+    assert_eq!(running.tailscale.detected_hostname, None);
+
+    let configured = manager
+        .configure_tailscale_hostname("forge-mac.manual-tailnet.ts.net".to_string())
+        .await;
+
+    assert_eq!(
+        configured.tailscale.configured_hostname.as_deref(),
+        Some("forge-mac.manual-tailnet.ts.net")
+    );
+    assert!(configured.endpoints.iter().any(|endpoint| endpoint.kind
+        == CompanionEndpointKind::Tailscale
+        && endpoint
+            .url
+            .starts_with("https://forge-mac.manual-tailnet.ts.net:")));
+    let pairing = manager.start_pairing().await.expect("pairing session");
+    assert!(
+        pairing
+            .qr_payload
+            .contains("https://forge-mac.manual-tailnet.ts.net:"),
+        "manual MagicDNS endpoint should be carried in the pairing host record"
+    );
+
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn manual_hostname_is_not_offered_without_a_tailscale_listener() {
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::unavailable()),
+        None,
+        0,
+    );
+    manager.enable().await.expect("gateway should start");
+
+    let configured = manager
+        .configure_tailscale_hostname("forge-mac.manual-tailnet.ts.net".to_string())
+        .await;
+    let pairing = manager.start_pairing().await.expect("pairing session");
+
+    assert!(configured
+        .endpoints
+        .iter()
+        .all(|endpoint| endpoint.kind != CompanionEndpointKind::Tailscale));
+    assert!(!pairing
+        .qr_payload
+        .contains("forge-mac.manual-tailnet.ts.net"));
+
+    manager.disable().await;
+}
+
+#[tokio::test]
+async fn detected_magicdns_hostname_is_ignored_when_it_cannot_be_confirmed_locally() {
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Tailscale,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::detected(
+            "other-mac.example.ts.net",
+            vec![IpAddr::V4(std::net::Ipv4Addr::new(100, 64, 0, 99))],
+        )),
+        None,
+        0,
+    );
+
+    let running = manager.enable().await.expect("gateway should start");
+
+    assert_eq!(running.tailscale.detected_hostname, None);
+    assert_eq!(running.tailscale.effective_hostname, None);
+    assert!(running
+        .endpoints
+        .iter()
+        .all(|endpoint| !endpoint.url.contains("other-mac.example.ts.net")));
+
+    manager.disable().await;
 }
 
 #[tokio::test]
@@ -969,6 +1251,79 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     ] {
         assert!(error_codes.iter().any(|entry| entry == code));
     }
+}
+
+#[tokio::test]
+async fn disable_wins_over_an_inflight_enable_after_detection_finishes() {
+    let detector = Arc::new(FixedTailscaleHostnameProvider::delayed_unavailable(
+        Duration::from_millis(100),
+    ));
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        detector.clone(),
+        None,
+        0,
+    );
+    let enable_manager = manager.clone();
+    let enable_task = tokio::spawn(async move { enable_manager.enable().await });
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while detector.calls() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("enable detection should start");
+
+    let disabled = manager.disable().await;
+    enable_task
+        .await
+        .expect("enable task should complete")
+        .expect("initial enable should complete before serialized disable");
+    let final_status = manager.status().await;
+
+    assert_eq!(disabled.phase, GatewayPhase::Disabled);
+    assert!(!final_status.enabled);
+    assert_eq!(final_status.phase, GatewayPhase::Disabled);
+    assert!(final_status.endpoints.is_empty());
+}
+
+#[tokio::test]
+async fn concurrent_enables_share_one_listener_startup() {
+    let probe =
+        std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserve port");
+    let port = probe.local_addr().expect("reserved address").port();
+    drop(probe);
+    let manager = CompanionGatewayManager::new_with_tailscale(
+        Arc::new(InMemoryIdentityStore::default()),
+        Arc::new(InMemoryCompanionDeviceStore::default()),
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        Arc::new(FixedTailscaleHostnameProvider::delayed_unavailable(
+            Duration::from_millis(50),
+        )),
+        None,
+        port,
+    );
+
+    let (first, second) = tokio::join!(manager.enable(), manager.enable());
+    let first = first.expect("first enable");
+    let second = second.expect("second enable");
+
+    assert_eq!(first.phase, GatewayPhase::Running);
+    assert_eq!(second.phase, GatewayPhase::Running);
+    assert_eq!(first.endpoints, second.endpoints);
+    assert_eq!(manager.status().await.phase, GatewayPhase::Running);
+
+    manager.disable().await;
 }
 
 #[tokio::test]

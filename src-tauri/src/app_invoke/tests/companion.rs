@@ -30,6 +30,28 @@ async fn companion_gateway_commands_persist_opt_in_and_report_lifecycle_state() 
         Some("true")
     );
 
+    let configured = invoke_ok(
+        &state,
+        "set_companion_tailscale_hostname",
+        json!({ "hostname": "Forge-Mac.Example.TS.NET." }),
+    )
+    .await;
+    assert_eq!(
+        configured["tailscale"]["configuredHostname"],
+        "forge-mac.example.ts.net"
+    );
+    assert_eq!(
+        configured["tailscale"]["effectiveHostname"],
+        "forge-mac.example.ts.net"
+    );
+    assert_eq!(
+        crate::db::acquire_db(&state.db)
+            .get_config(crate::companion_gateway::COMPANION_TAILSCALE_HOSTNAME_CONFIG)
+            .expect("read persisted Tailscale hostname")
+            .as_deref(),
+        Some("forge-mac.example.ts.net")
+    );
+
     let pairing = invoke_ok(&state, "start_companion_pairing", serde_json::Value::Null).await;
     let qr: serde_json::Value =
         serde_json::from_str(pairing["qrPayload"].as_str().expect("pairing QR payload"))
@@ -118,6 +140,32 @@ async fn companion_gateway_commands_persist_opt_in_and_report_lifecycle_state() 
             .expect("read persisted preference")
             .as_deref(),
         Some("false")
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn companion_tailscale_hostname_rejects_non_magicdns_endpoints() {
+    let (mut state, path) = test_state("app_invoke_companion_tailscale_validation");
+    state.companion_gateway = Some(crate::companion_gateway::test_manager());
+
+    let error = invoke(
+        &state,
+        "set_companion_tailscale_hostname",
+        json!({ "hostname": "https://public.example.com:17424" }),
+    )
+    .await
+    .expect_err("non-MagicDNS endpoint must be rejected");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert!(error.1.contains("MagicDNS"));
+    assert!(
+        crate::db::acquire_db(&state.db)
+            .get_config(crate::companion_gateway::COMPANION_TAILSCALE_HOSTNAME_CONFIG)
+            .expect("read Tailscale hostname preference")
+            .is_none(),
+        "invalid hostnames must not be persisted"
     );
 
     let _ = std::fs::remove_file(path);

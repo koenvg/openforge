@@ -162,13 +162,11 @@ impl CompanionStreamTermination {
 }
 
 /// Authenticated stream principal plus a race-safe trust termination subscription.
-#[allow(dead_code)] // Consumed by the canonical SSE route when KVG-2947 is integrated.
 pub(crate) struct CompanionStreamAuthorization {
     principal: CompanionAuthenticatedDevice,
     terminations: tokio::sync::broadcast::Receiver<CompanionStreamTermination>,
 }
 
-#[allow(dead_code)] // Consumed by the canonical SSE route when KVG-2947 is integrated.
 impl CompanionStreamAuthorization {
     pub(crate) fn device_id(&self) -> &str {
         &self.principal.device_id
@@ -517,7 +515,6 @@ impl PairingCoordinator {
         self.devices.rollback_revoke_all(batch)
     }
 
-    #[allow(dead_code)] // Subscription is wired into the canonical SSE route by KVG-2947.
     pub(crate) fn subscribe_stream_terminations(
         &self,
     ) -> tokio::sync::broadcast::Receiver<CompanionStreamTermination> {
@@ -565,7 +562,6 @@ impl PairingCoordinator {
         }
     }
 
-    #[allow(dead_code)] // Wired into the canonical SSE route by KVG-2947.
     pub(crate) fn authorize_stream(
         &self,
         headers: &HeaderMap,

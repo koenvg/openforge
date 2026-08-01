@@ -1,8 +1,9 @@
 use super::*;
 
-const COMPANION_COMMANDS: [&str; 10] = [
+const COMPANION_COMMANDS: [&str; 11] = [
     "get_companion_gateway_status",
     "set_companion_gateway_enabled",
+    "set_companion_tailscale_hostname",
     "start_companion_pairing",
     "get_companion_pairing_status",
     "cancel_companion_pairing",
@@ -55,6 +56,25 @@ pub(super) async fn handle_app_companion_command(
                 manager.disable().await
             };
             json_value(status)?
+        }
+        "set_companion_tailscale_hostname" => {
+            let hostname = payload_string(&request.payload, "hostname")?;
+            let hostname = crate::companion_gateway::normalize_magicdns_hostname(&hostname)
+                .map_err(companion_operation_error)?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.set_config(
+                    crate::companion_gateway::COMPANION_TAILSCALE_HOSTNAME_CONFIG,
+                    &hostname,
+                )
+                .map_err(|error| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to persist Companion Tailscale hostname: {error}"),
+                    )
+                })?;
+            }
+            json_value(manager.configure_tailscale_hostname(hostname).await)?
         }
         "start_companion_pairing" => json_value(
             manager

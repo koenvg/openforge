@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
@@ -59,7 +61,10 @@ void main() {
       final record = CompanionTrustRecord(
         hostId: 'host-1',
         certificateSha256: 'AA:BB:CC',
-        endpointCandidates: <Uri>[Uri.parse('https://openforge.local:17423')],
+        endpointCandidates: <Uri>[
+          Uri.parse('https://192.168.1.20:17424'),
+          Uri.parse('https://forge-mac.example.ts.net:17424'),
+        ],
         deviceId: 'device-1',
         deviceCredential: 'secret-credential',
       );
@@ -68,6 +73,22 @@ void main() {
 
       expect(await storage.load(), record);
       expect(backend.values, hasLength(1));
+      final persisted =
+          jsonDecode(backend.values.values.single) as Map<String, Object?>;
+      expect(
+        persisted.keys,
+        unorderedEquals(<String>[
+          'hostId',
+          'certificateSha256',
+          'endpointCandidates',
+          'deviceId',
+          'deviceCredential',
+        ]),
+      );
+      expect(persisted['endpointCandidates'], <String>[
+        'https://192.168.1.20:17424',
+        'https://forge-mac.example.ts.net:17424',
+      ]);
     },
   );
 

@@ -539,6 +539,33 @@ void main() {
   );
 
   test(
+    'MagicDNS failure maps to the existing desktop unavailable state',
+    () async {
+      final client = _FakeClient()
+        ..hostStatusError = const SocketException('Failed host lookup');
+      final storage = _FakeStorage()
+        ..record = CompanionTrustRecord(
+          hostId: _hostId,
+          certificateSha256: _fingerprint,
+          endpointCandidates: <Uri>[
+            Uri.parse('https://forge-mac.example.ts.net:17424'),
+          ],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        );
+      final controller = CompanionPairingController(
+        client: client,
+        storage: storage,
+      );
+
+      await controller.restore();
+
+      expect(controller.state, isA<Unavailable>());
+      expect(storage.record?.deviceCredential, 'credential-1');
+    },
+  );
+
+  test(
     'permission denial has typed recovery after stored endpoints fail',
     () async {
       final discovery = _FakeDiscovery()

@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => {
     setConfig: vi.fn(),
     getCompanionGatewayStatus: vi.fn(),
     setCompanionGatewayEnabled: vi.fn(),
+    setCompanionTailscaleHostname: vi.fn(),
     checkClaudeInstalled: vi.fn(),
     checkPiInstalled: vi.fn(),
     getAllWhisperModelStatuses: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock('../../lib/ipc', () => ({
   setConfig: mocks.setConfig,
   getCompanionGatewayStatus: mocks.getCompanionGatewayStatus,
   setCompanionGatewayEnabled: mocks.setCompanionGatewayEnabled,
+  setCompanionTailscaleHostname: mocks.setCompanionTailscaleHostname,
   checkOpenCodeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
   checkClaudeInstalled: mocks.checkClaudeInstalled,
   checkPiInstalled: mocks.checkPiInstalled,
@@ -149,9 +151,15 @@ export async function resetSettingsViewTest() {
     hostId: null,
     certificateFingerprint: null,
     endpoints: [],
+    tailscale: {
+      detectedHostname: null,
+      configuredHostname: null,
+      effectiveHostname: null,
+    },
     error: null,
   })
   mocks.setCompanionGatewayEnabled.mockResolvedValue(undefined)
+  mocks.setCompanionTailscaleHostname.mockResolvedValue(undefined)
   mocks.updateProject.mockResolvedValue(undefined)
   mocks.deleteProject.mockResolvedValue(undefined)
   mocks.checkClaudeInstalled.mockResolvedValue({ installed: false, path: null, version: null, authenticated: false })

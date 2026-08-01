@@ -29,9 +29,10 @@ final class _RecordingTransport implements CompanionV1Transport {
 }
 
 final class _EndpointTransport implements CloseableCompanionV1Transport {
-  _EndpointTransport(this.outcomes);
+  _EndpointTransport(this.outcomes, {this.requests});
 
   final Map<String, Object> outcomes;
+  final List<({Uri uri, Map<String, String> headers})>? requests;
 
   @override
   Future<CompanionV1HttpResponse> send({
@@ -40,6 +41,7 @@ final class _EndpointTransport implements CloseableCompanionV1Transport {
     required Map<String, String> headers,
     String? body,
   }) async {
+    requests?.add((uri: uri, headers: headers));
     final outcome = outcomes[uri.host];
     if (outcome is Exception) throw outcome;
     return outcome! as CompanionV1HttpResponse;
@@ -351,11 +353,11 @@ void main() {
   });
 
   test(
-    'trusted status connection fails over and reports the verified endpoint',
+    'LAN failure falls back to MagicDNS with the same certificate pin and device credential',
     () async {
       final outcomes = <String, Object>{
         '192.168.1.20': const SocketException('unreachable'),
-        '192.168.1.21': CompanionV1HttpResponse(
+        'forge-mac.example.ts.net': CompanionV1HttpResponse(
           statusCode: 200,
           body: jsonEncode(<String, Object>{
             'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
@@ -364,18 +366,23 @@ void main() {
           }),
         ),
       };
+      final pins = <String>[];
+      final requests = <({Uri uri, Map<String, String> headers})>[];
       final client = GeneratedCompanionClient(
-        transportFactory: (_) => CompanionEndpointTransport(
-          transport: _EndpointTransport(outcomes),
-          close: () {},
-        ),
+        transportFactory: (certificateSha256) {
+          pins.add(certificateSha256);
+          return CompanionEndpointTransport(
+            transport: _EndpointTransport(outcomes, requests: requests),
+            close: () {},
+          );
+        },
       );
       final trustRecord = CompanionTrustRecord(
         hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
         certificateSha256: 'trusted-pin',
         endpointCandidates: <Uri>[
           Uri.parse('https://192.168.1.20:17424'),
-          Uri.parse('https://192.168.1.21:17424'),
+          Uri.parse('https://forge-mac.example.ts.net:17424'),
         ],
         deviceId: 'device-1',
         deviceCredential: 'credential-1',
@@ -383,17 +390,23 @@ void main() {
 
       final connection = await client.fetchHostStatus(trustRecord);
 
-      expect(connection.endpoint, Uri.parse('https://192.168.1.21:17424'));
+      expect(
+        connection.endpoint,
+        Uri.parse('https://forge-mac.example.ts.net:17424'),
+      );
       expect(connection.status.hostId, trustRecord.hostId);
+      expect(pins, <String>['trusted-pin', 'trusted-pin']);
+      expect(requests, hasLength(2));
+      expect(requests.last.headers['authorization'], 'Bearer credential-1');
     },
   );
 
   test(
-    'certificate mismatch wins when no trusted candidate connects',
+    'MagicDNS certificate mismatch wins when no trusted candidate connects',
     () async {
       final outcomes = <String, Object>{
         '192.168.1.20': const SocketException('unreachable'),
-        '192.168.1.21': const CompanionCertificateMismatch(),
+        'forge-mac.example.ts.net': const CompanionCertificateMismatch(),
       };
       final client = GeneratedCompanionClient(
         transportFactory: (_) => CompanionEndpointTransport(
@@ -406,7 +419,7 @@ void main() {
         certificateSha256: 'trusted-pin',
         endpointCandidates: <Uri>[
           Uri.parse('https://192.168.1.20:17424'),
-          Uri.parse('https://192.168.1.21:17424'),
+          Uri.parse('https://forge-mac.example.ts.net:17424'),
         ],
         deviceId: 'device-1',
         deviceCredential: 'credential-1',
