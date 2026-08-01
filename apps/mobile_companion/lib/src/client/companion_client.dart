@@ -355,6 +355,8 @@ Future<_EndpointResult<T>> _tryEndpointCandidates<T>({
         endpoint: endpoint,
         value: await operation(endpoint),
       );
+    } on CompanionTerminalAuthorizationRequired {
+      rethrow;
     } on CompanionCertificateMismatch catch (error) {
       sawCertificateMismatch = true;
       lastError = error;

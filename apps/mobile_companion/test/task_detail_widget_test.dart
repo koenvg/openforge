@@ -224,10 +224,66 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
 
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(presentation.visible, isFalse);
+      expect(
+        find.byKey(const Key('xterm-surface'), skipOffstage: false),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      expect(presentation.visible, isTrue);
+
       presentation.setState(const AgentTerminalExited());
       await tester.pump();
       expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
       expect(find.text('Exited'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Task terminal follows foreground lifecycle without opening from Details',
+    (tester) async {
+      addTearDown(() {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      });
+      final presentation = _TerminalPresentation();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(agentTerminalAvailable: true)),
+            onRefresh: () async {},
+            terminalSurface: AgentTerminalSurface(
+              presentation: presentation,
+              terminal: const SizedBox(),
+              dispose: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(presentation.visible, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(presentation.foreground, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(presentation.foreground, isTrue);
+      expect(presentation.visible, isFalse);
+
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      expect(presentation.visible, isTrue);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(presentation.foreground, isFalse);
     },
   );
 }
@@ -236,6 +292,7 @@ final class _TerminalPresentation extends ChangeNotifier
     implements AgentTerminalPresentation {
   AgentTerminalState _state = const AgentTerminalNoActiveSession();
   bool visible = false;
+  bool foreground = true;
 
   @override
   AgentTerminalState get state => _state;
@@ -246,7 +303,7 @@ final class _TerminalPresentation extends ChangeNotifier
   }
 
   @override
-  void setForeground(bool foreground) {}
+  void setForeground(bool foreground) => this.foreground = foreground;
 
   @override
   void setVisible(bool visible) => this.visible = visible;

@@ -365,8 +365,11 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
 }
 
-#[tokio::test]
-async fn revocation_after_ready_prevents_further_terminal_input() {
+async fn assert_ready_terminal_termination_blocks_input(
+    termination: CompanionStreamTermination,
+    expected_control: &str,
+    test_name: &str,
+) {
     let mut pty_manager = crate::pty_manager::PtyManager::new();
     let temp_dir = tempfile::tempdir().expect("terminal tempdir");
     pty_manager.set_pid_dir(temp_dir.path().to_path_buf());
@@ -401,20 +404,20 @@ async fn revocation_after_ready_prevents_further_terminal_input() {
     let mut socket = connect_terminal(address).await;
     attach_and_wait_until_ready(&mut socket).await;
 
-    access.cancel(CompanionStreamTermination::AuthorizationRevoked);
+    access.cancel(termination);
     socket
         .send(Message::Binary(b"must-not-cross\n".to_vec()))
         .await
-        .expect("post-revocation input frame");
+        .expect("post-termination input frame");
     let response = socket
         .next()
         .await
-        .expect("revocation response")
-        .expect("revocation control");
-    assert!(matches!(
-        response,
-        Message::Text(control) if control.contains("authorization_revoked")
-    ));
+        .expect("termination response")
+        .expect("termination control");
+    assert!(
+        matches!(response, Message::Text(control) if control.contains(expected_control)),
+        "unexpected {test_name} control"
+    );
     tokio::time::sleep(Duration::from_millis(100)).await;
     let attachment = pty_manager
         .attach_agent_terminal("KVG-3018")
@@ -425,11 +428,31 @@ async fn revocation_after_ready_prevents_further_terminal_input() {
             .replay()
             .windows(b"must-not-cross".len())
             .any(|window| window == b"must-not-cross"),
-        "revoked input reached the Agent PTY"
+        "input crossed the {test_name} terminal channel"
     );
 
     server.abort();
     pty_manager.kill_pty("KVG-3018").await.expect("PTY cleanup");
+}
+
+#[tokio::test]
+async fn revocation_after_ready_prevents_further_terminal_input() {
+    assert_ready_terminal_termination_blocks_input(
+        CompanionStreamTermination::AuthorizationRevoked,
+        "authorization_revoked",
+        "revoked",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn gateway_shutdown_after_ready_prevents_further_terminal_input() {
+    assert_ready_terminal_termination_blocks_input(
+        CompanionStreamTermination::GatewayClosing,
+        "gateway_closing",
+        "gateway-closing",
+    )
+    .await;
 }
 
 #[tokio::test]
