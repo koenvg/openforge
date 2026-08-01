@@ -1,19 +1,65 @@
 # OpenForge Companion
 
 A dedicated Flutter application for iOS and Android. It is intentionally
-independent from the pnpm workspace and provides pairing, pinned-certificate
-host restoration, Bonjour/mDNS endpoint discovery, stable Tailscale MagicDNS
-fallback, and the accessible connection-state shell. The approved
+independent from the pnpm workspace and provides desktop-approved pairing, an
+attention-first home grouped by Project, read-only Task detail, foreground live
+updates, pinned-certificate host restoration, Bonjour/mDNS endpoint discovery,
+stable Tailscale MagicDNS fallback, and explicit connection and recovery states.
+The approved
 [Mobile Companion — Design](../../docs/superpowers/specs/2026-07-30-mobile-companion-design.md)
 remains the source of truth.
 
-The companion does **not** expose or cache Task or Project data, Agent state,
-Handoff Notes, repository or terminal access, mutations, analytics, or an
-offline domain cache. LAN discovery advertises and consumes only the persistent
-host identifier, protocol version, private IP addresses, and gateway port. Pairing
-also carries the desktop's locally detected or user-confirmed Tailscale MagicDNS
-hostname. Every LAN or Tailscale connection still requires the same paired
-certificate pin and device credential; no Tailscale account credential is stored.
+## Data and trust boundary
+
+Bonjour/mDNS discovery is endpoint selection, not authorization. Its service
+record contains only the persistent host identifier and protocol version plus the
+private addresses and port needed to try the gateway. It broadcasts no Task,
+Project, Agent, or Handoff Note data, no certificate or credential, and no pairing
+secret. A discovered endpoint is accepted only when it belongs to the already
+paired host and presents the exact pinned certificate.
+
+After the user explicitly approves pairing on the desktop, the device credential
+can make only the authenticated, read-only requests in the versioned Companion
+API. Those requests may fetch:
+
+- host identity, protocol version, and server time;
+- the Needs Attention snapshot time and rows: Task identity, title, normalized
+  state/reason, recent activity time, and Project identity/name;
+- Task detail: Task identity/title, Project identity/name, Board Status, Handoff
+  Notes, normalized Agent state, an optional safe Agent error summary, plus Task
+  creation/update and optional Agent-update timestamps; and
+- foreground SSE resource invalidations with opaque replay cursors, plus
+  stream-gap, authorization-revoked, and gateway-closing control events.
+  Invalidations identify attention or Task resources to refetch rather than
+  carrying domain content.
+
+The API exposes no Task mutations, generic command dispatch, repository or
+terminal access, provider credentials, or internal Agent-session identifiers.
+Every post-pairing LAN or Tailscale request uses the same device credential and
+exact certificate pin.
+
+Only host trust (host identity and certificate fingerprint), endpoint candidates,
+and the device credential (device identity and bearer credential) persist in
+secure mobile storage through Keychain on iOS or Keystore-backed encrypted
+storage on Android. Attention and Task responses live only in memory for the
+current foreground session; the app retains no offline domain snapshot in
+preferences, files, SQLite, analytics, or another cache. Suspending the app or a
+stream gap clears in-memory views before a fresh authenticated snapshot; lost
+desktop availability replaces domain content with Desktop Unavailable, and
+revocation clears it and requires re-pairing.
+
+## Availability and networking
+
+The OpenForge desktop app and its opt-in Companion Gateway must be running; there
+is no background desktop daemon or OpenForge-hosted service. LAN is the default
+nearby transport. Away from the LAN, Tailscale must be installed, connected, and
+managed by the user on both devices. OpenForge does not manage a tailnet, call the
+Tailscale control plane, operate a relay, or store Tailscale account credentials.
+
+Live invalidations and reconnect attempts run only while the mobile app is in the
+foreground. Suspending the app stops live networking; resuming performs a fresh
+authenticated refresh. V1 has no APNs, Firebase Cloud Messaging, silent push,
+periodic background guarantee, or notification service.
 
 ## Prerequisites
 
@@ -49,16 +95,17 @@ builds are separate Flutter invocations and do not require `pnpm install`.
 
 ## Architecture boundaries
 
-- `lib/src/connection/` owns the explicit connection-state types only.
 - `lib/src/client/companion_client.dart` is the single seam for pairing,
-  authenticated generated API calls, and pinned endpoint failover.
+  authenticated generated API calls, certificate-pinned endpoint failover, and
+  the foreground event stream.
 - `lib/src/discovery/` discovers Bonjour services and filters them by the already
-  paired host identifier. Discovery never establishes trust.
-- `lib/src/storage/` stores only the paired host trust record and device
-  credential through `flutter_secure_storage` (Keychain on iOS and
-  Keystore-backed encrypted storage on Android).
-- Domain snapshots remain in memory in later features and must never be added to
-  preferences, files, SQLite, or another offline cache.
+  paired host identifier and protocol version. Discovery never establishes trust.
+- `lib/src/attention/` and `lib/src/task_detail/` own the in-memory read-only
+  views; `lib/src/live/` refreshes them from coarse foreground SSE invalidations.
+- `lib/src/storage/` persists only the paired host trust record, endpoint
+  candidates, device identity, and device credential in platform secure storage.
+  Domain snapshots must never be added to preferences, files, SQLite, or another
+  offline cache.
 
 ## Physical-device LAN and Tailscale acceptance
 
