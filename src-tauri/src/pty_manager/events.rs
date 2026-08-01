@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use super::attachment::{PtyAttachmentHub, PtyAttachmentHubs};
 use super::pids::terminate_and_remove_managed_process;
 use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
 
@@ -92,13 +93,22 @@ impl RingBuffer {
     pub(super) fn push(&mut self, bytes: &[u8]) {
         self.data.extend_from_slice(bytes);
         if self.data.len() > self.capacity {
-            let excess = self.data.len() - self.capacity;
-            self.data.drain(0..excess);
+            let mut remove = self.data.len() - self.capacity;
+            while remove < self.data.len() && self.data[remove] & 0b1100_0000 == 0b1000_0000 {
+                remove += 1;
+            }
+            self.data.drain(0..remove);
         }
     }
 
     pub(super) fn snapshot(&self) -> String {
         String::from_utf8_lossy(&self.data).to_string()
+    }
+
+    pub(super) fn snapshot_bytes(&self) -> Vec<u8> {
+        String::from_utf8_lossy(&self.data)
+            .into_owned()
+            .into_bytes()
     }
 }
 
@@ -267,6 +277,8 @@ pub(super) struct PtyEventEmitterConfig {
     pub(super) app_handle: Option<crate::backend_runtime::AppHandle>,
     pub(super) app_event_tx: Option<AppEventSender>,
     pub(super) ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
+    pub(super) attachment_hub: Option<Arc<PtyAttachmentHub>>,
+    pub(super) attachment_hubs: Option<PtyAttachmentHubs>,
     pub(super) exit_action: PtyExitAction,
 }
 
@@ -281,6 +293,8 @@ pub(super) fn spawn_batched_pty_event_emitter(
             app_handle,
             app_event_tx,
             ring_buffer,
+            attachment_hub,
+            attachment_hubs,
             exit_action,
         } = config;
         let mut batcher = PtyOutputBatcher::new(
@@ -293,7 +307,16 @@ pub(super) fn spawn_batched_pty_event_emitter(
             tokio::time::interval(tokio::time::Duration::from_millis(PTY_FLUSH_INTERVAL_MS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+        let output_hub = attachment_hub.clone();
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
+            if event_name.starts_with("pty-output-") {
+                if let (Some(hub), Some(output)) = (
+                    output_hub.as_ref(),
+                    payload.get("data").and_then(serde_json::Value::as_str),
+                ) {
+                    hub.publish_output(output.as_bytes());
+                }
+            }
             publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, event_name, payload);
             Ok(())
         };
@@ -332,6 +355,18 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                     emit_agent_exit.then_some(success)
                                 }
                             };
+                            if let Some(hub) = attachment_hub.as_ref() {
+                                hub.publish_exit(instance_id);
+                            }
+                            if let Some(hubs) = attachment_hubs.as_ref() {
+                                let mut hubs = hubs.lock().await;
+                                if hubs
+                                    .get(&session_key)
+                                    .is_some_and(|hub| hub.instance_id() == instance_id)
+                                {
+                                    hubs.remove(&session_key);
+                                }
+                            }
 
                             info!("[PTY] key={} emitter received exit signal", session_key);
                             let exit_event_name = format!("pty-exit-{}", session_key);

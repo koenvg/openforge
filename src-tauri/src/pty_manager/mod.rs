@@ -1,9 +1,14 @@
+mod attachment;
+#[cfg(test)]
+mod attachment_tests;
 mod commands;
 mod events;
 mod managed_process;
 mod pids;
 mod session;
 
+use attachment::PtyAttachmentHubs;
+pub(crate) use attachment::{AgentTerminalAttachmentError, AgentTerminalEvent};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -82,6 +87,7 @@ pub struct PtyManager {
     pid_dir_override: Option<PathBuf>,
     last_output: LastOutputTimes,
     output_buffers: PtyOutputBuffers,
+    attachment_hubs: PtyAttachmentHubs,
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
@@ -134,6 +140,7 @@ impl PtyManager {
             pid_dir_override: None,
             last_output: Arc::new(Mutex::new(HashMap::new())),
             output_buffers: Arc::new(Mutex::new(HashMap::new())),
+            attachment_hubs: Arc::new(Mutex::new(HashMap::new())),
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
             lifecycle_locks: Arc::new(Mutex::new(HashMap::new())),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
@@ -873,6 +880,8 @@ mod tests {
                 app_handle: Some(app),
                 app_event_tx: Some(bus.sender()),
                 ring_buffer: ring,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
@@ -1012,6 +1021,8 @@ mod tests {
                 app_handle: Some(app),
                 app_event_tx: Some(bus.sender()),
                 ring_buffer: ring,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
@@ -1064,6 +1075,8 @@ mod tests {
                 app_handle: Some(app),
                 app_event_tx: Some(bus.sender()),
                 ring_buffer: ring,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
@@ -1113,6 +1126,8 @@ mod tests {
                 app_handle: Some(app),
                 app_event_tx: Some(app_event_tx),
                 ring_buffer: ring,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
@@ -1218,6 +1233,8 @@ mod tests {
                 app_handle: None,
                 app_event_tx: Some(app_event_tx),
                 ring_buffer: ring,
+                attachment_hub: None,
+                attachment_hubs: None,
                 exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),

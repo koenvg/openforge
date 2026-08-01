@@ -3,6 +3,7 @@ import 'dart:async';
 import '../generated/companion_v1_client.dart';
 import '../pairing/pairing_bootstrap.dart';
 import '../storage/companion_secure_storage.dart';
+import '../terminal/companion_terminal_client.dart';
 import 'companion_live_events.dart';
 import 'pinned_companion_transport.dart';
 
@@ -72,15 +73,18 @@ abstract interface class CompanionClient {
   });
 }
 
-final class GeneratedCompanionClient implements CompanionClient {
+final class GeneratedCompanionClient
+    implements CompanionClient, CompanionTerminalClient {
   factory GeneratedCompanionClient({
     CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
     CompanionEventConnector eventConnector = openPinnedCompanionEvents,
+    CompanionTerminalConnector terminalConnector = openPinnedAgentTerminal,
     Duration pairingCandidateTimeout = const Duration(seconds: 3),
     Duration pairingOverallTimeout = const Duration(seconds: 18),
   }) => GeneratedCompanionClient._(
     transportFactory,
     eventConnector,
+    terminalConnector,
     pairingCandidateTimeout,
     pairingOverallTimeout,
   );
@@ -88,12 +92,14 @@ final class GeneratedCompanionClient implements CompanionClient {
   GeneratedCompanionClient._(
     this._transportFactory,
     this._eventConnector,
+    this._terminalConnector,
     this._pairingCandidateTimeout,
     this._pairingOverallTimeout,
   );
 
   final CompanionEndpointTransportFactory _transportFactory;
   final CompanionEventConnector _eventConnector;
+  final CompanionTerminalConnector _terminalConnector;
   final Duration _pairingCandidateTimeout;
   final Duration _pairingOverallTimeout;
   final _preferredPairingEndpoints = <String, Uri>{};
@@ -200,6 +206,22 @@ final class GeneratedCompanionClient implements CompanionClient {
       certificateSha256: trustRecord.certificateSha256,
       credential: trustRecord.deviceCredential,
       lastEventId: lastEventId,
+    ),
+  )).value;
+
+  @override
+  Future<CompanionAgentTerminalChannel> openAgentTerminal(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async => (await _tryEndpointCandidates(
+    endpoints: trustRecord.endpointCandidates,
+    operation: (endpoint) => _terminalConnector(
+      TerminalConnectRequest(
+        endpoint: endpoint,
+        certificateSha256: trustRecord.certificateSha256,
+        credential: trustRecord.deviceCredential,
+        taskId: taskId,
+      ),
     ),
   )).value;
 }

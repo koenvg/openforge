@@ -159,7 +159,7 @@ impl PtyManager {
         Ok(())
     }
 
-    pub(super) async fn lifecycle_lock_for(&self, session_key: &str) -> Arc<Mutex<()>> {
+    pub(in super::super) async fn lifecycle_lock_for(&self, session_key: &str) -> Arc<Mutex<()>> {
         let mut lifecycle_locks = self.lifecycle_locks.lock().await;
         Arc::clone(
             lifecycle_locks
@@ -171,6 +171,7 @@ impl PtyManager {
     pub(super) async fn clear_session_tracking(&self, session_key: &str) {
         self.last_output.lock().await.remove(session_key);
         self.output_buffers.lock().await.remove(session_key);
+        self.attachment_hubs.lock().await.remove(session_key);
     }
 
     pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), PtyError> {

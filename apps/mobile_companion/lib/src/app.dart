@@ -10,6 +10,7 @@ import 'live/live_updates_controller.dart';
 import 'pairing/companion_pairing_capture.dart';
 import 'pairing/companion_pairing_controller.dart';
 import 'presentation/connection_shell.dart';
+import 'terminal/agent_terminal_surface.dart';
 import 'task_detail/task_detail_controller.dart';
 import 'task_detail/task_detail_screen.dart';
 
@@ -18,12 +19,15 @@ export 'presentation/connection_shell.dart' show ConnectionShell;
 
 typedef TaskDetailControllerFactory =
     TaskDetailController Function(String taskId);
+typedef AgentTerminalSurfaceFactory =
+    AgentTerminalSurface Function(String taskId);
 
 class CompanionApp extends StatefulWidget {
   const CompanionApp({
     this.controller,
     this.attentionController,
     this.taskDetailControllerFactory,
+    this.agentTerminalSurfaceFactory,
     this.liveUpdatesController,
     this.initialState = const Unpaired(),
     super.key,
@@ -32,6 +36,7 @@ class CompanionApp extends StatefulWidget {
   final CompanionPairingController? controller;
   final AttentionController? attentionController;
   final TaskDetailControllerFactory? taskDetailControllerFactory;
+  final AgentTerminalSurfaceFactory? agentTerminalSurfaceFactory;
   final LiveUpdatesController? liveUpdatesController;
   final CompanionConnectionState initialState;
 
@@ -273,12 +278,16 @@ class _CompanionAppState extends State<CompanionApp>
     final navigator = _navigatorKey.currentState;
     if (factory == null || navigator == null) return;
     final controller = factory(taskId);
+    final terminalSurface = widget.agentTerminalSurfaceFactory?.call(taskId);
     _openTaskController = controller;
     widget.liveUpdatesController?.setOpenTask(controller);
     try {
       await navigator.push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => TaskDetailScreen(controller: controller),
+          builder: (_) => TaskDetailScreen(
+            controller: controller,
+            terminalSurface: terminalSurface,
+          ),
         ),
       );
     } finally {
@@ -308,6 +317,14 @@ class _CompanionAppState extends State<CompanionApp>
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       useMaterial3: true,
     ),
+    darkTheme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+    ),
+    themeMode: ThemeMode.system,
     home: _state is Connected && widget.attentionController != null
         ? AttentionHome(
             state: _attentionState,

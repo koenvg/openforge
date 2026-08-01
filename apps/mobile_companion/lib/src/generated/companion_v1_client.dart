@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '6dd0c50ac189e16e4e6dfa1384961a0a5a36af127a16e116ef001fa8d6a1c790';
+    '37a7db7cb002c221a5e0a3a3316e9f8265e13c2e51d8b031b1b325e1fe5c2f0c';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -231,6 +231,7 @@ final class TaskDetail {
     required this.boardStatus,
     required this.handoffNotes,
     required this.agentState,
+    this.agentTerminalAvailable = false,
     required this.agentErrorSummary,
     required this.createdAt,
     required this.updatedAt,
@@ -246,6 +247,7 @@ final class TaskDetail {
       'boardStatus',
       'handoffNotes',
       'agentState',
+      'agentTerminalAvailable',
       'agentErrorSummary',
       'createdAt',
       'updatedAt',
@@ -261,6 +263,7 @@ final class TaskDetail {
     final projectName = json.string('projectName');
     final boardStatus = json.string('boardStatus');
     final agentState = json.string('agentState');
+    final agentTerminalAvailable = json['agentTerminalAvailable'];
     if (<String>[
           taskId,
           title,
@@ -274,7 +277,8 @@ final class TaskDetail {
           'blocked',
           'failed',
           'complete',
-        }.contains(agentState)) {
+        }.contains(agentState) ||
+        agentTerminalAvailable is! bool) {
       throw const FormatException('Invalid Task detail.');
     }
     return TaskDetail(
@@ -285,6 +289,7 @@ final class TaskDetail {
       boardStatus: boardStatus,
       handoffNotes: json.requiredNullableString('handoffNotes'),
       agentState: agentState,
+      agentTerminalAvailable: agentTerminalAvailable,
       agentErrorSummary: json.requiredNullableString('agentErrorSummary'),
       createdAt: json.dateTime('createdAt'),
       updatedAt: json.dateTime('updatedAt'),
@@ -299,6 +304,7 @@ final class TaskDetail {
   final String boardStatus;
   final String? handoffNotes;
   final String agentState;
+  final bool agentTerminalAvailable;
   final String? agentErrorSummary;
   final DateTime createdAt;
   final DateTime updatedAt;

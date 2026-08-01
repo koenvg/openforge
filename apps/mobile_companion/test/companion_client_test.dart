@@ -139,6 +139,7 @@ void main() {
           'boardStatus',
           'handoffNotes',
           'agentState',
+          'agentTerminalAvailable',
           'agentErrorSummary',
           'createdAt',
           'updatedAt',
@@ -221,6 +222,7 @@ void main() {
       expect(detail.boardStatus, 'doing');
       expect(detail.handoffNotes, 'Ready for review.');
       expect(detail.agentState, 'failed');
+      expect(detail.agentTerminalAvailable, isTrue);
       expect(transport.requests[0].uri.path, '/companion/v1/pairing/requests');
       expect(
         jsonDecode(transport.requests[0].body!)['deviceName'],

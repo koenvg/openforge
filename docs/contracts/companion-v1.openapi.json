@@ -349,6 +349,7 @@
           "boardStatus",
           "handoffNotes",
           "agentState",
+          "agentTerminalAvailable",
           "agentErrorSummary",
           "createdAt",
           "updatedAt",
@@ -368,6 +369,7 @@
             "type": "string",
             "enum": ["waiting", "running", "blocked", "failed", "complete"]
           },
+          "agentTerminalAvailable": { "type": "boolean" },
           "agentErrorSummary": { "type": ["string", "null"] },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" },
