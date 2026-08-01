@@ -376,7 +376,7 @@ export interface TaskStartPrefixContext {
 
 export interface TaskStartPrefixProviderRegistration {
   id: string
-  /** Menu label, e.g. 'Start with injectable…'. */
+  /** Menu label shown on the surface offering this provider. */
   title: string
   /** Lower sorts first. Defaults to 0. */
   order?: number
@@ -570,7 +570,8 @@ export interface TasksAPI {
   create(request: CreateTaskRequest): Promise<Task>
   /**
    * Opens the host's create-task dialog pre-filled, letting the user edit the
-   * prompt — including inserting injectables — before the task exists.
+   * prompt — including anything contributed at that injection point —
+   * before the task exists.
    * Resolves null if they dismiss it.
    */
   compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
