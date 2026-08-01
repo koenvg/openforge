@@ -22,6 +22,69 @@ void main() {
     decoder.dispose();
   });
 
+  test('terminal replay frames are applied in one explicit flush', () {
+    final adapter = XtermOpenForgeTerminal();
+    var notifications = 0;
+    adapter.terminal.addListener(() => notifications += 1);
+
+    adapter.writeOutput(Uint8List.fromList(utf8.encode('first ')));
+    adapter.writeOutput(Uint8List.fromList(utf8.encode('second')));
+
+    expect(notifications, 0);
+    adapter.flushOutput();
+    expect(notifications, 1);
+    adapter.flushOutput();
+    expect(notifications, 1);
+
+    adapter.dispose();
+  });
+
+  test('live output frames coalesce into a single timed render', () async {
+    final adapter = XtermOpenForgeTerminal();
+    var notifications = 0;
+    adapter.terminal.addListener(() => notifications += 1);
+
+    adapter.writeOutput(Uint8List.fromList(utf8.encode('first ')));
+    adapter.writeOutput(Uint8List.fromList(utf8.encode('second')));
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+
+    expect(notifications, 1);
+    adapter.dispose();
+  });
+
+  test('terminal output never buffers more than 256 KiB', () {
+    final adapter = XtermOpenForgeTerminal();
+    var notifications = 0;
+    adapter.terminal.addListener(() => notifications += 1);
+
+    adapter.writeOutput(Uint8List.fromList(<int>[0x61]));
+    adapter.writeOutput(Uint8List(256 * 1024));
+
+    expect(notifications, 1);
+    adapter.flushOutput();
+    expect(notifications, 2);
+    adapter.dispose();
+  });
+
+  test('clear removes main-buffer scrollback before replay', () {
+    final adapter = XtermOpenForgeTerminal();
+    adapter.terminal.resize(8, 2);
+    adapter.writeOutput(
+      Uint8List.fromList(utf8.encode('one\r\ntwo\r\nsecret')),
+    );
+    adapter.flushOutput();
+
+    expect(adapter.terminal.mainBuffer.scrollBack, greaterThan(0));
+    expect(adapter.terminal.mainBuffer.getText(), contains('one'));
+
+    adapter.clear();
+
+    expect(adapter.terminal.mainBuffer.scrollBack, 0);
+    expect(adapter.terminal.mainBuffer.getText(), isNot(contains('one')));
+    expect(adapter.terminal.mainBuffer.getText(), isNot(contains('secret')));
+    adapter.dispose();
+  });
+
   test('xterm input, paste, accessory keys, and one-shot Ctrl use UTF-8', () {
     final input = <Uint8List>[];
     final adapter = XtermOpenForgeTerminal(onInput: input.add);
@@ -194,16 +257,23 @@ void main() {
 
       Future<({int columns, int rows})> pumpGrid(
         double width,
-        double height,
-      ) async {
+        double height, {
+        double bottomInset = 0,
+      }) async {
         await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: width,
-                  height: height,
-                  child: OpenForgeTerminalView(
+          Center(
+            child: SizedBox(
+              width: width,
+              height: height,
+              child: MaterialApp(
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(viewInsets: EdgeInsets.only(bottom: bottomInset)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: OpenForgeTerminalView(
                     adapter: adapter,
                     inputState: enabled,
                     isInputEnabled: () => enabled.value,
@@ -219,7 +289,7 @@ void main() {
 
       final portrait = await pumpGrid(320, 560);
       final landscape = await pumpGrid(560, 280);
-      final keyboardVisible = await pumpGrid(560, 160);
+      final keyboardVisible = await pumpGrid(560, 280, bottomInset: 120);
 
       expect(landscape.columns, greaterThan(portrait.columns));
       expect(landscape.rows, lessThan(portrait.rows));

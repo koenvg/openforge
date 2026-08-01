@@ -53,6 +53,7 @@ final class AgentTerminalController extends ChangeNotifier
     required OpenForgeTerminal terminal,
     Duration reconnectDelay = const Duration(milliseconds: 300),
     Duration maxReconnectDelay = const Duration(seconds: 30),
+    Duration reconnectStabilityDuration = const Duration(seconds: 5),
     double Function()? randomUnit,
     Future<void> Function(Duration)? delay,
     VoidCallback? onAuthorizationLost,
@@ -63,6 +64,7 @@ final class AgentTerminalController extends ChangeNotifier
     terminal,
     reconnectDelay,
     maxReconnectDelay,
+    reconnectStabilityDuration,
     randomUnit ?? Random().nextDouble,
     delay ?? _defaultDelay,
     onAuthorizationLost,
@@ -75,14 +77,18 @@ final class AgentTerminalController extends ChangeNotifier
     this._terminal,
     this.reconnectDelay,
     this.maxReconnectDelay,
+    this.reconnectStabilityDuration,
     this._randomUnit,
     this._delay,
     this._onAuthorizationLost,
-  );
+  ) {
+    _terminal.outputErrorHandler = _handleTerminalOutputError;
+  }
 
   final String taskId;
   final Duration reconnectDelay;
   final Duration maxReconnectDelay;
+  final Duration reconnectStabilityDuration;
   final CompanionTerminalClient _client;
   final CompanionSecureStorage _storage;
   final OpenForgeTerminal _terminal;
@@ -107,6 +113,7 @@ final class AgentTerminalController extends ChangeNotifier
   var _authorizationFailed = false;
   var _handlingDisconnect = false;
   var _reconnectAttempts = 0;
+  Stopwatch? _readyUptime;
 
   @override
   void updateAvailability(bool available) {
@@ -254,9 +261,12 @@ final class AgentTerminalController extends ChangeNotifier
     }
     switch (control) {
       case ReadyTerminalControl():
-        _reconnectAttempts = 0;
+        if (!_flushTerminalOutput(generation)) return;
+        _clearReadyUptime();
+        _readyUptime = Stopwatch()..start();
         _setState(const AgentTerminalReady());
       case ExitedTerminalControl():
+        if (!_flushTerminalOutput(generation)) return;
         _terminalExited = true;
         _setState(const AgentTerminalExited());
         unawaited(_closeCurrentChannel());
@@ -306,6 +316,13 @@ final class AgentTerminalController extends ChangeNotifier
     if (!_isCurrent(generation) || _handlingDisconnect || _terminalExited) {
       return;
     }
+    final readyUptime = _readyUptime;
+    _readyUptime = null;
+    readyUptime?.stop();
+    if (readyUptime != null &&
+        readyUptime.elapsed >= reconnectStabilityDuration) {
+      _reconnectAttempts = 0;
+    }
     _handlingDisconnect = true;
     unawaited(_reconnect(generation));
   }
@@ -342,6 +359,7 @@ final class AgentTerminalController extends ChangeNotifier
   }
 
   Future<void> _closeCurrentChannel() async {
+    _clearReadyUptime();
     final subscription = _subscription;
     final channel = _channel;
     _subscription = null;
@@ -356,9 +374,30 @@ final class AgentTerminalController extends ChangeNotifier
     _handlingDisconnect = false;
     _terminalExited = false;
     _reconnectAttempts = 0;
+    _clearReadyUptime();
     if (clear) _terminal.clear();
     if (!_disposed) _setState(const AgentTerminalNoActiveSession());
     await _closeCurrentChannel();
+  }
+
+  void _handleTerminalOutputError(FormatException _) {
+    if (_disposed) return;
+    _protocolFailure(_generation);
+  }
+
+  bool _flushTerminalOutput(int generation) {
+    try {
+      _terminal.flushOutput();
+      return true;
+    } on FormatException {
+      _protocolFailure(generation);
+      return false;
+    }
+  }
+
+  void _clearReadyUptime() {
+    _readyUptime?.stop();
+    _readyUptime = null;
   }
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
@@ -382,6 +421,7 @@ final class AgentTerminalController extends ChangeNotifier
     if (_disposed) return;
     _disposed = true;
     _generation += 1;
+    _terminal.outputErrorHandler = null;
     unawaited(_closeCurrentChannel());
     _terminal.clear();
     _terminal.dispose();
