@@ -293,7 +293,12 @@ async function createTask(flags) {
     depends_on: dependsOn.length > 0 ? dependsOn : undefined,
     labels: labels.length > 0 ? labels : undefined,
   };
-  printJson(await requestJson('/create_task', { method: 'POST', body: JSON.stringify(payload) }));
+  const response = await requestJson('/create_task', { method: 'POST', body: JSON.stringify(payload) });
+  printJson(response);
+  if (response && response.warning) {
+    process.stderr.write(`${response.warning}\n`);
+    process.exitCode = 1;
+  }
 }
 
 async function updateTask(flags) {
