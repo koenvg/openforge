@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ChevronsDownUp, ChevronsUpDown, RotateCcw, SlidersHorizontal } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
-  import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
+  import { HIERARCHICAL_SETTINGS, isSettingVisible } from '../../lib/hierarchicalSettings'
   import type { HierarchicalSettingDef, SettingLevel } from '../../lib/hierarchicalSettings'
 
   interface Props {
@@ -37,7 +37,9 @@
   const visibleSettings = $derived(
     HIERARCHICAL_SETTINGS.filter(
       (setting) =>
-        setting.levels.includes(mode as SettingLevel) && !excludeKeys.includes(setting.key),
+        setting.levels.includes(mode as SettingLevel) &&
+        !excludeKeys.includes(setting.key) &&
+        isSettingVisible(setting, values),
     ),
   )
 

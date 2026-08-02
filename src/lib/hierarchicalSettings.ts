@@ -11,6 +11,7 @@ export interface HierarchicalSettingDef {
   levels: SettingLevel[]
   default: string
   options?: { value: string; label: string }[]
+  showWhen?: { key: string; equals: string }
 }
 
 export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
@@ -21,6 +22,19 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
     control: 'toggle',
     levels: ['global', 'project', 'task'],
     default: 'false',
+  },
+  {
+    key: 'code_cleanup_destination',
+    label: 'Cleanup Destination',
+    description: 'Where cleanup items are filed when Code Cleanup Tasks is on',
+    control: 'select',
+    levels: ['global', 'project'],
+    default: 'openforge',
+    options: [
+      { value: 'openforge', label: 'OpenForge backlog' },
+      { value: 'github_issues', label: 'GitHub Issues' },
+    ],
+    showWhen: { key: 'code_cleanup_tasks_enabled', equals: 'true' },
   },
   {
     key: 'task_display_title_metadata_updates_enabled',
@@ -105,4 +119,14 @@ export function computeEffectiveProjectSettings(
     }
   }
   return result
+}
+
+/** Whether a setting should be shown given the current effective values.
+ *  A setting with `showWhen` is visible only when values[showWhen.key] === showWhen.equals. */
+export function isSettingVisible(
+  def: HierarchicalSettingDef,
+  values: Record<string, string>,
+): boolean {
+  if (!def.showWhen) return true
+  return values[def.showWhen.key] === def.showWhen.equals
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   HIERARCHICAL_SETTINGS,
   computeEffectiveProjectSettings,
+  isSettingVisible,
 } from './hierarchicalSettings'
 
 describe('hierarchical settings registry', () => {
@@ -29,5 +30,30 @@ describe('hierarchical settings registry', () => {
     )
     expect(eff.use_worktrees).toBe('false')
     expect(eff.task_id_prefix).toBe('T')
+  })
+})
+
+describe('isSettingVisible', () => {
+  const destination = HIERARCHICAL_SETTINGS.find((s) => s.key === 'code_cleanup_destination')!
+
+  it('registers a code_cleanup_destination select with openforge + github_issues options', () => {
+    expect(destination).toBeDefined()
+    expect(destination.control).toBe('select')
+    expect(destination.default).toBe('openforge')
+    expect(destination.options?.map((o) => o.value)).toEqual(['openforge', 'github_issues'])
+    expect(destination.levels).toEqual(['global', 'project'])
+  })
+
+  it('hides the destination when cleanup is off', () => {
+    expect(isSettingVisible(destination, { code_cleanup_tasks_enabled: 'false' })).toBe(false)
+  })
+
+  it('shows the destination when cleanup is on', () => {
+    expect(isSettingVisible(destination, { code_cleanup_tasks_enabled: 'true' })).toBe(true)
+  })
+
+  it('always shows a setting without showWhen', () => {
+    const toggle = HIERARCHICAL_SETTINGS.find((s) => s.key === 'handoff_notes_enabled')!
+    expect(isSettingVisible(toggle, {})).toBe(true)
   })
 })
