@@ -31,6 +31,27 @@ fn find_registered_project_by_path<'a>(
     })
 }
 
+/// Where a create_task request should be routed.
+#[derive(Debug, PartialEq)]
+pub(in crate::http_server) enum CleanupRoute {
+    Backlog,
+    GithubIssue,
+}
+
+/// Cleanup-labeled requests go to GitHub Issues only when the project's
+/// destination is "github_issues"; everything else creates a backlog task.
+pub(in crate::http_server) fn decide_cleanup_route(
+    labels: &[String],
+    destination: &str,
+) -> CleanupRoute {
+    let is_cleanup = labels.iter().any(|l| l == "cleanup");
+    if is_cleanup && destination == "github_issues" {
+        CleanupRoute::GithubIssue
+    } else {
+        CleanupRoute::Backlog
+    }
+}
+
 /// Resolve project_id from request parameters, failing if no project can be determined.
 ///
 /// Priority: explicit project_id > worktree deduction.
@@ -613,4 +634,38 @@ pub async fn get_project_attention_handler(
         });
 
     Ok(Json(attention))
+}
+
+#[cfg(test)]
+mod cleanup_route_tests {
+    use super::*;
+
+    #[test]
+    fn cleanup_label_with_github_destination_routes_to_issue() {
+        assert_eq!(
+            decide_cleanup_route(&["cleanup".to_string()], "github_issues"),
+            CleanupRoute::GithubIssue
+        );
+    }
+
+    #[test]
+    fn cleanup_label_with_openforge_destination_routes_to_backlog() {
+        assert_eq!(
+            decide_cleanup_route(&["cleanup".to_string()], "openforge"),
+            CleanupRoute::Backlog
+        );
+    }
+
+    #[test]
+    fn non_cleanup_label_routes_to_backlog_even_for_github() {
+        assert_eq!(
+            decide_cleanup_route(&["chore".to_string()], "github_issues"),
+            CleanupRoute::Backlog
+        );
+    }
+
+    #[test]
+    fn empty_labels_route_to_backlog() {
+        assert_eq!(decide_cleanup_route(&[], "github_issues"), CleanupRoute::Backlog);
+    }
 }
