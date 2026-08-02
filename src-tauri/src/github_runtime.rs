@@ -1,10 +1,12 @@
 mod auth;
 mod comments;
+mod issues;
 mod polling;
 mod pr_actions;
 mod repo_resolution;
 
 pub use auth::{github_token, github_username};
+pub use issues::create_cleanup_issue;
 pub use comments::{
     create_review_comment, create_review_comment_reply, get_file_at_ref, get_file_at_ref_base64,
     get_file_content, get_file_content_base64, get_pr_file_diffs, get_pr_overview_comments,

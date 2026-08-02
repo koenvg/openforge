@@ -1,5 +1,28 @@
 use serde::{Deserialize, Serialize};
 
+/// Request body for creating an issue.
+#[derive(Debug, Serialize)]
+pub(crate) struct CreateIssueRequest {
+    pub title: String,
+    pub body: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+}
+
+/// Subset of the created issue we need back.
+#[derive(Debug, Deserialize)]
+pub struct CreatedIssue {
+    pub html_url: String,
+    pub number: i64,
+}
+
+/// Request body for creating a repo label.
+#[derive(Debug, Serialize)]
+pub(crate) struct CreateLabelRequest {
+    pub name: String,
+    pub color: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PrRef {
     pub repo_owner: String,

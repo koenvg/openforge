@@ -19,6 +19,7 @@ mod checks;
 pub mod error;
 mod events;
 mod graphql;
+mod issues;
 mod pulls;
 mod repos;
 mod response_cache;
