@@ -13,7 +13,6 @@ pub(crate) struct CreateIssueRequest {
 #[derive(Debug, Deserialize)]
 pub struct CreatedIssue {
     pub html_url: String,
-    pub number: i64,
 }
 
 /// Request body for creating a repo label.
