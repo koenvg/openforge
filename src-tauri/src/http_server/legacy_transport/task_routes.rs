@@ -163,45 +163,20 @@ pub(in crate::http_server) fn resolve_project_id(
     )))
 }
 
-/// Handle create_task requests from OpenCode sessions
-///
-/// Creates a new task in the database with "backlog" status and
-/// emits a "task-changed" event to notify the frontend.
-///
-/// If project_id is not provided but worktree is, attempts to deduce
-/// the project from the calling session's worktree.
-pub async fn create_task_handler(
-    State(state): State<AppState>,
-    Json(request): Json<CreateTaskRequest>,
-) -> Result<Json<CreateTaskResponse>, (StatusCode, String)> {
-    let resolution_db = std::sync::Arc::clone(&state.db);
-    let explicit_project_id = request.project_id.clone();
-    let worktree = request.worktree.clone();
-    let project_id = tokio::task::spawn_blocking(move || {
-        let db = resolution_db.lock().map_err(|_| {
-            ResolveProjectIdError::Storage(
-                "Failed to lock database while resolving project".to_string(),
-            )
-        })?;
-        resolve_project_id(&db, explicit_project_id.as_deref(), worktree.as_deref())
-    })
-    .await
-    .map_err(|error| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to join project resolution task: {error}"),
-        )
-    })?
-    .map_err(ResolveProjectIdError::into_http_response)?;
-
+/// Create a backlog task with the request's dependencies and labels, emitting
+/// the task-changed event. Returns (task_id, project_id).
+fn create_backlog_task(
+    state: &AppState,
+    project_id: &str,
+    request: &CreateTaskRequest,
+) -> Result<(String, Option<String>), (StatusCode, String)> {
     let db = db::acquire_db(&state.db);
-
     let task = db
         .create_task_with_metadata(
             db::NewTaskOptions {
                 initial_prompt: &request.initial_prompt,
                 status: "backlog",
-                project_id: Some(&project_id),
+                project_id: Some(project_id),
                 prompt: None,
                 permission_mode: None,
                 worktree_source: None,
@@ -229,15 +204,92 @@ pub async fn create_task_handler(
                 format!("Failed to set task labels: {error}"),
             ),
         })?;
-
+    let task_id = task.id.clone();
+    let task_project_id = task.project_id.clone();
     drop(db);
+    emit_task_changed(state, "created", &task_id, task_project_id.as_deref());
+    Ok((task_id, task_project_id))
+}
 
-    emit_task_changed(&state, "created", &task.id, task.project_id.as_deref());
+/// Handle create_task requests from OpenCode sessions
+///
+/// Creates a new task in the database with "backlog" status and
+/// emits a "task-changed" event to notify the frontend.
+///
+/// If project_id is not provided but worktree is, attempts to deduce
+/// the project from the calling session's worktree.
+pub async fn create_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<CreateTaskRequest>,
+) -> Result<Json<CreateTaskResponse>, (StatusCode, String)> {
+    let resolution_db = std::sync::Arc::clone(&state.db);
+    let explicit_project_id = request.project_id.clone();
+    let worktree = request.worktree.clone();
+    let (project_id, destination) = tokio::task::spawn_blocking(move || {
+        let db = resolution_db.lock().map_err(|_| {
+            ResolveProjectIdError::Storage(
+                "Failed to lock database while resolving project".to_string(),
+            )
+        })?;
+        let project_id =
+            resolve_project_id(&db, explicit_project_id.as_deref(), worktree.as_deref())?;
+        let destination = db.resolve_cleanup_destination(&project_id);
+        Ok((project_id, destination))
+    })
+    .await
+    .map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to join project resolution task: {error}"),
+        )
+    })?
+    .map_err(ResolveProjectIdError::into_http_response)?;
 
+    if decide_cleanup_route(&request.labels, &destination) == CleanupRoute::GithubIssue {
+        let (title, body) =
+            build_cleanup_issue_content(&request.initial_prompt, &request.depends_on);
+        match crate::github_runtime::create_cleanup_issue(
+            &state.github_client,
+            &state.db,
+            &project_id,
+            &title,
+            &body,
+        )
+        .await
+        {
+            Ok(issue_url) => {
+                return Ok(Json(CreateTaskResponse {
+                    task_id: String::new(),
+                    project_id: Some(project_id),
+                    status: "issue_created".to_string(),
+                    issue_url: Some(issue_url),
+                    warning: None,
+                }));
+            }
+            Err(e) => {
+                // Fail loudly, but keep it in OpenForge too.
+                let (task_id, task_project_id) =
+                    create_backlog_task(&state, &project_id, &request)?;
+                return Ok(Json(CreateTaskResponse {
+                    task_id,
+                    project_id: task_project_id,
+                    status: "created".to_string(),
+                    issue_url: None,
+                    warning: Some(format!(
+                        "GitHub issue creation failed; filed as an OpenForge task instead: {e}"
+                    )),
+                }));
+            }
+        }
+    }
+
+    let (task_id, task_project_id) = create_backlog_task(&state, &project_id, &request)?;
     Ok(Json(CreateTaskResponse {
-        task_id: task.id,
-        project_id: task.project_id,
+        task_id,
+        project_id: task_project_id,
         status: "created".to_string(),
+        issue_url: None,
+        warning: None,
     }))
 }
 

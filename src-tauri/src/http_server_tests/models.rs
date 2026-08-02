@@ -131,6 +131,8 @@ fn test_create_task_response_creation() {
         task_id: "T-123".to_string(),
         project_id: Some("P-1".to_string()),
         status: "created".to_string(),
+        issue_url: None,
+        warning: None,
     };
     assert_eq!(response.task_id, "T-123");
     assert_eq!(response.project_id, Some("P-1".to_string()));
@@ -143,6 +145,8 @@ fn test_create_task_response_serialize() {
         task_id: "T-456".to_string(),
         project_id: None,
         status: "created".to_string(),
+        issue_url: None,
+        warning: None,
     };
     let json = serde_json::to_string(&response).expect("Failed to serialize");
     assert!(json.contains("\"task_id\":\"T-456\""));
@@ -155,6 +159,8 @@ fn test_create_task_response_json_structure() {
         task_id: "T-789".to_string(),
         project_id: Some("P-2".to_string()),
         status: "created".to_string(),
+        issue_url: None,
+        warning: None,
     };
     let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
     assert_eq!(json_value["task_id"], "T-789");
