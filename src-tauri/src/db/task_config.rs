@@ -203,4 +203,23 @@ mod tests {
         drop(db);
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn test_resolve_cleanup_destination_precedence() {
+        let (db, path) = make_test_db("resolve_cleanup_destination");
+        let project = db.create_project("P", "/tmp/p").unwrap();
+        let key = "code_cleanup_destination";
+
+        // Nothing set -> default openforge.
+        assert_eq!(db.resolve_cleanup_destination(&project.id), "openforge");
+        // Global set.
+        db.set_config(key, "github_issues").unwrap();
+        assert_eq!(db.resolve_cleanup_destination(&project.id), "github_issues");
+        // Project override beats global.
+        db.set_project_config(&project.id, key, "openforge").unwrap();
+        assert_eq!(db.resolve_cleanup_destination(&project.id), "openforge");
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
 }
