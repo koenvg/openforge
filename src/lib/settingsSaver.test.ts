@@ -64,6 +64,7 @@ describe('settingsSaver', () => {
       githubPollInterval: 45,
       useWorktrees: false,
       aiProvider: 'opencode',
+      codeCleanupDestination: 'github_issues',
     })
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
@@ -73,6 +74,7 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
     expect(setConfig).toHaveBeenCalledWith('use_worktrees', 'false')
     expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')
+    expect(setConfig).toHaveBeenCalledWith('code_cleanup_destination', 'github_issues')
   })
 
   it('persists only supplied global settings', async () => {
@@ -91,6 +93,7 @@ describe('settingsSaver', () => {
       githubPollInterval: 0,
       useWorktrees: true,
       aiProvider: 'claude-code',
+      codeCleanupDestination: 'openforge',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
@@ -105,6 +108,7 @@ describe('settingsSaver', () => {
       githubPollInterval: 10,
       useWorktrees: true,
       aiProvider: 'claude-code',
+      codeCleanupDestination: 'openforge',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '15')
@@ -119,6 +123,7 @@ describe('settingsSaver', () => {
       githubPollInterval: 301,
       useWorktrees: true,
       aiProvider: 'claude-code',
+      codeCleanupDestination: 'openforge',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '300')
@@ -133,6 +138,7 @@ describe('settingsSaver', () => {
       githubPollInterval: Number.NaN,
       useWorktrees: true,
       aiProvider: 'claude-code',
+      codeCleanupDestination: 'openforge',
     })
 
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '60')

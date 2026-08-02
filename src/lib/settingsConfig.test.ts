@@ -120,10 +120,11 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('Custom walkthrough prompt')
+        .mockResolvedValueOnce('github_issues')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(8)
+      expect(getConfig).toHaveBeenCalledTimes(9)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
@@ -133,6 +134,7 @@ describe('settingsConfig', () => {
         useWorktrees: false,
         aiProvider: 'opencode',
         walkthroughPrompt: 'Custom walkthrough prompt',
+        codeCleanupDestination: 'github_issues',
       })
     })
 
@@ -155,6 +157,7 @@ describe('settingsConfig', () => {
         useWorktrees: true,
         aiProvider: 'claude-code',
         walkthroughPrompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
+        codeCleanupDestination: 'openforge',
       })
     })
 

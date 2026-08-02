@@ -41,6 +41,7 @@ export interface GlobalSettingsConfig {
   useWorktrees: boolean
   aiProvider: string
   walkthroughPrompt: string
+  codeCleanupDestination: 'openforge' | 'github_issues'
 }
 
 export interface InstallationStatus {
@@ -107,6 +108,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   useWorktrees: true,
   aiProvider: 'claude-code',
   walkthroughPrompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
+  codeCleanupDestination: 'openforge',
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
@@ -143,7 +145,7 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt, codeCleanupDestination] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
@@ -152,6 +154,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     getConfig('use_worktrees'),
     getConfig('ai_provider'),
     getConfig('pr_walkthrough_prompt'),
+    getConfig('code_cleanup_destination'),
   ])
 
   return {
@@ -165,6 +168,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     walkthroughPrompt: (walkthroughPrompt != null && walkthroughPrompt.length > 0)
       ? walkthroughPrompt
       : DEFAULT_GLOBAL_SETTINGS.walkthroughPrompt,
+    codeCleanupDestination: codeCleanupDestination === 'github_issues' ? 'github_issues' : 'openforge',
   }
 }
 

@@ -22,6 +22,7 @@ export interface GlobalSettingsSavePayload {
   useWorktrees?: boolean
   aiProvider?: string
   walkthroughPrompt?: string
+  codeCleanupDestination?: 'openforge' | 'github_issues'
 }
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
@@ -50,4 +51,7 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   if (payload.useWorktrees !== undefined) await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
   if (payload.aiProvider !== undefined) await setConfig('ai_provider', payload.aiProvider)
   if (payload.walkthroughPrompt !== undefined) await setConfig('pr_walkthrough_prompt', payload.walkthroughPrompt)
+  if (payload.codeCleanupDestination !== undefined) {
+    await setConfig('code_cleanup_destination', payload.codeCleanupDestination)
+  }
 }
