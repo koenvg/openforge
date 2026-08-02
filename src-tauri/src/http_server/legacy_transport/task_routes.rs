@@ -52,6 +52,42 @@ pub(in crate::http_server) fn decide_cleanup_route(
     }
 }
 
+/// Build the GitHub issue title and body for a cleanup task.
+/// Title = first non-empty line of the prompt (truncated); body = full prompt
+/// plus a footer referencing the originating task ids (a GitHub issue can't
+/// carry an OpenForge dependency edge).
+pub(in crate::http_server) fn build_cleanup_issue_content(
+    initial_prompt: &str,
+    depends_on: &[String],
+) -> (String, String) {
+    const MAX_TITLE: usize = 80;
+
+    let first_line = initial_prompt
+        .lines()
+        .map(|l| l.trim())
+        .find(|l| !l.is_empty())
+        .unwrap_or("");
+
+    let title = if first_line.is_empty() {
+        "Code cleanup".to_string()
+    } else if first_line.chars().count() > MAX_TITLE {
+        let truncated: String = first_line.chars().take(MAX_TITLE - 1).collect();
+        format!("{truncated}…")
+    } else {
+        first_line.to_string()
+    };
+
+    let mut body = initial_prompt.trim().to_string();
+    if !depends_on.is_empty() {
+        body.push_str(&format!(
+            "\n\n---\nReported by OpenForge code cleanup while working on: {}",
+            depends_on.join(", ")
+        ));
+    }
+
+    (title, body)
+}
+
 /// Resolve project_id from request parameters, failing if no project can be determined.
 ///
 /// Priority: explicit project_id > worktree deduction.
@@ -667,5 +703,43 @@ mod cleanup_route_tests {
     #[test]
     fn empty_labels_route_to_backlog() {
         assert_eq!(decide_cleanup_route(&[], "github_issues"), CleanupRoute::Backlog);
+    }
+}
+
+#[cfg(test)]
+mod issue_content_tests {
+    use super::*;
+
+    #[test]
+    fn title_is_first_nonempty_line() {
+        let (title, _) = build_cleanup_issue_content("Split the God object\nmore detail", &[]);
+        assert_eq!(title, "Split the God object");
+    }
+
+    #[test]
+    fn empty_prompt_gets_default_title() {
+        let (title, _) = build_cleanup_issue_content("   \n  ", &[]);
+        assert_eq!(title, "Code cleanup");
+    }
+
+    #[test]
+    fn long_title_is_truncated_with_ellipsis() {
+        let long = "x".repeat(200);
+        let (title, _) = build_cleanup_issue_content(&long, &[]);
+        assert!(title.chars().count() <= 80);
+        assert!(title.ends_with('…'));
+    }
+
+    #[test]
+    fn body_includes_originating_task_footer() {
+        let (_, body) = build_cleanup_issue_content("Fix this", &["T-42".to_string()]);
+        assert!(body.contains("Fix this"));
+        assert!(body.contains("T-42"));
+    }
+
+    #[test]
+    fn body_has_no_footer_without_dependencies() {
+        let (_, body) = build_cleanup_issue_content("Fix this", &[]);
+        assert_eq!(body, "Fix this");
     }
 }
