@@ -120,6 +120,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'refresh_task_github_status',
   'set_poll_context',
   'get_project_repo',
+  'check_github_issues_ready',
   'get_pull_requests',
   'link_pull_request',
   'get_pr_comments',

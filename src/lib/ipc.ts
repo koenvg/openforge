@@ -251,6 +251,10 @@ export async function getProjectRepo(projectId: string): Promise<{ owner: string
   return invoke<{ owner: string; name: string } | null>("get_project_repo", { projectId });
 }
 
+export async function checkGithubIssuesReady(projectId: string | null): Promise<{ ready: boolean; reason: string | null }> {
+  return invoke<{ ready: boolean; reason: string | null }>("check_github_issues_ready", { projectId });
+}
+
 export async function getPullRequests(taskId?: string): Promise<PullRequestInfo[]> {
   return invoke<PullRequestInfo[]>("get_pull_requests", { taskId });
 }
