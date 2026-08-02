@@ -414,6 +414,22 @@ pub(super) async fn handle_app_github_review_command(
                 .await
                 .map_err(runtime_error)?,
         )?,
+        "check_github_issues_ready" => {
+            let project_id = request
+                .payload
+                .get("projectId")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            to_app_value(
+                crate::github_runtime::check_github_issues_ready(
+                    &state.github_client,
+                    &state.db,
+                    project_id,
+                )
+                .await
+                .map_err(runtime_error)?,
+            )?
+        }
         _ => return Ok(None),
     };
 
