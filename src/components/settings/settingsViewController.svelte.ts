@@ -7,6 +7,7 @@ import {
   setProjectConfig,
   setWhisperModel,
 } from '../../lib/ipc'
+import { validateDestinationChange } from '../../lib/cleanupDestinationGuard'
 import { DEFAULT_FOCUS_STATES } from '../../lib/boardFilters'
 import { createTrackedDebouncedSave } from '../../lib/createTrackedDebouncedSave'
 import { computeEffectiveProjectSettings } from '../../lib/hierarchicalSettings'
@@ -53,6 +54,7 @@ const SAVE_DEBOUNCE_MS = 500
 const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins', 'pr_walkthrough_prompt']
 const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'code_cleanup_tasks_enabled',
+  'code_cleanup_destination',
   'task_display_title_metadata_updates_enabled',
   'use_worktrees',
   'task_id_prefix',
@@ -61,6 +63,7 @@ const PROVIDER_ONLY_EXCLUDE_KEYS = [
 ]
 const GITHUB_ONLY_EXCLUDE_KEYS = [
   'code_cleanup_tasks_enabled',
+  'code_cleanup_destination',
   'task_display_title_metadata_updates_enabled',
   'ai_provider',
   'use_worktrees',
@@ -95,6 +98,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let globalUseWorktrees = $state(true)
   let globalAiProvider = $state('claude-code')
   let globalWalkthroughPrompt = $state(DEFAULT_PR_WALKTHROUGH_PROMPT)
+  let globalCodeCleanupDestination = $state<'openforge' | 'github_issues'>('openforge')
+  let destinationError = $state<string | null>(null)
   let globalPluginDefaults = $state<Map<string, boolean>>(new Map())
   let globalSettingsLoaded = $state(false)
   let globalSettingsLoadError = $state<string | null>(null)
@@ -144,6 +149,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
 
   const globalHierarchyValues = $derived<Record<string, string>>({
     code_cleanup_tasks_enabled: isCodeCleanupTasksEnabled ? 'true' : 'false',
+    code_cleanup_destination: globalCodeCleanupDestination,
     task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
     ai_provider: globalAiProvider,
     use_worktrees: globalUseWorktrees ? 'true' : 'false',
@@ -221,6 +227,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       globalUseWorktrees = globalSettings.useWorktrees
       globalAiProvider = globalSettings.aiProvider
       globalWalkthroughPrompt = globalSettings.walkthroughPrompt
+      globalCodeCleanupDestination = globalSettings.codeCleanupDestination
       globalSettingsLoaded = true
     } catch (value) {
       globalSettingsLoadError = getErrorMessage(value)
@@ -382,7 +389,34 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     scheduleSave()
   }
 
+  // Selecting GitHub Issues is gated by a readiness check so we prevent failures
+  // up front. On rejection we surface the reason and leave the value unchanged;
+  // on acceptance we persist (global via debounced save, project immediately).
+  async function handleDestinationChange(projectId: string | null, value: string): Promise<void> {
+    const result = await validateDestinationChange(value, projectId)
+    if (!result.accepted) {
+      destinationError = result.reason
+      return
+    }
+    destinationError = null
+    if (projectId === null) {
+      globalCodeCleanupDestination = value as 'openforge' | 'github_issues'
+      scheduleSave({ codeCleanupDestination: globalCodeCleanupDestination })
+      return
+    }
+    projectRawOverrides = { ...projectRawOverrides, code_cleanup_destination: value }
+    try {
+      await setProjectConfig(projectId, 'code_cleanup_destination', value)
+    } catch (err) {
+      error.set(getErrorMessage(err))
+    }
+  }
+
   function handleGlobalSettingChange(key: string, value: string): void {
+    if (key === 'code_cleanup_destination') {
+      void handleDestinationChange(null, value)
+      return
+    }
     switch (key) {
       case 'code_cleanup_tasks_enabled':
         isCodeCleanupTasksEnabled = value === 'true'
@@ -434,6 +468,10 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
 
   async function handleProjectSettingChange(key: string, value: string): Promise<void> {
     if (!projectId) return
+    if (key === 'code_cleanup_destination') {
+      await handleDestinationChange(projectId, value)
+      return
+    }
     projectRawOverrides = { ...projectRawOverrides, [key]: value }
     try {
       await setProjectConfig(projectId, key, value)
@@ -548,6 +586,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get settingsLoading() { return settingsLoading },
     get projectSettingsLoadError() { return projectSettingsLoadError },
     get globalSettingsLoadError() { return globalSettingsLoadError },
+    get destinationError() { return destinationError },
     get isSaving() { return isSaving },
     get saved() { return saved },
     get saveStatus() { return saveStatus },

@@ -47,6 +47,9 @@
       />
     {/snippet}
   </HierarchicalSettingsCard>
+  {#if controller.destinationError}
+    <p class="m-0 text-xs text-error">{controller.destinationError}</p>
+  {/if}
 {:else if activeSection === 'labels'}
   <SettingsTaskLabelsCard projectId={controller.projectId} disabled={!controller.hasProject} />
 {:else if activeSection === 'focus'}

@@ -213,7 +213,7 @@ describe('SettingsView auto-save', () => {
       resolvers.get('use_worktrees')?.('true')
       resolvers.get('ai_provider')?.('claude-code')
       resolvers.get('pr_walkthrough_prompt')?.('Prompt')
-
+      resolvers.get('code_cleanup_destination')?.('openforge')
       await vi.waitFor(() => {
         expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)
         expect(requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement).disabled).toBe(false)

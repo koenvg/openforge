@@ -25,6 +25,9 @@
     onChange={controller.handleGlobalSettingChange}
     disabled={!controller.globalSettingsLoaded}
   />
+  {#if controller.destinationError}
+    <p class="m-0 text-xs text-error">{controller.destinationError}</p>
+  {/if}
   <SettingsPreferencesCard
     isDarkMode={controller.isDarkMode}
     onThemeToggle={controller.handleThemeToggle}
