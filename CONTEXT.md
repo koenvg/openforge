@@ -104,6 +104,18 @@ _Avoid_: Plugin run options, per-call agent override
 Project-owned defaults used when starting **Task Creation**, such as the default workspace choice for new **Tasks**.
 _Avoid_: Agent run settings, global task defaults, plugin task policy
 
+**Mobile Project Board**:
+The companion view of one selected **Project**, whose **Tasks** are partitioned into the canonical Focus, In Flight, Out of Focus, and Backlog lanes for the entire view.
+_Avoid_: All-project board, cross-project task list
+
+**Selected Project**:
+The **Project** whose **Mobile Project Board** the companion currently presents.
+_Avoid_: Active Project, all-project scope, Project filter
+
+**Companion Task Start**:
+A request from a **Paired Companion Device** to begin an **Implementation Run** for a backlog **Task** using its existing Project and Task defaults.
+_Avoid_: Move to In Flight, change Board Status, configure run
+
 **Trusted Plugin**:
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
@@ -211,6 +223,10 @@ _Avoid_: Exact screen snapshot, durable terminal history, session transcript
 **Paired Companion Device**:
 A mobile device explicitly approved by the desktop to connect to that trusted OpenForge host.
 _Avoid_: Authenticated client, discovered device, terminal-only device
+
+**Companion Task Authority**:
+The narrow authority of a **Paired Companion Device** to start backlog Tasks and to Delete or Complete Tasks.
+_Avoid_: General command access, task editing, status mutation
 
 **Shell Session Key**:
 The OpenForge identifier for one concrete terminal shell tab/session.
