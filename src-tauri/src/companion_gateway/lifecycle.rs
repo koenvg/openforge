@@ -33,7 +33,6 @@ const COMPANION_GATEWAY_PORT_ENV: &str = "OPENFORGE_COMPANION_PORT";
 const LISTENER_START_TIMEOUT: Duration = Duration::from_secs(2);
 const LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
 const CONNECTION_DRAIN_TIMEOUT: Duration = Duration::from_millis(250);
-const RESTORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(4);
 const PAIRING_SESSION_TTL: Duration = Duration::from_secs(2 * 60);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -243,6 +242,7 @@ struct CompanionGatewayRouteSources {
 pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
     operation_lock: Arc<tokio::sync::Mutex<()>>,
+    startup_cancellation: crate::secure_store::SecretStoreCancellation,
     tailscale_detection_notify: Arc<tokio::sync::Notify>,
     identity_store: Arc<dyn CompanionIdentityStore>,
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
@@ -376,6 +376,7 @@ impl CompanionGatewayManager {
         Self {
             runtime: Arc::new(tokio::sync::Mutex::new(runtime)),
             operation_lock: Arc::new(tokio::sync::Mutex::new(())),
+            startup_cancellation: crate::secure_store::SecretStoreCancellation::default(),
             tailscale_detection_notify: Arc::new(tokio::sync::Notify::new()),
             identity_store,
             endpoint_provider,
@@ -465,6 +466,9 @@ impl CompanionGatewayManager {
     }
 
     async fn enable_locked(&self) -> Result<CompanionGatewayStatus, String> {
+        if self.startup_cancellation.is_cancelled() {
+            return Err("Companion Gateway is shutting down".to_string());
+        }
         {
             let mut runtime = self.runtime.lock().await;
             runtime.enabled = true;
@@ -480,16 +484,20 @@ impl CompanionGatewayManager {
         }
         self.ensure_tailscale_detection().await;
 
-        let mut runtime = self.runtime.lock().await;
-        runtime.enabled = true;
-        runtime.error = None;
-        runtime.phase = GatewayPhase::Starting;
+        {
+            let mut runtime = self.runtime.lock().await;
+            runtime.enabled = true;
+            runtime.error = None;
+            runtime.phase = GatewayPhase::Starting;
+        }
         self.pairing.mark_gateway_not_accepting_streams();
 
         let identity_store = Arc::clone(&self.identity_store);
         let endpoint_provider = Arc::clone(&self.endpoint_provider);
+        let startup_cancellation = self.startup_cancellation.clone();
         let startup_material = tokio::task::spawn_blocking(move || {
-            let identity = load_or_create_host_identity(identity_store.as_ref())?;
+            let identity =
+                load_or_create_host_identity(identity_store.as_ref(), &startup_cancellation)?;
             let bind_endpoints = endpoint_provider.bind_endpoints()?;
             Ok::<_, String>((identity, bind_endpoints))
         })
@@ -498,11 +506,13 @@ impl CompanionGatewayManager {
         let (identity, bind_endpoints) = match startup_material {
             Ok(Ok(material)) => material,
             Ok(Err(error)) | Err(error) => {
+                let mut runtime = self.runtime.lock().await;
                 runtime.phase = GatewayPhase::Error;
                 runtime.error = Some(error.clone());
                 return Err(error);
             }
         };
+        let mut runtime = self.runtime.lock().await;
         runtime.identity = Some(identity.clone());
         let tailscale_hostname = runtime
             .configured_tailscale_hostname
@@ -576,21 +586,17 @@ impl CompanionGatewayManager {
         Ok(status)
     }
 
+    /// Restore a persisted opt-in after the core loopback bridge is ready.
+    ///
+    /// Server lifecycle runs this in a background task, so waiting for platform
+    /// trust initialization cannot delay core readiness. Do not wrap `enable` in
+    /// a cancellation timeout: macOS Keychain can exceed a short cold-start budget,
+    /// and cancelling midway can leave an enabled gateway unavailable until a user
+    /// retries it manually.
     pub(crate) async fn restore(&self) -> CompanionGatewayStatus {
-        match tokio::time::timeout(RESTORE_STARTUP_TIMEOUT, self.enable()).await {
-            Ok(Ok(status)) => status,
-            Ok(Err(_)) => self.status().await,
-            Err(_) => {
-                let mut runtime = self.runtime.lock().await;
-                if runtime.running.is_none() {
-                    runtime.phase = GatewayPhase::Error;
-                    runtime.error = Some(format!(
-                        "Companion Gateway restore timed out after {:?}",
-                        RESTORE_STARTUP_TIMEOUT
-                    ));
-                }
-                runtime.status()
-            }
+        match self.enable().await {
+            Ok(status) => status,
+            Err(_) => self.status().await,
         }
     }
 
@@ -618,6 +624,9 @@ impl CompanionGatewayManager {
     }
 
     pub(crate) async fn shutdown(&self) {
+        // Wake a blocked macOS Keychain authorization read before waiting for the
+        // serialized gateway operation. Status remains available through `runtime`.
+        self.startup_cancellation.cancel();
         let _operation = self.operation_lock.lock().await;
         let mut runtime = self.runtime.lock().await;
         runtime.phase = GatewayPhase::Stopped;
@@ -733,19 +742,32 @@ impl CompanionGatewayManager {
 
         let identity_store = Arc::clone(&self.identity_store);
         let identity_to_save = identity.clone();
-        if let Err(save_error) =
-            tokio::task::spawn_blocking(move || identity_store.save(&identity_to_save))
-                .await
-                .map_err(|error| format!("Companion identity persistence task failed: {error}"))
-                .and_then(|result| result)
+        let save_cancellation = self.startup_cancellation.clone();
+        let save_result = match tokio::task::spawn_blocking(move || {
+            identity_store.save_with_cancellation(&identity_to_save, &save_cancellation)
+        })
+        .await
         {
+            Ok(result) => result,
+            Err(error) => Err(crate::secure_store::SecretStoreWriteError::CommitUnknown(
+                format!("Companion identity persistence task failed: {error}"),
+            )),
+        };
+        if let Err(save_error) = save_result {
+            if save_error.commit_unknown() {
+                self.pairing.notify_all_devices_revoked();
+                self.disable_locked().await;
+                return Err(format!(
+                    "{save_error}; paired-device trust remains revoked because identity persistence may have committed"
+                ));
+            }
             if let Err(rollback_error) = self.pairing.rollback_revoke_all(&revoked_devices) {
                 self.disable_locked().await;
                 return Err(format!(
                     "{save_error}; failed to restore paired-device trust: {rollback_error}"
                 ));
             }
-            return Err(save_error);
+            return Err(save_error.to_string());
         }
         self.pairing.notify_all_devices_revoked();
         self.disable_locked().await;

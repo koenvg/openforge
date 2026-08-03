@@ -21,9 +21,32 @@ void main() {
 
     expect(find.text('Not paired'), findsOneWidget);
     expect(
+      find.textContaining(
+        'Pairing lets this phone interact with running Agent terminals as your '
+        'desktop user',
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.bySemanticsLabel('Connection state: Not paired'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('pairing approval discloses interactive terminal authority', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CompanionApp(initialState: AwaitingApproval()),
+    );
+
+    expect(
+      find.textContaining(
+        'Approval lets this phone interact with running Agent terminals',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('desktop user'), findsOneWidget);
   });
 
   testWidgets(

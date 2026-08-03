@@ -1,5 +1,7 @@
 # Mobile Companion — Design
 
+Status: accepted baseline, amended by [Companion Agent Terminal — Design](2026-08-01-companion-agent-terminal-design.md).
+
 ## Problem Statement
 
 OpenForge is a local-first desktop command center, so a user must currently be at the Mac running OpenForge to see which Tasks need attention, read current Handoff Notes, or check an Agent's state. That makes it easy to miss a blocked or completed Agent when the user has stepped away from the desktop, even though the user only needs a small amount of read-only context rather than the full development environment.
@@ -12,13 +14,13 @@ A mobile solution must therefore provide useful remote visibility without turnin
 
 Build a dedicated Flutter companion application for iOS and Android. The companion connects directly to one paired OpenForge desktop over the local network or the user's Tailscale network. OpenForge operates no server or relay; Tailscale is the user-selected private network for away-from-LAN access.
 
-The desktop gains an opt-in Companion Gateway that is disabled by default and is separate from the existing Electron-to-Rust loopback bridge. The gateway exposes a small, versioned, read-only API, an authenticated Server-Sent Events stream, and a short-lived pairing flow. The existing internal bridge remains bound to loopback and retains its current authentication and command surface.
+The desktop gains an opt-in Companion Gateway that is disabled by default and is separate from the existing Electron-to-Rust loopback bridge. The gateway exposes a small, versioned HTTP API whose authenticated Task-domain surface is non-mutating, an authenticated Server-Sent Events stream, a Task-scoped interactive Agent-terminal WebSocket, and a short-lived pairing flow. Pairing request submission creates only an ephemeral pending approval. The existing internal bridge remains bound to loopback and retains its current authentication and command surface.
 
-Pairing begins in Desktop Settings. The desktop displays a QR code containing a short-lived, single-use pairing secret, the persistent desktop identity, its pinned TLS certificate fingerprint, the protocol version, and reachable LAN/Tailscale endpoints. The phone scans the QR code and waits until the user explicitly approves the device on the desktop. Approval issues a revocable, device-specific, read-only credential stored in the phone's Keychain or Keystore. The desktop stores only a verifier for that credential. A paired device can be revoked individually, and disabling the Companion Gateway invalidates all companion connectivity.
+Pairing begins in Desktop Settings. The desktop displays a QR code containing a short-lived, single-use pairing secret, the persistent desktop identity, its pinned TLS certificate fingerprint, the protocol version, and reachable LAN/Tailscale endpoints. The phone scans the QR code and waits until the user explicitly approves the device on the desktop. Approval issues a revocable, device-specific credential stored in the phone's Keychain or Keystore. That credential authorizes the purpose-built status and Task reads plus interactive input and resizing for already-running Agent terminals as the desktop user. The desktop stores only a verifier for the credential. A paired device can be revoked individually, and disabling the Companion Gateway invalidates all companion connectivity.
 
 The first release is deliberately small. Its home screen is an attention-first list of Tasks that need the user's attention, using OpenForge's existing Focus/attention terminology and behavior. A user can open a basic Task detail showing the display title, Project, Board Status, Handoff Notes, and current Agent state. The user can manually refresh, and the screen updates live while the app is open. When the desktop is unavailable, the companion displays an unavailable state and does not show a persisted snapshot.
 
-The companion is strictly read-only. It cannot create or edit Tasks, change Board Status, send Agent feedback, start or abort an Agent, interact with a terminal, inspect repository files or diffs, merge a Pull Request, or Complete a Task.
+The companion's Task workflow remains non-mutating: it cannot create or edit Tasks, change Board Status, send Agent feedback, start or abort an Agent, inspect repository files or diffs, merge a Pull Request, or Complete a Task. A paired device can attach to, read, type into, and resize an already-running Task Agent terminal as the desktop user; it cannot control Agent lifecycle or access ordinary shell terminals.
 
 ## User Stories
 
@@ -85,8 +87,8 @@ The companion is strictly read-only. It cannot create or edit Tasks, change Boar
 61. As a mobile user, I want live updates only while the app is active, so that v1 does not imply unsupported background reliability.
 62. As a mobile user, I want no promise of push notifications while the app is closed, so that the serverless architecture has honest behavior.
 63. As an OpenForge user, I want the companion to expose no task mutation actions, so that v1 cannot change desktop workflow state.
-64. As an OpenForge user, I want the companion to expose no Agent control or terminal input, so that a compromised phone cannot execute development commands.
-65. As an OpenForge user, I want the companion API to omit repository files, diffs, terminal output, provider credentials, and GitHub tokens, so that its data surface remains minimal.
+64. As an OpenForge user, I want the companion to expose no Agent lifecycle control or ordinary shell terminals, so that interactive authority stays limited to already-running Task Agent Sessions.
+65. As an OpenForge user, I want the companion API to omit repository files, diffs, provider credentials, internal Agent-session identifiers, and terminal image payloads, so that its data surface remains minimal.
 66. As an OpenForge user, I want Complete, delete, merge, start, abort, and status-change operations to be absent from the companion protocol, so that hiding buttons is not the only protection.
 67. As an iPhone user, I want the core pairing, connection, attention, and Task-detail flow to work in a private/TestFlight build, so that the architecture can be validated before public distribution.
 68. As an Android user, I want the same core flow in an internal build, so that Flutter's cross-platform behavior is validated from the beginning.
@@ -128,7 +130,7 @@ The companion is strictly read-only. It cannot create or edit Tasks, change Boar
   - an attention resource containing normalized, task-scoped attention rows grouped or groupable by Project;
   - a Task-detail resource containing only Task identity, display title/fallback, Project identity/name, Board Status, Handoff Notes, normalized Agent state/error summary, and relevant timestamps;
   - an SSE event resource for live invalidations.
-- The contract does not expose a generic command name, arbitrary payload, SQL-like filtering, filesystem path, repository content, diff, terminal buffer, provider session identifier, provider credential, GitHub token, plugin RPC, or mutation endpoint.
+- Beyond ephemeral pairing-request submission, the contract exposes no Task or other domain mutation endpoint, generic command name, arbitrary payload, SQL-like filtering, filesystem path, repository content, diff, terminal buffer, provider session identifier, provider credential, GitHub token, or plugin RPC.
 - The gateway returns stable error categories for unauthenticated, revoked, incompatible-version, not-found, rate-limited, and temporarily unavailable states. Mobile copy maps these categories to explicit recovery states rather than displaying raw backend errors.
 - Response payloads use the established OpenForge domain terms: Project, Task, Board Status, Handoff Notes, Agent, Focus, and Needs Attention.
 
@@ -158,8 +160,8 @@ The companion is strictly read-only. It cannot create or edit Tasks, change Boar
 - The QR payload contains only the information required to bootstrap trust: protocol version, host identity, certificate fingerprint, candidate LAN/Tailscale endpoints, and the one-time pairing secret. It contains no internal sidecar token or durable device credential.
 - The phone connects only when the presented certificate exactly matches the fingerprint from the QR. A platform trust bypass that accepts any certificate is forbidden.
 - Scanning submits a pending device request with a user-recognizable device name and platform. The desktop must explicitly approve it before a durable credential is returned.
-- Approval creates a random, high-entropy, device-specific, read-only bearer credential. The clear credential is returned once to the approved phone and stored in Keychain/Keystore; the desktop stores a cryptographic verifier, device metadata, pairing time, last-seen time, and revocation state.
-- Device credentials have a fixed read-only capability. V1 does not contain hidden write scopes that can be activated only by UI changes.
+- Approval creates a random, high-entropy, device-specific bearer credential. The clear credential is returned once to the approved phone and stored in Keychain/Keystore; the desktop stores a cryptographic verifier, device metadata, pairing time, last-seen time, and revocation state.
+- Device credentials have fixed Companion milestone authority: purpose-built status and Task reads plus interactive attachment, input, and resize for already-running Agent terminals as the desktop user. V1 has no hidden scope toggle or second terminal approval flow.
 - Revocation takes effect for subsequent requests and terminates an active SSE connection. A revoked phone enters Re-pair Required and does not retain visible Task data.
 - Authentication comparisons are timing-safe. Pairing endpoints are rate-limited, pairing secrets expire, rejected sessions cannot be retried as approved sessions, and logs redact all secrets.
 
@@ -215,7 +217,7 @@ The companion is strictly read-only. It cannot create or edit Tasks, change Boar
 - Desktop settings tests follow existing Svelte settings and Electron bridge test patterns. They cover opt-in enablement, QR lifecycle, pending-device approval/rejection, device listing, revocation confirmation, disablement, identity-reset confirmation, and IPC error presentation.
 - Electron/sidecar lifecycle tests verify that the gateway starts only when enabled, remains separate from the loopback bridge, reports health to Settings, closes during coordinated shutdown, and does not delay the established sidecar shutdown budget beyond its contract.
 - A focused process-level security smoke test binds the real TLS gateway and proves successful pinned-certificate connection plus rejection of an unpinned certificate. Certificate-library primitives themselves are not re-tested.
-- Manual acceptance testing is required on at least one physical iOS device and one physical Android device. It covers QR scanning, desktop approval, LAN connection, Tailscale connection away from the LAN, switching between LAN and Tailscale, app foreground/resume, gateway disablement, device revocation, and desktop shutdown/restart.
+- Manual acceptance testing is required on at least one physical iOS device and one physical Android device over LAN and Tailscale. It covers QR pairing and approval, endpoint switching and reconnect, every supported Agent provider, concurrent desktop/mobile input and last-writer-wins resizing, orientation and keyboard geometry, accessory keys, paste, high-volume output, final-screen exit behavior, foreground recovery, host lock, gateway disablement, device revocation, authorization loss, unavailable-host recovery, and desktop shutdown/restart.
 - No test should require an OpenForge-operated external service. Tailscale-dependent manual tests use a test tailnet owned by the tester.
 
 ## Out of Scope
@@ -230,14 +232,14 @@ The companion is strictly read-only. It cannot create or edit Tasks, change Boar
 - Pairing with or switching among multiple desktop hosts at the same time.
 - Task creation or editing, Board Status changes, labels, dependencies, set-aside/return-to-board actions, or Task completion/deletion.
 - Starting, aborting, resuming, or messaging an Agent.
-- Interactive terminal input, terminal output, shell management, or PTY transport.
+- Ordinary shell terminals, shell tabs, shell lifecycle controls, generic terminal discovery, or public PTY identifiers.
 - Repository browsing, changed-file lists, diffs, commits, Worktree management, or editor integration.
 - Pull Request detail, review queues, comments, review submission, CI controls, merge operations, or GitHub configuration.
 - Plugin views, plugin management, settings management beyond Companion Settings, Whisper, or voice input.
 - Full desktop board parity or reuse of the desktop Svelte UI inside the mobile application.
 - Public App Store/Play Store launch, marketing, subscriptions, analytics, or hosted crash reporting.
 - Deep Tailscale account/API integration or managing Tailscale installation and authentication on the user's behalf.
-- Generalizing the companion credential into write scopes during v1. Any mutation capability requires a separately reviewed specification and threat model.
+- Per-device terminal permission scopes, a terminal-access toggle, or a second approval flow. Pairing grants the fixed Companion authority described above during pre-release development.
 
 ## Further Notes
 

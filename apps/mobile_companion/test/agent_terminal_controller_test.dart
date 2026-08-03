@@ -8,6 +8,7 @@ import 'package:openforge_companion/src/terminal/agent_terminal_controller.dart'
 import 'package:openforge_companion/src/terminal/companion_terminal_client.dart';
 import 'package:openforge_companion/src/terminal/companion_terminal_protocol.dart';
 import 'package:openforge_companion/src/terminal/openforge_terminal.dart';
+import 'package:openforge_companion/src/terminal/xterm_terminal_adapter.dart';
 
 void main() {
   test(
@@ -44,6 +45,7 @@ void main() {
       await _flush();
 
       expect(terminal.output, 'replay live');
+      expect(terminal.flushCount, 1);
       expect(controller.state, isA<AgentTerminalReady>());
 
       controller.setVisible(false);
@@ -88,6 +90,34 @@ void main() {
     controller.updateAvailability(true);
     await _flush();
     expect(client.opens, 1);
+
+    controller.dispose();
+  });
+
+  test('timed malformed xterm output closes the active channel', () async {
+    final channel = _FakeChannel();
+    final terminal = XtermOpenForgeTerminal();
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _FakeTerminalClient(channel),
+            storage: _Storage(),
+            terminal: terminal,
+            reconnectDelay: Duration.zero,
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+    await _flush();
+    channel.add('{"type":"ready","initialState":"replay"}');
+    await _flush();
+    expect(controller.state, isA<AgentTerminalReady>());
+
+    channel.add(Uint8List.fromList(<int>[0x66, 0x80, 0x6f]));
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    await _flush();
+
+    expect(controller.state, isA<AgentTerminalNoActiveSession>());
+    expect(channel.closed, isTrue);
 
     controller.dispose();
   });
@@ -140,13 +170,14 @@ void main() {
   );
 
   test(
-    'input and subsequent resizes are gated by ready and visibility',
+    'keyboard resize and typing stay on the same ready attachment',
     () async {
       final channel = _FakeChannel();
+      final client = _FakeTerminalClient(channel);
       final controller =
           AgentTerminalController(
               taskId: 'KVG-3018',
-              client: _FakeTerminalClient(channel),
+              client: client,
               storage: _Storage(),
               terminal: _FakeTerminal(),
               reconnectDelay: Duration.zero,
@@ -170,6 +201,9 @@ void main() {
         ClientTerminalControl.decode(channel.sent.last),
         isA<ResizeTerminalControl>(),
       );
+      expect(client.opens, 1);
+      expect(channel.closed, isFalse);
+      expect(controller.state, isA<AgentTerminalReady>());
 
       controller.setVisible(false);
       controller.sendInput(Uint8List.fromList('hidden'.codeUnits));
@@ -282,6 +316,137 @@ void main() {
       controller.dispose();
     },
   );
+
+  test('brief ready connections preserve reconnect backoff', () async {
+    final delays = <Duration>[];
+    final channels = List<_FakeChannel>.generate(4, (_) => _FakeChannel());
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _QueueTerminalClient(channels),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+            reconnectDelay: const Duration(milliseconds: 10),
+            maxReconnectDelay: const Duration(milliseconds: 25),
+            randomUnit: () => 0,
+            delay: (duration) async => delays.add(duration),
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+
+    for (var index = 0; index < 3; index += 1) {
+      await _flush();
+      channels[index].add('{"type":"ready","initialState":"replay"}');
+      channels[index].add(
+        '{"type":"error","code":"slow_consumer","message":"retry"}',
+      );
+      await _flush();
+      await _flush();
+    }
+
+    expect(delays, <Duration>[
+      const Duration(milliseconds: 8),
+      const Duration(milliseconds: 16),
+      const Duration(milliseconds: 25),
+    ]);
+    expect(channels.take(3).every((channel) => channel.closed), isTrue);
+    expect(channels.last.sent, hasLength(1));
+
+    controller.dispose();
+  });
+
+  test('a stable ready connection resets reconnect backoff', () async {
+    final delays = <Duration>[];
+    final channels = List<_FakeChannel>.generate(3, (_) => _FakeChannel());
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _QueueTerminalClient(channels),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+            reconnectDelay: const Duration(milliseconds: 10),
+            maxReconnectDelay: const Duration(milliseconds: 25),
+            reconnectStabilityDuration: Duration.zero,
+            randomUnit: () => 0,
+            delay: (duration) async => delays.add(duration),
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+
+    await _flush();
+    channels.first.add('{"type":"ready","initialState":"replay"}');
+    channels.first.add(
+      '{"type":"error","code":"slow_consumer","message":"retry"}',
+    );
+    await _flush();
+    await _flush();
+
+    channels[1].add('{"type":"ready","initialState":"replay"}');
+    await _flush();
+    channels[1].add(
+      '{"type":"error","code":"slow_consumer","message":"retry"}',
+    );
+    await _flush();
+    await _flush();
+
+    expect(delays, <Duration>[
+      const Duration(milliseconds: 8),
+      const Duration(milliseconds: 8),
+    ]);
+    expect(channels.last.sent, hasLength(1));
+
+    controller.dispose();
+  });
+
+  test('a closed ready channel cannot reset a later reconnect', () async {
+    final delays = <Duration>[];
+    final channels = List<_FakeChannel>.generate(4, (_) => _FakeChannel());
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: _QueueTerminalClient(channels),
+            storage: _Storage(),
+            terminal: _FakeTerminal(),
+            reconnectDelay: const Duration(milliseconds: 10),
+            maxReconnectDelay: const Duration(milliseconds: 25),
+            reconnectStabilityDuration: const Duration(milliseconds: 10),
+            randomUnit: () => 0,
+            delay: (duration) async => delays.add(duration),
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+
+    await _flush();
+    channels.first.add('{"type":"ready","initialState":"replay"}');
+    channels.first.add(
+      '{"type":"error","code":"slow_consumer","message":"retry"}',
+    );
+    await _flush();
+    await _flush();
+
+    channels[1].add('{"type":"ready","initialState":"replay"}');
+    channels[1].add(
+      '{"type":"error","code":"no_active_agent_terminal",'
+      '"message":"closed"}',
+    );
+    await _flush();
+    await Future<void>.delayed(const Duration(milliseconds: 15));
+    controller.updateAvailability(false);
+    controller.updateAvailability(true);
+    await _flush();
+
+    await channels[2].close();
+    await _flush();
+    await _flush();
+
+    expect(delays, <Duration>[
+      const Duration(milliseconds: 8),
+      const Duration(milliseconds: 16),
+    ]);
+    expect(channels.last.sent, hasLength(1));
+
+    controller.dispose();
+  });
 
   test(
     'reconnect uses capped exponential backoff and stops while hidden',
@@ -410,6 +575,7 @@ final class _FakeTerminal implements OpenForgeTerminal {
   final bool rejectMalformedUtf8;
   var output = '';
   var clearCount = 0;
+  var flushCount = 0;
 
   @override
   TerminalDimensions get dimensions =>
@@ -424,6 +590,13 @@ final class _FakeTerminal implements OpenForgeTerminal {
   @override
   void dispose() {}
 
+  @override
+  void flushOutput() {
+    flushCount += 1;
+  }
+
+  @override
+  set outputErrorHandler(void Function(FormatException error)? handler) {}
   @override
   void writeOutput(Uint8List output) {
     final decoded = rejectMalformedUtf8

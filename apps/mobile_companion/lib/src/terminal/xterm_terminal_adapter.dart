@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,6 +7,9 @@ import 'package:xterm/xterm.dart' as xterm;
 
 import 'companion_terminal_protocol.dart';
 import 'openforge_terminal.dart';
+
+const _terminalOutputBatchDelay = Duration(milliseconds: 16);
+const _terminalOutputBatchMaxBytes = 256 * 1024;
 
 final class IncrementalTerminalUtf8Decoder {
   IncrementalTerminalUtf8Decoder(this._onText) {
@@ -81,6 +85,9 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
   final ValueNotifier<bool> controlArmed = ValueNotifier<bool>(false);
   late final xterm.Terminal terminal;
   late IncrementalTerminalUtf8Decoder _decoder;
+  var _pendingOutput = BytesBuilder(copy: false);
+  Timer? _outputFlushTimer;
+  void Function(FormatException error)? _outputErrorHandler;
 
   @override
   TerminalDimensions get dimensions => TerminalDimensions(
@@ -89,7 +96,50 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
   );
 
   @override
-  void writeOutput(Uint8List output) => _decoder.add(output);
+  void writeOutput(Uint8List output) {
+    var offset = 0;
+    while (offset < output.length) {
+      final capacity = _terminalOutputBatchMaxBytes - _pendingOutput.length;
+      final remaining = output.length - offset;
+      final chunkLength = remaining < capacity ? remaining : capacity;
+      _pendingOutput.add(
+        Uint8List.sublistView(output, offset, offset + chunkLength),
+      );
+      offset += chunkLength;
+      if (_pendingOutput.length == _terminalOutputBatchMaxBytes) {
+        flushOutput();
+      }
+    }
+    if (_pendingOutput.isNotEmpty) {
+      _outputFlushTimer ??= Timer(
+        _terminalOutputBatchDelay,
+        _flushOutputOnTimer,
+      );
+    }
+  }
+
+  @override
+  void flushOutput() {
+    _outputFlushTimer?.cancel();
+    _outputFlushTimer = null;
+    if (_pendingOutput.isEmpty) return;
+    _decoder.add(_pendingOutput.takeBytes());
+  }
+
+  @override
+  set outputErrorHandler(void Function(FormatException error)? handler) {
+    _outputErrorHandler = handler;
+  }
+
+  void _flushOutputOnTimer() {
+    try {
+      flushOutput();
+    } on FormatException catch (error) {
+      final handler = _outputErrorHandler;
+      if (handler == null) rethrow;
+      handler(error);
+    }
+  }
 
   void paste(String text) => terminal.paste(text);
 
@@ -135,6 +185,7 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
   @override
   void clear() {
     controlArmed.value = false;
+    _discardPendingOutput();
     _decoder.reset();
     terminal.mainBuffer.clear();
     terminal.altBuffer.clear();
@@ -143,8 +194,16 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
 
   @override
   void dispose() {
+    _outputErrorHandler = null;
+    _discardPendingOutput();
     _decoder.dispose();
     controlArmed.dispose();
+  }
+
+  void _discardPendingOutput() {
+    _outputFlushTimer?.cancel();
+    _outputFlushTimer = null;
+    _pendingOutput = BytesBuilder(copy: false);
   }
 }
 

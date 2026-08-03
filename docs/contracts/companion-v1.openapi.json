@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Read-only desktop host boundary for the OpenForge Mobile Companion. Pairing is the only unauthenticated bootstrap flow; durable device credentials can read only purpose-built status and Task attention resources."
+    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission is the only bootstrap mutation; authenticated status, Task, and event resources do not mutate desktop workflow. Durable device credentials authorize those reads and the separate interactive Agent-terminal WebSocket, whose input runs as the desktop user."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -150,7 +150,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current read-only Task detail",
+            "description": "Current non-mutating Task detail",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/TaskDetail" }

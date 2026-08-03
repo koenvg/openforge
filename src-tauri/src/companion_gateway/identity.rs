@@ -1,8 +1,7 @@
+use crate::secure_store::COMPANION_HOST_IDENTITY_SECRET;
 use rcgen::generate_simple_self_signed;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,16 +13,38 @@ pub(crate) struct CompanionHostIdentity {
 }
 
 pub(crate) trait CompanionIdentityStore: Send + Sync {
-    fn load(&self) -> Result<Option<CompanionHostIdentity>, String>;
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<CompanionHostIdentity>, String>;
     fn save(&self, identity: &CompanionHostIdentity) -> Result<(), String>;
+    fn save_with_cancellation(
+        &self,
+        identity: &CompanionHostIdentity,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<(), crate::secure_store::SecretStoreWriteError> {
+        if cancellation.is_cancelled() {
+            return Err(crate::secure_store::SecretStoreWriteError::NotCommitted(
+                "Companion identity persistence was cancelled".to_string(),
+            ));
+        }
+        self.save(identity)
+            .map_err(crate::secure_store::SecretStoreWriteError::NotCommitted)
+    }
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct KeychainCompanionIdentityStore;
 
 impl CompanionIdentityStore for KeychainCompanionIdentityStore {
-    fn load(&self) -> Result<Option<CompanionHostIdentity>, String> {
-        let Some(serialized) = crate::secure_store::get_secret(COMPANION_HOST_IDENTITY_SECRET)?
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<CompanionHostIdentity>, String> {
+        let Some(serialized) = crate::secure_store::get_secret_with_cancellation(
+            COMPANION_HOST_IDENTITY_SECRET,
+            cancellation,
+        )?
         else {
             return Ok(None);
         };
@@ -37,6 +58,34 @@ impl CompanionIdentityStore for KeychainCompanionIdentityStore {
             .map_err(|error| format!("failed to encode Companion host identity: {error}"))?;
         crate::secure_store::set_secret(COMPANION_HOST_IDENTITY_SECRET, &serialized)
             .map_err(|error| format!("failed to persist Companion host identity: {error}"))
+    }
+
+    fn save_with_cancellation(
+        &self,
+        identity: &CompanionHostIdentity,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<(), crate::secure_store::SecretStoreWriteError> {
+        let serialized = serde_json::to_string(identity).map_err(|error| {
+            crate::secure_store::SecretStoreWriteError::NotCommitted(format!(
+                "failed to encode Companion host identity: {error}"
+            ))
+        })?;
+        crate::secure_store::set_companion_host_identity_with_cancellation(
+            &serialized,
+            cancellation,
+        )
+        .map_err(|error| match error {
+            crate::secure_store::SecretStoreWriteError::NotCommitted(error) => {
+                crate::secure_store::SecretStoreWriteError::NotCommitted(format!(
+                    "failed to persist Companion host identity: {error}"
+                ))
+            }
+            crate::secure_store::SecretStoreWriteError::CommitUnknown(error) => {
+                crate::secure_store::SecretStoreWriteError::CommitUnknown(format!(
+                    "Companion host identity persistence may have committed: {error}"
+                ))
+            }
+        })
     }
 }
 
@@ -67,13 +116,16 @@ pub(crate) fn generate_host_identity() -> Result<CompanionHostIdentity, String> 
 
 pub(crate) fn load_or_create_host_identity(
     store: &dyn CompanionIdentityStore,
+    cancellation: &crate::secure_store::SecretStoreCancellation,
 ) -> Result<CompanionHostIdentity, String> {
-    if let Some(identity) = store.load()? {
+    if let Some(identity) = store.load(cancellation)? {
         return Ok(identity);
     }
 
     let identity = generate_host_identity()?;
-    store.save(&identity)?;
+    store
+        .save_with_cancellation(&identity, cancellation)
+        .map_err(|error| error.to_string())?;
     Ok(identity)
 }
 
@@ -99,7 +151,10 @@ impl InMemoryIdentityStore {
 
 #[cfg(test)]
 impl CompanionIdentityStore for InMemoryIdentityStore {
-    fn load(&self) -> Result<Option<CompanionHostIdentity>, String> {
+    fn load(
+        &self,
+        _cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<CompanionHostIdentity>, String> {
         self.identity
             .lock()
             .map(|identity| identity.clone())
@@ -139,12 +194,23 @@ impl DelayedIdentityStore {
         }
     }
 }
-
 #[cfg(test)]
 impl CompanionIdentityStore for DelayedIdentityStore {
-    fn load(&self) -> Result<Option<CompanionHostIdentity>, String> {
-        std::thread::sleep(self.delay);
-        self.inner.load()
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<CompanionHostIdentity>, String> {
+        let deadline = std::time::Instant::now() + self.delay;
+        while std::time::Instant::now() < deadline {
+            if cancellation.is_cancelled() {
+                return Err("Companion identity read was cancelled".to_string());
+            }
+            std::thread::sleep(
+                std::time::Duration::from_millis(10)
+                    .min(deadline.saturating_duration_since(std::time::Instant::now())),
+            );
+        }
+        self.inner.load(cancellation)
     }
 
     fn save(&self, identity: &CompanionHostIdentity) -> Result<(), String> {

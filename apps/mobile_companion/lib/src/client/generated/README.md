@@ -27,7 +27,7 @@ of the source contract.
 
 ## Implemented boundary
 
-`CompanionV1Client` implements the current Companion v1 read-only HTTP API surface:
+`CompanionV1Client` implements the current Companion v1 HTTP API surface. Pairing request submission creates only a short-lived pending approval; authenticated Task-domain operations are non-mutating. The same paired-device credential also authorizes the separate interactive Agent-terminal WebSocket, where terminal input runs as the desktop user:
 
 - pairing request submission and approval polling;
 - authenticated host status;
@@ -35,9 +35,8 @@ of the source contract.
 - the authenticated event-stream request, with typed SSE decoding in
   `lib/src/client/companion_live_events.dart`.
 
-Interactive Agent terminal traffic is intentionally outside this generated HTTP client. `lib/src/terminal/companion_terminal_client.dart` owns the dedicated authenticated WebSocket boundary, which permits typed attach/resize controls plus validated UTF-8 binary terminal input only after `ready`.
+Interactive Agent terminal traffic is intentionally outside this generated HTTP client. `lib/src/terminal/companion_terminal_client.dart` owns the dedicated authenticated WebSocket boundary, which permits typed attach/resize controls plus validated UTF-8 binary terminal input only after `ready`; it cannot start, stop, or replace Agent Sessions.
 
 `GeneratedCompanionClient` in `lib/src/client/companion_client.dart` adapts those
 generated calls behind the application's `CompanionClient` seam and owns pinned
-endpoint failover. The HTTP boundary does not implement mutations, broad project or
-repository APIs, generic command dispatch, or an offline domain cache.
+endpoint failover. Beyond the pairing bootstrap, the HTTP boundary does not implement Task or other domain mutations, broad project or repository APIs, generic command dispatch, or an offline domain cache.

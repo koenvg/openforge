@@ -157,7 +157,8 @@ _ConnectionContent _contentFor(
   Unpaired() => const _ConnectionContent(
     title: 'Not paired',
     message:
-        'Pair this companion with an OpenForge desktop to view live status.',
+        'Pairing lets this phone interact with running Agent terminals as your '
+        'desktop user, in addition to viewing live Task status.',
     icon: Icons.phonelink_off,
     iconLabel: 'Phone is not paired',
   ),
@@ -169,7 +170,9 @@ _ConnectionContent _contentFor(
   ),
   AwaitingApproval() => const _ConnectionContent(
     title: 'Awaiting desktop approval',
-    message: 'Approve this device from OpenForge on the desktop.',
+    message:
+        'Approval lets this phone interact with running Agent terminals as your '
+        'desktop user and view Task data.',
     icon: Icons.approval_outlined,
     iconLabel: 'Waiting for approval',
   ),
