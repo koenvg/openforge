@@ -1,8 +1,7 @@
+use crate::secure_store::COMPANION_HOST_IDENTITY_SECRET;
 use rcgen::generate_simple_self_signed;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,8 +70,7 @@ impl CompanionIdentityStore for KeychainCompanionIdentityStore {
                 "failed to encode Companion host identity: {error}"
             ))
         })?;
-        crate::secure_store::set_secret_with_cancellation(
-            COMPANION_HOST_IDENTITY_SECRET,
+        crate::secure_store::set_companion_host_identity_with_cancellation(
             &serialized,
             cancellation,
         )

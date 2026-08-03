@@ -16,6 +16,7 @@ use std::{
 
 const KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5);
 const INTERACTIVE_KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub(crate) const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 #[cfg(target_os = "macos")]
 const KEYCHAIN_PROCESS_GRACEFUL_TERMINATION_TIMEOUT: Duration = Duration::from_millis(500);
 #[cfg(target_os = "macos")]
@@ -524,8 +525,7 @@ pub fn set_secret(key: &str, value: &str) -> Result<(), String> {
     with_serialized_keychain_access(|| set_secret_unlocked(key, value))
 }
 
-pub(crate) fn set_secret_with_cancellation(
-    key: &str,
+pub(crate) fn set_companion_host_identity_with_cancellation(
     value: &str,
     cancellation: &SecretStoreCancellation,
 ) -> Result<(), SecretStoreWriteError> {
@@ -535,16 +535,16 @@ pub(crate) fn set_secret_with_cancellation(
                 "Secret store operation was cancelled".to_string(),
             ));
         }
-        return delete_secret(key).map_err(SecretStoreWriteError::NotCommitted);
+        return delete_secret(COMPANION_HOST_IDENTITY_SECRET)
+            .map_err(SecretStoreWriteError::NotCommitted);
     }
     with_serialized_keychain_access_cancellable(cancellation, || {
-        set_secret_cancellable_unlocked(key, value, cancellation)
+        set_companion_host_identity_cancellable_unlocked(value, cancellation)
     })
 }
 
 #[cfg(target_os = "macos")]
-fn set_secret_cancellable_unlocked(
-    key: &str,
+fn set_companion_host_identity_cancellable_unlocked(
     value: &str,
     cancellation: &SecretStoreCancellation,
 ) -> Result<(), SecretStoreWriteError> {
@@ -560,7 +560,6 @@ fn set_secret_cancellable_unlocked(
     })?;
     let mut child = Command::new(executable)
         .arg(KEYCHAIN_WRITE_HELPER_ARG)
-        .arg(key)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -625,8 +624,7 @@ fn set_secret_cancellable_unlocked(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn set_secret_cancellable_unlocked(
-    key: &str,
+fn set_companion_host_identity_cancellable_unlocked(
     value: &str,
     cancellation: &SecretStoreCancellation,
 ) -> Result<(), SecretStoreWriteError> {
@@ -635,7 +633,21 @@ fn set_secret_cancellable_unlocked(
             "Secret store operation was cancelled".to_string(),
         ));
     }
-    set_secret_unlocked(key, value).map_err(SecretStoreWriteError::NotCommitted)
+    set_secret_unlocked(COMPANION_HOST_IDENTITY_SECRET, value)
+        .map_err(SecretStoreWriteError::NotCommitted)
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_write_helper_requested(args: impl IntoIterator<Item = String>) -> Result<bool, ()> {
+    let mut args = args.into_iter();
+    let _executable = args.next();
+    if args.next().as_deref() != Some(KEYCHAIN_WRITE_HELPER_ARG) {
+        return Ok(false);
+    }
+    if args.next().is_some() {
+        return Err(());
+    }
+    Ok(true)
 }
 
 pub(crate) fn run_keychain_write_helper_if_requested() -> Option<i32> {
@@ -645,16 +657,10 @@ pub(crate) fn run_keychain_write_helper_if_requested() -> Option<i32> {
     }
     #[cfg(target_os = "macos")]
     {
-        let mut args = std::env::args();
-        let _executable = args.next();
-        if args.next().as_deref() != Some(KEYCHAIN_WRITE_HELPER_ARG) {
-            return None;
-        }
-        let Some(key) = args.next() else {
-            return Some(2);
-        };
-        if args.next().is_some() {
-            return Some(2);
+        match keychain_write_helper_requested(std::env::args()) {
+            Ok(false) => return None,
+            Err(()) => return Some(2),
+            Ok(true) => {}
         }
         let mut value = Vec::new();
         let read_result = std::io::stdin()
@@ -668,7 +674,9 @@ pub(crate) fn run_keychain_write_helper_if_requested() -> Option<i32> {
                 }
                 String::from_utf8(value).map_err(|_| ())
             })
-            .and_then(|value| set_secret_unlocked(&key, &value).map_err(|_| ()));
+            .and_then(|value| {
+                set_secret_unlocked(COMPANION_HOST_IDENTITY_SECRET, &value).map_err(|_| ())
+            });
         Some(if result.is_ok() { 0 } else { 1 })
     }
 }
@@ -1072,6 +1080,20 @@ mod tests {
             started_at.elapsed() < Duration::from_secs(1),
             "cancellation must not consume the interactive authorization budget"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn keychain_write_helper_rejects_account_override() {
+        let requested = keychain_write_helper_requested(
+            ["openforge", KEYCHAIN_WRITE_HELPER_ARG].map(str::to_string),
+        );
+        assert_eq!(requested, Ok(true));
+
+        let overridden = keychain_write_helper_requested(
+            ["openforge", KEYCHAIN_WRITE_HELPER_ARG, "github_token"].map(str::to_string),
+        );
+        assert_eq!(overridden, Err(()));
     }
 
     #[cfg(target_os = "macos")]
