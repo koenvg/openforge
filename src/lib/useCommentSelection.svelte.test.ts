@@ -28,6 +28,7 @@ const makeComment = (id: number, addressed = 0): PrComment => ({
   file_path: 'src/main.rs',
   line_number: id,
   addressed,
+  outdated: 0,
   created_at: 1700000000,
 })
 

@@ -24,7 +24,6 @@ describe('SendToAgentPanel', () => {
     render(SendToAgentPanel, {
       props: {
         taskId: 'task-1',
-        taskTitle: 'Test task',
         agentStatus: null,
         onSendToAgent: vi.fn(),
         onRefresh: vi.fn(),
@@ -36,13 +35,12 @@ describe('SendToAgentPanel', () => {
     expect(screen.getByText('→ Send to Agent').closest('button')?.disabled).toBe(false)
   })
 
-  it('clears only the provided task-scoped inline comments after sending', async () => {
+  it('archives inline comments when opening the prompt dialog, then sends on confirm', async () => {
     const onPendingInlineCommentsChange = vi.fn()
     const onSendToAgent = vi.fn()
     render(SendToAgentPanel, {
       props: {
         taskId: 'task-1',
-        taskTitle: 'Test task',
         agentStatus: null,
         onSendToAgent,
         onRefresh: vi.fn(),
@@ -51,11 +49,91 @@ describe('SendToAgentPanel', () => {
       },
     })
 
+    // Clicking the panel button archives (current timing) and opens the dialog,
+    // but does NOT dispatch to the agent yet.
     await fireEvent.click(screen.getByText('→ Send to Agent'))
-
     await waitFor(() => {
       expect(onPendingInlineCommentsChange).toHaveBeenCalledWith([])
-      expect(onSendToAgent).toHaveBeenCalled()
     })
+    expect(onSendToAgent).not.toHaveBeenCalled()
+
+    // The dialog shows the compiled prompt (Address mode by default) with the
+    // comment content — and NOT the task's initial prompt.
+    const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
+    expect(textarea.value).toContain('Please address the following review comments:')
+    expect(textarea.value).toContain('task scoped feedback')
+    expect(textarea.value).not.toContain('for task')
+
+    // Confirming dispatches the prompt.
+    await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+    expect(onSendToAgent).toHaveBeenCalledWith(textarea.value)
+  })
+
+  it('regenerates the prompt when toggling between Address and Analyze modes', async () => {
+    const onSendToAgent = vi.fn()
+    render(SendToAgentPanel, {
+      props: {
+        taskId: 'task-1',
+        agentStatus: null,
+        onSendToAgent,
+        onRefresh: vi.fn(),
+        pendingInlineComments: inlineComments,
+      },
+    })
+
+    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
+
+    // Default is Address.
+    expect(textarea.value).toContain('Please address the following review comments:')
+    expect(textarea.value).not.toContain('Please analyze')
+
+    // Toggle to Analyze regenerates the prompt.
+    await fireEvent.click(screen.getByText('Analyze'))
+    expect(textarea.value).toContain('Please analyze the following review comments')
+    expect(textarea.value).not.toContain('Please address the following review comments:')
+
+    // Sending uses the current (Analyze) prompt.
+    await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+    expect(onSendToAgent).toHaveBeenCalledWith(expect.stringContaining('Please analyze'))
+  })
+
+  it('sends the edited prompt text, not the original', async () => {
+    const onSendToAgent = vi.fn()
+    render(SendToAgentPanel, {
+      props: {
+        taskId: 'task-1',
+        agentStatus: null,
+        onSendToAgent,
+        onRefresh: vi.fn(),
+        pendingInlineComments: inlineComments,
+      },
+    })
+
+    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
+    await fireEvent.input(textarea, { target: { value: 'my edited prompt' } })
+    await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+
+    expect(onSendToAgent).toHaveBeenCalledWith('my edited prompt')
+  })
+
+  it('does not send when the dialog is cancelled', async () => {
+    const onSendToAgent = vi.fn()
+    render(SendToAgentPanel, {
+      props: {
+        taskId: 'task-1',
+        agentStatus: null,
+        onSendToAgent,
+        onRefresh: vi.fn(),
+        pendingInlineComments: inlineComments,
+      },
+    })
+
+    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    await screen.findByRole('textbox')
+    await fireEvent.click(screen.getByText('Cancel'))
+
+    expect(onSendToAgent).not.toHaveBeenCalled()
   })
 })

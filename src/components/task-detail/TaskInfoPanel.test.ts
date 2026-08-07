@@ -164,6 +164,7 @@ describe('TaskInfoPanel', () => {
       file_path: 'src/auth.ts',
       line_number: 12,
       addressed: 0,
+      outdated: 0,
       created_at: 3000,
       ...overrides,
     }

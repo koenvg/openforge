@@ -60,43 +60,54 @@ pub(super) fn persist_polled_comments(
     let mut inserted_this_batch: HashSet<i64> = HashSet::new();
 
     for comment in &result.comments {
-        if existing_ids.contains(&comment.id) || inserted_this_batch.contains(&comment.id) {
-            continue;
+        let already_seen =
+            existing_ids.contains(&comment.id) || inserted_this_batch.contains(&comment.id);
+
+        if !already_seen {
+            let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
+
+            if let Err(e) = db.insert_pr_comment(
+                comment.id,
+                result.pr_id,
+                &comment.user.login,
+                &comment.body,
+                &comment.comment_type,
+                comment.path.as_deref(),
+                comment.line,
+                false,
+                created_at,
+            ) {
+                error!(
+                    "[GitHub Poller] Failed to insert comment {}: {}",
+                    comment.id, e
+                );
+                persist_result.failed_insert_count += 1;
+                continue;
+            }
+
+            if let Err(e) = events.emit(
+                "new-pr-comment",
+                serde_json::json!({
+                    "ticket_id": result.ticket_id,
+                    "comment_id": comment.id
+                }),
+            ) {
+                warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
+            }
+
+            persist_result.new_comment_count += 1;
+            inserted_this_batch.insert(comment.id);
         }
 
-        let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
-
-        if let Err(e) = db.insert_pr_comment(
-            comment.id,
-            result.pr_id,
-            &comment.user.login,
-            &comment.body,
-            &comment.comment_type,
-            comment.path.as_deref(),
-            comment.line,
-            false,
-            created_at,
-        ) {
-            error!(
-                "[GitHub Poller] Failed to insert comment {}: {}",
+        // Refresh the GitHub "outdated" state for every fetched comment — new or
+        // pre-existing. This never touches the local `addressed` flag, so an
+        // addressed comment stays addressed even after it becomes outdated.
+        if let Err(e) = db.update_comment_outdated(comment.id, comment.outdated) {
+            warn!(
+                "[GitHub Poller] Failed to update outdated for comment {}: {}",
                 comment.id, e
             );
-            persist_result.failed_insert_count += 1;
-            continue;
         }
-
-        if let Err(e) = events.emit(
-            "new-pr-comment",
-            serde_json::json!({
-                "ticket_id": result.ticket_id,
-                "comment_id": comment.id
-            }),
-        ) {
-            warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
-        }
-
-        persist_result.new_comment_count += 1;
-        inserted_this_batch.insert(comment.id);
     }
 
     persist_result
@@ -160,18 +171,6 @@ pub(super) async fn poll_prs_for_project(
             .collect()
     };
 
-    let since_map: HashMap<i64, Option<String>> = pr_metadata
-        .iter()
-        .map(|(pr_id, last_polled, _, _, _, _)| {
-            let since = last_polled.map(|ts| {
-                chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-                    .unwrap_or_default()
-            });
-            (*pr_id, since)
-        })
-        .collect();
-
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
         .map(|(pr_id, _, old_ci, _, _, _)| (*pr_id, old_ci.clone()))
@@ -196,7 +195,11 @@ pub(super) async fn poll_prs_for_project(
         .map(|pr| {
             let client = github_client.clone();
             let token = github_token.to_string();
-            let since = since_map.get(&pr.id).cloned().flatten();
+            // Always full-refetch comments (no `since` delta). A comment going
+            // outdated does not bump its updated_at, so a delta fetch would never
+            // re-read it and its "outdated" state would go stale. ETag conditional
+            // requests keep unchanged fetches cheap (304 Not Modified).
+            let since: Option<String> = None;
             let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
             let old_review = old_review_map.get(&pr.id).cloned().flatten();
             let (old_mergeable, old_mergeable_state) = old_mergeability_map

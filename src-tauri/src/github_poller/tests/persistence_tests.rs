@@ -28,6 +28,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
             path: None,
             line: None,
             comment_type: "review_body".to_string(),
+            outdated: false,
             created_at: review
                 .submitted_at
                 .clone()
@@ -58,6 +59,110 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
         terminal_state: None,
         error: None,
     }
+}
+
+fn make_review_comment_poll_result(
+    pr_id: i64,
+    comment_id: i64,
+    outdated: bool,
+) -> PollSinglePrResult {
+    PollSinglePrResult {
+        pr_id,
+        ticket_id: "T-100".to_string(),
+        pr_title: "Outdated test".to_string(),
+        head_sha: "abc123".to_string(),
+        ci_validation_sha: "abc123".to_string(),
+        old_ci_status: None,
+        old_review_status: None,
+        comments: vec![PrComment {
+            id: comment_id,
+            body: "please fix".to_string(),
+            user: crate::github_client::GitHubUser {
+                login: "reviewer".to_string(),
+                extra: serde_json::json!({}),
+            },
+            path: Some("src/lib.rs".to_string()),
+            line: Some(10),
+            comment_type: "review_comment".to_string(),
+            outdated,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+        }],
+        check_runs: None,
+        combined_status: None,
+        reviews: None,
+        has_requested_reviewers: false,
+        mergeable: None,
+        mergeable_state: None,
+        is_queued: false,
+        required_check_names: vec![],
+        required_approving_count: None,
+        readiness_facts: PrMergeReadinessFacts {
+            status: None,
+            action: None,
+            blockers_json: None,
+            warnings_json: None,
+            source_head_sha: Some("abc123".to_string()),
+            merge_group_sha: None,
+            required_checks_policy_known: None,
+            required_reviews_policy_known: None,
+            merge_queue_required: None,
+            merge_queue_state: None,
+            updated_at: 0,
+        },
+        terminal_state: None,
+        error: None,
+    }
+}
+
+#[test]
+fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering_addressed() {
+    let (db, path) = make_test_db("persist_outdated_refresh");
+    insert_test_task(&db);
+    db.insert_pull_request(
+        142,
+        "T-100",
+        "acme",
+        "repo",
+        "Outdated test",
+        "https://example.com/pr/142",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert pr failed");
+
+    let events = GitHubEventTarget::sidecar(None);
+
+    // First poll: the comment arrives outdated.
+    let result = make_review_comment_poll_result(142, 900, true);
+    let existing = db.get_existing_comment_ids(142).expect("existing ids");
+    let first = persist_polled_comments(&events, &db, &result, &existing, 1000);
+    assert_eq!(first.new_comment_count, 1);
+    let comments = db.get_comments_for_pr(142).expect("get comments");
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].outdated, 1, "first poll stores outdated");
+
+    // User addresses the comment locally.
+    db.mark_comment_addressed(900).expect("mark addressed");
+
+    // Second poll: the line came back, comment is no longer outdated.
+    let result2 = make_review_comment_poll_result(142, 900, false);
+    let existing2 = db.get_existing_comment_ids(142).expect("existing ids 2");
+    let second = persist_polled_comments(&events, &db, &result2, &existing2, 2000);
+    assert_eq!(
+        second.new_comment_count, 0,
+        "existing comment is not re-counted"
+    );
+    let comments = db.get_comments_for_pr(142).expect("get comments");
+    assert_eq!(comments[0].outdated, 0, "outdated refreshed on re-poll");
+    assert_eq!(
+        comments[0].addressed, 1,
+        "addressed preserved across re-poll"
+    );
+
+    drop(db);
+    let _ = std::fs::remove_file(&path);
 }
 
 #[test]

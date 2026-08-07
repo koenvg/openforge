@@ -442,6 +442,7 @@ describe('TaskDetailView', () => {
       file_path: 'src/App.svelte',
       line_number: 42,
       addressed: 0,
+      outdated: 0,
       created_at: 1000,
     }
     const { getPrComments, markCommentAddressed } = await import('../../lib/ipc')

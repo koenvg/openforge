@@ -135,6 +135,8 @@ export interface PrComment {
   file_path: string | null;
   line_number: number | null;
   addressed: number;
+  /** 1 when GitHub considers the comment outdated (its diff line changed). */
+  outdated: number;
   created_at: number;
 }
 

@@ -5,6 +5,7 @@
   import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
+  import { buildPrCommentUrl } from '../../lib/prCommentLinks'
   import { createPrCommentLoader } from '../../lib/prComments.svelte'
   import { mergingTaskIds } from '../../lib/stores'
   import { useMergeOrchestration } from './useMergeOrchestration.svelte'
@@ -295,6 +296,8 @@
                 showLocation={true}
                 showMarkAddressed={allowCommentAddressing}
                 density="detail"
+                commentUrl={(c) => buildPrCommentUrl(c, pr.url)}
+                showAuthorFilter={true}
               />
             </div>
           {/if}

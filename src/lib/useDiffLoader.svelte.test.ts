@@ -93,6 +93,7 @@ const basePrComment: PrComment = {
 	file_path: "src/main.rs",
 	line_number: 5,
 	addressed: 0,
+	outdated: 0,
 	created_at: 1700000000,
 };
 

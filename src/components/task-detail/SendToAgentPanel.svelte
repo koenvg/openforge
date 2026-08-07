@@ -5,12 +5,12 @@
     setSelfReviewGeneralComments,
   } from '../../lib/taskScopedSelfReviewState'
   import { archiveSelfReviewComments, getActiveSelfReviewComments, getArchivedSelfReviewComments } from '../../lib/ipc'
-  import { compileReviewPrompt } from '../../lib/reviewPrompt'
+  import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
+  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
 
   interface Props {
     taskId: string
-    taskTitle: string
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
     onRefresh: () => void
@@ -20,11 +20,21 @@
     onSendComplete?: () => void
   }
 
-  let { taskId, taskTitle, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
+  let { taskId, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
 
   let isSending = $state(false)
   let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
+  let showPromptDialog = $state(false)
+  let promptDraft = $state('')
+  let promptMode = $state<ReviewPromptMode>('address')
+  // Captured at dialog-open so toggling the mode can regenerate the prompt even
+  // after the source comment stores have been archived/cleared.
+  let capturedInline = $state<{ path: string; line: number; body: string }[]>([])
+  let capturedGeneral = $state<{ body: string }[]>([])
+  let capturedPr = $state<
+    { body: string; author: string; file_path: string | null; line_number: number | null }[]
+  >([])
 
   let selfReviewState = $derived($selfReviewStateByTask.get(taskId))
   let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
@@ -35,25 +45,29 @@
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
   let canSend = $derived(hasComments && !isAgentBusy && !isSending)
 
-  async function handleSendToAgent() {
+  // Opens the editable-prompt dialog. Archive timing is unchanged from before the
+  // dialog existed: comments are archived here (when the prompt is compiled), not on
+  // confirm — so cancelling the dialog still archives, as agreed for this change.
+  async function openPromptDialog() {
     if (!canSend) return
 
-    const inlineComments = pendingInlineComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
-    const generalComments = selfReviewGeneralComments.map(c => ({ body: c.body }))
-    const prReviewComments = selectedPrComments.map(c => ({
+    capturedInline = pendingInlineComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
+    capturedGeneral = selfReviewGeneralComments.map(c => ({ body: c.body }))
+    capturedPr = selectedPrComments.map(c => ({
       body: c.body,
       author: c.author,
       file_path: c.file_path,
       line_number: c.line_number
     }))
-    const prompt = compileReviewPrompt(taskTitle, inlineComments, generalComments, prReviewComments)
+    promptMode = 'address'
+    promptDraft = compileReviewPrompt(promptMode, capturedInline, capturedGeneral, capturedPr)
 
     isSending = true
     error = null
     successMessage = null
 
     try {
-      // CRITICAL ORDER: archive → clear stores → reload → call callback
+      // CRITICAL ORDER: archive → clear stores → reload
       await archiveSelfReviewComments(taskId)
 
       // Clear task-scoped inline comments from store
@@ -67,19 +81,35 @@
       const active = await getActiveSelfReviewComments(taskId)
       setSelfReviewGeneralComments(taskId, active.filter(c => c.comment_type === 'general'))
 
-      successMessage = 'Feedback sent to agent!'
-      setTimeout(() => {
-        successMessage = null
-      }, 3000)
-
-      onSendToAgent(prompt)
-      onSendComplete?.()
+      showPromptDialog = true
     } catch (e) {
-      console.error('Failed to send to agent:', e)
-      error = 'Failed to send to agent. Please try again.'
+      console.error('Failed to prepare feedback:', e)
+      error = 'Failed to prepare feedback. Please try again.'
     } finally {
       isSending = false
     }
+  }
+
+  // Dispatches the (possibly edited) prompt the user reviewed in the dialog.
+  function confirmSend() {
+    onSendToAgent(promptDraft)
+    showPromptDialog = false
+    successMessage = 'Feedback sent to agent!'
+    setTimeout(() => {
+      successMessage = null
+    }, 3000)
+    onSendComplete?.()
+  }
+
+  function cancelPromptDialog() {
+    showPromptDialog = false
+  }
+
+  // Switching mode regenerates the prompt from the captured comments (overwriting
+  // any manual edits), so each mode shows its own template.
+  function setPromptMode(mode: ReviewPromptMode) {
+    promptMode = mode
+    promptDraft = compileReviewPrompt(mode, capturedInline, capturedGeneral, capturedPr)
   }
 </script>
 
@@ -143,11 +173,60 @@
 
     <button
       class="btn btn-primary btn-sm font-semibold tracking-wide shadow-sm hover:shadow-md transition-shadow"
-      onclick={handleSendToAgent}
+      onclick={openPromptDialog}
       disabled={!canSend}
-      title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Send feedback to agent'}
+      title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Review and send feedback to agent'}
     >
-      {isSending ? 'Sending…' : '→ Send to Agent'}
+      {isSending ? 'Preparing…' : '→ Send to Agent'}
     </button>
   </div>
 </div>
+
+{#if showPromptDialog}
+  <Modal
+    onClose={cancelPromptDialog}
+    maxWidth="760px"
+    initialFocus="textarea"
+    ariaLabel="Review the prompt before sending to the agent"
+  >
+    {#snippet header()}
+      <h2 class="text-base font-semibold m-0">Review prompt before sending</h2>
+    {/snippet}
+    <div class="flex flex-col gap-3 px-5 py-4">
+      <p class="m-0 text-xs text-base-content/60">
+        Edit the prompt below if you like — the agent receives exactly this text.
+        Switching mode regenerates it.
+      </p>
+      <textarea
+        class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed min-h-80"
+        bind:value={promptDraft}
+        aria-label="Prompt sent to the agent"
+      ></textarea>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm mr-auto" onclick={cancelPromptDialog}>Cancel</button>
+        <div class="join" role="group" aria-label="Prompt mode">
+          <button
+            class="btn btn-sm join-item {promptMode === 'address' ? 'btn-primary' : 'btn-ghost'}"
+            aria-pressed={promptMode === 'address'}
+            title="Ask the agent to fix the comments"
+            onclick={() => setPromptMode('address')}
+          >Address</button>
+          <button
+            class="btn btn-sm join-item {promptMode === 'analyze' ? 'btn-primary' : 'btn-ghost'}"
+            aria-pressed={promptMode === 'analyze'}
+            title="Ask the agent to explain the comments without changing code"
+            onclick={() => setPromptMode('analyze')}
+          >Analyze</button>
+        </div>
+        <button
+          class="btn btn-primary btn-sm font-semibold"
+          data-testid="confirm-send-prompt"
+          onclick={confirmSend}
+          disabled={!promptDraft.trim()}
+        >
+          → Send to Agent
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
