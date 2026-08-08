@@ -120,6 +120,40 @@ impl CompanionIdentityStore for BlockingIdentityStore {
     }
 }
 
+struct BlockingReplacementIdentityStore {
+    inner: InMemoryIdentityStore,
+    entered: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl CompanionIdentityStore for BlockingReplacementIdentityStore {
+    fn load(
+        &self,
+        cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<super::identity::CompanionHostIdentity>, String> {
+        self.inner.load(cancellation)
+    }
+
+    fn save(&self, identity: &super::identity::CompanionHostIdentity) -> Result<(), String> {
+        if self.inner.save_count() > 0 {
+            if let Some(entered) = self
+                .entered
+                .lock()
+                .map_err(|_| "blocking replacement entry lock was poisoned".to_string())?
+                .take()
+            {
+                let _ = entered.send(());
+            }
+            self.release
+                .lock()
+                .map_err(|_| "blocking replacement release lock was poisoned".to_string())?
+                .recv()
+                .map_err(|_| "blocking replacement release signal was dropped".to_string())?;
+        }
+        self.inner.save(identity)
+    }
+}
+
 struct CommitThenBlockIdentityStore {
     inner: InMemoryIdentityStore,
     entered: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
@@ -1186,8 +1220,14 @@ async fn disable_waits_for_identity_reset_and_remains_the_final_lifecycle_state(
 
 #[tokio::test]
 async fn aborting_reset_caller_does_not_cancel_the_destructive_transition() {
-    let identity_store: Arc<dyn CompanionIdentityStore> =
-        Arc::new(DelayedIdentityStore::new(Duration::from_millis(40)));
+    let (save_entered_tx, save_entered_rx) = tokio::sync::oneshot::channel();
+    let (release_save_tx, release_save_rx) = mpsc::channel();
+    let identity_store = Arc::new(BlockingReplacementIdentityStore {
+        inner: InMemoryIdentityStore::default(),
+        entered: Mutex::new(Some(save_entered_tx)),
+        release: Mutex::new(release_save_rx),
+    });
+    let manager_identity_store: Arc<dyn CompanionIdentityStore> = identity_store.clone();
     let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
     device_store
         .save(&CompanionDeviceRecord {
@@ -1202,7 +1242,7 @@ async fn aborting_reset_caller_does_not_cancel_the_destructive_transition() {
         .expect("seed paired device");
     let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
     let manager = CompanionGatewayManager::new(
-        identity_store,
+        manager_identity_store,
         manager_device_store,
         Arc::new(FixedEndpointProvider::new(vec![(
             CompanionEndpointKind::Lan,
@@ -1214,12 +1254,22 @@ async fn aborting_reset_caller_does_not_cancel_the_destructive_transition() {
     let first = manager.enable().await.expect("gateway start");
     let reset_manager = manager.clone();
     let reset = tokio::spawn(async move { reset_manager.reset_host_identity().await });
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    tokio::time::timeout(Duration::from_secs(1), save_entered_rx)
+        .await
+        .expect("replacement identity save should start")
+        .expect("replacement identity save signal should be delivered");
     reset.abort();
     let _ = reset.await;
+    release_save_tx
+        .send(())
+        .expect("replacement identity save should be released");
 
-    tokio::time::sleep(Duration::from_millis(250)).await;
-    let completed = manager.status().await;
+    let completed = tokio::time::timeout(
+        Duration::from_secs(5),
+        manager.status_after_operations_settle(),
+    )
+    .await
+    .expect("independent reset should finish after caller cancellation");
     assert_eq!(completed.phase, GatewayPhase::Running);
     assert_ne!(completed.host_id, first.host_id);
     assert!(device_store

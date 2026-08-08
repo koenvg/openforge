@@ -460,6 +460,13 @@ impl CompanionGatewayManager {
         runtime.status()
     }
 
+    #[cfg(test)]
+    pub(crate) async fn status_after_operations_settle(&self) -> CompanionGatewayStatus {
+        let _operation = self.operation_lock.lock().await;
+        let runtime = self.runtime.lock().await;
+        runtime.status()
+    }
+
     pub(crate) async fn enable(&self) -> Result<CompanionGatewayStatus, String> {
         let _operation = self.operation_lock.lock().await;
         self.enable_locked().await
