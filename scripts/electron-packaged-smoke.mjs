@@ -69,6 +69,17 @@ export function packagedAppExecutablePath(appPath, platform = process.platform) 
   return appPath
 }
 
+export function packagedAppSpawnOptions({ repoRoot, env, platform = process.platform } = {}) {
+  return {
+    cwd: repoRoot,
+    env,
+    // The packaged sidecar may terminate its inherited process group during shutdown.
+    // Isolate the macOS app so that cleanup cannot SIGTERM this smoke runner first.
+    detached: platform === 'darwin',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }
+}
+
 export function formatHealthFailure(result) {
   const rendererUrl = result.url ? `\nRenderer URL: ${result.url}` : ''
   const details = result.message ? `\nDetail: ${result.message}` : ''
@@ -227,6 +238,22 @@ export async function checkRendererBridge(page, { invokeTimeoutMs = DEFAULT_INVO
   }, { invokeTimeoutMs })
 }
 
+export function forceKillPackagedApp(
+  child,
+  { platform = process.platform, killProcess = process.kill } = {},
+) {
+  if (platform === 'darwin' && Number.isInteger(child.pid) && child.pid > 0) {
+    try {
+      killProcess(-child.pid, 'SIGKILL')
+    } catch (error) {
+      if (error?.code !== 'ESRCH') throw error
+    }
+    return
+  }
+
+  child.kill('SIGKILL')
+}
+
 async function stopChild(child, timeoutMs = 5_000) {
   if (child.exitCode !== null || child.signalCode !== null) return
 
@@ -237,7 +264,7 @@ async function stopChild(child, timeoutMs = 5_000) {
     sleep(timeoutMs).then(() => false),
   ])
   if (!stopped && child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL')
+    forceKillPackagedApp(child)
     await Promise.race([exited, sleep(2_000)])
   }
 }
@@ -289,11 +316,7 @@ export async function runPackagedElectronSmoke({
   const child = spawn(executablePath, [
     `--remote-debugging-port=${port}`,
     '--no-first-run',
-  ], {
-    cwd: repoRoot,
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  ], packagedAppSpawnOptions({ repoRoot, env }))
   const output = captureChildOutput(child)
   child.once('error', error => {
     childState.error = error
