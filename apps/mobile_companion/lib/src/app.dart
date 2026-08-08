@@ -7,9 +7,10 @@ import 'attention/attention_controller.dart';
 import 'attention/attention_home.dart';
 import 'connection/companion_connection_state.dart';
 import 'live/live_updates_controller.dart';
-import 'pairing/companion_pairing_capture.dart';
 import 'pairing/companion_pairing_controller.dart';
-import 'presentation/connection_shell.dart';
+import 'pairing/companion_pairing_scanner.dart';
+import 'presentation/companion_app_shell.dart';
+import 'presentation/companion_connection_view.dart';
 import 'terminal/agent_terminal_surface.dart';
 import 'task_detail/task_detail_controller.dart';
 import 'task_detail/task_detail_screen.dart';
@@ -50,12 +51,17 @@ class _CompanionAppState extends State<CompanionApp>
   late CompanionConnectionState _state;
   late AttentionViewState _attentionState;
   TaskDetailController? _openTaskController;
-  var _pairingFlowActive = false;
+  late final CompanionPairingScanner _pairingScanner;
   late bool _isForeground;
 
   @override
   void initState() {
     super.initState();
+    _pairingScanner = CompanionPairingScanner(
+      onActivityChanged: (_) {
+        if (mounted) setState(() {});
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     _isForeground =
         WidgetsBinding.instance.lifecycleState == null ||
@@ -212,46 +218,26 @@ class _CompanionAppState extends State<CompanionApp>
 
   Future<void> _openScanner() async {
     final controller = widget.controller;
-    if (controller == null) return;
     final navigator = _navigatorKey.currentState;
-    if (navigator == null) return;
-    await _runPairingFlow(
-      () => captureCompanionPairing(
-        navigator: navigator,
-        controller: controller,
-        isControllerCurrent: () =>
-            mounted && identical(widget.controller, controller),
-      ),
+    if (controller == null || navigator == null) return;
+    await _pairingScanner.scan(
+      navigator: navigator,
+      controller: controller,
+      isControllerCurrent: () =>
+          mounted && identical(widget.controller, controller),
     );
   }
 
   Future<void> _openManualPairing() async {
     final controller = widget.controller;
-    if (controller == null) return;
     final navigator = _navigatorKey.currentState;
-    if (navigator == null) return;
-    await _runPairingFlow(
-      () => enterCompanionPairingBootstrap(
-        navigator: navigator,
-        controller: controller,
-        isControllerCurrent: () =>
-            mounted && identical(widget.controller, controller),
-      ),
+    if (controller == null || navigator == null) return;
+    await _pairingScanner.enterManually(
+      navigator: navigator,
+      controller: controller,
+      isControllerCurrent: () =>
+          mounted && identical(widget.controller, controller),
     );
-  }
-
-  Future<void> _runPairingFlow(Future<void> Function() flow) async {
-    if (_pairingFlowActive) return;
-    setState(() => _pairingFlowActive = true);
-    try {
-      await flow();
-    } finally {
-      if (mounted) {
-        setState(() => _pairingFlowActive = false);
-      } else {
-        _pairingFlowActive = false;
-      }
-    }
   }
 
   Future<void> _forgetAndPairAgain() async {
@@ -309,44 +295,31 @@ class _CompanionAppState extends State<CompanionApp>
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => CompanionAppShell(
     navigatorKey: _navigatorKey,
-    debugShowCheckedModeBanner: false,
-    title: 'OpenForge Companion',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-      useMaterial3: true,
+    home: CompanionConnectionView(
+      state: _state,
+      connectedView: _state is Connected && widget.attentionController != null
+          ? AttentionHome(
+              state: _attentionState,
+              onRefresh: widget.attentionController!.refresh,
+              onTaskSelected: widget.taskDetailControllerFactory == null
+                  ? null
+                  : _openTaskDetail,
+            )
+          : null,
+      onPair: widget.controller == null || _pairingScanner.isActive
+          ? null
+          : _openScanner,
+      onManualPair:
+          widget.controller == null || !kDebugMode || _pairingScanner.isActive
+          ? null
+          : _openManualPairing,
+      onReset: widget.controller == null ? null : _forgetAndPairAgain,
+      onRetry: widget.controller == null ? null : _retryConnection,
+      onOpenSettings: widget.controller == null
+          ? null
+          : _openLocalNetworkSettings,
     ),
-    darkTheme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.indigo,
-        brightness: Brightness.dark,
-      ),
-      useMaterial3: true,
-    ),
-    themeMode: ThemeMode.system,
-    home: _state is Connected && widget.attentionController != null
-        ? AttentionHome(
-            state: _attentionState,
-            onRefresh: widget.attentionController!.refresh,
-            onTaskSelected: widget.taskDetailControllerFactory == null
-                ? null
-                : _openTaskDetail,
-          )
-        : ConnectionShell(
-            state: _state,
-            onPair: widget.controller == null || _pairingFlowActive
-                ? null
-                : _openScanner,
-            onManualPair:
-                widget.controller == null || !kDebugMode || _pairingFlowActive
-                ? null
-                : _openManualPairing,
-            onReset: widget.controller == null ? null : _forgetAndPairAgain,
-            onRetry: widget.controller == null ? null : _retryConnection,
-            onOpenSettings: widget.controller == null
-                ? null
-                : _openLocalNetworkSettings,
-          ),
   );
 }
