@@ -1,9 +1,13 @@
+import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createPackagedSmokeEnv,
+  forceKillPackagedApp,
   formatHealthFailure,
   packagedAppExecutablePath,
+  packagedAppSpawnOptions,
 } from './electron-packaged-smoke.mjs'
 
 describe('Electron packaged runtime smoke helpers', () => {
@@ -25,6 +29,44 @@ describe('Electron packaged runtime smoke helpers', () => {
     expect(packagedAppExecutablePath('/repo/Open Forge.app', 'darwin')).toBe(
       join('/repo/Open Forge.app', 'Contents', 'MacOS', 'Open Forge'),
     )
+  })
+
+  it('launches the packaged app in a separate process group on macOS', () => {
+    expect(packagedAppSpawnOptions({
+      repoRoot: '/repo',
+      env: { PATH: '/usr/bin' },
+      platform: 'darwin',
+    })).toMatchObject({
+      cwd: '/repo',
+      env: { PATH: '/usr/bin' },
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  })
+
+  it('force-kills the detached macOS app process group so descendants cannot leak', () => {
+    const child = { pid: 42, kill: vi.fn() }
+    const killProcess = vi.fn()
+
+    forceKillPackagedApp(child, { platform: 'darwin', killProcess })
+
+    expect(killProcess).toHaveBeenCalledWith(-42, 'SIGKILL')
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
+  it('prints an actionable diagnostic when the packaged app cannot be found', () => {
+    const scriptPath = fileURLToPath(new URL('./electron-packaged-smoke.mjs', import.meta.url))
+    const missingAppPath = join(process.cwd(), '__missing-packaged-smoke-app__')
+    const result = spawnSync(process.execPath, [
+      scriptPath,
+      '--skip-package',
+      '--app',
+      missingAppPath,
+    ], { encoding: 'utf8' })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(`Packaged Electron app not found at ${missingAppPath}`)
+    expect(result.stderr).toContain('Run pnpm electron:package first or omit --skip-package')
   })
 
   it('diagnoses a missing window.openforge as the packaged sandbox preload guardrail failure', () => {
