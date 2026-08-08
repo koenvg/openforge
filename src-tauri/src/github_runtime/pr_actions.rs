@@ -159,7 +159,7 @@ pub async fn merge_pull_request(
     repo: &str,
     pr_number: i64,
 ) -> Result<(), String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     let response = github_client
         .merge_pr(owner, repo, pr_number, &token)
         .await
@@ -181,7 +181,7 @@ pub async fn enqueue_pull_request(
     repo: &str,
     pr_number: i64,
 ) -> Result<(), String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     let actor_login = github_username(db, github_client).await?;
     github_client
         .enqueue_pull_request(owner, repo, pr_number, &token, &actor_login)

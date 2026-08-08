@@ -49,7 +49,7 @@ pub async fn fetch_review_prs(
     github_client: &GitHubClient,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     let username = github_username(db, github_client).await?;
-    let token = github_token()?;
+    let token = github_token().await?;
 
     let (prs, all_search_ids) = github_client
         .search_review_requested_prs(&username, &token)
@@ -253,7 +253,7 @@ pub async fn fetch_authored_prs(
     github_client: &GitHubClient,
 ) -> Result<Vec<db::AuthoredPrRow>, String> {
     let username = github_username(db, github_client).await?;
-    let token = github_token()?;
+    let token = github_token().await?;
 
     let existing_rows = {
         let db_lock = crate::db::acquire_db(db);

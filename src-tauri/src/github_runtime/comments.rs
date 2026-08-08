@@ -50,7 +50,7 @@ pub async fn get_pr_file_diffs(
     repo: &str,
     pr_number: i64,
 ) -> Result<Vec<crate::github_client::PrFileDiff>, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .get_pr_files(owner, repo, pr_number, &token)
         .await
@@ -63,7 +63,7 @@ pub async fn get_file_content(
     repo: &str,
     sha: &str,
 ) -> Result<String, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .get_blob_content(owner, repo, sha, &token)
         .await
@@ -76,7 +76,7 @@ pub async fn get_file_content_base64(
     repo: &str,
     sha: &str,
 ) -> Result<String, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .get_blob_content_base64(owner, repo, sha, &token)
         .await
@@ -90,7 +90,7 @@ pub async fn get_file_at_ref(
     path: &str,
     ref_sha: &str,
 ) -> Result<String, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .get_file_at_ref(owner, repo, path, ref_sha, &token)
         .await
@@ -104,7 +104,7 @@ pub async fn get_file_at_ref_base64(
     path: &str,
     ref_sha: &str,
 ) -> Result<String, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .get_file_at_ref_base64(owner, repo, path, ref_sha, &token)
         .await
@@ -147,7 +147,7 @@ pub async fn get_review_comments(
     repo: &str,
     pr_number: i64,
 ) -> Result<Vec<FrontendReviewComment>, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     let comments = github_client
         .get_pr_review_comments(owner, repo, pr_number, &token)
         .await
@@ -187,7 +187,7 @@ pub async fn get_pr_overview_comments(
     repo: &str,
     pr_number: i64,
 ) -> Result<Vec<FrontendPrOverviewComment>, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     let comments = github_client
         .get_pr_comments(owner, repo, pr_number, &token, None)
         .await
@@ -210,7 +210,7 @@ pub async fn submit_pr_review(
     github_client: &GitHubClient,
     request: SubmitPrReviewRequest<'_>,
 ) -> Result<(), String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     github_client
         .submit_review(
             request.owner,

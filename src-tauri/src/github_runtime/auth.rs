@@ -1,12 +1,12 @@
 use crate::{db, github_client::GitHubClient};
 use std::sync::{Arc, Mutex};
 
-pub fn github_token() -> Result<String, String> {
-    crate::secure_store::get_secret("github_token")
+pub async fn github_token() -> Result<String, String> {
+    crate::secure_store::get_secret_async("github_token")
+        .await
         .map_err(|e| format!("Failed to get config: {e}"))?
         .ok_or_else(|| "github_token not configured".to_string())
 }
-
 pub async fn github_username(
     db: &Arc<Mutex<db::Database>>,
     github_client: &GitHubClient,
@@ -22,7 +22,7 @@ pub async fn github_username(
         return Ok(username);
     }
 
-    let token = github_token()?;
+    let token = github_token().await?;
     let username = github_client
         .get_authenticated_user(&token)
         .await
