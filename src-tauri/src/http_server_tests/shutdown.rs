@@ -16,6 +16,28 @@ fn sidecar_runtime_shutdown_budget_stays_inside_electron_sigterm_grace() {
 }
 
 #[tokio::test]
+async fn serve_error_still_runs_coordinated_sidecar_cleanup() {
+    let (mut state, _path) = test_state("sidecar_runtime_cleanup_after_serve_error");
+    let manager = crate::companion_gateway::test_manager();
+    manager.enable().await.expect("gateway should start");
+    state.companion_gateway = Some(manager.clone());
+
+    let serve_result = run_electron_sidecar_with_cleanup(
+        async { Err(std::io::Error::other("injected serve failure")) },
+        &state,
+        None,
+    )
+    .await;
+
+    let error = serve_result.expect_err("serve error should be preserved after cleanup");
+    assert_eq!(error.kind(), std::io::ErrorKind::Other);
+    assert_eq!(error.to_string(), "injected serve failure");
+
+    let status = serde_json::to_value(manager.status().await).expect("serialize status");
+    assert_eq!(status["phase"], "stopped");
+    assert_eq!(status["enabled"], true);
+}
+#[tokio::test]
 async fn sidecar_runtime_shutdown_cleanup_is_safe_and_idempotent_without_live_children() {
     let (state, _path) = test_state("sidecar_runtime_shutdown_cleanup_empty");
 

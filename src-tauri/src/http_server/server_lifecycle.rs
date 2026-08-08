@@ -12,7 +12,7 @@ use crate::{
 };
 use axum::Router;
 use log::{info, warn};
-use std::{net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
+use std::{future::Future, net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
 
 /// Rust-sidecar internal cleanup budget after SIGTERM.
 ///
@@ -116,6 +116,31 @@ pub(super) async fn shutdown_sidecar_runtime(
     info!("[http_server] Rust sidecar shutdown cleanup completed");
 }
 
+pub(super) async fn run_electron_sidecar_with_cleanup<Serve>(
+    serve: Serve,
+    state: &AppState,
+    companion_restore: Option<CompanionGatewayRestoreTask>,
+) -> std::io::Result<()>
+where
+    Serve: Future<Output = std::io::Result<()>>,
+{
+    let serve_result = serve.await;
+
+    if tokio::time::timeout(
+        SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+        shutdown_sidecar_runtime(state, companion_restore),
+    )
+    .await
+    .is_err()
+    {
+        warn!(
+            "[http_server] Rust sidecar shutdown cleanup timed out after {:?}",
+            SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT
+        );
+    }
+
+    serve_result
+}
 pub(super) struct CompanionGatewayRestoreTask {
     task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -266,22 +291,16 @@ async fn start_http_server_with_app_state(
         companion_enabled && is_electron_sidecar,
     );
     if is_electron_sidecar {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(sidecar_shutdown_signal())
-            .await?;
-
-        if tokio::time::timeout(
-            SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
-            shutdown_sidecar_runtime(&shutdown_state, companion_restore),
+        run_electron_sidecar_with_cleanup(
+            async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(sidecar_shutdown_signal())
+                    .await
+            },
+            &shutdown_state,
+            companion_restore,
         )
-        .await
-        .is_err()
-        {
-            warn!(
-                "[http_server] Rust sidecar shutdown cleanup timed out after {:?}",
-                SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT
-            );
-        }
+        .await?;
     } else {
         axum::serve(listener, router).await?;
     }
