@@ -3,17 +3,21 @@ mod attention;
 mod contract;
 mod devices;
 mod identity;
+mod identity_lifecycle;
 mod lifecycle;
+mod listener_runtime;
 mod live_events;
 mod network;
 mod pairing;
 mod rate_limit;
+mod stream_termination;
 mod tailscale;
 mod task_detail;
 mod terminal;
 mod terminal_protocol;
 #[cfg(test)]
 mod terminal_protocol_tests;
+mod trust_policy;
 
 pub(crate) const COMPANION_GATEWAY_ENABLED_CONFIG: &str = "companion_gateway_enabled";
 pub(crate) const COMPANION_TAILSCALE_HOSTNAME_CONFIG: &str =

@@ -1,15 +1,14 @@
+#[cfg(test)]
+pub(super) use super::listener_runtime::unique_offered_endpoints;
+pub(crate) use super::listener_runtime::CompanionGatewayEndpoint;
 use super::{
-    advertisement::{
-        CompanionAdvertisement, CompanionAdvertisementHandle, CompanionAdvertiser,
-        MdnsCompanionAdvertiser,
-    },
+    advertisement::{CompanionAdvertisement, CompanionAdvertiser, MdnsCompanionAdvertiser},
     attention::{CompanionAttentionSource, DatabaseCompanionAttentionSource},
-    contract::{self, CompanionHostStatus, CompanionRouterSources},
+    contract,
     devices::{CompanionDeviceStore, DatabaseCompanionDeviceStore},
-    identity::{
-        generate_host_identity, load_or_create_host_identity, CompanionHostIdentity,
-        CompanionIdentityStore, KeychainCompanionIdentityStore,
-    },
+    identity::{CompanionHostIdentity, CompanionIdentityStore, KeychainCompanionIdentityStore},
+    identity_lifecycle::{CompanionIdentityLifecycle, IdentityResetError},
+    listener_runtime::{start_tls_listeners, CompanionGatewayRouteSources, RunningGateway},
     live_events::{CompanionStreamAccess, PairingCompanionStreamAccess},
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
@@ -24,15 +23,11 @@ use super::{
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
-use axum_server::{tls_rustls::RustlsConfig, Handle};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 const DEFAULT_COMPANION_GATEWAY_PORT: u16 = 17_424;
 const COMPANION_GATEWAY_PORT_ENV: &str = "OPENFORGE_COMPANION_PORT";
-const LISTENER_START_TIMEOUT: Duration = Duration::from_secs(2);
-const LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
-const CONNECTION_DRAIN_TIMEOUT: Duration = Duration::from_millis(250);
 const PAIRING_SESSION_TTL: Duration = Duration::from_secs(2 * 60);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -43,13 +38,6 @@ pub(crate) enum GatewayPhase {
     Running,
     Error,
     Stopped,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CompanionGatewayEndpoint {
-    pub(crate) kind: CompanionEndpointKind,
-    pub(crate) url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -70,75 +58,6 @@ pub(crate) struct CompanionGatewayStatus {
     pub(crate) endpoints: Vec<CompanionGatewayEndpoint>,
     pub(crate) tailscale: CompanionTailscaleStatus,
     pub(crate) error: Option<String>,
-}
-
-struct GatewayListener {
-    handle: Handle,
-    task: Option<tokio::task::JoinHandle<std::io::Result<()>>>,
-}
-
-impl GatewayListener {
-    fn is_finished(&self) -> bool {
-        self.task.as_ref().is_some_and(|task| task.is_finished())
-    }
-}
-
-impl Drop for GatewayListener {
-    fn drop(&mut self) {
-        self.handle.shutdown();
-        if let Some(task) = self.task.take() {
-            task.abort();
-        }
-    }
-}
-
-struct RunningGateway {
-    listeners: Vec<GatewayListener>,
-    endpoints: Vec<CompanionGatewayEndpoint>,
-    addresses: Vec<SocketAddr>,
-    advertisement: Option<Box<dyn CompanionAdvertisementHandle>>,
-}
-
-impl RunningGateway {
-    fn is_finished(&self) -> bool {
-        self.listeners.iter().any(GatewayListener::is_finished)
-    }
-
-    async fn stop(mut self) {
-        if let Some(advertisement) = self.advertisement.take() {
-            let _ = tokio::task::spawn_blocking(move || drop(advertisement)).await;
-        }
-        for listener in &self.listeners {
-            listener
-                .handle
-                .graceful_shutdown(Some(CONNECTION_DRAIN_TIMEOUT));
-        }
-        let graceful = tokio::time::timeout(
-            LISTENER_SHUTDOWN_TIMEOUT,
-            futures::future::join_all(
-                self.listeners
-                    .iter_mut()
-                    .filter_map(|listener| listener.task.as_mut()),
-            ),
-        )
-        .await;
-        if graceful.is_err() {
-            for listener in &mut self.listeners {
-                if let Some(task) = listener.task.as_mut() {
-                    task.abort();
-                }
-            }
-            futures::future::join_all(
-                self.listeners
-                    .iter_mut()
-                    .filter_map(|listener| listener.task.as_mut()),
-            )
-            .await;
-        }
-        for listener in &mut self.listeners {
-            listener.task = None;
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -199,7 +118,7 @@ impl GatewayRuntime {
             endpoints: self
                 .running
                 .as_ref()
-                .map(|running| unique_offered_endpoints(&running.endpoints))
+                .map(RunningGateway::offered_endpoints)
                 .unwrap_or_default(),
             tailscale: CompanionTailscaleStatus {
                 detected_hostname: self.tailscale_detection.hostname().map(str::to_string),
@@ -229,22 +148,11 @@ struct CompanionGatewayDomainSources {
 }
 
 #[derive(Clone)]
-struct CompanionGatewayRouteSources {
-    pairing: Arc<PairingCoordinator>,
-    attention: Arc<dyn CompanionAttentionSource>,
-    task_detail: Arc<dyn CompanionTaskDetailSource>,
-    pty_manager: crate::pty_manager::PtyManager,
-    events: AppEventBus,
-    stream_access: Arc<dyn CompanionStreamAccess>,
-}
-
-#[derive(Clone)]
 pub(crate) struct CompanionGatewayManager {
     runtime: Arc<tokio::sync::Mutex<GatewayRuntime>>,
     operation_lock: Arc<tokio::sync::Mutex<()>>,
-    startup_cancellation: crate::secure_store::SecretStoreCancellation,
+    identity_lifecycle: CompanionIdentityLifecycle,
     tailscale_detection_notify: Arc<tokio::sync::Notify>,
-    identity_store: Arc<dyn CompanionIdentityStore>,
     endpoint_provider: Arc<dyn CompanionEndpointProvider>,
     tailscale_hostname_provider: Arc<dyn TailscaleHostnameProvider>,
     advertiser: Arc<dyn CompanionAdvertiser>,
@@ -376,9 +284,8 @@ impl CompanionGatewayManager {
         Self {
             runtime: Arc::new(tokio::sync::Mutex::new(runtime)),
             operation_lock: Arc::new(tokio::sync::Mutex::new(())),
-            startup_cancellation: crate::secure_store::SecretStoreCancellation::default(),
+            identity_lifecycle: CompanionIdentityLifecycle::new(identity_store),
             tailscale_detection_notify: Arc::new(tokio::sync::Notify::new()),
-            identity_store,
             endpoint_provider,
             tailscale_hostname_provider,
             advertiser,
@@ -473,7 +380,7 @@ impl CompanionGatewayManager {
     }
 
     async fn enable_locked(&self) -> Result<CompanionGatewayStatus, String> {
-        if self.startup_cancellation.is_cancelled() {
+        if self.identity_lifecycle.is_cancelled() {
             return Err("Companion Gateway is shutting down".to_string());
         }
         {
@@ -499,20 +406,19 @@ impl CompanionGatewayManager {
         }
         self.pairing.mark_gateway_not_accepting_streams();
 
-        let identity_store = Arc::clone(&self.identity_store);
-        let endpoint_provider = Arc::clone(&self.endpoint_provider);
-        let startup_cancellation = self.startup_cancellation.clone();
-        let startup_material = tokio::task::spawn_blocking(move || {
-            let identity =
-                load_or_create_host_identity(identity_store.as_ref(), &startup_cancellation)?;
-            let bind_endpoints = endpoint_provider.bind_endpoints()?;
+        let startup_material = async {
+            let identity = self.identity_lifecycle.load_or_create().await?;
+            let endpoint_provider = Arc::clone(&self.endpoint_provider);
+            let bind_endpoints =
+                tokio::task::spawn_blocking(move || endpoint_provider.bind_endpoints())
+                    .await
+                    .map_err(|error| format!("Companion Gateway startup task failed: {error}"))??;
             Ok::<_, String>((identity, bind_endpoints))
-        })
-        .await
-        .map_err(|error| format!("Companion Gateway startup task failed: {error}"));
+        }
+        .await;
         let (identity, bind_endpoints) = match startup_material {
-            Ok(Ok(material)) => material,
-            Ok(Err(error)) | Err(error) => {
+            Ok(material) => material,
+            Err(error) => {
                 let mut runtime = self.runtime.lock().await;
                 runtime.phase = GatewayPhase::Error;
                 runtime.error = Some(error.clone());
@@ -550,20 +456,18 @@ impl CompanionGatewayManager {
             }
         };
         if let Some(hostname) = tailscale_hostname {
-            apply_tailscale_hostname(&mut running, Some(&hostname));
+            running.apply_tailscale_hostname(Some(&hostname));
         }
         let advertisement = CompanionAdvertisement {
             host_id: identity.host_id.clone(),
             protocol_version: contract::PROTOCOL_VERSION,
             addresses: running
-                .addresses
+                .addresses()
                 .iter()
                 .map(|address| address.ip())
                 .collect(),
             port: running
-                .addresses
-                .first()
-                .map(SocketAddr::port)
+                .advertised_port()
                 .ok_or_else(|| "Companion Gateway has no LAN endpoints to advertise".to_string())?,
         };
         let advertiser = Arc::clone(&self.advertiser);
@@ -580,7 +484,7 @@ impl CompanionGatewayManager {
                 return Err(error);
             }
         };
-        running.advertisement = Some(advertisement_handle);
+        running.attach_advertisement(advertisement_handle);
         runtime.running = Some(running);
         runtime.phase = GatewayPhase::Running;
         self.pairing.notify_gateway_running();
@@ -633,7 +537,7 @@ impl CompanionGatewayManager {
     pub(crate) async fn shutdown(&self) {
         // Wake a blocked macOS Keychain authorization read before waiting for the
         // serialized gateway operation. Status remains available through `runtime`.
-        self.startup_cancellation.cancel();
+        self.identity_lifecycle.cancel_pending_operations();
         let _operation = self.operation_lock.lock().await;
         let mut runtime = self.runtime.lock().await;
         runtime.phase = GatewayPhase::Stopped;
@@ -664,7 +568,8 @@ impl CompanionGatewayManager {
             .running
             .as_ref()
             .map(|running| {
-                unique_offered_endpoints(&running.endpoints)
+                running
+                    .offered_endpoints()
                     .into_iter()
                     .map(|endpoint| endpoint.url)
                     .collect()
@@ -690,7 +595,7 @@ impl CompanionGatewayManager {
             .clone()
             .or_else(|| runtime.tailscale_detection.hostname().map(str::to_string));
         if let Some(running) = runtime.running.as_mut() {
-            apply_tailscale_hostname(running, effective_hostname.as_deref());
+            running.apply_tailscale_hostname(effective_hostname.as_deref());
         }
         let _ = self.pairing.clear();
         runtime.status()
@@ -742,41 +647,16 @@ impl CompanionGatewayManager {
     async fn reset_host_identity_owned(&self) -> Result<CompanionGatewayStatus, String> {
         let _operation = self.operation_lock.lock().await;
         let was_enabled = self.runtime.lock().await.enabled;
-        let identity = tokio::task::spawn_blocking(generate_host_identity)
-            .await
-            .map_err(|error| format!("Companion identity generation task failed: {error}"))??;
-        let revoked_devices = self.pairing.revoke_all()?;
-
-        let identity_store = Arc::clone(&self.identity_store);
-        let identity_to_save = identity.clone();
-        let save_cancellation = self.startup_cancellation.clone();
-        let save_result = match tokio::task::spawn_blocking(move || {
-            identity_store.save_with_cancellation(&identity_to_save, &save_cancellation)
-        })
-        .await
-        {
-            Ok(result) => result,
-            Err(error) => Err(crate::secure_store::SecretStoreWriteError::CommitUnknown(
-                format!("Companion identity persistence task failed: {error}"),
-            )),
+        let reset = match self.identity_lifecycle.reset(&self.pairing).await {
+            Ok(reset) => reset,
+            Err(IdentityResetError::Recoverable(message)) => return Err(message),
+            Err(IdentityResetError::RequiresGatewayStop(message)) => {
+                self.disable_locked().await;
+                return Err(message);
+            }
         };
-        if let Err(save_error) = save_result {
-            if save_error.commit_unknown() {
-                self.pairing.notify_all_devices_revoked();
-                self.disable_locked().await;
-                return Err(format!(
-                    "{save_error}; paired-device trust remains revoked because identity persistence may have committed"
-                ));
-            }
-            if let Err(rollback_error) = self.pairing.rollback_revoke_all(&revoked_devices) {
-                self.disable_locked().await;
-                return Err(format!(
-                    "{save_error}; failed to restore paired-device trust: {rollback_error}"
-                ));
-            }
-            return Err(save_error.to_string());
-        }
-        self.pairing.notify_all_devices_revoked();
+        let identity = reset.identity;
+        let revoked_device_count = reset.revoked_device_count;
         self.disable_locked().await;
         {
             let mut runtime = self.runtime.lock().await;
@@ -785,7 +665,7 @@ impl CompanionGatewayManager {
         log::info!(
             "[companion_gateway] host identity reset host_id={} revoked_devices={}",
             identity.host_id,
-            revoked_devices.len()
+            revoked_device_count
         );
 
         if was_enabled {
@@ -797,17 +677,6 @@ impl CompanionGatewayManager {
         }
         Ok(self.status().await)
     }
-}
-
-pub(super) fn unique_offered_endpoints(
-    endpoints: &[CompanionGatewayEndpoint],
-) -> Vec<CompanionGatewayEndpoint> {
-    let mut seen_urls = HashSet::new();
-    endpoints
-        .iter()
-        .filter(|endpoint| seen_urls.insert(endpoint.url.clone()))
-        .cloned()
-        .collect()
 }
 
 fn confirmed_tailscale_hostname(
@@ -823,127 +692,4 @@ fn confirmed_tailscale_hostname(
             })
         })
         .map(|detected| detected.hostname)
-}
-
-fn apply_tailscale_hostname(running: &mut RunningGateway, hostname: Option<&str>) {
-    for (endpoint, address) in running.endpoints.iter_mut().zip(&running.addresses) {
-        if endpoint.kind == CompanionEndpointKind::Tailscale {
-            endpoint.url = hostname.map_or_else(
-                || endpoint_url(*address),
-                |hostname| format!("https://{hostname}:{}", address.port()),
-            );
-        }
-    }
-}
-
-fn endpoint_url(address: SocketAddr) -> String {
-    match address {
-        SocketAddr::V4(_) => format!("https://{}:{}", address.ip(), address.port()),
-        SocketAddr::V6(_) => format!("https://[{}]:{}", address.ip(), address.port()),
-    }
-}
-
-async fn start_tls_listeners(
-    identity: &CompanionHostIdentity,
-    bind_endpoints: Vec<(CompanionEndpointKind, std::net::IpAddr)>,
-    port: u16,
-    sources: CompanionGatewayRouteSources,
-) -> Result<RunningGateway, String> {
-    let tls_config = RustlsConfig::from_pem(
-        identity.certificate_pem.clone().into_bytes(),
-        identity.private_key_pem.clone().into_bytes(),
-    )
-    .await
-    .map_err(|error| format!("failed to configure Companion TLS: {error}"))?;
-    let CompanionGatewayRouteSources {
-        pairing,
-        attention,
-        task_detail,
-        pty_manager,
-        events,
-        stream_access,
-    } = sources;
-    let router = contract::create_router_with_sources_event_access_and_pty(
-        CompanionHostStatus::new(identity.host_id.clone()),
-        pairing.clone(),
-        pairing,
-        CompanionRouterSources {
-            attention,
-            task_detail,
-            events,
-            stream_access,
-            pty_manager,
-        },
-    );
-    let mut bound_listeners = Vec::with_capacity(bind_endpoints.len());
-    for (kind, address) in bind_endpoints {
-        let requested_address = SocketAddr::new(address, port);
-        let listener = std::net::TcpListener::bind(requested_address).map_err(|error| {
-            format!("failed to bind Companion TLS listener on {requested_address}: {error}")
-        })?;
-        let local_address = listener.local_addr().map_err(|error| {
-            format!("failed to inspect Companion TLS listener on {requested_address}: {error}")
-        })?;
-        bound_listeners.push((kind, listener, local_address));
-    }
-
-    let mut running = RunningGateway {
-        listeners: Vec::with_capacity(bound_listeners.len()),
-        endpoints: Vec::with_capacity(bound_listeners.len()),
-        addresses: Vec::with_capacity(bound_listeners.len()),
-        advertisement: None,
-    };
-    for (kind, listener, local_address) in bound_listeners {
-        let handle = Handle::new();
-        let server_handle = handle.clone();
-        let server_router = router.clone();
-        let server_tls_config = tls_config.clone();
-        let task = tokio::spawn(async move {
-            axum_server::from_tcp_rustls(listener, server_tls_config)
-                .handle(server_handle)
-                .serve(server_router.into_make_service_with_connect_info::<std::net::SocketAddr>())
-                .await
-        });
-        running.listeners.push(GatewayListener {
-            handle,
-            task: Some(task),
-        });
-        running.endpoints.push(CompanionGatewayEndpoint {
-            kind,
-            url: endpoint_url(local_address),
-        });
-        running.addresses.push(local_address);
-    }
-
-    for index in 0..running.listeners.len() {
-        let listening = tokio::time::timeout(
-            LISTENER_START_TIMEOUT,
-            running.listeners[index].handle.listening(),
-        )
-        .await
-        .map_err(|_| {
-            format!(
-                "timed out starting Companion TLS listener at {}",
-                running.endpoints[index].url
-            )
-        })?
-        .ok_or_else(|| {
-            format!(
-                "Companion TLS listener failed to start at {}",
-                running.endpoints[index].url
-            )
-        });
-        match listening {
-            Ok(address) => {
-                running.endpoints[index].url = endpoint_url(address);
-                running.addresses[index] = address;
-            }
-            Err(error) => {
-                running.stop().await;
-                return Err(error);
-            }
-        }
-    }
-
-    Ok(running)
 }
