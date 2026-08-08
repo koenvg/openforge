@@ -73,6 +73,20 @@ pub(crate) fn delayed_test_manager(delay: std::time::Duration) -> CompanionGatew
 }
 
 #[cfg(test)]
+pub(crate) fn non_cancelling_test_manager() -> (
+    CompanionGatewayManager,
+    tokio::sync::oneshot::Receiver<()>,
+    std::sync::mpsc::Sender<()>,
+) {
+    let (store, entered, release) = identity::NonCancellingBlockingIdentityStore::new();
+    (
+        test_manager_with_store(std::sync::Arc::new(store)),
+        entered,
+        release,
+    )
+}
+
+#[cfg(test)]
 mod attention_tests;
 #[cfg(test)]
 mod live_events_tests;

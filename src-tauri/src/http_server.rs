@@ -67,7 +67,8 @@ use legacy_transport::{
 };
 #[cfg(test)]
 use server_lifecycle::{
-    resolve_http_server_port, shutdown_sidecar_runtime, SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+    resolve_http_server_port, restore_companion_gateway_in_background, shutdown_sidecar_runtime,
+    SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
 };
 
 #[derive(Clone)]

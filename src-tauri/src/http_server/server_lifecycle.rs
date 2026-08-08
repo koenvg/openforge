@@ -88,9 +88,15 @@ async fn sidecar_shutdown_signal() {
     ctrl_c.await;
 }
 
-pub(super) async fn shutdown_sidecar_runtime(state: &AppState) {
+pub(super) async fn shutdown_sidecar_runtime(
+    state: &AppState,
+    companion_restore: Option<CompanionGatewayRestoreTask>,
+) {
     info!("[http_server] Rust sidecar shutdown cleanup started");
 
+    if let Some(companion_restore) = companion_restore {
+        companion_restore.abort().await;
+    }
     if let Some(companion_gateway) = &state.companion_gateway {
         companion_gateway.shutdown().await;
     }
@@ -110,19 +116,46 @@ pub(super) async fn shutdown_sidecar_runtime(state: &AppState) {
     info!("[http_server] Rust sidecar shutdown cleanup completed");
 }
 
-fn restore_companion_gateway_in_background(
+pub(super) struct CompanionGatewayRestoreTask {
+    task: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl CompanionGatewayRestoreTask {
+    async fn abort(mut self) {
+        let Some(task) = self.task.take() else {
+            return;
+        };
+        task.abort();
+        if let Err(error) = task.await {
+            if !error.is_cancelled() {
+                warn!("[companion_gateway] Persisted restore task failed during shutdown: {error}");
+            }
+        }
+    }
+}
+
+impl Drop for CompanionGatewayRestoreTask {
+    fn drop(&mut self) {
+        if let Some(task) = self.task.take() {
+            task.abort();
+        }
+    }
+}
+
+pub(super) fn restore_companion_gateway_in_background(
     manager: crate::companion_gateway::CompanionGatewayManager,
     enabled: bool,
-) {
+) -> Option<CompanionGatewayRestoreTask> {
     if !enabled {
-        return;
+        return None;
     }
-    tokio::spawn(async move {
+    let task = tokio::spawn(async move {
         let status = manager.restore().await;
         if let Some(error) = status.error {
             warn!("[companion_gateway] Failed to restore enabled gateway: {error}");
         }
     });
+    Some(CompanionGatewayRestoreTask { task: Some(task) })
 }
 
 pub async fn start_http_sidecar_server(
@@ -228,7 +261,7 @@ async fn start_http_server_with_app_state(
     // Signal that the core loopback bridge is listening before independently
     // restoring the optional Companion Gateway.
     let _ = ready_tx.send(());
-    restore_companion_gateway_in_background(
+    let companion_restore = restore_companion_gateway_in_background(
         companion_gateway,
         companion_enabled && is_electron_sidecar,
     );
@@ -239,7 +272,7 @@ async fn start_http_server_with_app_state(
 
         if tokio::time::timeout(
             SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
-            shutdown_sidecar_runtime(&shutdown_state),
+            shutdown_sidecar_runtime(&shutdown_state, companion_restore),
         )
         .await
         .is_err()
@@ -265,13 +298,23 @@ mod companion_restore_tests {
         let manager = crate::companion_gateway::delayed_test_manager(Duration::from_millis(250));
         let started_at = std::time::Instant::now();
 
-        restore_companion_gateway_in_background(manager.clone(), true);
+        let restore_task = restore_companion_gateway_in_background(manager.clone(), true)
+            .expect("enabled persisted gateway should own its background restore");
 
         assert!(
             started_at.elapsed() < Duration::from_millis(50),
             "optional gateway restoration must return control immediately"
         );
-        tokio::time::sleep(Duration::from_millis(350)).await;
+        restore_task.abort().await;
         manager.shutdown().await;
+    }
+
+    #[test]
+    fn disabled_companion_restore_does_not_spawn_a_task() {
+        assert!(restore_companion_gateway_in_background(
+            crate::companion_gateway::test_manager(),
+            false,
+        )
+        .is_none());
     }
 }
