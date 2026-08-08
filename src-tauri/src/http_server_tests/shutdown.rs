@@ -19,8 +19,8 @@ fn sidecar_runtime_shutdown_budget_stays_inside_electron_sigterm_grace() {
 async fn sidecar_runtime_shutdown_cleanup_is_safe_and_idempotent_without_live_children() {
     let (state, _path) = test_state("sidecar_runtime_shutdown_cleanup_empty");
 
-    shutdown_sidecar_runtime(&state).await;
-    shutdown_sidecar_runtime(&state).await;
+    shutdown_sidecar_runtime(&state, None).await;
+    shutdown_sidecar_runtime(&state, None).await;
 }
 
 #[tokio::test]
@@ -32,7 +32,7 @@ async fn coordinated_sidecar_shutdown_closes_the_companion_gateway_within_budget
 
     tokio::time::timeout(
         SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
-        shutdown_sidecar_runtime(&state),
+        shutdown_sidecar_runtime(&state, None),
     )
     .await
     .expect("coordinated shutdown should remain within its budget");
@@ -67,8 +67,56 @@ async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
         vec!["T-shutdown-shell-1".to_string()]
     );
 
-    shutdown_sidecar_runtime(&state).await;
+    shutdown_sidecar_runtime(&state, None).await;
 
     assert!(pty_manager.get_session_keys().await.is_empty());
     assert!(pty_manager.process_diagnostic_sessions().await.is_empty());
+}
+
+#[tokio::test]
+async fn hung_companion_restore_cannot_consume_pty_shutdown_budget() {
+    let (mut state, _path) = test_state("sidecar_runtime_shutdown_hung_companion_restore");
+    let (manager, restore_entered, release_restore) =
+        crate::companion_gateway::non_cancelling_test_manager();
+    state.companion_gateway = Some(manager.clone());
+    let restore_task = restore_companion_gateway_in_background(manager.clone(), true)
+        .expect("enabled persisted gateway should own a restore task");
+    tokio::time::timeout(Duration::from_secs(1), restore_entered)
+        .await
+        .expect("platform trust initialization should start")
+        .expect("platform trust entry signal");
+
+    let workspace = tempfile::tempdir().expect("workspace temp dir");
+    let task_id = format!("T-hung-restore-shutdown-{}", uuid::Uuid::new_v4());
+    let pty_manager = state.pty_manager.as_ref().expect("PTY manager");
+    pty_manager
+        .spawn_shell_pty(
+            crate::pty_manager::PtySpawnContext {
+                task_id: &task_id,
+                cwd: workspace.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            Some(0),
+            None,
+        )
+        .await
+        .expect("shutdown test shell should spawn");
+
+    tokio::time::timeout(
+        SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+        shutdown_sidecar_runtime(&state, Some(restore_task)),
+    )
+    .await
+    .expect("hung persisted restore must not consume the core cleanup budget");
+
+    assert!(pty_manager.get_session_keys().await.is_empty());
+    assert!(pty_manager.process_diagnostic_sessions().await.is_empty());
+    assert_eq!(
+        serde_json::to_value(manager.status().await).expect("serialize status")["phase"],
+        "stopped"
+    );
+    drop(release_restore);
 }

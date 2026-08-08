@@ -218,3 +218,59 @@ impl CompanionIdentityStore for DelayedIdentityStore {
         self.inner.save(identity)
     }
 }
+
+#[cfg(test)]
+pub(crate) struct NonCancellingBlockingIdentityStore {
+    inner: InMemoryIdentityStore,
+    entered: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+#[cfg(test)]
+impl NonCancellingBlockingIdentityStore {
+    pub(crate) fn new() -> (
+        Self,
+        tokio::sync::oneshot::Receiver<()>,
+        std::sync::mpsc::Sender<()>,
+    ) {
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        (
+            Self {
+                inner: InMemoryIdentityStore::default(),
+                entered: std::sync::Mutex::new(Some(entered_tx)),
+                release: std::sync::Mutex::new(release_rx),
+            },
+            entered_rx,
+            release_tx,
+        )
+    }
+}
+
+#[cfg(test)]
+impl CompanionIdentityStore for NonCancellingBlockingIdentityStore {
+    fn load(
+        &self,
+        _cancellation: &crate::secure_store::SecretStoreCancellation,
+    ) -> Result<Option<CompanionHostIdentity>, String> {
+        if let Some(entered) = self
+            .entered
+            .lock()
+            .map_err(|_| "non-cancelling identity entry lock was poisoned".to_string())?
+            .take()
+        {
+            let _ = entered.send(());
+        }
+        self.release
+            .lock()
+            .map_err(|_| "non-cancelling identity release lock was poisoned".to_string())?
+            .recv()
+            .map_err(|_| "non-cancelling identity release signal was dropped".to_string())?;
+        self.inner
+            .load(&crate::secure_store::SecretStoreCancellation::default())
+    }
+
+    fn save(&self, identity: &CompanionHostIdentity) -> Result<(), String> {
+        self.inner.save(identity)
+    }
+}
