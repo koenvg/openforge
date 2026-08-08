@@ -13,6 +13,8 @@ import 'package:openforge_companion/src/pairing/companion_pairing_controller.dar
 import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 
+import 'support/widget_test_fakes.dart' show installScannerPlatform;
+
 const _hostId = '65d91f21-6732-45a6-9418-3dfaf4c93f52';
 const _fingerprint =
     '9F:64:A7:47:E1:B9:7F:13:1F:AB:B6:B4:47:29:6C:9B:6F:02:01:E7:9F:B3:C5:35:6E:6C:77:E8:9B:6A:80:6A';
@@ -29,7 +31,7 @@ void main() {
     'QR pairing waits for scanner and name routes to dispose before controller pairing starts',
     (tester) async {
       final scanner = _FakeMobileScannerPlatform(blockDispose: true);
-      _installScannerPlatform(scanner);
+      installScannerPlatform(scanner);
       addTearDown(scanner.completeDispose);
       final client = _SuccessfulPairingClient(waitForApproval: true);
       final storage = _MemorySecureStorage();
@@ -292,16 +294,6 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
     isTrue,
     reason: 'Expected lifecycle event did not occur.',
   );
-}
-
-void _installScannerPlatform(MobileScannerPlatform platform) {
-  final previousPlatform = MobileScannerPlatform.instance;
-  MobileScannerPlatform.instance = platform;
-  MobileScannerController.resetPlatformSessionOwner();
-  addTearDown(() {
-    MobileScannerPlatform.instance = previousPlatform;
-    MobileScannerController.resetPlatformSessionOwner();
-  });
 }
 
 final class _FakeMobileScannerPlatform extends MobileScannerPlatform {
