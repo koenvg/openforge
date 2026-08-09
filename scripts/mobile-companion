@@ -19,15 +19,20 @@ fi
 
 cd "$app_dir"
 
+dart_sources=()
+while IFS= read -r source; do
+  dart_sources+=("$source")
+done < <(find lib test -type f -name '*.dart' ! -path 'lib/src/generated/*' -print)
+
 case "${1:-}" in
   pub-get)
     "$flutter_path" pub get
     ;;
   format)
-    "$dart_bin" format lib test
+    "$dart_bin" format "${dart_sources[@]}"
     ;;
   format-check)
-    "$dart_bin" format --output=none --set-exit-if-changed lib test
+    "$dart_bin" format --output=none --set-exit-if-changed "${dart_sources[@]}"
     ;;
   analyze)
     "$flutter_path" analyze
@@ -36,8 +41,9 @@ case "${1:-}" in
     "$flutter_path" test
     ;;
   check)
+    node "$repo_root/scripts/check-companion-dart-contract.mjs"
     "$flutter_path" pub get
-    "$dart_bin" format --output=none --set-exit-if-changed lib test
+    "$dart_bin" format --output=none --set-exit-if-changed "${dart_sources[@]}"
     "$flutter_path" analyze
     "$flutter_path" test
     ;;
