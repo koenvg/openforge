@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'src/app.dart';
-import 'src/attention/attention_controller.dart';
+import 'src/project_board/project_board_controller.dart';
 import 'src/client/companion_client.dart';
 import 'src/discovery/bonjour_discovery_browser.dart';
 import 'src/discovery/companion_discovery.dart';
@@ -24,7 +24,7 @@ void main() {
       browser: BonjourCompanionDiscoveryBrowser(),
     ),
   );
-  final attentionController = AttentionController(
+  final projectBoardController = ProjectBoardController(
     client: client,
     storage: storage,
     onAuthorizationLost: pairingController.authorizationLost,
@@ -32,7 +32,7 @@ void main() {
   final liveUpdatesController = LiveUpdatesController(
     client: client,
     storage: storage,
-    attention: attentionController,
+    projectBoard: projectBoardController,
     onReconnecting: pairingController.liveReconnecting,
     onConnected: pairingController.liveConnected,
     onUnavailable: pairingController.liveUnavailable,
@@ -43,7 +43,7 @@ void main() {
   runApp(
     CompanionApp(
       controller: pairingController,
-      attentionController: attentionController,
+      projectBoardController: projectBoardController,
       liveUpdatesController: liveUpdatesController,
       taskDetailControllerFactory: (taskId) => TaskDetailController(
         taskId: taskId,

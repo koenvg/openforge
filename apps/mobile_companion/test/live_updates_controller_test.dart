@@ -7,6 +7,7 @@ import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/client/pinned_companion_transport.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/live/live_updates_controller.dart';
+import 'package:openforge_companion/src/project_board/project_board_controller.dart';
 import 'package:openforge_companion/src/pairing/pairing_bootstrap.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
@@ -59,6 +60,8 @@ final class _FakeClient implements CompanionClient {
   final cursors = <String?>[];
   var attentionCalls = 0;
   var taskDetailCalls = 0;
+  var projectCatalogCalls = 0;
+  final List<String> projectBoardRequests = <String>[];
   Object? attentionError;
   Object? taskDetailError;
   AttentionSnapshot attentionSnapshot = _snapshot;
@@ -88,13 +91,26 @@ final class _FakeClient implements CompanionClient {
   @override
   Future<ProjectCatalog> fetchProjectCatalog(
     CompanionTrustRecord trustRecord,
-  ) => throw UnsupportedError('not used');
+  ) async {
+    projectCatalogCalls += 1;
+    return ProjectCatalog(
+      snapshotAt: DateTime.utc(2026, 8, 1),
+      projects: const <ProjectCatalogItem>[
+        ProjectCatalogItem(projectId: 'P-1', name: 'OpenForge'),
+        ProjectCatalogItem(projectId: 'P-2', name: 'Other'),
+      ],
+    );
+  }
 
   @override
   Future<ProjectBoard> fetchProjectBoard(
     CompanionTrustRecord trustRecord,
     String projectId,
-  ) => throw UnsupportedError('not used');
+  ) async {
+    projectBoardRequests.add(projectId);
+    return _emptyBoard(projectId, projectId == 'P-1' ? 'OpenForge' : 'Other');
+  }
+
   @override
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,
@@ -127,7 +143,7 @@ final class _FakeClient implements CompanionClient {
   }) => throw UnsupportedError('not used');
 }
 
-final class _FakeStorage implements CompanionSecureStorage {
+final class _FakeStorage implements CompanionProjectStorage {
   CompanionTrustRecord? record = _trustRecord;
 
   @override
@@ -138,6 +154,15 @@ final class _FakeStorage implements CompanionSecureStorage {
 
   @override
   Future<void> save(CompanionTrustRecord value) async {}
+
+  @override
+  Future<String?> loadSelectedProject(String hostId) async => 'P-1';
+
+  @override
+  Future<void> saveSelectedProject(String hostId, String projectId) async {}
+
+  @override
+  Future<void> clearSelectedProject(String hostId) async {}
 }
 
 Future<void> _until(bool Function() predicate) async {
@@ -147,7 +172,94 @@ Future<void> _until(bool Function() predicate) async {
   expect(predicate(), isTrue, reason: 'condition did not become true');
 }
 
+ProjectBoard _emptyBoard(String projectId, String projectName) => ProjectBoard(
+  snapshotAt: DateTime.utc(2026, 8, 1),
+  projectId: projectId,
+  projectName: projectName,
+  counts: const ProjectBoardCounts(
+    focus: 0,
+    inFlight: 0,
+    outOfFocus: 0,
+    backlog: 0,
+  ),
+  lanes: ProjectBoardLanes(
+    focus: const <ProjectBoardTask>[],
+    inFlight: const <ProjectBoardTask>[],
+    outOfFocus: const <ProjectBoardTask>[],
+    backlog: const <ProjectBoardTask>[],
+  ),
+);
 void main() {
+  test(
+    'Project Board live updates ignore unrelated Projects and recover from gaps',
+    () async {
+      final connection = _FakeConnection();
+      final client = _FakeClient()..connections.add(connection);
+      final storage = _FakeStorage();
+      final board = ProjectBoardController(client: client, storage: storage);
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        projectBoard: board,
+      );
+
+      live.start();
+      await _until(
+        () =>
+            client.projectCatalogCalls == 1 &&
+            client.projectBoardRequests.length == 1,
+      );
+      expect(board.selectedProjectId, 'P-1');
+
+      connection.controller.add(
+        const CompanionResourcesInvalidated(
+          eventId: 'epoch:1',
+          resources: <CompanionResourceInvalidation>[
+            CompanionResourceInvalidation.projectBoard('P-2'),
+          ],
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(client.projectBoardRequests, <String>['P-1']);
+
+      connection.controller.add(
+        const CompanionResourcesInvalidated(
+          eventId: 'epoch:2',
+          resources: <CompanionResourceInvalidation>[
+            CompanionResourceInvalidation.projectBoard('P-1'),
+          ],
+        ),
+      );
+      await _until(() => client.projectBoardRequests.length == 2);
+      expect(client.projectCatalogCalls, 1);
+
+      connection.controller.add(
+        const CompanionResourcesInvalidated(
+          eventId: 'epoch:3',
+          resources: <CompanionResourceInvalidation>[
+            CompanionResourceInvalidation.projectCatalog(),
+          ],
+        ),
+      );
+      await _until(
+        () =>
+            client.projectCatalogCalls == 2 &&
+            client.projectBoardRequests.length == 3,
+      );
+
+      connection.controller.add(const CompanionStreamGap(eventId: 'epoch:4'));
+      await _until(
+        () =>
+            client.projectCatalogCalls == 3 &&
+            client.projectBoardRequests.length == 4,
+      );
+      expect(board.state, isA<ProjectBoardLoaded>());
+
+      await live.suspend();
+      expect(board.state, isA<ProjectBoardLoading>());
+    },
+  );
   test(
     'resource invalidations refetch attention and only the open Task',
     () async {

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'attention/attention_controller.dart';
 import 'attention/attention_home.dart';
+import 'project_board/project_board_controller.dart';
+import 'project_board/project_board_home.dart';
 import 'connection/companion_connection_state.dart';
 import 'live/live_updates_controller.dart';
 import 'pairing/companion_pairing_controller.dart';
@@ -26,6 +28,7 @@ typedef AgentTerminalSurfaceFactory =
 class CompanionApp extends StatefulWidget {
   const CompanionApp({
     this.controller,
+    this.projectBoardController,
     this.attentionController,
     this.taskDetailControllerFactory,
     this.agentTerminalSurfaceFactory,
@@ -35,6 +38,7 @@ class CompanionApp extends StatefulWidget {
   });
 
   final CompanionPairingController? controller;
+  final ProjectBoardController? projectBoardController;
   final AttentionController? attentionController;
   final TaskDetailControllerFactory? taskDetailControllerFactory;
   final AgentTerminalSurfaceFactory? agentTerminalSurfaceFactory;
@@ -84,6 +88,8 @@ class _CompanionAppState extends State<CompanionApp>
     super.didUpdateWidget(oldWidget);
     final previousState = _state;
     final controllerChanged = oldWidget.controller != widget.controller;
+    final boardChanged =
+        oldWidget.projectBoardController != widget.projectBoardController;
     final attentionChanged =
         oldWidget.attentionController != widget.attentionController;
     final liveChanged =
@@ -104,6 +110,11 @@ class _CompanionAppState extends State<CompanionApp>
       _attentionState =
           widget.attentionController?.state ?? const AttentionLoading();
     }
+    if (boardChanged && !liveChanged) {
+      widget.liveUpdatesController?.setProjectBoardController(
+        widget.projectBoardController,
+      );
+    }
     if (attentionChanged && !liveChanged) {
       widget.liveUpdatesController?.setAttentionController(
         widget.attentionController,
@@ -115,16 +126,20 @@ class _CompanionAppState extends State<CompanionApp>
     } else if (controllerChanged) {
       _clearLiveCallbacks(widget.liveUpdatesController);
       unawaited(widget.liveUpdatesController?.stop());
-    } else if (attentionChanged) {
+    } else if (boardChanged || attentionChanged) {
       unawaited(widget.liveUpdatesController?.suspend());
     }
 
     _configureLiveController(widget.liveUpdatesController);
 
-    if (controllerChanged || attentionChanged || liveChanged) {
+    if (controllerChanged || boardChanged || attentionChanged || liveChanged) {
       _reconcileConnectionState(
         previousState,
-        ownershipChanged: controllerChanged || attentionChanged || liveChanged,
+        ownershipChanged:
+            controllerChanged ||
+            boardChanged ||
+            attentionChanged ||
+            liveChanged,
       );
     }
   }
@@ -156,6 +171,7 @@ class _CompanionAppState extends State<CompanionApp>
 
     if (_state is! Connected && previous is Connected) {
       _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      widget.projectBoardController?.clear();
       widget.attentionController?.clear();
     }
     if (wasActive && !isActive) {
@@ -168,15 +184,20 @@ class _CompanionAppState extends State<CompanionApp>
 
   void _resumeUpdatesForCurrentState() {
     if (!_isForeground) return;
+    final projectBoardController = widget.projectBoardController;
     final attentionController = widget.attentionController;
-    if (attentionController == null) return;
+    if (projectBoardController == null && attentionController == null) return;
 
     final live = widget.liveUpdatesController;
     if (live != null) {
       _configureLiveController(live);
       if (_state is Connected || _state is Reconnecting) live.resume();
     } else if (_state is Connected) {
-      unawaited(attentionController.refresh());
+      if (projectBoardController != null) {
+        unawaited(projectBoardController.refresh());
+      } else {
+        unawaited(attentionController!.refresh());
+      }
     }
   }
 
@@ -190,6 +211,7 @@ class _CompanionAppState extends State<CompanionApp>
       onCertificateMismatch: widget.controller?.liveCertificateMismatch,
       onIncompatible: widget.controller?.liveIncompatible,
     );
+    live.setProjectBoardController(widget.projectBoardController);
     live.setAttentionController(widget.attentionController);
     live.setOpenTask(_openTaskController);
   }
@@ -207,6 +229,7 @@ class _CompanionAppState extends State<CompanionApp>
 
   void _releaseLiveController(LiveUpdatesController? live) {
     live?.setOpenTask(null);
+    live?.setProjectBoardController(null);
     live?.setAttentionController(null);
     _clearLiveCallbacks(live);
     unawaited(live?.suspend());
@@ -273,6 +296,7 @@ class _CompanionAppState extends State<CompanionApp>
           builder: (_) => TaskDetailScreen(
             controller: controller,
             terminalSurface: terminalSurface,
+            onRefresh: () => _refreshTaskDetailAndBoard(controller),
           ),
         ),
       );
@@ -282,6 +306,20 @@ class _CompanionAppState extends State<CompanionApp>
         _openTaskController = null;
       }
     }
+  }
+
+  Future<void> _refreshTaskDetailAndBoard(
+    TaskDetailController taskDetail,
+  ) async {
+    final projectBoard = widget.projectBoardController;
+    if (projectBoard == null) {
+      await taskDetail.refresh();
+      return;
+    }
+    await Future.wait(<Future<void>>[
+      projectBoard.refresh(),
+      taskDetail.refresh(),
+    ]);
   }
 
   @override
@@ -299,7 +337,16 @@ class _CompanionAppState extends State<CompanionApp>
     navigatorKey: _navigatorKey,
     home: CompanionConnectionView(
       state: _state,
-      connectedView: _state is Connected && widget.attentionController != null
+      connectedView: _state is! Connected
+          ? null
+          : widget.projectBoardController != null
+          ? ProjectBoardHome(
+              controller: widget.projectBoardController!,
+              onTaskSelected: widget.taskDetailControllerFactory == null
+                  ? null
+                  : _openTaskDetail,
+            )
+          : widget.attentionController != null
           ? AttentionHome(
               state: _attentionState,
               onRefresh: widget.attentionController!.refresh,
