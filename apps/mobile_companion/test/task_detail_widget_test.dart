@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/attention/attention_controller.dart';
 import 'package:openforge_companion/src/attention/attention_home.dart';
@@ -28,6 +30,15 @@ TaskDetail _detail({
   updatedAt: DateTime.utc(2026, 7, 30, 11),
   agentUpdatedAt: DateTime.utc(2026, 7, 30, 12),
 );
+
+Offset _textOffsetToPosition(RenderParagraph paragraph, int offset) {
+  const caret = Rect.fromLTWH(0, 0, 2, 20);
+  final localOffset = paragraph.getOffsetForCaret(
+    TextPosition(offset: offset),
+    caret,
+  );
+  return paragraph.localToGlobal(localOffset);
+}
 
 void main() {
   testWidgets('Task detail shows the approved fields with accessible semantics', (
@@ -65,10 +76,105 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
+    expect(find.bySemanticsLabel('Ready for review.'), findsOneWidget);
+  });
+
+  testWidgets('Handoff Notes render with Markdown formatting', (tester) async {
+    const markdown = '''
+## Summary
+
+**Ready** for review.
+
+- Preserves lists
+- Supports `inline code`
+
+Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
+[![Linked diagram](https://tracker.example/linked.png)](https://docs.openforge.dev/diagram)
+![Remote diagram](https://tracker.example/pixel.png)
+![Local diagram](file:///tmp/private.png)
+![Embedded diagram](data:image/png;base64,aGVsbG8=)
+![Bundled diagram](resource:assets/private.png)
+''';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail(handoffNotes: markdown)),
+          onRefresh: () async {},
+        ),
+      ),
+    );
+
+    expect(find.text('Summary'), findsOneWidget);
+    expect(find.text('Ready for review.', findRichText: true), findsOneWidget);
+    expect(find.text('Preserves lists', findRichText: true), findsOneWidget);
     expect(
-      find.bySemanticsLabel('Handoff Notes. Ready for review.'),
+      find.text('Supports inline code', findRichText: true),
       findsOneWidget,
     );
+    final visibleLink = find.byWidgetPredicate((widget) {
+      if (widget is! Text) return false;
+      final plainText = widget.data ?? widget.textSpan?.toPlainText();
+      return plainText?.contains(
+            'important mobile guide (https://docs.openforge.dev/mobile)',
+          ) ??
+          false;
+    });
+    expect(visibleLink, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(visibleLink)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isFalse,
+    );
+    expect(find.text('[Image: Linked diagram]'), findsOneWidget);
+    expect(find.text('[Image: Remote diagram]'), findsOneWidget);
+    expect(find.text('[Image: Local diagram]'), findsOneWidget);
+    expect(find.text('[Image: Embedded diagram]'), findsOneWidget);
+    expect(find.text('[Image: Bundled diagram]'), findsOneWidget);
+    expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Summary\s+Ready for review\.')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(
+        RegExp(r'tracker\.example|file:///|data:image|resource:'),
+      ),
+      findsNothing,
+    );
+    final firstParagraph = tester.renderObject<RenderParagraph>(
+      find.text('Ready for review.', findRichText: true),
+    );
+    final lastParagraph = tester.renderObject<RenderParagraph>(
+      find.text('Supports inline code', findRichText: true),
+    );
+    final selectionGesture = await tester.startGesture(
+      _textOffsetToPosition(firstParagraph, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(selectionGesture.removePointer);
+    await tester.pump();
+    await selectionGesture.moveTo(
+      _textOffsetToPosition(lastParagraph, 'Supports inline code'.length),
+    );
+    await selectionGesture.up();
+    await tester.pump();
+
+    expect(
+      firstParagraph.selections.any((selection) => !selection.isCollapsed),
+      isTrue,
+    );
+    expect(
+      lastParagraph.selections.any((selection) => !selection.isCollapsed),
+      isTrue,
+    );
+    expect(find.byType(Image), findsNothing);
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(find.byType(SelectableText), findsNothing);
+    expect(find.text(markdown.trim()), findsNothing);
   });
 
   testWidgets(
@@ -92,10 +198,8 @@ void main() {
       expect(find.text('Prompt-derived fallback title'), findsOneWidget);
       expect(find.text('No Handoff Notes yet.'), findsOneWidget);
       expect(find.text('Needs input'), findsOneWidget);
-      expect(
-        find.bySemanticsLabel('Handoff Notes. No Handoff Notes yet.'),
-        findsOneWidget,
-      );
+      expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
+      expect(find.bySemanticsLabel('No Handoff Notes yet.'), findsOneWidget);
     },
   );
 
