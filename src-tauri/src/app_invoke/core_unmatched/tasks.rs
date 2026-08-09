@@ -1,0 +1,270 @@
+use super::*;
+
+pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_json::Value> {
+    match request.command.as_str() {
+        "get_task_config" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let key = payload_string(&request.payload, "key")?;
+            let value = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_task_config(&task_id, &key).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get task config: {e}"),
+                    )
+                })?
+            };
+            json_value(value)
+        }
+        "set_task_config" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let key = payload_string(&request.payload, "key")?;
+            let value = payload_string(&request.payload, "value")?;
+            let db = crate::db::acquire_db(&state.db);
+            db.set_task_config(&task_id, &key, &value).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to set task config: {e}"),
+                )
+            })?;
+            Ok(serde_json::Value::Null)
+        }
+        "create_task" => create_task(state, request),
+        "update_task" => {
+            let id = payload_string(&request.payload, "id")?;
+            let initial_prompt = payload_string(&request.payload, "initialPrompt")?;
+            let _claim = state
+                .task_claims
+                .try_claim(&id, TaskOperation::UpdateInitialPrompt)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::CONFLICT,
+                        format!("task {id} is starting; create a replacement task instead"),
+                    )
+                })?;
+            let db = crate::db::acquire_db(&state.db);
+            db.update_task_initial_prompt(&id, &initial_prompt)
+                .map_err(|error| match error {
+                    db::TaskInitialPromptUpdateError::NotFound(_) => {
+                        (StatusCode::NOT_FOUND, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
+                        (StatusCode::CONFLICT, error.to_string())
+                    }
+                    db::TaskInitialPromptUpdateError::Database(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task initial prompt: {error}"),
+                    ),
+                })?;
+            Ok(serde_json::Value::Null)
+        }
+        "update_task_title" => {
+            let id = payload_string(&request.payload, "id")?;
+            let title = payload_string(&request.payload, "title")?;
+            let db = crate::db::acquire_db(&state.db);
+            db.update_task_title(&id, &title).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update task title: {e}"),
+                )
+            })?;
+            Ok(serde_json::Value::Null)
+        }
+        "update_task_summary" => {
+            let id = payload_string(&request.payload, "id")?;
+            let summary = payload_string(&request.payload, "summary")?;
+            let db = crate::db::acquire_db(&state.db);
+            db.update_task_summary(&id, &summary).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update task summary: {e}"),
+                )
+            })?;
+            Ok(serde_json::Value::Null)
+        }
+        "update_task_source_ticket_url" => {
+            let id = payload_string(&request.payload, "id")?;
+            let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
+            let db = crate::db::acquire_db(&state.db);
+            db.update_task_source_ticket_url(&id, source_ticket_url.as_deref())
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task source ticket url: {e}"),
+                    )
+                })?;
+            Ok(serde_json::Value::Null)
+        }
+        "get_tasks" => {
+            let tasks = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_all_tasks().map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get tasks: {e}"),
+                    )
+                })?
+            };
+            json_value(tasks)
+        }
+        "get_project_attention" => {
+            let attention = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_project_attention_summaries().map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get project attention: {e}"),
+                    )
+                })?
+            };
+            json_value(attention)
+        }
+        "get_task_attention" => {
+            let attention = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_task_attention_rows().map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get task attention: {e}"),
+                    )
+                })?
+            };
+            json_value(attention)
+        }
+        "get_task_detail" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let task = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_task(&task_id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get task: {e}"),
+                        )
+                    })?
+                    .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task {task_id} not found")))?
+            };
+            json_value(task)
+        }
+        "get_tasks_for_project" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            // Default excludes done so the app board's active-only view is
+            // unchanged; plugins opt in with includeDone to see done tasks too.
+            let include_done =
+                payload_optional_bool(&request.payload, "includeDone")?.unwrap_or(false);
+            let tasks = {
+                let db = crate::db::acquire_db(&state.db);
+                if include_done {
+                    db.get_tasks_for_project(&project_id)
+                } else {
+                    db.get_tasks_for_project_excluding_state(&project_id, "done")
+                }
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get tasks for project: {e}"),
+                    )
+                })?
+            };
+            json_value(tasks)
+        }
+        "get_task_workspace" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let workspace = {
+                let db = crate::db::acquire_db(&state.db);
+                crate::provider_runtime::get_task_workspace(&db, &task_id)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+            };
+            json_value(workspace)
+        }
+        _ => unreachable!("task handler only receives task commands"),
+    }
+}
+
+fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_json::Value> {
+    let initial_prompt = payload_string(&request.payload, "initialPrompt")?;
+    let status = payload_string(&request.payload, "status")?;
+    let project_id = payload_optional_string(&request.payload, "projectId")?;
+    let permission_mode = payload_optional_string(&request.payload, "permissionMode")?;
+    let depends_on = payload_optional_string_vec(&request.payload, "dependsOn")?;
+    let label_names = payload_optional_string_vec(&request.payload, "labelNames")?;
+    let worktree_source = payload_optional_string(&request.payload, "worktreeSource")?;
+    let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
+    let title = payload_optional_string(&request.payload, "title")?;
+    let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
+    // Default to enabled so callers that omit the flag keep handoff notes.
+    let handoff_notes_enabled = request
+        .payload
+        .get("handoffNotesEnabled")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    // Task-level hierarchy overrides: absent (None) means "inherit
+    // project/global" so the runtime resolves them at start time.
+    let code_cleanup_enabled = request
+        .payload
+        .get("codeCleanupEnabled")
+        .and_then(|value| value.as_bool());
+    let task_display_title_updates_enabled = request
+        .payload
+        .get("taskDisplayTitleUpdatesEnabled")
+        .and_then(|value| value.as_bool());
+    let ai_provider = payload_optional_string(&request.payload, "aiProvider")?;
+
+    let task = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task_with_options(crate::db::NewTaskOptions {
+                initial_prompt: &initial_prompt,
+                status: &status,
+                project_id: project_id.as_deref(),
+                prompt: None,
+                permission_mode: permission_mode.as_deref(),
+                worktree_source: worktree_source.as_deref(),
+                worktree_branch: worktree_branch.as_deref(),
+                title: title.as_deref(),
+                handoff_notes_enabled,
+                source_ticket_url: source_ticket_url.as_deref(),
+                code_cleanup_enabled,
+                task_display_title_updates_enabled,
+                ai_provider: ai_provider.as_deref(),
+            })
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to create task: {e}"),
+                )
+            })?;
+        if let Some(depends_on) = depends_on {
+            if !depends_on.is_empty() {
+                if let Err(e) = db.set_task_dependencies(&task.id, &depends_on) {
+                    let _ = db.hard_delete_task(&task.id);
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!("Failed to set task dependencies: {e}"),
+                    ));
+                }
+            }
+        }
+        if let Some(label_names) = label_names {
+            if !label_names.is_empty() {
+                if let Err(e) = db.set_task_labels(&task.id, &label_names) {
+                    let _ = db.hard_delete_task(&task.id);
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!("Failed to set task labels: {e}"),
+                    ));
+                }
+            }
+        }
+        db.get_task(&task.id)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to reload task: {e}"),
+                )
+            })?
+            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task {} not found", task.id)))?
+    };
+
+    json_value(task)
+}

@@ -3,6 +3,7 @@ pub(crate) mod payload;
 mod agent_generate;
 mod companion;
 mod core;
+mod core_unmatched;
 mod files_review;
 mod github_review;
 mod lifecycle;
@@ -175,7 +176,7 @@ pub(crate) async fn handle_unmatched_command(
     state: &AppState,
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
-    core::handle_app_unmatched_command(state, request).await
+    core_unmatched::handle_app_unmatched_command(state, request).await
 }
 
 pub(crate) async fn handle_command(
