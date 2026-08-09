@@ -371,7 +371,7 @@ describe('createTaskActionRunner', () => {
     expect(get(ticketPrs).get(task.id)).toEqual([stalePr])
   })
 
-  it('deleteTaskAndReload reloads tasks after a successful delete', async () => {
+  it('deleteTaskAndReload reloads tasks after successful completion', async () => {
     const loadTasks = vi.fn(async () => undefined)
     vi.mocked(deleteTask).mockResolvedValue(undefined)
     const runner = createTaskActionRunner({

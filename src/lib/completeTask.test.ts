@@ -5,7 +5,12 @@ vi.mock('./ipc', () => ({
   deleteTask: vi.fn(),
 }))
 
-import { runCompleteTask } from './completeTask'
+import {
+  COMPLETE_TASK_CONFIRM_MESSAGE,
+  DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
+  confirmTerminalTaskAction,
+  runCompleteTask,
+} from './completeTask'
 import { completingTasks, error } from './stores'
 import { deleteTask } from './ipc'
 
@@ -13,6 +18,33 @@ beforeEach(() => {
   vi.clearAllMocks()
   completingTasks.set(new Set())
   error.set(null)
+})
+
+describe('confirmTerminalTaskAction', () => {
+  it.each([
+    {
+      action: 'Complete' as const,
+      message: COMPLETE_TASK_CONFIRM_MESSAGE,
+      actionPrompt: 'Complete this task?',
+      retainedReference: 'Completed Task will remain available for reference',
+    },
+    {
+      action: 'Delete' as const,
+      message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
+      actionPrompt: 'Delete this task from the backlog?',
+      retainedReference: 'Task will remain available as a completed reference',
+    },
+  ])('confirms destructive cleanup for $action while explaining retained reference data', ({ action, message, actionPrompt, retainedReference }) => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    expect(confirmTerminalTaskAction(action)).toBe(true)
+    expect(confirmSpy).toHaveBeenCalledWith(message)
+    expect(message).toContain(actionPrompt)
+    expect(message).toContain('runtime workspace state will be removed')
+    expect(message).toContain(retainedReference)
+
+    confirmSpy.mockRestore()
+  })
 })
 
 describe('runCompleteTask', () => {

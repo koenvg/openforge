@@ -7,7 +7,7 @@
   import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
   import type { TaskRunAppRegistration } from './taskRunAppController'
   import { createTaskRunAppController, INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
-  import { confirmCompleteTask, runCompleteTask } from '../../lib/completeTask'
+  import { confirmTerminalTaskAction, runCompleteTask } from '../../lib/completeTask'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
@@ -195,7 +195,7 @@
   }
 
   async function handleComplete() {
-    if (isCompleting || !confirmCompleteTask()) {
+    if (isCompleting || !confirmTerminalTaskAction('Complete')) {
       return
     }
     if (await runCompleteTask(task.id)) {

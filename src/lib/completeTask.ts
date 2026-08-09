@@ -2,19 +2,25 @@ import { get } from 'svelte/store'
 import { deleteTask } from './ipc'
 import { completingTasks, error } from './stores'
 
-// "Complete" is the single terminal action for a task: it permanently deletes
-// the task along with its worktree and branch (there is no Done/reopen flow).
-// Because the label reads as a benign "finish", every Complete affordance must
-// confirm first. Centralised here so the wording stays identical everywhere.
+// Started Tasks use "Complete" while backlog Tasks use "Delete". Both terminal
+// actions share the completion lifecycle: runtime workspace state is removed while
+// the Completed Task remains available as reference data (there is no reopen flow).
+// Because runtime cleanup is destructive, every terminal action must confirm first.
 export const COMPLETE_TASK_CONFIRM_MESSAGE =
-  'Complete this task? Its worktree and branch will be deleted — this cannot be undone.'
+  'Complete this task? Its runtime workspace state will be removed — this cannot be undone. The Completed Task will remain available for reference.'
 
-/** Prompt the user to confirm the destructive Complete (delete) action. */
-export function confirmCompleteTask(): boolean {
-  return window.confirm(COMPLETE_TASK_CONFIRM_MESSAGE)
+export const DELETE_BACKLOG_TASK_CONFIRM_MESSAGE =
+  'Delete this task from the backlog? Any runtime workspace state will be removed — this cannot be undone. The Task will remain available as a completed reference.'
+
+/** Prompt the user to confirm destructive runtime cleanup for the displayed action. */
+export function confirmTerminalTaskAction(action: 'Complete' | 'Delete'): boolean {
+  const message = action === 'Delete'
+    ? DELETE_BACKLOG_TASK_CONFIRM_MESSAGE
+    : COMPLETE_TASK_CONFIRM_MESSAGE
+  return window.confirm(message)
 }
 
-/** Whether a Complete (delete) is already in flight for the task. */
+/** Whether completion is already in flight for the Task. */
 export function isTaskCompleting(taskId: string): boolean {
   return get(completingTasks).has(taskId)
 }
@@ -30,11 +36,11 @@ function setTaskCompleting(taskId: string, completing: boolean): void {
 }
 
 /**
- * Delete an already-confirmed task, tracking it in `completingTasks` so every
+ * Complete an already-confirmed Task, tracking it in `completingTasks` so every
  * Complete affordance can show pending state and refuse duplicate requests.
- * Returns whether the task was actually deleted; failures land in the shared
- * `error` store. Confirmation stays with the caller so a cancelled prompt can
- * keep its surrounding UI (e.g. an open context menu) intact.
+ * Returns whether completion succeeded; failures land in the shared `error`
+ * store. Confirmation stays with the caller so a cancelled prompt can keep its
+ * surrounding UI (e.g. an open context menu) intact.
  */
 export async function runCompleteTask(taskId: string): Promise<boolean> {
   if (isTaskCompleting(taskId)) {

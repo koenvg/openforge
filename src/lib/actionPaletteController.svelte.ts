@@ -1,4 +1,4 @@
-import { confirmCompleteTask, isTaskCompleting } from './completeTask'
+import { confirmTerminalTaskAction, isTaskCompleting } from './completeTask'
 import type { Task } from './types'
 import type { TaskActionRunner } from './taskActionRunner'
 
@@ -51,7 +51,7 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
         if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
         break
       case 'delete-task':
-        if (task && !isTaskCompleting(task.id) && confirmCompleteTask()) {
+        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction(task.status === 'backlog' ? 'Delete' : 'Complete')) {
           await options.taskActions.deleteTaskAndReload(task.id)
         }
         break
