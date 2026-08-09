@@ -220,6 +220,38 @@
         }
       }
     },
+    "/tasks/{taskId}/complete": {
+      "post": {
+        "operationId": "completeCompanionTask",
+        "summary": "Complete one active Task through the shared terminal lifecycle",
+        "description": "Authenticated Task-scoped mutation. The server validates Project visibility, current doing state, and lifecycle claims; stops the Agent and Task shells; retains Completed Task reference data; and schedules safe worktree and owned-branch cleanup. Clients must not automatically retry this mutation after transport uncertainty.",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task reference data completed and cleanup accepted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskCompleteResult" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
     "/events": {
       "get": {
         "operationId": "streamCompanionEvents",
@@ -503,6 +535,16 @@
           "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }
         }
       },
+      "TaskCompleteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskId", "boardStatus", "cleanupScheduled"],
+        "properties": {
+          "taskId": { "type": "string", "minLength": 1 },
+          "boardStatus": { "const": "done" },
+          "cleanupScheduled": { "type": "boolean" }
+        }
+      },
       "ResourceInvalidationData": {
         "type": "object",
         "additionalProperties": false,
@@ -575,6 +617,8 @@
           "revoked",
           "incompatible_version",
           "invalid_request",
+          "invalid_task_state",
+          "operation_in_progress",
           "not_found",
           "rate_limited",
           "temporarily_unavailable"

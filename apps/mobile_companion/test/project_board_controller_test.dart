@@ -182,6 +182,23 @@ void main() {
   });
 
   test(
+    'authoritative refresh preserves the originating lane and position',
+    () async {
+      final controller = ProjectBoardController(
+        client: _FakeClient(),
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+      controller.selectLane(ProjectBoardLane.outOfFocus);
+      controller.rememberScrollOffset(ProjectBoardLane.outOfFocus, 128);
+
+      await controller.refresh();
+
+      expect(controller.selectedLane, ProjectBoardLane.outOfFocus);
+      expect(controller.scrollOffsetFor(ProjectBoardLane.outOfFocus), 128);
+    },
+  );
+  test(
     'catalog fallback changes Project and resets lane context to Focus',
     () async {
       final client = _FakeClient();

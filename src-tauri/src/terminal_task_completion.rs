@@ -68,7 +68,6 @@ pub enum TerminalTaskCompletionRequest {
     /// resolves backlog to Delete and doing to Complete from authoritative state.
     Desktop(String),
     Delete(String),
-    #[allow(dead_code)] // Reserved for the distinct Companion Complete route.
     Complete(String),
 }
 
@@ -81,7 +80,6 @@ impl TerminalTaskCompletionRequest {
         Self::Delete(task_id.to_string())
     }
 
-    #[allow(dead_code)] // Reserved for the distinct Companion Complete route.
     pub fn complete(task_id: &str) -> Self {
         Self::Complete(task_id.to_string())
     }

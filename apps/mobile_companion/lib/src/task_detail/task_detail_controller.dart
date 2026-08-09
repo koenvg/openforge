@@ -35,23 +35,34 @@ final class TaskDetailUnavailable extends TaskDetailViewState {
   const TaskDetailUnavailable();
 }
 
+enum TaskCompleteAttempt { completed, failed, alreadyPending }
+
 final class TaskDetailController extends ChangeNotifier {
   factory TaskDetailController({
     required String taskId,
     required CompanionClient client,
+    CompanionTaskActionClient? actionClient,
     required CompanionSecureStorage storage,
     VoidCallback? onAuthorizationLost,
-  }) => TaskDetailController._(taskId, client, storage, onAuthorizationLost);
+  }) => TaskDetailController._(
+    taskId,
+    client,
+    actionClient,
+    storage,
+    onAuthorizationLost,
+  );
 
   TaskDetailController._(
     this.taskId,
     this._client,
+    this._actionClient,
     this._storage,
     this._onAuthorizationLost,
   );
 
   final String taskId;
   final CompanionClient _client;
+  final CompanionTaskActionClient? _actionClient;
   final CompanionSecureStorage _storage;
   final VoidCallback? _onAuthorizationLost;
 
@@ -60,12 +71,26 @@ final class TaskDetailController extends ChangeNotifier {
   TaskDetailViewState _state = const TaskDetailLoading();
   TaskDetailViewState get state => _state;
 
+  var _completePending = false;
+  bool get completePending => _completePending;
+
+  String? _completeError;
+  String? get completeError => _completeError;
+
+  bool get completeAvailable =>
+      _actionClient != null &&
+      switch (_state) {
+        TaskDetailLoaded(:final detail) => detail.boardStatus == 'doing',
+        _ => false,
+      };
+
   Future<void> refresh() async {
     await refreshWithOutcome();
   }
 
   Future<CompanionRefreshOutcome> refreshWithOutcome() async {
     final generation = ++_generation;
+    if (!_completePending) _completeError = null;
     _setState(const TaskDetailLoading());
     try {
       final trustRecord = await _storage.load();
@@ -102,6 +127,58 @@ final class TaskDetailController extends ChangeNotifier {
     }
   }
 
+  Future<TaskCompleteAttempt> complete() async {
+    if (_disposed) return TaskCompleteAttempt.failed;
+    if (_completePending) return TaskCompleteAttempt.alreadyPending;
+    final actionClient = _actionClient;
+    final currentState = _state;
+    if (actionClient == null ||
+        currentState is! TaskDetailLoaded ||
+        currentState.detail.boardStatus != 'doing') {
+      return TaskCompleteAttempt.failed;
+    }
+
+    _completePending = true;
+    _completeError = null;
+    notifyListeners();
+    try {
+      final trustRecord = await _storage.load();
+      if (_disposed) return TaskCompleteAttempt.failed;
+      if (trustRecord == null) {
+        _authorizationLost();
+        return TaskCompleteAttempt.failed;
+      }
+      final result = await actionClient.completeTask(trustRecord, taskId);
+      if (_disposed) return TaskCompleteAttempt.failed;
+      if (result.taskId != taskId || result.boardStatus != 'done') {
+        throw const FormatException('Invalid Task Complete result.');
+      }
+      return TaskCompleteAttempt.completed;
+    } on CompanionV1Exception catch (error) {
+      if (_disposed) return TaskCompleteAttempt.failed;
+      if (error.code == 'revoked' || error.code == 'unauthenticated') {
+        _authorizationLost();
+        return TaskCompleteAttempt.failed;
+      }
+      final message = _completeFailureMessage(error.code);
+      await refreshWithOutcome();
+      if (!_disposed) _completeError = message;
+      return TaskCompleteAttempt.failed;
+    } on Object {
+      if (_disposed) return TaskCompleteAttempt.failed;
+      const message =
+          'OpenForge could not confirm whether Complete succeeded. Current Task state was refreshed; review it before choosing Complete again.';
+      await refreshWithOutcome();
+      if (!_disposed) _completeError = message;
+      return TaskCompleteAttempt.failed;
+    } finally {
+      if (!_disposed) {
+        _completePending = false;
+        notifyListeners();
+      }
+    }
+  }
+
   void clear() {
     if (_disposed) return;
     _generation += 1;
@@ -128,3 +205,14 @@ final class TaskDetailController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+String _completeFailureMessage(String code) => switch (code) {
+  'invalid_task_state' =>
+    'Complete is no longer available. The current Task state was refreshed.',
+  'operation_in_progress' =>
+    'Another Task action is already in progress. The current Task state was refreshed.',
+  'not_found' =>
+    'This Task is no longer active. The current Task state was refreshed.',
+  _ =>
+    'Complete could not be accepted. The current Task state was refreshed; review it before choosing Complete again.',
+};

@@ -48,6 +48,7 @@ void main() {
       taskDetailControllerFactory: (taskId) => TaskDetailController(
         taskId: taskId,
         client: client,
+        actionClient: client,
         storage: storage,
         onAuthorizationLost: pairingController.authorizationLost,
       ),

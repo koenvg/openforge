@@ -14,12 +14,14 @@ class TaskDetailScreen extends StatefulWidget {
     required this.controller,
     this.terminalSurface,
     this.onRefresh,
+    this.onCompleted,
     super.key,
   });
 
   final TaskDetailController controller;
   final AgentTerminalSurface? terminalSurface;
   final Future<void> Function()? onRefresh;
+  final Future<void> Function()? onCompleted;
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -57,6 +59,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget build(BuildContext context) => TaskDetailView(
     state: _state,
     onRefresh: _refresh,
+    onComplete: widget.controller.completeAvailable
+        ? widget.controller.complete
+        : null,
+    onCompleted: widget.onCompleted,
+    completePending: widget.controller.completePending,
+    completeError: widget.controller.completeError,
     terminalSurface: widget.terminalSurface,
   );
 }
@@ -65,12 +73,20 @@ class TaskDetailView extends StatefulWidget {
   const TaskDetailView({
     required this.state,
     required this.onRefresh,
+    this.onComplete,
+    this.onCompleted,
+    this.completePending = false,
+    this.completeError,
     this.terminalSurface,
     super.key,
   });
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final Future<TaskCompleteAttempt> Function()? onComplete;
+  final Future<void> Function()? onCompleted;
+  final bool completePending;
+  final String? completeError;
   final AgentTerminalSurface? terminalSurface;
 
   @override
@@ -82,6 +98,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
   late final TabController _tabs;
   late bool _foreground;
   var _selectedTab = 0;
+  var _completionAccepted = false;
 
   @override
   void initState() {
@@ -141,6 +158,74 @@ class _TaskDetailViewState extends State<TaskDetailView>
     widget.terminalSurface?.presentation.setForeground(_foreground);
   }
 
+  Future<void> _confirmAndComplete(TaskDetail detail) async {
+    final complete = widget.onComplete;
+    if (complete == null || widget.completePending) return;
+    final running = detail.agentState == 'running';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Complete “${detail.title}”?'),
+        content: Text(
+          'This keeps the Completed Task as reference data. Its worktree will be removed asynchronously, and an OpenForge-owned branch may be deleted. Existing branches are kept. Any uncommitted work remaining in the Task worktree will be removed.'
+          '${running ? '\n\nThe running Agent and all Task shells will stop before completion.' : ''}',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.terminalSurface?.presentation.closeForTaskCompletion();
+    } on Object {
+      // The desktop lifecycle remains authoritative and will close the channel.
+    }
+    final result = await complete();
+    if (!mounted) return;
+    if (result == TaskCompleteAttempt.completed) {
+      setState(() => _completionAccepted = true);
+      try {
+        await widget.onCompleted?.call();
+      } on Object {
+        // The refreshed lane owns its own safe unavailable state.
+      }
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    widget.terminalSurface?.presentation.setVisible(_selectedTab == 1);
+  }
+
+  Widget? _completeAction() {
+    final state = widget.state;
+    final onComplete = widget.onComplete;
+    if (_completionAccepted ||
+        state is! TaskDetailLoaded ||
+        state.detail.boardStatus != 'doing' ||
+        onComplete == null) {
+      return null;
+    }
+    return SafeArea(
+      top: false,
+      child: _CompleteTaskAction(
+        detail: state.detail,
+        pending: widget.completePending,
+        error: widget.completeError,
+        onPressed: () => _confirmAndComplete(state.detail),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -160,6 +245,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
         ],
       ),
     ),
+    bottomNavigationBar: _completeAction(),
     body: SafeArea(
       child: IndexedStack(
         index: _selectedTab,
@@ -315,6 +401,70 @@ class _LoadedTaskDetail extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CompleteTaskAction extends StatelessWidget {
+  const _CompleteTaskAction({
+    required this.detail,
+    required this.pending,
+    required this.error,
+    required this.onPressed,
+  });
+
+  final TaskDetail detail;
+  final bool pending;
+  final String? error;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    elevation: 4,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (error case final message?) ...<Widget>[
+            Semantics(
+              container: true,
+              liveRegion: true,
+              label: message,
+              child: ExcludeSemantics(
+                child: Text(
+                  message,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Semantics(
+            button: true,
+            enabled: !pending,
+            label: pending
+                ? 'Completing ${detail.title}'
+                : 'Complete ${detail.title}',
+            child: FilledButton.icon(
+              onPressed: pending ? null : onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              icon: pending
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.flag_outlined),
+              label: Text(pending ? 'Completing…' : 'Complete'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _DetailCard extends StatelessWidget {

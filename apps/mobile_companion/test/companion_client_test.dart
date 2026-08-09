@@ -57,7 +57,7 @@ final class _EndpointTransport implements CloseableCompanionV1Transport {
 
 void main() {
   test(
-    'generated client matches pairing, status, snapshot, and event contracts',
+    'generated client matches pairing, reads, Complete, and event contracts',
     () async {
       final contract =
           jsonDecode(
@@ -92,6 +92,7 @@ void main() {
       expect(encodedContract, contains('getCompanionProjects'));
       expect(encodedContract, contains('getCompanionProjectBoard'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
+      expect(encodedContract, contains('completeCompanionTask'));
       expect(encodedContract, contains('streamCompanionEvents'));
       final paths = contract['paths']! as Map<String, Object?>;
       expect(
@@ -104,6 +105,7 @@ void main() {
           '/projects',
           '/projects/{projectId}/board',
           '/tasks/{taskId}',
+          '/tasks/{taskId}/complete',
           '/events',
         ]),
       );
@@ -184,6 +186,10 @@ void main() {
             statusCode: 200,
             body: jsonEncode(fixtures['taskDetail']),
           ),
+          CompanionV1HttpResponse(
+            statusCode: 200,
+            body: jsonEncode(fixtures['taskCompleteResult']),
+          ),
         ];
       final client = CompanionV1Client(
         baseUrl: Uri.parse('https://192.168.1.20:17424'),
@@ -209,6 +215,10 @@ void main() {
         taskId: 'KVG-2946',
         credential: approval.credential!,
       );
+      final completed = await client.completeCompanionTask(
+        taskId: 'KVG-2946',
+        credential: approval.credential!,
+      );
       final eventRequest = client.streamCompanionEvents(
         credential: approval.credential!,
         lastEventId: 'epoch:12',
@@ -227,6 +237,9 @@ void main() {
       expect(detail.handoffNotes, 'Ready for review.');
       expect(detail.agentState, 'failed');
       expect(detail.agentTerminalAvailable, isTrue);
+      expect(completed.taskId, 'KVG-2946');
+      expect(completed.boardStatus, 'done');
+      expect(completed.cleanupScheduled, isTrue);
       expect(transport.requests[0].uri.path, '/companion/v1/pairing/requests');
       expect(
         jsonDecode(transport.requests[0].body!)['deviceName'],
@@ -262,6 +275,15 @@ void main() {
         transport.requests[4].headers['openforge-companion-protocol-version'],
         '1',
       );
+      expect(transport.requests[5].method, 'POST');
+      expect(
+        transport.requests[5].uri.path,
+        '/companion/v1/tasks/KVG-2946/complete',
+      );
+      expect(
+        transport.requests[5].headers['authorization'],
+        'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
       expect(eventRequest.method, 'GET');
       expect(eventRequest.uri.path, '/companion/v1/events');
       expect(eventRequest.headers, <String, String>{
@@ -274,7 +296,7 @@ void main() {
         eventRequestWithoutCursor.headers,
         isNot(contains('last-event-id')),
       );
-      expect(transport.requests, hasLength(5));
+      expect(transport.requests, hasLength(6));
     },
   );
 
@@ -363,6 +385,43 @@ void main() {
       );
     },
   );
+  test(
+    'Complete makes one request and never falls through to another endpoint',
+    () async {
+      final requests = <({Uri uri, Map<String, String> headers})>[];
+      final transport = _EndpointTransport(<String, Object>{
+        '192.168.1.20': const SocketException('uncertain response'),
+        'openforge.tailnet': const CompanionV1HttpResponse(
+          statusCode: 200,
+          body:
+              '{"taskId":"KVG-3033","boardStatus":"done","cleanupScheduled":false}',
+        ),
+      }, requests: requests);
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) =>
+            CompanionEndpointTransport(transport: transport, close: () {}),
+      );
+      final trust = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: <Uri>[
+          Uri.parse('https://192.168.1.20:17424'),
+          Uri.parse('https://openforge.tailnet:17424'),
+        ],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+
+      await expectLater(
+        client.completeTask(trust, 'KVG-3033'),
+        throwsA(isA<SocketException>()),
+      );
+      expect(requests, hasLength(1));
+      expect(requests.single.uri.host, '192.168.1.20');
+      expect(requests.single.uri.path, '/companion/v1/tasks/KVG-3033/complete');
+    },
+  );
+
   test('endpoint fallback preserves authoritative revocation errors', () async {
     final transport = _RecordingTransport()
       ..responses = <CompanionV1HttpResponse>[
@@ -422,18 +481,25 @@ void main() {
   });
 
   test(
-    'LAN failure falls back to MagicDNS with the same certificate pin and device credential',
+    'Complete uses the last healthy MagicDNS endpoint once after LAN fallback',
     () async {
       final outcomes = <String, Object>{
         '192.168.1.20': const SocketException('unreachable'),
-        'forge-mac.example.ts.net': CompanionV1HttpResponse(
-          statusCode: 200,
-          body: jsonEncode(<String, Object>{
-            'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-            'protocolVersion': 1,
-            'serverTime': '2026-07-30T12:00:01Z',
-          }),
-        ),
+        'forge-mac.example.ts.net': <Object>[
+          CompanionV1HttpResponse(
+            statusCode: 200,
+            body: jsonEncode(<String, Object>{
+              'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+              'protocolVersion': 1,
+              'serverTime': '2026-07-30T12:00:01Z',
+            }),
+          ),
+          const CompanionV1HttpResponse(
+            statusCode: 200,
+            body:
+                '{"taskId":"KVG-3033","boardStatus":"done","cleanupScheduled":false}',
+          ),
+        ],
       };
       final pins = <String>[];
       final requests = <({Uri uri, Map<String, String> headers})>[];
@@ -458,15 +524,18 @@ void main() {
       );
 
       final connection = await client.fetchHostStatus(trustRecord);
-
+      final completed = await client.completeTask(trustRecord, 'KVG-3033');
       expect(
         connection.endpoint,
         Uri.parse('https://forge-mac.example.ts.net:17424'),
       );
       expect(connection.status.hostId, trustRecord.hostId);
-      expect(pins, <String>['trusted-pin', 'trusted-pin']);
-      expect(requests, hasLength(2));
+      expect(completed.boardStatus, 'done');
+      expect(pins, <String>['trusted-pin', 'trusted-pin', 'trusted-pin']);
+      expect(requests, hasLength(3));
       expect(requests.last.headers['authorization'], 'Bearer credential-1');
+      expect(requests.last.uri.host, 'forge-mac.example.ts.net');
+      expect(requests.last.uri.path, '/companion/v1/tasks/KVG-3033/complete');
     },
   );
 

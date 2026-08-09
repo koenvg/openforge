@@ -80,8 +80,19 @@ abstract interface class CompanionClient {
   });
 }
 
+/// Mutation-only seam. Implementations must make exactly one network attempt.
+abstract interface class CompanionTaskActionClient {
+  Future<TaskCompleteResult> completeTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
+}
+
 final class GeneratedCompanionClient
-    implements CompanionClient, CompanionTerminalClient {
+    implements
+        CompanionClient,
+        CompanionTaskActionClient,
+        CompanionTerminalClient {
   factory GeneratedCompanionClient({
     CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
     CompanionEventConnector eventConnector = openPinnedCompanionEvents,
@@ -109,7 +120,7 @@ final class GeneratedCompanionClient
   final CompanionTerminalConnector _terminalConnector;
   final Duration _pairingCandidateTimeout;
   final Duration _pairingOverallTimeout;
-  final _preferredPairingEndpoints = <String, Uri>{};
+  final _preferredEndpoints = <String, Uri>{};
 
   @override
   Future<PairingSubmissionStatus> submitPairing({
@@ -131,7 +142,7 @@ final class GeneratedCompanionClient
         platform: platform,
       ),
     );
-    _preferredPairingEndpoints[bootstrap.hostId] = result.endpoint;
+    _preferredEndpoints[bootstrap.hostId] = result.endpoint;
     return result.value;
   }
 
@@ -144,7 +155,7 @@ final class GeneratedCompanionClient
     transportFactory: _transportFactory,
     endpoints: _preferEndpoint(
       bootstrap.endpointCandidates,
-      _preferredPairingEndpoints[bootstrap.hostId],
+      _preferredEndpoints[bootstrap.hostId],
     ),
     certificateSha256: bootstrap.certificateSha256,
     candidateTimeout: _pairingCandidateTimeout,
@@ -164,67 +175,99 @@ final class GeneratedCompanionClient
       transportFactory: _transportFactory,
       endpoints: _preferEndpoint(
         trustRecord.endpointCandidates,
-        _preferredPairingEndpoints[trustRecord.hostId],
+        _preferredEndpoints[trustRecord.hostId],
       ),
       certificateSha256: trustRecord.certificateSha256,
       operation: (client) => client.getCompanionHostStatus(
         credential: trustRecord.deviceCredential,
       ),
     );
+    _preferredEndpoints[trustRecord.hostId] = result.endpoint;
     return CompanionHostConnection(
       endpoint: result.endpoint,
       status: result.value,
     );
   }
 
-  @override
-  Future<AttentionSnapshot> fetchAttention(
+  Future<T> _authenticatedRead<T>(
     CompanionTrustRecord trustRecord,
-  ) async => (await _tryEndpoints(
-    transportFactory: _transportFactory,
-    endpoints: trustRecord.endpointCandidates,
-    certificateSha256: trustRecord.certificateSha256,
-    operation: (client) =>
-        client.getCompanionAttention(credential: trustRecord.deviceCredential),
-  )).value;
+    Future<T> Function(CompanionV1Client client) operation,
+  ) async {
+    final result = await _tryEndpoints(
+      transportFactory: _transportFactory,
+      endpoints: _preferEndpoint(
+        trustRecord.endpointCandidates,
+        _preferredEndpoints[trustRecord.hostId],
+      ),
+      certificateSha256: trustRecord.certificateSha256,
+      operation: operation,
+    );
+    _preferredEndpoints[trustRecord.hostId] = result.endpoint;
+    return result.value;
+  }
 
+  @override
+  Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord) =>
+      _authenticatedRead(
+        trustRecord,
+        (client) => client.getCompanionAttention(
+          credential: trustRecord.deviceCredential,
+        ),
+      );
   @override
   Future<ProjectCatalog> fetchProjectCatalog(
     CompanionTrustRecord trustRecord,
-  ) async => (await _tryEndpoints(
-    transportFactory: _transportFactory,
-    endpoints: trustRecord.endpointCandidates,
-    certificateSha256: trustRecord.certificateSha256,
-    operation: (client) =>
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) =>
         client.getCompanionProjects(credential: trustRecord.deviceCredential),
-  )).value;
+  );
 
   @override
   Future<ProjectBoard> fetchProjectBoard(
     CompanionTrustRecord trustRecord,
     String projectId,
-  ) async => (await _tryEndpoints(
-    transportFactory: _transportFactory,
-    endpoints: trustRecord.endpointCandidates,
-    certificateSha256: trustRecord.certificateSha256,
-    operation: (client) => client.getCompanionProjectBoard(
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) => client.getCompanionProjectBoard(
       projectId: projectId,
       credential: trustRecord.deviceCredential,
     ),
-  )).value;
+  );
   @override
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,
     String taskId,
-  ) async => (await _tryEndpoints(
-    transportFactory: _transportFactory,
-    endpoints: trustRecord.endpointCandidates,
-    certificateSha256: trustRecord.certificateSha256,
-    operation: (client) => client.getCompanionTaskDetail(
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) => client.getCompanionTaskDetail(
       taskId: taskId,
       credential: trustRecord.deviceCredential,
     ),
-  )).value;
+  );
+
+  @override
+  Future<TaskCompleteResult> completeTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    final endpoint = _preferEndpoint(
+      trustRecord.endpointCandidates,
+      _preferredEndpoints[trustRecord.hostId],
+    ).first;
+    final endpointTransport = _transportFactory(trustRecord.certificateSha256);
+    try {
+      return await CompanionV1Client(
+        baseUrl: endpoint,
+        transport: endpointTransport.transport,
+      ).completeCompanionTask(
+        taskId: taskId,
+        credential: trustRecord.deviceCredential,
+      );
+    } finally {
+      endpointTransport.close();
+    }
+  }
 
   @override
   Future<CompanionLiveConnection> openLiveEvents(

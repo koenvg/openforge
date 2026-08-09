@@ -1,6 +1,7 @@
 mod live_events;
 mod pairing;
 mod snapshots;
+mod task_actions;
 
 use super::{
     attention::CompanionAttentionSource,
@@ -8,6 +9,7 @@ use super::{
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
     project_board::CompanionProjectBoardSource,
     rate_limit::{RateLimitError, SlidingWindowRateLimiter},
+    task_actions::CompanionTaskActionService,
     task_detail::CompanionTaskDetailSource,
     terminal::CompanionTerminalRegistry,
 };
@@ -15,6 +17,7 @@ use super::{
 use super::{
     attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
     project_board::UnavailableCompanionProjectBoardSource,
+    task_actions::UnavailableCompanionTaskActionService,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
@@ -52,6 +55,8 @@ pub(crate) enum CompanionErrorCode {
     Revoked,
     IncompatibleVersion,
     InvalidRequest,
+    InvalidTaskState,
+    OperationInProgress,
     NotFound,
     RateLimited,
     TemporarilyUnavailable,
@@ -65,6 +70,8 @@ impl CompanionErrorCode {
             Self::Revoked => "revoked",
             Self::IncompatibleVersion => "incompatible_version",
             Self::InvalidRequest => "invalid_request",
+            Self::InvalidTaskState => "invalid_task_state",
+            Self::OperationInProgress => "operation_in_progress",
             Self::NotFound => "not_found",
             Self::RateLimited => "rate_limited",
             Self::TemporarilyUnavailable => "temporarily_unavailable",
@@ -193,6 +200,13 @@ pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) agent_updated_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskCompleteResponse {
+    pub(crate) task_id: String,
+    pub(crate) board_status: String,
+    pub(crate) cleanup_scheduled: bool,
+}
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(
         &self,
@@ -235,6 +249,7 @@ pub(crate) struct CompanionRouterSources {
     pub(crate) attention: Arc<dyn CompanionAttentionSource>,
     pub(crate) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pub(crate) task_actions: Arc<dyn CompanionTaskActionService>,
     pub(crate) pty_manager: crate::pty_manager::PtyManager,
     pub(crate) events: AppEventBus,
     pub(crate) stream_access: Arc<dyn CompanionStreamAccess>,
@@ -248,6 +263,7 @@ struct CompanionRouterState {
     attention: Arc<dyn CompanionAttentionSource>,
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
+    task_actions: Arc<dyn CompanionTaskActionService>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
@@ -270,6 +286,10 @@ fn authorization_error_response(code: CompanionErrorCode) -> Response {
         CompanionErrorCode::InvalidRequest => (
             StatusCode::BAD_REQUEST,
             "Companion authorization request is invalid",
+        ),
+        CompanionErrorCode::InvalidTaskState | CompanionErrorCode::OperationInProgress => (
+            StatusCode::CONFLICT,
+            "Companion Task action conflicts with current state",
         ),
         CompanionErrorCode::NotFound => (
             StatusCode::NOT_FOUND,
@@ -383,12 +403,39 @@ pub(crate) fn create_router_with_project_board(
             attention: Arc::new(UnavailableCompanionAttentionSource),
             project_board,
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            task_actions: Arc::new(UnavailableCompanionTaskActionService),
             pty_manager: crate::pty_manager::PtyManager::new(),
             events: AppEventBus::new(16, 8),
             stream_access,
         },
     )
 }
+#[cfg(test)]
+pub(crate) fn create_router_with_task_actions(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    task_actions: Arc<dyn CompanionTaskActionService>,
+) -> Router {
+    let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
+    create_router_with_sources_event_access_and_pty(
+        host,
+        authorizer,
+        pairing,
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board,
+            task_detail,
+            task_actions,
+            pty_manager: crate::pty_manager::PtyManager::new(),
+            events: AppEventBus::new(16, 8),
+            stream_access,
+        },
+    )
+}
+
 #[cfg(test)]
 pub(crate) fn create_router_with_sources(
     host: CompanionHostStatus,
@@ -446,6 +493,7 @@ pub(crate) fn create_router_with_sources_and_event_access(
             attention,
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail,
+            task_actions: Arc::new(UnavailableCompanionTaskActionService),
             events,
             stream_access,
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -463,6 +511,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
         attention,
         project_board,
         task_detail,
+        task_actions,
         pty_manager,
         events,
         stream_access,
@@ -477,6 +526,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
     ));
     let authenticated_routes = Router::new()
         .merge(snapshots::routes())
+        .merge(task_actions::routes())
         .merge(live_events::routes())
         .route_layer(middleware::from_fn_with_state(
             authenticated_rate_limit,
@@ -494,6 +544,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
             attention,
             project_board,
             task_detail,
+            task_actions,
             pty_manager,
             events,
             stream_access,

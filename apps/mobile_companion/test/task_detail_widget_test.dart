@@ -13,6 +13,7 @@ import 'package:openforge_companion/src/task_detail/task_detail_screen.dart';
 TaskDetail _detail({
   String title = 'Mobile Task detail',
   String? handoffNotes = 'Ready for review.',
+  String boardStatus = 'doing',
   String agentState = 'running',
   bool agentTerminalAvailable = false,
   String? agentErrorSummary,
@@ -21,7 +22,7 @@ TaskDetail _detail({
   title: title,
   projectId: 'P-1',
   projectName: 'OpenForge',
-  boardStatus: 'doing',
+  boardStatus: boardStatus,
   handoffNotes: handoffNotes,
   agentState: agentState,
   agentTerminalAvailable: agentTerminalAvailable,
@@ -202,6 +203,118 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       expect(find.bySemanticsLabel('No Handoff Notes yet.'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'Complete is offered for doing Task detail but never backlog detail',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail()),
+            onRefresh: () async {},
+            onComplete: () async => TaskCompleteAttempt.completed,
+          ),
+        ),
+      );
+      expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
+            onRefresh: () async {},
+            onComplete: () async => TaskCompleteAttempt.completed,
+          ),
+        ),
+      );
+      expect(find.widgetWithText(FilledButton, 'Complete'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Complete confirmation names the Task and warns for a running Agent',
+    (tester) async {
+      var completeCalls = 0;
+      var completedCallbacks = 0;
+      final presentation = _TerminalPresentation();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(agentState: 'running')),
+            onRefresh: () async {},
+            onComplete: () async {
+              completeCalls += 1;
+              return TaskCompleteAttempt.completed;
+            },
+            onCompleted: () async => completedCallbacks += 1,
+            terminalSurface: AgentTerminalSurface(
+              presentation: presentation,
+              terminal: const SizedBox(),
+              dispose: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Mobile Task detail'), findsWidgets);
+      expect(find.textContaining('worktree will be removed'), findsOneWidget);
+      expect(find.textContaining('OpenForge-owned branch'), findsOneWidget);
+      expect(find.textContaining('uncommitted work'), findsOneWidget);
+      expect(
+        find.textContaining('running Agent and all Task shells will stop'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(completeCalls, 0);
+      expect(presentation.closeCalls, 0);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Complete'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Complete'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(completeCalls, 1);
+      expect(completedCallbacks, 1);
+      expect(presentation.closeCalls, 1);
+    },
+  );
+
+  testWidgets('pending Complete is disabled and failure is announced safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail()),
+          onRefresh: () async {},
+          onComplete: () async => TaskCompleteAttempt.failed,
+          completePending: true,
+          completeError:
+              'OpenForge could not confirm whether Complete succeeded. Current Task state was refreshed.',
+        ),
+      ),
+    );
+
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.onPressed, isNull);
+    expect(find.text('Completing…'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'OpenForge could not confirm whether Complete succeeded. Current Task state was refreshed.',
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('missing Task has a calm explicit state', (tester) async {
     await tester.pumpWidget(
@@ -397,7 +510,7 @@ final class _TerminalPresentation extends ChangeNotifier
   AgentTerminalState _state = const AgentTerminalNoActiveSession();
   bool visible = false;
   bool foreground = true;
-
+  var closeCalls = 0;
   @override
   AgentTerminalState get state => _state;
 
@@ -405,6 +518,9 @@ final class _TerminalPresentation extends ChangeNotifier
     _state = state;
     notifyListeners();
   }
+
+  @override
+  Future<void> closeForTaskCompletion() async => closeCalls += 1;
 
   @override
   void setForeground(bool foreground) => this.foreground = foreground;
