@@ -196,8 +196,10 @@ _ConnectionContent _contentFor(
   Connected() => const _ConnectionContent(
     title: 'Connected',
     message:
-        'Interactive Agent terminal access is active for this paired device. '
-        'Terminal input runs as your desktop user.',
+        'This paired device can Start backlog Tasks, Delete or Complete Tasks, '
+        'and interact with running Agent terminals as your desktop user. This '
+        'authority remains available while the Mac is locked and ends when the '
+        'gateway is disabled, the device is revoked, or Companion identity changes.',
     icon: Icons.check_circle_outline,
     iconLabel: 'Desktop connected',
   ),

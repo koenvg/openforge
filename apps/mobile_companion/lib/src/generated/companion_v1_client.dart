@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    'c9094950ff8546076116c5f50a8337185e2d9089acea9dffe211e46f98de0cd7';
+    '3a94b1141350f02faf35452f408544f714473ee1f8d42871dd819b930f503d76';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 

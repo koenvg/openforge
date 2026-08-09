@@ -500,25 +500,36 @@ void main() {
     await live.suspend();
   });
   test(
-    'certificate mismatch is terminal and keeps its security state',
+    'certificate mismatch after reconnect clears the Project Board and stays terminal',
     () async {
+      final first = _FakeConnection();
       final client = _FakeClient()
-        ..connections.add(const CompanionCertificateMismatch());
+        ..connections.addAll(<Object>[
+          first,
+          const CompanionCertificateMismatch(),
+        ]);
+      final storage = _FakeStorage();
+      final board = ProjectBoardController(client: client, storage: storage);
       var mismatches = 0;
       var unavailable = 0;
       final live = LiveUpdatesController(
         client: client,
-        storage: _FakeStorage(),
-        attention: AttentionController(client: client, storage: _FakeStorage()),
+        storage: storage,
+        projectBoard: board,
+        delay: (_) async {},
         onCertificateMismatch: () => mismatches += 1,
         onUnavailable: () => unavailable += 1,
       );
 
       live.start();
+      await _until(() => board.state is ProjectBoardLoaded);
+      await first.controller.close();
       await _until(() => mismatches == 1);
 
+      expect(board.state, isA<ProjectBoardLoading>());
+      expect(board.selectedProjectId, isNull);
       expect(unavailable, 0);
-      expect(client.cursors, hasLength(1));
+      expect(client.cursors, hasLength(2));
     },
   );
 
@@ -620,24 +631,102 @@ void main() {
     },
   );
 
-  test('authorization termination crosses the typed client boundary', () async {
-    final connection = _FakeConnection();
-    final client = _FakeClient()..connections.add(connection);
-    var authorizationLosses = 0;
-    final live = LiveUpdatesController(
-      client: client,
-      storage: _FakeStorage(),
-      attention: AttentionController(client: client, storage: _FakeStorage()),
-      onAuthorizationLost: () => authorizationLosses += 1,
-    );
+  test(
+    'authorization loss clears the Project Board through the live boundary',
+    () async {
+      final connection = _FakeConnection();
+      final client = _FakeClient()..connections.add(connection);
+      final storage = _FakeStorage();
+      final board = ProjectBoardController(client: client, storage: storage);
+      var authorizationLosses = 0;
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        projectBoard: board,
+        onAuthorizationLost: () => authorizationLosses += 1,
+      );
 
-    live.start();
-    await _until(() => client.cursors.length == 1);
-    connection.controller.add(const CompanionAuthorizationRevoked());
-    await _until(() => authorizationLosses == 1);
+      live.start();
+      await _until(() => board.state is ProjectBoardLoaded);
+      connection.controller.add(const CompanionAuthorizationRevoked());
+      await _until(() => authorizationLosses == 1);
 
-    expect(client.cursors, hasLength(1));
-  });
+      expect(board.state, isA<ProjectBoardLoading>());
+      expect(board.selectedProjectId, isNull);
+      expect(client.cursors, hasLength(1));
+    },
+  );
+  test(
+    'gateway shutdown clears the Project Board before reconnecting',
+    () async {
+      final first = _FakeConnection();
+      final pendingReconnect = Completer<CompanionLiveConnection>();
+      final client = _FakeClient()
+        ..connections.addAll(<Object>[first, pendingReconnect]);
+      final storage = _FakeStorage();
+      final board = ProjectBoardController(client: client, storage: storage);
+      var reconnecting = 0;
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        projectBoard: board,
+        delay: (_) async {},
+        onReconnecting: () => reconnecting += 1,
+      );
+
+      live.start();
+      await _until(() => board.state is ProjectBoardLoaded);
+      first.controller.add(const CompanionGatewayClosing());
+      await _until(() => reconnecting == 1);
+
+      expect(board.state, isA<ProjectBoardLoading>());
+      expect(board.selectedProjectId, isNull);
+      await live.suspend();
+      pendingReconnect.completeError(const SocketException('gateway disabled'));
+    },
+  );
+
+  for (final scenario in <({String code, String name})>[
+    (code: 'unauthenticated', name: 'credential failure'),
+    (code: 'incompatible_version', name: 'incompatible protocol'),
+  ]) {
+    test('${scenario.name} after reconnect clears the Project Board', () async {
+      final first = _FakeConnection();
+      final client = _FakeClient()
+        ..connections.addAll(<Object>[
+          first,
+          CompanionV1Exception(
+            statusCode: scenario.code == 'unauthenticated' ? 401 : 409,
+            code: scenario.code,
+            message: 'Safe connection failure',
+          ),
+        ]);
+      final storage = _FakeStorage();
+      final board = ProjectBoardController(client: client, storage: storage);
+      var authorizationLosses = 0;
+      var incompatibilities = 0;
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        projectBoard: board,
+        delay: (_) async {},
+        onAuthorizationLost: () => authorizationLosses += 1,
+        onIncompatible: () => incompatibilities += 1,
+      );
+
+      live.start();
+      await _until(() => board.state is ProjectBoardLoaded);
+      await first.controller.close();
+      await _until(() => authorizationLosses == 1 || incompatibilities == 1);
+
+      expect(board.state, isA<ProjectBoardLoading>());
+      expect(board.selectedProjectId, isNull);
+      expect((
+        authorizationLosses,
+        incompatibilities,
+      ), scenario.code == 'unauthenticated' ? (1, 0) : (0, 1));
+    });
+  }
 
   test(
     'detaching attention prevents teardown from notifying its old owner',

@@ -1555,13 +1555,23 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     .expect("OpenAPI JSON");
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
+    let api_description = contract["info"]["description"]
+        .as_str()
+        .expect("Companion API description");
+    for disclosed_authority in ["interactive Agent terminal", "Start", "Delete", "Complete"] {
+        assert!(
+            api_description.contains(disclosed_authority),
+            "Companion API must disclose {disclosed_authority} authority",
+        );
+    }
+    assert!(!api_description.to_ascii_lowercase().contains("read-only"));
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
     assert_eq!(paths.len(), 11);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
         vec!["get"],
-        "authenticated v1 resources must remain read-only"
+        "host status must expose no mutation or generic command capability"
     );
     let attention_path = paths["/attention"]
         .as_object()

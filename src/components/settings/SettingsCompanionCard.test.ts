@@ -109,6 +109,8 @@ describe('SettingsCompanionCard', () => {
     expect(await screen.findByText('Disabled')).toBeTruthy()
     expect(screen.getByText(/OpenForge must remain running/i)).toBeTruthy()
     expect(screen.getByText(/interactive Agent terminal access/i)).toBeTruthy()
+    expect(screen.getByText(/authority remains active while this Mac is locked/i)).toBeTruthy()
+    expect(screen.getByText(/gateway is disabled, the device is revoked, or Companion identity is reset/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Enable Companion Gateway' })).toBeTruthy()
   })
 
@@ -197,7 +199,7 @@ describe('SettingsCompanionCard', () => {
 
     expect(await screen.findByText("Koen's iPhone")).toBeTruthy()
     expect(screen.getByText(/iOS · Awaiting/)).toBeTruthy()
-    expect(screen.getByText(/Approval lets this phone.*Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
+    expect(screen.getByText(/Approval grants this phone authority.*Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Approve Koen\'s iPhone' }))
 
     expect(approveCompanionPairing).toHaveBeenCalledWith('request-1')
@@ -247,6 +249,7 @@ describe('SettingsCompanionCard', () => {
     expect(screen.getByText('device-1')).toBeTruthy()
     expect(screen.getByText('Last seen')).toBeTruthy()
     expect(screen.getByText(/Paired devices can Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
+    expect(screen.getByText(/Existing paired devices inherit this fixed authority without reapproval/i)).toBeTruthy()
     expect(screen.getByText('never')).toBeTruthy()
     confirm.mockRestore()
   })

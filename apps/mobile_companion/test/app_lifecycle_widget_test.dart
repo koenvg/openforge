@@ -79,7 +79,16 @@ void main() {
 
       expect(find.text('Connected'), findsOneWidget);
       expect(
-        find.textContaining('Interactive Agent terminal access is active'),
+        find.textContaining(
+          'This paired device can Start backlog Tasks, Delete or Complete Tasks, '
+          'and interact with running Agent terminals',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'authority remains available while the Mac is locked',
+        ),
         findsOneWidget,
       );
       expect(find.text('Host desktop-host-1'), findsOneWidget);
