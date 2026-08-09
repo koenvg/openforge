@@ -134,6 +134,52 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 }
 
 #[tokio::test]
+async fn delete_project_conflicts_with_an_in_progress_task_start() {
+    let (state, path) = test_state("app_invoke_delete_project_claim");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Claimed Project", "path": "/tmp/claimed-project" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Claimed task",
+            "status": "backlog",
+            "projectId": project_id,
+            "permissionMode": null,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("task id");
+    let _start_claim = state
+        .task_claims
+        .try_claim(
+            task_id,
+            crate::task_claims::TaskOperation::StartImplementation,
+        )
+        .expect("claim task start");
+
+    let error = invoke(&state, "delete_project", json!({ "id": project_id }))
+        .await
+        .expect_err("project deletion should conflict with task start");
+
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    assert!(crate::db::acquire_db(&state.db)
+        .get_project(project_id)
+        .expect("get project")
+        .is_some());
+    assert!(crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get task")
+        .is_some());
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn app_invoke_updates_only_never_started_initial_prompts() {
     let (state, path) = test_state("app_invoke_initial_prompt_lifecycle_guard");
     let task = invoke_ok(

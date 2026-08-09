@@ -25,7 +25,7 @@ use crate::{
     whisper_manager::WhisperModelSize,
 };
 use axum::http::StatusCode;
-pub(crate) use lifecycle::start_implementation;
+pub(crate) use lifecycle::start_task;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

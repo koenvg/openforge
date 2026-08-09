@@ -665,10 +665,25 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
     assert_eq!(latest_session["id"], "session-1");
     assert_eq!(latest_session["ticket_id"], task_id);
 
+    let start_task_id = {
+        let db_state = app
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .expect("database state");
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        db.create_task(
+            "Start through plugin callback",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("start Task fixture")
+        .id
+    };
     let start_error = host
         .handle_host_callback(
             "openforge.tasks.startImplementation",
-            &json!({ "taskId": task_id }),
+            &json!({ "taskId": start_task_id }),
         )
         .await
         .expect_err("start should route through app lifecycle and report unavailable PTY manager");

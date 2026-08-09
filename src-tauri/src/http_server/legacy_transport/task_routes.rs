@@ -117,63 +117,7 @@ pub async fn start_task_handler(
     State(state): State<AppState>,
     Json(request): Json<StartTaskRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let repo_path = {
-        let db = state.db.lock().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to lock database while starting task: {e}"),
-            )
-        })?;
-        let task = db
-            .get_task(&request.task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get task before start: {e}"),
-                )
-            })?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    format!("Task not found: {}", request.task_id),
-                )
-            })?;
-        let project_id = task.project_id.ok_or_else(|| {
-            (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                format!(
-                    "Cannot start task {}: task is not associated with a project",
-                    request.task_id
-                ),
-            )
-        })?;
-        db.get_project(&project_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get project before task start: {e}"),
-                )
-            })?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    format!(
-                        "Cannot start task {}: project {} not found",
-                        request.task_id, project_id
-                    ),
-                )
-            })?
-            .path
-    };
-
-    let response = crate::app_invoke::start_implementation(
-        &state,
-        &request.task_id,
-        &repo_path,
-        crate::git_worktree::DivergenceResolution::Auto,
-        None,
-    )
-    .await?;
+    let response = crate::app_invoke::start_task(&state, &request.task_id).await?;
 
     Ok(Json(response))
 }
