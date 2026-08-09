@@ -149,7 +149,8 @@ pub async fn refresh_task_github_status_for_sidecar(
     }
 
     github_client.clear_rate_limit_reset();
-    let github_token = crate::secure_store::get_secret("github_token")
+    let github_token = crate::secure_store::get_secret_async("github_token")
+        .await
         .unwrap_or(None)
         .unwrap_or_default();
     if github_token.is_empty() {
@@ -193,7 +194,8 @@ pub(super) async fn poll_github_once_with_state(
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
 
-    let github_token = crate::secure_store::get_secret("github_token")
+    let github_token = crate::secure_store::get_secret_async("github_token")
+        .await
         .unwrap_or(None)
         .unwrap_or_default();
 

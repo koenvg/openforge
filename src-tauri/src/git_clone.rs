@@ -227,7 +227,7 @@ pub async fn create_project_from_git(
     let parsed = parse_repo_url(url)?;
 
     // Access pre-check only when a PAT is stored; tolerate inconclusive results.
-    let token = crate::github_runtime::github_token().ok();
+    let token = crate::github_runtime::github_token().await.ok();
     if let Some(token) = token.as_deref() {
         match github_client
             .check_repo_access(&parsed.owner, &parsed.repo, token)
@@ -260,7 +260,7 @@ pub async fn create_project_from_new_repo(
     parent_dir: &str,
     private: bool,
 ) -> Result<crate::db::ProjectRow, String> {
-    let token = crate::github_runtime::github_token().map_err(|_| {
+    let token = crate::github_runtime::github_token().await.map_err(|_| {
         "Connect a GitHub token with 'repo' scope in Settings to create repositories.".to_string()
     })?;
 

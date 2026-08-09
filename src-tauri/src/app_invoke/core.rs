@@ -146,10 +146,66 @@ pub(super) async fn handle_app_core_task_project_command(
     Ok(Some(value))
 }
 
+async fn handle_config_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<serde_json::Value> {
+    let key = payload_string(&request.payload, "key")?;
+    match request.command.as_str() {
+        "get_config" => {
+            if crate::secure_store::is_secret(&key) {
+                let value = crate::secure_config::get(&state.db, &key)
+                    .await
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get secret config: {error}"),
+                        )
+                    })?;
+                json_value(value)
+            } else {
+                let db = crate::db::acquire_db(&state.db);
+                json_value(db.get_config(&key).map_err(|error| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get config: {error}"),
+                    )
+                })?)
+            }
+        }
+        "set_config" => {
+            let value = payload_string(&request.payload, "value")?;
+            if crate::secure_store::is_secret(&key) {
+                crate::secure_config::set(&state.db, &key, &value)
+                    .await
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to set secret config: {error}"),
+                        )
+                    })?;
+            } else {
+                let db = crate::db::acquire_db(&state.db);
+                db.set_config(&key, &value).map_err(|error| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set config: {error}"),
+                    )
+                })?;
+            }
+            Ok(serde_json::Value::Null)
+        }
+        _ => unreachable!("config handler only receives config commands"),
+    }
+}
 pub(super) async fn handle_app_unmatched_command(
     state: &AppState,
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
+    if matches!(request.command.as_str(), "get_config" | "set_config") {
+        return handle_config_command(state, request).await;
+    }
+
     let db = crate::db::acquire_db(&state.db);
     let value = match request.command.as_str() {
         "list_browser_session_purge_intents" => {
@@ -171,57 +227,6 @@ pub(super) async fn handle_app_unmatched_command(
                         format!("Failed to acknowledge Task Browser Session purge intent: {error}"),
                     )
                 })?;
-            serde_json::Value::Null
-        }
-        "get_config" => {
-            let key = payload_string(&request.payload, "key")?;
-            let db_value = || {
-                db.get_config(&key).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get config: {e}"),
-                    )
-                })
-            };
-            if crate::secure_store::is_secret(&key) {
-                let secret = crate::secure_store::get_secret(&key).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get secret config: {e}"),
-                    )
-                })?;
-                json_value(match secret {
-                    Some(value) => Some(value),
-                    None => db_value()?,
-                })?
-            } else {
-                json_value(db_value()?)?
-            }
-        }
-        "set_config" => {
-            let key = payload_string(&request.payload, "key")?;
-            let value = payload_string(&request.payload, "value")?;
-            if crate::secure_store::is_secret(&key) {
-                crate::secure_store::set_secret(&key, &value).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to set secret config: {e}"),
-                    )
-                })?;
-                db.set_config(&key, "").map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to clear persisted secret config: {e}"),
-                    )
-                })?;
-            } else {
-                db.set_config(&key, &value).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to set config: {e}"),
-                    )
-                })?;
-            }
             serde_json::Value::Null
         }
         "create_project" => {

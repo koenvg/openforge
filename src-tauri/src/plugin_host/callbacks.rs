@@ -105,8 +105,8 @@ impl PluginHost {
             }
             "openforge.attention.listProjects" => self.list_project_attention_for_host(),
             "openforge.system.openUrl" => self.emit_host_app_event("openforge.open-url", params),
-            "openforge.config.get" => self.get_config_for_host(params),
-            "openforge.config.set" => self.set_config_for_host(params),
+            "openforge.config.get" => self.get_config_for_host(params).await,
+            "openforge.config.set" => self.set_config_for_host(params).await,
             "openforge.projectConfig.get" => self.get_project_config_for_host(params),
             "openforge.projectConfig.set" => self.set_project_config_for_host(params),
             _ => Err(format!("unsupported plugin host callback method: {method}")),
@@ -319,38 +319,37 @@ impl PluginHost {
         .map_err(|error| format!("failed to serialize project attention: {error}"))
     }
 
-    fn get_config_for_host(&self, params: &Value) -> Result<Value, String> {
+    async fn get_config_for_host(&self, params: &Value) -> Result<Value, String> {
         let key = required_param_string(params, "key")?;
         let db_state = self
             .app_handle
             .try_state::<Arc<Mutex<crate::db::Database>>>()
             .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
         let value = if crate::secure_store::is_secret(&key) {
-            crate::secure_store::get_secret(&key)
+            crate::secure_config::get(db_state.inner(), &key)
+                .await
                 .map_err(|error| format!("failed to get secret config: {error}"))?
-                .or_else(|| db.get_config(&key).ok().flatten())
         } else {
+            let db = crate::db::acquire_db(db_state.inner().as_ref());
             db.get_config(&key)
                 .map_err(|error| format!("failed to get config: {error}"))?
         };
         serde_json::to_value(value).map_err(|error| format!("failed to serialize config: {error}"))
     }
 
-    fn set_config_for_host(&self, params: &Value) -> Result<Value, String> {
+    async fn set_config_for_host(&self, params: &Value) -> Result<Value, String> {
         let key = required_param_string(params, "key")?;
         let value = host_config_value(params);
         let db_state = self
             .app_handle
             .try_state::<Arc<Mutex<crate::db::Database>>>()
             .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
         if crate::secure_store::is_secret(&key) {
-            crate::secure_store::set_secret(&key, &value)
+            crate::secure_config::set(db_state.inner(), &key, &value)
+                .await
                 .map_err(|error| format!("failed to set secret config: {error}"))?;
-            db.set_config(&key, "")
-                .map_err(|error| format!("failed to clear persisted secret config: {error}"))?;
         } else {
+            let db = crate::db::acquire_db(db_state.inner().as_ref());
             db.set_config(&key, &value)
                 .map_err(|error| format!("failed to set config: {error}"))?;
         }

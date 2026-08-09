@@ -39,6 +39,7 @@ pub mod providers;
 mod pty_manager;
 pub mod review_parser;
 mod runtime_checks;
+mod secure_config;
 mod secure_store;
 mod self_review_runtime;
 mod sidecar_logger;

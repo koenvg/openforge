@@ -60,6 +60,11 @@ fn keychain_access_lock() -> &'static Mutex<()> {
     KEYCHAIN_ACCESS_LOCK.get_or_init(|| Mutex::new(()))
 }
 
+fn async_keychain_access_lock() -> &'static Arc<tokio::sync::Mutex<()>> {
+    static ASYNC_KEYCHAIN_ACCESS_LOCK: OnceLock<Arc<tokio::sync::Mutex<()>>> = OnceLock::new();
+    ASYNC_KEYCHAIN_ACCESS_LOCK.get_or_init(|| Arc::new(tokio::sync::Mutex::new(())))
+}
+
 fn with_serialized_keychain_access<T>(
     access: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
@@ -100,6 +105,41 @@ pub fn is_secret(key: &str) -> bool {
     crate::data_identity::is_secret_account(key)
 }
 
+async fn spawn_blocking_secret_store_operation<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let admission_guard = Arc::clone(async_keychain_access_lock()).lock_owned().await;
+    tokio::task::spawn_blocking(move || {
+        let _admission_guard = admission_guard;
+        operation()
+    })
+    .await
+    .map_err(|error| format!("{operation_name} task failed: {error}"))?
+}
+
+pub async fn get_secret_async(key: &str) -> Result<Option<String>, String> {
+    let key = key.to_string();
+    spawn_blocking_secret_store_operation("Secret read", move || get_secret(&key)).await
+}
+
+pub async fn set_secret_async(key: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return delete_secret_async(key).await;
+    }
+    let key = key.to_string();
+    let value = value.to_string();
+    spawn_blocking_secret_store_operation("Secret write", move || set_secret(&key, &value)).await
+}
+
+pub async fn delete_secret_async(key: &str) -> Result<(), String> {
+    let key = key.to_string();
+    spawn_blocking_secret_store_operation("Secret deletion", move || delete_secret(&key)).await
+}
 pub fn get_secret(key: &str) -> Result<Option<String>, String> {
     let cancellation = SecretStoreCancellation::default();
     with_serialized_keychain_access(|| {
@@ -438,5 +478,48 @@ mod tests {
         );
         assert!(started_at.elapsed() < Duration::from_millis(100));
         drop(guard);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn blocking_secret_store_work_runs_off_the_tokio_worker() {
+        let tokio_worker = std::thread::current().id();
+
+        let credential_worker = spawn_blocking_secret_store_operation("test secret read", || {
+            Ok::<_, String>(std::thread::current().id())
+        })
+        .await
+        .expect("secret-store operation should succeed");
+
+        assert_ne!(credential_worker, tokio_worker);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn async_secret_store_admission_is_held_until_blocking_work_finishes() {
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let operation = tokio::spawn(spawn_blocking_secret_store_operation(
+            "test secret access",
+            move || {
+                let _ = started_tx.send(());
+                release_rx.recv().expect("release blocking operation");
+                Ok::<(), String>(())
+            },
+        ));
+
+        started_rx.await.expect("blocking operation should start");
+        assert!(
+            async_keychain_access_lock().try_lock().is_err(),
+            "async admission must remain held by blocking work"
+        );
+
+        release_tx.send(()).expect("release blocking operation");
+        operation
+            .await
+            .expect("secret-store task should join")
+            .expect("secret-store operation should succeed");
+
+        let _available = async_keychain_access_lock()
+            .try_lock()
+            .expect("async admission should be released after blocking work");
     }
 }
