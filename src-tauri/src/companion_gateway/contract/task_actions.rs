@@ -3,11 +3,13 @@ use super::{
     CompanionRouterState, CompanionTaskCompleteResponse, CompanionTaskDeleteOutcome,
     CompanionTaskDeleteResponse, CompanionTaskStartResponse,
 };
+use crate::companion_gateway::action_diagnostics::record_task_action;
 use crate::terminal_task_completion::{TerminalTaskCompletionError, TerminalTaskCompletionOutcome};
 use axum::{
     body::Bytes,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
+    middleware,
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -27,6 +29,7 @@ pub(super) fn routes() -> Router<CompanionRouterState> {
             "/companion/v1/tasks/:task_id/start",
             post(task_start_handler),
         )
+        .route_layer(middleware::from_fn(record_task_action))
 }
 
 async fn complete_task_handler(

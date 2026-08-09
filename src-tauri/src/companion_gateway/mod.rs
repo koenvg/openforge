@@ -1,3 +1,4 @@
+mod action_diagnostics;
 mod advertisement;
 mod attention;
 mod contract;

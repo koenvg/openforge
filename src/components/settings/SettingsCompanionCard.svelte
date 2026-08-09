@@ -143,7 +143,7 @@
 >
   <div class="flex flex-col gap-4">
     <p class="m-0 text-sm text-base-content/70">
-      OpenForge must remain running for the Mobile Companion to connect. Paired phones can Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user. Task actions follow desktop lifecycle safeguards; terminal access alone cannot create, stop, or replace Agent Sessions. The internal desktop and CLI bridge stays local to this Mac.
+      OpenForge must remain running for the Mobile Companion to connect. Paired phones can Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user. Task actions follow desktop lifecycle safeguards; terminal access alone cannot create, stop, or replace Agent Sessions. This authority remains active while this Mac is locked and ends when the Companion Gateway is disabled, the device is revoked, or Companion identity is reset. The internal desktop and CLI bridge stays local to this Mac.
     </p>
 
     {#if loading && !status}

@@ -1,9 +1,10 @@
 # OpenForge Companion
 
 A dedicated Flutter application for iOS and Android. It is intentionally
-independent from the pnpm workspace and provides desktop-approved pairing, an
-attention-first Project Board and Task detail, explicit active-Task completion,
-foreground live updates, an interactive attachment to an already-running Task Agent terminal,
+independent from the pnpm workspace and provides desktop-approved pairing, a
+Project-scoped four-lane Board and Task detail, explicit Start/Delete/Complete
+Task actions, foreground live updates, and an interactive attachment to an
+already-running Task Agent terminal,
 pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
 Tailscale MagicDNS fallback, and explicit connection and recovery states.
 The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md) and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
@@ -17,42 +18,56 @@ Project, Agent, or Handoff Note data, no certificate or credential, and no pairi
 secret. A discovered endpoint is accepted only when it belongs to the already
 paired host and presents the exact pinned certificate.
 
-After the user explicitly approves pairing on the desktop, the device credential
-can make authenticated reads, invoke the one explicit Task-scoped Complete operation,
-and attach interactively to the current Agent terminal for a Task. HTTP reads may fetch:
+Every existing and newly approved paired-device credential has the same fixed
+pre-release authority. It can read the desktop-authoritative Project catalog,
+four-lane Project Board, Task detail, and foreground coarse invalidations; attach
+interactively to the current Agent terminal for a Task; Start a backlog Task with
+its saved defaults; and Delete a backlog Task or Complete an active Task through
+explicit Task-scoped operations. Existing credentials inherit this authority
+without reapproval, migration, renewed consent, or per-device scopes.
 
-- host identity, protocol version, and server time;
-- the Needs Attention snapshot time and rows: Task identity, title, normalized
-  state/reason, recent activity time, and Project identity/name;
-- Task detail: Task identity/title, Project identity/name, Board Status, Handoff
-  Notes, normalized Agent state, an optional safe Agent error summary, plus Task
-  creation/update and optional Agent-update timestamps; and
-- foreground SSE resource invalidations with opaque replay cursors, plus
-  stream-gap, authorization-revoked, and gateway-closing control events.
-  Invalidations identify attention or Task resources to refetch rather than
-  carrying domain content.
+The Project catalog contains only visible Project identifiers and display names.
+The Board contains the authoritative Focus, In Flight, Out of Focus, and Backlog
+partition with safe Task identity, title, state, reason, and activity metadata.
+Task detail contains Task and Project identity, Board Status, Handoff Notes,
+normalized Agent state, an optional safe Agent error summary, terminal
+availability, and timestamps. The API omits filesystem paths, repository data,
+provider configuration, internal Agent-session identifiers, terminal content,
+and credentials from these HTTP resources.
 
-Task Complete accepts only a Task identifier. The server rechecks authentication,
-Project visibility, doing state, and lifecycle claims; it then uses the shared desktop
-terminal completion service to stop the Agent and Task shells, retain Completed Task
-reference data, and schedule safe worktree/owned-branch cleanup. The client closes an
-active terminal attachment normally, refreshes authoritative state after failures or
-uncertain transport loss, and never retries or fails the mutation over automatically.
+Start accepts only a Task identifier and resolves Project, provider, agent,
+permission, workspace, branch, prompt, and model choices from desktop state. It
+never retries automatically. Delete and Complete also accept only a Task
+identifier and use the shared desktop terminal Task lifecycle. Delete is backlog
+only. Complete is active-Task only, can stop a running Agent and Task shells,
+retains the Completed Task as reference data, and schedules the normal safe
+worktree and owned-branch cleanup. After transport uncertainty the client clears
+stale state and refetches Task detail and the Project Board before offering
+another action.
+
 The dedicated Task-scoped terminal WebSocket attaches only to an already-running
-Agent PTY. It carries terminal output and ready-gated UTF-8 input, and it applies
+Agent PTY. It carries terminal output and ready-gated UTF-8 input, and applies
 last-writer-wins resizes to the PTY shared with desktop surfaces and other paired
-devices. It cannot start, resume, abort, replace, or kill Agent Sessions.
+devices. It cannot independently start, resume, abort, replace, or kill Agent
+Sessions; Start and Complete remain the only Task actions that can respectively
+create or stop an Agent through the shared Task lifecycle.
 
-Beyond explicit Task Complete, the API exposes no Task mutations, generic command
-dispatch, repository access, ordinary shell terminals, provider credentials, or
-internal Agent-session identifiers. Every post-pairing LAN or Tailscale request uses
-the same device credential and exact certificate pin.
-
+Companion Task Authority remains valid while the macOS screen is locked, provided
+OpenForge and the opt-in Companion Gateway are running. Device revocation,
+gateway disablement, host identity reset, credential failure, and certificate-pin
+failure remove access. The API exposes no generic command dispatch, arbitrary
+status mutation, repository access, ordinary shell terminal, caller-supplied
+provider/workspace options, or public-release scope system. Action diagnostics
+are restricted to safe request, Task, action, outcome, and timing metadata;
+they never contain credentials, prompts, Handoff Notes, terminal content,
+provider options, workspace paths, or repository data. Every post-pairing LAN or
+Tailscale request uses the same device credential and exact certificate pin.
 Only host trust (host identity and certificate fingerprint), endpoint candidates,
 and the device credential (device identity and bearer credential) persist in
 secure mobile storage through Keychain on iOS or Keystore-backed encrypted
-storage on Android. Attention and Task responses live only in memory for the
-current foreground session; the app retains no offline domain snapshot in
+storage on Android. Project catalogs, Board snapshots, Task detail, pending
+action state, and scroll positions live only in memory for the current foreground
+session; the app retains no offline domain snapshot in
 preferences, files, SQLite, analytics, or another cache. Suspending the app or a
 stream gap clears in-memory views before a fresh authenticated snapshot; lost
 desktop availability replaces domain content with Desktop Unavailable, and
@@ -105,20 +120,24 @@ builds are separate Flutter invocations and do not require `pnpm install`.
 
 ## Architecture boundaries
 
-- `lib/src/client/companion_client.dart` separates read/failover calls behind
-  `CompanionClient` from the single-attempt Complete mutation behind
-  `CompanionTaskActionClient`; all calls use generated models and pinned transport.
+- `lib/src/client/companion_client.dart` keeps read/failover calls and each
+  single-attempt Start/Delete/Complete mutation behind the generated Companion
+  client boundary; mutations never fail over or retry automatically.
+- `lib/src/project_board/` owns the host-scoped Selected Project, the in-memory
+  authoritative four-lane snapshot, lane positions, generation races, and refresh
+  recovery. `lib/src/task_detail/` owns detail-only actions, confirmations,
+  pending-state suppression, safe recovery, and success navigation.
 - `lib/src/discovery/` discovers Bonjour services and filters them by the already
   paired host identifier and protocol version. Discovery never establishes trust.
-- `lib/src/attention/` and `lib/src/task_detail/` own in-memory views; Task detail
-  also coordinates confirmed Complete, safe refresh recovery, and success navigation.
-  `lib/src/live/` refreshes views from coarse foreground SSE invalidations.
+- `lib/src/live/` clears and refetches Board/detail state after foreground resume,
+  reconnect, or stream gaps, ignores unrelated Project invalidations, and removes
+  domain state on unavailable, authorization, certificate, or version failures.
 - `lib/src/terminal/` owns the dedicated Agent-terminal WebSocket, ready-gated
   input/resize controller, and xterm.dart adapter. Terminal state is memory-only.
 - `lib/src/storage/` persists only the paired host trust record, endpoint
-  candidates, device identity, and device credential in platform secure storage.
-  Domain snapshots must never be added to preferences, files, SQLite, or another
-  offline cache.
+  candidates, device identity/credential, and that host's Selected Project
+  identifier in platform secure storage. Domain snapshots must never be added to
+  preferences, files, SQLite, or another offline cache.
 
 ## Physical-device LAN and Tailscale acceptance
 
@@ -126,38 +145,47 @@ Use real iOS and Android devices; emulators do not reliably receive LAN mDNS.
 Use a tester-owned tailnet for remote checks. OpenForge operates no central server
 or relay; Tailscale remains user-selected network infrastructure.
 
-1. Put the desktop and phone on the same Wi-Fi LAN. Connect the desktop to the
-   tester-owned tailnet so Settings can inspect its local Tailscale identity.
-2. In Companion Settings, confirm the locally detected MagicDNS hostname. If no
-   reliable candidate appears, enter this desktop's full `*.ts.net` MagicDNS name.
-3. Enable Companion Gateway after Tailscale is connected (or disable and re-enable
-   it), and verify both LAN and Tailscale endpoints are offered before pairing.
-4. Pair once by QR, then fully close and relaunch the phone app. It should reconnect
-   on the LAN without IP entry.
-5. Disable and re-enable Wi-Fi or change the desktop DHCP lease. After a lease
-   change, re-enable Companion Gateway so it binds and advertises the new address,
-   then tap **Retry** if the unavailable state is shown. The paired host should
-   reconnect without another QR scan.
-6. Verify a second reachable LAN address is used when the first saved candidate
-   is unreachable.
-7. On iOS, deny Local Network access on first discovery. Verify the app explains
-   the denial and **Open settings** opens app settings; re-enable Local Network
-   and retry.
-8. Disable Companion Gateway and confirm the service disappears from a Bonjour
-   browser; re-enable it and confirm it returns.
-9. With the desktop and phone connected to the same test tailnet, turn off phone
-   Wi-Fi (or move it to a separate non-LAN network) and tap **Retry**. Verify the
-   already-paired host reconnects through Tailscale without another QR scan.
-10. Move the phone back onto the LAN, then away from it again. Verify both switches
-    reconnect under the same host identity and device credential.
-11. Stop Tailscale and verify the existing Desktop Unavailable state. Restore
-    Tailscale, disable and re-enable Companion Gateway so it rebinds current
-    interfaces, then verify recovery.
-12. For a separate fresh-pairing security check, configure a controlled MagicDNS
-    endpoint that resolves to a different test host before scanning the QR. Away
-    from the LAN, verify that host cannot connect and the app shows Certificate
-    Mismatch rather than trusting the address. Restore the real hostname and pair
-    again afterward.
+1. Build and install the same revision on one physical iOS device and one physical
+   Android device. Put the desktop and phone on the same Wi-Fi LAN, connect the
+   desktop to the tester-owned tailnet, and confirm the detected or entered
+   `*.ts.net` MagicDNS hostname.
+2. Enable Companion Gateway after Tailscale is connected and verify Settings offers
+   both LAN and Tailscale endpoints. Confirm gateway, pairing approval, and paired-
+   device copy disclose Start, Delete, Complete, and interactive Agent terminal
+   authority without calling the credential read-only.
+3. Pair once by QR. Fully close and relaunch the phone app; verify the existing
+   credential reconnects without another approval. Confirm Project selection persists,
+   hidden Projects stay absent, fallback works when the selection disappears, and
+   Focus, In Flight, Out of Focus, and Backlog membership/count/order match desktop.
+4. Change Tasks and Agent state on desktop while mobile is foregrounded. Verify the
+   selected Board and open Task refresh without disturbing unrelated Projects. Break
+   and restore connectivity, suspend/resume, and induce a replay gap; stale domain
+   state must clear before fresh Board/detail snapshots appear.
+5. Start backlog Tasks with each supported saved provider default. Verify a desktop-
+   action-required branch/workspace choice refuses safely, duplicate taps are blocked,
+   no provider/workspace inputs are offered, and uncertain network outcomes refetch
+   before another attempt.
+6. Confirmed Delete must remove a backlog Task from the active Board while retaining
+   Completed Task reference data. Confirmed Complete must work in Focus, In Flight,
+   and Out of Focus, disclose cleanup, and stop a running Agent/Task shells when an
+   Agent terminal is attached. Cancellation sends no request.
+7. Lock the Mac while OpenForge and Companion Gateway remain running. Repeat Start,
+   Delete, and Complete from each phone over LAN and Tailscale; all three actions must
+   remain authorized.
+8. Separately disable the gateway, revoke the active device, reset Companion identity,
+   use a wrong credential, present a different pinned certificate, and connect with an
+   incompatible protocol version. Each case must remove Board/detail/terminal state and
+   show its explicit unavailable, re-pair, certificate, or update recovery state.
+9. Turn off phone Wi-Fi (or move it to a separate non-LAN network) and retry through
+   Tailscale without re-pairing. Move between LAN and Tailscale repeatedly, interrupt
+   the network during each action, and confirm recovery uses the same host identity,
+   certificate pin, and device credential without automatic mutation retry.
+10. On iOS, deny Local Network access during discovery. Verify the explanation and
+    **Open settings** recovery; re-enable permission and retry. Confirm Android requires
+    no location, Wi-Fi identity, Bluetooth, or nearby-device permission.
+11. Record device model/OS, app and desktop revision, LAN/Tailscale result, action/
+    recovery outcomes, and any precise device-only blocker in
+    `docs/acceptance/companion-task-authority.md`.
 
 iOS requests the system Local Network permission for `_openforge._tcp`. Android
 uses NSD with only `INTERNET`, `ACCESS_NETWORK_STATE`, and Bonsoir's normal

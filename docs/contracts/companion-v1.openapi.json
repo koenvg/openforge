@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; authenticated resources expose narrow desktop-authoritative Companion capabilities without generic command dispatch or sensitive desktop state."
+    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; every existing and newly approved paired-device credential receives interactive Agent terminal access plus the fixed authority to Start backlog Tasks and Delete or Complete Tasks through explicit Task-scoped operations. Desktop-authoritative reads and mutations expose no generic command dispatch or sensitive desktop state."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -377,7 +377,8 @@
       "companionDeviceBearer": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "OpenForge companion device credential"
+        "bearerFormat": "OpenForge companion device credential",
+        "description": "A fixed pre-release paired-device credential authorizes desktop-authoritative reads, interactive Agent terminal attachment, and only the explicit Start, Delete, and Complete Task operations. Existing credentials inherit this authority without reapproval or migration; revocation, gateway disablement, host identity reset, credential failure, or certificate-pin failure removes access."
       }
     },
     "parameters": {

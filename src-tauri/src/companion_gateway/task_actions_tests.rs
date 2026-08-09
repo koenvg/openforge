@@ -3,7 +3,7 @@ use super::{
         create_router_with_task_actions, AllowAllAuthorizer, CompanionAuthorizer,
         CompanionErrorCode, CompanionHostStatus,
     },
-    devices::InMemoryCompanionDeviceStore,
+    devices::{CompanionDeviceRecord, CompanionDeviceStore, InMemoryCompanionDeviceStore},
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
     project_board::DatabaseCompanionProjectBoardSource,
     task_actions::CompanionTaskActionService,
@@ -97,10 +97,19 @@ fn router(
     authorizer: Arc<dyn CompanionAuthorizer>,
     actions: Arc<dyn CompanionTaskActionService>,
 ) -> axum::Router {
+    router_with_pairing(database, authorizer, pairing(), actions)
+}
+
+fn router_with_pairing(
+    database: Arc<Mutex<Database>>,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    actions: Arc<dyn CompanionTaskActionService>,
+) -> axum::Router {
     create_router_with_task_actions(
         CompanionHostStatus::new(HOST_ID.to_string()),
         authorizer,
-        pairing(),
+        pairing,
         Arc::new(DatabaseCompanionProjectBoardSource::new(Arc::clone(
             &database,
         ))),
@@ -116,6 +125,22 @@ fn complete_request(task_id: &str) -> Request<Body> {
         .header(
             super::contract::PROTOCOL_VERSION_HEADER,
             super::contract::PROTOCOL_VERSION.to_string(),
+        )
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn authorized_complete_request(task_id: &str, credential: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(format!("/companion/v1/tasks/{task_id}/complete"))
+        .header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        )
+        .header(
+            axum::http::header::AUTHORIZATION,
+            format!("Bearer {credential}"),
         )
         .body(Body::empty())
         .expect("request")
@@ -465,6 +490,91 @@ async fn delete_rejects_lost_authority_and_duplicate_operation_claims() {
     .expect("router response");
     assert_eq!(denied.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(denied).await["error"]["code"], "revoked");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn existing_paired_credential_keeps_task_authority_without_reapproval_or_host_unlock() {
+    const CREDENTIAL: &str = "existing-device-credential";
+    let (database, path) =
+        crate::db::test_helpers::make_test_db("companion_existing_device_authority");
+    let database = Arc::new(Mutex::new(database));
+    let (first_task_id, second_task_id) = {
+        let database = crate::db::acquire_db(&database);
+        let project = database
+            .create_project("Visible", "/tmp/visible")
+            .expect("create Project");
+        let first = database
+            .create_task(
+                "Complete while locked",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("create first Task");
+        let second = database
+            .create_task("Revocation check", "doing", Some(&project.id), None, None)
+            .expect("create second Task");
+        (first.id, second.id)
+    };
+
+    let devices = Arc::new(InMemoryCompanionDeviceStore::default());
+    devices
+        .save(&CompanionDeviceRecord {
+            device_id: "existing-device".to_string(),
+            device_name: "Previously paired phone".to_string(),
+            platform: "ios".to_string(),
+            credential_verifier: super::trust_policy::credential_verifier(CREDENTIAL),
+            paired_at: 1_700_000_000,
+            last_seen_at: None,
+            revoked_at: None,
+        })
+        .expect("seed existing paired credential without a new approval");
+    let pairing = Arc::new(PairingCoordinator::new(devices, Duration::from_secs(60)));
+    let authorizer: Arc<dyn CompanionAuthorizer> = pairing.clone();
+    let service = Arc::new(TerminalTaskCompletionService::new(
+        Arc::clone(&database),
+        RecordingRuntime::new(Arc::clone(&database)),
+        TaskClaims::new(),
+        None,
+        Some(AppEventBus::new(16, 8)),
+        None,
+    ));
+    let app = router_with_pairing(database, authorizer, pairing.clone(), service);
+
+    let invalid_credential = app
+        .clone()
+        .oneshot(authorized_complete_request(
+            &first_task_id,
+            "wrong-credential",
+        ))
+        .await
+        .expect("invalid credential response");
+    assert_eq!(
+        invalid_credential.status(),
+        axum::http::StatusCode::UNAUTHORIZED
+    );
+
+    // Host lock state is intentionally absent from the authorization boundary: the
+    // persisted paired credential remains sufficient while OpenForge is running.
+    let while_locked = app
+        .clone()
+        .oneshot(authorized_complete_request(&first_task_id, CREDENTIAL))
+        .await
+        .expect("existing credential action response");
+    assert_eq!(while_locked.status(), axum::http::StatusCode::OK);
+
+    pairing
+        .revoke("existing-device")
+        .expect("revoke paired device");
+    let revoked = app
+        .oneshot(authorized_complete_request(&second_task_id, CREDENTIAL))
+        .await
+        .expect("revoked credential response");
+    assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
+    assert_eq!(response_json(revoked).await["error"]["code"], "revoked");
 
     let _ = std::fs::remove_file(path);
 }

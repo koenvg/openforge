@@ -22,7 +22,7 @@
   <section class="flex flex-col gap-2" aria-labelledby="paired-devices-heading">
     <h3 id="paired-devices-heading" class="m-0 text-sm font-medium">Paired devices</h3>
     <p class="m-0 text-xs text-base-content/60">
-      Paired devices can Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user until revoked.
+      Paired devices can Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user until revoked. Existing paired devices inherit this fixed authority without reapproval or credential migration.
     </p>
     <ul class="m-0 flex list-none flex-col gap-2 p-0">
       {#each devices as device (device.deviceId)}
