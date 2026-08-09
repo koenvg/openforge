@@ -1,0 +1,146 @@
+name: Mobile Companion Private Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Semantic version for both mobile artifacts
+        required: true
+        default: 1.0.0
+        type: string
+      build_number:
+        description: Monotonically increasing iOS/Android build number
+        required: true
+        type: string
+      upload_testflight:
+        description: Upload the signed IPA to TestFlight after building
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android private artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: android-internal
+    env:
+      OPENFORGE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/openforge-upload.jks
+      OPENFORGE_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      OPENFORGE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      OPENFORGE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      OPENFORGE_MOBILE_BUILD_NAME: ${{ inputs.version_name }}
+      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ inputs.build_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0-0.3.pre
+          channel: beta
+          cache: true
+
+      - name: Restore Android upload keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$OPENFORGE_ANDROID_KEYSTORE_PATH"
+
+      - name: Build signed Android release candidates
+        run: ./scripts/mobile-companion build-android-release
+
+      - name: Upload Android private artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openforge-companion-android-${{ inputs.version_name }}-${{ inputs.build_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/mobile_companion/build/app/outputs/flutter-apk/app-release.apk
+            apps/mobile_companion/build/app/outputs/bundle/release/app-release.aab
+
+  ios:
+    name: iOS TestFlight artifact
+    runs-on: macos-14
+    timeout-minutes: 35
+    environment: ios-testflight
+    env:
+      OPENFORGE_IOS_DEVELOPMENT_TEAM: ${{ secrets.IOS_DEVELOPMENT_TEAM }}
+      OPENFORGE_MOBILE_BUILD_NAME: ${{ inputs.version_name }}
+      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ inputs.build_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0-0.3.pre
+          channel: beta
+          cache: true
+
+      - name: Import Apple distribution signing material
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/openforge-distribution.p12"
+          profile="$RUNNER_TEMP/openforge-companion.mobileprovision"
+          keychain="$RUNNER_TEMP/openforge-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+          profile_uuid="$(security cms -D -i "$profile" | plutil -extract UUID raw -)"
+          profile_name="$(security cms -D -i "$profile" | plutil -extract Name raw -)"
+          printf 'OPENFORGE_IOS_PROVISIONING_PROFILE_SPECIFIER=%s\n' "$profile_name" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$profile_uuid.mobileprovision"
+
+      - name: Build signed iOS release candidate
+        run: ./scripts/mobile-companion build-ios-release
+
+      - name: Upload iOS private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openforge-companion-ios-${{ inputs.version_name }}-${{ inputs.build_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: apps/mobile_companion/build/ios/ipa/*.ipa
+
+      - name: Upload to TestFlight
+        if: inputs.upload_testflight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/private_keys"
+          private_key="$HOME/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$private_key"
+          ipa="$(find apps/mobile_companion/build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "$ipa"
+          xcrun altool --upload-app --type ios --file "$ipa" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"

@@ -4,8 +4,27 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseSigningEnvironment = mapOf(
+    "OPENFORGE_ANDROID_KEYSTORE_PATH" to System.getenv("OPENFORGE_ANDROID_KEYSTORE_PATH"),
+    "OPENFORGE_ANDROID_STORE_PASSWORD" to System.getenv("OPENFORGE_ANDROID_STORE_PASSWORD"),
+    "OPENFORGE_ANDROID_KEY_ALIAS" to System.getenv("OPENFORGE_ANDROID_KEY_ALIAS"),
+    "OPENFORGE_ANDROID_KEY_PASSWORD" to System.getenv("OPENFORGE_ANDROID_KEY_PASSWORD"),
+)
+val missingReleaseSigningValues = releaseSigningEnvironment
+    .filterValues { it.isNullOrBlank() }
+    .keys
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (releaseBuildRequested && missingReleaseSigningValues.isNotEmpty()) {
+    throw GradleException(
+        "Android release signing requires: ${missingReleaseSigningValues.sorted().joinToString(", ")}",
+    )
+}
+
 android {
-    namespace = "app.openforge.openforge_companion"
+    namespace = "com.openforge.app.companion"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -14,9 +33,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        if (missingReleaseSigningValues.isEmpty()) {
+            create("release") {
+                storeFile = file(releaseSigningEnvironment.getValue("OPENFORGE_ANDROID_KEYSTORE_PATH")!!)
+                storePassword = releaseSigningEnvironment.getValue("OPENFORGE_ANDROID_STORE_PASSWORD")
+                keyAlias = releaseSigningEnvironment.getValue("OPENFORGE_ANDROID_KEY_ALIAS")
+                keyPassword = releaseSigningEnvironment.getValue("OPENFORGE_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
-        // Provisional private-build identifier; release signing is intentionally deferred.
-        applicationId = "app.openforge.openforge_companion"
+        applicationId = "com.openforge.app.companion"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -25,9 +54,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 }
