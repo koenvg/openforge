@@ -33,6 +33,7 @@ mod plugin_platform;
 mod plugin_platform_adapter;
 mod plugin_rpc;
 mod process_memory;
+mod project_board;
 mod project_fs;
 mod provider_runtime;
 pub mod providers;

@@ -6,6 +6,7 @@ use super::{
     attention::CompanionAttentionSource,
     live_events::CompanionStreamAccess,
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
+    project_board::CompanionProjectBoardSource,
     rate_limit::{RateLimitError, SlidingWindowRateLimiter},
     task_detail::CompanionTaskDetailSource,
     terminal::CompanionTerminalRegistry,
@@ -13,6 +14,7 @@ use super::{
 #[cfg(test)]
 use super::{
     attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
+    project_board::UnavailableCompanionProjectBoardSource,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
@@ -124,6 +126,58 @@ pub(crate) struct CompanionAttentionSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectCatalogItem {
+    pub(crate) project_id: String,
+    pub(crate) name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectCatalogResponse {
+    pub(crate) snapshot_at: String,
+    pub(crate) projects: Vec<CompanionProjectCatalogItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectBoardCounts {
+    pub(crate) focus: usize,
+    pub(crate) in_flight: usize,
+    pub(crate) out_of_focus: usize,
+    pub(crate) backlog: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectBoardTask {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) lane: crate::project_board::ProjectBoardLane,
+    pub(crate) state: String,
+    pub(crate) reason: String,
+    pub(crate) activity_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectBoardLanes {
+    pub(crate) focus: Vec<CompanionProjectBoardTask>,
+    pub(crate) in_flight: Vec<CompanionProjectBoardTask>,
+    pub(crate) out_of_focus: Vec<CompanionProjectBoardTask>,
+    pub(crate) backlog: Vec<CompanionProjectBoardTask>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectBoardResponse {
+    pub(crate) snapshot_at: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
+    pub(crate) counts: CompanionProjectBoardCounts,
+    pub(crate) lanes: CompanionProjectBoardLanes,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) task_id: String,
     pub(crate) title: String,
@@ -179,6 +233,7 @@ impl CompanionAuthorizer for AllowAllAuthorizer {
 #[derive(Clone)]
 pub(crate) struct CompanionRouterSources {
     pub(crate) attention: Arc<dyn CompanionAttentionSource>,
+    pub(crate) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(crate) pty_manager: crate::pty_manager::PtyManager,
     pub(crate) events: AppEventBus,
@@ -191,6 +246,7 @@ struct CompanionRouterState {
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -312,6 +368,28 @@ pub(crate) fn create_router_with_attention(
 }
 
 #[cfg(test)]
+pub(crate) fn create_router_with_project_board(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
+) -> Router {
+    let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
+    create_router_with_sources_event_access_and_pty(
+        host,
+        authorizer,
+        pairing,
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board,
+            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            pty_manager: crate::pty_manager::PtyManager::new(),
+            events: AppEventBus::new(16, 8),
+            stream_access,
+        },
+    )
+}
+#[cfg(test)]
 pub(crate) fn create_router_with_sources(
     host: CompanionHostStatus,
     authorizer: Arc<dyn CompanionAuthorizer>,
@@ -366,6 +444,7 @@ pub(crate) fn create_router_with_sources_and_event_access(
         pairing,
         CompanionRouterSources {
             attention,
+            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail,
             events,
             stream_access,
@@ -382,6 +461,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
 ) -> Router {
     let CompanionRouterSources {
         attention,
+        project_board,
         task_detail,
         pty_manager,
         events,
@@ -412,6 +492,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
             authorizer,
             pairing,
             attention,
+            project_board,
             task_detail,
             pty_manager,
             events,

@@ -8,6 +8,7 @@ use super::{
     devices::InMemoryCompanionDeviceStore,
     live_events::{CompanionStreamAccess, CompanionStreamTermination},
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
+    project_board::UnavailableCompanionProjectBoardSource,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use axum::{body::Body, http::Request};
@@ -290,6 +291,7 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
         pairing(),
         CompanionRouterSources {
             attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             pty_manager: pty_manager.clone(),
             events: crate::app_events::AppEventBus::new(16, 8),
@@ -388,6 +390,7 @@ async fn assert_ready_terminal_termination_blocks_input(
         pairing(),
         CompanionRouterSources {
             attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             pty_manager: pty_manager.clone(),
             events: crate::app_events::AppEventBus::new(16, 8),
@@ -486,6 +489,7 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
         pairing(),
         CompanionRouterSources {
             attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             pty_manager: pty_manager.clone(),
             events: crate::app_events::AppEventBus::new(16, 8),
@@ -570,6 +574,7 @@ fn terminal_router(pty_manager: crate::pty_manager::PtyManager) -> axum::Router 
         pairing(),
         CompanionRouterSources {
             attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             pty_manager,
             events: crate::app_events::AppEventBus::new(16, 8),

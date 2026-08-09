@@ -27,13 +27,14 @@ of the source contract.
 
 ## Implemented boundary
 
-`CompanionV1Client` implements the current Companion v1 HTTP API surface. Pairing request submission creates only a short-lived pending approval; authenticated Task-domain operations are non-mutating. The same paired-device credential also authorizes the separate interactive Agent-terminal WebSocket, where terminal input runs as the desktop user:
+`CompanionV1Client` implements the current Companion v1 HTTP API surface. Pairing request submission creates only a short-lived pending approval; authenticated read resources remain desktop-authoritative and non-mutating. The same paired-device credential also authorizes the separate interactive Agent-terminal WebSocket, where terminal input runs as the desktop user:
 
 - pairing request submission and approval polling;
 - authenticated host status;
+- authenticated Project catalog and four-lane Project Board snapshots;
 - authenticated attention snapshots and task-detail domain reads; and
-- the authenticated event-stream request, with typed SSE decoding in
-  `lib/src/client/companion_live_events.dart`.
+- the authenticated event-stream request, with typed Project-catalog, Project Board,
+  attention, and Task invalidation decoding in `lib/src/client/companion_live_events.dart`.
 
 Interactive Agent terminal traffic is intentionally outside this generated HTTP client. `lib/src/terminal/companion_terminal_client.dart` owns the dedicated authenticated WebSocket boundary, which permits typed attach/resize controls plus validated UTF-8 binary terminal input only after `ready`; it cannot start, stop, or replace Agent Sessions.
 

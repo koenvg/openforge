@@ -1101,15 +1101,21 @@ async fn test_get_tasks_handler_rejects_invalid_state() {
 #[tokio::test]
 async fn test_update_task_handler_updates_summary_without_changing_initial_prompt() {
     let (state, path) = test_state("http_update_task_summary_only");
-    let task_id = {
+    let (task_id, project_id) = {
         let db = state.db.lock().expect("lock db");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        db.create_task("Original prompt", "backlog", Some(&project.id), None, None)
-            .expect("create task")
-            .id
+        let task = db
+            .create_task("Original prompt", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        (task.id, project.id)
     };
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
 
     let router = create_router(state.clone());
     let response = router
@@ -1131,6 +1137,10 @@ async fn test_update_task_handler_updates_summary_without_changing_initial_promp
     let json = response_body_json(response).await;
     assert_eq!(json["task_id"], task_id);
     assert_eq!(json["status"], "updated");
+    let event = events.try_recv().expect("Task invalidation");
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["project_id"], project_id);
 
     let task = state
         .db

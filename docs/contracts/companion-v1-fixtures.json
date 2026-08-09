@@ -51,5 +51,71 @@
       "message": "Companion device authentication is required",
       "requestId": null
     }
+  },
+  "projectCatalog": {
+    "snapshotAt": "2026-08-01T12:00:00Z",
+    "projects": [
+      {
+        "projectId": "P-4",
+        "name": "OpenForge"
+      },
+      {
+        "projectId": "P-2",
+        "name": "Companion"
+      }
+    ]
+  },
+  "projectBoard": {
+    "snapshotAt": "2026-08-01T12:00:01Z",
+    "projectId": "P-4",
+    "projectName": "OpenForge",
+    "counts": {
+      "focus": 1,
+      "inFlight": 1,
+      "outOfFocus": 1,
+      "backlog": 1
+    },
+    "lanes": {
+      "focus": [
+        {
+          "taskId": "KVG-3029",
+          "title": "Add the Companion Project Board read path",
+          "lane": "focus",
+          "state": "needs-input",
+          "reason": "Agent needs your input to continue.",
+          "activityAt": "2026-08-01T11:59:00Z"
+        }
+      ],
+      "inFlight": [
+        {
+          "taskId": "KVG-3028",
+          "title": "Keep implementation running",
+          "lane": "in_flight",
+          "state": "active",
+          "reason": "Agent is running — no action needed right now.",
+          "activityAt": "2026-08-01T11:58:00Z"
+        }
+      ],
+      "outOfFocus": [
+        {
+          "taskId": "KVG-3027",
+          "title": "Set aside maintenance",
+          "lane": "out_of_focus",
+          "state": "idle",
+          "reason": "No agent running. Start when ready.",
+          "activityAt": "2026-08-01T11:57:00Z"
+        }
+      ],
+      "backlog": [
+        {
+          "taskId": "KVG-3030",
+          "title": "Prepare follow-up",
+          "lane": "backlog",
+          "state": "egg",
+          "reason": "In backlog — not started yet.",
+          "activityAt": "2026-08-01T11:56:00Z"
+        }
+      ]
+    }
   }
 }

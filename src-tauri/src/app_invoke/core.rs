@@ -31,16 +31,26 @@ pub(super) async fn handle_app_core_task_project_command(
                         "Task has another lifecycle operation in progress".to_string(),
                     )
                 })?;
-            {
+            let project_id = {
                 let db = crate::db::acquire_db(&state.db);
+                let project_id = db
+                    .get_task(&id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to read task before status update: {e}"),
+                        )
+                    })?
+                    .and_then(|task| task.project_id);
                 db.update_task_status(&id, status.as_str()).map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         format!("Failed to update task status: {e}"),
                     )
                 })?;
-            }
-            publish_task_changed(state, &id);
+                project_id
+            };
+            publish_task_changed(state, &id, project_id.as_deref());
             serde_json::Value::Null
         }
         "delete_task" => {
@@ -100,6 +110,7 @@ pub(super) async fn handle_app_core_task_project_command(
                     format!("Failed to delete project: {e}"),
                 )
             })?;
+            publish_project_changed(state, &id);
             serde_json::Value::Null
         }
         "create_project_from_git" => {
@@ -115,6 +126,7 @@ pub(super) async fn handle_app_core_task_project_command(
             )
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            publish_project_changed(state, &project.id);
             json_value(project)?
         }
         "create_project_from_new_repo" => {
@@ -130,6 +142,7 @@ pub(super) async fn handle_app_core_task_project_command(
             )
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            publish_project_changed(state, &project.id);
             json_value(project)?
         }
         _ => return Ok(None),

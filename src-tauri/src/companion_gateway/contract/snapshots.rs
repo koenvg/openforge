@@ -1,7 +1,9 @@
 use super::{
     authorization_error_response, authorize_versioned_request, error_response,
     CompanionAttentionItem, CompanionAttentionSnapshot, CompanionErrorCode,
-    CompanionHostStatusResponse, CompanionRouterState, CompanionTaskDetailResponse,
+    CompanionHostStatusResponse, CompanionProjectBoardCounts, CompanionProjectBoardLanes,
+    CompanionProjectBoardResponse, CompanionProjectBoardTask, CompanionProjectCatalogItem,
+    CompanionProjectCatalogResponse, CompanionRouterState, CompanionTaskDetailResponse,
     PROTOCOL_VERSION,
 };
 use axum::{
@@ -16,6 +18,11 @@ pub(super) fn routes() -> Router<CompanionRouterState> {
     Router::new()
         .route("/companion/v1/status", get(status_handler))
         .route("/companion/v1/attention", get(attention_handler))
+        .route("/companion/v1/projects", get(project_catalog_handler))
+        .route(
+            "/companion/v1/projects/:project_id/board",
+            get(project_board_handler),
+        )
         .route("/companion/v1/tasks/:task_id", get(task_detail_handler))
 }
 
@@ -36,6 +43,13 @@ fn attention_activity_at(timestamp: i64) -> Option<String> {
     chrono::DateTime::from_timestamp(timestamp, 0).map(|value| value.to_rfc3339())
 }
 
+fn attention_unavailable() -> Response {
+    error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        CompanionErrorCode::TemporarilyUnavailable,
+        "Task attention is temporarily unavailable",
+    )
+}
 async fn attention_handler(
     State(state): State<CompanionRouterState>,
     headers: HeaderMap,
@@ -46,35 +60,28 @@ async fn attention_handler(
 
     let rows = match state.attention.snapshot() {
         Ok(rows) => rows,
-        Err(_) => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                CompanionErrorCode::TemporarilyUnavailable,
-                "Task attention is temporarily unavailable",
-            );
+        Err(_) => return attention_unavailable(),
+    };
+    let mut items = Vec::new();
+    for row in rows {
+        match state.project_board.is_project_visible(&row.project_id) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(_) => return attention_unavailable(),
         }
-    };
-    let items = rows
-        .into_iter()
-        .map(|row| {
-            Some(CompanionAttentionItem {
-                task_id: row.task_id,
-                project_id: row.project_id,
-                project_name: row.project_name,
-                title: row.title,
-                state: row.state,
-                reason: row.reason,
-                activity_at: attention_activity_at(row.activity_at)?,
-            })
-        })
-        .collect::<Option<Vec<_>>>();
-    let Some(items) = items else {
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            CompanionErrorCode::TemporarilyUnavailable,
-            "Task attention is temporarily unavailable",
-        );
-    };
+        let Some(activity_at) = attention_activity_at(row.activity_at) else {
+            return attention_unavailable();
+        };
+        items.push(CompanionAttentionItem {
+            task_id: row.task_id,
+            project_id: row.project_id,
+            project_name: row.project_name,
+            title: row.title,
+            state: row.state,
+            reason: row.reason,
+            activity_at,
+        });
+    }
 
     Json(CompanionAttentionSnapshot {
         snapshot_at: chrono::Utc::now().to_rfc3339(),
@@ -83,6 +90,118 @@ async fn attention_handler(
     .into_response()
 }
 
+async fn project_catalog_handler(
+    State(state): State<CompanionRouterState>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+    let projects = match state.project_board.catalog() {
+        Ok(projects) => projects,
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                "Project catalog is temporarily unavailable",
+            );
+        }
+    };
+    Json(CompanionProjectCatalogResponse {
+        snapshot_at: chrono::Utc::now().to_rfc3339(),
+        projects: projects
+            .into_iter()
+            .map(|project| CompanionProjectCatalogItem {
+                project_id: project.project_id,
+                name: project.name,
+            })
+            .collect(),
+    })
+    .into_response()
+}
+
+fn board_task(row: crate::project_board::ProjectBoardTask) -> Option<CompanionProjectBoardTask> {
+    Some(CompanionProjectBoardTask {
+        task_id: row.task_id,
+        title: row.title,
+        lane: row.lane,
+        state: row.state,
+        reason: row.reason,
+        activity_at: detail_timestamp(row.activity_at)?,
+    })
+}
+
+fn board_lane(
+    rows: Vec<crate::project_board::ProjectBoardTask>,
+) -> Option<Vec<CompanionProjectBoardTask>> {
+    rows.into_iter().map(board_task).collect()
+}
+
+async fn project_board_handler(
+    State(state): State<CompanionRouterState>,
+    Path(project_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+    let board = match state.project_board.board(&project_id) {
+        Ok(Some(board)) => board,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                CompanionErrorCode::NotFound,
+                "Project Board was not found",
+            );
+        }
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                "Project Board is temporarily unavailable",
+            );
+        }
+    };
+    let counts = CompanionProjectBoardCounts {
+        focus: board.focus.len(),
+        in_flight: board.in_flight.len(),
+        out_of_focus: board.out_of_focus.len(),
+        backlog: board.backlog.len(),
+    };
+    let Some(focus) = board_lane(board.focus) else {
+        return project_board_unavailable();
+    };
+    let Some(in_flight) = board_lane(board.in_flight) else {
+        return project_board_unavailable();
+    };
+    let Some(out_of_focus) = board_lane(board.out_of_focus) else {
+        return project_board_unavailable();
+    };
+    let Some(backlog) = board_lane(board.backlog) else {
+        return project_board_unavailable();
+    };
+    Json(CompanionProjectBoardResponse {
+        snapshot_at: chrono::Utc::now().to_rfc3339(),
+        project_id: board.project_id,
+        project_name: board.project_name,
+        counts,
+        lanes: CompanionProjectBoardLanes {
+            focus,
+            in_flight,
+            out_of_focus,
+            backlog,
+        },
+    })
+    .into_response()
+}
+
+fn project_board_unavailable() -> Response {
+    error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        CompanionErrorCode::TemporarilyUnavailable,
+        "Project Board is temporarily unavailable",
+    )
+}
 fn detail_timestamp(timestamp: i64) -> Option<String> {
     chrono::DateTime::from_timestamp(timestamp, 0).map(|value| value.to_rfc3339())
 }
@@ -114,6 +233,23 @@ async fn task_detail_handler(
         }
     };
 
+    match state.project_board.is_project_visible(&detail.project_id) {
+        Ok(true) => {}
+        Ok(false) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                CompanionErrorCode::NotFound,
+                "Task was not found",
+            );
+        }
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                "Task detail is temporarily unavailable",
+            );
+        }
+    }
     let Some(created_at) = detail_timestamp(detail.created_at) else {
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,

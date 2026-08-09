@@ -89,6 +89,8 @@ void main() {
       expect(encodedContract, contains('getCompanionPairingRequest'));
       expect(encodedContract, contains('getCompanionHostStatus'));
       expect(encodedContract, contains('getCompanionAttention'));
+      expect(encodedContract, contains('getCompanionProjects'));
+      expect(encodedContract, contains('getCompanionProjectBoard'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
       expect(encodedContract, contains('streamCompanionEvents'));
       final paths = contract['paths']! as Map<String, Object?>;
@@ -99,6 +101,8 @@ void main() {
           '/pairing/requests/{requestId}',
           '/status',
           '/attention',
+          '/projects',
+          '/projects/{projectId}/board',
           '/tasks/{taskId}',
           '/events',
         ]),
@@ -313,6 +317,52 @@ void main() {
     );
   });
 
+  test(
+    'application client seam exposes pinned Project catalog and Board reads',
+    () async {
+      final transport = _RecordingTransport()
+        ..responses = <CompanionV1HttpResponse>[
+          const CompanionV1HttpResponse(
+            statusCode: 200,
+            body:
+                '{"snapshotAt":"2026-08-01T12:00:00Z","projects":[{"projectId":"P-4","name":"OpenForge"}]}',
+          ),
+          const CompanionV1HttpResponse(
+            statusCode: 200,
+            body:
+                '{"snapshotAt":"2026-08-01T12:00:01Z","projectId":"P-4","projectName":"OpenForge","counts":{"focus":0,"inFlight":0,"outOfFocus":0,"backlog":0},"lanes":{"focus":[],"inFlight":[],"outOfFocus":[],"backlog":[]}}',
+          ),
+        ];
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) =>
+            CompanionEndpointTransport(transport: transport, close: () {}),
+      );
+      final trust = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: <Uri>[Uri.parse('https://openforge.tailnet:17424')],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+
+      final catalog = await client.fetchProjectCatalog(trust);
+      final board = await client.fetchProjectBoard(trust, 'P-4');
+
+      expect(catalog.projects.single.name, 'OpenForge');
+      expect(board.projectId, 'P-4');
+      expect(transport.requests.map((request) => request.uri.path), <String>[
+        '/companion/v1/projects',
+        '/companion/v1/projects/P-4/board',
+      ]);
+      expect(
+        transport.requests.every(
+          (request) =>
+              request.headers['authorization'] == 'Bearer credential-1',
+        ),
+        isTrue,
+      );
+    },
+  );
   test('endpoint fallback preserves authoritative revocation errors', () async {
     final transport = _RecordingTransport()
       ..responses = <CompanionV1HttpResponse>[

@@ -14,6 +14,14 @@ sealed class CompanionLiveEvent {
 }
 
 final class CompanionResourceInvalidation {
+  const CompanionResourceInvalidation.projectCatalog()
+    : kind = CompanionResourceKind.projectCatalog,
+      id = null;
+
+  const CompanionResourceInvalidation.projectBoard(String projectId)
+    : kind = CompanionResourceKind.projectBoard,
+      id = projectId;
+
   const CompanionResourceInvalidation.attention()
     : kind = CompanionResourceKind.attention,
       id = null;
@@ -26,7 +34,7 @@ final class CompanionResourceInvalidation {
   final String? id;
 }
 
-enum CompanionResourceKind { attention, task }
+enum CompanionResourceKind { projectCatalog, projectBoard, attention, task }
 
 final class CompanionResourcesInvalidated extends CompanionLiveEvent {
   const CompanionResourcesInvalidated({
@@ -165,6 +173,10 @@ CompanionResourcesInvalidated _decodeResources(String? eventId, String data) {
   final resources = payload.resources
       .map(
         (resource) => switch (resource) {
+          ProjectCatalogResourceIdentityData() =>
+            const CompanionResourceInvalidation.projectCatalog(),
+          ProjectBoardResourceIdentityData(:final id) =>
+            CompanionResourceInvalidation.projectBoard(id),
           AttentionResourceIdentityData() =>
             const CompanionResourceInvalidation.attention(),
           TaskResourceIdentityData(:final id) =>

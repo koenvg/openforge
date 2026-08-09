@@ -14,6 +14,7 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                     )
                 })?
             };
+            publish_project_changed(state, &project.id);
             json_value(project)
         }
         "get_projects" => {
@@ -32,13 +33,16 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             let id = payload_string(&request.payload, "id")?;
             let name = payload_string(&request.payload, "name")?;
             let path = payload_string(&request.payload, "path")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_project(&id, &name, &path).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update project: {e}"),
-                )
-            })?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.update_project(&id, &name, &path).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update project: {e}"),
+                    )
+                })?;
+            }
+            publish_project_changed(state, &id);
             Ok(serde_json::Value::Null)
         }
         "get_project_config" => {
@@ -67,26 +71,34 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             let project_id = payload_string(&request.payload, "projectId")?;
             let key = payload_string(&request.payload, "key")?;
             let value = payload_string(&request.payload, "value")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.set_project_config(&project_id, &key, &value)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to set project config: {e}"),
-                    )
-                })?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.set_project_config(&project_id, &key, &value)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to set project config: {e}"),
+                        )
+                    })?;
+            }
+            if matches!(key.as_str(), "focus_filter_states" | "low_fire_task_ids") {
+                publish_project_board_changed(state, &project_id);
+            }
             Ok(serde_json::Value::Null)
         }
         "reset_project_settings_to_global" => {
             let project_id = payload_string(&request.payload, "projectId")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.reset_project_settings_to_global(&project_id)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to reset project settings: {e}"),
-                    )
-                })?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.reset_project_settings_to_global(&project_id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reset project settings: {e}"),
+                        )
+                    })?;
+            }
+            publish_project_board_changed(state, &project_id);
             Ok(serde_json::Value::Null)
         }
         _ => unreachable!("project handler only receives project commands"),

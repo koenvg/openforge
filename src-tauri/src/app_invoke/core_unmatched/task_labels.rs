@@ -67,7 +67,18 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                 })?
             };
             for task_id in affected_task_ids {
-                publish_task_changed(state, &task_id);
+                let project_id = {
+                    let db = crate::db::acquire_db(&state.db);
+                    db.get_task(&task_id)
+                        .map_err(|error| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                format!("Failed to reload Task after label deletion: {error}"),
+                            )
+                        })?
+                        .and_then(|task| task.project_id)
+                };
+                publish_task_changed(state, &task_id, project_id.as_deref());
             }
             Ok(serde_json::Value::Null)
         }

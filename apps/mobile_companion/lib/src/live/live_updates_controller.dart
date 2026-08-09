@@ -20,6 +20,8 @@ final class LiveUpdatesController {
     this.reconnectMaxDelay = const Duration(seconds: 8),
     this.reconnectStabilityWindow = const Duration(seconds: 10),
     LiveReconnectDelay? delay,
+    this.onProjectCatalogInvalidated,
+    this.onProjectBoardInvalidated,
     void Function()? onReconnecting,
     void Function()? onConnected,
     void Function()? onUnavailable,
@@ -40,6 +42,8 @@ final class LiveUpdatesController {
   final CompanionSecureStorage _storage;
   AttentionController? _attention;
   final LiveReconnectDelay _delay;
+  final FutureOr<void> Function()? onProjectCatalogInvalidated;
+  final FutureOr<void> Function(String projectId)? onProjectBoardInvalidated;
   final int maxReconnectAttempts;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
@@ -212,20 +216,41 @@ final class LiveUpdatesController {
 
   Future<void> _handleInvalidation(CompanionResourcesInvalidated event) async {
     final refreshes = <Future<CompanionRefreshOutcome>>[];
+    final catalogInvalidated = event.resources.any(
+      (resource) => resource.kind == CompanionResourceKind.projectCatalog,
+    );
+    for (final resource in event.resources) {
+      switch (resource.kind) {
+        case CompanionResourceKind.projectCatalog:
+          await onProjectCatalogInvalidated?.call();
+          break;
+        case CompanionResourceKind.projectBoard:
+          final projectId = resource.id;
+          if (projectId != null) {
+            await onProjectBoardInvalidated?.call(projectId);
+          }
+          break;
+        case CompanionResourceKind.attention:
+        case CompanionResourceKind.task:
+          break;
+      }
+    }
     final attention = _attention;
     if (attention != null &&
-        event.resources.any(
-          (resource) => resource.kind == CompanionResourceKind.attention,
-        )) {
+        (catalogInvalidated ||
+            event.resources.any(
+              (resource) => resource.kind == CompanionResourceKind.attention,
+            ))) {
       refreshes.add(attention.refreshWithOutcome());
     }
     final openTask = _openTask;
     if (openTask != null &&
-        event.resources.any(
-          (resource) =>
-              resource.kind == CompanionResourceKind.task &&
-              resource.id == openTask.taskId,
-        )) {
+        (catalogInvalidated ||
+            event.resources.any(
+              (resource) =>
+                  resource.kind == CompanionResourceKind.task &&
+                  resource.id == openTask.taskId,
+            ))) {
       refreshes.add(openTask.refreshWithOutcome());
     }
     _requireCurrentSnapshots(await Future.wait(refreshes));

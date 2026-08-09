@@ -50,6 +50,12 @@ pub(super) async fn handle(
                     )
                 })?;
             }
+            if matches!(
+                key.as_str(),
+                "project_sidebar_order" | "project_sidebar_hidden"
+            ) {
+                publish_project_catalog_changed(state);
+            }
             Ok(serde_json::Value::Null)
         }
         _ => unreachable!("config handler only receives config commands"),

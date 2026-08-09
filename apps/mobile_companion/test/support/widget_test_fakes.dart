@@ -196,6 +196,16 @@ final class DomainCompanionClient implements CompanionClient {
   );
 
   @override
+  Future<ProjectCatalog> fetchProjectCatalog(
+    CompanionTrustRecord trustRecord,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => throw UnimplementedError();
+  @override
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,
     String taskId,

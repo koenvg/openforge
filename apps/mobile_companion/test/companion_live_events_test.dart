@@ -7,17 +7,21 @@ void main() {
       Stream<String>.fromIterable(<String>[
         'id: epoch:4',
         'event: resources-invalidated',
-        'data: {"resources":[{"kind":"attention"},{"kind":"task","id":"KVG-2947"}]}',
+        'data: {"resources":[{"kind":"project_catalog"},{"kind":"project_board","id":"P-4"},{"kind":"attention"},{"kind":"task","id":"KVG-2947"}]}',
         '',
       ]),
     ).toList();
 
     final event = events.single as CompanionResourcesInvalidated;
     expect(event.eventId, 'epoch:4');
-    expect(event.resources, hasLength(2));
-    expect(event.resources.first.kind, CompanionResourceKind.attention);
-    expect(event.resources.last.kind, CompanionResourceKind.task);
-    expect(event.resources.last.id, 'KVG-2947');
+    expect(event.resources, hasLength(4));
+    expect(event.resources[0].kind, CompanionResourceKind.projectCatalog);
+    expect(event.resources[0].id, isNull);
+    expect(event.resources[1].kind, CompanionResourceKind.projectBoard);
+    expect(event.resources[1].id, 'P-4');
+    expect(event.resources[2].kind, CompanionResourceKind.attention);
+    expect(event.resources[3].kind, CompanionResourceKind.task);
+    expect(event.resources[3].id, 'KVG-2947');
   });
 
   test(

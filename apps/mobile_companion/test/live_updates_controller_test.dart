@@ -61,6 +61,7 @@ final class _FakeClient implements CompanionClient {
   var taskDetailCalls = 0;
   Object? attentionError;
   Object? taskDetailError;
+  AttentionSnapshot attentionSnapshot = _snapshot;
 
   @override
   Future<CompanionLiveConnection> openLiveEvents(
@@ -81,9 +82,19 @@ final class _FakeClient implements CompanionClient {
     attentionCalls += 1;
     final error = attentionError;
     if (error != null) throw error;
-    return _snapshot;
+    return attentionSnapshot;
   }
 
+  @override
+  Future<ProjectCatalog> fetchProjectCatalog(
+    CompanionTrustRecord trustRecord,
+  ) => throw UnsupportedError('not used');
+
+  @override
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => throw UnsupportedError('not used');
   @override
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,
@@ -144,6 +155,8 @@ void main() {
       final client = _FakeClient()..connections.add(connection);
       final storage = _FakeStorage();
       final attention = AttentionController(client: client, storage: storage);
+      final catalogInvalidations = <String>[];
+      final boardInvalidations = <String>[];
       final detail = TaskDetailController(
         taskId: 'KVG-2947',
         client: client,
@@ -153,6 +166,8 @@ void main() {
         client: client,
         storage: storage,
         attention: attention,
+        onProjectCatalogInvalidated: () => catalogInvalidations.add('catalog'),
+        onProjectBoardInvalidated: boardInvalidations.add,
       )..setOpenTask(detail);
 
       live.start();
@@ -164,6 +179,8 @@ void main() {
           eventId: 'epoch:1',
           resources: <CompanionResourceInvalidation>[
             CompanionResourceInvalidation.attention(),
+            CompanionResourceInvalidation.projectCatalog(),
+            CompanionResourceInvalidation.projectBoard('P-4'),
             CompanionResourceInvalidation.task('KVG-2947'),
           ],
         ),
@@ -171,6 +188,8 @@ void main() {
       await _until(
         () => client.attentionCalls == 2 && client.taskDetailCalls == 2,
       );
+      expect(catalogInvalidations, <String>['catalog']);
+      expect(boardInvalidations, <String>['P-4']);
 
       connection.controller.add(
         const CompanionResourcesInvalidated(
@@ -183,6 +202,30 @@ void main() {
       );
       await _until(() => client.attentionCalls == 3);
       expect(client.taskDetailCalls, 2);
+
+      client.attentionSnapshot = AttentionSnapshot(
+        snapshotAt: DateTime.utc(2026, 8, 1),
+        items: const <AttentionItem>[],
+      );
+      client.taskDetailError = const CompanionV1Exception(
+        statusCode: 404,
+        code: 'not_found',
+        message: 'Task was not found',
+      );
+      connection.controller.add(
+        const CompanionResourcesInvalidated(
+          eventId: 'epoch:3',
+          resources: <CompanionResourceInvalidation>[
+            CompanionResourceInvalidation.projectCatalog(),
+          ],
+        ),
+      );
+      await _until(
+        () => client.attentionCalls == 4 && client.taskDetailCalls == 3,
+      );
+      expect(catalogInvalidations, <String>['catalog', 'catalog']);
+      expect((attention.state as AttentionLoaded).snapshot.items, isEmpty);
+      expect(detail.state, isA<TaskDetailNotFound>());
       await live.suspend();
     },
   );

@@ -509,7 +509,8 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
 
     let app = AppHandle::new();
     app.manage(Arc::new(Mutex::new(database)));
-    let host = PluginHost::new(app.clone());
+    let (event_sender, mut events) = tokio::sync::broadcast::channel(16);
+    let host = PluginHost::with_app_event_sender(app.clone(), Some(event_sender));
 
     let created = host
         .handle_host_callback(
@@ -530,6 +531,10 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
     assert_eq!(created["depends_on"], json!([dependency.id]));
     assert_eq!(created["labels"][0]["name"], "scheduled");
 
+    let created_event = events.try_recv().expect("created Task invalidation");
+    assert_eq!(created_event.event_name, "task-changed");
+    assert_eq!(created_event.payload["task_id"], task_id);
+    assert_eq!(created_event.payload["project_id"], project.id);
     let project_tasks = host
         .handle_host_callback("openforge.tasks.list", &json!({ "projectId": project.id }))
         .await
@@ -563,6 +568,10 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .expect("task summary callback"),
         Value::Null
     );
+    let summary_event = events.try_recv().expect("summary Task invalidation");
+    assert_eq!(summary_event.event_name, "task-changed");
+    assert_eq!(summary_event.payload["task_id"], task_id);
+    assert_eq!(summary_event.payload["project_id"], project.id);
     assert_eq!(
         host.handle_host_callback(
             "openforge.tasks.updateStatus",

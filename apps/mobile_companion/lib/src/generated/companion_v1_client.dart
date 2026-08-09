@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '289d2e391b1474daefbc66cbb1f2101a0e761d996d3c4f0d60156f3d76d43e9c';
+    '96133ff4b7f3fa1bfb191d560fb3cc91db5b04caac7fb906cd51a25fd46f29c8';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -222,6 +222,260 @@ final class AttentionItem {
   final DateTime activityAt;
 }
 
+final class ProjectCatalog {
+  ProjectCatalog({
+    required this.snapshotAt,
+    required List<ProjectCatalogItem> projects,
+  }) : projects = List<ProjectCatalogItem>.unmodifiable(projects);
+
+  factory ProjectCatalog.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'snapshotAt', 'projects'});
+    final rawProjects = json['projects'];
+    if (rawProjects is! List<Object?>) {
+      throw const FormatException('Expected a Project catalog list.');
+    }
+    return ProjectCatalog(
+      snapshotAt: json.dateTime('snapshotAt'),
+      projects: rawProjects.map((project) {
+        if (project is! Map<String, Object?>) {
+          throw const FormatException('Expected a Project catalog item.');
+        }
+        return ProjectCatalogItem.fromJson(project);
+      }).toList(),
+    );
+  }
+
+  final DateTime snapshotAt;
+  final List<ProjectCatalogItem> projects;
+}
+
+final class ProjectCatalogItem {
+  const ProjectCatalogItem({required this.projectId, required this.name});
+
+  factory ProjectCatalogItem.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'projectId', 'name'});
+    final projectId = json.string('projectId');
+    final name = json.string('name');
+    if (projectId.isEmpty || name.isEmpty) {
+      throw const FormatException('Project catalog fields must not be empty.');
+    }
+    return ProjectCatalogItem(projectId: projectId, name: name);
+  }
+
+  final String projectId;
+  final String name;
+}
+
+enum ProjectBoardLane {
+  focus,
+  inFlight,
+  outOfFocus,
+  backlog;
+
+  static ProjectBoardLane fromWire(String value) => switch (value) {
+    'focus' => ProjectBoardLane.focus,
+    'in_flight' => ProjectBoardLane.inFlight,
+    'out_of_focus' => ProjectBoardLane.outOfFocus,
+    'backlog' => ProjectBoardLane.backlog,
+    _ => throw const FormatException('Invalid Project Board lane.'),
+  };
+}
+
+final class ProjectBoardTask {
+  const ProjectBoardTask({
+    required this.taskId,
+    required this.title,
+    required this.lane,
+    required this.state,
+    required this.reason,
+    required this.activityAt,
+  });
+
+  factory ProjectBoardTask.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{
+      'taskId',
+      'title',
+      'lane',
+      'state',
+      'reason',
+      'activityAt',
+    });
+    final taskId = json.string('taskId');
+    final title = json.string('title');
+    final state = json.string('state');
+    final reason = json.string('reason');
+    if (<String>[taskId, title, state, reason].any((value) => value.isEmpty)) {
+      throw const FormatException(
+        'Project Board Task fields must not be empty.',
+      );
+    }
+    return ProjectBoardTask(
+      taskId: taskId,
+      title: title,
+      lane: ProjectBoardLane.fromWire(json.string('lane')),
+      state: state,
+      reason: reason,
+      activityAt: json.dateTime('activityAt'),
+    );
+  }
+
+  final String taskId;
+  final String title;
+  final ProjectBoardLane lane;
+  final String state;
+  final String reason;
+  final DateTime activityAt;
+}
+
+final class ProjectBoardCounts {
+  const ProjectBoardCounts({
+    required this.focus,
+    required this.inFlight,
+    required this.outOfFocus,
+    required this.backlog,
+  });
+
+  factory ProjectBoardCounts.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{
+      'focus',
+      'inFlight',
+      'outOfFocus',
+      'backlog',
+    });
+    final counts = ProjectBoardCounts(
+      focus: json.integer('focus'),
+      inFlight: json.integer('inFlight'),
+      outOfFocus: json.integer('outOfFocus'),
+      backlog: json.integer('backlog'),
+    );
+    if (<int>[
+      counts.focus,
+      counts.inFlight,
+      counts.outOfFocus,
+      counts.backlog,
+    ].any((count) => count < 0)) {
+      throw const FormatException('Project Board counts must not be negative.');
+    }
+    return counts;
+  }
+
+  final int focus;
+  final int inFlight;
+  final int outOfFocus;
+  final int backlog;
+}
+
+final class ProjectBoardLanes {
+  ProjectBoardLanes({
+    required List<ProjectBoardTask> focus,
+    required List<ProjectBoardTask> inFlight,
+    required List<ProjectBoardTask> outOfFocus,
+    required List<ProjectBoardTask> backlog,
+  }) : focus = List<ProjectBoardTask>.unmodifiable(focus),
+       inFlight = List<ProjectBoardTask>.unmodifiable(inFlight),
+       outOfFocus = List<ProjectBoardTask>.unmodifiable(outOfFocus),
+       backlog = List<ProjectBoardTask>.unmodifiable(backlog);
+
+  factory ProjectBoardLanes.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{
+      'focus',
+      'inFlight',
+      'outOfFocus',
+      'backlog',
+    });
+    return ProjectBoardLanes(
+      focus: _projectBoardTasks(json, 'focus', ProjectBoardLane.focus),
+      inFlight: _projectBoardTasks(json, 'inFlight', ProjectBoardLane.inFlight),
+      outOfFocus: _projectBoardTasks(
+        json,
+        'outOfFocus',
+        ProjectBoardLane.outOfFocus,
+      ),
+      backlog: _projectBoardTasks(json, 'backlog', ProjectBoardLane.backlog),
+    );
+  }
+
+  final List<ProjectBoardTask> focus;
+  final List<ProjectBoardTask> inFlight;
+  final List<ProjectBoardTask> outOfFocus;
+  final List<ProjectBoardTask> backlog;
+}
+
+List<ProjectBoardTask> _projectBoardTasks(
+  Map<String, Object?> json,
+  String key,
+  ProjectBoardLane expectedLane,
+) {
+  final rawTasks = json[key];
+  if (rawTasks is! List<Object?>) {
+    throw FormatException('Expected Project Board lane $key.');
+  }
+  return rawTasks.map((rawTask) {
+    if (rawTask is! Map<String, Object?>) {
+      throw const FormatException('Expected a Project Board Task.');
+    }
+    final task = ProjectBoardTask.fromJson(rawTask);
+    if (task.lane != expectedLane) {
+      throw const FormatException('Project Board Task is in the wrong lane.');
+    }
+    return task;
+  }).toList();
+}
+
+final class ProjectBoard {
+  const ProjectBoard({
+    required this.snapshotAt,
+    required this.projectId,
+    required this.projectName,
+    required this.counts,
+    required this.lanes,
+  });
+
+  factory ProjectBoard.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{
+      'snapshotAt',
+      'projectId',
+      'projectName',
+      'counts',
+      'lanes',
+    });
+    final projectId = json.string('projectId');
+    final projectName = json.string('projectName');
+    final rawCounts = json['counts'];
+    final rawLanes = json['lanes'];
+    if (projectId.isEmpty || projectName.isEmpty) {
+      throw const FormatException('Project Board identity must not be empty.');
+    }
+    if (rawCounts is! Map<String, Object?> ||
+        rawLanes is! Map<String, Object?>) {
+      throw const FormatException('Expected Project Board counts and lanes.');
+    }
+    final counts = ProjectBoardCounts.fromJson(rawCounts);
+    final lanes = ProjectBoardLanes.fromJson(rawLanes);
+    if (counts.focus != lanes.focus.length ||
+        counts.inFlight != lanes.inFlight.length ||
+        counts.outOfFocus != lanes.outOfFocus.length ||
+        counts.backlog != lanes.backlog.length) {
+      throw const FormatException(
+        'Project Board counts do not match lane membership.',
+      );
+    }
+    return ProjectBoard(
+      snapshotAt: json.dateTime('snapshotAt'),
+      projectId: projectId,
+      projectName: projectName,
+      counts: counts,
+      lanes: lanes,
+    );
+  }
+
+  final DateTime snapshotAt;
+  final String projectId;
+  final String projectName;
+  final ProjectBoardCounts counts;
+  final ProjectBoardLanes lanes;
+}
+
 final class TaskDetail {
   const TaskDetail({
     required this.taskId,
@@ -320,6 +574,18 @@ sealed class CompanionResourceIdentityData {
       case 'attention':
         json.expectOnly(const <String>{'kind'});
         return const AttentionResourceIdentityData();
+      case 'project_catalog':
+        json.expectOnly(const <String>{'kind'});
+        return const ProjectCatalogResourceIdentityData();
+      case 'project_board':
+        json.expectOnly(const <String>{'kind', 'id'});
+        final projectId = json.string('id');
+        if (projectId.isEmpty) {
+          throw const FormatException(
+            'Project Board resource id must not be empty.',
+          );
+        }
+        return ProjectBoardResourceIdentityData(projectId);
       case 'task':
         json.expectOnly(const <String>{'kind', 'id'});
         final id = json.string('id');
@@ -336,6 +602,18 @@ sealed class CompanionResourceIdentityData {
 final class AttentionResourceIdentityData
     extends CompanionResourceIdentityData {
   const AttentionResourceIdentityData();
+}
+
+final class ProjectCatalogResourceIdentityData
+    extends CompanionResourceIdentityData {
+  const ProjectCatalogResourceIdentityData();
+}
+
+final class ProjectBoardResourceIdentityData
+    extends CompanionResourceIdentityData {
+  const ProjectBoardResourceIdentityData(this.id);
+
+  final String id;
 }
 
 final class TaskResourceIdentityData extends CompanionResourceIdentityData {
@@ -476,6 +754,37 @@ final class CompanionV1Client {
       },
     );
     return AttentionSnapshot.fromJson(_successJson(response, const <int>{200}));
+  }
+
+  Future<ProjectCatalog> getCompanionProjects({
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve('/companion/v1/projects'),
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return ProjectCatalog.fromJson(_successJson(response, const <int>{200}));
+  }
+
+  Future<ProjectBoard> getCompanionProjectBoard({
+    required String projectId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve(
+        '/companion/v1/projects/${Uri.encodeComponent(projectId)}/board',
+      ),
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return ProjectBoard.fromJson(_successJson(response, const <int>{200}));
   }
 
   Future<TaskDetail> getCompanionTaskDetail({

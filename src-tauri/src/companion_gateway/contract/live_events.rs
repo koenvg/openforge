@@ -13,6 +13,7 @@ use axum::{
     routing::get,
     Router,
 };
+use std::sync::Arc;
 
 const TERMINAL_CONTROL_MAX_BYTES: usize = 4 * 1_024;
 
@@ -46,7 +47,12 @@ async fn events_handler(State(state): State<CompanionRouterState>, headers: Head
         }
         None => None,
     };
-    let stream = match companion_event_stream(&state.events, cursor, access) {
+    let stream = match companion_event_stream(
+        &state.events,
+        cursor,
+        access,
+        Arc::clone(&state.project_board),
+    ) {
         Ok(stream) => stream,
         Err(code) => return authorization_error_response(code),
     };

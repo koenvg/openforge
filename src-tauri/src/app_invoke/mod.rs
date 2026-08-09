@@ -86,11 +86,12 @@ fn json_value<T: Serialize>(value: T) -> AppResult<serde_json::Value> {
     })
 }
 
-fn publish_task_changed(state: &AppState, task_id: &str) {
-    publish_task_changed_payload(
-        state,
-        serde_json::json!({ "action": "updated", "task_id": task_id }),
-    );
+fn publish_task_changed(state: &AppState, task_id: &str, project_id: Option<&str>) {
+    let mut payload = serde_json::json!({ "action": "updated", "task_id": task_id });
+    if let Some(project_id) = project_id {
+        payload["project_id"] = serde_json::json!(project_id);
+    }
+    publish_task_changed_payload(state, payload);
 }
 
 fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
@@ -102,6 +103,32 @@ fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
     );
 }
 
+fn publish_project_catalog_changed(state: &AppState) {
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "project-catalog-changed",
+        &serde_json::json!({}),
+    );
+}
+
+fn publish_project_board_changed(state: &AppState, project_id: &str) {
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "project-board-changed",
+        &serde_json::json!({ "project_id": project_id }),
+    );
+}
+
+fn publish_project_changed(state: &AppState, project_id: &str) {
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "project-changed",
+        &serde_json::json!({ "project_id": project_id }),
+    );
+}
 pub(crate) async fn handle_companion_command(
     state: &AppState,
     request: &AppInvokeRequest,

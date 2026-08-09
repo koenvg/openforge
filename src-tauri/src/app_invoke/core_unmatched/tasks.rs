@@ -42,44 +42,77 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                         format!("task {id} is starting; create a replacement task instead"),
                     )
                 })?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_task_initial_prompt(&id, &initial_prompt)
-                .map_err(|error| match error {
-                    db::TaskInitialPromptUpdateError::NotFound(_) => {
-                        (StatusCode::NOT_FOUND, error.to_string())
-                    }
-                    db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
-                        (StatusCode::CONFLICT, error.to_string())
-                    }
-                    db::TaskInitialPromptUpdateError::Database(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task initial prompt: {error}"),
-                    ),
-                })?;
+            let project_id = {
+                let db = crate::db::acquire_db(&state.db);
+                db.update_task_initial_prompt(&id, &initial_prompt)
+                    .map_err(|error| match error {
+                        db::TaskInitialPromptUpdateError::NotFound(_) => {
+                            (StatusCode::NOT_FOUND, error.to_string())
+                        }
+                        db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
+                            (StatusCode::CONFLICT, error.to_string())
+                        }
+                        db::TaskInitialPromptUpdateError::Database(_) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to update task initial prompt: {error}"),
+                        ),
+                    })?;
+                db.get_task(&id)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reload task after initial prompt update: {error}"),
+                        )
+                    })?
+                    .and_then(|task| task.project_id)
+            };
+            publish_task_changed(state, &id, project_id.as_deref());
             Ok(serde_json::Value::Null)
         }
         "update_task_title" => {
             let id = payload_string(&request.payload, "id")?;
             let title = payload_string(&request.payload, "title")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_task_title(&id, &title).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update task title: {e}"),
-                )
-            })?;
+            let project_id = {
+                let db = crate::db::acquire_db(&state.db);
+                db.update_task_title(&id, &title).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task title: {e}"),
+                    )
+                })?;
+                db.get_task(&id)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reload task after title update: {error}"),
+                        )
+                    })?
+                    .and_then(|task| task.project_id)
+            };
+            publish_task_changed(state, &id, project_id.as_deref());
             Ok(serde_json::Value::Null)
         }
         "update_task_summary" => {
             let id = payload_string(&request.payload, "id")?;
             let summary = payload_string(&request.payload, "summary")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.update_task_summary(&id, &summary).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update task summary: {e}"),
-                )
-            })?;
+            let project_id = {
+                let db = crate::db::acquire_db(&state.db);
+                db.update_task_summary(&id, &summary).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task summary: {e}"),
+                    )
+                })?;
+                db.get_task(&id)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reload task after summary update: {error}"),
+                        )
+                    })?
+                    .and_then(|task| task.project_id)
+            };
+            publish_task_changed(state, &id, project_id.as_deref());
             Ok(serde_json::Value::Null)
         }
         "update_task_source_ticket_url" => {
@@ -266,5 +299,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
             .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task {} not found", task.id)))?
     };
 
+    publish_task_changed(state, &task.id, task.project_id.as_deref());
     json_value(task)
 }

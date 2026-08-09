@@ -1,9 +1,12 @@
 use rusqlite::Result;
 use std::collections::HashMap;
 
-use crate::task_attention::{
-    project_task_attention, TaskAttentionInput, TaskAttentionProject, TaskAttentionPullRequest,
-    TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
+use crate::{
+    project_board::{project_task_board, ProjectBoardProjection},
+    task_attention::{
+        project_task_attention, TaskAttentionInput, TaskAttentionProject, TaskAttentionPullRequest,
+        TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
+    },
 };
 
 const FOCUS_FILTER_CONFIG_KEY: &str = "focus_filter_states";
@@ -110,14 +113,29 @@ impl super::Database {
     ///
     /// Standalone review-request pull requests intentionally remain outside this seam.
     pub(crate) fn get_task_attention_rows(&self) -> Result<Vec<TaskAttentionRow>> {
+        Ok(project_task_attention(self.get_task_projection_input()?))
+    }
+
+    /// Returns the backend-authoritative four-lane Board projection for a Project.
+    pub(crate) fn get_project_board(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectBoardProjection>> {
+        Ok(project_task_board(
+            self.get_task_projection_input()?,
+            project_id,
+        ))
+    }
+
+    fn get_task_projection_input(&self) -> Result<TaskAttentionInput> {
         let projects = self.get_all_projects()?;
         let tasks = self.get_all_tasks()?;
-        let doing_task_ids: Vec<String> = tasks
+        let active_task_ids: Vec<String> = tasks
             .iter()
-            .filter(|task| task.status == "doing")
+            .filter(|task| matches!(task.status.as_str(), "backlog" | "doing"))
             .map(|task| task.id.clone())
             .collect();
-        let sessions = self.get_latest_sessions_for_tickets(&doing_task_ids)?;
+        let sessions = self.get_latest_sessions_for_tickets(&active_task_ids)?;
         let pull_requests = self.get_all_pull_requests()?;
         let mut out_of_focus_by_project = HashMap::new();
         let mut focus_states_by_project = HashMap::new();
@@ -137,7 +155,7 @@ impl super::Database {
             }
         }
 
-        Ok(project_task_attention(TaskAttentionInput {
+        Ok(TaskAttentionInput {
             projects: projects
                 .into_iter()
                 .map(|project| TaskAttentionProject {
@@ -190,7 +208,7 @@ impl super::Database {
                 .collect(),
             out_of_focus_by_project,
             focus_states_by_project,
-        }))
+        })
     }
 }
 
