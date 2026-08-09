@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as markdown;
 
 import '../generated/companion_v1_client.dart';
 import '../terminal/agent_terminal_pane.dart';
@@ -240,18 +242,27 @@ class _LoadedTaskDetail extends StatelessWidget {
           const SizedBox(height: 16),
           Semantics(
             container: true,
-            label: 'Handoff Notes. $visibleHandoff',
-            child: ExcludeSemantics(
-              child: _DetailCard(
-                children: <Widget>[
-                  Text(
+            explicitChildNodes: true,
+            label: 'Handoff Notes',
+            child: _DetailCard(
+              children: <Widget>[
+                ExcludeSemantics(
+                  child: Text(
                     'Handoff Notes',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 8),
-                  SelectableText(visibleHandoff),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+                SelectionArea(
+                  child: MarkdownBody(
+                    data: visibleHandoff,
+                    builders: <String, MarkdownElementBuilder>{
+                      'a': _HandoffLinkBuilder(),
+                    },
+                    imageBuilder: _buildHandoffImagePlaceholder,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -387,6 +398,77 @@ class _DetailState extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+final class _HandoffLinkBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    markdown.Element element,
+    TextStyle? _,
+    TextStyle? parentStyle,
+  ) {
+    final styleSheet = MarkdownStyleSheet.fromTheme(Theme.of(context));
+    final children = _buildHandoffLinkSpans(element.children, styleSheet);
+    final destination = element.attributes['href']?.trim();
+    if (destination != null &&
+        destination.isNotEmpty &&
+        element.textContent.trim() != destination) {
+      children.add(TextSpan(text: ' ($destination)'));
+    }
+
+    return Semantics(
+      child: Text.rich(TextSpan(style: parentStyle, children: children)),
+    );
+  }
+}
+
+List<InlineSpan> _buildHandoffLinkSpans(
+  List<markdown.Node>? nodes,
+  MarkdownStyleSheet styleSheet,
+) => <InlineSpan>[
+  for (final node in nodes ?? const <markdown.Node>[])
+    _buildHandoffLinkSpan(node, styleSheet),
+];
+
+InlineSpan _buildHandoffLinkSpan(
+  markdown.Node node,
+  MarkdownStyleSheet styleSheet,
+) {
+  if (node is! markdown.Element) return TextSpan(text: node.textContent);
+  if (node.tag == 'br') return const TextSpan(text: '\n');
+  if (node.tag == 'img') {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: _buildHandoffImagePlaceholder(
+        Uri.tryParse(node.attributes['src'] ?? '') ?? Uri(),
+        node.attributes['title'],
+        node.attributes['alt'],
+      ),
+    );
+  }
+
+  final children = _buildHandoffLinkSpans(node.children, styleSheet);
+  final childText = children.map((span) => span.toPlainText()).join();
+  final useTextFallback =
+      node.textContent.isNotEmpty && childText != node.textContent;
+  return TextSpan(
+    text: useTextFallback ? node.textContent : null,
+    style: styleSheet.styles[node.tag],
+    children: useTextFallback ? null : children,
+  );
+}
+
+Widget _buildHandoffImagePlaceholder(Uri _, String? title, String? alt) {
+  final description = switch ((alt?.trim(), title?.trim())) {
+    (final altText?, _) when altText.isNotEmpty => altText,
+    (_, final titleText?) when titleText.isNotEmpty => titleText,
+    _ => null,
+  };
+
+  return Text(
+    description == null ? '[Image omitted]' : '[Image: $description]',
   );
 }
 
