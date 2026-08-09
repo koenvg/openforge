@@ -13,6 +13,7 @@ mod project_board;
 mod rate_limit;
 mod stream_termination;
 mod tailscale;
+mod task_actions;
 mod task_detail;
 mod terminal;
 mod terminal_protocol;
@@ -99,6 +100,8 @@ mod live_events_tests;
 mod pairing_tests;
 #[cfg(test)]
 mod project_board_tests;
+#[cfg(test)]
+mod task_actions_tests;
 #[cfg(test)]
 mod task_detail_tests;
 #[cfg(test)]

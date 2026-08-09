@@ -42,6 +42,8 @@ abstract interface class AgentTerminalPresentation implements Listenable {
   void setVisible(bool visible);
 
   void setForeground(bool foreground);
+
+  Future<void> closeForTaskCompletion();
 }
 
 final class AgentTerminalController extends ChangeNotifier
@@ -146,6 +148,13 @@ final class AgentTerminalController extends ChangeNotifier
       return;
     }
     _reconcile();
+  }
+
+  @override
+  Future<void> closeForTaskCompletion() async {
+    if (_disposed) return;
+    _visible = false;
+    await _detach(clear: true);
   }
 
   bool get inputEnabled =>

@@ -90,6 +90,29 @@ final class _FakeClient implements CompanionClient {
   }) => throw UnsupportedError('not used');
 }
 
+final class _FakeActions implements CompanionTaskActionClient {
+  Object result = const TaskCompleteResult(
+    taskId: 'KVG-2946',
+    boardStatus: 'done',
+    cleanupScheduled: true,
+  );
+  Completer<TaskCompleteResult>? pending;
+  var calls = 0;
+
+  @override
+  Future<TaskCompleteResult> completeTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    calls += 1;
+    final pendingResult = pending;
+    if (pendingResult != null) return pendingResult.future;
+    final current = result;
+    if (current is! TaskCompleteResult) throw current;
+    return current;
+  }
+}
+
 final class _FakeStorage implements CompanionSecureStorage {
   CompanionTrustRecord? record = _trustRecord;
   var saveCalls = 0;
@@ -162,6 +185,95 @@ void main() {
 
       expect(controller.state, isA<TaskDetailAuthorizationRequired>());
       expect(client.taskDetailCalls, 0);
+    },
+  );
+
+  test(
+    'Complete is single-flight and disabled while the mutation is pending',
+    () async {
+      final client = _FakeClient();
+      final actions = _FakeActions()..pending = Completer<TaskCompleteResult>();
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        actionClient: actions,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+
+      final firstAttempt = controller.complete();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.completePending, isTrue);
+      expect(actions.calls, 1);
+      expect(await controller.complete(), TaskCompleteAttempt.alreadyPending);
+      expect(actions.calls, 1);
+
+      actions.pending!.complete(
+        const TaskCompleteResult(
+          taskId: 'KVG-2946',
+          boardStatus: 'done',
+          cleanupScheduled: true,
+        ),
+      );
+      expect(await firstAttempt, TaskCompleteAttempt.completed);
+      expect(controller.completePending, isFalse);
+      expect(controller.completeError, isNull);
+    },
+  );
+
+  test(
+    'uncertain Complete failure refreshes state once without retrying mutation',
+    () async {
+      final client = _FakeClient();
+      final actions = _FakeActions()
+        ..result = TimeoutException('raw network path /Users/secret');
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        actionClient: actions,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+
+      expect(await controller.complete(), TaskCompleteAttempt.failed);
+
+      expect(actions.calls, 1, reason: 'mutations must never be retried');
+      expect(
+        client.taskDetailCalls,
+        2,
+        reason: 'current Task state is refreshed',
+      );
+      expect(controller.state, isA<TaskDetailLoaded>());
+      expect(controller.completeError, contains('could not confirm'));
+      expect(controller.completeError, isNot(contains('/Users/secret')));
+    },
+  );
+
+  test(
+    'authorization loss during Complete clears authority without retrying',
+    () async {
+      final actions = _FakeActions()
+        ..result = const CompanionV1Exception(
+          statusCode: 401,
+          code: 'revoked',
+          message: 'raw credential detail',
+        );
+      var authorizationLosses = 0;
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: _FakeClient(),
+        actionClient: actions,
+        storage: _FakeStorage(),
+        onAuthorizationLost: () => authorizationLosses += 1,
+      );
+      await controller.refresh();
+
+      expect(await controller.complete(), TaskCompleteAttempt.failed);
+
+      expect(actions.calls, 1);
+      expect(controller.state, isA<TaskDetailAuthorizationRequired>());
+      expect(authorizationLosses, 1);
     },
   );
 

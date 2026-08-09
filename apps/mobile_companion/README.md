@@ -2,13 +2,11 @@
 
 A dedicated Flutter application for iOS and Android. It is intentionally
 independent from the pnpm workspace and provides desktop-approved pairing, an
-attention-first home grouped by Project, read-only Task detail, foreground live
-updates, an interactive attachment to an already-running Task Agent terminal,
+attention-first Project Board and Task detail, explicit active-Task completion,
+foreground live updates, an interactive attachment to an already-running Task Agent terminal,
 pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
 Tailscale MagicDNS fallback, and explicit connection and recovery states.
-The approved
-[Mobile Companion — Design](../../docs/superpowers/specs/2026-07-30-mobile-companion-design.md)
-remains the source of truth.
+The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md) and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
 
 ## Data and trust boundary
 
@@ -20,8 +18,8 @@ secret. A discovered endpoint is accepted only when it belongs to the already
 paired host and presents the exact pinned certificate.
 
 After the user explicitly approves pairing on the desktop, the device credential
-can make authenticated read-only HTTP requests in the versioned Companion API and
-attach interactively to the current Agent terminal for a Task. HTTP requests may fetch:
+can make authenticated reads, invoke the one explicit Task-scoped Complete operation,
+and attach interactively to the current Agent terminal for a Task. HTTP reads may fetch:
 
 - host identity, protocol version, and server time;
 - the Needs Attention snapshot time and rows: Task identity, title, normalized
@@ -34,15 +32,21 @@ attach interactively to the current Agent terminal for a Task. HTTP requests may
   Invalidations identify attention or Task resources to refetch rather than
   carrying domain content.
 
+Task Complete accepts only a Task identifier. The server rechecks authentication,
+Project visibility, doing state, and lifecycle claims; it then uses the shared desktop
+terminal completion service to stop the Agent and Task shells, retain Completed Task
+reference data, and schedule safe worktree/owned-branch cleanup. The client closes an
+active terminal attachment normally, refreshes authoritative state after failures or
+uncertain transport loss, and never retries or fails the mutation over automatically.
 The dedicated Task-scoped terminal WebSocket attaches only to an already-running
 Agent PTY. It carries terminal output and ready-gated UTF-8 input, and it applies
 last-writer-wins resizes to the PTY shared with desktop surfaces and other paired
 devices. It cannot start, resume, abort, replace, or kill Agent Sessions.
 
-The API exposes no Task mutations, generic command dispatch, repository access,
-ordinary shell terminals, provider credentials, or internal Agent-session
-identifiers. Every post-pairing LAN or Tailscale request uses the same device
-credential and exact certificate pin.
+Beyond explicit Task Complete, the API exposes no Task mutations, generic command
+dispatch, repository access, ordinary shell terminals, provider credentials, or
+internal Agent-session identifiers. Every post-pairing LAN or Tailscale request uses
+the same device credential and exact certificate pin.
 
 Only host trust (host identity and certificate fingerprint), endpoint candidates,
 and the device credential (device identity and bearer credential) persist in
@@ -101,13 +105,14 @@ builds are separate Flutter invocations and do not require `pnpm install`.
 
 ## Architecture boundaries
 
-- `lib/src/client/companion_client.dart` is the single seam for pairing,
-  authenticated generated API calls, certificate-pinned endpoint failover, and
-  the foreground event stream.
+- `lib/src/client/companion_client.dart` separates read/failover calls behind
+  `CompanionClient` from the single-attempt Complete mutation behind
+  `CompanionTaskActionClient`; all calls use generated models and pinned transport.
 - `lib/src/discovery/` discovers Bonjour services and filters them by the already
   paired host identifier and protocol version. Discovery never establishes trust.
-- `lib/src/attention/` and `lib/src/task_detail/` own the in-memory read-only
-  views; `lib/src/live/` refreshes them from coarse foreground SSE invalidations.
+- `lib/src/attention/` and `lib/src/task_detail/` own in-memory views; Task detail
+  also coordinates confirmed Complete, safe refresh recovery, and success navigation.
+  `lib/src/live/` refreshes views from coarse foreground SSE invalidations.
 - `lib/src/terminal/` owns the dedicated Agent-terminal WebSocket, ready-gated
   input/resize controller, and xterm.dart adapter. Terminal state is memory-only.
 - `lib/src/storage/` persists only the paired host trust record, endpoint

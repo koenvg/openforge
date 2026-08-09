@@ -7,6 +7,7 @@ use super::{
     network::CompanionEndpointKind,
     pairing::PairingCoordinator,
     project_board::CompanionProjectBoardSource,
+    task_actions::CompanionTaskActionService,
     task_detail::CompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
@@ -31,6 +32,7 @@ pub(super) struct CompanionGatewayRouteSources {
     pub(super) attention: Arc<dyn CompanionAttentionSource>,
     pub(super) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(super) task_detail: Arc<dyn CompanionTaskDetailSource>,
+    pub(super) task_actions: Arc<dyn CompanionTaskActionService>,
     pub(super) pty_manager: crate::pty_manager::PtyManager,
     pub(super) events: AppEventBus,
     pub(super) stream_access: Arc<dyn CompanionStreamAccess>,
@@ -170,6 +172,7 @@ pub(super) async fn start_tls_listeners(
         attention,
         project_board,
         task_detail,
+        task_actions,
         pty_manager,
         events,
         stream_access,
@@ -182,6 +185,7 @@ pub(super) async fn start_tls_listeners(
             attention,
             project_board,
             task_detail,
+            task_actions,
             events,
             stream_access,
             pty_manager,

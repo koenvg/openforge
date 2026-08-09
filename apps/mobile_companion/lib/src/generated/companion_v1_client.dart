@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '96133ff4b7f3fa1bfb191d560fb3cc91db5b04caac7fb906cd51a25fd46f29c8';
+    '94664b3167acb1906a0d352200bd6bffc259bda8d4cb3b2b0057aceea9bd5b1a';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -565,6 +565,39 @@ final class TaskDetail {
   final DateTime? agentUpdatedAt;
 }
 
+final class TaskCompleteResult {
+  const TaskCompleteResult({
+    required this.taskId,
+    required this.boardStatus,
+    required this.cleanupScheduled,
+  });
+
+  factory TaskCompleteResult.fromJson(Map<String, Object?> json) {
+    const fields = <String>{'taskId', 'boardStatus', 'cleanupScheduled'};
+    json.expectOnly(fields);
+    if (!json.keys.toSet().containsAll(fields)) {
+      throw const FormatException(
+        'Task Complete result is missing required fields.',
+      );
+    }
+    final taskId = json.string('taskId');
+    final boardStatus = json.string('boardStatus');
+    final cleanupScheduled = json['cleanupScheduled'];
+    if (taskId.isEmpty || boardStatus != 'done' || cleanupScheduled is! bool) {
+      throw const FormatException('Invalid Task Complete result.');
+    }
+    return TaskCompleteResult(
+      taskId: taskId,
+      boardStatus: boardStatus,
+      cleanupScheduled: cleanupScheduled,
+    );
+  }
+
+  final String taskId;
+  final String boardStatus;
+  final bool cleanupScheduled;
+}
+
 sealed class CompanionResourceIdentityData {
   const CompanionResourceIdentityData();
 
@@ -804,6 +837,25 @@ final class CompanionV1Client {
     return TaskDetail.fromJson(_successJson(response, const <int>{200}));
   }
 
+  Future<TaskCompleteResult> completeCompanionTask({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve(
+        '/companion/v1/tasks/${Uri.encodeComponent(taskId)}/complete',
+      ),
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return TaskCompleteResult.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
   CompanionV1StreamRequest streamCompanionEvents({
     required String credential,
     String? lastEventId,
@@ -834,6 +886,8 @@ Map<String, Object?> _successJson(
         'revoked',
         'incompatible_version',
         'invalid_request',
+        'invalid_task_state',
+        'operation_in_progress',
         'not_found',
         'rate_limited',
         'temporarily_unavailable',

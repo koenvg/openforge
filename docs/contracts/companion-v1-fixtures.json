@@ -45,6 +45,11 @@
     "updatedAt": "2026-07-30T11:58:00Z",
     "agentUpdatedAt": "2026-07-30T11:59:00Z"
   },
+  "taskCompleteResult": {
+    "taskId": "KVG-2946",
+    "boardStatus": "done",
+    "cleanupScheduled": true
+  },
   "error": {
     "error": {
       "code": "unauthenticated",

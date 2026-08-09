@@ -64,6 +64,37 @@ void main() {
     },
   );
 
+  test(
+    'Task completion closes the attachment normally without reconnecting',
+    () async {
+      final channel = _FakeChannel();
+      final client = _FakeTerminalClient(channel);
+      final terminal = _FakeTerminal();
+      final controller = AgentTerminalController(
+        taskId: 'KVG-3018',
+        client: client,
+        storage: _Storage(),
+        terminal: terminal,
+        reconnectDelay: Duration.zero,
+      );
+      controller.updateAvailability(true);
+      controller.setVisible(true);
+      await _flush();
+      channel.add(Uint8List.fromList('attached'.codeUnits));
+      channel.add('{"type":"ready","initialState":"replay"}');
+      await _flush();
+
+      await controller.closeForTaskCompletion();
+      await _flush();
+
+      expect(channel.closed, isTrue);
+      expect(terminal.output, isEmpty);
+      expect(controller.state, isA<AgentTerminalNoActiveSession>());
+      expect(client.opens, 1, reason: 'completion closure must not reconnect');
+      controller.dispose();
+    },
+  );
+
   test('malformed UTF-8 is a protocol failure and is never rendered', () async {
     final channel = _FakeChannel();
     final client = _FakeTerminalClient(channel);

@@ -1,5 +1,5 @@
 name: openforge_companion
-description: "Mobile Companion with read-only Task views and interactive Agent terminal attachment."
+description: "Mobile Companion for Task views, Task completion, and interactive Agent terminal attachment."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
