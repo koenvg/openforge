@@ -7,6 +7,11 @@ import 'package:openforge_companion/src/project_board/project_board_controller.d
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 
 final class _FakeClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   ProjectCatalog catalog = ProjectCatalog(
     snapshotAt: DateTime.utc(2026, 8, 1),
     projects: const <ProjectCatalogItem>[

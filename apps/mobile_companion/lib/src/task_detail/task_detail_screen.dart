@@ -15,6 +15,8 @@ class TaskDetailScreen extends StatefulWidget {
     this.terminalSurface,
     this.onRefresh,
     this.onCompleted,
+    this.onDeleteSucceeded,
+    this.onDeleteNeedsRefresh,
     super.key,
   });
 
@@ -22,6 +24,8 @@ class TaskDetailScreen extends StatefulWidget {
   final AgentTerminalSurface? terminalSurface;
   final Future<void> Function()? onRefresh;
   final Future<void> Function()? onCompleted;
+  final Future<void> Function()? onDeleteSucceeded;
+  final Future<void> Function()? onDeleteNeedsRefresh;
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -63,6 +67,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ? widget.controller.complete
         : null,
     onCompleted: widget.onCompleted,
+    onDelete: widget.controller.deleteBacklogTask,
+    onDeleteSucceeded: widget.onDeleteSucceeded,
+    onDeleteNeedsRefresh: widget.onDeleteNeedsRefresh,
     completePending: widget.controller.completePending,
     completeError: widget.controller.completeError,
     terminalSurface: widget.terminalSurface,
@@ -75,6 +82,9 @@ class TaskDetailView extends StatefulWidget {
     required this.onRefresh,
     this.onComplete,
     this.onCompleted,
+    this.onDelete,
+    this.onDeleteSucceeded,
+    this.onDeleteNeedsRefresh,
     this.completePending = false,
     this.completeError,
     this.terminalSurface,
@@ -85,6 +95,9 @@ class TaskDetailView extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final Future<TaskCompleteAttempt> Function()? onComplete;
   final Future<void> Function()? onCompleted;
+  final Future<TaskDeleteResult> Function()? onDelete;
+  final Future<void> Function()? onDeleteSucceeded;
+  final Future<void> Function()? onDeleteNeedsRefresh;
   final bool completePending;
   final String? completeError;
   final AgentTerminalSurface? terminalSurface;
@@ -99,6 +112,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
   late bool _foreground;
   var _selectedTab = 0;
   var _completionAccepted = false;
+  var _deleteBusy = false;
 
   @override
   void initState() {
@@ -206,6 +220,49 @@ class _TaskDetailViewState extends State<TaskDetailView>
     widget.terminalSurface?.presentation.setVisible(_selectedTab == 1);
   }
 
+  Future<void> _confirmDelete(TaskDetail detail) async {
+    final action = widget.onDelete;
+    if (_deleteBusy || action == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete “${detail.title}”?'),
+        content: const Text(
+          'This completes the Task using the desktop lifecycle. The Completed Task stays available as reference data, while runtime workspace state is removed.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleteBusy = true);
+    final result = await action();
+    if (!mounted) return;
+    if (result == TaskDeleteResult.succeeded) {
+      await widget.onDeleteSucceeded?.call();
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    } else if (result == TaskDeleteResult.failed ||
+        result == TaskDeleteResult.uncertain) {
+      await widget.onDeleteNeedsRefresh?.call();
+    }
+    if (mounted) setState(() => _deleteBusy = false);
+  }
+
   Widget? _completeAction() {
     final state = widget.state;
     final onComplete = widget.onComplete;
@@ -250,7 +307,13 @@ class _TaskDetailViewState extends State<TaskDetailView>
       child: IndexedStack(
         index: _selectedTab,
         children: <Widget>[
-          _TaskDetailBody(state: widget.state, onRefresh: widget.onRefresh),
+          _TaskDetailBody(
+            state: widget.state,
+            onRefresh: widget.onRefresh,
+            deleteBusy: _deleteBusy,
+            deleteAvailable: widget.onDelete != null,
+            onDelete: _confirmDelete,
+          ),
           AgentTerminalPane(surface: widget.terminalSurface),
         ],
       ),
@@ -259,10 +322,19 @@ class _TaskDetailViewState extends State<TaskDetailView>
 }
 
 class _TaskDetailBody extends StatelessWidget {
-  const _TaskDetailBody({required this.state, required this.onRefresh});
+  const _TaskDetailBody({
+    required this.state,
+    required this.onRefresh,
+    required this.deleteBusy,
+    required this.deleteAvailable,
+    required this.onDelete,
+  });
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final bool deleteBusy;
+  final bool deleteAvailable;
+  final Future<void> Function(TaskDetail detail) onDelete;
 
   @override
   Widget build(BuildContext context) => switch (state) {
@@ -273,7 +345,14 @@ class _TaskDetailBody extends StatelessWidget {
         child: const CircularProgressIndicator(),
       ),
     ),
-    TaskDetailLoaded(:final detail) => _LoadedTaskDetail(detail: detail),
+    TaskDetailLoaded(:final detail, :final deletePhase, :final deleteMessage) =>
+      _LoadedTaskDetail(
+        detail: detail,
+        deletePending: deleteBusy || deletePhase == TaskDeletePhase.pending,
+        deleteMessage: deleteMessage,
+        deleteAvailable: deleteAvailable,
+        onDelete: onDelete,
+      ),
     TaskDetailNotFound() => const _DetailState(
       icon: Icons.task_alt_outlined,
       title: 'Task no longer available',
@@ -299,9 +378,19 @@ class _TaskDetailBody extends StatelessWidget {
 }
 
 class _LoadedTaskDetail extends StatelessWidget {
-  const _LoadedTaskDetail({required this.detail});
+  const _LoadedTaskDetail({
+    required this.detail,
+    required this.deletePending,
+    required this.deleteMessage,
+    required this.deleteAvailable,
+    required this.onDelete,
+  });
 
   final TaskDetail detail;
+  final bool deletePending;
+  final String? deleteMessage;
+  final bool deleteAvailable;
+  final Future<void> Function(TaskDetail detail) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +486,46 @@ class _LoadedTaskDetail extends StatelessWidget {
               ],
             ],
           ),
+          if (deleteMessage case final message?) ...<Widget>[
+            const SizedBox(height: 16),
+            Semantics(
+              liveRegion: true,
+              label: message,
+              child: Text(
+                message,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          ],
+          if (deleteAvailable && detail.boardStatus == 'backlog') ...<Widget>[
+            const SizedBox(height: 24),
+            Semantics(
+              liveRegion: deletePending,
+              label: deletePending
+                  ? 'Deleting Task ${detail.title}'
+                  : 'Delete Task ${detail.title}',
+              button: true,
+              enabled: !deletePending,
+              child: ExcludeSemantics(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  onPressed: deletePending ? null : () => onDelete(detail),
+                  icon: deletePending
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline),
+                  label: Text(deletePending ? 'Deleting…' : 'Delete Task'),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

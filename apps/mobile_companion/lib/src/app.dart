@@ -297,7 +297,9 @@ class _CompanionAppState extends State<CompanionApp>
             controller: controller,
             terminalSurface: terminalSurface,
             onRefresh: () => _refreshTaskDetailAndBoard(controller),
-            onCompleted: _refreshBoardAfterCompletion,
+            onCompleted: _refreshBoardAfterTaskAction,
+            onDeleteSucceeded: _refreshBoardAfterTaskAction,
+            onDeleteNeedsRefresh: _refreshBoardAfterTaskAction,
           ),
         ),
       );
@@ -323,7 +325,7 @@ class _CompanionAppState extends State<CompanionApp>
     ]);
   }
 
-  Future<void> _refreshBoardAfterCompletion() async {
+  Future<void> _refreshBoardAfterTaskAction() async {
     await widget.projectBoardController?.refresh();
   }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
@@ -31,10 +32,42 @@ final _detail = TaskDetail(
   agentUpdatedAt: DateTime.utc(2026, 7, 30, 12),
 );
 
+final _backlogDetail = TaskDetail(
+  taskId: 'KVG-2946',
+  title: 'Mobile Task detail',
+  projectId: 'P-1',
+  projectName: 'OpenForge',
+  boardStatus: 'backlog',
+  handoffNotes: 'Ready for review.',
+  agentState: 'waiting',
+  agentErrorSummary: null,
+  createdAt: DateTime.utc(2026, 7, 30, 10),
+  updatedAt: DateTime.utc(2026, 7, 30, 11),
+  agentUpdatedAt: null,
+);
+
 final class _FakeClient implements CompanionClient {
   Object result = _detail;
   Completer<TaskDetail>? pendingDetail;
   var taskDetailCalls = 0;
+  Object deleteResult = const TaskDeleteReceipt(
+    taskId: 'KVG-2946',
+    outcome: 'deleted',
+  );
+  Completer<TaskDeleteReceipt>? pendingDelete;
+  var deleteCalls = 0;
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    deleteCalls += 1;
+    final pending = pendingDelete;
+    if (pending != null) return pending.future;
+    final current = deleteResult;
+    if (current is! TaskDeleteReceipt) throw current;
+    return current;
+  }
 
   @override
   Future<CompanionLiveConnection> openLiveEvents(
@@ -293,4 +326,90 @@ void main() {
 
     expect(await refresh, CompanionRefreshOutcome.superseded);
   });
+
+  test(
+    'Delete is single-flight and reports success without retrying',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..pendingDelete = Completer<TaskDeleteReceipt>();
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+
+      final first = controller.deleteBacklogTask();
+      await Future<void>.delayed(Duration.zero);
+      final duplicate = await controller.deleteBacklogTask();
+
+      expect(client.deleteCalls, 1);
+      expect(duplicate, TaskDeleteResult.ignored);
+      expect(
+        (controller.state as TaskDetailLoaded).deletePhase,
+        TaskDeletePhase.pending,
+      );
+      client.pendingDelete!.complete(
+        const TaskDeleteReceipt(taskId: 'KVG-2946', outcome: 'deleted'),
+      );
+      expect(await first, TaskDeleteResult.succeeded);
+      expect(client.deleteCalls, 1);
+    },
+  );
+
+  test(
+    'stale Delete refreshes current Task state and remains on detail',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..deleteResult = const CompanionV1Exception(
+          statusCode: 409,
+          code: 'invalid_task_state',
+          message: 'raw backend state',
+        );
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+      client.result = _detail;
+
+      final result = await controller.deleteBacklogTask();
+
+      final loaded = controller.state as TaskDetailLoaded;
+      expect(result, TaskDeleteResult.failed);
+      expect(client.deleteCalls, 1);
+      expect(client.taskDetailCalls, 2);
+      expect(loaded.detail.boardStatus, 'doing');
+      expect(loaded.deletePhase, TaskDeletePhase.failed);
+      expect(loaded.deleteMessage, contains('changed'));
+    },
+  );
+
+  test(
+    'uncertain Delete never retries and safely refreshes current state',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..deleteResult = const SocketException('response lost');
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+
+      final result = await controller.deleteBacklogTask();
+
+      final loaded = controller.state as TaskDetailLoaded;
+      expect(result, TaskDeleteResult.uncertain);
+      expect(client.deleteCalls, 1);
+      expect(client.taskDetailCalls, 2);
+      expect(loaded.detail, same(_backlogDetail));
+      expect(loaded.deletePhase, TaskDeletePhase.uncertain);
+      expect(loaded.deleteMessage, contains('was not retried'));
+    },
+  );
 }

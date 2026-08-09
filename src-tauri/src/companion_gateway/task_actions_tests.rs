@@ -121,6 +121,18 @@ fn complete_request(task_id: &str) -> Request<Body> {
         .expect("request")
 }
 
+fn delete_request(task_id: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(format!("/companion/v1/tasks/{task_id}/delete"))
+        .header(
+            super::contract::PROTOCOL_VERSION_HEADER,
+            super::contract::PROTOCOL_VERSION.to_string(),
+        )
+        .body(Body::empty())
+        .expect("request")
+}
+
 async fn response_json(response: Response) -> serde_json::Value {
     let body = axum::body::to_bytes(response.into_body(), 16 * 1024)
         .await
@@ -289,6 +301,170 @@ async fn complete_conceals_hidden_tasks_and_rejects_stale_or_duplicate_operation
     .expect("router response");
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(response).await["error"]["code"], "revoked");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn authenticated_delete_is_backlog_only_bodyless_and_preserves_reference_data() {
+    let (database, path) = crate::db::test_helpers::make_test_db("companion_delete_route");
+    let database = Arc::new(Mutex::new(database));
+    let (project_id, backlog_id, doing_id) = {
+        let database = crate::db::acquire_db(&database);
+        let project = database
+            .create_project("Visible", "/tmp/visible")
+            .expect("create Project");
+        let backlog = database
+            .create_task("Delete me", "backlog", Some(&project.id), None, None)
+            .expect("create backlog Task");
+        database
+            .update_task_summary(&backlog.id, "Reference notes")
+            .expect("save reference notes");
+        let doing = database
+            .create_task("Do not delete", "doing", Some(&project.id), None, None)
+            .expect("create doing Task");
+        (project.id, backlog.id, doing.id)
+    };
+    let runtime = RecordingRuntime::new(Arc::clone(&database));
+    let events = AppEventBus::new(16, 8);
+    let mut subscription = events.subscribe(None).expect("subscribe to events");
+    let service = Arc::new(TerminalTaskCompletionService::new(
+        Arc::clone(&database),
+        runtime.clone(),
+        TaskClaims::new(),
+        None,
+        Some(events),
+        None,
+    ));
+    let app = router(Arc::clone(&database), Arc::new(AllowAllAuthorizer), service);
+
+    let response = app
+        .clone()
+        .oneshot(delete_request(&backlog_id))
+        .await
+        .expect("router response");
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        response_json(response).await,
+        serde_json::json!({"taskId": backlog_id, "outcome": "deleted"}),
+    );
+    let completed = crate::db::acquire_db(&database)
+        .get_task(&backlog_id)
+        .expect("read completed Task")
+        .expect("Completed Task remains as reference data");
+    assert_eq!(completed.status, "done");
+    assert_eq!(completed.summary.as_deref(), Some("Reference notes"));
+    let AppEventFrame::Event(event) = subscription.recv().await.expect("Delete event") else {
+        panic!("expected canonical Task event");
+    };
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["task_id"], backlog_id);
+    assert_eq!(event.payload["project_id"], project_id);
+
+    let stale = app
+        .clone()
+        .oneshot(delete_request(&doing_id))
+        .await
+        .expect("router response");
+    assert_eq!(stale.status(), axum::http::StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(stale).await["error"]["code"],
+        "invalid_task_state",
+    );
+
+    let caller_supplied_cleanup = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/companion/v1/tasks/{backlog_id}/delete"))
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"workspacePath":"/tmp/unsafe"}"#))
+                .expect("request"),
+        )
+        .await
+        .expect("router response");
+    assert_eq!(
+        caller_supplied_cleanup.status(),
+        axum::http::StatusCode::BAD_REQUEST,
+    );
+    assert_eq!(
+        response_json(caller_supplied_cleanup).await["error"]["code"],
+        "invalid_request",
+    );
+
+    crate::db::acquire_db(&database)
+        .set_config(
+            "project_sidebar_hidden",
+            &serde_json::to_string(&vec![project_id]).expect("hidden projects"),
+        )
+        .expect("hide Project");
+    let hidden = app
+        .oneshot(delete_request(&backlog_id))
+        .await
+        .expect("router response");
+    assert_eq!(hidden.status(), axum::http::StatusCode::NOT_FOUND);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn delete_rejects_lost_authority_and_duplicate_operation_claims() {
+    let (database, path) = crate::db::test_helpers::make_test_db("companion_delete_policy");
+    let database = Arc::new(Mutex::new(database));
+    let task_id = {
+        let database = crate::db::acquire_db(&database);
+        let project = database
+            .create_project("Visible", "/tmp/visible")
+            .expect("create Project");
+        database
+            .create_task("Delete me", "backlog", Some(&project.id), None, None)
+            .expect("create Task")
+            .id
+    };
+    let runtime = RecordingRuntime::new(Arc::clone(&database));
+    let claims = TaskClaims::new();
+    let _claim = claims
+        .try_claim(&task_id, TaskOperation::TerminalCompletion)
+        .expect("claim Task");
+    let service = Arc::new(TerminalTaskCompletionService::new(
+        Arc::clone(&database),
+        runtime.clone(),
+        claims,
+        None,
+        Some(AppEventBus::new(16, 8)),
+        None,
+    ));
+
+    let duplicate = router(
+        Arc::clone(&database),
+        Arc::new(AllowAllAuthorizer),
+        service.clone(),
+    )
+    .oneshot(delete_request(&task_id))
+    .await
+    .expect("router response");
+    assert_eq!(duplicate.status(), axum::http::StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(duplicate).await["error"]["code"],
+        "operation_in_progress",
+    );
+    assert!(runtime.calls().is_empty());
+
+    let denied = router(
+        database,
+        Arc::new(RejectAuthorizer(CompanionErrorCode::Revoked)),
+        service,
+    )
+    .oneshot(delete_request(&task_id))
+    .await
+    .expect("router response");
+    assert_eq!(denied.status(), axum::http::StatusCode::UNAUTHORIZED);
+    assert_eq!(response_json(denied).await["error"]["code"], "revoked");
 
     let _ = std::fs::remove_file(path);
 }

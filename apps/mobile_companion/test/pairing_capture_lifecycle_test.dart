@@ -349,6 +349,11 @@ final class _FakeMobileScannerPlatform extends MobileScannerPlatform {
 }
 
 final class _SuccessfulPairingClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   _SuccessfulPairingClient({
     this.waitForApproval = false,
     this.submitError,

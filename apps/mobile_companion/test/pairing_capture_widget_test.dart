@@ -134,6 +134,11 @@ final class _CaptureLauncher extends StatelessWidget {
 }
 
 final class _RecordingPairingClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   var submitCalls = 0;
   PairingBootstrap? submittedBootstrap;
   String? submittedDeviceName;

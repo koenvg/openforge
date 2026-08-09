@@ -252,6 +252,39 @@
         }
       }
     },
+    "/tasks/{taskId}/delete": {
+      "post": {
+        "operationId": "deleteCompanionBacklogTask",
+        "summary": "Delete one current backlog Task using terminal completion semantics",
+        "description": "This explicit mutation is never automatically retried. The desktop verifies Task ownership, visible Project policy, current backlog state, and the per-Task lifecycle claim before preserving the Completed Task as reference data and scheduling normal runtime cleanup.",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The backlog Task reached the terminal Completed Task lifecycle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskDeleteReceipt" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CompanionError" },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
     "/events": {
       "get": {
         "operationId": "streamCompanionEvents",
@@ -543,6 +576,15 @@
           "taskId": { "type": "string", "minLength": 1 },
           "boardStatus": { "const": "done" },
           "cleanupScheduled": { "type": "boolean" }
+        }
+      },
+      "TaskDeleteReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskId", "outcome"],
+        "properties": {
+          "taskId": { "type": "string", "minLength": 1 },
+          "outcome": { "type": "string", "const": "deleted" }
         }
       },
       "ResourceInvalidationData": {

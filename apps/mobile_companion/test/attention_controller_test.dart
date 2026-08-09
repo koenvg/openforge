@@ -33,6 +33,11 @@ AttentionItem _item({
 );
 
 final class _FakeClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   var snapshots = <AttentionSnapshot>[];
   final pendingSnapshots = <Completer<AttentionSnapshot>>[];
   Object? error;
