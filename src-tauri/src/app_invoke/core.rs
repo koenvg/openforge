@@ -22,6 +22,15 @@ pub(super) async fn handle_app_core_task_project_command(
                     ),
                 ));
             }
+            let _status_claim = state
+                .task_claims
+                .try_claim(&id, TaskOperation::UpdateStatus)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::CONFLICT,
+                        "Task has another lifecycle operation in progress".to_string(),
+                    )
+                })?;
             {
                 let db = crate::db::acquire_db(&state.db);
                 db.update_task_status(&id, status.as_str()).map_err(|e| {
@@ -36,39 +45,22 @@ pub(super) async fn handle_app_core_task_project_command(
         }
         "delete_task" => {
             let id = payload_string(&request.payload, "id")?;
-            // Held until the background cleanup finishes so a second Complete
-            // cannot start a duplicate delete while cleanup is in flight.
-            let delete_claim = state
-                .task_claims
-                .try_claim(&id, TaskOperation::DeleteTask)
-                .ok_or_else(|| {
-                    (
-                        StatusCode::CONFLICT,
-                        "Task already has a delete in progress".to_string(),
-                    )
-                })?;
-            let cleanup = prepare_task_runtime_cleanup(state, &id, true).await?;
-            {
-                let db = crate::db::acquire_db(&state.db);
-                db.delete_task(&id).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to delete task: {e}"),
-                    )
-                })?;
-            }
-            publish_task_changed_payload(
-                state,
-                serde_json::json!({ "action": "deleted", "task_id": id }),
+            let service = crate::terminal_task_completion::TerminalTaskCompletionService::new(
+                std::sync::Arc::clone(&state.db),
+                crate::terminal_task_completion::PtyTerminalTaskRuntime::new(
+                    state.pty_manager.clone(),
+                ),
+                state.task_claims.clone(),
+                state.app.clone(),
+                state.app_event_bus.clone(),
+                state.app_event_tx.clone(),
             );
-            // The board is already updated; the slow worktree/branch cleanup
-            // (repo lock, git subprocesses, rm -rf) must not delay the response.
-            if let Some(cleanup) = cleanup {
-                tokio::spawn(async move {
-                    let _delete_claim = delete_claim;
-                    run_task_runtime_cleanup(&id, cleanup).await;
-                });
-            }
+            service
+                .complete(
+                    crate::terminal_task_completion::TerminalTaskCompletionRequest::desktop(&id),
+                )
+                .await
+                .map_err(crate::http_server::map_terminal_task_completion_error)?;
             serde_json::Value::Null
         }
         "list_git_branches" => {

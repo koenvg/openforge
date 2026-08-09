@@ -9,19 +9,14 @@ use crate::{
     whisper_manager::WhisperManager,
 };
 #[cfg(test)]
-use axum::{
-    extract::{Json, State},
-    http::StatusCode,
-};
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
 #[cfg(test)]
 use futures::StreamExt;
 use serde::Serialize;
+use std::sync::{Arc, Mutex};
 #[cfg(test)]
 use std::time::Duration;
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
-};
 
 mod authentication;
 mod internal_transport;
@@ -71,6 +66,24 @@ use server_lifecycle::{
     run_electron_sidecar_with_cleanup, shutdown_sidecar_runtime, SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
 };
 
+pub(crate) fn map_terminal_task_completion_error(
+    error: crate::terminal_task_completion::TerminalTaskCompletionError,
+) -> (StatusCode, String) {
+    let status = match &error {
+        crate::terminal_task_completion::TerminalTaskCompletionError::NotFound => {
+            StatusCode::NOT_FOUND
+        }
+        crate::terminal_task_completion::TerminalTaskCompletionError::AlreadyClaimed
+        | crate::terminal_task_completion::TerminalTaskCompletionError::InvalidState { .. } => {
+            StatusCode::CONFLICT
+        }
+        crate::terminal_task_completion::TerminalTaskCompletionError::RuntimeShutdown(_)
+        | crate::terminal_task_completion::TerminalTaskCompletionError::Persistence(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+    (status, error.to_string())
+}
 #[derive(Clone)]
 pub struct AppState {
     pub app: Option<crate::backend_runtime::AppHandle>,
@@ -89,69 +102,7 @@ pub struct AppState {
     pub poll_context: crate::github_poller::PollContext,
 }
 
-/// Exclusive per-task operations guarded by [`TaskClaims`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TaskOperation {
-    StartImplementation,
-    UpdateInitialPrompt,
-    DeleteTask,
-}
-
-/// Registry of in-flight exclusive per-task operations. Duplicate operations
-/// conflict, and implementation start conflicts with initial-prompt replacement
-/// so a launched provider cannot observe a stale prompt snapshot.
-#[derive(Debug, Clone, Default)]
-pub struct TaskClaims {
-    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
-}
-
-fn task_operations_conflict(active: TaskOperation, requested: TaskOperation) -> bool {
-    active == requested
-        || matches!(
-            (active, requested),
-            (
-                TaskOperation::StartImplementation,
-                TaskOperation::UpdateInitialPrompt
-            ) | (
-                TaskOperation::UpdateInitialPrompt,
-                TaskOperation::StartImplementation
-            )
-        )
-}
-
-pub struct TaskClaim {
-    key: (String, TaskOperation),
-    active: Arc<Mutex<HashSet<(String, TaskOperation)>>>,
-}
-
-impl TaskClaims {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn try_claim(&self, task_id: &str, operation: TaskOperation) -> Option<TaskClaim> {
-        let mut active = self.active.lock().ok()?;
-        if active.iter().any(|(active_task_id, active_operation)| {
-            active_task_id == task_id && task_operations_conflict(*active_operation, operation)
-        }) {
-            return None;
-        }
-        let key = (task_id.to_string(), operation);
-        active.insert(key.clone());
-        Some(TaskClaim {
-            key,
-            active: Arc::clone(&self.active),
-        })
-    }
-}
-
-impl Drop for TaskClaim {
-    fn drop(&mut self) {
-        if let Ok(mut active) = self.active.lock() {
-            active.remove(&self.key);
-        }
-    }
-}
+pub use crate::task_claims::{TaskClaims, TaskOperation};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

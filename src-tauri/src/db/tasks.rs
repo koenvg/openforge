@@ -37,6 +37,12 @@ impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompleteTaskWriteOutcome {
+    Completed,
+    NotFound,
+    StaleState { current_status: String },
+}
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
     pub id: i64,
@@ -1199,7 +1205,7 @@ impl super::Database {
     /// Hard-delete a newly created task during rollback before it is user-visible.
     ///
     /// This removes the task row and every associated row. Normal completion must use
-    /// `delete_task` so completed tasks stay available for reference.
+    /// the terminal Task completion service so Completed Tasks remain available as reference data.
     pub fn hard_delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
@@ -1248,10 +1254,43 @@ impl super::Database {
     ///
     /// Runtime data that depends on a live workspace is removed, but the task row, labels,
     /// and dependency links remain available for CLI/agent lookup.
+    #[cfg(test)]
     pub fn delete_task(&self, id: &str) -> Result<()> {
+        self.complete_task_internal(id, None).map(|_| ())
+    }
+
+    /// Atomically complete a task only when it still has the state validated by
+    /// the terminal Task completion service.
+    pub fn complete_task_if_status(
+        &self,
+        id: &str,
+        expected_status: &str,
+    ) -> Result<CompleteTaskWriteOutcome> {
+        self.complete_task_internal(id, Some(expected_status))
+    }
+
+    fn complete_task_internal(
+        &self,
+        id: &str,
+        expected_status: Option<&str>,
+    ) -> Result<CompleteTaskWriteOutcome> {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
-        let result = (|| -> Result<()> {
+        let result = (|| -> Result<CompleteTaskWriteOutcome> {
+            let current_status = conn
+                .query_row(
+                    "SELECT status FROM tasks WHERE id = ?1",
+                    rusqlite::params![id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            let Some(current_status) = current_status else {
+                return Ok(CompleteTaskWriteOutcome::NotFound);
+            };
+            if expected_status.is_some_and(|expected| expected != current_status) {
+                return Ok(CompleteTaskWriteOutcome::StaleState { current_status });
+            }
+
             conn.execute(
                 "DELETE FROM agent_sessions WHERE ticket_id = ?1",
                 rusqlite::params![id],
@@ -1281,16 +1320,16 @@ impl super::Database {
                  WHERE id = ?2",
                 rusqlite::params![now, id],
             )?;
-            Ok(())
+            Ok(CompleteTaskWriteOutcome::Completed)
         })();
         match result {
-            Ok(()) => {
+            Ok(outcome) => {
                 conn.execute_batch("COMMIT")?;
-                Ok(())
+                Ok(outcome)
             }
-            Err(e) => {
+            Err(error) => {
                 let _ = conn.execute_batch("ROLLBACK");
-                Err(e)
+                Err(error)
             }
         }
     }

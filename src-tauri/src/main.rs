@@ -44,8 +44,12 @@ mod self_review_runtime;
 mod sidecar_logger;
 mod startup_resume;
 mod task_attention;
+mod task_claims;
 mod task_metadata_refresh;
 mod task_prompt;
+mod terminal_task_completion;
+#[cfg(test)]
+mod terminal_task_completion_tests;
 mod user_environment;
 mod whisper_manager;
 use log::{error, info, warn};
