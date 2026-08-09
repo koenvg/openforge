@@ -245,59 +245,18 @@ pub async fn delete_task_handler(
     Json(request): Json<DeleteTaskRequest>,
 ) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
     let task_id = request.task_id;
-    let delete_claim = state
-        .task_claims
-        .try_claim(&task_id, TaskOperation::DeleteTask)
-        .ok_or_else(|| {
-            (
-                StatusCode::CONFLICT,
-                "Task already has a delete in progress".to_string(),
-            )
-        })?;
-    let task = {
-        let db = state.db.lock().unwrap();
-        db.get_task(&task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get task before deletion: {e}"),
-                )
-            })?
-            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Task not found: {task_id}")))?
-    };
-
-    if task.status != "backlog" {
-        return Err((
-            StatusCode::CONFLICT,
-            format!(
-                "delete_task requires a backlog task; task {} has status {}",
-                task_id, task.status
-            ),
-        ));
-    }
-
-    let project_id = task.project_id;
-    let cleanup = crate::app_invoke::prepare_task_runtime_cleanup(&state, &task_id, true).await?;
-    {
-        let db = state.db.lock().unwrap();
-        db.delete_task(&task_id).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to delete task: {e}"),
-            )
-        })?;
-    }
-
-    emit_task_changed(&state, "deleted", &task_id, project_id.as_deref());
-    if let Some(cleanup) = cleanup {
-        let cleanup_task_id = task_id.clone();
-        tokio::spawn(async move {
-            let _delete_claim = delete_claim;
-            crate::app_invoke::run_task_runtime_cleanup(&cleanup_task_id, cleanup).await;
-        });
-    } else {
-        drop(delete_claim);
-    }
+    let service = crate::terminal_task_completion::TerminalTaskCompletionService::new(
+        std::sync::Arc::clone(&state.db),
+        crate::terminal_task_completion::PtyTerminalTaskRuntime::new(state.pty_manager.clone()),
+        state.task_claims.clone(),
+        state.app.clone(),
+        state.app_event_bus.clone(),
+        state.app_event_tx.clone(),
+    );
+    service
+        .complete(crate::terminal_task_completion::TerminalTaskCompletionRequest::delete(&task_id))
+        .await
+        .map_err(crate::http_server::map_terminal_task_completion_error)?;
 
     Ok(Json(DeleteTaskResponse {
         task_id,
@@ -309,6 +268,15 @@ pub async fn hard_delete_task_handler(
     State(state): State<AppState>,
     Json(request): Json<DeleteTaskRequest>,
 ) -> Result<Json<DeleteTaskResponse>, (StatusCode, String)> {
+    let _hard_delete_claim = state
+        .task_claims
+        .try_claim(&request.task_id, TaskOperation::HardDelete)
+        .ok_or_else(|| {
+            (
+                StatusCode::CONFLICT,
+                "Task has another lifecycle operation in progress".to_string(),
+            )
+        })?;
     let db = state.db.lock().unwrap();
     let task = db
         .get_task(&request.task_id)

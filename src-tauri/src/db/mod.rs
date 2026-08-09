@@ -42,7 +42,8 @@ pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]
 pub use tasks::TaskWorktreeOptions;
 pub use tasks::{
-    CompactTaskRow, NewTaskOptions, TaskInitialPromptUpdateError, TaskLabelRow, TaskRow,
+    CompactTaskRow, CompleteTaskWriteOutcome, NewTaskOptions, TaskInitialPromptUpdateError,
+    TaskLabelRow, TaskRow,
 };
 pub use worktrees::WorktreeRow;
 

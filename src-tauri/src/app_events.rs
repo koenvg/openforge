@@ -440,6 +440,15 @@ impl TaskEvents {
         self.changed("updated", task_id, project_id)
     }
 
+    pub fn completed(
+        &self,
+        task_id: &str,
+        project_id: Option<&str>,
+    ) -> Result<EmitReceipt, AppEventError> {
+        // Keep the established `deleted` invalidation action for desktop and
+        // plugin consumers even though the Task row remains as reference data.
+        self.changed("deleted", task_id, project_id)
+    }
     fn changed(
         &self,
         action: &str,

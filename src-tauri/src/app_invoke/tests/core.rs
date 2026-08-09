@@ -339,6 +339,35 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
 }
 
 #[tokio::test]
+async fn app_invoke_delete_task_rejects_missing_task() {
+    let (state, path) = test_state("app_invoke_delete_missing_task");
+
+    let error = invoke(&state, "delete_task", json!({ "id": "T-missing" }))
+        .await
+        .expect_err("a missing task must be rejected");
+
+    assert_eq!(error.0, StatusCode::NOT_FOUND);
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn app_invoke_delete_task_rejects_completed_task_as_stale() {
+    let (state, path) = test_state("app_invoke_delete_completed_task");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_task("Already complete", "done", None, None, None)
+            .expect("create completed task")
+            .id
+    };
+
+    let error = invoke(&state, "delete_task", json!({ "id": task_id }))
+        .await
+        .expect_err("a stale completion must be rejected");
+
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    let _ = std::fs::remove_file(path);
+}
+#[tokio::test]
 async fn app_invoke_create_task_uses_project_worktree_default_when_source_omitted() {
     let (state, path) = test_state("app_invoke_create_task_project_worktree_default");
     let project = invoke_ok(
