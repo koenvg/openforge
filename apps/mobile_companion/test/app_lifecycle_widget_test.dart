@@ -15,8 +15,8 @@ void main() {
     expect(find.text('Not paired'), findsOneWidget);
     expect(
       find.textContaining(
-        'Pairing lets this phone interact with running Agent terminals as your '
-        'desktop user',
+        'Pairing lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'and interact with running Agent terminals as your desktop user',
       ),
       findsOneWidget,
     );
@@ -35,7 +35,8 @@ void main() {
 
     expect(
       find.textContaining(
-        'Approval lets this phone interact with running Agent terminals',
+        'Approval lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'and interact with running Agent terminals',
       ),
       findsOneWidget,
     );

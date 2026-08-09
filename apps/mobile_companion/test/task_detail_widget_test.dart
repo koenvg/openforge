@@ -318,6 +318,86 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     );
   });
 
+  testWidgets(
+    'Backlog detail starts immediately and announces a disabled pending state',
+    (tester) async {
+      var starts = 0;
+      Future<void> start() async => starts += 1;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
+            startAction: const TaskStartIdle(),
+            onStart: start,
+            onRefresh: () async {},
+          ),
+        ),
+      );
+
+      expect(find.text('Start'), findsOneWidget);
+      await tester.tap(find.text('Start'));
+      await tester.pump();
+      expect(starts, 1);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
+            startAction: const TaskStartPending(),
+            onStart: start,
+            onRefresh: () async {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Starting…'), findsOneWidget);
+      expect(find.bySemanticsLabel('Starting Task'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('Starting…'));
+      expect(starts, 1);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail()),
+            startAction: const TaskStartIdle(),
+            onStart: start,
+            onRefresh: () async {},
+          ),
+        ),
+      );
+      expect(find.text('Start'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'desktop-action-required is clear without exposing backend detail',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
+            startAction: const TaskStartDesktopActionRequired(),
+            onStart: () async {},
+            onRefresh: () async {},
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('Open this Task on the desktop'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Desktop action required'), findsOneWidget);
+      expect(find.textContaining('workspace detail'), findsNothing);
+    },
+  );
+
   testWidgets('missing Task has a calm explicit state', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

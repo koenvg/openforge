@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '960b7184c8b8869922b9aa162504342e10342fe8bf837302b24bd17d26f935be';
+    'c9094950ff8546076116c5f50a8337185e2d9089acea9dffe211e46f98de0cd7';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -615,6 +615,25 @@ final class TaskDeleteReceipt {
   final String outcome;
 }
 
+enum TaskStartOutcome { started }
+
+final class TaskStartResult {
+  const TaskStartResult({required this.taskId, required this.outcome});
+
+  factory TaskStartResult.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'taskId', 'outcome'});
+    final taskId = json.string('taskId');
+    final outcome = json.string('outcome');
+    if (taskId.isEmpty || outcome != 'started') {
+      throw const FormatException('Invalid Companion Task Start result.');
+    }
+    return TaskStartResult(taskId: taskId, outcome: TaskStartOutcome.started);
+  }
+
+  final String taskId;
+  final TaskStartOutcome outcome;
+}
+
 sealed class CompanionResourceIdentityData {
   const CompanionResourceIdentityData();
 
@@ -890,6 +909,23 @@ final class CompanionV1Client {
     return TaskDeleteReceipt.fromJson(_successJson(response, const <int>{200}));
   }
 
+  Future<TaskStartResult> startCompanionTask({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve(
+        '/companion/v1/tasks/${Uri.encodeComponent(taskId)}/start',
+      ),
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return TaskStartResult.fromJson(_successJson(response, const <int>{200}));
+  }
+
   CompanionV1StreamRequest streamCompanionEvents({
     required String credential,
     String? lastEventId,
@@ -923,6 +959,8 @@ Map<String, Object?> _successJson(
         'invalid_task_state',
         'operation_in_progress',
         'not_found',
+        'invalid_state',
+        'desktop_action_required',
         'rate_limited',
         'temporarily_unavailable',
       };

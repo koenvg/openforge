@@ -139,11 +139,11 @@
 
 <SettingsSectionCard
   title="Companion"
-  description="Opt in to mobile Task access with interactive Agent terminal access."
+  description="Opt in to mobile Task actions with interactive Agent terminal access."
 >
   <div class="flex flex-col gap-4">
     <p class="m-0 text-sm text-base-content/70">
-      OpenForge must remain running for the Mobile Companion to connect. Paired phones can view Task data and type into running Agent terminals as your desktop user; they cannot start, stop, or replace Agent Sessions. The internal desktop and CLI bridge stays local to this Mac.
+      OpenForge must remain running for the Mobile Companion to connect. Paired phones can Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into running Agent terminals as your desktop user. Task actions follow desktop lifecycle safeguards; terminal access alone cannot create, stop, or replace Agent Sessions. The internal desktop and CLI bridge stays local to this Mac.
     </p>
 
     {#if loading && !status}

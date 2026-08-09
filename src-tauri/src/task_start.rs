@@ -345,7 +345,7 @@ impl TaskStartService {
                 other => TaskStartError::Persistence(other.to_string()),
             });
         }
-        self.publish_task_changed(request.task_id);
+        self.publish_task_changed(request.task_id, &context.project_id);
 
         let receipt = TaskStartReceipt {
             task_id: request.task_id.to_string(),
@@ -646,12 +646,16 @@ impl TaskStartService {
         }
     }
 
-    fn publish_task_changed(&self, task_id: &str) {
+    fn publish_task_changed(&self, task_id: &str, project_id: &str) {
         publish_app_event_to_runtime(
             self.app.as_ref(),
             &self.app_event_tx,
             "task-changed",
-            &serde_json::json!({ "action": "updated", "task_id": task_id }),
+            &serde_json::json!({
+                "action": "updated",
+                "task_id": task_id,
+                "project_id": project_id,
+            }),
         );
     }
 }

@@ -78,6 +78,10 @@ abstract interface class CompanionClient {
     CompanionTrustRecord trustRecord,
     String taskId,
   );
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
   Future<CompanionLiveConnection> openLiveEvents(
     CompanionTrustRecord trustRecord, {
     String? lastEventId,
@@ -297,6 +301,32 @@ final class GeneratedCompanionClient
           );
       _preferredEndpoints[trustRecord.hostId] = endpoint;
       return receipt;
+    } finally {
+      transportHandle.close();
+    }
+  }
+
+  @override
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    final endpoints = _preferEndpoint(
+      trustRecord.endpointCandidates,
+      _preferredEndpoints[trustRecord.hostId],
+    );
+    if (endpoints.isEmpty) {
+      throw StateError('No Companion endpoint candidates are available.');
+    }
+    final transportHandle = _transportFactory(trustRecord.certificateSha256);
+    try {
+      return await CompanionV1Client(
+        baseUrl: endpoints.first,
+        transport: transportHandle.transport,
+      ).startCompanionTask(
+        taskId: taskId,
+        credential: trustRecord.deviceCredential,
+      );
     } finally {
       transportHandle.close();
     }

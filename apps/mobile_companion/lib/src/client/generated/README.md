@@ -27,16 +27,18 @@ of the source contract.
 
 ## Implemented boundary
 
-`CompanionV1Client` implements the current Companion v1 HTTP API surface. Pairing request submission creates only a short-lived pending approval; authenticated read resources remain desktop-authoritative. The same paired-device credential authorizes one explicit Task Complete mutation and the separate interactive Agent-terminal WebSocket, where terminal input runs as the desktop user:
+`CompanionV1Client` implements the current Companion v1 HTTP API surface. Pairing request submission creates only a short-lived pending approval; authenticated reads remain desktop-authoritative. The same paired-device credential authorizes explicit identity-only Task Start, backlog Task Delete, and Task Complete mutations plus the separate interactive Agent-terminal WebSocket, where terminal input runs as the desktop user:
 
 - pairing request submission and approval polling;
 - authenticated host status;
 - authenticated Project catalog and four-lane Project Board snapshots;
 - authenticated attention snapshots and task-detail domain reads;
+- authenticated identity-only Companion Task Start without automatic mutation retry;
+- authenticated backlog Task Delete without automatic mutation retry;
 - authenticated Task-scoped Complete through the shared terminal Task lifecycle; and
 - the authenticated event-stream request, with typed Project-catalog, Project Board,
   attention, and Task invalidation decoding in `lib/src/client/companion_live_events.dart`.
 
 Interactive Agent terminal traffic is intentionally outside this generated HTTP client. `lib/src/terminal/companion_terminal_client.dart` owns the dedicated authenticated WebSocket boundary, which permits typed attach/resize controls plus validated UTF-8 binary terminal input only after `ready`; the channel cannot directly start, stop, or replace Agent Sessions. Task Complete closes the mobile attachment normally and lets the desktop-owned lifecycle stop the Agent and Task shells.
 
-`GeneratedCompanionClient` in `lib/src/client/companion_client.dart` adapts reads behind the application's `CompanionClient` seam and Complete behind `CompanionTaskActionClient`. Reads own pinned endpoint failover; Complete deliberately makes one request to one endpoint and is never retried or failed over automatically. The HTTP boundary exposes no broad project or repository mutations, generic command dispatch, or offline domain cache.
+`GeneratedCompanionClient` in `lib/src/client/companion_client.dart` adapts reads and identity-only Start/Delete operations behind the application's `CompanionClient` seam, and Complete behind `CompanionTaskActionClient`. Reads own pinned endpoint failover; Start, Delete, and Complete each deliberately make one request to the established endpoint and are never retried or failed over automatically. The HTTP boundary exposes no broader Task/domain mutations, project or repository mutations, generic command dispatch, or offline domain cache.

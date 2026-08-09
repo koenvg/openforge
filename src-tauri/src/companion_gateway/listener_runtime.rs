@@ -9,6 +9,7 @@ use super::{
     project_board::CompanionProjectBoardSource,
     task_actions::CompanionTaskActionService,
     task_detail::CompanionTaskDetailSource,
+    task_start::CompanionTaskStarter,
 };
 use crate::app_events::AppEventBus;
 use axum_server::{tls_rustls::RustlsConfig, Handle};
@@ -33,6 +34,7 @@ pub(super) struct CompanionGatewayRouteSources {
     pub(super) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(super) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(super) task_actions: Arc<dyn CompanionTaskActionService>,
+    pub(super) task_start: Arc<dyn CompanionTaskStarter>,
     pub(super) pty_manager: crate::pty_manager::PtyManager,
     pub(super) events: AppEventBus,
     pub(super) stream_access: Arc<dyn CompanionStreamAccess>,
@@ -173,6 +175,7 @@ pub(super) async fn start_tls_listeners(
         project_board,
         task_detail,
         task_actions,
+        task_start,
         pty_manager,
         events,
         stream_access,
@@ -186,6 +189,7 @@ pub(super) async fn start_tls_listeners(
             project_board,
             task_detail,
             task_actions,
+            task_start,
             events,
             stream_access,
             pty_manager,

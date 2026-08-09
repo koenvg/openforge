@@ -157,8 +157,9 @@ _ConnectionContent _contentFor(
   Unpaired() => const _ConnectionContent(
     title: 'Not paired',
     message:
-        'Pairing lets this phone interact with running Agent terminals as your '
-        'desktop user, in addition to viewing live Task status.',
+        'Pairing lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'and interact with running Agent terminals as your desktop user, in '
+        'addition to viewing live Task status.',
     icon: Icons.phonelink_off,
     iconLabel: 'Phone is not paired',
   ),
@@ -171,8 +172,9 @@ _ConnectionContent _contentFor(
   AwaitingApproval() => const _ConnectionContent(
     title: 'Awaiting desktop approval',
     message:
-        'Approval lets this phone interact with running Agent terminals as your '
-        'desktop user and view Task data.',
+        'Approval lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'and interact with running Agent terminals as your desktop user while '
+        'viewing Task data.',
     icon: Icons.approval_outlined,
     iconLabel: 'Waiting for approval',
   ),

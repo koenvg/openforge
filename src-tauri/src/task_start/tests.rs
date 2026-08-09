@@ -5,6 +5,32 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+struct SuccessfulProviderLauncher;
+
+impl ProviderLauncher for SuccessfulProviderLauncher {
+    fn launch<'a>(
+        &'a self,
+        _request: ProviderLaunchRequest<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<ProviderSessionResult, TaskStartError>> + Send + 'a>>
+    {
+        Box::pin(async {
+            Ok(ProviderSessionResult {
+                port: 17_424,
+                opencode_session_id: Some("provider-session".to_string()),
+                pi_session_id: None,
+                pty_instance_id: Some(7),
+            })
+        })
+    }
+
+    fn abort<'a>(
+        &'a self,
+        _task_id: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
 struct FailingProviderLauncher;
 
 impl ProviderLauncher for FailingProviderLauncher {
@@ -195,6 +221,80 @@ fn start_context_resolves_saved_task_overrides() {
     assert!(context.code_cleanup_enabled);
     assert_eq!(context.provider_name, "opencode");
     assert_eq!(context.repo_path, Path::new("/tmp/p"));
+
+    drop(state);
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn safe_start_creates_implementation_run_and_publishes_canonical_invalidation() {
+    let (state, path) = crate::app_invoke::test_support::test_state("task_start_success");
+    let task_id = {
+        let db = db::acquire_db(&state.db);
+        let project = db
+            .create_project("Start Project", "/tmp/start-project")
+            .expect("create Project");
+        db.create_task_with_options(crate::db::NewTaskOptions {
+            initial_prompt: "Start from Companion",
+            status: "backlog",
+            project_id: Some(&project.id),
+            prompt: None,
+            permission_mode: None,
+            worktree_source: Some("disabled"),
+            worktree_branch: None,
+            title: None,
+            handoff_notes_enabled: true,
+            source_ticket_url: None,
+            code_cleanup_enabled: None,
+            task_display_title_updates_enabled: None,
+            ai_provider: None,
+        })
+        .expect("create Task")
+        .id
+    };
+    let project_id = db::acquire_db(&state.db)
+        .get_task(&task_id)
+        .expect("get Task")
+        .expect("Task exists")
+        .project_id
+        .expect("Task has Project");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+    let execution = service_for_state(&state)
+        .with_provider_launcher(Arc::new(SuccessfulProviderLauncher))
+        .start(TaskStartRequest::safe(&task_id))
+        .await
+        .expect("safe Start succeeds");
+
+    assert_eq!(
+        execution.outcome,
+        TaskStartOutcome::Started {
+            task_id: task_id.clone(),
+        }
+    );
+    let db = db::acquire_db(&state.db);
+    assert_eq!(
+        db.get_task(&task_id)
+            .expect("get Task")
+            .expect("Task exists")
+            .status,
+        "doing"
+    );
+    assert_eq!(
+        db.get_latest_session_for_ticket(&task_id)
+            .expect("get Agent Session")
+            .expect("Agent Session exists")
+            .status,
+        "running"
+    );
+    drop(db);
+    let event = events.recv().await.expect("canonical Task invalidation");
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["project_id"], project_id);
 
     drop(state);
     let _ = std::fs::remove_file(path);

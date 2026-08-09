@@ -53,6 +53,50 @@ final class TaskDetailUnavailable extends TaskDetailViewState {
 
 enum TaskCompleteAttempt { completed, failed, alreadyPending }
 
+sealed class TaskStartActionState {
+  const TaskStartActionState();
+
+  String get message => '';
+}
+
+final class TaskStartIdle extends TaskStartActionState {
+  const TaskStartIdle();
+}
+
+final class TaskStartPending extends TaskStartActionState {
+  const TaskStartPending();
+}
+
+final class TaskStartDesktopActionRequired extends TaskStartActionState {
+  const TaskStartDesktopActionRequired();
+
+  @override
+  String get message =>
+      'Open this Task on the desktop to resolve its workspace before starting.';
+}
+
+final class TaskStartFailed extends TaskStartActionState {
+  const TaskStartFailed(this._message);
+
+  final String _message;
+
+  @override
+  String get message => _message;
+}
+
+final class TaskStartUncertain extends TaskStartActionState {
+  const TaskStartUncertain({required this.authorityRefreshed});
+
+  final bool authorityRefreshed;
+
+  @override
+  String get message => authorityRefreshed
+      ? 'The Start result could not be confirmed. Current Task and Board state were refreshed before retry.'
+      : 'The Start result and current Board state could not be confirmed. Return to the Board and refresh before retrying.';
+}
+
+typedef TaskBoardRefresh = Future<CompanionRefreshOutcome> Function();
+
 final class TaskDetailController extends ChangeNotifier {
   factory TaskDetailController({
     required String taskId,
@@ -60,12 +104,14 @@ final class TaskDetailController extends ChangeNotifier {
     CompanionTaskActionClient? actionClient,
     required CompanionSecureStorage storage,
     VoidCallback? onAuthorizationLost,
+    TaskBoardRefresh? onBoardRefresh,
   }) => TaskDetailController._(
     taskId,
     client,
     actionClient,
     storage,
     onAuthorizationLost,
+    onBoardRefresh,
   );
 
   TaskDetailController._(
@@ -74,6 +120,7 @@ final class TaskDetailController extends ChangeNotifier {
     this._actionClient,
     this._storage,
     this._onAuthorizationLost,
+    this._onBoardRefresh,
   );
 
   final String taskId;
@@ -81,11 +128,16 @@ final class TaskDetailController extends ChangeNotifier {
   final CompanionTaskActionClient? _actionClient;
   final CompanionSecureStorage _storage;
   final VoidCallback? _onAuthorizationLost;
+  final TaskBoardRefresh? _onBoardRefresh;
 
   var _generation = 0;
   var _disposed = false;
   TaskDetailViewState _state = const TaskDetailLoading();
   TaskDetailViewState get state => _state;
+
+  TaskStartActionState _startAction = const TaskStartIdle();
+  TaskStartActionState get startAction => _startAction;
+  bool _startPending = false;
 
   var _completePending = false;
   bool get completePending => _completePending;
@@ -198,6 +250,111 @@ final class TaskDetailController extends ChangeNotifier {
     }
   }
 
+  Future<void> start() async {
+    if (_disposed || _startPending) return;
+    final startAction = _startAction;
+    if (startAction is TaskStartUncertain && !startAction.authorityRefreshed) {
+      return;
+    }
+    final currentState = _state;
+    if (currentState is! TaskDetailLoaded ||
+        currentState.detail.boardStatus != 'backlog') {
+      return;
+    }
+
+    _startPending = true;
+    _setStartAction(const TaskStartPending());
+    try {
+      final trustRecord = await _storage.load();
+      if (_disposed) return;
+      if (trustRecord == null) {
+        _authorizationLost();
+        _setStartAction(const TaskStartIdle());
+        return;
+      }
+
+      try {
+        await _client.startTask(trustRecord, taskId);
+      } on CompanionV1Exception catch (error) {
+        await _handleStartProtocolError(error);
+        return;
+      } on Object {
+        final authorityRefreshed = await _refreshAuthoritativeState();
+        if (!_disposed) {
+          _setStartAction(
+            TaskStartUncertain(authorityRefreshed: authorityRefreshed),
+          );
+        }
+        return;
+      }
+
+      await _refreshAuthoritativeState();
+      if (!_disposed) _setStartAction(const TaskStartIdle());
+    } finally {
+      _startPending = false;
+    }
+  }
+
+  Future<void> _handleStartProtocolError(CompanionV1Exception error) async {
+    switch (error.code) {
+      case 'revoked':
+      case 'unauthenticated':
+        _authorizationLost();
+        _setStartAction(const TaskStartIdle());
+      case 'incompatible_version':
+        _setState(const TaskDetailIncompatible());
+        _setStartAction(const TaskStartIdle());
+      case 'desktop_action_required':
+        _setStartAction(const TaskStartDesktopActionRequired());
+      case 'operation_in_progress':
+        await _refreshAuthoritativeState();
+        if (!_disposed) {
+          _setStartAction(
+            const TaskStartFailed(
+              'Task Start is already in progress. Current Task and Board state were refreshed.',
+            ),
+          );
+        }
+      case 'invalid_state':
+      case 'not_found':
+        await _refreshAuthoritativeState();
+        if (!_disposed) {
+          _setStartAction(
+            const TaskStartFailed(
+              'This Task is no longer available to Start. Current Task and Board state were refreshed.',
+            ),
+          );
+        }
+      default:
+        await _refreshAuthoritativeState();
+        if (!_disposed) {
+          _setStartAction(
+            const TaskStartFailed(
+              'Task could not be started. Current Task and Board state were refreshed; try again.',
+            ),
+          );
+        }
+    }
+  }
+
+  Future<bool> _refreshAuthoritativeState() async {
+    final boardRefresh = _onBoardRefresh;
+    final outcomes = await Future.wait<CompanionRefreshOutcome>(
+      <Future<CompanionRefreshOutcome>>[
+        refreshWithOutcome(),
+        if (boardRefresh != null)
+          boardRefresh()
+        else
+          Future<CompanionRefreshOutcome>.value(CompanionRefreshOutcome.loaded),
+      ],
+    );
+    return outcomes.every(
+      (outcome) =>
+          outcome == CompanionRefreshOutcome.loaded ||
+          outcome == CompanionRefreshOutcome.notFound,
+    );
+  }
+
   Future<TaskDeleteResult> deleteBacklogTask() async {
     if (_deletePending || _disposed) return TaskDeleteResult.ignored;
     final current = _state;
@@ -308,6 +465,12 @@ final class TaskDetailController extends ChangeNotifier {
   void _authorizationLost() {
     _setState(const TaskDetailAuthorizationRequired());
     _onAuthorizationLost?.call();
+  }
+
+  void _setStartAction(TaskStartActionState state) {
+    if (_disposed) return;
+    _startAction = state;
+    notifyListeners();
   }
 
   void _setState(TaskDetailViewState state) {

@@ -33,11 +33,13 @@ class TaskDetailScreen extends StatefulWidget {
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   late TaskDetailViewState _state;
+  late TaskStartActionState _startAction;
 
   @override
   void initState() {
     super.initState();
     _state = widget.controller.state;
+    _startAction = widget.controller.startAction;
     widget.controller.addListener(_onControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(widget.controller.refresh());
@@ -53,7 +55,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   void _onControllerChanged() {
-    if (mounted) setState(() => _state = widget.controller.state);
+    if (!mounted) return;
+    setState(() {
+      _state = widget.controller.state;
+      _startAction = widget.controller.startAction;
+    });
   }
 
   Future<void> _refresh() =>
@@ -72,6 +78,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     onDeleteNeedsRefresh: widget.onDeleteNeedsRefresh,
     completePending: widget.controller.completePending,
     completeError: widget.controller.completeError,
+    startAction: _startAction,
+    onStart: widget.controller.start,
     terminalSurface: widget.terminalSurface,
   );
 }
@@ -87,6 +95,8 @@ class TaskDetailView extends StatefulWidget {
     this.onDeleteNeedsRefresh,
     this.completePending = false,
     this.completeError,
+    this.startAction = const TaskStartIdle(),
+    this.onStart,
     this.terminalSurface,
     super.key,
   });
@@ -100,6 +110,8 @@ class TaskDetailView extends StatefulWidget {
   final Future<void> Function()? onDeleteNeedsRefresh;
   final bool completePending;
   final String? completeError;
+  final TaskStartActionState startAction;
+  final Future<void> Function()? onStart;
   final AgentTerminalSurface? terminalSurface;
 
   @override
@@ -313,6 +325,8 @@ class _TaskDetailViewState extends State<TaskDetailView>
             deleteBusy: _deleteBusy,
             deleteAvailable: widget.onDelete != null,
             onDelete: _confirmDelete,
+            startAction: widget.startAction,
+            onStart: widget.onStart,
           ),
           AgentTerminalPane(surface: widget.terminalSurface),
         ],
@@ -328,6 +342,8 @@ class _TaskDetailBody extends StatelessWidget {
     required this.deleteBusy,
     required this.deleteAvailable,
     required this.onDelete,
+    required this.startAction,
+    required this.onStart,
   });
 
   final TaskDetailViewState state;
@@ -335,6 +351,8 @@ class _TaskDetailBody extends StatelessWidget {
   final bool deleteBusy;
   final bool deleteAvailable;
   final Future<void> Function(TaskDetail detail) onDelete;
+  final TaskStartActionState startAction;
+  final Future<void> Function()? onStart;
 
   @override
   Widget build(BuildContext context) => switch (state) {
@@ -352,6 +370,8 @@ class _TaskDetailBody extends StatelessWidget {
         deleteMessage: deleteMessage,
         deleteAvailable: deleteAvailable,
         onDelete: onDelete,
+        startAction: startAction,
+        onStart: onStart,
       ),
     TaskDetailNotFound() => const _DetailState(
       icon: Icons.task_alt_outlined,
@@ -384,6 +404,8 @@ class _LoadedTaskDetail extends StatelessWidget {
     required this.deleteMessage,
     required this.deleteAvailable,
     required this.onDelete,
+    required this.startAction,
+    required this.onStart,
   });
 
   final TaskDetail detail;
@@ -391,6 +413,8 @@ class _LoadedTaskDetail extends StatelessWidget {
   final String? deleteMessage;
   final bool deleteAvailable;
   final Future<void> Function(TaskDetail detail) onDelete;
+  final TaskStartActionState startAction;
+  final Future<void> Function()? onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -411,6 +435,10 @@ class _LoadedTaskDetail extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: <Widget>[
           Text(detail.title, style: Theme.of(context).textTheme.headlineSmall),
+          if (detail.boardStatus == 'backlog' && onStart != null) ...<Widget>[
+            const SizedBox(height: 16),
+            _TaskStartAction(state: startAction, onStart: onStart!),
+          ],
           const SizedBox(height: 20),
           _DetailCard(
             children: <Widget>[
@@ -594,6 +622,96 @@ class _CompleteTaskAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _TaskStartAction extends StatelessWidget {
+  const _TaskStartAction({required this.state, required this.onStart});
+
+  final TaskStartActionState state;
+  final Future<void> Function() onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = state is TaskStartPending;
+    final refreshRequired = switch (state) {
+      TaskStartUncertain(:final authorityRefreshed) => !authorityRefreshed,
+      _ => false,
+    };
+    final disabled = pending || refreshRequired;
+    final message = state.message;
+    final messageLabel = switch (state) {
+      TaskStartDesktopActionRequired() => 'Desktop action required',
+      TaskStartUncertain() => 'Start result uncertain',
+      TaskStartFailed() => 'Task Start failed',
+      _ => null,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Semantics(
+          button: true,
+          enabled: !disabled,
+          liveRegion: pending,
+          label: pending
+              ? 'Starting Task'
+              : refreshRequired
+              ? 'Authoritative refresh required before retry'
+              : 'Start Task',
+          child: ExcludeSemantics(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed: disabled ? null : () => unawaited(onStart()),
+              icon: pending
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      refreshRequired
+                          ? Icons.sync_problem_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+              label: Text(
+                pending
+                    ? 'Starting…'
+                    : refreshRequired
+                    ? 'Refresh required'
+                    : 'Start',
+              ),
+            ),
+          ),
+        ),
+        if (messageLabel != null && message.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 12),
+          Semantics(
+            container: true,
+            liveRegion: true,
+            label: messageLabel,
+            child: ExcludeSemantics(
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Icon(Icons.info_outline_rounded),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(message)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _DetailCard extends StatelessWidget {

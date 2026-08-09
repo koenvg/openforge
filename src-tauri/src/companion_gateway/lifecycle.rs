@@ -18,13 +18,14 @@ use super::{
     },
     task_actions::CompanionTaskActionService,
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
+    task_start::CompanionTaskStarter,
 };
 #[cfg(test)]
 use super::{
     attention::UnavailableCompanionAttentionSource,
     project_board::UnavailableCompanionProjectBoardSource,
     tailscale::FixedTailscaleHostnameProvider, task_actions::UnavailableCompanionTaskActionService,
-    task_detail::UnavailableCompanionTaskDetailSource,
+    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::{
     app_events::AppEventBus,
@@ -153,6 +154,7 @@ struct CompanionGatewayDomainSources {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
 }
@@ -171,6 +173,7 @@ pub(crate) struct CompanionGatewayManager {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
@@ -182,6 +185,7 @@ impl CompanionGatewayManager {
         database: Arc<std::sync::Mutex<crate::db::Database>>,
         events: AppEventBus,
         pty_manager: crate::pty_manager::PtyManager,
+        app: Option<crate::backend_runtime::AppHandle>,
         task_claims: TaskClaims,
     ) -> Self {
         let port = std::env::var(COMPANION_GATEWAY_PORT_ENV)
@@ -197,10 +201,17 @@ impl CompanionGatewayManager {
         let task_actions = Arc::new(TerminalTaskCompletionService::new(
             Arc::clone(&database),
             PtyTerminalTaskRuntime::new(Some(pty_manager.clone())),
-            task_claims,
+            task_claims.clone(),
             None,
             Some(events.clone()),
             None,
+        ));
+        let task_start = Arc::new(crate::task_start::TaskStartService::new(
+            app,
+            Arc::clone(&database),
+            Some(pty_manager.clone()),
+            Some(events.sender()),
+            task_claims,
         ));
         Self::new_with_sources(
             Arc::new(KeychainCompanionIdentityStore),
@@ -214,6 +225,7 @@ impl CompanionGatewayManager {
                     &database,
                 ))),
                 task_actions,
+                task_start,
                 events,
                 pty_manager,
             },
@@ -243,6 +255,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 task_actions: Arc::new(UnavailableCompanionTaskActionService),
+                task_start: Arc::new(UnavailableCompanionTaskStarter),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
             },
@@ -274,6 +287,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 task_actions: Arc::new(UnavailableCompanionTaskActionService),
+                task_start: Arc::new(UnavailableCompanionTaskStarter),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
             },
@@ -299,6 +313,7 @@ impl CompanionGatewayManager {
             project_board,
             task_detail,
             task_actions,
+            task_start,
             pty_manager,
             events,
         } = sources;
@@ -327,6 +342,7 @@ impl CompanionGatewayManager {
             project_board,
             task_detail,
             task_actions,
+            task_start,
             events,
             pty_manager,
             stream_access,
@@ -478,6 +494,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::clone(&self.project_board),
                 task_detail: Arc::clone(&self.task_detail),
                 task_actions: Arc::clone(&self.task_actions),
+                task_start: Arc::clone(&self.task_start),
                 pty_manager: self.pty_manager.clone(),
                 events: self.events.clone(),
                 stream_access: Arc::clone(&self.stream_access),
