@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TaskContextMenu from './TaskContextMenu.svelte'
 import type { Task, BoardStatus } from '../../../lib/types'
 import { completingTasks, tasks, error } from '../../../lib/stores'
+import { DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from '../../../lib/completeTask'
 
 vi.mock('../../../lib/ipc', () => ({
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
@@ -229,6 +230,17 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText(/Complete/)).toBeNull()
   })
 
+  it('uses the Delete confirmation copy for backlog Tasks', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+
+    await fireEvent.click(screen.getByText('Delete'))
+
+    expect(confirmSpy).toHaveBeenCalledWith(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE)
+    confirmSpy.mockRestore()
+  })
+
   it.each(['doing', 'done'] as BoardStatus[])('shows Complete instead of Delete for %s tasks', status => {
     tasks.set([makeTask('T-1', status)])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
@@ -237,7 +249,7 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Delete')).toBeNull()
   })
 
-  it('confirms, then calls deleteTask and onDelete when Complete is confirmed', async () => {
+  it('confirms, then completes the Task and calls onDelete', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const onDelete = vi.fn()
@@ -252,7 +264,7 @@ describe('TaskContextMenu', () => {
     confirmSpy.mockRestore()
   })
 
-  it('does not delete when Complete confirmation is cancelled', async () => {
+  it('does not complete when Complete confirmation is cancelled', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     tasks.set([makeTask('T-1', 'doing')])
@@ -279,7 +291,7 @@ describe('TaskContextMenu', () => {
     confirmSpy.mockRestore()
   })
 
-  it('does not start a second delete while the first is still pending', async () => {
+  it('does not start a second completion while the first is still pending', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     let resolveDelete!: () => void

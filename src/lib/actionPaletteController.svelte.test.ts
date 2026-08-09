@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './types'
 
 import { useActionPaletteController } from './actionPaletteController.svelte'
+import { COMPLETE_TASK_CONFIRM_MESSAGE, DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from './completeTask'
 import { activeProjectId } from './stores'
 
 const selectedTask: Task = {
@@ -65,7 +66,18 @@ describe('useActionPaletteController', () => {
     expect(triggerGithubSync).toHaveBeenCalledOnce()
   })
 
-  it('confirms before completing (deleting) a task from the palette', async () => {
+  it.each([
+    {
+      action: 'Complete',
+      task: selectedTask,
+      message: COMPLETE_TASK_CONFIRM_MESSAGE,
+    },
+    {
+      action: 'Delete',
+      task: { ...selectedTask, status: 'backlog' as const },
+      message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
+    },
+  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ task, message }) => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
@@ -75,7 +87,7 @@ describe('useActionPaletteController', () => {
       setTaskOutOfFocus: vi.fn(async () => undefined),
     }
     const controller = useActionPaletteController({
-      getSelectedTask: () => selectedTask,
+      getSelectedTask: () => task,
       taskActions,
       goBack: vi.fn(),
       showSearchTasks: vi.fn(),
@@ -87,8 +99,8 @@ describe('useActionPaletteController', () => {
     controller.openActionPalette()
     await controller.executeAction('delete-task')
 
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(taskActions.deleteTaskAndReload).toHaveBeenCalledWith(selectedTask.id)
+    expect(confirmSpy).toHaveBeenCalledWith(message)
+    expect(taskActions.deleteTaskAndReload).toHaveBeenCalledWith(task.id)
     confirmSpy.mockRestore()
   })
 

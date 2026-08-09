@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BoardStatus } from '../../../lib/types'
   import { completingTasks, tasks } from '../../../lib/stores'
-  import { confirmCompleteTask, runCompleteTask } from '../../../lib/completeTask'
+  import { confirmTerminalTaskAction, runCompleteTask } from '../../../lib/completeTask'
   import ContextMenu from '../ui/ContextMenu.svelte'
   import ContextMenuItem from '../ui/ContextMenuItem.svelte'
 
@@ -54,7 +54,7 @@
 
   async function handleComplete() {
     const id = taskId
-    if (isCompleting || !confirmCompleteTask()) {
+    if (isCompleting || !confirmTerminalTaskAction(taskStatus === 'backlog' ? 'Delete' : 'Complete')) {
       return
     }
     onClose()

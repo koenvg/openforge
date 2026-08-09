@@ -1094,7 +1094,7 @@ describe('TaskDetailView', () => {
 
 
 
-  it('completes a doing task by confirming, deleting it, and navigating to the board', async () => {
+  it('completes a doing Task by confirming, requesting completion, and navigating to the board', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -1126,7 +1126,7 @@ describe('TaskDetailView', () => {
     confirmSpy.mockRestore()
   })
 
-  it('does not start a second delete while the first is still pending', async () => {
+  it('does not start a second completion while the first is still pending', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)

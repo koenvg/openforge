@@ -76,7 +76,7 @@ describe('getTaskActions', () => {
     expect(actions.some(a => a.label === 'Complete')).toBe(false)
   })
 
-  it('returns Set aside + Complete (delete) for a doing task outside Out of Focus', () => {
+  it('returns Set aside + Complete for a doing task outside Out of Focus', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getTaskActions(task, [])
     const ids = actions.map(a => a.id)

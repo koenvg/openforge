@@ -117,7 +117,7 @@ export const agentReviewComments = writable<AgentReviewComment[]>([]);
 /** Set of task IDs currently starting (worktree creation + agent spawn in progress) */
 export const startingTasks = writable<Set<string>>(new Set());
 
-/** Set of task IDs with a Complete (delete) in flight, awaiting the backend. */
+/** Set of Task IDs with completion in flight, awaiting the backend lifecycle. */
 export const completingTasks = writable<Set<string>>(new Set());
 
 export const codeCleanupTasksEnabled = writable<boolean>(false);
