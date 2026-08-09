@@ -229,6 +229,11 @@ final class DomainCompanionClient implements CompanionClient {
   );
 
   @override
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnimplementedError();
+  @override
   Future<CompanionLiveConnection> openLiveEvents(
     CompanionTrustRecord trustRecord, {
     String? lastEventId,

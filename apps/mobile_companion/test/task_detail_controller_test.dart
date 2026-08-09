@@ -50,6 +50,12 @@ final class _FakeClient implements CompanionClient {
   Object result = _detail;
   Completer<TaskDetail>? pendingDetail;
   var taskDetailCalls = 0;
+  Object startResult = const TaskStartResult(
+    taskId: 'KVG-3031',
+    outcome: TaskStartOutcome.started,
+  );
+  Completer<TaskStartResult>? pendingStart;
+  var startCalls = 0;
   Object deleteResult = const TaskDeleteReceipt(
     taskId: 'KVG-2946',
     outcome: 'deleted',
@@ -85,6 +91,19 @@ final class _FakeClient implements CompanionClient {
     if (pending != null) return pending.future;
     final current = result;
     if (current is! TaskDetail) throw current;
+    return current;
+  }
+
+  @override
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    startCalls += 1;
+    final pending = pendingStart;
+    if (pending != null) return pending.future;
+    final current = startResult;
+    if (current is! TaskStartResult) throw current;
     return current;
   }
 
@@ -410,6 +429,169 @@ void main() {
       expect(loaded.detail, same(_backlogDetail));
       expect(loaded.deletePhase, TaskDeletePhase.uncertain);
       expect(loaded.deleteMessage, contains('was not retried'));
+    },
+  );
+  test(
+    'one Start is immediate and duplicate taps are suppressed while pending',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..pendingStart = Completer<TaskStartResult>();
+      var boardRefreshes = 0;
+      final controller = TaskDetailController(
+        taskId: 'KVG-3031',
+        client: client,
+        storage: _FakeStorage(),
+        onBoardRefresh: () async {
+          boardRefreshes += 1;
+          return CompanionRefreshOutcome.loaded;
+        },
+      );
+      await controller.refresh();
+
+      final first = controller.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.startAction, isA<TaskStartPending>());
+      expect(client.startCalls, 1);
+
+      await controller.start();
+      expect(client.startCalls, 1);
+
+      client.result = _detail;
+      client.pendingStart!.complete(
+        const TaskStartResult(
+          taskId: 'KVG-3031',
+          outcome: TaskStartOutcome.started,
+        ),
+      );
+      await first;
+
+      expect(client.startCalls, 1);
+      expect(boardRefreshes, 1);
+      expect(
+        (controller.state as TaskDetailLoaded).detail.boardStatus,
+        'doing',
+      );
+      expect(controller.startAction, isA<TaskStartIdle>());
+    },
+  );
+
+  test(
+    'desktop-only preflight refusal stays safe and keeps backlog detail open',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..startResult = const CompanionV1Exception(
+          statusCode: 409,
+          code: 'desktop_action_required',
+          message: 'raw backend workspace detail',
+        );
+      final controller = TaskDetailController(
+        taskId: 'KVG-3031',
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+
+      await controller.start();
+
+      expect(controller.startAction, isA<TaskStartDesktopActionRequired>());
+      expect(
+        (controller.state as TaskDetailLoaded).detail,
+        same(_backlogDetail),
+      );
+      expect(
+        controller.startAction.message,
+        isNot(contains('workspace detail')),
+      );
+    },
+  );
+
+  test(
+    'provider failure refreshes authority and presents a safe retryable error',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..startResult = const CompanionV1Exception(
+          statusCode: 503,
+          code: 'temporarily_unavailable',
+          message: 'provider secret /Users/example',
+        );
+      var boardRefreshes = 0;
+      final controller = TaskDetailController(
+        taskId: 'KVG-3031',
+        client: client,
+        storage: _FakeStorage(),
+        onBoardRefresh: () async {
+          boardRefreshes += 1;
+          return CompanionRefreshOutcome.loaded;
+        },
+      );
+      await controller.refresh();
+
+      await controller.start();
+
+      expect(controller.startAction, isA<TaskStartFailed>());
+      expect(controller.startAction.message, isNot(contains('secret')));
+      expect(controller.startAction.message, isNot(contains('/Users')));
+      expect(client.taskDetailCalls, 2);
+      expect(boardRefreshes, 1);
+    },
+  );
+
+  test(
+    'uncertain network outcome refetches Task and Board before enabling retry',
+    () async {
+      final boardRefresh = Completer<CompanionRefreshOutcome>();
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..startResult = const SocketException('response lost');
+      var boardRefreshes = 0;
+      final controller = TaskDetailController(
+        taskId: 'KVG-3031',
+        client: client,
+        storage: _FakeStorage(),
+        onBoardRefresh: () {
+          boardRefreshes += 1;
+          return boardRefresh.future;
+        },
+      );
+      await controller.refresh();
+
+      final start = controller.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.startAction, isA<TaskStartPending>());
+      expect(client.taskDetailCalls, 2);
+      expect(boardRefreshes, 1);
+
+      await controller.start();
+      expect(client.startCalls, 1);
+
+      boardRefresh.complete(CompanionRefreshOutcome.loaded);
+      await start;
+      expect(controller.startAction, isA<TaskStartUncertain>());
+    },
+  );
+  test(
+    'retry remains blocked when authoritative Board refresh cannot complete',
+    () async {
+      final client = _FakeClient()
+        ..result = _backlogDetail
+        ..startResult = const SocketException('response lost');
+      final controller = TaskDetailController(
+        taskId: 'KVG-3031',
+        client: client,
+        storage: _FakeStorage(),
+        onBoardRefresh: () async => CompanionRefreshOutcome.unavailable,
+      );
+      await controller.refresh();
+
+      await controller.start();
+      final action = controller.startAction as TaskStartUncertain;
+      expect(action.authorityRefreshed, isFalse);
+
+      await controller.start();
+      expect(client.startCalls, 1);
     },
   );
 }

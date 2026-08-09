@@ -51,6 +51,7 @@ void main() {
         actionClient: client,
         storage: storage,
         onAuthorizationLost: pairingController.authorizationLost,
+        onBoardRefresh: projectBoardController.refreshWithOutcome,
       ),
       agentTerminalSurfaceFactory: (taskId) {
         late AgentTerminalController terminalController;

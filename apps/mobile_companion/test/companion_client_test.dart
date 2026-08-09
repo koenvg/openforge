@@ -93,6 +93,7 @@ void main() {
       expect(encodedContract, contains('getCompanionProjectBoard'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
       expect(encodedContract, contains('completeCompanionTask'));
+      expect(encodedContract, contains('startCompanionTask'));
       expect(encodedContract, contains('deleteCompanionBacklogTask'));
       expect(encodedContract, contains('streamCompanionEvents'));
       final paths = contract['paths']! as Map<String, Object?>;
@@ -107,6 +108,7 @@ void main() {
           '/projects/{projectId}/board',
           '/tasks/{taskId}',
           '/tasks/{taskId}/complete',
+          '/tasks/{taskId}/start',
           '/tasks/{taskId}/delete',
           '/events',
         ]),

@@ -197,7 +197,7 @@ describe('SettingsCompanionCard', () => {
 
     expect(await screen.findByText("Koen's iPhone")).toBeTruthy()
     expect(screen.getByText(/iOS · Awaiting/)).toBeTruthy()
-    expect(screen.getByText(/Approval lets this phone.*type into running Agent terminals/i)).toBeTruthy()
+    expect(screen.getByText(/Approval lets this phone.*Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Approve Koen\'s iPhone' }))
 
     expect(approveCompanionPairing).toHaveBeenCalledWith('request-1')
@@ -246,7 +246,7 @@ describe('SettingsCompanionCard', () => {
     expect(screen.getByText('Device ID')).toBeTruthy()
     expect(screen.getByText('device-1')).toBeTruthy()
     expect(screen.getByText('Last seen')).toBeTruthy()
-    expect(screen.getByText(/Paired devices can type into running Agent terminals/i)).toBeTruthy()
+    expect(screen.getByText(/Paired devices can Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
     expect(screen.getByText('never')).toBeTruthy()
     confirm.mockRestore()
   })

@@ -128,6 +128,11 @@ final class _FakeClient implements CompanionClient {
   }
 
   @override
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
+  @override
   Future<CompanionHostConnection> fetchHostStatus(
     CompanionTrustRecord trustRecord,
   ) => throw UnsupportedError('not used');

@@ -15,6 +15,7 @@ mod stream_termination;
 mod tailscale;
 mod task_actions;
 mod task_detail;
+mod task_start;
 mod terminal;
 mod terminal_protocol;
 #[cfg(test)]
@@ -104,6 +105,8 @@ mod project_board_tests;
 mod task_actions_tests;
 #[cfg(test)]
 mod task_detail_tests;
+#[cfg(test)]
+mod task_start_tests;
 #[cfg(test)]
 mod terminal_tests;
 #[cfg(test)]

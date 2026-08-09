@@ -217,13 +217,6 @@ async fn start_http_server_with_app_state(
         std::env::var("AI_COMMAND_CENTER_PORT").ok(),
     );
     let app_event_bus = AppEventBus::new(1024, 1024);
-    let task_claims = TaskClaims::new();
-    let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production(
-        db.clone(),
-        app_event_bus.clone(),
-        pty_manager.clone(),
-        task_claims.clone(),
-    );
     let companion_enabled = {
         let database = crate::db::acquire_db(&db);
         match crate::companion_gateway::enabled_preference(&database) {
@@ -246,6 +239,14 @@ async fn start_http_server_with_app_state(
         .and_then(|app| app.try_state::<GitHubClient>())
         .map(|state| state.inner().clone())
         .unwrap_or_default();
+    let task_claims = TaskClaims::new();
+    let companion_gateway = crate::companion_gateway::CompanionGatewayManager::production(
+        db.clone(),
+        app_event_bus.clone(),
+        pty_manager.clone(),
+        app.clone(),
+        task_claims.clone(),
+    );
     let poll_context = crate::github_poller::PollContext::new();
     let plugin_host = Some(PluginHost::with_app_event_sender_and_task_claims(
         app.clone().unwrap_or_default(),

@@ -125,6 +125,12 @@ final class _FakeClient implements CompanionClient {
     CompanionTrustRecord trustRecord,
     String taskId,
   ) => throw UnsupportedError('not used');
+
+  @override
+  Future<TaskStartResult> startTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
 }
 
 final class _FakeDiscovery implements CompanionEndpointDiscovery {

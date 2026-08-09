@@ -11,6 +11,7 @@ use super::{
     rate_limit::{RateLimitError, SlidingWindowRateLimiter},
     task_actions::CompanionTaskActionService,
     task_detail::CompanionTaskDetailSource,
+    task_start::CompanionTaskStarter,
     terminal::CompanionTerminalRegistry,
 };
 #[cfg(test)]
@@ -18,7 +19,7 @@ use super::{
     attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
     project_board::UnavailableCompanionProjectBoardSource,
     task_actions::UnavailableCompanionTaskActionService,
-    task_detail::UnavailableCompanionTaskDetailSource,
+    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::app_events::AppEventBus;
 use axum::{
@@ -58,6 +59,8 @@ pub(crate) enum CompanionErrorCode {
     InvalidTaskState,
     OperationInProgress,
     NotFound,
+    InvalidState,
+    DesktopActionRequired,
     RateLimited,
     TemporarilyUnavailable,
 }
@@ -73,6 +76,8 @@ impl CompanionErrorCode {
             Self::InvalidTaskState => "invalid_task_state",
             Self::OperationInProgress => "operation_in_progress",
             Self::NotFound => "not_found",
+            Self::InvalidState => "invalid_state",
+            Self::DesktopActionRequired => "desktop_action_required",
             Self::RateLimited => "rate_limited",
             Self::TemporarilyUnavailable => "temporarily_unavailable",
         }
@@ -220,6 +225,13 @@ pub(crate) struct CompanionTaskDeleteResponse {
     pub(crate) task_id: String,
     pub(crate) outcome: CompanionTaskDeleteOutcome,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskStartResponse {
+    pub(crate) task_id: String,
+    pub(crate) outcome: &'static str,
+}
+
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(
         &self,
@@ -263,6 +275,7 @@ pub(crate) struct CompanionRouterSources {
     pub(crate) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(crate) task_actions: Arc<dyn CompanionTaskActionService>,
+    pub(crate) task_start: Arc<dyn CompanionTaskStarter>,
     pub(crate) pty_manager: crate::pty_manager::PtyManager,
     pub(crate) events: AppEventBus,
     pub(crate) stream_access: Arc<dyn CompanionStreamAccess>,
@@ -277,6 +290,7 @@ struct CompanionRouterState {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
     stream_access: Arc<dyn CompanionStreamAccess>,
@@ -300,7 +314,10 @@ fn authorization_error_response(code: CompanionErrorCode) -> Response {
             StatusCode::BAD_REQUEST,
             "Companion authorization request is invalid",
         ),
-        CompanionErrorCode::InvalidTaskState | CompanionErrorCode::OperationInProgress => (
+        CompanionErrorCode::InvalidTaskState
+        | CompanionErrorCode::InvalidState
+        | CompanionErrorCode::OperationInProgress
+        | CompanionErrorCode::DesktopActionRequired => (
             StatusCode::CONFLICT,
             "Companion Task action conflicts with current state",
         ),
@@ -417,6 +434,7 @@ pub(crate) fn create_router_with_project_board(
             project_board,
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            task_start: Arc::new(UnavailableCompanionTaskStarter),
             pty_manager: crate::pty_manager::PtyManager::new(),
             events: AppEventBus::new(16, 8),
             stream_access,
@@ -442,6 +460,7 @@ pub(crate) fn create_router_with_task_actions(
             project_board,
             task_detail,
             task_actions,
+            task_start: Arc::new(UnavailableCompanionTaskStarter),
             pty_manager: crate::pty_manager::PtyManager::new(),
             events: AppEventBus::new(16, 8),
             stream_access,
@@ -449,6 +468,32 @@ pub(crate) fn create_router_with_task_actions(
     )
 }
 
+#[cfg(test)]
+pub(crate) fn create_router_with_task_start(
+    host: CompanionHostStatus,
+    authorizer: Arc<dyn CompanionAuthorizer>,
+    pairing: Arc<PairingCoordinator>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
+    task_detail: Arc<dyn CompanionTaskDetailSource>,
+    task_start: Arc<dyn CompanionTaskStarter>,
+) -> Router {
+    let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
+    create_router_with_sources_event_access_and_pty(
+        host,
+        authorizer,
+        pairing,
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board,
+            task_detail,
+            task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            task_start,
+            pty_manager: crate::pty_manager::PtyManager::new(),
+            events: AppEventBus::new(16, 8),
+            stream_access,
+        },
+    )
+}
 #[cfg(test)]
 pub(crate) fn create_router_with_sources(
     host: CompanionHostStatus,
@@ -507,6 +552,7 @@ pub(crate) fn create_router_with_sources_and_event_access(
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail,
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            task_start: Arc::new(UnavailableCompanionTaskStarter),
             events,
             stream_access,
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -525,6 +571,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
         project_board,
         task_detail,
         task_actions,
+        task_start,
         pty_manager,
         events,
         stream_access,
@@ -558,6 +605,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
             project_board,
             task_detail,
             task_actions,
+            task_start,
             pty_manager,
             events,
             stream_access,

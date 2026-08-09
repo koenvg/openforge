@@ -176,7 +176,8 @@
           {platformLabel(pairing.pendingRequest.platform)} · Awaiting your approval
         </div>
         <p class="m-0 mt-2 text-xs text-base-content/70">
-          Approval lets this phone view Task data and type into running Agent terminals as your desktop user.
+          Approval lets this phone Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into
+          running Agent terminals as your desktop user.
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
           <button

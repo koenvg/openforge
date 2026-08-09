@@ -50,6 +50,10 @@
     "boardStatus": "done",
     "cleanupScheduled": true
   },
+  "taskStart": {
+    "taskId": "KVG-3031",
+    "outcome": "started"
+  },
   "error": {
     "error": {
       "code": "unauthenticated",

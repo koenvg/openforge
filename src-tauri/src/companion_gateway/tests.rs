@@ -1556,7 +1556,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 10);
+    assert_eq!(paths.len(), 11);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1630,6 +1630,18 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         task_delete_path["post"]["operationId"],
         "deleteCompanionBacklogTask",
     );
+    let task_start_path = paths["/tasks/{taskId}/start"]
+        .as_object()
+        .expect("Task Start path item");
+    assert_eq!(
+        task_start_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["post"],
+        "Task Start must be one explicit Task-scoped mutation",
+    );
+    assert!(task_start_path["post"].get("requestBody").is_none());
     let events_path = paths["/events"].as_object().expect("events path item");
     assert_eq!(
         events_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1688,6 +1700,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         &task_detail_path["get"],
         &task_complete_path["post"],
         &task_delete_path["post"],
+        &task_start_path["post"],
         &events_path["get"],
     ] {
         assert!(
@@ -1731,6 +1744,12 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     for status in ["200", "400", "401", "404", "409", "429", "503"] {
         assert!(task_delete_responses.contains_key(status));
     }
+    let task_start_responses = task_start_path["post"]["responses"]
+        .as_object()
+        .expect("Task Start responses");
+    for status in ["200", "400", "401", "404", "409", "429", "503"] {
+        assert!(task_start_responses.contains_key(status));
+    }
     let event_responses = events_path["get"]["responses"]
         .as_object()
         .expect("event responses");
@@ -1757,6 +1776,10 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_schema_accepts(
         &contract["components"]["schemas"]["TaskDeleteReceipt"],
         &fixtures["taskDeleteReceipt"],
+    );
+    assert_schema_accepts(
+        &contract["components"]["schemas"]["TaskStartResult"],
+        &fixtures["taskStart"],
     );
     let task_detail_properties = task_detail_schema["properties"]
         .as_object()
@@ -1856,6 +1879,8 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         "invalid_task_state",
         "operation_in_progress",
         "not_found",
+        "invalid_state",
+        "desktop_action_required",
         "rate_limited",
         "temporarily_unavailable",
     ] {

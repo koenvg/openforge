@@ -1,7 +1,7 @@
 use super::{
     authorization_error_response, authorize_versioned_request, error_response, CompanionErrorCode,
     CompanionRouterState, CompanionTaskCompleteResponse, CompanionTaskDeleteOutcome,
-    CompanionTaskDeleteResponse,
+    CompanionTaskDeleteResponse, CompanionTaskStartResponse,
 };
 use crate::terminal_task_completion::{TerminalTaskCompletionError, TerminalTaskCompletionOutcome};
 use axum::{
@@ -22,6 +22,10 @@ pub(super) fn routes() -> Router<CompanionRouterState> {
         .route(
             "/companion/v1/tasks/:task_id/delete",
             post(delete_task_handler),
+        )
+        .route(
+            "/companion/v1/tasks/:task_id/start",
+            post(task_start_handler),
         )
 }
 
@@ -144,4 +148,101 @@ fn task_actions_unavailable(action: &str) -> Response {
         CompanionErrorCode::TemporarilyUnavailable,
         &format!("{action} is temporarily unavailable"),
     )
+}
+
+async fn task_start_handler(
+    State(state): State<CompanionRouterState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+    if !body.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            CompanionErrorCode::InvalidRequest,
+            "Companion Task Start accepts only the Task identifier",
+        );
+    }
+
+    let detail = match state.task_detail.get(&task_id) {
+        Ok(Some(detail)) => detail,
+        Ok(None) => return task_start_not_found(),
+        Err(_) => return task_start_unavailable(),
+    };
+    match state.project_board.is_project_visible(&detail.project_id) {
+        Ok(true) => {}
+        Ok(false) => return task_start_not_found(),
+        Err(_) => return task_start_unavailable(),
+    }
+    if detail.board_status != "backlog" {
+        return error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::InvalidState,
+            "Task cannot be started from its current state",
+        );
+    }
+
+    match state.task_start.start(&task_id).await {
+        Ok(crate::task_start::TaskStartOutcome::Started { task_id }) => {
+            Json(CompanionTaskStartResponse {
+                task_id,
+                outcome: "started",
+            })
+            .into_response()
+        }
+        Ok(crate::task_start::TaskStartOutcome::DesktopActionRequired { .. }) => error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::DesktopActionRequired,
+            "Open this Task on the desktop to resolve its workspace before starting",
+        ),
+        Err(error) => task_start_error_response(error),
+    }
+}
+
+fn task_start_not_found() -> Response {
+    error_response(
+        StatusCode::NOT_FOUND,
+        CompanionErrorCode::NotFound,
+        "Task was not found",
+    )
+}
+
+fn task_start_unavailable() -> Response {
+    error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        CompanionErrorCode::TemporarilyUnavailable,
+        "Task could not be started. Check the desktop and try again",
+    )
+}
+
+fn task_start_error_response(error: crate::task_start::TaskStartError) -> Response {
+    use crate::task_start::TaskStartError;
+
+    match error {
+        TaskStartError::NotFound
+        | TaskStartError::ProjectRequired
+        | TaskStartError::ProjectNotFound { .. } => task_start_not_found(),
+        TaskStartError::AlreadyInProgress => error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::OperationInProgress,
+            "Task Start is already in progress",
+        ),
+        TaskStartError::InvalidState { .. }
+        | TaskStartError::StaleState
+        | TaskStartError::ActiveSession
+        | TaskStartError::DependencyBlocked { .. } => error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::InvalidState,
+            "Task cannot be started from its current state",
+        ),
+        TaskStartError::RuntimeUnavailable
+        | TaskStartError::InvalidConfiguration(_)
+        | TaskStartError::Workspace(_)
+        | TaskStartError::InvalidWorkspace(_)
+        | TaskStartError::ProviderLaunch(_)
+        | TaskStartError::Persistence(_) => task_start_unavailable(),
+    }
 }
