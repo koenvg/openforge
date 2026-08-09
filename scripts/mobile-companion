@@ -17,6 +17,109 @@ if [[ ! -x "$dart_bin" ]]; then
   exit 1
 fi
 
+require_environment() {
+  local missing=()
+  local variable
+  for variable in "$@"; do
+    if [[ -z "${!variable:-}" ]]; then
+      missing+=("$variable")
+    fi
+  done
+  if (( ${#missing[@]} > 0 )); then
+    printf 'Missing required release environment: %s\n' "${missing[*]}" >&2
+    return 1
+  fi
+}
+
+release_version_args=()
+configure_release_version_args() {
+  if [[ -n "${OPENFORGE_MOBILE_BUILD_NAME:-}" || -n "${OPENFORGE_MOBILE_BUILD_NUMBER:-}" ]]; then
+    require_environment OPENFORGE_MOBILE_BUILD_NAME OPENFORGE_MOBILE_BUILD_NUMBER
+    release_version_args=(
+      "--build-name=$OPENFORGE_MOBILE_BUILD_NAME"
+      "--build-number=$OPENFORGE_MOBILE_BUILD_NUMBER"
+    )
+  fi
+}
+
+build_ios_release() {
+  require_environment OPENFORGE_IOS_DEVELOPMENT_TEAM
+  configure_release_version_args
+
+  local signing_config="$app_dir/ios/Flutter/Signing.xcconfig"
+  local signing_backup=""
+  local export_options
+  export_options="$(mktemp "${TMPDIR:-/tmp}/openforge-ios-export.XXXXXX.plist")"
+
+  if [[ -f "$signing_config" ]]; then
+    signing_backup="$(mktemp "${TMPDIR:-/tmp}/openforge-ios-signing.XXXXXX.xcconfig")"
+    cp "$signing_config" "$signing_backup"
+  fi
+
+  cleanup_ios_release_config() {
+    rm -f "$export_options"
+    if [[ -n "$signing_backup" ]]; then
+      mv "$signing_backup" "$signing_config"
+    else
+      rm -f "$signing_config"
+    fi
+  }
+  trap cleanup_ios_release_config RETURN
+
+  umask 077
+  local export_method="${OPENFORGE_IOS_EXPORT_METHOD:-app-store-connect}"
+  local provisioning_profile="${OPENFORGE_IOS_PROVISIONING_PROFILE_SPECIFIER:-}"
+  local signing_style="automatic"
+  local provisioning_profiles_xml=""
+
+  if [[ "$OPENFORGE_IOS_DEVELOPMENT_TEAM" == *$'\n'* || "$provisioning_profile" == *$'\n'* ]]; then
+    echo "iOS signing identifiers must not contain newlines." >&2
+    return 1
+  fi
+
+  cat > "$signing_config" <<EOF
+DEVELOPMENT_TEAM = $OPENFORGE_IOS_DEVELOPMENT_TEAM
+CODE_SIGN_STYLE = Automatic
+EOF
+
+  if [[ -n "$provisioning_profile" ]]; then
+    signing_style="manual"
+    cat > "$signing_config" <<EOF
+DEVELOPMENT_TEAM = $OPENFORGE_IOS_DEVELOPMENT_TEAM
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = Apple Distribution
+PROVISIONING_PROFILE_SPECIFIER = $provisioning_profile
+EOF
+    provisioning_profiles_xml="  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.openforge.app.companion</key>
+    <string>$provisioning_profile</string>
+  </dict>"
+  fi
+
+  cat > "$export_options" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>destination</key>
+  <string>export</string>
+  <key>manageAppVersionAndBuildNumber</key>
+  <false/>
+  <key>method</key>
+  <string>$export_method</string>
+$provisioning_profiles_xml
+  <key>signingStyle</key>
+  <string>$signing_style</string>
+  <key>teamID</key>
+  <string>$OPENFORGE_IOS_DEVELOPMENT_TEAM</string>
+</dict>
+</plist>
+EOF
+
+  "$flutter_path" build ipa --release --export-options-plist="$export_options" "${release_version_args[@]}"
+}
+
 cd "$app_dir"
 
 dart_sources=()
@@ -53,6 +156,23 @@ case "${1:-}" in
   build-ios)
     "$flutter_path" build ios --simulator --debug
     ;;
+  build-android-release)
+    require_environment \
+      OPENFORGE_ANDROID_KEYSTORE_PATH \
+      OPENFORGE_ANDROID_STORE_PASSWORD \
+      OPENFORGE_ANDROID_KEY_ALIAS \
+      OPENFORGE_ANDROID_KEY_PASSWORD
+    configure_release_version_args
+    if [[ ! -f "$OPENFORGE_ANDROID_KEYSTORE_PATH" ]]; then
+      echo "Android release keystore does not exist: $OPENFORGE_ANDROID_KEYSTORE_PATH" >&2
+      exit 1
+    fi
+    "$flutter_path" build apk --release "${release_version_args[@]}"
+    "$flutter_path" build appbundle --release "${release_version_args[@]}"
+    ;;
+  build-ios-release)
+    build_ios_release
+    ;;
   run)
     shift
     "$flutter_path" run "$@"
@@ -62,15 +182,17 @@ case "${1:-}" in
 Usage: ./scripts/mobile-companion <command>
 
 Commands:
-  pub-get       Resolve Flutter dependencies
-  format        Format handwritten Dart code
-  format-check  Verify Dart formatting without changing files
-  analyze       Run Flutter static analysis
-  test          Run Flutter unit and widget tests
-  check         Run dependency, format, analysis, and test checks
-  build-android Build a debug Android APK
-  build-ios     Build an unsigned iOS Simulator app (macOS only)
-  run [args]    Launch the companion with optional flutter run arguments
+  pub-get              Resolve Flutter dependencies
+  format               Format handwritten Dart code
+  format-check         Verify Dart formatting without changing files
+  analyze              Run Flutter static analysis
+  test                 Run Flutter unit and widget tests
+  check                Run dependency, format, analysis, and test checks
+  build-android        Build a debug Android APK
+  build-ios            Build an unsigned iOS Simulator app (macOS only)
+  build-android-release Build signed APK and AAB private release artifacts
+  build-ios-release    Build a signed IPA for TestFlight/private distribution
+  run [args]           Launch the companion with optional flutter run arguments
 USAGE
     exit 2
     ;;

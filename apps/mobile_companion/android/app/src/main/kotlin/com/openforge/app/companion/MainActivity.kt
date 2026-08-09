@@ -1,4 +1,4 @@
-package app.openforge.openforge_companion
+package com.openforge.app.companion
 
 import android.content.Intent
 import android.net.Uri

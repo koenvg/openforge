@@ -93,9 +93,9 @@ periodic background guarantee, or notification service.
 - Xcode for iOS Simulator or device builds
 - Tailscale installed and connected on the desktop and phone for away-from-LAN testing
 
-The generated application identifiers are provisional private-build values.
-Production bundle identifiers, signing teams, and distribution ownership remain
-explicit release decisions from the design specification.
+The stable iOS bundle identifier and Android application ID are both
+`com.openforge.app.companion`. Private signing credentials and ownership stay
+outside the repository; see the [private release guide](../../docs/mobile-companion-release.md).
 
 ## Repository commands
 
@@ -114,6 +114,8 @@ pnpm mobile:contract:check     # Fail on any generated-client drift
 ./scripts/mobile-companion check
 ./scripts/mobile-companion build-android
 ./scripts/mobile-companion build-ios    # macOS only; iOS Simulator
+./scripts/mobile-companion build-android-release
+./scripts/mobile-companion build-ios-release
 ./scripts/mobile-companion run
 ```
 
@@ -124,8 +126,12 @@ format commands intentionally cover handwritten sources only.
 
 `check` is the CI entry point: it first verifies the checked-in client byte for byte,
 then resolves packages, checks handwritten formatting, runs static analysis, and
-executes all focused unit/widget tests. Android and iOS builds are separate Flutter
-invocations and do not require `pnpm install`.
+executes all focused unit/widget tests. Debug and signed release builds are separate
+Flutter invocations and do not require `pnpm install`. Release signing, private
+distribution, privacy wording, and physical-device evidence are documented in the
+[private release guide](../../docs/mobile-companion-release.md),
+[privacy boundary](../../docs/mobile-companion-privacy.md), and
+[acceptance matrix](../../docs/mobile-companion-acceptance-matrix.md).
 
 ## Architecture boundaries
 

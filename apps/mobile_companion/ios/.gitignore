@@ -26,6 +26,10 @@ Flutter/flutter_assets/
 Flutter/flutter_export_environment.sh
 ServiceDefinitions.json
 Runner/GeneratedPluginRegistrant.*
+Flutter/Signing.xcconfig
+ExportOptions.plist
+*.mobileprovision
+*.p12
 
 # Exceptions to above rules.
 !default.mode1v3
