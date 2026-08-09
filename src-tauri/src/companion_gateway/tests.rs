@@ -1556,7 +1556,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 6);
+    assert_eq!(paths.len(), 8);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1573,6 +1573,25 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
             .collect::<Vec<_>>(),
         vec!["get"],
         "attention must expose no mutation or generic command capability"
+    );
+    let projects_path = paths["/projects"]
+        .as_object()
+        .expect("Project catalog path item");
+    assert_eq!(
+        projects_path.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec!["get"],
+        "Project catalog must expose no mutation or generic command capability"
+    );
+    let project_board_path = paths["/projects/{projectId}/board"]
+        .as_object()
+        .expect("Project Board path item");
+    assert_eq!(
+        project_board_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
+        "Project Board must expose no mutation or generic command capability"
     );
     let task_detail_path = paths["/tasks/{taskId}"]
         .as_object()
@@ -1638,6 +1657,8 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     for operation in [
         &status_path["get"],
         &attention_path["get"],
+        &projects_path["get"],
+        &project_board_path["get"],
         &task_detail_path["get"],
         &events_path["get"],
     ] {

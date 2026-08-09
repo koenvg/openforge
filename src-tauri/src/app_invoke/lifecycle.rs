@@ -429,7 +429,7 @@ pub(crate) async fn start_implementation(
             )
         })?;
         drop(db);
-        publish_task_changed(state, task_id);
+        publish_task_changed(state, task_id, start_context.task.project_id.as_deref());
     }
 
     Ok(crate::agent_lifecycle::build_start_response(

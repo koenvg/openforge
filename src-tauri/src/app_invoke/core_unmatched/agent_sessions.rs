@@ -106,8 +106,18 @@ fn finalize_agent_session(
                         format!("Failed to update session: {e}"),
                     )
                 })?;
+                let project_id = db
+                    .get_task(&task_id)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reload Task for Agent invalidation: {error}"),
+                        )
+                    })?
+                    .and_then(|task| task.project_id);
                 Some(serde_json::json!({
                     "task_id": task_id,
+                    "project_id": project_id,
                     "status": next_status,
                     "provider": session.provider,
                 }))

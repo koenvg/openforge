@@ -12,6 +12,7 @@ use super::{
     live_events::{CompanionStreamAccess, PairingCompanionStreamAccess},
     network::{CompanionEndpointKind, CompanionEndpointProvider, PrivateInterfaceEndpointProvider},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision, PairingSessionStatus},
+    project_board::{CompanionProjectBoardSource, DatabaseCompanionProjectBoardSource},
     tailscale::{
         DetectedTailscaleHostname, LocalTailscaleHostnameProvider, TailscaleHostnameProvider,
     },
@@ -19,8 +20,9 @@ use super::{
 };
 #[cfg(test)]
 use super::{
-    attention::UnavailableCompanionAttentionSource, tailscale::FixedTailscaleHostnameProvider,
-    task_detail::UnavailableCompanionTaskDetailSource,
+    attention::UnavailableCompanionAttentionSource,
+    project_board::UnavailableCompanionProjectBoardSource,
+    tailscale::FixedTailscaleHostnameProvider, task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::AppEventBus;
 use serde::{Deserialize, Serialize};
@@ -142,6 +144,7 @@ struct CompanionGatewayNetwork {
 
 struct CompanionGatewayDomainSources {
     attention: Arc<dyn CompanionAttentionSource>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -158,6 +161,7 @@ pub(crate) struct CompanionGatewayManager {
     advertiser: Arc<dyn CompanionAdvertiser>,
     pairing: Arc<PairingCoordinator>,
     attention: Arc<dyn CompanionAttentionSource>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -186,6 +190,9 @@ impl CompanionGatewayManager {
             Arc::new(DatabaseCompanionDeviceStore::new(Arc::clone(&database))),
             CompanionGatewayDomainSources {
                 attention: Arc::new(DatabaseCompanionAttentionSource::new(Arc::clone(&database))),
+                project_board: Arc::new(DatabaseCompanionProjectBoardSource::new(Arc::clone(
+                    &database,
+                ))),
                 task_detail: Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
                 events,
                 pty_manager,
@@ -213,6 +220,7 @@ impl CompanionGatewayManager {
             device_store,
             CompanionGatewayDomainSources {
                 attention: Arc::new(UnavailableCompanionAttentionSource),
+                project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
@@ -242,6 +250,7 @@ impl CompanionGatewayManager {
             device_store,
             CompanionGatewayDomainSources {
                 attention: Arc::new(UnavailableCompanionAttentionSource),
+                project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
@@ -265,6 +274,7 @@ impl CompanionGatewayManager {
     ) -> Self {
         let CompanionGatewayDomainSources {
             attention,
+            project_board,
             task_detail,
             pty_manager,
             events,
@@ -291,6 +301,7 @@ impl CompanionGatewayManager {
             advertiser,
             pairing,
             attention,
+            project_board,
             task_detail,
             events,
             pty_manager,
@@ -440,6 +451,7 @@ impl CompanionGatewayManager {
             CompanionGatewayRouteSources {
                 pairing: Arc::clone(&self.pairing),
                 attention: Arc::clone(&self.attention),
+                project_board: Arc::clone(&self.project_board),
                 task_detail: Arc::clone(&self.task_detail),
                 pty_manager: self.pty_manager.clone(),
                 events: self.events.clone(),

@@ -232,7 +232,19 @@ pub async fn update_task_handler(
         }
     }
 
-    emit_task_changed(&state, "updated", &request.task_id, None);
+    let project_id = state
+        .db
+        .lock()
+        .unwrap()
+        .get_task(&request.task_id)
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to reload task after update: {error}"),
+            )
+        })?
+        .and_then(|task| task.project_id);
+    emit_task_changed(&state, "updated", &request.task_id, project_id.as_deref());
 
     Ok(Json(UpdateTaskResponse {
         task_id: request.task_id,

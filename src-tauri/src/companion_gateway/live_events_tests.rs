@@ -2,13 +2,16 @@ use super::{
     attention::UnavailableCompanionAttentionSource,
     contract::{
         create_router_with_sources_and_event_access, create_router_with_sources_and_events,
-        CompanionAuthorizer, CompanionErrorCode, CompanionHostStatus,
+        create_router_with_sources_event_access_and_pty, CompanionAuthorizer, CompanionErrorCode,
+        CompanionHostStatus, CompanionRouterSources,
     },
     devices::{CompanionDeviceRecord, CompanionDeviceStore, InMemoryCompanionDeviceStore},
     live_events::{
-        CompanionStreamAccess, CompanionStreamTermination, PairingCompanionStreamAccess,
+        CompanionStreamAccess, CompanionStreamTermination, GatewayCompanionStreamAccess,
+        PairingCompanionStreamAccess,
     },
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
+    project_board::DatabaseCompanionProjectBoardSource,
     task_detail::UnavailableCompanionTaskDetailSource,
 };
 use crate::app_events::{AppEvent, AppEventBus, AppEventCursor, DeliveryClass};
@@ -197,6 +200,7 @@ async fn task_and_agent_events_expose_only_coarse_resource_invalidations() {
             "agent-status-changed",
             serde_json::json!({
                 "task_id": "KVG-2947",
+                "project_id": "P-4",
                 "status": "blocked",
                 "provider": "secret-provider",
                 "pty_instance_id": 47
@@ -209,6 +213,7 @@ async fn task_and_agent_events_expose_only_coarse_resource_invalidations() {
     let chunk = next_sse_chunk(response).await;
     assert!(chunk.contains("event: resources-invalidated"));
     assert!(chunk.contains("\"kind\":\"attention\""));
+    assert!(chunk.contains("\"kind\":\"project_board\",\"id\":\"P-4\""));
     assert!(chunk.contains("\"kind\":\"task\",\"id\":\"KVG-2947\""));
     assert!(!chunk.contains("secret-provider"));
     assert!(!chunk.contains("pty_instance_id"));
@@ -216,15 +221,109 @@ async fn task_and_agent_events_expose_only_coarse_resource_invalidations() {
 }
 
 #[tokio::test]
+async fn hidden_project_task_events_do_not_expose_resource_identifiers() {
+    let (database, path) = crate::db::test_helpers::make_test_db("companion_hidden_live_events");
+    let visible = database
+        .create_project("Visible", "/secret/visible")
+        .expect("visible project");
+    let hidden = database
+        .create_project("Hidden", "/secret/hidden")
+        .expect("hidden project");
+    database
+        .set_config(
+            "project_sidebar_hidden",
+            &serde_json::to_string(&vec![&hidden.id]).expect("hidden Project configuration"),
+        )
+        .expect("hide Project");
+    let project_board = Arc::new(DatabaseCompanionProjectBoardSource::new(Arc::new(
+        Mutex::new(database),
+    )));
+    let events = AppEventBus::new(16, 8);
+    let authorizer: Arc<dyn CompanionAuthorizer> = Arc::new(MutableAuthorizer::authorized());
+    let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
+    let router = create_router_with_sources_event_access_and_pty(
+        CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
+        authorizer,
+        Arc::new(PairingCoordinator::new(
+            Arc::new(InMemoryCompanionDeviceStore::default()),
+            Duration::from_secs(120),
+        )),
+        CompanionRouterSources {
+            attention: Arc::new(UnavailableCompanionAttentionSource),
+            project_board,
+            task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
+            events: events.clone(),
+            stream_access,
+            pty_manager: crate::pty_manager::PtyManager::new(),
+        },
+    );
+    let response = open_events(router, None).await;
+
+    events
+        .tasks()
+        .updated("T-hidden", Some(&hidden.id))
+        .expect("hidden event should publish internally");
+    events
+        .tasks()
+        .updated("T-visible", Some(&visible.id))
+        .expect("visible event should publish internally");
+
+    let chunk = next_sse_chunk(response).await;
+    assert!(chunk.contains("T-visible"));
+    assert!(chunk.contains(&visible.id));
+    assert!(!chunk.contains("T-hidden"));
+    assert!(!chunk.contains(&hidden.id));
+
+    drop(path);
+}
+#[tokio::test]
+async fn project_events_expose_only_catalog_and_board_resource_identifiers() {
+    let events = AppEventBus::new(16, 8);
+    let catalog_response = open_events(
+        test_router(Arc::new(MutableAuthorizer::authorized()), events.clone()),
+        None,
+    )
+    .await;
+    events
+        .try_emit(AppEvent::new(
+            "project-catalog-changed",
+            serde_json::json!({ "reason": "sidebar reordered", "path": "/secret/repo" }),
+            DeliveryClass::StateInvalidation,
+            Some("projects".to_string()),
+        ))
+        .expect("catalog event should publish");
+    let catalog_chunk = next_sse_chunk(catalog_response).await;
+    assert!(catalog_chunk.contains("\"kind\":\"project_catalog\""));
+    assert!(!catalog_chunk.contains("sidebar reordered"));
+    assert!(!catalog_chunk.contains("/secret/repo"));
+
+    let board_response = open_events(
+        test_router(Arc::new(MutableAuthorizer::authorized()), events.clone()),
+        None,
+    )
+    .await;
+    events
+        .try_emit(AppEvent::new(
+            "project-board-changed",
+            serde_json::json!({ "project_id": "P-4", "task_ids": ["secret-task"] }),
+            DeliveryClass::StateInvalidation,
+            Some("project:P-4".to_string()),
+        ))
+        .expect("board event should publish");
+    let board_chunk = next_sse_chunk(board_response).await;
+    assert!(board_chunk.contains("\"kind\":\"project_board\",\"id\":\"P-4\""));
+    assert!(!board_chunk.contains("secret-task"));
+}
+#[tokio::test]
 async fn companion_events_resume_from_last_event_id_when_replay_is_available() {
     let events = AppEventBus::new(16, 8);
     let first = events
         .tasks()
-        .updated("T-1", None)
+        .updated("T-1", Some("P-4"))
         .expect("first event should publish");
     events
         .tasks()
-        .updated("T-2", None)
+        .updated("T-2", Some("P-4"))
         .expect("second event should publish");
 
     let response = open_events(
@@ -243,15 +342,15 @@ async fn expired_cursor_reports_a_public_gap_without_internal_event_payloads() {
     let events = AppEventBus::new(16, 1);
     let first = events
         .tasks()
-        .updated("T-1", None)
+        .updated("T-1", Some("P-4"))
         .expect("first event should publish");
     events
         .tasks()
-        .updated("T-2", None)
+        .updated("T-2", Some("P-4"))
         .expect("second event should publish");
     events
         .tasks()
-        .updated("T-3", None)
+        .updated("T-3", Some("P-4"))
         .expect("third event should publish");
 
     let response = open_events(
@@ -282,7 +381,7 @@ async fn revoked_streams_emit_typed_terminal_state_and_close() {
     .await;
     events
         .tasks()
-        .updated("T-must-not-leak-after-revocation", None)
+        .updated("T-must-not-leak-after-revocation", Some("P-4"))
         .expect("queued invalidation should publish");
     access.terminate(CompanionStreamTermination::AuthorizationRevoked);
 
@@ -337,7 +436,7 @@ async fn revoking_one_device_closes_only_that_devices_canonical_sse_stream() {
     assert!(revoked_chunk.contains("event: authorization-revoked"));
     events
         .tasks()
-        .updated("T-visible-to-active-device", None)
+        .updated("T-visible-to-active-device", Some("P-4"))
         .expect("publish invalidation");
     let active_chunk = next_sse_chunk(active_response).await;
     assert!(active_chunk.contains("event: resources-invalidated"));
@@ -377,7 +476,7 @@ async fn gateway_shutdown_is_a_public_terminal_event() {
     .await;
     events
         .tasks()
-        .updated("T-after-reenable", None)
+        .updated("T-after-reenable", Some("P-4"))
         .expect("post-reenable event should publish");
     let resumed_chunk = next_sse_chunk(resumed).await;
     assert!(resumed_chunk.contains("event: resources-invalidated"));

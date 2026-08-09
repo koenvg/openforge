@@ -248,6 +248,17 @@ pub(super) async fn poll_prs_for_project(
             continue;
         }
 
+        let project_id = match db_lock.get_task(&result.ticket_id) {
+            Ok(Some(task)) => task.project_id,
+            Ok(None) => None,
+            Err(error) => {
+                warn!(
+                    "[GitHub Poller] Failed to resolve Project for Task {}: {}",
+                    result.ticket_id, error
+                );
+                None
+            }
+        };
         let existing_ids = match db_lock.get_existing_comment_ids(result.pr_id) {
             Ok(ids) => ids,
             Err(e) => {
@@ -279,6 +290,7 @@ pub(super) async fn poll_prs_for_project(
                     "ci-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
+                        "project_id": project_id.as_deref(),
                         "pr_id": result.pr_id,
                         "pr_title": result.pr_title,
                         "ci_status": ci_payload.status,
@@ -310,6 +322,7 @@ pub(super) async fn poll_prs_for_project(
                     "review-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
+                        "project_id": project_id.as_deref(),
                         "pr_id": result.pr_id,
                         "pr_title": result.pr_title,
                         "review_status": review_status,
@@ -368,6 +381,21 @@ pub(super) async fn poll_prs_for_project(
                     result.pr_id, e
                 );
                 error_count += 1;
+            }
+        }
+
+        if let Some(project_id) = project_id.as_deref() {
+            if let Err(error) = events.emit(
+                "task-changed",
+                serde_json::json!({
+                    "task_id": result.ticket_id,
+                    "project_id": project_id,
+                }),
+            ) {
+                warn!(
+                    "[GitHub Poller] Failed to emit Task Board invalidation for Task {}: {}",
+                    result.ticket_id, error
+                );
             }
         }
         if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {

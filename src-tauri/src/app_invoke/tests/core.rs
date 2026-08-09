@@ -693,3 +693,50 @@ async fn lists_and_acknowledges_plugin_browser_session_purge_intents() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn board_shaping_task_mutations_publish_project_scoped_invalidations() {
+    let (state, path) = test_state("app_invoke_task_board_invalidations");
+    let project = crate::db::acquire_db(&state.db)
+        .create_project("OpenForge", "/tmp/openforge")
+        .expect("create Project");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Initial prompt",
+            "status": "backlog",
+            "projectId": project.id,
+        }),
+    )
+    .await;
+    let task_id = task["id"].as_str().expect("Task id");
+    for (command, payload) in [
+        (
+            "update_task",
+            json!({ "id": task_id, "initialPrompt": "Updated prompt" }),
+        ),
+        (
+            "update_task_title",
+            json!({ "id": task_id, "title": "Updated title" }),
+        ),
+    ] {
+        let event = events.try_recv().expect("Task invalidation");
+        assert_eq!(event.event_name, "task-changed");
+        assert_eq!(event.payload["task_id"], task_id);
+        assert_eq!(event.payload["project_id"], project.id);
+        invoke_ok(&state, command, payload).await;
+    }
+    let event = events.try_recv().expect("final Task invalidation");
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["project_id"], project.id);
+
+    let _ = std::fs::remove_file(path);
+}

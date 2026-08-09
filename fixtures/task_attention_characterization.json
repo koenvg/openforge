@@ -61,5 +61,39 @@
     { "task_id": "T-comments", "project_id": "P-alpha", "project_name": "Alpha", "title": "Review feedback", "state": "ready-to-merge", "reason": "Ready to merge — all checks passed.", "activity_at": 650 },
     { "task_id": "T-idle", "project_id": "P-alpha", "project_name": "Alpha", "title": "Fallback from prompt", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 500 },
     { "task_id": "T-beta-failed", "project_id": "P-beta", "project_name": "Beta", "title": "Configured failure", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 300 }
-  ]
+  ],
+  "expected_boards": {
+    "P-alpha": {
+      "project_id": "P-alpha",
+      "project_name": "Alpha",
+      "focus": [
+        { "task_id": "T-input", "title": "Needs a decision", "lane": "focus", "state": "needs-input", "reason": "Agent needs your input to continue.", "activity_at": 900 },
+        { "task_id": "T-failed", "title": "Repair failed automation", "lane": "focus", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 800 },
+        { "task_id": "T-completed", "title": "Completed changes", "lane": "focus", "state": "agent-done", "reason": "Agent completed — review the changes.", "activity_at": 750 },
+        { "task_id": "T-comments", "title": "Review feedback", "lane": "focus", "state": "ready-to-merge", "reason": "Ready to merge — all checks passed.", "activity_at": 650 },
+        { "task_id": "T-idle", "title": "Fallback from prompt", "lane": "focus", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 500 }
+      ],
+      "in_flight": [
+        { "task_id": "T-running", "title": "Running agent", "lane": "in_flight", "state": "active", "reason": "Agent is running — no action needed right now.", "activity_at": 1400 }
+      ],
+      "out_of_focus": [
+        { "task_id": "T-set-aside", "title": "Set aside", "lane": "out_of_focus", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 1100 }
+      ],
+      "backlog": [
+        { "task_id": "T-backlog", "title": "Backlog", "lane": "backlog", "state": "egg", "reason": "In backlog — not started yet.", "activity_at": 1200 }
+      ]
+    },
+    "P-beta": {
+      "project_id": "P-beta",
+      "project_name": "Beta",
+      "focus": [
+        { "task_id": "T-beta-failed", "title": "Configured failure", "lane": "focus", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 300 }
+      ],
+      "in_flight": [
+        { "task_id": "T-beta-idle", "title": "Configured out", "lane": "in_flight", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 600 }
+      ],
+      "out_of_focus": [],
+      "backlog": []
+    }
+  }
 }

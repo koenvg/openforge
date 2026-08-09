@@ -188,7 +188,7 @@ fn pr_state(prs: &[&TaskAttentionPullRequest]) -> Option<&'static str> {
     }
 }
 
-fn task_state(
+pub(crate) fn task_state(
     session: Option<&TaskAttentionSession>,
     prs: &[&TaskAttentionPullRequest],
 ) -> &'static str {
@@ -212,7 +212,7 @@ fn task_state(
     "idle"
 }
 
-fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
+pub(crate) fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     if state == "unaddressed-comments" {
         let count = driving_pr(prs)
             .map(|pr| pr.unaddressed_comment_count)
@@ -223,6 +223,7 @@ fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> String {
     }
 
     match state {
+        "egg" => "In backlog — not started yet.",
         "idle" => "No agent running. Start when ready.",
         "active" => "Agent is running — no action needed right now.",
         "needs-input" => "Agent needs your input to continue.",

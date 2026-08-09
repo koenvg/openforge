@@ -54,8 +54,15 @@ fn emit_agent_status_changed(
     state: &AppState,
     change: &crate::agent_lifecycle::AgentLifecycleStatusChange,
 ) {
+    let project_id = state
+        .db
+        .lock()
+        .ok()
+        .and_then(|database| database.get_task(&change.task_id).ok().flatten())
+        .and_then(|task| task.project_id);
     let payload = serde_json::json!({
         "task_id": change.task_id,
+        "project_id": project_id,
         "status": change.status,
         "provider": change.provider,
         "kind": change.kind,

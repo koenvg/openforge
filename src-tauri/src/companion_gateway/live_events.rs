@@ -3,6 +3,7 @@ use super::contract::CompanionAuthorizer;
 use super::{
     contract::CompanionErrorCode,
     pairing::{CompanionStreamTermination as PairingStreamTermination, PairingCoordinator},
+    project_board::CompanionProjectBoardSource,
 };
 use crate::app_events::{AppEventBus, AppEventFrame, AppEventSubscription};
 use axum::{http::HeaderMap, response::sse::Event};
@@ -123,13 +124,15 @@ impl CompanionStreamAccess for PairingCompanionStreamAccess {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PublicResourceInvalidation<'a> {
-    resources: [PublicResource<'a>; 2],
+    resources: Vec<PublicResource<'a>>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PublicResource<'a> {
     Attention,
+    ProjectCatalog,
+    ProjectBoard { id: &'a str },
     Task { id: &'a str },
 }
 
@@ -152,6 +155,7 @@ struct PublicGatewayTermination {
 struct StreamState {
     subscription: AppEventSubscription,
     cancellation: tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
     terminal: bool,
 }
 
@@ -159,6 +163,7 @@ pub(crate) fn companion_event_stream(
     events: &AppEventBus,
     cursor: Option<crate::app_events::AppEventCursor>,
     cancellation: tokio::sync::mpsc::UnboundedReceiver<CompanionStreamTermination>,
+    project_board: Arc<dyn CompanionProjectBoardSource>,
 ) -> Result<impl Stream<Item = Result<Event, Infallible>> + Send + 'static, CompanionErrorCode> {
     let subscription = events
         .subscribe(cursor)
@@ -167,6 +172,7 @@ pub(crate) fn companion_event_stream(
         StreamState {
             subscription,
             cancellation,
+            project_board,
             terminal: false,
         },
         |mut state| async move {
@@ -199,7 +205,7 @@ pub(crate) fn companion_event_stream(
                     }
                     frame = state.subscription.recv() => {
                         let frame = frame?;
-                        if let Some(event) = map_app_event(frame) {
+                        if let Some(event) = map_app_event(frame, state.project_board.as_ref()) {
                             return Some((Ok(event), state));
                         }
                     }
@@ -209,7 +215,10 @@ pub(crate) fn companion_event_stream(
     ))
 }
 
-fn map_app_event(frame: AppEventFrame) -> Option<Event> {
+fn map_app_event(
+    frame: AppEventFrame,
+    project_board: &dyn CompanionProjectBoardSource,
+) -> Option<Event> {
     match frame {
         AppEventFrame::Gap(gap) => Some(
             public_event(
@@ -221,24 +230,52 @@ fn map_app_event(frame: AppEventFrame) -> Option<Event> {
             .id(gap.newest_available.as_sse_id()),
         ),
         AppEventFrame::Event(envelope) => {
-            if !matches!(
-                envelope.event_name.as_str(),
-                "task-changed" | "agent-status-changed"
-            ) {
-                return None;
-            }
-            let task_id = envelope.payload.get("task_id")?.as_str()?;
-            if task_id.is_empty() {
-                return None;
-            }
+            let resources = match envelope.event_name.as_str() {
+                "task-changed"
+                | "agent-status-changed"
+                | "ci-status-changed"
+                | "review-status-changed" => {
+                    let task_id = envelope.payload.get("task_id")?.as_str()?;
+                    let project_id = envelope.payload.get("project_id")?.as_str()?;
+                    if task_id.is_empty()
+                        || project_id.is_empty()
+                        || !project_board.is_project_visible(project_id).ok()?
+                    {
+                        return None;
+                    }
+                    vec![
+                        PublicResource::Attention,
+                        PublicResource::ProjectBoard { id: project_id },
+                        PublicResource::Task { id: task_id },
+                    ]
+                }
+                "project-catalog-changed" => vec![PublicResource::ProjectCatalog],
+                "project-board-changed" => {
+                    let project_id = envelope.payload.get("project_id")?.as_str()?;
+                    if project_id.is_empty()
+                        || !project_board.is_project_visible(project_id).ok()?
+                    {
+                        return None;
+                    }
+                    vec![PublicResource::ProjectBoard { id: project_id }]
+                }
+                "project-changed" => {
+                    let project_id = envelope.payload.get("project_id")?.as_str()?;
+                    let mut resources = vec![PublicResource::ProjectCatalog];
+                    if !project_id.is_empty()
+                        && project_board
+                            .is_project_visible(project_id)
+                            .unwrap_or(false)
+                    {
+                        resources.push(PublicResource::ProjectBoard { id: project_id });
+                    }
+                    resources
+                }
+                _ => return None,
+            };
             let event = public_event(
                 "resources-invalidated",
-                &PublicResourceInvalidation {
-                    resources: [
-                        PublicResource::Attention,
-                        PublicResource::Task { id: task_id },
-                    ],
-                },
+                &PublicResourceInvalidation { resources },
             );
             Some(with_envelope_id(event, &envelope))
         }

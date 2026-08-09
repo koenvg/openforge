@@ -98,7 +98,7 @@ async fn abort_session(
         Err(_) => {}
     }
 
-    {
+    let project_id = {
         let db = crate::db::acquire_db(&state.db);
         let _ = db.update_agent_session(
             &session.id,
@@ -113,9 +113,13 @@ async fn abort_session(
         if policy.update_task_workspace_status {
             let _ = db.update_task_workspace_status(&session.ticket_id, "stopped");
         }
-    }
+        db.get_task(&session.ticket_id)
+            .ok()
+            .flatten()
+            .and_then(|task| task.project_id)
+    };
 
-    publish_task_changed(state, &session.ticket_id);
+    publish_task_changed(state, &session.ticket_id, project_id.as_deref());
     Ok(serde_json::Value::Null)
 }
 

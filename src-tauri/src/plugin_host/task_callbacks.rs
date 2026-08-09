@@ -128,13 +128,16 @@ impl PluginHost {
     pub(super) fn update_task_summary_for_host(&self, params: &Value) -> Result<Value, String> {
         let task_id = required_param_string(params, "taskId")?;
         let summary = required_param_text(params, "summary")?;
-        {
+        let project_id = {
             let db_state = self.database_state_for_host()?;
             let db = crate::db::acquire_db(db_state.as_ref());
             db.update_task_summary(&task_id, &summary)
                 .map_err(|error| format!("failed to update task summary: {error}"))?;
-        }
-        self.publish_task_changed_for_host("updated", &task_id, None)?;
+            db.get_task(&task_id)
+                .map_err(|error| format!("failed to reload task after summary update: {error}"))?
+                .and_then(|task| task.project_id)
+        };
+        self.publish_task_changed_for_host("updated", &task_id, project_id.as_deref())?;
         Ok(Value::Null)
     }
 

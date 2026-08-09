@@ -9,6 +9,7 @@ mod listener_runtime;
 mod live_events;
 mod network;
 mod pairing;
+mod project_board;
 mod rate_limit;
 mod stream_termination;
 mod tailscale;
@@ -96,6 +97,8 @@ mod attention_tests;
 mod live_events_tests;
 #[cfg(test)]
 mod pairing_tests;
+#[cfg(test)]
+mod project_board_tests;
 #[cfg(test)]
 mod task_detail_tests;
 #[cfg(test)]

@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission is the only bootstrap mutation; authenticated status, Task, and event resources do not mutate desktop workflow. Durable device credentials authorize those reads and the separate interactive Agent-terminal WebSocket, whose input runs as the desktop user."
+    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; authenticated resources expose narrow desktop-authoritative Companion capabilities without generic command dispatch or sensitive desktop state."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -128,6 +128,61 @@
             }
           },
           "401": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "getCompanionProjects",
+        "summary": "Read visible Projects in desktop sidebar order",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Visible Project identifiers and names in desktop order",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProjectCatalog" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
+    "/projects/{projectId}/board": {
+      "get": {
+        "operationId": "getCompanionProjectBoard",
+        "summary": "Read one backend-authoritative Project Board snapshot",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative four-lane Board snapshot for the requested visible Project",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProjectBoard" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
           "409": { "$ref": "#/components/responses/CompanionError" },
           "429": { "$ref": "#/components/responses/CompanionError" },
           "503": { "$ref": "#/components/responses/CompanionError" }
@@ -338,7 +393,79 @@
           "activityAt": { "type": "string", "format": "date-time" }
         }
       },
-      "TaskDetail": {
+      "ProjectCatalogItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "name"],
+      "properties": {
+        "projectId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ProjectCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshotAt", "projects"],
+      "properties": {
+        "snapshotAt": { "type": "string", "format": "date-time" },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/components/schemas/ProjectCatalogItem" }
+        }
+      }
+    },
+    "ProjectBoardLane": {
+      "type": "string",
+      "enum": ["focus", "in_flight", "out_of_focus", "backlog"]
+    },
+    "ProjectBoardTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "title", "lane", "state", "reason", "activityAt"],
+      "properties": {
+        "taskId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "lane": { "$ref": "#/components/schemas/ProjectBoardLane" },
+        "state": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "activityAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ProjectBoardCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focus", "inFlight", "outOfFocus", "backlog"],
+      "properties": {
+        "focus": { "type": "integer", "minimum": 0 },
+        "inFlight": { "type": "integer", "minimum": 0 },
+        "outOfFocus": { "type": "integer", "minimum": 0 },
+        "backlog": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ProjectBoardLanes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focus", "inFlight", "outOfFocus", "backlog"],
+      "properties": {
+        "focus": { "type": "array", "items": { "$ref": "#/components/schemas/ProjectBoardTask" } },
+        "inFlight": { "type": "array", "items": { "$ref": "#/components/schemas/ProjectBoardTask" } },
+        "outOfFocus": { "type": "array", "items": { "$ref": "#/components/schemas/ProjectBoardTask" } },
+        "backlog": { "type": "array", "items": { "$ref": "#/components/schemas/ProjectBoardTask" } }
+      }
+    },
+    "ProjectBoard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshotAt", "projectId", "projectName", "counts", "lanes"],
+      "properties": {
+        "snapshotAt": { "type": "string", "format": "date-time" },
+        "projectId": { "type": "string", "minLength": 1 },
+        "projectName": { "type": "string", "minLength": 1 },
+        "counts": { "$ref": "#/components/schemas/ProjectBoardCounts" },
+        "lanes": { "$ref": "#/components/schemas/ProjectBoardLanes" }
+      }
+    },
+    "TaskDetail": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -391,6 +518,23 @@
                   "additionalProperties": false,
                   "required": ["kind"],
                   "properties": { "kind": { "const": "attention" } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind"],
+                  "properties": {
+                    "kind": { "const": "project_catalog" }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "id"],
+                  "properties": {
+                    "kind": { "const": "project_board" },
+                    "id": { "type": "string", "minLength": 1 }
+                  }
                 },
                 {
                   "type": "object",

@@ -62,6 +62,13 @@ abstract interface class CompanionClient {
 
   Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord);
 
+  Future<ProjectCatalog> fetchProjectCatalog(CompanionTrustRecord trustRecord);
+
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  );
+
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,
     String taskId,
@@ -181,6 +188,30 @@ final class GeneratedCompanionClient
         client.getCompanionAttention(credential: trustRecord.deviceCredential),
   )).value;
 
+  @override
+  Future<ProjectCatalog> fetchProjectCatalog(
+    CompanionTrustRecord trustRecord,
+  ) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
+    endpoints: trustRecord.endpointCandidates,
+    certificateSha256: trustRecord.certificateSha256,
+    operation: (client) =>
+        client.getCompanionProjects(credential: trustRecord.deviceCredential),
+  )).value;
+
+  @override
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async => (await _tryEndpoints(
+    transportFactory: _transportFactory,
+    endpoints: trustRecord.endpointCandidates,
+    certificateSha256: trustRecord.certificateSha256,
+    operation: (client) => client.getCompanionProjectBoard(
+      projectId: projectId,
+      credential: trustRecord.deviceCredential,
+    ),
+  )).value;
   @override
   Future<TaskDetail> fetchTaskDetail(
     CompanionTrustRecord trustRecord,

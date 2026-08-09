@@ -60,6 +60,16 @@ final class _FakeClient implements CompanionClient {
       throw UnsupportedError('not used');
 
   @override
+  Future<ProjectCatalog> fetchProjectCatalog(
+    CompanionTrustRecord trustRecord,
+  ) => throw UnsupportedError('not used');
+
+  @override
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => throw UnsupportedError('not used');
+  @override
   Future<CompanionHostConnection> fetchHostStatus(
     CompanionTrustRecord trustRecord,
   ) => throw UnsupportedError('not used');
