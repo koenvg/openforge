@@ -88,6 +88,9 @@ Run these from the repository root. Set `FLUTTER_BIN` when Flutter is not on
 `PATH`.
 
 ```sh
+pnpm mobile:contract:generate  # Regenerate the checked-in Dart client from OpenAPI
+pnpm mobile:contract:check     # Fail on any generated-client drift
+
 ./scripts/mobile-companion pub-get
 ./scripts/mobile-companion format
 ./scripts/mobile-companion format-check
@@ -99,9 +102,15 @@ Run these from the repository root. Set `FLUTTER_BIN` when Flutter is not on
 ./scripts/mobile-companion run
 ```
 
-`check` is the CI entry point: it resolves packages, checks formatting, runs
-static analysis, and executes all focused unit/widget tests. Android and iOS
-builds are separate Flutter invocations and do not require `pnpm install`.
+`docs/contracts/companion-v1.openapi.json` is the sole source for the generated
+models, operations, stable error codes, and embedded source SHA-256. The generator
+owns the formatting of `lib/src/generated/companion_v1_client.dart`; normal Dart
+format commands intentionally cover handwritten sources only.
+
+`check` is the CI entry point: it first verifies the checked-in client byte for byte,
+then resolves packages, checks handwritten formatting, runs static analysis, and
+executes all focused unit/widget tests. Android and iOS builds are separate Flutter
+invocations and do not require `pnpm install`.
 
 ## Architecture boundaries
 
