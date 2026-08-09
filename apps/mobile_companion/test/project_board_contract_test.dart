@@ -126,4 +126,41 @@ void main() {
       );
     },
   );
+
+  test('generated client sends the explicit Task Delete operation', () async {
+    final fixtures =
+        jsonDecode(
+              File(
+                '../../docs/contracts/companion-v1-fixtures.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, Object?>;
+    final transport = _QueueTransport(<CompanionV1HttpResponse>[
+      CompanionV1HttpResponse(
+        statusCode: 200,
+        body: jsonEncode(fixtures['taskDeleteReceipt']),
+      ),
+    ]);
+    final client = CompanionV1Client(
+      baseUrl: Uri.parse('https://192.168.1.20:17424'),
+      transport: transport,
+    );
+
+    final receipt = await client.deleteCompanionBacklogTask(
+      taskId: 'KVG-3030',
+      credential: 'credential',
+    );
+
+    expect(receipt.taskId, 'KVG-3030');
+    expect(receipt.outcome, 'deleted');
+    expect(transport.requests.single.method, 'POST');
+    expect(
+      transport.requests.single.uri.path,
+      '/companion/v1/tasks/KVG-3030/delete',
+    );
+    expect(
+      transport.requests.single.headers['openforge-companion-protocol-version'],
+      '1',
+    );
+  });
 }

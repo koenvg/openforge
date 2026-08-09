@@ -74,6 +74,10 @@ abstract interface class CompanionClient {
     String taskId,
   );
 
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
   Future<CompanionLiveConnection> openLiveEvents(
     CompanionTrustRecord trustRecord, {
     String? lastEventId,
@@ -266,6 +270,35 @@ final class GeneratedCompanionClient
       );
     } finally {
       endpointTransport.close();
+    }
+  }
+
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    if (trustRecord.endpointCandidates.isEmpty) {
+      throw StateError('No Companion endpoint candidates are available.');
+    }
+    final endpoint = _preferEndpoint(
+      trustRecord.endpointCandidates,
+      _preferredEndpoints[trustRecord.hostId],
+    ).first;
+    final transportHandle = _transportFactory(trustRecord.certificateSha256);
+    try {
+      final receipt =
+          await CompanionV1Client(
+            baseUrl: endpoint,
+            transport: transportHandle.transport,
+          ).deleteCompanionBacklogTask(
+            taskId: taskId,
+            credential: trustRecord.deviceCredential,
+          );
+      _preferredEndpoints[trustRecord.hostId] = endpoint;
+      return receipt;
+    } finally {
+      transportHandle.close();
     }
   }
 

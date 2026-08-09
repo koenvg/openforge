@@ -13,6 +13,11 @@ import 'package:openforge_companion/src/task_detail/task_detail_controller.dart'
 
 final class _WidgetClient implements CompanionClient {
   @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
+  @override
   Future<ProjectCatalog> fetchProjectCatalog(
     CompanionTrustRecord trustRecord,
   ) async => ProjectCatalog(
@@ -241,6 +246,47 @@ void main() {
     expect(controller.selectedLane, ProjectBoardLane.backlog);
     expect(find.text('Backlog Task'), findsOneWidget);
   });
+
+  testWidgets('successful Delete refreshes Backlog before closing detail', (
+    tester,
+  ) async {
+    final client = _CountingWidgetClient();
+    final storage = _WidgetStorage();
+    final controller = ProjectBoardController(client: client, storage: storage);
+    await controller.refresh();
+    controller.selectLane(ProjectBoardLane.backlog);
+    await tester.pumpWidget(
+      CompanionApp(
+        initialState: const Connected(hostId: 'host-1', protocolVersion: 1),
+        projectBoardController: controller,
+        taskDetailControllerFactory: (taskId) => TaskDetailController(
+          taskId: taskId,
+          client: client,
+          storage: storage,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final boardCallsBeforeDelete = client.projectBoardCalls;
+
+    await tester.tap(
+      find.bySemanticsLabel(RegExp(r'^Task Backlog Task, Backlog,')),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Task'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(client.deleteCalls, 1);
+    expect(client.projectBoardCalls, boardCallsBeforeDelete + 1);
+    expect(controller.selectedLane, ProjectBoardLane.backlog);
+    expect(find.text('Handoff Notes'), findsNothing);
+    expect(find.text('Backlog Task'), findsNothing);
+    expect(find.text('No Tasks are waiting in the Backlog.'), findsOneWidget);
+  });
 }
 
 final class _EmptyWidgetClient extends _WidgetClient {
@@ -255,7 +301,8 @@ final class _CountingWidgetClient extends _WidgetClient {
   var projectCatalogCalls = 0;
   var projectBoardCalls = 0;
   var taskDetailCalls = 0;
-
+  var deleteCalls = 0;
+  var deleted = false;
   @override
   Future<ProjectCatalog> fetchProjectCatalog(
     CompanionTrustRecord trustRecord,
@@ -270,6 +317,9 @@ final class _CountingWidgetClient extends _WidgetClient {
     String projectId,
   ) async {
     projectBoardCalls += 1;
+    if (deleted) {
+      return _emptyBoard(projectId, projectId == 'P-1' ? 'Alpha' : 'Beta');
+    }
     return super.fetchProjectBoard(trustRecord, projectId);
   }
 
@@ -280,6 +330,16 @@ final class _CountingWidgetClient extends _WidgetClient {
   ) async {
     taskDetailCalls += 1;
     return super.fetchTaskDetail(trustRecord, taskId);
+  }
+
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async {
+    deleteCalls += 1;
+    deleted = true;
+    return TaskDeleteReceipt(taskId: taskId, outcome: 'deleted');
   }
 }
 

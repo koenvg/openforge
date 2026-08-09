@@ -1556,7 +1556,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_eq!(contract["info"]["version"], "1.0.0");
     assert_eq!(contract["servers"][0]["url"], "/companion/v1");
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 9);
+    assert_eq!(paths.len(), 10);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1615,6 +1615,21 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         vec!["post"],
         "Complete must be the only Task mutation on its explicit path",
     );
+    let task_delete_path = paths["/tasks/{taskId}/delete"]
+        .as_object()
+        .expect("Task Delete path item");
+    assert_eq!(
+        task_delete_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["post"],
+        "Task Delete must be the only explicit mutation on its route",
+    );
+    assert_eq!(
+        task_delete_path["post"]["operationId"],
+        "deleteCompanionBacklogTask",
+    );
     let events_path = paths["/events"].as_object().expect("events path item");
     assert_eq!(
         events_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1672,6 +1687,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         &project_board_path["get"],
         &task_detail_path["get"],
         &task_complete_path["post"],
+        &task_delete_path["post"],
         &events_path["get"],
     ] {
         assert!(
@@ -1709,6 +1725,12 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     for status in ["200", "401", "404", "409", "429", "503"] {
         assert!(task_complete_responses.contains_key(status));
     }
+    let task_delete_responses = task_delete_path["post"]["responses"]
+        .as_object()
+        .expect("Task Delete responses");
+    for status in ["200", "400", "401", "404", "409", "429", "503"] {
+        assert!(task_delete_responses.contains_key(status));
+    }
     let event_responses = events_path["get"]["responses"]
         .as_object()
         .expect("event responses");
@@ -1731,6 +1753,10 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     assert_schema_accepts(
         &contract["components"]["schemas"]["TaskCompleteResult"],
         &fixtures["taskCompleteResult"],
+    );
+    assert_schema_accepts(
+        &contract["components"]["schemas"]["TaskDeleteReceipt"],
+        &fixtures["taskDeleteReceipt"],
     );
     let task_detail_properties = task_detail_schema["properties"]
         .as_object()

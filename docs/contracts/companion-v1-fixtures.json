@@ -122,5 +122,9 @@
         }
       ]
     }
+  },
+  "taskDeleteReceipt": {
+    "taskId": "KVG-3030",
+    "outcome": "deleted"
   }
 }

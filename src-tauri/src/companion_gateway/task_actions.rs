@@ -18,12 +18,20 @@ pub(crate) type CompanionTaskActionFuture<'a> = Pin<
 /// so Companion and desktop completion retain one lifecycle owner.
 pub(crate) trait CompanionTaskActionService: Send + Sync {
     fn complete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a>;
+    fn delete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a>;
 }
 
 impl<R: TerminalTaskRuntime> CompanionTaskActionService for TerminalTaskCompletionService<R> {
     fn complete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a> {
         Box::pin(async move {
             self.complete(TerminalTaskCompletionRequest::complete(task_id))
+                .await
+        })
+    }
+
+    fn delete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a> {
+        Box::pin(async move {
+            self.complete(TerminalTaskCompletionRequest::delete(task_id))
                 .await
         })
     }
@@ -36,6 +44,14 @@ pub(crate) struct UnavailableCompanionTaskActionService;
 #[cfg(test)]
 impl CompanionTaskActionService for UnavailableCompanionTaskActionService {
     fn complete<'a>(&'a self, _task_id: &'a str) -> CompanionTaskActionFuture<'a> {
+        Box::pin(async {
+            Err(TerminalTaskCompletionError::Persistence(
+                "Companion Task actions are unavailable".to_string(),
+            ))
+        })
+    }
+
+    fn delete<'a>(&'a self, _task_id: &'a str) -> CompanionTaskActionFuture<'a> {
         Box::pin(async {
             Err(TerminalTaskCompletionError::Persistence(
                 "Companion Task actions are unavailable".to_string(),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -503,6 +505,91 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       expect(presentation.foreground, isFalse);
     },
   );
+
+  testWidgets(
+    'Delete is detail-only for Backlog and cancellation sends no request',
+    (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(
+              _detail(title: 'Backlog cleanup', boardStatus: 'backlog'),
+            ),
+            onRefresh: () async {},
+            onDelete: () async {
+              calls += 1;
+              return TaskDeleteResult.succeeded;
+            },
+          ),
+        ),
+      );
+
+      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(OutlinedButton, 'Delete Task'),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete “Backlog cleanup”?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(calls, 0);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail()),
+            onRefresh: () async {},
+            onDelete: () async => TaskDeleteResult.succeeded,
+          ),
+        ),
+      );
+      expect(find.widgetWithText(OutlinedButton, 'Delete Task'), findsNothing);
+    },
+  );
+
+  testWidgets('confirmed Delete is disabled and announced while pending', (
+    tester,
+  ) async {
+    final pending = Completer<TaskDeleteResult>();
+    var successCallbacks = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(
+            _detail(title: 'Backlog cleanup', boardStatus: 'backlog'),
+          ),
+          onRefresh: () async {},
+          onDelete: () => pending.future,
+          onDeleteSucceeded: () async => successCallbacks += 1,
+        ),
+      ),
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Task'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pump();
+
+    expect(find.text('Deleting…'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Deleting Task Backlog cleanup'),
+      findsOneWidget,
+    );
+    final button = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Deleting…'),
+    );
+    expect(button.onPressed, isNull);
+
+    pending.complete(TaskDeleteResult.succeeded);
+    await tester.pumpAndSettle();
+    expect(successCallbacks, 1);
+  });
 }
 
 final class _TerminalPresentation extends ChangeNotifier

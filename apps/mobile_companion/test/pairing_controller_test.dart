@@ -23,6 +23,11 @@ String get _qrPayload =>
     '"oneTimeSecret":"$_secret"}';
 
 final class _FakeClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   Object? submitError;
   Completer<PairingSubmissionStatus>? submitCompleter;
   Object? pollError;

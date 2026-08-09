@@ -166,6 +166,11 @@ final class MemoryCompanionStorage implements CompanionSecureStorage {
 
 final class DomainCompanionClient implements CompanionClient {
   @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
+  @override
   Future<CompanionHostConnection> fetchHostStatus(
     CompanionTrustRecord trustRecord,
   ) async => CompanionHostConnection(

@@ -56,6 +56,11 @@ final class _FakeConnection implements CompanionLiveConnection {
 }
 
 final class _FakeClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   final connections = <Object>[];
   final cursors = <String?>[];
   var attentionCalls = 0;

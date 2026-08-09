@@ -13,10 +13,26 @@ final class TaskDetailLoading extends TaskDetailViewState {
   const TaskDetailLoading();
 }
 
+enum TaskDeletePhase { idle, pending, failed, uncertain }
+
+enum TaskDeleteResult {
+  succeeded,
+  failed,
+  uncertain,
+  authorizationRequired,
+  ignored,
+}
+
 final class TaskDetailLoaded extends TaskDetailViewState {
-  const TaskDetailLoaded(this.detail);
+  const TaskDetailLoaded(
+    this.detail, {
+    this.deletePhase = TaskDeletePhase.idle,
+    this.deleteMessage,
+  });
 
   final TaskDetail detail;
+  final TaskDeletePhase deletePhase;
+  final String? deleteMessage;
 }
 
 final class TaskDetailNotFound extends TaskDetailViewState {
@@ -77,6 +93,8 @@ final class TaskDetailController extends ChangeNotifier {
   String? _completeError;
   String? get completeError => _completeError;
 
+  var _deletePending = false;
+
   bool get completeAvailable =>
       _actionClient != null &&
       switch (_state) {
@@ -89,6 +107,7 @@ final class TaskDetailController extends ChangeNotifier {
   }
 
   Future<CompanionRefreshOutcome> refreshWithOutcome() async {
+    if (_deletePending) return CompanionRefreshOutcome.superseded;
     final generation = ++_generation;
     if (!_completePending) _completeError = null;
     _setState(const TaskDetailLoading());
@@ -176,6 +195,98 @@ final class TaskDetailController extends ChangeNotifier {
         _completePending = false;
         notifyListeners();
       }
+    }
+  }
+
+  Future<TaskDeleteResult> deleteBacklogTask() async {
+    if (_deletePending || _disposed) return TaskDeleteResult.ignored;
+    final current = _state;
+    if (current is! TaskDetailLoaded ||
+        current.detail.boardStatus != 'backlog') {
+      return TaskDeleteResult.ignored;
+    }
+
+    _deletePending = true;
+    _setState(
+      TaskDetailLoaded(current.detail, deletePhase: TaskDeletePhase.pending),
+    );
+    CompanionTrustRecord? trustRecord;
+    try {
+      trustRecord = await _storage.load();
+      if (_disposed) return TaskDeleteResult.ignored;
+      if (trustRecord == null) {
+        _deletePending = false;
+        _authorizationLost();
+        return TaskDeleteResult.authorizationRequired;
+      }
+      final receipt = await _client.deleteBacklogTask(trustRecord, taskId);
+      if (_disposed) return TaskDeleteResult.ignored;
+      if (receipt.taskId != taskId || receipt.outcome != 'deleted') {
+        throw const FormatException(
+          'Task Delete receipt did not match the request.',
+        );
+      }
+      return TaskDeleteResult.succeeded;
+    } on CompanionV1Exception catch (error) {
+      if (_disposed) return TaskDeleteResult.ignored;
+      _deletePending = false;
+      if (error.code == 'revoked' || error.code == 'unauthenticated') {
+        _authorizationLost();
+        return TaskDeleteResult.authorizationRequired;
+      }
+      final message = switch (error.code) {
+        'invalid_task_state' =>
+          'Task state changed on the desktop. Current state was refreshed before another Delete can be considered.',
+        'operation_in_progress' =>
+          'Another Task operation is in progress. Current state was refreshed; Delete was not retried.',
+        'not_found' =>
+          'Task is no longer available. Current state was refreshed; Delete was not retried.',
+        _ =>
+          'Delete could not be completed. Current Task state was refreshed. Try again when ready.',
+      };
+      await _refreshAfterDeleteOutcome(
+        trustRecord,
+        current.detail,
+        TaskDeletePhase.failed,
+        message,
+      );
+      return TaskDeleteResult.failed;
+    } on Object {
+      if (_disposed) return TaskDeleteResult.ignored;
+      _deletePending = false;
+      await _refreshAfterDeleteOutcome(
+        trustRecord,
+        current.detail,
+        TaskDeletePhase.uncertain,
+        'The Delete outcome could not be confirmed. Current Task state was refreshed and Delete was not retried.',
+      );
+      return TaskDeleteResult.uncertain;
+    }
+  }
+
+  Future<void> _refreshAfterDeleteOutcome(
+    CompanionTrustRecord? trustRecord,
+    TaskDetail fallback,
+    TaskDeletePhase phase,
+    String message,
+  ) async {
+    var detail = fallback;
+    if (trustRecord != null) {
+      try {
+        detail = await _client.fetchTaskDetail(trustRecord, taskId);
+      } on CompanionV1Exception catch (error) {
+        if (error.code == 'revoked' || error.code == 'unauthenticated') {
+          _authorizationLost();
+          return;
+        }
+      } on Object {
+        // Retain the last safe in-memory detail when the current read also fails.
+      }
+    }
+    if (!_disposed) {
+      _setState(
+        TaskDetailLoaded(detail, deletePhase: phase, deleteMessage: message),
+      );
     }
   }
 

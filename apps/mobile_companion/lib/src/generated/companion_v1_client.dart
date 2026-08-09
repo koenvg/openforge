@@ -4,7 +4,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '94664b3167acb1906a0d352200bd6bffc259bda8d4cb3b2b0057aceea9bd5b1a';
+    '960b7184c8b8869922b9aa162504342e10342fe8bf837302b24bd17d26f935be';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -598,6 +598,23 @@ final class TaskCompleteResult {
   final bool cleanupScheduled;
 }
 
+final class TaskDeleteReceipt {
+  const TaskDeleteReceipt({required this.taskId, required this.outcome});
+
+  factory TaskDeleteReceipt.fromJson(Map<String, Object?> json) {
+    json.expectOnly(const <String>{'taskId', 'outcome'});
+    final taskId = json.string('taskId');
+    final outcome = json.string('outcome');
+    if (taskId.isEmpty || outcome != 'deleted') {
+      throw const FormatException('Invalid Task Delete receipt.');
+    }
+    return TaskDeleteReceipt(taskId: taskId, outcome: outcome);
+  }
+
+  final String taskId;
+  final String outcome;
+}
+
 sealed class CompanionResourceIdentityData {
   const CompanionResourceIdentityData();
 
@@ -854,6 +871,23 @@ final class CompanionV1Client {
     return TaskCompleteResult.fromJson(
       _successJson(response, const <int>{200}),
     );
+  }
+
+  Future<TaskDeleteReceipt> deleteCompanionBacklogTask({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve(
+        '/companion/v1/tasks/${Uri.encodeComponent(taskId)}/delete',
+      ),
+      headers: <String, String>{
+        'authorization': 'Bearer $credential',
+        companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return TaskDeleteReceipt.fromJson(_successJson(response, const <int>{200}));
   }
 
   CompanionV1StreamRequest streamCompanionEvents({

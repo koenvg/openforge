@@ -207,6 +207,19 @@ pub(crate) struct CompanionTaskCompleteResponse {
     pub(crate) board_status: String,
     pub(crate) cleanup_scheduled: bool,
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CompanionTaskDeleteOutcome {
+    Deleted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskDeleteResponse {
+    pub(crate) task_id: String,
+    pub(crate) outcome: CompanionTaskDeleteOutcome,
+}
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(
         &self,

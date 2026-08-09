@@ -561,6 +561,11 @@ void main() {
 }
 
 final class _SuccessfulTailscaleClient implements CompanionClient {
+  @override
+  Future<TaskDeleteReceipt> deleteBacklogTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => throw UnsupportedError('not used');
   _SuccessfulTailscaleClient(this.endpoint);
 
   final Uri endpoint;
