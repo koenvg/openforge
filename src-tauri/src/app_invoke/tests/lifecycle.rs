@@ -398,6 +398,135 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
 }
 
 #[tokio::test]
+async fn start_implementation_uses_authoritative_project_path_and_publishes_canonical_event() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_project_temp, project_repo_dir) = provider_repo_dir();
+    let (_spoofed_temp, spoofed_repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_authoritative_project_path");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Authoritative Project",
+                project_repo_dir.to_str().expect("utf8 project repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Start from authoritative project state",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
+        )
+        .expect("create task")
+        .id
+    };
+
+    let response = invoke_ok(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": spoofed_repo_dir.to_string_lossy() }),
+    )
+    .await;
+
+    assert_eq!(
+        response["workspace_path"],
+        project_repo_dir.to_string_lossy().as_ref()
+    );
+    let log = wait_for_provider_log_record(
+        &sandbox.log_path,
+        "pi",
+        "Start from authoritative project state",
+    )
+    .await;
+    let canonical_project_repo =
+        fs::canonicalize(&project_repo_dir).expect("project repo should canonicalize");
+    assert!(
+        log.contains(&format!("cwd={}", canonical_project_repo.display())),
+        "provider must launch from the Project path saved in the database, got: {log}"
+    );
+    let event = tokio::time::timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("task event should arrive")
+        .expect("task event should be readable");
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["action"], "updated");
+    assert_eq!(event.payload["task_id"], task_id);
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn start_implementation_rejects_stale_non_backlog_task_state() {
+    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let sandbox = &*PROVIDER_TEST_SANDBOX;
+    sandbox.clear_log();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
+    let (state, path) = test_state("app_invoke_start_rejects_stale_state");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Stale State Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Do not start stale state",
+            "doing",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
+        )
+        .expect("create task")
+        .id
+    };
+
+    let error = invoke(
+        &state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await
+    .expect_err("only backlog Tasks may start an Implementation Run");
+
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    assert!(error.1.contains("backlog"), "got: {}", error.1);
+    assert!(
+        fs::read_to_string(&sandbox.log_path)
+            .ok()
+            .is_none_or(|log| !log.contains("Do not start stale state")),
+        "provider must not launch for stale Task state"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn start_implementation_injects_plugin_configured_handoff_workflow() {
     let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
@@ -1693,85 +1822,4 @@ async fn delete_task_rejects_duplicate_delete_while_cleanup_in_flight() {
     .await;
 
     let _ = std::fs::remove_file(db_path);
-}
-
-#[tokio::test]
-async fn rollback_failed_start_workspace_removes_fresh_worktree_and_record() {
-    let (state, path) = test_state("app_invoke_rollback_failed_start");
-    let (_temp, repo_dir) = provider_repo_dir();
-    init_committed_repo(&repo_dir);
-
-    // Mirror what prepare_start_workspace produces for a default (fresh-branch)
-    // start: a real git worktree on a fresh openforge/<task> branch plus the
-    // matching worktrees DB record.
-    let (task_id, branch, worktree_path) = {
-        let db = crate::db::acquire_db(&state.db);
-        let project = db
-            .create_project(
-                "Rollback Project",
-                repo_dir.to_str().expect("utf8 repo path"),
-            )
-            .expect("create project");
-        let task = db
-            .create_task("Rollback task", "backlog", Some(&project.id), None, None)
-            .expect("create task");
-        let branch = crate::git_worktree::task_branch_name(&task.id);
-        let worktree_path = repo_dir
-            .parent()
-            .expect("repo parent")
-            .join(format!("wt-{}", task.id));
-        assert_git_success(
-            &repo_dir,
-            &[
-                "worktree",
-                "add",
-                "-b",
-                branch.as_str(),
-                worktree_path.to_str().expect("utf8 worktree path"),
-                "HEAD",
-            ],
-        );
-        db.create_worktree_record(
-            &task.id,
-            &project.id,
-            repo_dir.to_str().expect("utf8 repo path"),
-            worktree_path.to_str().expect("utf8 worktree path"),
-            &branch,
-        )
-        .expect("create worktree record");
-        (task.id, branch, worktree_path)
-    };
-    assert!(
-        worktree_path.exists(),
-        "worktree should exist before rollback"
-    );
-
-    let workspace = crate::app_invoke::lifecycle::PreparedWorkspace {
-        working_dir: worktree_path.clone(),
-        kind: "git_worktree",
-        branch_name: Some(branch),
-    };
-    crate::app_invoke::lifecycle::rollback_failed_start_workspace(
-        &state,
-        &task_id,
-        repo_dir.to_str().expect("utf8 repo path"),
-        &workspace,
-        false,
-    )
-    .await;
-
-    let db = crate::db::acquire_db(&state.db);
-    assert!(
-        db.get_worktree_for_task(&task_id)
-            .expect("query worktree")
-            .is_none(),
-        "worktree record should be rolled back after a failed start"
-    );
-    drop(db);
-    assert!(
-        !worktree_path.exists(),
-        "physical worktree should be removed after a failed start"
-    );
-
-    let _ = std::fs::remove_file(path);
 }

@@ -19,6 +19,7 @@ mod self_review;
 mod settings_reset;
 mod task_attention;
 mod task_config;
+mod task_start;
 mod task_workspaces;
 mod tasks;
 mod worktrees;
@@ -38,6 +39,7 @@ pub(crate) use pull_request_readiness::{
 };
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
+pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]
 pub use tasks::TaskWorktreeOptions;

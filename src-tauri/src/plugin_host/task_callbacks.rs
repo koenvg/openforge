@@ -243,28 +243,9 @@ impl PluginHost {
         params: &Value,
     ) -> Result<Value, String> {
         let task_id = required_param_string(params, "taskId")?;
-        let repo_path = {
-            let db_state = self.database_state_for_host()?;
-            let db = crate::db::acquire_db(db_state.as_ref());
-            let task = db
-                .get_task(&task_id)
-                .map_err(|error| format!("failed to get task: {error}"))?
-                .ok_or_else(|| format!("task not found: {task_id}"))?;
-            let project_id = task.project_id.ok_or_else(|| {
-                format!("cannot start task {task_id}: task is not associated with a project")
-            })?;
-            let project = db
-                .get_project(&project_id)
-                .map_err(|error| format!("failed to get project: {error}"))?
-                .ok_or_else(|| {
-                    format!("cannot start task {task_id}: project {project_id} not found")
-                })?;
-            project.path
-        };
-
         self.invoke_app_task_command_for_host(
             "start_implementation",
-            json!({ "taskId": task_id, "repoPath": repo_path }),
+            json!({ "taskId": task_id, "repoPath": "" }),
         )
         .await
     }

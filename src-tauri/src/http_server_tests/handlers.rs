@@ -610,6 +610,46 @@ async fn test_hard_delete_task_handler_rejects_terminal_completion_claim() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn test_hard_delete_task_handler_conflicts_with_in_progress_start() {
+    let (state, path) = test_state("http_hard_delete_conflicts_with_start");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        db.create_task("Task to keep", "backlog", None, None, None)
+            .expect("create task")
+            .id
+    };
+    let _start_claim = state
+        .task_claims
+        .try_claim(&task_id, TaskOperation::StartImplementation)
+        .expect("Start claim should be acquired");
+
+    let response = create_router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/hard_delete_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "task_id": task_id }).to_string(),
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task(&task_id)
+        .expect("get task")
+        .is_some());
+
+    let _ = std::fs::remove_file(path);
+}
 #[tokio::test]
 async fn test_delete_task_handler_rejects_non_backlog_task() {
     let (state, path) = test_state("http_delete_task_handler_non_backlog_task");

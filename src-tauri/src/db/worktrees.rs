@@ -59,6 +59,28 @@ impl super::Database {
         )
     }
 
+    /// Restore a worktree record replaced during a failed Task Start attempt.
+    pub fn restore_worktree_record(&self, record: &WorktreeRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE worktrees
+             SET project_id = ?1, repo_path = ?2, worktree_path = ?3,
+                 branch_name = ?4, status = ?5, created_at = ?6, updated_at = ?7
+             WHERE task_id = ?8",
+            params![
+                record.project_id,
+                record.repo_path,
+                record.worktree_path,
+                record.branch_name,
+                record.status,
+                record.created_at,
+                record.updated_at,
+                record.task_id,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Get worktree for a task
     pub fn get_worktree_for_task(&self, task_id: &str) -> Result<Option<WorktreeRow>> {
         let conn = self.conn.lock().unwrap();

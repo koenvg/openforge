@@ -104,6 +104,33 @@ pub(super) async fn handle_app_core_task_project_command(
         "delete_project" => {
             let id = payload_string(&request.payload, "id")?;
             let db = crate::db::acquire_db(&state.db);
+            let task_ids = db
+                .get_tasks_for_project(&id)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to load project tasks: {e}"),
+                    )
+                })?
+                .into_iter()
+                .map(|task| task.id)
+                .collect::<Vec<_>>();
+            let _task_claims = task_ids
+                .iter()
+                .map(|task_id| {
+                    state
+                        .task_claims
+                        .try_claim(task_id, TaskOperation::HardDelete)
+                        .ok_or_else(|| {
+                            (
+                                StatusCode::CONFLICT,
+                                format!(
+                                    "Task {task_id} already has a lifecycle operation in progress"
+                                ),
+                            )
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             db.delete_project(&id).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,

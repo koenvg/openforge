@@ -380,21 +380,40 @@ async fn collect_commit_summaries(
     Ok((summaries, truncated))
 }
 
-/// Read-only pre-flight run at Start time for an existing-branch task. Fetches
-/// origin best-effort, then classifies `branch_ref`'s local branch against
-/// `origin/<branch>` and reports the ahead/behind commit lists WITHOUT creating a
-/// worktree or mutating any ref. `branch_ref` may be a local short name (`foo`)
-/// or a remote-tracking ref (`origin/foo`); both resolve to the same short name.
+/// Desktop preflight for an existing-branch Task. Refreshes origin best-effort,
+/// then classifies the saved branch against its remote-tracking ref.
 pub async fn inspect_existing_branch(
     repo_path: &Path,
     branch_ref: &str,
 ) -> Result<ExistingBranchPlan, GitWorktreeError> {
+    inspect_existing_branch_inner(repo_path, branch_ref, true).await
+}
+
+/// Side-effect-free existing-branch preflight for unattended Task Start.
+///
+/// Uses only the repository's current local and remote-tracking refs. It does not
+/// fetch or create a worktree, so callers may safely return a desktop-action-required
+/// outcome without changing repository state.
+pub async fn inspect_existing_branch_cached(
+    repo_path: &Path,
+    branch_ref: &str,
+) -> Result<ExistingBranchPlan, GitWorktreeError> {
+    inspect_existing_branch_inner(repo_path, branch_ref, false).await
+}
+
+async fn inspect_existing_branch_inner(
+    repo_path: &Path,
+    branch_ref: &str,
+    refresh_origin: bool,
+) -> Result<ExistingBranchPlan, GitWorktreeError> {
     let branch_ref = normalize_branch_ref(branch_ref)?;
     validate_repository_path_access(repo_path)?;
 
-    // Best-effort fetch: swallows failures. Track reachability so the UI can warn
-    // that the comparison may be stale when origin was unreachable.
-    let remote_reachable = fetch_origin_succeeded(repo_path).await;
+    let remote_reachable = if refresh_origin {
+        fetch_origin_succeeded(repo_path).await
+    } else {
+        false
+    };
 
     // Resolve to the short local branch name. Only strip the `origin/` prefix —
     // a bare `feature/foo` local name (or a non-origin remote) is left intact so
