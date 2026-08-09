@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -53,6 +54,29 @@ final class _MemorySecureStorage extends FlutterSecureStorage {
   }
 }
 
+final class _BlockingSelectionSecureStorage extends _MemorySecureStorage {
+  final selectionWrite = Completer<void>();
+  var selectionWriteStarted = false;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (key == 'companion.selected_project.v1') {
+      selectionWriteStarted = true;
+      await selectionWrite.future;
+    }
+    await super.write(key: key, value: value);
+  }
+}
+
 void main() {
   test(
     'round-trips host trust and device credentials as one secure record',
@@ -93,6 +117,52 @@ void main() {
     },
   );
 
+  test('persists only the host-scoped Selected Project identifier', () async {
+    final backend = _MemorySecureStorage();
+    final storage = PlatformCompanionSecureStorage(storage: backend);
+    await storage.save(
+      CompanionTrustRecord(
+        hostId: 'host-1',
+        certificateSha256: 'AA:BB:CC',
+        endpointCandidates: <Uri>[Uri.parse('https://openforge.local')],
+        deviceId: 'device-1',
+        deviceCredential: 'secret-credential',
+      ),
+    );
+    await storage.saveSelectedProject('host-1', 'P-2');
+
+    expect(await storage.loadSelectedProject('host-1'), 'P-2');
+    expect(await storage.loadSelectedProject('host-2'), isNull);
+    final selection = jsonDecode(
+      backend.values['companion.selected_project.v1']!,
+    );
+    expect(selection, <String, Object?>{
+      'hostId': 'host-1',
+      'projectId': 'P-2',
+    });
+  });
+
+  test(
+    'malformed Selected Project storage is cleared and treated as absent',
+    () async {
+      final backend = _MemorySecureStorage()
+        ..values['companion.selected_project.v1'] = '{not-json';
+      final storage = PlatformCompanionSecureStorage(storage: backend);
+
+      expect(await storage.loadSelectedProject('host-1'), isNull);
+      expect(backend.values, isEmpty);
+    },
+  );
+
+  test('clear removes a schema-invalid Selected Project record', () async {
+    final backend = _MemorySecureStorage()
+      ..values['companion.selected_project.v1'] = '{"hostId":1}';
+    final storage = PlatformCompanionSecureStorage(storage: backend);
+
+    await storage.clearSelectedProject('host-1');
+
+    expect(backend.values, isEmpty);
+  });
   test('secure persistence schema excludes all Companion domain snapshots', () {
     final persisted = CompanionTrustRecord(
       hostId: 'host-1',
@@ -179,12 +249,43 @@ void main() {
         deviceCredential: 'secret-credential',
       ),
     );
-
+    await storage.saveSelectedProject('host-1', 'P-2');
     await storage.forget();
+    await storage.saveSelectedProject('host-1', 'P-stale');
 
     expect(await storage.load(), isNull);
+    expect(await storage.loadSelectedProject('host-1'), isNull);
+    expect(backend.values, isEmpty);
   });
 
+  test(
+    'forget remains authoritative over an in-flight selection write',
+    () async {
+      final backend = _BlockingSelectionSecureStorage();
+      final storage = PlatformCompanionSecureStorage(storage: backend);
+      await storage.save(
+        CompanionTrustRecord(
+          hostId: 'host-1',
+          certificateSha256: 'AA:BB:CC',
+          endpointCandidates: <Uri>[Uri.parse('https://openforge.local')],
+          deviceId: 'device-1',
+          deviceCredential: 'secret-credential',
+        ),
+      );
+
+      final selectionWrite = storage.saveSelectedProject('host-1', 'P-2');
+      while (!backend.selectionWriteStarted) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final forgetting = storage.forget();
+      backend.selectionWrite.complete();
+      await Future.wait(<Future<void>>[selectionWrite, forgetting]);
+
+      expect(await storage.load(), isNull);
+      expect(await storage.loadSelectedProject('host-1'), isNull);
+      expect(backend.values, isEmpty);
+    },
+  );
   test('preferred endpoint history is deduplicated and bounded', () {
     final record = CompanionTrustRecord(
       hostId: 'host-1',

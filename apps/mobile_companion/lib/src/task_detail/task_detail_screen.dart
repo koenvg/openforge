@@ -11,11 +11,13 @@ class TaskDetailScreen extends StatefulWidget {
   const TaskDetailScreen({
     required this.controller,
     this.terminalSurface,
+    this.onRefresh,
     super.key,
   });
 
   final TaskDetailController controller;
   final AgentTerminalSurface? terminalSurface;
+  final Future<void> Function()? onRefresh;
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -46,10 +48,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (mounted) setState(() => _state = widget.controller.state);
   }
 
+  Future<void> _refresh() =>
+      widget.onRefresh?.call() ?? widget.controller.refresh();
+
   @override
   Widget build(BuildContext context) => TaskDetailView(
     state: _state,
-    onRefresh: widget.controller.refresh,
+    onRefresh: _refresh,
     terminalSurface: widget.terminalSurface,
   );
 }

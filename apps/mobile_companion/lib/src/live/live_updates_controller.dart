@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../attention/attention_controller.dart';
+import '../project_board/project_board_controller.dart';
 import '../client/companion_client.dart';
 import '../client/companion_refresh_outcome.dart';
 import '../client/pinned_companion_transport.dart';
@@ -14,7 +15,8 @@ final class LiveUpdatesController {
   LiveUpdatesController({
     required this._client,
     required this._storage,
-    required this._attention,
+    this._projectBoard,
+    this._attention,
     this.maxReconnectAttempts = 5,
     this.reconnectBaseDelay = const Duration(milliseconds: 500),
     this.reconnectMaxDelay = const Duration(seconds: 8),
@@ -40,6 +42,7 @@ final class LiveUpdatesController {
 
   final CompanionClient _client;
   final CompanionSecureStorage _storage;
+  ProjectBoardController? _projectBoard;
   AttentionController? _attention;
   final LiveReconnectDelay _delay;
   final FutureOr<void> Function()? onProjectCatalogInvalidated;
@@ -71,6 +74,10 @@ final class LiveUpdatesController {
     _callbacks.onAuthorizationLost = onAuthorizationLost;
     _callbacks.onCertificateMismatch = onCertificateMismatch;
     _callbacks.onIncompatible = onIncompatible;
+  }
+
+  void setProjectBoardController(ProjectBoardController? controller) {
+    _projectBoard = controller;
   }
 
   void setAttentionController(AttentionController? controller) {
@@ -219,6 +226,16 @@ final class LiveUpdatesController {
     final catalogInvalidated = event.resources.any(
       (resource) => resource.kind == CompanionResourceKind.projectCatalog,
     );
+    final projectBoard = _projectBoard;
+    final selectedBoardInvalidated =
+        projectBoard != null &&
+        event.resources.any(
+          (resource) =>
+              resource.kind == CompanionResourceKind.projectBoard &&
+              resource.id != null &&
+              projectBoard.isSelectedProject(resource.id!),
+        );
+
     for (final resource in event.resources) {
       switch (resource.kind) {
         case CompanionResourceKind.projectCatalog:
@@ -235,6 +252,15 @@ final class LiveUpdatesController {
           break;
       }
     }
+
+    if (projectBoard != null) {
+      if (catalogInvalidated) {
+        refreshes.add(projectBoard.refreshWithOutcome());
+      } else if (selectedBoardInvalidated) {
+        refreshes.add(projectBoard.refreshSelectedBoardWithOutcome());
+      }
+    }
+
     final attention = _attention;
     if (attention != null &&
         (catalogInvalidated ||
@@ -243,9 +269,11 @@ final class LiveUpdatesController {
             ))) {
       refreshes.add(attention.refreshWithOutcome());
     }
+
     final openTask = _openTask;
     if (openTask != null &&
         (catalogInvalidated ||
+            selectedBoardInvalidated ||
             event.resources.any(
               (resource) =>
                   resource.kind == CompanionResourceKind.task &&
@@ -259,6 +287,10 @@ final class LiveUpdatesController {
   Future<void> _refreshViews({required bool clearFirst}) async {
     if (clearFirst) _clearViews();
     final refreshes = <Future<CompanionRefreshOutcome>>[];
+    final projectBoard = _projectBoard;
+    if (projectBoard != null) {
+      refreshes.add(projectBoard.refreshWithOutcome());
+    }
     final attention = _attention;
     if (attention != null) refreshes.add(attention.refreshWithOutcome());
     final openTask = _openTask;
@@ -279,6 +311,7 @@ final class LiveUpdatesController {
   }
 
   void _clearViews() {
+    _projectBoard?.clear();
     _attention?.clear();
     _openTask?.clear();
   }
