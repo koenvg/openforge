@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -7,6 +9,8 @@ import '../storage/companion_secure_storage.dart';
 import 'companion_terminal_client.dart';
 import 'companion_terminal_protocol.dart';
 import 'openforge_terminal.dart';
+
+const _maximumReplayBytes = 256 * 1024;
 
 Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
 
@@ -27,7 +31,9 @@ final class AgentTerminalReady extends AgentTerminalState {
 }
 
 final class AgentTerminalReconnecting extends AgentTerminalState {
-  const AgentTerminalReconnecting();
+  const AgentTerminalReconnecting({this.retryAvailable = false});
+
+  final bool retryAvailable;
 }
 
 final class AgentTerminalExited extends AgentTerminalState {
@@ -43,6 +49,7 @@ abstract interface class AgentTerminalPresentation implements Listenable {
 
   void setForeground(bool foreground);
 
+  void retryNow();
   Future<void> closeForTaskCompletion();
 }
 
@@ -115,6 +122,9 @@ final class AgentTerminalController extends ChangeNotifier
   var _authorizationFailed = false;
   var _handlingDisconnect = false;
   var _reconnectAttempts = 0;
+  BytesBuilder? _replayOutput;
+  var _replaceTerminalOnReady = false;
+  Completer<void>? _retryWait;
   Stopwatch? _readyUptime;
 
   @override
@@ -148,6 +158,17 @@ final class AgentTerminalController extends ChangeNotifier
       return;
     }
     _reconcile();
+  }
+
+  @override
+  void retryNow() {
+    final reconnecting = _state;
+    if (reconnecting is! AgentTerminalReconnecting ||
+        !reconnecting.retryAvailable) {
+      return;
+    }
+    final retryWait = _retryWait;
+    if (retryWait != null && !retryWait.isCompleted) retryWait.complete();
   }
 
   @override
@@ -204,6 +225,8 @@ final class AgentTerminalController extends ChangeNotifier
     }
     var reconcileAfterRejectedChannel = false;
     try {
+      await _terminal.layoutReady;
+      if (!_mayCompleteAttach(generation)) return;
       final trustRecord = await _storage.load();
       if (!_mayCompleteAttach(generation)) {
         reconcileAfterRejectedChannel = true;
@@ -226,6 +249,8 @@ final class AgentTerminalController extends ChangeNotifier
         return;
       }
       _channel = channel;
+      _replayOutput = BytesBuilder(copy: false);
+      _replaceTerminalOnReady = _state is AgentTerminalReconnecting;
       _handlingDisconnect = false;
       _subscription = channel.frames.listen(
         (frame) => _handleFrame(generation, frame),
@@ -250,8 +275,24 @@ final class AgentTerminalController extends ChangeNotifier
   void _handleFrame(int generation, Object frame) {
     if (!_isCurrent(generation)) return;
     if (frame is List<int>) {
+      final bytes = Uint8List.fromList(frame);
+      final replayOutput = _replayOutput;
+      if (replayOutput != null) {
+        if (replayOutput.length + bytes.length > _maximumReplayBytes) {
+          _protocolFailure(generation);
+          return;
+        }
+        try {
+          utf8.decode(bytes, allowMalformed: false);
+        } on FormatException {
+          _protocolFailure(generation);
+          return;
+        }
+        replayOutput.add(bytes);
+        return;
+      }
       try {
-        _terminal.writeOutput(Uint8List.fromList(frame));
+        _terminal.writeOutput(bytes);
       } on FormatException {
         _protocolFailure(generation);
       }
@@ -270,12 +311,12 @@ final class AgentTerminalController extends ChangeNotifier
     }
     switch (control) {
       case ReadyTerminalControl():
-        if (!_flushTerminalOutput(generation)) return;
+        if (!_commitReplay(generation)) return;
         _clearReadyUptime();
         _readyUptime = Stopwatch()..start();
         _setState(const AgentTerminalReady());
       case ExitedTerminalControl():
-        if (!_flushTerminalOutput(generation)) return;
+        if (!_commitReplay(generation)) return;
         _terminalExited = true;
         _setState(const AgentTerminalExited());
         unawaited(_closeCurrentChannel());
@@ -351,17 +392,22 @@ final class AgentTerminalController extends ChangeNotifier
   }
 
   Future<void> _reconnect(int generation) async {
-    _terminal.clear();
     if (!_foreground || !_visible || !_available) {
       _setState(const AgentTerminalNoActiveSession());
       _handlingDisconnect = false;
       await _closeCurrentChannel();
       return;
     }
-    _setState(const AgentTerminalReconnecting());
+    final delay = _nextReconnectDelay();
+    _setState(
+      AgentTerminalReconnecting(retryAvailable: _reconnectAttempts >= 3),
+    );
     await _closeCurrentChannel();
     if (!_isCurrent(generation)) return;
-    await _delay(_nextReconnectDelay());
+    final retryWait = Completer<void>();
+    _retryWait = retryWait;
+    await Future.any<void>(<Future<void>>[_delay(delay), retryWait.future]);
+    if (identical(_retryWait, retryWait)) _retryWait = null;
     if (!_isCurrent(generation)) return;
     _handlingDisconnect = false;
     _reconcile();
@@ -369,6 +415,7 @@ final class AgentTerminalController extends ChangeNotifier
 
   Future<void> _closeCurrentChannel() async {
     _clearReadyUptime();
+    _discardReplay();
     final subscription = _subscription;
     final channel = _channel;
     _subscription = null;
@@ -387,6 +434,29 @@ final class AgentTerminalController extends ChangeNotifier
     if (clear) _terminal.clear();
     if (!_disposed) _setState(const AgentTerminalNoActiveSession());
     await _closeCurrentChannel();
+  }
+
+  bool _commitReplay(int generation) {
+    final replayOutput = _replayOutput;
+    if (replayOutput == null) return _flushTerminalOutput(generation);
+    _replayOutput = null;
+    final replaceTerminal = _replaceTerminalOnReady;
+    _replaceTerminalOnReady = false;
+    try {
+      if (replaceTerminal) _terminal.clear();
+      final bytes = replayOutput.takeBytes();
+      if (bytes.isNotEmpty) _terminal.writeOutput(bytes);
+      _terminal.flushOutput();
+      return true;
+    } on FormatException {
+      _protocolFailure(generation);
+      return false;
+    }
+  }
+
+  void _discardReplay() {
+    _replayOutput = null;
+    _replaceTerminalOnReady = false;
   }
 
   void _handleTerminalOutputError(FormatException _) {

@@ -74,6 +74,7 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
     );
     terminal.onResize = (columns, rows, _, _) {
       if (columns > 0 && rows > 0) {
+        if (!_layoutReady.isCompleted) _layoutReady.complete();
         _onResize?.call(TerminalDimensions(columns: columns, rows: rows));
       }
     };
@@ -82,6 +83,7 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
 
   final void Function(Uint8List)? _onInput;
   final void Function(TerminalDimensions)? _onResize;
+  final _layoutReady = Completer<void>();
   final ValueNotifier<bool> controlArmed = ValueNotifier<bool>(false);
   late final xterm.Terminal terminal;
   late IncrementalTerminalUtf8Decoder _decoder;
@@ -89,6 +91,8 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
   Timer? _outputFlushTimer;
   void Function(FormatException error)? _outputErrorHandler;
 
+  @override
+  Future<void> get layoutReady => _layoutReady.future;
   @override
   TerminalDimensions get dimensions => TerminalDimensions(
     columns: terminal.viewWidth,
@@ -141,8 +145,11 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
     }
   }
 
-  void paste(String text) => terminal.paste(text);
+  void resizeViewport(TerminalDimensions dimensions) {
+    terminal.resize(dimensions.columns, dimensions.rows);
+  }
 
+  void paste(String text) => terminal.paste(text);
   void sendEscape() => terminal.keyInput(xterm.TerminalKey.escape);
 
   void sendTab() => terminal.keyInput(xterm.TerminalKey.tab);
@@ -207,7 +214,7 @@ final class XtermOpenForgeTerminal implements OpenForgeTerminal {
   }
 }
 
-class OpenForgeTerminalView extends StatelessWidget {
+class OpenForgeTerminalView extends StatefulWidget {
   const OpenForgeTerminalView({
     required this.adapter,
     required this.inputState,
@@ -220,46 +227,132 @@ class OpenForgeTerminalView extends StatelessWidget {
   final bool Function() isInputEnabled;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: inputState,
-    builder: (context, _) {
-      final enabled = isInputEnabled();
-      final brightness = Theme.of(context).brightness;
-      return Column(
-        children: <Widget>[
-          Expanded(
-            child: Semantics(
-              label: 'Agent terminal input',
-              textField: true,
-              enabled: enabled,
-              child: xterm.TerminalView(
-                adapter.terminal,
-                readOnly: !enabled,
-                autofocus: false,
-                deleteDetection: true,
-                simulateScroll: false,
-                padding: const EdgeInsets.all(8),
-                textStyle: const xterm.TerminalStyle(fontSize: 13),
-                textScaler: MediaQuery.textScalerOf(context),
-                keyboardAppearance: brightness,
-                theme: brightness == Brightness.dark
-                    ? _darkTerminalTheme
-                    : _lightTerminalTheme,
+  State<OpenForgeTerminalView> createState() => _OpenForgeTerminalViewState();
+}
+
+class _OpenForgeTerminalViewState extends State<OpenForgeTerminalView>
+    with WidgetsBindingObserver {
+  static const _terminalHorizontalPadding = 16.0;
+  static const _bottomTolerance = 1.0;
+
+  final _scrollController = ScrollController();
+  double? _layoutWidth;
+  TerminalDimensions? _keyboardDimensions;
+  var _keyboardVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final distanceFromBottom = position.maxScrollExtent - position.pixels;
+    if (distanceFromBottom <= _bottomTolerance) return;
+    final manualOffset = position.pixels;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final restored = manualOffset.clamp(
+          _scrollController.position.minScrollExtent,
+          _scrollController.position.maxScrollExtent,
+        );
+        _scrollController.jumpTo(restored);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardVisible = View.of(context).viewInsets.bottom > 0;
+    if (keyboardVisible && !_keyboardVisible) {
+      _keyboardDimensions = widget.adapter.dimensions;
+    } else if (!keyboardVisible && _keyboardVisible) {
+      _keyboardDimensions = null;
+    }
+    _keyboardVisible = keyboardVisible;
+
+    return AnimatedBuilder(
+      animation: widget.inputState,
+      builder: (context, _) {
+        final enabled = widget.isInputEnabled();
+        final brightness = Theme.of(context).brightness;
+        return Column(
+          children: <Widget>[
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  _preserveKeyboardGeometry(constraints.maxWidth);
+                  return Semantics(
+                    label: 'Agent terminal input',
+                    textField: true,
+                    enabled: enabled,
+                    child: xterm.TerminalView(
+                      widget.adapter.terminal,
+                      readOnly: !enabled,
+                      autofocus: false,
+                      autoResize: !keyboardVisible,
+                      scrollController: _scrollController,
+                      deleteDetection: true,
+                      simulateScroll: false,
+                      padding: const EdgeInsets.all(8),
+                      textStyle: const xterm.TerminalStyle(fontSize: 13),
+                      textScaler: MediaQuery.textScalerOf(context),
+                      keyboardAppearance: brightness,
+                      theme: brightness == Brightness.dark
+                          ? _darkTerminalTheme
+                          : _lightTerminalTheme,
+                    ),
+                  );
+                },
               ),
             ),
-          ),
-          ValueListenableBuilder<bool>(
-            valueListenable: adapter.controlArmed,
-            builder: (context, controlArmed, _) => _TerminalAccessoryRow(
-              enabled: enabled,
-              controlArmed: controlArmed,
-              adapter: adapter,
+            ValueListenableBuilder<bool>(
+              valueListenable: widget.adapter.controlArmed,
+              builder: (context, controlArmed, _) => _TerminalAccessoryRow(
+                enabled: enabled,
+                controlArmed: controlArmed,
+                adapter: widget.adapter,
+              ),
             ),
-          ),
-        ],
-      );
-    },
-  );
+          ],
+        );
+      },
+    );
+  }
+
+  void _preserveKeyboardGeometry(double width) {
+    final previousWidth = _layoutWidth;
+    _layoutWidth = width;
+    final dimensions = _keyboardDimensions;
+    if (!_keyboardVisible ||
+        dimensions == null ||
+        previousWidth == null ||
+        previousWidth == width) {
+      return;
+    }
+    final previousContentWidth = previousWidth - _terminalHorizontalPadding;
+    final contentWidth = width - _terminalHorizontalPadding;
+    if (previousContentWidth <= 0 || contentWidth <= 0) return;
+    final columns = (dimensions.columns * contentWidth / previousContentWidth)
+        .floor()
+        .clamp(1, 1000);
+    final resized = TerminalDimensions(columns: columns, rows: dimensions.rows);
+    _keyboardDimensions = resized;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _keyboardVisible) widget.adapter.resizeViewport(resized);
+    });
+  }
 }
 
 final class _TerminalAccessoryRow extends StatelessWidget {

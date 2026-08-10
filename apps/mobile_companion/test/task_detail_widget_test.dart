@@ -518,10 +518,27 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       presentation.setState(const AgentTerminalAttaching());
       await tester.pump();
       expect(find.text('Attaching to Agent terminal'), findsOneWidget);
+      expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
 
       presentation.setState(const AgentTerminalReady());
       await tester.pump();
       expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
+
+      presentation.setState(const AgentTerminalReconnecting());
+      await tester.pump();
+      expect(find.text('Reconnecting Agent terminal'), findsOneWidget);
+      expect(find.byKey(const Key('xterm-surface')), findsOneWidget);
+
+      presentation.setState(
+        const AgentTerminalReconnecting(retryAvailable: true),
+      );
+      await tester.pump();
+      expect(find.text('Connection interrupted'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Retry now'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Retry now'));
+      expect(presentation.retryCalls, 1);
+      presentation.setState(const AgentTerminalReady());
+      await tester.pump();
 
       await tester.tap(find.text('Details'));
       await tester.pumpAndSettle();
@@ -678,6 +695,7 @@ final class _TerminalPresentation extends ChangeNotifier
   bool visible = false;
   bool foreground = true;
   var closeCalls = 0;
+  var retryCalls = 0;
   @override
   AgentTerminalState get state => _state;
 
@@ -689,6 +707,8 @@ final class _TerminalPresentation extends ChangeNotifier
   @override
   Future<void> closeForTaskCompletion() async => closeCalls += 1;
 
+  @override
+  void retryNow() => retryCalls += 1;
   @override
   void setForeground(bool foreground) => this.foreground = foreground;
 

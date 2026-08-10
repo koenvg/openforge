@@ -22,6 +22,17 @@ void main() {
     decoder.dispose();
   });
 
+  test('layout readiness completes even for an 80 by 24 viewport', () async {
+    final adapter = XtermOpenForgeTerminal();
+
+    adapter.resizeViewport(const TerminalDimensions(columns: 80, rows: 24));
+
+    await expectLater(
+      adapter.layoutReady.timeout(const Duration(milliseconds: 100)),
+      completes,
+    );
+    adapter.dispose();
+  });
   test('terminal replay frames are applied in one explicit flush', () {
     final adapter = XtermOpenForgeTerminal();
     var notifications = 0;
@@ -260,18 +271,13 @@ void main() {
         double height, {
         double bottomInset = 0,
       }) async {
+        tester.view.viewInsets = FakeViewPadding(bottom: bottomInset);
         await tester.pumpWidget(
           Center(
             child: SizedBox(
               width: width,
               height: height,
               child: MaterialApp(
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(viewInsets: EdgeInsets.only(bottom: bottomInset)),
-                  child: child!,
-                ),
                 home: Scaffold(
                   body: OpenForgeTerminalView(
                     adapter: adapter,
@@ -290,16 +296,75 @@ void main() {
       final portrait = await pumpGrid(320, 560);
       final landscape = await pumpGrid(560, 280);
       final keyboardVisible = await pumpGrid(560, 280, bottomInset: 120);
+      expect(
+        tester.widget<TerminalView>(find.byType(TerminalView)).autoResize,
+        isFalse,
+      );
+      final rotatedWithKeyboard = await pumpGrid(320, 560, bottomInset: 200);
+      final keyboardClosed = await pumpGrid(320, 560);
 
       expect(landscape.columns, greaterThan(portrait.columns));
       expect(landscape.rows, lessThan(portrait.rows));
-      expect(keyboardVisible.columns, landscape.columns);
-      expect(keyboardVisible.rows, lessThan(landscape.rows));
-
+      expect(keyboardVisible, landscape);
+      expect(rotatedWithKeyboard.columns, lessThan(keyboardVisible.columns));
+      expect(rotatedWithKeyboard.rows, keyboardVisible.rows);
+      expect(keyboardClosed, portrait);
       adapter.dispose();
       enabled.dispose();
     },
   );
+
+  testWidgets('software keyboard preserves manual terminal scrollback', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetViewInsets);
+    final enabled = ValueNotifier<bool>(true);
+    final adapter = XtermOpenForgeTerminal();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 420,
+            child: OpenForgeTerminalView(
+              adapter: adapter,
+              inputState: enabled,
+              isInputEnabled: () => enabled.value,
+            ),
+          ),
+        ),
+      ),
+    );
+    adapter.writeOutput(
+      Uint8List.fromList(
+        utf8.encode(List.generate(100, (index) => 'line $index').join('\r\n')),
+      ),
+    );
+    adapter.flushOutput();
+    await tester.pumpAndSettle();
+
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(TerminalView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    final position = scrollable.position;
+    expect(position.maxScrollExtent, greaterThan(0));
+    position.jumpTo(position.maxScrollExtent / 2);
+    await tester.pump();
+    final manualOffset = position.pixels;
+
+    await tester.tap(find.byType(TerminalView));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pumpAndSettle();
+
+    expect(position.pixels, closeTo(manualOffset, 0.1));
+
+    adapter.dispose();
+    enabled.dispose();
+  });
 
   testWidgets('Companion app follows the system theme mode', (tester) async {
     await tester.pumpWidget(const CompanionApp());
