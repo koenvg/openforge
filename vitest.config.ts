@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
-import { createOpenForgePluginSdkSourceAliasRecord } from './packages/plugin-sdk/src/vite'
+import { createOpenForgePluginSdkSourceAliasRecord } from './packages/plugin-sdk/src/vite.ts'
 
 const pluginRuntimeAliases = {
   '@openforge-app/plugin-runtime/commandValidation': new URL('./packages/plugin-runtime/src/commandValidation.ts', import.meta.url).pathname,
