@@ -23,16 +23,16 @@ class AgentTerminalPane extends StatelessWidget {
           label: 'No active Agent terminal',
           icon: Icons.terminal_outlined,
         ),
-        AgentTerminalAttaching() => const _TerminalStatus(
+        AgentTerminalAttaching() => _CoveredTerminalStatus(
+          terminal: surface!.terminal,
           label: 'Attaching to Agent terminal',
-          icon: Icons.sync,
-          progress: true,
         ),
-        AgentTerminalReconnecting() => const _TerminalStatus(
-          label: 'Reconnecting Agent terminal',
-          icon: Icons.cloud_sync_outlined,
-          progress: true,
-        ),
+        AgentTerminalReconnecting(:final retryAvailable) =>
+          _ReconnectingTerminal(
+            terminal: surface!.terminal,
+            retryAvailable: retryAvailable,
+            onRetry: surface!.presentation.retryNow,
+          ),
         AgentTerminalReady() => Semantics(
           label: 'Agent terminal ready',
           container: true,
@@ -61,6 +61,93 @@ class AgentTerminalPane extends StatelessWidget {
           ],
         ),
       },
+    );
+  }
+}
+
+final class _CoveredTerminalStatus extends StatelessWidget {
+  const _CoveredTerminalStatus({required this.terminal, required this.label});
+
+  final Widget terminal;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: <Widget>[
+      Positioned.fill(child: terminal),
+      Positioned.fill(
+        child: ColoredBox(
+          color: Theme.of(context).colorScheme.surface,
+          child: _TerminalStatus(
+            label: label,
+            icon: Icons.sync,
+            progress: true,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+final class _ReconnectingTerminal extends StatelessWidget {
+  const _ReconnectingTerminal({
+    required this.terminal,
+    required this.retryAvailable,
+    required this.onRetry,
+  });
+
+  final Widget terminal;
+  final bool retryAvailable;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = retryAvailable
+        ? 'Connection interrupted'
+        : 'Reconnecting Agent terminal';
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(child: terminal),
+        Align(
+          alignment: Alignment.topRight,
+          child: Semantics(
+            label: retryAvailable
+                ? 'Connection interrupted, retrying automatically'
+                : label,
+            liveRegion: true,
+            child: Card(
+              margin: const EdgeInsets.all(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (retryAvailable)
+                      const Icon(Icons.cloud_off_outlined, size: 20)
+                    else
+                      const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    const SizedBox(width: 8),
+                    Text(label),
+                    if (retryAvailable) ...<Widget>[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Retry now'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

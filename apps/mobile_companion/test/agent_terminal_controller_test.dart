@@ -64,6 +64,41 @@ void main() {
     },
   );
 
+  test('initial attach waits for the measured mobile terminal grid', () async {
+    final layoutReady = Completer<void>();
+    final terminal = _FakeTerminal(layoutReadyCompleter: layoutReady);
+    final channel = _FakeChannel();
+    final client = _FakeTerminalClient(channel);
+    final controller =
+        AgentTerminalController(
+            taskId: 'KVG-3018',
+            client: client,
+            storage: _Storage(),
+            terminal: terminal,
+            reconnectDelay: Duration.zero,
+          )
+          ..updateAvailability(true)
+          ..setVisible(true);
+
+    await _flush();
+    expect(controller.state, isA<AgentTerminalAttaching>());
+    expect(client.opens, 0);
+
+    terminal.dimensionsValue = const TerminalDimensions(columns: 43, rows: 12);
+    layoutReady.complete();
+    await _flush();
+
+    expect(client.opens, 1);
+    final attach = ClientTerminalControl.decode(channel.sent.single);
+    expect(attach, isA<AttachTerminalControl>());
+    final dimensions = (attach as AttachTerminalControl).dimensions;
+    expect(
+      (columns: dimensions.columns, rows: dimensions.rows),
+      (columns: 43, rows: 12),
+    );
+
+    controller.dispose();
+  });
   test(
     'Task completion closes the attachment normally without reconnecting',
     () async {
@@ -127,7 +162,8 @@ void main() {
 
   test('timed malformed xterm output closes the active channel', () async {
     final channel = _FakeChannel();
-    final terminal = XtermOpenForgeTerminal();
+    final terminal = XtermOpenForgeTerminal()
+      ..resizeViewport(const TerminalDimensions(columns: 80, rows: 24));
     final controller =
         AgentTerminalController(
             taskId: 'KVG-3018',
@@ -517,6 +553,54 @@ void main() {
     },
   );
 
+  test(
+    'third reconnect exposes Retry now and skips the active backoff',
+    () async {
+      final waits = <Completer<void>>[];
+      final client = _FailingTerminalClient();
+      final controller =
+          AgentTerminalController(
+              taskId: 'KVG-3018',
+              client: client,
+              storage: _Storage(),
+              terminal: _FakeTerminal(),
+              reconnectDelay: const Duration(seconds: 1),
+              randomUnit: () => 0,
+              delay: (_) {
+                final wait = Completer<void>();
+                waits.add(wait);
+                return wait.future;
+              },
+            )
+            ..updateAvailability(true)
+            ..setVisible(true);
+
+      await _flush();
+      expect(client.opens, 1);
+      expect(waits, hasLength(1));
+
+      waits[0].complete();
+      await _flush();
+      await _flush();
+      expect(client.opens, 2);
+      expect(waits, hasLength(2));
+
+      waits[1].complete();
+      await _flush();
+      await _flush();
+      expect(client.opens, 3);
+      expect(waits, hasLength(3));
+      final reconnecting = controller.state as AgentTerminalReconnecting;
+      expect(reconnecting.retryAvailable, isTrue);
+
+      controller.retryNow();
+      await _flush();
+      await _flush();
+      expect(client.opens, 4);
+
+      controller.dispose();
+    },
+  );
   test('authorization loss clears content and stops reconnecting', () async {
     final terminal = _FakeTerminal()
       ..writeOutput(Uint8List.fromList('stale'.codeUnits));
@@ -558,7 +642,7 @@ void main() {
   });
 
   test(
-    'a failed input send clears stale state and opens a fresh channel',
+    'a failed input keeps stale output visible until fresh replay is ready',
     () async {
       final channels = <_FakeChannel>[
         _FakeChannel(throwOnBinarySend: true),
@@ -584,11 +668,21 @@ void main() {
       await _flush();
       await _flush();
 
-      expect(terminal.output, isEmpty);
-      expect(terminal.clearCount, 1);
+      expect(terminal.output, 'stale');
+      expect(terminal.clearCount, 0);
+      expect(controller.state, isA<AgentTerminalReconnecting>());
       expect(channels.first.sentBinary, isEmpty);
       expect(channels.first.closed, isTrue);
       expect(channels.last.sent, hasLength(1));
+
+      channels.last.add(Uint8List.fromList('fresh'.codeUnits));
+      expect(terminal.output, 'stale');
+      channels.last.add('{"type":"ready","initialState":"replay"}');
+      await _flush();
+
+      expect(terminal.output, 'fresh');
+      expect(terminal.clearCount, 1);
+      expect(controller.state, isA<AgentTerminalReady>());
 
       controller.dispose();
     },
@@ -601,16 +695,27 @@ Future<void> _flush() async {
 }
 
 final class _FakeTerminal implements OpenForgeTerminal {
-  _FakeTerminal({this.rejectMalformedUtf8 = false});
+  _FakeTerminal({
+    this.rejectMalformedUtf8 = false,
+    this.layoutReadyCompleter,
+    TerminalDimensions dimensions = const TerminalDimensions(
+      columns: 80,
+      rows: 24,
+    ),
+  }) : dimensionsValue = dimensions;
 
   final bool rejectMalformedUtf8;
+  final Completer<void>? layoutReadyCompleter;
+  TerminalDimensions dimensionsValue;
   var output = '';
   var clearCount = 0;
   var flushCount = 0;
 
   @override
-  TerminalDimensions get dimensions =>
-      const TerminalDimensions(columns: 80, rows: 24);
+  Future<void> get layoutReady =>
+      layoutReadyCompleter?.future ?? Future<void>.value();
+  @override
+  TerminalDimensions get dimensions => dimensionsValue;
 
   @override
   void clear() {
