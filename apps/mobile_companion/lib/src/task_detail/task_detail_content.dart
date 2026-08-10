@@ -4,6 +4,7 @@ class _TaskDetailBody extends StatelessWidget {
   const _TaskDetailBody({
     required this.state,
     required this.onRefresh,
+    required this.onOpenTask,
     required this.deleteBusy,
     required this.deleteAvailable,
     required this.onDelete,
@@ -13,6 +14,7 @@ class _TaskDetailBody extends StatelessWidget {
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final void Function(String taskId)? onOpenTask;
   final bool deleteBusy;
   final bool deleteAvailable;
   final Future<void> Function(TaskDetail detail) onDelete;
@@ -31,6 +33,7 @@ class _TaskDetailBody extends StatelessWidget {
     TaskDetailLoaded(:final detail, :final deletePhase, :final deleteMessage) =>
       _LoadedTaskDetail(
         detail: detail,
+        onOpenTask: onOpenTask,
         deletePending: deleteBusy || deletePhase == TaskDeletePhase.pending,
         deleteMessage: deleteMessage,
         deleteAvailable: deleteAvailable,
@@ -65,6 +68,7 @@ class _TaskDetailBody extends StatelessWidget {
 class _LoadedTaskDetail extends StatelessWidget {
   const _LoadedTaskDetail({
     required this.detail,
+    required this.onOpenTask,
     required this.deletePending,
     required this.deleteMessage,
     required this.deleteAvailable,
@@ -74,6 +78,7 @@ class _LoadedTaskDetail extends StatelessWidget {
   });
 
   final TaskDetail detail;
+  final void Function(String taskId)? onOpenTask;
   final bool deletePending;
   final String? deleteMessage;
   final bool deleteAvailable;
@@ -112,6 +117,24 @@ class _LoadedTaskDetail extends StatelessWidget {
               _LabeledValue(label: 'Board Status', value: boardStatus),
             ],
           ),
+          if (detail.labels.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            _TaskLabelsCard(labels: detail.labels),
+          ],
+          if (detail.dependencies.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            _TaskRelationshipsCard.dependencies(
+              relationships: detail.dependencies,
+              onOpenTask: onOpenTask,
+            ),
+          ],
+          if (detail.dependentTasks.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 16),
+            _TaskRelationshipsCard.dependents(
+              relationships: detail.dependentTasks,
+              onOpenTask: onOpenTask,
+            ),
+          ],
           const SizedBox(height: 16),
           Semantics(
             container: true,

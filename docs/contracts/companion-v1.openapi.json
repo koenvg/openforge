@@ -564,6 +564,33 @@
         "lanes": { "$ref": "#/components/schemas/ProjectBoardLanes" }
       }
     },
+    "TaskRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "title", "boardStatus"],
+      "properties": {
+        "taskId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "boardStatus": {
+          "type": "string",
+          "enum": ["backlog", "doing", "done"]
+        }
+      }
+    },
+    "DependentTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "title", "boardStatus", "remainingDependencyCount"],
+      "properties": {
+        "taskId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "boardStatus": {
+          "type": "string",
+          "enum": ["backlog", "doing", "done"]
+        },
+        "remainingDependencyCount": { "type": "integer", "minimum": 0 }
+      }
+    },
     "TaskDetail": {
         "type": "object",
         "additionalProperties": false,
@@ -577,6 +604,9 @@
           "agentState",
           "agentTerminalAvailable",
           "agentErrorSummary",
+          "labels",
+          "dependencies",
+          "dependentTasks",
           "createdAt",
           "updatedAt",
           "agentUpdatedAt"
@@ -597,6 +627,18 @@
           },
           "agentTerminalAvailable": { "type": "boolean" },
           "agentErrorSummary": { "type": ["string", "null"] },
+          "labels": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TaskRelationship" }
+          },
+          "dependentTasks": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DependentTask" }
+          },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" },
           "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }

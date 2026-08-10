@@ -1,6 +1,23 @@
 use crate::db::BoardStatus;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompanionTaskRelationship {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) board_status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompanionDependentTask {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) board_status: String,
+    pub(crate) remaining_dependency_count: usize,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CompanionTaskDetail {
     pub(crate) task_id: String,
@@ -11,6 +28,9 @@ pub(crate) struct CompanionTaskDetail {
     pub(crate) handoff_notes: Option<String>,
     pub(crate) agent_state: String,
     pub(crate) agent_error_summary: Option<String>,
+    pub(crate) labels: Vec<String>,
+    pub(crate) dependencies: Vec<CompanionTaskRelationship>,
+    pub(crate) dependent_tasks: Vec<CompanionDependentTask>,
     pub(crate) created_at: i64,
     pub(crate) updated_at: i64,
     pub(crate) agent_updated_at: Option<i64>,
@@ -31,6 +51,23 @@ impl DatabaseCompanionTaskDetailSource {
     }
 }
 
+fn task_display_title(task: &crate::db::TaskRow) -> String {
+    crate::task_attention::task_display_title(&task.id, task.title.as_deref(), &task.initial_prompt)
+}
+
+fn task_relationship(task: &crate::db::TaskRow) -> Result<CompanionTaskRelationship, String> {
+    let board_status = task.status.parse::<BoardStatus>().map_err(|_| {
+        format!(
+            "Companion related Task {} has an invalid Board Status",
+            task.id
+        )
+    })?;
+    Ok(CompanionTaskRelationship {
+        task_id: task.id.clone(),
+        title: task_display_title(task),
+        board_status: board_status.as_str().to_string(),
+    })
+}
 impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
     fn get(&self, task_id: &str) -> Result<Option<CompanionTaskDetail>, String> {
         let database = self
@@ -67,19 +104,56 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
                 )
             });
 
+        let project_tasks = database
+            .get_tasks_for_project(project_id)
+            .map_err(|error| format!("failed to read Companion related Tasks: {error}"))?;
+        let tasks_by_id = project_tasks
+            .iter()
+            .map(|related_task| (related_task.id.as_str(), related_task))
+            .collect::<HashMap<_, _>>();
+        let dependencies = task
+            .depends_on
+            .iter()
+            .filter_map(|dependency_id| tasks_by_id.get(dependency_id.as_str()).copied())
+            .map(task_relationship)
+            .collect::<Result<Vec<_>, _>>()?;
+        let dependent_tasks = project_tasks
+            .iter()
+            .filter(|related_task| {
+                related_task.id != task.id && related_task.depends_on.contains(&task.id)
+            })
+            .map(|dependent_task| {
+                let relationship = task_relationship(dependent_task)?;
+                let remaining_dependency_count = dependent_task
+                    .depends_on
+                    .iter()
+                    .filter(|dependency_id| dependency_id.as_str() != task.id)
+                    .filter(|dependency_id| {
+                        tasks_by_id
+                            .get(dependency_id.as_str())
+                            .is_none_or(|dependency| dependency.status != "done")
+                    })
+                    .count();
+                Ok(CompanionDependentTask {
+                    task_id: relationship.task_id,
+                    title: relationship.title,
+                    board_status: relationship.board_status,
+                    remaining_dependency_count,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
         Ok(Some(CompanionTaskDetail {
             task_id: task.id.clone(),
-            title: crate::task_attention::task_display_title(
-                &task.id,
-                task.title.as_deref(),
-                &task.initial_prompt,
-            ),
+            title: task_display_title(&task),
             project_id: project.id,
             project_name: project.name,
             board_status: board_status.as_str().to_string(),
             handoff_notes: normalized_handoff_notes(task.summary.as_deref()),
             agent_state: agent_state.to_string(),
             agent_error_summary,
+            labels: task.labels.iter().map(|label| label.name.clone()).collect(),
+            dependencies,
+            dependent_tasks,
             created_at: task.created_at,
             updated_at: task.updated_at,
             agent_updated_at,

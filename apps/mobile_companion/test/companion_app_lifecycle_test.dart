@@ -401,6 +401,125 @@ void main() {
   );
 
   testWidgets(
+    'related Task navigation preserves the prior detail and live refresh owner',
+    (tester) async {
+      final endpoint = Uri.parse(_tailscaleEndpoint);
+      final client = _SuccessfulTailscaleClient(endpoint)
+        ..attentionItems = <AttentionItem>[
+          AttentionItem(
+            taskId: 'T-1',
+            projectId: 'P-1',
+            projectName: 'OpenForge',
+            title: 'Primary Task',
+            state: 'needs-input',
+            reason: 'Agent needs input.',
+            activityAt: DateTime.utc(2026, 8, 1),
+          ),
+        ]
+        ..taskDetails['T-1'] = TaskDetail(
+          taskId: 'T-1',
+          title: 'Primary Task',
+          projectId: 'P-1',
+          projectName: 'OpenForge',
+          boardStatus: 'doing',
+          handoffNotes: 'Primary notes',
+          agentState: 'blocked',
+          agentErrorSummary: null,
+          dependentTasks: const <DependentTask>[
+            DependentTask(
+              taskId: 'T-2',
+              title: 'Related Task',
+              boardStatus: 'backlog',
+              remainingDependencyCount: 0,
+            ),
+          ],
+          createdAt: DateTime.utc(2026, 8, 1),
+          updatedAt: DateTime.utc(2026, 8, 1),
+          agentUpdatedAt: null,
+        )
+        ..taskDetails['T-2'] = TaskDetail(
+          taskId: 'T-2',
+          title: 'Related Task',
+          projectId: 'P-1',
+          projectName: 'OpenForge',
+          boardStatus: 'backlog',
+          handoffNotes: 'Related notes',
+          agentState: 'waiting',
+          agentErrorSummary: null,
+          createdAt: DateTime.utc(2026, 8, 1),
+          updatedAt: DateTime.utc(2026, 8, 1),
+          agentUpdatedAt: null,
+        );
+      final storage = _MemorySecureStorage();
+      final pairing = CompanionPairingController(
+        client: client,
+        storage: storage,
+        pollInterval: Duration.zero,
+      );
+      final attention = AttentionController(client: client, storage: storage);
+      final live = LiveUpdatesController(
+        client: client,
+        storage: storage,
+        attention: attention,
+      );
+      addTearDown(() {
+        pairing.dispose();
+        attention.dispose();
+      });
+
+      await tester.pumpWidget(
+        CompanionApp(
+          controller: pairing,
+          attentionController: attention,
+          liveUpdatesController: live,
+          taskDetailControllerFactory: (taskId) => TaskDetailController(
+            taskId: taskId,
+            client: client,
+            storage: storage,
+          ),
+        ),
+      );
+      await pairing.pairFromQr(
+        qrPayload: _tailscaleQrPayload,
+        deviceName: 'Tailscale Android',
+        platform: 'android',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Primary Task'));
+      await tester.pumpAndSettle();
+      expect(client.taskDetailCalls, 1);
+      await tester.scrollUntilVisible(find.text('Related Task'), 200);
+      await tester.tap(find.text('Related Task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Related notes'), findsOneWidget);
+      expect(client.taskDetailCalls, 2);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Primary notes'), findsOneWidget);
+
+      client.liveConnections.last.add(
+        const CompanionResourcesInvalidated(
+          eventId: 'event-related-navigation',
+          resources: <CompanionResourceInvalidation>[
+            CompanionResourceInvalidation.task('T-1'),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(client.taskDetailCalls, 3);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'replacing live updates transfers the open Task detail lifecycle owner',
     (tester) async {
       final endpoint = Uri.parse(_tailscaleEndpoint);
@@ -573,6 +692,7 @@ final class _SuccessfulTailscaleClient implements CompanionClient {
   final liveConnections = <_FakeLiveConnection>[];
   final liveLastEventIds = <String?>[];
   List<AttentionItem> attentionItems = const <AttentionItem>[];
+  final taskDetails = <String, TaskDetail>{};
   var taskDetailCalls = 0;
 
   @override
@@ -627,6 +747,8 @@ final class _SuccessfulTailscaleClient implements CompanionClient {
     String taskId,
   ) async {
     taskDetailCalls += 1;
+    final configured = taskDetails[taskId];
+    if (configured != null) return configured;
     return TaskDetail(
       taskId: taskId,
       title: 'Task one',

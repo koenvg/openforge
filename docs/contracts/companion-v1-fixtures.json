@@ -41,6 +41,22 @@
     "agentState": "failed",
     "agentTerminalAvailable": true,
     "agentErrorSummary": "Agent failed. Review details on the desktop.",
+    "labels": ["mobile", "review"],
+    "dependencies": [
+      {
+        "taskId": "KVG-2944",
+        "title": "Prepare companion contract",
+        "boardStatus": "done"
+      }
+    ],
+    "dependentTasks": [
+      {
+        "taskId": "KVG-2947",
+        "title": "Ship companion release",
+        "boardStatus": "backlog",
+        "remainingDependencyCount": 1
+      }
+    ],
     "createdAt": "2026-07-30T10:00:00Z",
     "updatedAt": "2026-07-30T11:58:00Z",
     "agentUpdatedAt": "2026-07-30T11:59:00Z"

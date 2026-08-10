@@ -31,6 +31,13 @@ describe('Companion OpenAPI Dart generator', () => {
     expect(first).toContain(`'${fingerprint}'`)
     expect(first).toContain('enum TaskStartOutcome')
     expect(first).toContain('final TaskStartOutcome outcome;')
+    expect(first).toContain('List<String> labels = const <String>[]')
+    expect(first).toContain(
+      'List<TaskRelationship> dependencies = const <TaskRelationship>[]',
+    )
+    expect(first).toContain(
+      'List<DependentTask> dependentTasks = const <DependentTask>[]',
+    )
   })
 
   it('projects model fields, operations, and error codes from the contract', async () => {

@@ -76,6 +76,18 @@ fn detail() -> CompanionTaskDetail {
         handoff_notes: Some("Ready for review.".to_string()),
         agent_state: "failed".to_string(),
         agent_error_summary: Some("Agent failed. Review details on the desktop.".to_string()),
+        labels: vec!["mobile".to_string(), "review".to_string()],
+        dependencies: vec![super::task_detail::CompanionTaskRelationship {
+            task_id: "KVG-2944".to_string(),
+            title: "Prepare companion contract".to_string(),
+            board_status: "done".to_string(),
+        }],
+        dependent_tasks: vec![super::task_detail::CompanionDependentTask {
+            task_id: "KVG-2947".to_string(),
+            title: "Ship companion release".to_string(),
+            board_status: "backlog".to_string(),
+            remaining_dependency_count: 1,
+        }],
         created_at: 1_754_000_000,
         updated_at: 1_754_000_100,
         agent_updated_at: Some(1_754_000_200),
@@ -110,6 +122,11 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
     assert_eq!(json["handoffNotes"], "Ready for review.");
     assert_eq!(json["agentState"], "failed");
     assert_eq!(json["agentTerminalAvailable"], false);
+    assert_eq!(json["labels"], serde_json::json!(["mobile", "review"]));
+    assert_eq!(json["dependencies"][0]["taskId"], "KVG-2944");
+    assert_eq!(json["dependencies"][0]["boardStatus"], "done");
+    assert_eq!(json["dependentTasks"][0]["taskId"], "KVG-2947");
+    assert_eq!(json["dependentTasks"][0]["remainingDependencyCount"], 1);
     assert_eq!(
         json.as_object()
             .expect("Task detail object")
@@ -123,7 +140,10 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
             "agentUpdatedAt",
             "boardStatus",
             "createdAt",
+            "dependencies",
+            "dependentTasks",
             "handoffNotes",
+            "labels",
             "projectId",
             "projectName",
             "taskId",
@@ -196,6 +216,45 @@ async fn sqlite_task_detail_matches_title_handoff_board_and_safe_agent_semantics
             None,
         )
         .expect("task");
+    let dependency = database
+        .create_task(
+            "Prepare companion contract",
+            "done",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("dependency");
+    let other_dependency = database
+        .create_task(
+            "Finish release notes",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("other dependency");
+    let dependent = database
+        .create_task(
+            "Ship companion release",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("dependent");
+    database
+        .add_task_label(&task.id, "mobile")
+        .expect("Task Label");
+    database
+        .add_task_dependency(&task.id, &dependency.id)
+        .expect("dependency link");
+    database
+        .add_task_dependency(&dependent.id, &task.id)
+        .expect("dependent link");
+    database
+        .add_task_dependency(&dependent.id, &other_dependency.id)
+        .expect("dependent remaining link");
     database
         .update_task_summary(&task.id, "Current Handoff Notes")
         .expect("summary");
@@ -248,6 +307,17 @@ async fn sqlite_task_detail_matches_title_handoff_board_and_safe_agent_semantics
         json["agentErrorSummary"],
         "Agent failed. Review details on the desktop."
     );
+    assert_eq!(json["labels"], serde_json::json!(["mobile"]));
+    assert_eq!(json["dependencies"][0]["taskId"], dependency.id);
+    assert_eq!(
+        json["dependencies"][0]["title"],
+        "Prepare companion contract"
+    );
+    assert_eq!(json["dependencies"][0]["boardStatus"], "done");
+    assert_eq!(json["dependentTasks"][0]["taskId"], dependent.id);
+    assert_eq!(json["dependentTasks"][0]["title"], "Ship companion release");
+    assert_eq!(json["dependentTasks"][0]["boardStatus"], "backlog");
+    assert_eq!(json["dependentTasks"][0]["remainingDependencyCount"], 1);
     let encoded = json.to_string();
     for forbidden in [
         "provider-session-secret",

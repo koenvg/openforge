@@ -1,10 +1,10 @@
 use super::{
     authorization_error_response, authorize_versioned_request, error_response,
-    CompanionAttentionItem, CompanionAttentionSnapshot, CompanionErrorCode,
-    CompanionHostStatusResponse, CompanionProjectBoardCounts, CompanionProjectBoardLanes,
-    CompanionProjectBoardResponse, CompanionProjectBoardTask, CompanionProjectCatalogItem,
-    CompanionProjectCatalogResponse, CompanionRouterState, CompanionTaskDetailResponse,
-    PROTOCOL_VERSION,
+    CompanionAttentionItem, CompanionAttentionSnapshot, CompanionDependentTaskResponse,
+    CompanionErrorCode, CompanionHostStatusResponse, CompanionProjectBoardCounts,
+    CompanionProjectBoardLanes, CompanionProjectBoardResponse, CompanionProjectBoardTask,
+    CompanionProjectCatalogItem, CompanionProjectCatalogResponse, CompanionRouterState,
+    CompanionTaskDetailResponse, CompanionTaskRelationshipResponse, PROTOCOL_VERSION,
 };
 use axum::{
     extract::{Path, State},
@@ -289,6 +289,26 @@ async fn task_detail_handler(
         agent_state: detail.agent_state,
         agent_terminal_available,
         agent_error_summary: detail.agent_error_summary,
+        labels: detail.labels,
+        dependencies: detail
+            .dependencies
+            .into_iter()
+            .map(|dependency| CompanionTaskRelationshipResponse {
+                task_id: dependency.task_id,
+                title: dependency.title,
+                board_status: dependency.board_status,
+            })
+            .collect(),
+        dependent_tasks: detail
+            .dependent_tasks
+            .into_iter()
+            .map(|dependent| CompanionDependentTaskResponse {
+                task_id: dependent.task_id,
+                title: dependent.title,
+                board_status: dependent.board_status,
+                remaining_dependency_count: dependent.remaining_dependency_count,
+            })
+            .collect(),
         created_at,
         updated_at,
         agent_updated_at,

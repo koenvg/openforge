@@ -1777,8 +1777,16 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         .expect("attention item schema") =
         contract["components"]["schemas"]["AttentionItem"].clone();
     assert_schema_accepts(&attention_schema, &fixtures["attentionSnapshot"]);
-    let task_detail_schema = &contract["components"]["schemas"]["TaskDetail"];
-    assert_schema_accepts(task_detail_schema, &fixtures["taskDetail"]);
+    let mut task_detail_schema = contract["components"]["schemas"]["TaskDetail"].clone();
+    *task_detail_schema
+        .pointer_mut("/properties/dependencies/items")
+        .expect("Task dependency schema") =
+        contract["components"]["schemas"]["TaskRelationship"].clone();
+    *task_detail_schema
+        .pointer_mut("/properties/dependentTasks/items")
+        .expect("dependent Task schema") =
+        contract["components"]["schemas"]["DependentTask"].clone();
+    assert_schema_accepts(&task_detail_schema, &fixtures["taskDetail"]);
     assert_schema_accepts(
         &contract["components"]["schemas"]["TaskCompleteResult"],
         &fixtures["taskCompleteResult"],

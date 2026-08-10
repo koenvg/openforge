@@ -188,6 +188,24 @@ pub(crate) struct CompanionProjectBoardResponse {
     pub(crate) counts: CompanionProjectBoardCounts,
     pub(crate) lanes: CompanionProjectBoardLanes,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskRelationshipResponse {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) board_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionDependentTaskResponse {
+    pub(crate) task_id: String,
+    pub(crate) title: String,
+    pub(crate) board_status: String,
+    pub(crate) remaining_dependency_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionTaskDetailResponse {
@@ -200,6 +218,9 @@ pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) agent_state: String,
     pub(crate) agent_terminal_available: bool,
     pub(crate) agent_error_summary: Option<String>,
+    pub(crate) labels: Vec<String>,
+    pub(crate) dependencies: Vec<CompanionTaskRelationshipResponse>,
+    pub(crate) dependent_tasks: Vec<CompanionDependentTaskResponse>,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
     pub(crate) agent_updated_at: Option<String>,

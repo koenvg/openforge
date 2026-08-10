@@ -11,6 +11,7 @@ import 'task_detail_controller.dart';
 
 part 'task_detail_actions.dart';
 part 'task_detail_content.dart';
+part 'task_detail_metadata.dart';
 part 'task_detail_tabs.dart';
 
 class TaskDetailScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class TaskDetailScreen extends StatefulWidget {
     required this.controller,
     this.terminalSurface,
     this.onRefresh,
+    this.onOpenTask,
     this.onCompleted,
     this.onDeleteSucceeded,
     this.onDeleteNeedsRefresh,
@@ -27,6 +29,7 @@ class TaskDetailScreen extends StatefulWidget {
   final TaskDetailController controller;
   final AgentTerminalSurface? terminalSurface;
   final Future<void> Function()? onRefresh;
+  final void Function(String taskId)? onOpenTask;
   final Future<void> Function()? onCompleted;
   final Future<void> Function()? onDeleteSucceeded;
   final Future<void> Function()? onDeleteNeedsRefresh;
@@ -73,6 +76,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget build(BuildContext context) => TaskDetailView(
     state: _state,
     onRefresh: _refresh,
+    onOpenTask: widget.onOpenTask,
     onComplete: widget.controller.completeAvailable
         ? widget.controller.complete
         : null,
@@ -92,6 +96,7 @@ class TaskDetailView extends StatefulWidget {
   const TaskDetailView({
     required this.state,
     required this.onRefresh,
+    this.onOpenTask,
     this.onComplete,
     this.onCompleted,
     this.onDelete,
@@ -107,6 +112,7 @@ class TaskDetailView extends StatefulWidget {
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
+  final void Function(String taskId)? onOpenTask;
   final Future<TaskCompleteAttempt> Function()? onComplete;
   final Future<void> Function()? onCompleted;
   final Future<TaskDeleteResult> Function()? onDelete;
@@ -308,6 +314,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
     details: _TaskDetailBody(
       state: widget.state,
       onRefresh: widget.onRefresh,
+      onOpenTask: widget.onOpenTask,
       deleteBusy: _deleteBusy,
       deleteAvailable: widget.onDelete != null,
       onDelete: _confirmDelete,

@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '3a94b1141350f02faf35452f408544f714473ee1f8d42871dd819b930f503d76';
+    '20c41f770120cabedc1244fea125e178a828407c4a061bcb5e4a5c8e557861af';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -618,8 +618,68 @@ final class ProjectBoard {
   final ProjectBoardLanes lanes;
 }
 
+final class TaskRelationship {
+  const TaskRelationship({
+    required this.taskId,
+    required this.title,
+    required this.boardStatus,
+  });
+
+  factory TaskRelationship.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'taskId', 'title', 'boardStatus'});
+    final model = TaskRelationship(
+      taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
+      title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
+      boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', allowed: const <String>{'backlog', 'doing', 'done'})),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'taskId': taskId,
+      'title': title,
+      'boardStatus': boardStatus,
+  };
+
+  final String taskId;
+  final String title;
+  final String boardStatus;
+}
+
+final class DependentTask {
+  const DependentTask({
+    required this.taskId,
+    required this.title,
+    required this.boardStatus,
+    required this.remainingDependencyCount,
+  });
+
+  factory DependentTask.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'taskId', 'title', 'boardStatus', 'remainingDependencyCount'});
+    final model = DependentTask(
+      taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
+      title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
+      boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', allowed: const <String>{'backlog', 'doing', 'done'})),
+      remainingDependencyCount: _required(json, 'remainingDependencyCount', (value) => _asInt(value, 'remainingDependencyCount', minimum: 0)),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'taskId': taskId,
+      'title': title,
+      'boardStatus': boardStatus,
+      'remainingDependencyCount': remainingDependencyCount,
+  };
+
+  final String taskId;
+  final String title;
+  final String boardStatus;
+  final int remainingDependencyCount;
+}
+
 final class TaskDetail {
-  const TaskDetail({
+  TaskDetail({
     required this.taskId,
     required this.title,
     required this.projectId,
@@ -629,13 +689,18 @@ final class TaskDetail {
     required this.agentState,
     this.agentTerminalAvailable = false,
     required this.agentErrorSummary,
+    List<String> labels = const <String>[],
+    List<TaskRelationship> dependencies = const <TaskRelationship>[],
+    List<DependentTask> dependentTasks = const <DependentTask>[],
     required this.createdAt,
     required this.updatedAt,
     required this.agentUpdatedAt,
-  });
+  }) : labels = List<String>.unmodifiable(labels),
+       dependencies = List<TaskRelationship>.unmodifiable(dependencies),
+       dependentTasks = List<DependentTask>.unmodifiable(dependentTasks);
 
   factory TaskDetail.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'projectId', 'projectName', 'boardStatus', 'handoffNotes', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
+    _expectOnly(json, const <String>{'taskId', 'title', 'projectId', 'projectName', 'boardStatus', 'handoffNotes', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
     final model = TaskDetail(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
@@ -646,6 +711,9 @@ final class TaskDetail {
       agentState: _required(json, 'agentState', (value) => _asString(value, 'agentState', allowed: const <String>{'waiting', 'running', 'blocked', 'failed', 'complete'})),
       agentTerminalAvailable: _required(json, 'agentTerminalAvailable', (value) => _asBool(value, 'agentTerminalAvailable')),
       agentErrorSummary: _requiredNullable(json, 'agentErrorSummary', (value) => _asString(value, 'agentErrorSummary')),
+      labels: _required(json, 'labels', (value) => _asList(value, 'labels').map((item) => _asString(item, 'labelsItem', minLength: 1, maxLength: 40)).toList()),
+      dependencies: _required(json, 'dependencies', (value) => _asList(value, 'dependencies').map((item) => TaskRelationship.fromJson(_asObject(item, 'dependenciesItem'))).toList()),
+      dependentTasks: _required(json, 'dependentTasks', (value) => _asList(value, 'dependentTasks').map((item) => DependentTask.fromJson(_asObject(item, 'dependentTasksItem'))).toList()),
       createdAt: _required(json, 'createdAt', (value) => _asDateTime(value, 'createdAt')),
       updatedAt: _required(json, 'updatedAt', (value) => _asDateTime(value, 'updatedAt')),
       agentUpdatedAt: _requiredNullable(json, 'agentUpdatedAt', (value) => _asDateTime(value, 'agentUpdatedAt')),
@@ -663,6 +731,9 @@ final class TaskDetail {
       'agentState': agentState,
       'agentTerminalAvailable': agentTerminalAvailable,
       'agentErrorSummary': agentErrorSummary == null ? null : agentErrorSummary!,
+      'labels': labels.map((item) => item).toList(),
+      'dependencies': dependencies.map((item) => item.toJson()).toList(),
+      'dependentTasks': dependentTasks.map((item) => item.toJson()).toList(),
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       'agentUpdatedAt': agentUpdatedAt == null ? null : agentUpdatedAt!.toUtc().toIso8601String(),
@@ -677,6 +748,9 @@ final class TaskDetail {
   final String agentState;
   final bool agentTerminalAvailable;
   final String? agentErrorSummary;
+  final List<String> labels;
+  final List<TaskRelationship> dependencies;
+  final List<DependentTask> dependentTasks;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? agentUpdatedAt;
