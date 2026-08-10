@@ -141,7 +141,9 @@ function inspectImage(data: string, payloadLimitBytes: number, pixelLimit: numbe
   const separatorIndex = data.indexOf(':')
   if (separatorIndex < 0) return null
   const header = data.slice(0, separatorIndex)
-  const fields = header.split(';')
+  const fields = header
+    .split(';')
+    .map((field, index) => index === 0 && field.startsWith('File=') ? field.slice('File='.length) : field)
   if (!fields.some(field => field === 'inline=1')) return null
 
   const sizeField = fields.find(field => field.startsWith('File=size=') || field.startsWith('size='))

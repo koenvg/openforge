@@ -86,6 +86,16 @@ describe('iTerm inline image compatibility', () => {
     expect(harness.terminal.write).not.toHaveBeenCalled()
   })
 
+  it('accepts current Pi sequences with inline as the first File parameter', async () => {
+    const decodeImage = vi.fn<DecodeInlineImage>().mockResolvedValue({ width: 1, height: 1 })
+    const harness = createHarness(decodeImage)
+    const payload = toBase64(ONE_PIXEL_PNG)
+    const handled = await harness.handle(`File=inline=1;size=${ONE_PIXEL_PNG.length}:${payload}`)
+    expect(decodeImage).toHaveBeenCalledOnce()
+    expect(handled).toBe(false)
+    expect(harness.terminal.write).not.toHaveBeenCalled()
+  })
+
   it('converts WebP data to an in-memory PNG sequence before xterm renders it', async () => {
     const decodeImage = vi.fn<DecodeInlineImage>().mockResolvedValue({
       width: 1,
