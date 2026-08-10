@@ -220,6 +220,33 @@ final class GeneratedCompanionClient
     return result.value;
   }
 
+  Future<T> _singleAttemptMutation<T>(
+    CompanionTrustRecord trustRecord,
+    Future<T> Function(CompanionV1Client client) operation,
+  ) async {
+    final endpoints = _preferEndpoint(
+      trustRecord.endpointCandidates,
+      _preferredEndpoints[trustRecord.hostId],
+    );
+    if (endpoints.isEmpty) {
+      throw StateError('No Companion endpoint candidates are available.');
+    }
+    final endpoint = endpoints.first;
+    final transportHandle = _transportFactory(trustRecord.certificateSha256);
+    try {
+      final value = await operation(
+        CompanionV1Client(
+          baseUrl: endpoint,
+          transport: transportHandle.transport,
+        ),
+      );
+      _preferredEndpoints[trustRecord.hostId] = endpoint;
+      return value;
+    } finally {
+      transportHandle.close();
+    }
+  }
+
   @override
   Future<AttentionSnapshot> fetchAttention(CompanionTrustRecord trustRecord) =>
       _authenticatedRead(
@@ -228,6 +255,7 @@ final class GeneratedCompanionClient
           credential: trustRecord.deviceCredential,
         ),
       );
+
   @override
   Future<ProjectCatalog> fetchProjectCatalog(
     CompanionTrustRecord trustRecord,
@@ -253,28 +281,14 @@ final class GeneratedCompanionClient
     CompanionTrustRecord trustRecord,
     String projectId,
     String initialPrompt,
-  ) async {
-    final endpoints = _preferEndpoint(
-      trustRecord.endpointCandidates,
-      _preferredEndpoints[trustRecord.hostId],
-    );
-    if (endpoints.isEmpty) {
-      throw StateError('No Companion endpoint candidates are available.');
-    }
-    final transportHandle = _transportFactory(trustRecord.certificateSha256);
-    try {
-      return await CompanionV1Client(
-        baseUrl: endpoints.first,
-        transport: transportHandle.transport,
-      ).createCompanionTask(
-        projectId: projectId,
-        initialPrompt: initialPrompt,
-        credential: trustRecord.deviceCredential,
-      );
-    } finally {
-      transportHandle.close();
-    }
-  }
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.createCompanionTask(
+      projectId: projectId,
+      initialPrompt: initialPrompt,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
 
   @override
   Future<TaskDetail> fetchTaskDetail(
@@ -292,79 +306,37 @@ final class GeneratedCompanionClient
   Future<TaskCompleteResult> completeTask(
     CompanionTrustRecord trustRecord,
     String taskId,
-  ) async {
-    final endpoint = _preferEndpoint(
-      trustRecord.endpointCandidates,
-      _preferredEndpoints[trustRecord.hostId],
-    ).first;
-    final endpointTransport = _transportFactory(trustRecord.certificateSha256);
-    try {
-      return await CompanionV1Client(
-        baseUrl: endpoint,
-        transport: endpointTransport.transport,
-      ).completeCompanionTask(
-        taskId: taskId,
-        credential: trustRecord.deviceCredential,
-      );
-    } finally {
-      endpointTransport.close();
-    }
-  }
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.completeCompanionTask(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
 
   @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
     CompanionTrustRecord trustRecord,
     String taskId,
-  ) async {
-    if (trustRecord.endpointCandidates.isEmpty) {
-      throw StateError('No Companion endpoint candidates are available.');
-    }
-    final endpoint = _preferEndpoint(
-      trustRecord.endpointCandidates,
-      _preferredEndpoints[trustRecord.hostId],
-    ).first;
-    final transportHandle = _transportFactory(trustRecord.certificateSha256);
-    try {
-      final receipt =
-          await CompanionV1Client(
-            baseUrl: endpoint,
-            transport: transportHandle.transport,
-          ).deleteCompanionBacklogTask(
-            taskId: taskId,
-            credential: trustRecord.deviceCredential,
-          );
-      _preferredEndpoints[trustRecord.hostId] = endpoint;
-      return receipt;
-    } finally {
-      transportHandle.close();
-    }
-  }
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.deleteCompanionBacklogTask(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
 
   @override
   Future<TaskStartResult> startTask(
     CompanionTrustRecord trustRecord,
     String taskId,
-  ) async {
-    final endpoints = _preferEndpoint(
-      trustRecord.endpointCandidates,
-      _preferredEndpoints[trustRecord.hostId],
-    );
-    if (endpoints.isEmpty) {
-      throw StateError('No Companion endpoint candidates are available.');
-    }
-    final transportHandle = _transportFactory(trustRecord.certificateSha256);
-    try {
-      return await CompanionV1Client(
-        baseUrl: endpoints.first,
-        transport: transportHandle.transport,
-      ).startCompanionTask(
-        taskId: taskId,
-        credential: trustRecord.deviceCredential,
-      );
-    } finally {
-      transportHandle.close();
-    }
-  }
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.startCompanionTask(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
 
   @override
   Future<CompanionLiveConnection> openLiveEvents(
