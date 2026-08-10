@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '20c41f770120cabedc1244fea125e178a828407c4a061bcb5e4a5c8e557861af';
+    'e643499b33af610f5397c6e0d1365ff7caef2047ac44e742ab2108ad0601a5e2';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -756,6 +756,54 @@ final class TaskDetail {
   final DateTime? agentUpdatedAt;
 }
 
+final class TaskCreateRequest {
+  const TaskCreateRequest({
+    required this.initialPrompt,
+  });
+
+  factory TaskCreateRequest.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'initialPrompt'});
+    final model = TaskCreateRequest(
+      initialPrompt: _required(json, 'initialPrompt', (value) => _asString(value, 'initialPrompt', minLength: 1, maxLength: 64000)),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'initialPrompt': initialPrompt,
+  };
+
+  final String initialPrompt;
+}
+
+final class TaskCreateResult {
+  const TaskCreateResult({
+    required this.taskId,
+    required this.projectId,
+    required this.boardStatus,
+  });
+
+  factory TaskCreateResult.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'taskId', 'projectId', 'boardStatus'});
+    final model = TaskCreateResult(
+      taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
+      projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
+      boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', constant: 'backlog')),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'taskId': taskId,
+      'projectId': projectId,
+      'boardStatus': boardStatus,
+  };
+
+  final String taskId;
+  final String projectId;
+  final String boardStatus;
+}
+
 final class TaskCompleteResult {
   const TaskCompleteResult({
     required this.taskId,
@@ -1039,6 +1087,30 @@ final class CompanionV1Client {
       },
     );
     return ProjectBoard.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
+  Future<TaskCreateResult> createCompanionTask({
+    required String projectId,
+    required String initialPrompt,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/tasks'),
+      headers: <String, String>{
+      'content-type': 'application/json',
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+      body: jsonEncode(
+        TaskCreateRequest(
+          initialPrompt: initialPrompt,
+        ).toJson(),
+      ),
+    );
+    return TaskCreateResult.fromJson(
       _successJson(response, const <int>{200}),
     );
   }

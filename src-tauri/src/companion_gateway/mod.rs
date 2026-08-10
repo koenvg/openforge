@@ -15,6 +15,7 @@ mod rate_limit;
 mod stream_termination;
 mod tailscale;
 mod task_actions;
+mod task_creation;
 mod task_detail;
 mod task_start;
 mod terminal;
@@ -104,6 +105,8 @@ mod pairing_tests;
 mod project_board_tests;
 #[cfg(test)]
 mod task_actions_tests;
+#[cfg(test)]
+mod task_creation_tests;
 #[cfg(test)]
 mod task_detail_tests;
 #[cfg(test)]

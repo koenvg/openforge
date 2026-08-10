@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
 
 final class _WidgetClient implements CompanionClient {
+  final List<(String, String)> creationRequests = <(String, String)>[];
+  Object? creationError;
   @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
     CompanionTrustRecord trustRecord,
@@ -33,6 +36,21 @@ final class _WidgetClient implements CompanionClient {
     CompanionTrustRecord trustRecord,
     String projectId,
   ) async => _board(projectId, projectId == 'P-1' ? 'Alpha' : 'Beta');
+
+  @override
+  Future<TaskCreateResult> createTask(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+    String initialPrompt,
+  ) async {
+    creationRequests.add((projectId, initialPrompt));
+    if (creationError case final Object error) throw error;
+    return TaskCreateResult(
+      taskId: 'T-new',
+      projectId: projectId,
+      boardStatus: 'backlog',
+    );
+  }
 
   @override
   Future<TaskDetail> fetchTaskDetail(
@@ -115,6 +133,73 @@ void main() {
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
+  });
+
+  testWidgets('creates a Task from the selected Project Board', (tester) async {
+    final client = _WidgetClient();
+    final selectedTasks = <String>[];
+    final controller = ProjectBoardController(
+      client: client,
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProjectBoardHome(
+          controller: controller,
+          onTaskSelected: selectedTasks.add,
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Create new Task'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create Task'), findsWidgets);
+    await tester.enterText(
+      find.byType(TextField),
+      'Investigate mobile creation',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Task'));
+    await tester.pumpAndSettle();
+
+    expect(client.creationRequests, <(String, String)>[
+      ('P-1', 'Investigate mobile creation'),
+    ]);
+    expect(selectedTasks, <String>['T-new']);
+  });
+
+  testWidgets('warns before retrying after an uncertain creation response', (
+    tester,
+  ) async {
+    final client = _WidgetClient()
+      ..creationError = const SocketException('response lost');
+    final controller = ProjectBoardController(
+      client: client,
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+    await tester.pumpWidget(
+      MaterialApp(home: ProjectBoardHome(controller: controller)),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Create new Task'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'Investigate mobile creation',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Task'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Task may have been created. Check Backlog before retrying.'),
+      findsOneWidget,
+    );
+    expect(client.creationRequests, hasLength(1));
+    expect(find.text('Create Task'), findsWidgets);
   });
 
   testWidgets('the Project switcher changes scope and returns to Focus', (

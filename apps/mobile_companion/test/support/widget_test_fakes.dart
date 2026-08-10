@@ -171,6 +171,13 @@ final class DomainCompanionClient implements CompanionClient {
     String taskId,
   ) => throw UnsupportedError('not used');
   @override
+  Future<TaskCreateResult> createTask(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+    String initialPrompt,
+  ) => throw UnsupportedError('not used');
+
+  @override
   Future<CompanionHostConnection> fetchHostStatus(
     CompanionTrustRecord trustRecord,
   ) async => CompanionHostConnection(

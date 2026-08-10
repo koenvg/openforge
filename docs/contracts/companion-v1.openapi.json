@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; every existing and newly approved paired-device credential receives interactive Agent terminal access plus the fixed authority to Start backlog Tasks and Delete or Complete Tasks through explicit Task-scoped operations. Desktop-authoritative reads and mutations expose no generic command dispatch or sensitive desktop state."
+    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; every existing and newly approved paired-device credential receives interactive Agent terminal access plus the fixed authority to Create backlog Tasks and Start, Delete, or Complete Tasks through explicit Project- and Task-scoped operations. Desktop-authoritative reads and mutations expose no generic command dispatch or sensitive desktop state."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -181,6 +181,47 @@
               }
             }
           },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
+    "/projects/{projectId}/tasks": {
+      "post": {
+        "operationId": "createCompanionTask",
+        "summary": "Create a backlog Task in one visible Project",
+        "description": "Creates exactly one backlog Task using the submitted initial prompt and desktop-saved Project defaults. Clients must not automatically retry after transport uncertainty; they refresh the Project Board before offering a manual retry.",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TaskCreateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The backlog Task was created and Board resources will invalidate",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskCreateResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/CompanionError" },
           "401": { "$ref": "#/components/responses/CompanionError" },
           "404": { "$ref": "#/components/responses/CompanionError" },
           "409": { "$ref": "#/components/responses/CompanionError" },
@@ -378,7 +419,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "OpenForge companion device credential",
-        "description": "A fixed pre-release paired-device credential authorizes desktop-authoritative reads, interactive Agent terminal attachment, and only the explicit Start, Delete, and Complete Task operations. Existing credentials inherit this authority without reapproval or migration; revocation, gateway disablement, host identity reset, credential failure, or certificate-pin failure removes access."
+        "description": "A fixed pre-release paired-device credential authorizes desktop-authoritative reads, interactive Agent terminal attachment, and only the explicit Create, Start, Delete, and Complete Task operations. Existing credentials inherit this authority without reapproval or migration; revocation, gateway disablement, host identity reset, credential failure, or certificate-pin failure removes access."
       }
     },
     "parameters": {
@@ -642,6 +683,24 @@
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" },
           "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "TaskCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["initialPrompt"],
+        "properties": {
+          "initialPrompt": { "type": "string", "minLength": 1, "maxLength": 64000 }
+        }
+      },
+      "TaskCreateResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskId", "projectId", "boardStatus"],
+        "properties": {
+          "taskId": { "type": "string", "minLength": 1 },
+          "projectId": { "type": "string", "minLength": 1 },
+          "boardStatus": { "const": "backlog" }
         }
       },
       "TaskCompleteResult": {

@@ -157,7 +157,7 @@ _ConnectionContent _contentFor(
   Unpaired() => const _ConnectionContent(
     title: 'Not paired',
     message:
-        'Pairing lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'Pairing lets this phone Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
         'and interact with running Agent terminals as your desktop user, in '
         'addition to viewing live Task status.',
     icon: Icons.phonelink_off,
@@ -172,7 +172,7 @@ _ConnectionContent _contentFor(
   AwaitingApproval() => const _ConnectionContent(
     title: 'Awaiting desktop approval',
     message:
-        'Approval lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'Approval lets this phone Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
         'and interact with running Agent terminals as your desktop user while '
         'viewing Task data.',
     icon: Icons.approval_outlined,
@@ -196,7 +196,7 @@ _ConnectionContent _contentFor(
   Connected() => const _ConnectionContent(
     title: 'Connected',
     message:
-        'This paired device can Start backlog Tasks, Delete or Complete Tasks, '
+        'This paired device can Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
         'and interact with running Agent terminals as your desktop user. This '
         'authority remains available while the Mac is locked and ends when the '
         'gateway is disabled, the device is revoked, or Companion identity changes.',

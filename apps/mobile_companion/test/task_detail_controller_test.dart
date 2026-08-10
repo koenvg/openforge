@@ -47,6 +47,12 @@ final _backlogDetail = TaskDetail(
 );
 
 final class _FakeClient implements CompanionClient {
+  @override
+  Future<TaskCreateResult> createTask(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+    String initialPrompt,
+  ) => throw UnsupportedError('not used');
   Object result = _detail;
   Completer<TaskDetail>? pendingDetail;
   var taskDetailCalls = 0;

@@ -176,7 +176,7 @@
           {platformLabel(pairing.pendingRequest.platform)} · Awaiting your approval
         </div>
         <p class="m-0 mt-2 text-xs text-base-content/70">
-          Approval grants this phone authority to Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into
+          Approval grants this phone authority to Create backlog Tasks from a prompt, Start backlog Tasks with saved defaults, Delete or Complete Tasks, and type into
           running Agent terminals as your desktop user. This authority remains active while the Mac is locked and ends when the gateway is disabled, the device is revoked, or Companion identity is reset.
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
