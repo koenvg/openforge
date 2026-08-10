@@ -204,7 +204,7 @@ These actions use explicit, Task-scoped Companion routes backed by shared Rust l
 
 - An All Projects board, cross-Project lane aggregation, or retaining the old cross-Project attention home as a second primary mobile view.
 - Project creation, editing, hiding, reordering, deleting, repository selection, or settings management from mobile.
-- Task creation, prompt/title editing, dependency editing, label assignment, desktop Backlog label filtering, or full desktop Task-card parity.
+- Task editing, dependency editing, label assignment, desktop Backlog label filtering, or full desktop Task-card parity. Prompt-only Task creation is defined separately in `2026-08-10-mobile-task-creation-design.md`.
 - Moving Tasks between Backlog and doing through arbitrary status changes.
 - Set Aside, Return to Board, Focus-configuration editing, or any other lane mutation from mobile.
 - Standalone Agent resume, abort, replace, restart, kill, provider selection, permission changes, model selection, or run configuration from mobile.

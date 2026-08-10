@@ -385,6 +385,7 @@ async fn hidden_projects_are_also_concealed_from_attention_and_task_detail() {
             ))),
             task_detail: Arc::new(DatabaseCompanionTaskDetailSource::new(database)),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             events: AppEventBus::new(16, 8),
             stream_access,

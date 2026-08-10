@@ -47,6 +47,19 @@ final class ProjectBoardLoadError extends ProjectBoardViewState {
   final String? selectedProjectId;
 }
 
+final class TaskCreationFailure implements Exception {
+  const TaskCreationFailure({
+    required this.message,
+    required this.outcomeMayBeUncertain,
+  });
+
+  final String message;
+  final bool outcomeMayBeUncertain;
+
+  @override
+  String toString() => message;
+}
+
 final class ProjectBoardController extends ChangeNotifier {
   ProjectBoardController({
     required this._client,
@@ -83,6 +96,48 @@ final class ProjectBoardController extends ChangeNotifier {
     if (_selectedLane == lane) return;
     _selectedLane = lane;
     notifyListeners();
+  }
+
+  Future<TaskCreateResult> createTask(String initialPrompt) async {
+    final prompt = initialPrompt.trim();
+    if (prompt.isEmpty) {
+      throw ArgumentError.value(
+        initialPrompt,
+        'initialPrompt',
+        'must not be empty',
+      );
+    }
+    final projectId = _selectedProjectId;
+    if (projectId == null) {
+      throw StateError('No Project is selected.');
+    }
+    final trustRecord = await _storage.load();
+    if (trustRecord == null) {
+      _authorizationLost();
+      throw StateError('Companion authorization is unavailable.');
+    }
+
+    try {
+      final created = await _client.createTask(trustRecord, projectId, prompt);
+      selectLane(ProjectBoardLane.backlog);
+      await refreshSelectedBoardWithOutcome();
+      return created;
+    } on CompanionV1Exception catch (error) {
+      if (error.code == 'revoked' || error.code == 'unauthenticated') {
+        _authorizationLost();
+      }
+      throw TaskCreationFailure(
+        message: error.message,
+        outcomeMayBeUncertain: false,
+      );
+    } on Object {
+      selectLane(ProjectBoardLane.backlog);
+      await refreshSelectedBoardWithOutcome();
+      throw const TaskCreationFailure(
+        message: 'Task may have been created. Check Backlog before retrying.',
+        outcomeMayBeUncertain: true,
+      );
+    }
   }
 
   Future<void> refresh() async {

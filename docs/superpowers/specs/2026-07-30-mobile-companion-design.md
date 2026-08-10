@@ -222,6 +222,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 
 ## Out of Scope
 
+> This section records the original Companion milestone boundary. Later accepted designs expand terminal and Task authority; prompt-only Task creation is specified in `2026-08-10-mobile-task-creation-design.md`.
 - OpenForge accounts, hosted authentication, cloud synchronization, central storage, rendezvous services, or OpenForge-operated relays.
 - Replacing Tailscale with custom NAT traversal, STUN/TURN, port forwarding automation, or a public internet listener.
 - Operation while the OpenForge desktop application is closed.

@@ -2,12 +2,12 @@
 
 A dedicated Flutter application for iOS and Android. It is intentionally
 independent from the pnpm workspace and provides desktop-approved pairing, a
-Project-scoped four-lane Board and Task detail, explicit Start/Delete/Complete
-Task actions, foreground live updates, and an interactive attachment to an
-already-running Task Agent terminal,
+Project-scoped four-lane Board and Task detail, prompt-only Backlog Task creation,
+explicit Start/Delete/Complete Task actions, foreground live updates, and an
+interactive attachment to an already-running Task Agent terminal,
 pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
 Tailscale MagicDNS fallback, and explicit connection and recovery states.
-The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md) and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
+The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md), [Mobile Task Creation design](../../docs/superpowers/specs/2026-08-10-mobile-task-creation-design.md), and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
 
 ## Data and trust boundary
 
@@ -21,9 +21,10 @@ paired host and presents the exact pinned certificate.
 Every existing and newly approved paired-device credential has the same fixed
 pre-release authority. It can read the desktop-authoritative Project catalog,
 four-lane Project Board, Task detail, and foreground coarse invalidations; attach
-interactively to the current Agent terminal for a Task; Start a backlog Task with
-its saved defaults; and Delete a backlog Task or Complete an active Task through
-explicit Task-scoped operations. Existing credentials inherit this authority
+interactively to the current Agent terminal for a Task; Create a prompt-only
+backlog Task in the selected visible Project; Start a backlog Task with its saved
+defaults; and Delete a backlog Task or Complete an active Task through explicit
+Project- and Task-scoped operations. Existing credentials inherit this authority
 without reapproval, migration, renewed consent, or per-device scopes.
 
 The Project catalog contains only visible Project identifiers and display names.
@@ -34,6 +35,12 @@ normalized Agent state, an optional safe Agent error summary, terminal
 availability, and timestamps. The API omits filesystem paths, repository data,
 provider configuration, internal Agent-session identifiers, terminal content,
 and credentials from these HTTP resources.
+
+Create accepts only an initial prompt and the selected visible Project identifier.
+The desktop creates a Backlog Task and leaves provider, permission, worktree,
+Handoff Notes, and other runtime settings to desktop-saved Project defaults. Create
+makes one network attempt; after transport uncertainty mobile refreshes Backlog and
+warns the user to check for the Task before manually retrying.
 
 Start accepts only a Task identifier and resolves Project, provider, agent,
 permission, workspace, branch, prompt, and model choices from desktop state. It
@@ -136,7 +143,7 @@ distribution, privacy wording, and physical-device evidence are documented in th
 ## Architecture boundaries
 
 - `lib/src/client/companion_client.dart` keeps read/failover calls and each
-  single-attempt Start/Delete/Complete mutation behind the generated Companion
+  single-attempt Create/Start/Delete/Complete mutations behind the generated Companion
   client boundary; mutations never fail over or retry automatically.
 - `lib/src/project_board/` owns the host-scoped Selected Project, the in-memory
   authoritative four-lane snapshot, lane positions, generation races, and refresh
@@ -166,7 +173,7 @@ or relay; Tailscale remains user-selected network infrastructure.
    `*.ts.net` MagicDNS hostname.
 2. Enable Companion Gateway after Tailscale is connected and verify Settings offers
    both LAN and Tailscale endpoints. Confirm gateway, pairing approval, and paired-
-   device copy disclose Start, Delete, Complete, and interactive Agent terminal
+   device copy disclose Create, Start, Delete, Complete, and interactive Agent terminal
    authority without calling the credential read-only.
 3. Pair once by QR. Fully close and relaunch the phone app; verify the existing
    credential reconnects without another approval. Confirm Project selection persists,
@@ -176,7 +183,10 @@ or relay; Tailscale remains user-selected network infrastructure.
    selected Board and open Task refresh without disturbing unrelated Projects. Break
    and restore connectivity, suspend/resume, and induce a replay gap; stale domain
    state must clear before fresh Board/detail snapshots appear.
-5. Start backlog Tasks with each supported saved provider default. Verify a desktop-
+5. Create a prompt-only backlog Task in the selected Project and confirm success opens
+   its detail after a Board refresh. Interrupt the response and confirm Backlog refreshes
+   with a check-before-retry warning and no automatic second mutation. Then Start
+   backlog Tasks with each supported saved provider default. Verify a desktop-
    action-required branch/workspace choice refuses safely, duplicate taps are blocked,
    no provider/workspace inputs are offered, and uncertain network outcomes refetch
    before another attempt.

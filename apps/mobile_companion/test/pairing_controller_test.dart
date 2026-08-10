@@ -24,6 +24,12 @@ String get _qrPayload =>
 
 final class _FakeClient implements CompanionClient {
   @override
+  Future<TaskCreateResult> createTask(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+    String initialPrompt,
+  ) => throw UnsupportedError('not used');
+  @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
     CompanionTrustRecord trustRecord,
     String taskId,

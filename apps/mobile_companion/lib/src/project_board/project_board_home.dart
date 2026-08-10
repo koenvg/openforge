@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../generated/companion_v1_client.dart';
 import 'project_board_controller.dart';
+import 'task_creation_sheet.dart';
 
 part 'project_board_content.dart';
 
@@ -99,6 +100,19 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     });
   }
 
+  Future<void> _showTaskComposer() async {
+    final created = await showModalBottomSheet<TaskCreateResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) =>
+          TaskCreationSheet(onCreate: widget.controller.createTask),
+    );
+    if (!mounted || created == null) return;
+    widget.onTaskSelected?.call(created.taskId);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.state;
@@ -125,6 +139,20 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
               )
             : null,
       ),
+      floatingActionButton: state is ProjectBoardLoaded
+          ? Semantics(
+              label: 'Create new Task',
+              button: true,
+              child: ExcludeSemantics(
+                child: FloatingActionButton.extended(
+                  onPressed: _showTaskComposer,
+                  tooltip: 'Create new Task',
+                  icon: const Icon(Icons.add_task),
+                  label: const Text('New Task'),
+                ),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: _ProjectBoardBody(
           state: state,

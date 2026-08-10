@@ -15,7 +15,7 @@ void main() {
     expect(find.text('Not paired'), findsOneWidget);
     expect(
       find.textContaining(
-        'Pairing lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'Pairing lets this phone Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
         'and interact with running Agent terminals as your desktop user',
       ),
       findsOneWidget,
@@ -35,7 +35,7 @@ void main() {
 
     expect(
       find.textContaining(
-        'Approval lets this phone Start backlog Tasks, Delete or Complete Tasks, '
+        'Approval lets this phone Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
         'and interact with running Agent terminals',
       ),
       findsOneWidget,
@@ -80,7 +80,7 @@ void main() {
       expect(find.text('Connected'), findsOneWidget);
       expect(
         find.textContaining(
-          'This paired device can Start backlog Tasks, Delete or Complete Tasks, '
+          'This paired device can Create backlog Tasks from a prompt, Start backlog Tasks, Delete or Complete Tasks, '
           'and interact with running Agent terminals',
         ),
         findsOneWidget,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
@@ -20,6 +21,8 @@ final class _FakeClient implements CompanionClient {
     ],
   );
   final List<String> boardRequests = <String>[];
+  final List<(String, String)> creationRequests = <(String, String)>[];
+  Object? creationError;
   final Map<String, Completer<ProjectBoard>> pendingBoards =
       <String, Completer<ProjectBoard>>{};
 
@@ -40,6 +43,21 @@ final class _FakeClient implements CompanionClient {
       (candidate) => candidate.projectId == projectId,
     );
     return _board(project.projectId, project.name);
+  }
+
+  @override
+  Future<TaskCreateResult> createTask(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+    String initialPrompt,
+  ) async {
+    creationRequests.add((projectId, initialPrompt));
+    if (creationError case final Object error) throw error;
+    return TaskCreateResult(
+      taskId: 'T-new',
+      projectId: projectId,
+      boardStatus: 'backlog',
+    );
   }
 
   @override
@@ -279,6 +297,55 @@ void main() {
       expect(state.board.projectId, 'P-1');
     },
   );
+  test('creates in the selected Project and refreshes its Board', () async {
+    final client = _FakeClient();
+    final controller = ProjectBoardController(
+      client: client,
+      storage: _FakeStorage(),
+    );
+    await controller.refresh();
+    client.boardRequests.clear();
+
+    final created = await controller.createTask('Investigate mobile creation');
+
+    expect(created.taskId, 'T-new');
+    expect(client.creationRequests, <(String, String)>[
+      ('P-1', 'Investigate mobile creation'),
+    ]);
+    expect(client.boardRequests, <String>['P-1']);
+    expect(controller.selectedLane, ProjectBoardLane.backlog);
+  });
+  test('refreshes Backlog and marks a lost response as uncertain', () async {
+    final client = _FakeClient();
+    final controller = ProjectBoardController(
+      client: client,
+      storage: _FakeStorage(),
+    );
+    await controller.refresh();
+    client.boardRequests.clear();
+    client.creationError = const SocketException('response lost');
+
+    await expectLater(
+      controller.createTask('Investigate mobile creation'),
+      throwsA(
+        isA<TaskCreationFailure>()
+            .having(
+              (failure) => failure.outcomeMayBeUncertain,
+              'outcomeMayBeUncertain',
+              isTrue,
+            )
+            .having(
+              (failure) => failure.message,
+              'message',
+              contains('may have been created'),
+            ),
+      ),
+    );
+
+    expect(client.creationRequests, hasLength(1));
+    expect(client.boardRequests, <String>['P-1']);
+    expect(controller.selectedLane, ProjectBoardLane.backlog);
+  });
 }
 
 ProjectBoard _board(String projectId, String projectName) => ProjectBoard(

@@ -17,6 +17,7 @@ use super::{
         DetectedTailscaleHostname, LocalTailscaleHostnameProvider, TailscaleHostnameProvider,
     },
     task_actions::CompanionTaskActionService,
+    task_creation::{CompanionTaskCreator, DatabaseCompanionTaskCreator},
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
     task_start::CompanionTaskStarter,
 };
@@ -25,6 +26,7 @@ use super::{
     attention::UnavailableCompanionAttentionSource,
     project_board::UnavailableCompanionProjectBoardSource,
     tailscale::FixedTailscaleHostnameProvider, task_actions::UnavailableCompanionTaskActionService,
+    task_creation::UnavailableCompanionTaskCreator,
     task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::{
@@ -154,6 +156,7 @@ struct CompanionGatewayDomainSources {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    task_creator: Arc<dyn CompanionTaskCreator>,
     task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -173,6 +176,7 @@ pub(crate) struct CompanionGatewayManager {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    task_creator: Arc<dyn CompanionTaskCreator>,
     task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -206,6 +210,10 @@ impl CompanionGatewayManager {
             Some(events.clone()),
             None,
         ));
+        let task_creator = Arc::new(DatabaseCompanionTaskCreator::new(
+            Arc::clone(&database),
+            events.clone(),
+        ));
         let task_start = Arc::new(crate::task_start::TaskStartService::new(
             app,
             Arc::clone(&database),
@@ -225,6 +233,7 @@ impl CompanionGatewayManager {
                     &database,
                 ))),
                 task_actions,
+                task_creator,
                 task_start,
                 events,
                 pty_manager,
@@ -255,6 +264,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 task_actions: Arc::new(UnavailableCompanionTaskActionService),
+                task_creator: Arc::new(UnavailableCompanionTaskCreator),
                 task_start: Arc::new(UnavailableCompanionTaskStarter),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
@@ -287,6 +297,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::new(UnavailableCompanionProjectBoardSource),
                 task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
                 task_actions: Arc::new(UnavailableCompanionTaskActionService),
+                task_creator: Arc::new(UnavailableCompanionTaskCreator),
                 task_start: Arc::new(UnavailableCompanionTaskStarter),
                 events: AppEventBus::new(16, 8),
                 pty_manager: crate::pty_manager::PtyManager::new(),
@@ -313,6 +324,7 @@ impl CompanionGatewayManager {
             project_board,
             task_detail,
             task_actions,
+            task_creator,
             task_start,
             pty_manager,
             events,
@@ -342,6 +354,7 @@ impl CompanionGatewayManager {
             project_board,
             task_detail,
             task_actions,
+            task_creator,
             task_start,
             events,
             pty_manager,
@@ -494,6 +507,7 @@ impl CompanionGatewayManager {
                 project_board: Arc::clone(&self.project_board),
                 task_detail: Arc::clone(&self.task_detail),
                 task_actions: Arc::clone(&self.task_actions),
+                task_creator: Arc::clone(&self.task_creator),
                 task_start: Arc::clone(&self.task_start),
                 pty_manager: self.pty_manager.clone(),
                 events: self.events.clone(),

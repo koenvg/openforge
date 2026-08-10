@@ -61,6 +61,11 @@
     "updatedAt": "2026-07-30T11:58:00Z",
     "agentUpdatedAt": "2026-07-30T11:59:00Z"
   },
+  "taskCreate": {
+    "taskId": "KVG-3093",
+    "projectId": "P-4",
+    "boardStatus": "backlog"
+  },
   "taskCompleteResult": {
     "taskId": "KVG-2946",
     "boardStatus": "done",

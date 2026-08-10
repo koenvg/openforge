@@ -57,7 +57,7 @@ final class _EndpointTransport implements CloseableCompanionV1Transport {
 
 void main() {
   test(
-    'generated client matches pairing, reads, Complete, and event contracts',
+    'generated client matches pairing, reads, Task mutations, and event contracts',
     () async {
       final contract =
           jsonDecode(
@@ -91,6 +91,7 @@ void main() {
       expect(encodedContract, contains('getCompanionAttention'));
       expect(encodedContract, contains('getCompanionProjects'));
       expect(encodedContract, contains('getCompanionProjectBoard'));
+      expect(encodedContract, contains('createCompanionTask'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
       expect(encodedContract, contains('completeCompanionTask'));
       expect(encodedContract, contains('startCompanionTask'));
@@ -106,6 +107,7 @@ void main() {
           '/attention',
           '/projects',
           '/projects/{projectId}/board',
+          '/projects/{projectId}/tasks',
           '/tasks/{taskId}',
           '/tasks/{taskId}/complete',
           '/tasks/{taskId}/start',
@@ -191,6 +193,10 @@ void main() {
           ),
           CompanionV1HttpResponse(
             statusCode: 200,
+            body: jsonEncode(fixtures['taskCreate']),
+          ),
+          CompanionV1HttpResponse(
+            statusCode: 200,
             body: jsonEncode(fixtures['taskDetail']),
           ),
           CompanionV1HttpResponse(
@@ -222,6 +228,11 @@ void main() {
       final attention = await client.getCompanionAttention(
         credential: approval.credential!,
       );
+      final created = await client.createCompanionTask(
+        projectId: 'P-4',
+        initialPrompt: 'Investigate mobile creation',
+        credential: approval.credential!,
+      );
       final detail = await client.getCompanionTaskDetail(
         taskId: 'KVG-2946',
         credential: approval.credential!,
@@ -247,6 +258,9 @@ void main() {
       expect(attention.items.single.taskId, 'KVG-2945');
       expect(attention.items.single.projectName, 'OpenForge');
       expect(attention.items.single.state, 'needs-input');
+      expect(created.taskId, 'KVG-3093');
+      expect(created.projectId, 'P-4');
+      expect(created.boardStatus, 'backlog');
       expect(detail.title, 'Add mobile Task detail');
       expect(detail.boardStatus, 'doing');
       expect(detail.handoffNotes, 'Ready for review.');
@@ -288,27 +302,39 @@ void main() {
         transport.requests[3].headers['openforge-companion-protocol-version'],
         '1',
       );
-      expect(transport.requests[4].uri.path, '/companion/v1/tasks/KVG-2946');
+      expect(transport.requests[4].method, 'POST');
+      expect(
+        transport.requests[4].uri.path,
+        '/companion/v1/projects/P-4/tasks',
+      );
+      expect(jsonDecode(transport.requests[4].body!), <String, Object?>{
+        'initialPrompt': 'Investigate mobile creation',
+      });
       expect(
         transport.requests[4].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
-      expect(
-        transport.requests[4].headers['openforge-companion-protocol-version'],
-        '1',
-      );
-      expect(transport.requests[5].method, 'POST');
-      expect(
-        transport.requests[5].uri.path,
-        '/companion/v1/tasks/KVG-2946/complete',
-      );
+      expect(transport.requests[5].uri.path, '/companion/v1/tasks/KVG-2946');
       expect(
         transport.requests[5].headers['authorization'],
         'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
       );
+      expect(
+        transport.requests[5].headers['openforge-companion-protocol-version'],
+        '1',
+      );
       expect(transport.requests[6].method, 'POST');
       expect(
         transport.requests[6].uri.path,
+        '/companion/v1/tasks/KVG-2946/complete',
+      );
+      expect(
+        transport.requests[6].headers['authorization'],
+        'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      );
+      expect(transport.requests[7].method, 'POST');
+      expect(
+        transport.requests[7].uri.path,
         '/companion/v1/tasks/KVG-3032/delete',
       );
       expect(eventRequest.method, 'GET');
@@ -323,7 +349,7 @@ void main() {
         eventRequestWithoutCursor.headers,
         isNot(contains('last-event-id')),
       );
-      expect(transport.requests, hasLength(7));
+      expect(transport.requests, hasLength(8));
     },
   );
 
