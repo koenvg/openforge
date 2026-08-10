@@ -1369,8 +1369,8 @@ function getProjectFileTreeItemAccessibility(node, state) {
 function formatProjectFileTreeSize(size) {
 	if (size === null) return "";
 	if (size < 1024) return `${size} B`;
-	if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+	if (size < 1048576) return `${(size / 1024).toFixed(1)} KB`;
+	return `${(size / 1048576).toFixed(1)} MB`;
 }
 function projectFileTreePathToId(path) {
 	return `project-file-tree-${Array.from(path).map((char) => char.charCodeAt(0).toString(36)).join("-")}`;
