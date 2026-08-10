@@ -55,6 +55,13 @@ final class _EndpointTransport implements CloseableCompanionV1Transport {
   void close() {}
 }
 
+typedef _RunTaskMutation =
+    Future<Object> Function(
+      GeneratedCompanionClient client,
+      CompanionTrustRecord trust,
+    );
+typedef _TaskMutation = ({String path, _RunTaskMutation run});
+
 void main() {
   test(
     'generated client matches pairing, reads, Task mutations, and event contracts',
@@ -507,6 +514,119 @@ void main() {
     expect(requests.single.uri.host, '192.168.1.20');
     expect(requests.single.uri.path, '/companion/v1/tasks/T-1/delete');
   });
+
+  test(
+    'Task mutations reject missing endpoints before opening transport',
+    () async {
+      var transportsOpened = 0;
+      final client = GeneratedCompanionClient(
+        transportFactory: (_) {
+          transportsOpened += 1;
+          return CompanionEndpointTransport(
+            transport: _RecordingTransport(),
+            close: () {},
+          );
+        },
+      );
+      final trust = CompanionTrustRecord(
+        hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+        certificateSha256: 'trusted-pin',
+        endpointCandidates: const <Uri>[],
+        deviceId: 'device-1',
+        deviceCredential: 'credential-1',
+      );
+      final mutations = <Future<Object> Function()>[
+        () => client.createTask(trust, 'P-4', 'Investigate mobile creation'),
+        () => client.startTask(trust, 'T-1'),
+        () => client.deleteBacklogTask(trust, 'T-1'),
+        () => client.completeTask(trust, 'T-1'),
+      ];
+
+      for (final mutate in mutations) {
+        await expectLater(
+          mutate(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'No Companion endpoint candidates are available.',
+            ),
+          ),
+        );
+      }
+      expect(transportsOpened, 0);
+    },
+  );
+
+  test(
+    'Task mutations use the preferred endpoint once and close failed transports',
+    () async {
+      final mutations = <_TaskMutation>[
+        (
+          path: '/companion/v1/projects/P-4/tasks',
+          run: (client, trust) =>
+              client.createTask(trust, 'P-4', 'Investigate mobile creation'),
+        ),
+        (
+          path: '/companion/v1/tasks/T-1/start',
+          run: (client, trust) => client.startTask(trust, 'T-1'),
+        ),
+        (
+          path: '/companion/v1/tasks/T-1/delete',
+          run: (client, trust) => client.deleteBacklogTask(trust, 'T-1'),
+        ),
+        (
+          path: '/companion/v1/tasks/T-1/complete',
+          run: (client, trust) => client.completeTask(trust, 'T-1'),
+        ),
+      ];
+
+      for (final mutation in mutations) {
+        final requests = <({Uri uri, Map<String, String> headers})>[];
+        final outcomes = <String, Object>{
+          '192.168.1.20': const SocketException('unreachable'),
+          'openforge.tailnet': <Object>[
+            const CompanionV1HttpResponse(
+              statusCode: 200,
+              body:
+                  '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":1,"serverTime":"2026-08-01T12:00:00Z"}',
+            ),
+            const SocketException('uncertain mutation outcome'),
+          ],
+        };
+        var closes = 0;
+        final client = GeneratedCompanionClient(
+          transportFactory: (_) => CompanionEndpointTransport(
+            transport: _EndpointTransport(outcomes, requests: requests),
+            close: () => closes += 1,
+          ),
+        );
+        final trust = CompanionTrustRecord(
+          hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
+          certificateSha256: 'trusted-pin',
+          endpointCandidates: <Uri>[
+            Uri.parse('https://192.168.1.20:17424'),
+            Uri.parse('https://openforge.tailnet:17424'),
+          ],
+          deviceId: 'device-1',
+          deviceCredential: 'credential-1',
+        );
+        await client.fetchHostStatus(trust);
+        requests.clear();
+        closes = 0;
+
+        await expectLater(
+          mutation.run(client, trust),
+          throwsA(isA<SocketException>()),
+        );
+
+        expect(requests, hasLength(1), reason: mutation.path);
+        expect(requests.single.uri.host, 'openforge.tailnet');
+        expect(requests.single.uri.path, mutation.path);
+        expect(closes, 1, reason: mutation.path);
+      }
+    },
+  );
 
   test('endpoint fallback preserves authoritative revocation errors', () async {
     final transport = _RecordingTransport()
