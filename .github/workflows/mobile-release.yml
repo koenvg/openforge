@@ -28,7 +28,6 @@ jobs:
     timeout-minutes: 30
     environment: android-internal
     env:
-      OPENFORGE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/openforge-upload.jks
       OPENFORGE_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       OPENFORGE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       OPENFORGE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -54,7 +53,10 @@ jobs:
       - name: Restore Android upload keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$OPENFORGE_ANDROID_KEYSTORE_PATH"
+          OPENFORGE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/openforge-upload.jks
+        run: |
+          printf 'OPENFORGE_ANDROID_KEYSTORE_PATH=%s\n' "$OPENFORGE_ANDROID_KEYSTORE_PATH" >> "$GITHUB_ENV"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$OPENFORGE_ANDROID_KEYSTORE_PATH"
 
       - name: Build signed Android release candidates
         run: ./scripts/mobile-companion build-android-release
