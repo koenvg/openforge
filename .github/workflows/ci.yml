@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: "3.47.0-0.3.pre"
-  FLUTTER_CHANNEL: beta
+  FLUTTER_VERSION: "3.44.9"
+  FLUTTER_CHANNEL: stable
 
 jobs:
   frontend:
