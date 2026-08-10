@@ -2,19 +2,18 @@
 
 This is the release gate for privately distributed Mobile Companion v1 candidates. Complete it with the exact signed IPA/APK that will be distributed. Simulator/emulator results may supplement evidence but do not satisfy a physical-device cell.
 
-## KVG-2952 execution record
+## Current gate status (KVG-3111)
 
 | Field | Recorded value |
 | --- | --- |
 | Status | **BLOCKED — physical matrix not executed** |
-| Date | 2026-08-09 |
-| Candidate | Not built; signing ownership/credentials unavailable |
-| iOS device | None connected |
-| Android device | None connected |
-| Desktop/Tailscale | No tester tailnet/device pair available |
-| Local toolchain evidence | Flutter 3.44.9/Dart 3.12.2 present; Android SDK 36/JDK 17 work through Flutter; only macOS and Chrome targets detected; full Xcode not selected; no Apple signing identities or provisioning profiles |
-| Automated evidence | `./scripts/mobile-companion check` passed (201 tests); root contract/lint/typecheck/build and 3,817 Vitest tests passed; Android debug APK built with `com.openforge.app.companion` (SHA-256 `4295564369a9997cef4dab22eee759633cf28266808af7fd22390e939212ad62`); signed release commands passed focused tests |
-| Blocking owner actions | Supply protected Apple/Android signing environments, full Xcode on the iOS build host, one physical iOS device, one physical Android device, and a tester-owned tailnet; build candidates and execute every row below |
+| Documentation refresh | 2026-08-10; matrix aligned with the current Mobile Project Board, prompt-only Task creation, Companion Task Authority, and interactive Agent terminal surface |
+| Candidate | No signed candidate for this revision was built, installed, or distributed during KVG-3111 |
+| Physical devices | None tested. The KVG-2952 environment assessment found no connected iOS or Android device and no tester-owned phone/tailnet pair |
+| Physical execution | None. KVG-3111 performed documentation and automated verification only |
+| Current automated evidence | `pnpm mobile:contract:check` passed for all 12 generated Companion operations; `./scripts/mobile-companion check` passed contract drift, formatting, analysis, and 216 Flutter tests; `cargo test companion_gateway` passed 96 focused Rust tests; focused Companion Settings/contract-generator/release Vitest runs passed 23 tests |
+| Automated coverage represented | Four-lane Board projection and navigation, Task detail and Handoff Notes, prompt-only Create, Start/Delete/Complete authority and confirmation, terminal attachment/recovery, credential and lifecycle boundaries, and check-before-retry recovery after uncertain mutations |
+| Blocking owner actions | Supply protected Apple/Android signing environments, full Xcode on the iOS build host, one physical iOS device, one physical Android device, and a tester-owned tailnet; build the exact release candidates and execute every applicable row below |
 
 Do not change this record to **PASS** until all required cells have evidence. Never infer a physical pass from unit tests, simulators, code inspection, or CI build success.
 
@@ -37,10 +36,25 @@ Use `PASS`, `FAIL`, `BLOCKED`, or `N/A` in each platform/path cell. `N/A` requir
 | --- | --- | --- | --- | --- | --- |
 | Install the signed private candidate; identifier is `com.openforge.app.companion` and signer matches the owner record | BLOCKED | BLOCKED | BLOCKED | BLOCKED | |
 | Scan a fresh QR and approve the pending device only from desktop Settings | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Record approval UI and successful authenticated load, not QR contents |
-| Load Needs Attention and open Task detail from the approved device | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm only expected read-model fields are shown |
-| Receive a foreground live invalidation and refresh attention/Task detail | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Change a safe desktop fixture and record mobile refresh latency |
-| Suspend for at least 60 seconds, change desktop data, resume, and receive a fresh snapshot rather than stale content | BLOCKED | BLOCKED | BLOCKED | BLOCKED | |
-| Terminate/relaunch after viewing domain data; confirm no offline attention/Task snapshot appears before authenticated refresh | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Test once with desktop unreachable during relaunch |
+| Verify desktop gateway, pairing approval, paired-device, and mobile connection copy discloses prompt-only Create, Start, Delete, Complete, and interactive Agent terminal authority; it must not call the credential read-only | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Check both a newly approved device and an existing credential upgraded without re-approval |
+| Relaunch after pairing; reconnect without another approval and restore the host-scoped Selected Project when it remains visible | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Only the Selected Project identifier may persist; Board and Task snapshots remain memory-only |
+| Use the Project switcher; visible Projects and order match desktop, hidden Projects stay absent, no All Projects option exists, and a missing selection falls back to the first visible Project | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Switching Project must return to Focus; also verify the no-visible-Projects state |
+| Compare Focus, In Flight, Out of Focus, and Backlog against desktop for exact-one-lane membership, counts, ordering, state, reason, activity time, and completed-Task omission | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Include Focus attention, running, set-aside, backlog, failed/no-session, and completed fixtures |
+| Switch among all four lanes, open a Task, then return; preserve the originating lane and its in-memory scroll position | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Project switching resets the active lane to Focus |
+| Inspect Task detail for Task/Project identity, Board Status, labels, dependencies/dependent Tasks, Markdown Handoff Notes, Agent state and safe error, terminal availability, and timestamps | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm no filesystem paths, repository/provider configuration, internal Agent-session identifiers, credentials, or terminal output appear in HTTP detail |
+| Change the Selected Project’s Tasks and Agent state on desktop while mobile is foregrounded; refresh the Board and any open Task detail without disturbing unrelated Project state | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Record invalidation-to-refresh latency; induce a replay gap and verify clear-before-refetch |
+| Suspend for at least 60 seconds, change desktop data, resume, and receive fresh Board/Task snapshots rather than stale content | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Domain content must clear while freshness is uncertain |
+| Terminate/relaunch after viewing Board and Task detail; confirm no offline domain snapshot appears before authenticated refresh | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Test once with desktop unreachable during relaunch |
+| Create a Task from the loaded Selected Project using only a non-blank initial prompt; refresh Backlog, open the created Task detail, and confirm desktop-saved defaults remain authoritative | BLOCKED | BLOCKED | BLOCKED | BLOCKED | No labels, dependencies, provider, permission, worktree, Handoff Notes, or create-and-start controls may be offered |
+| Interrupt the Create response after submission; make exactly one mutation attempt, refresh Backlog, keep the composer open, and show “Task may have been created. Check Backlog before retrying.” | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Verify no endpoint failover, automatic retry, duplicate Task, or offline queue |
+| Start a Backlog Task from detail with one tap; use its saved desktop defaults, suppress duplicate taps while pending, remain on detail, and refresh Task/Board/terminal availability | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Repeat with each supported saved provider default; no mobile run-configuration inputs |
+| Trigger a branch/workspace choice that requires desktop judgment; Start refuses without side effects and shows a desktop-action-required recovery message | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm no workspace, Agent Session, or status transition was created |
+| Interrupt a Start response; do not retry or fail over automatically, clear stale state, and refetch Task detail plus Board before offering another attempt | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Resolve success/failure from authoritative current state |
+| Cancel Delete for a Backlog Task, then confirm it; cancellation sends no request, pending state blocks duplicates, and success removes it from the active Board while retaining Completed Task reference data | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Delete is detail-only and backlog-only; it is not a hard-delete path |
+| Cancel and then confirm Complete from Task detail in each active lane: Focus, In Flight, and Out of Focus | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirmation names the Task and discloses worktree, owned-branch, and uncommitted-work cleanup consequences |
+| Complete while an Agent terminal is active; confirmation warns that the running Agent and all Task shells stop, the terminal closes safely, and the Task leaves the active Board | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Completed Task reference data must remain available on desktop |
+| Attach the Task-scoped Terminal tab to an already-running Agent PTY; verify ready-gated UTF-8 input, output, resize, Details/Terminal switching, reconnect/retry states, exit state, and foreground suspension behavior | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm no ordinary shell, standalone Agent control, or terminal transcript persistence is exposed |
+| Interrupt Delete or Complete after submission; make no automatic retry/failover, retain safe detail state while uncertain, and refetch Task plus Board before another attempt | BLOCKED | BLOCKED | BLOCKED | BLOCKED | A stale or duplicate mutation must be rejected by current server state |
 | Connect on LAN after pairing without entering an IP address | BLOCKED | N/A | BLOCKED | N/A | |
 | Leave LAN, connect through the paired host's MagicDNS/Tailscale endpoint, and do not re-pair | N/A | BLOCKED | N/A | BLOCKED | Tailscale must be tester-managed |
 | Return to LAN, then leave it again; both path switches retain host/device identity and require no new QR | BLOCKED | BLOCKED | BLOCKED | BLOCKED | |
@@ -48,6 +62,7 @@ Use `PASS`, `FAIL`, `BLOCKED`, or `N/A` in each platform/path cell. `N/A` requir
 | Present a different certificate for a controlled candidate endpoint; connection is rejected as **Certificate Mismatch** | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Never bypass or replace the pin during this check |
 | Stop the desktop host; domain views clear and the app shows **Desktop Unavailable** | BLOCKED | BLOCKED | BLOCKED | BLOCKED | |
 | Restart the same desktop host; retry/recovery succeeds without re-pairing | BLOCKED | BLOCKED | BLOCKED | BLOCKED | |
+| Lock the Mac while OpenForge and Companion Gateway remain running; Board/detail/terminal access and Create, Start, Delete, and Complete remain authorized | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Repeat lifecycle actions on both LAN and Tailscale; macOS unlock is not an authority gate |
 | Disable Companion Gateway; service disappears/unavailable state appears; re-enable and recover without re-pairing | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm Bonjour disappearance on LAN |
 | Revoke the device from desktop; current content clears, live/authenticated calls stop, and re-pairing is required | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Execute separately per platform so one device remains available to test the other |
 | Reset desktop host identity; all old pairings/pins fail and each device requires fresh QR plus desktop approval | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Perform last because it invalidates all devices |
