@@ -1,0 +1,74 @@
+// Built-in Kotlin build definition for mobile_scanner 7.4.0.
+// Remove this override after mobile_scanner publishes a migration without KGP.
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+group = 'dev.steenbakker.mobile_scanner'
+version = '1.0-SNAPSHOT'
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace = 'dev.steenbakker.mobile_scanner'
+    compileSdk = 36
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+        test.java.srcDirs += 'src/test/kotlin'
+    }
+
+    defaultConfig {
+        minSdk = 23
+        consumerProguardFiles 'proguard-rules.pro'
+    }
+
+    dependencies {
+        def useUnbundled = project.findProperty('dev.steenbakker.mobile_scanner.useUnbundled') ?: false
+        if (useUnbundled.toBoolean()) {
+            implementation 'com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1'
+        } else {
+            implementation 'com.google.mlkit:barcode-scanning:17.3.0'
+        }
+
+        implementation 'androidx.camera:camera-lifecycle:1.6.1'
+        implementation 'androidx.camera:camera-camera2:1.6.1'
+        implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
+
+        testImplementation 'org.jetbrains.kotlin:kotlin-test'
+        testImplementation 'org.mockito:mockito-core:5.23.0'
+        testImplementation 'org.robolectric:robolectric:4.16.1'
+        testImplementation 'junit:junit:4.13.2'
+        testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:6.1.2'
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+
+        unitTests.all {
+            useJUnitPlatform()
+
+            testLogging {
+                events 'passed', 'skipped', 'failed', 'standardOut', 'standardError'
+                outputs.upToDateWhen { false }
+                showStandardStreams = true
+            }
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
