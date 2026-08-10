@@ -151,6 +151,9 @@ void main() {
           'agentState',
           'agentTerminalAvailable',
           'agentErrorSummary',
+          'labels',
+          'dependencies',
+          'dependentTasks',
           'createdAt',
           'updatedAt',
           'agentUpdatedAt',
@@ -249,6 +252,11 @@ void main() {
       expect(detail.handoffNotes, 'Ready for review.');
       expect(detail.agentState, 'failed');
       expect(detail.agentTerminalAvailable, isTrue);
+      expect(detail.labels, <String>['mobile', 'review']);
+      expect(detail.dependencies.single.taskId, 'KVG-2944');
+      expect(detail.dependencies.single.boardStatus, 'done');
+      expect(detail.dependentTasks.single.taskId, 'KVG-2947');
+      expect(detail.dependentTasks.single.remainingDependencyCount, 1);
       expect(completed.taskId, 'KVG-2946');
       expect(completed.boardStatus, 'done');
       expect(completed.cleanupScheduled, isTrue);

@@ -10,6 +10,11 @@ const HTTP_METHODS = new Set(['delete', 'get', 'patch', 'post', 'put'])
 const INLINE_ENUM_PROPERTIES = new Map([
   ['TaskStartResult.outcome', 'TaskStartOutcome'],
 ])
+const TASK_DETAIL_EMPTY_LIST_DEFAULTS = new Set([
+  'labels',
+  'dependencies',
+  'dependentTasks',
+])
 
 const lowerCamel = (value) => {
   const words = value
@@ -251,7 +256,11 @@ function renderObject(name, schema, schemas) {
         owner: name,
         property: `${property}Item`,
       })
-      return `    required List<${itemType}> ${field},`
+      const defaultsToEmpty =
+        name === 'TaskDetail' && TASK_DETAIL_EMPTY_LIST_DEFAULTS.has(property)
+      return defaultsToEmpty
+        ? `    List<${itemType}> ${field} = const <${itemType}>[],`
+        : `    required List<${itemType}> ${field},`
     }
     return `    required this.${lowerCamel(property)},`
   })

@@ -19,6 +19,9 @@ TaskDetail _detail({
   String agentState = 'running',
   bool agentTerminalAvailable = false,
   String? agentErrorSummary,
+  List<String> labels = const <String>[],
+  List<TaskRelationship> dependencies = const <TaskRelationship>[],
+  List<DependentTask> dependentTasks = const <DependentTask>[],
 }) => TaskDetail(
   taskId: 'KVG-2946',
   title: title,
@@ -29,6 +32,9 @@ TaskDetail _detail({
   agentState: agentState,
   agentTerminalAvailable: agentTerminalAvailable,
   agentErrorSummary: agentErrorSummary,
+  labels: labels,
+  dependencies: dependencies,
+  dependentTasks: dependentTasks,
   createdAt: DateTime.utc(2026, 7, 30, 10),
   updatedAt: DateTime.utc(2026, 7, 30, 11),
   agentUpdatedAt: DateTime.utc(2026, 7, 30, 12),
@@ -81,7 +87,71 @@ void main() {
     );
     expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
     expect(find.bySemanticsLabel('Ready for review.'), findsOneWidget);
+    expect(find.text('Labels'), findsNothing);
+    expect(find.text('Dependencies'), findsNothing);
+    expect(find.text('Dependent tasks'), findsNothing);
   });
+
+  testWidgets(
+    'Task detail shows labels and related Tasks and opens either relationship',
+    (tester) async {
+      final openedTaskIds = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(
+              _detail(
+                labels: const <String>['mobile', 'review'],
+                dependencies: const <TaskRelationship>[
+                  TaskRelationship(
+                    taskId: 'KVG-2944',
+                    title: 'Prepare companion contract',
+                    boardStatus: 'done',
+                  ),
+                  TaskRelationship(
+                    taskId: 'KVG-2945',
+                    title: 'Approve release notes',
+                    boardStatus: 'backlog',
+                  ),
+                ],
+                dependentTasks: const <DependentTask>[
+                  DependentTask(
+                    taskId: 'KVG-2947',
+                    title: 'Ship companion release',
+                    boardStatus: 'backlog',
+                    remainingDependencyCount: 1,
+                  ),
+                ],
+              ),
+            ),
+            onRefresh: () async {},
+            onOpenTask: openedTaskIds.add,
+          ),
+        ),
+      );
+
+      expect(find.text('Labels'), findsOneWidget);
+      expect(find.text('mobile'), findsOneWidget);
+      expect(find.text('review'), findsOneWidget);
+      expect(find.text('Dependencies'), findsOneWidget);
+      expect(find.text('Prepare companion contract'), findsOneWidget);
+      expect(find.text('Approve release notes'), findsOneWidget);
+      expect(find.text('Waiting on 1 dependency'), findsOneWidget);
+      expect(find.bySemanticsLabel('Labels. mobile, review.'), findsOneWidget);
+      await tester.tap(find.text('Prepare companion contract'));
+
+      await tester.scrollUntilVisible(find.text('Dependent tasks'), 200);
+      expect(find.text('Dependent tasks'), findsOneWidget);
+      expect(find.text('Ship companion release'), findsOneWidget);
+      expect(
+        find.textContaining('Still waits on 1 dependency'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Ship companion release'));
+
+      expect(openedTaskIds, <String>['KVG-2944', 'KVG-2947']);
+    },
+  );
 
   testWidgets('Handoff Notes render with Markdown formatting', (tester) async {
     const markdown = '''

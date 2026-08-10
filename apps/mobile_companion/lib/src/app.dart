@@ -288,6 +288,7 @@ class _CompanionAppState extends State<CompanionApp>
     if (factory == null || navigator == null) return;
     final controller = factory(taskId);
     final terminalSurface = widget.agentTerminalSurfaceFactory?.call(taskId);
+    final previousController = _openTaskController;
     _openTaskController = controller;
     widget.liveUpdatesController?.setOpenTask(controller);
     try {
@@ -297,6 +298,7 @@ class _CompanionAppState extends State<CompanionApp>
             controller: controller,
             terminalSurface: terminalSurface,
             onRefresh: () => _refreshTaskDetailAndBoard(controller),
+            onOpenTask: _openTaskDetail,
             onCompleted: _refreshBoardAfterTaskAction,
             onDeleteSucceeded: _refreshBoardAfterTaskAction,
             onDeleteNeedsRefresh: _refreshBoardAfterTaskAction,
@@ -305,8 +307,8 @@ class _CompanionAppState extends State<CompanionApp>
       );
     } finally {
       if (identical(_openTaskController, controller)) {
-        widget.liveUpdatesController?.setOpenTask(null);
-        _openTaskController = null;
+        _openTaskController = previousController;
+        widget.liveUpdatesController?.setOpenTask(previousController);
       }
     }
   }
