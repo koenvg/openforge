@@ -95,7 +95,7 @@ periodic background guarantee, or notification service.
 
 ## Prerequisites
 
-- Flutter 3.47.0-0.3.pre (beta) with its bundled Dart SDK
+- Flutter 3.44.9 (stable) with its bundled Dart SDK
 - Android Studio/Android SDK for Android builds
 - Xcode for iOS Simulator or device builds
 - Tailscale installed and connected on the desktop and phone for away-from-LAN testing
@@ -132,7 +132,7 @@ owns the formatting of `lib/src/generated/companion_v1_client.dart`; normal Dart
 format commands intentionally cover handwritten sources only.
 
 `check` is the CI entry point: it first verifies the checked-in client byte for byte,
-then resolves packages, checks handwritten formatting, runs static analysis, and
+then validates the committed lockfile, checks handwritten formatting, runs static analysis, and
 executes all focused unit/widget tests. Debug and signed release builds are separate
 Flutter invocations and do not require `pnpm install`. Release signing, private
 distribution, privacy wording, and physical-device evidence are documented in the
