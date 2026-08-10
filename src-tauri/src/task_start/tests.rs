@@ -275,22 +275,23 @@ async fn safe_start_creates_implementation_run_and_publishes_canonical_invalidat
             task_id: task_id.clone(),
         }
     );
-    let db = db::acquire_db(&state.db);
-    assert_eq!(
-        db.get_task(&task_id)
-            .expect("get Task")
-            .expect("Task exists")
-            .status,
-        "doing"
-    );
-    assert_eq!(
-        db.get_latest_session_for_ticket(&task_id)
-            .expect("get Agent Session")
-            .expect("Agent Session exists")
-            .status,
-        "running"
-    );
-    drop(db);
+    {
+        let db = db::acquire_db(&state.db);
+        assert_eq!(
+            db.get_task(&task_id)
+                .expect("get Task")
+                .expect("Task exists")
+                .status,
+            "doing"
+        );
+        assert_eq!(
+            db.get_latest_session_for_ticket(&task_id)
+                .expect("get Agent Session")
+                .expect("Agent Session exists")
+                .status,
+            "running"
+        );
+    }
     let event = events.recv().await.expect("canonical Task invalidation");
     assert_eq!(event.event_name, "task-changed");
     assert_eq!(event.payload["task_id"], task_id);
