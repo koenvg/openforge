@@ -333,6 +333,9 @@ function createTestingCalls() {
 		browserSurfaceDestroys: [],
 		browserSurfaceNavigations: [],
 		browserSurfaceControls: [],
+		browserSurfaceSelections: [],
+		browserSurfaceCaptures: [],
+		browserSurfaceCaptureDiscards: [],
 		browserSurfaceSessionResets: [],
 		storageGets: [],
 		storageSets: [],
@@ -957,6 +960,48 @@ var TestingTaskBrowserSurface = class {
 		});
 		this.publish({ loading: false });
 		return this.getState();
+	}
+	async selectVisibleRegion() {
+		this.assertLive();
+		this.calls.browserSurfaceSelections.push({
+			taskId: this.taskId,
+			id: this.id
+		});
+		return {
+			region: {
+				x: .1,
+				y: .1,
+				width: .4,
+				height: .4
+			},
+			comment: "Example visual feedback"
+		};
+	}
+	async cancelVisibleRegionSelection() {
+		this.assertLive();
+	}
+	async captureVisibleViewport() {
+		this.assertLive();
+		this.calls.browserSurfaceCaptures.push({
+			taskId: this.taskId,
+			id: this.id
+		});
+		return {
+			artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+			mediaType: "image/png",
+			width: 800,
+			height: 600,
+			dataUrl: "data:image/png;base64,iVBORw0KGgo="
+		};
+	}
+	async discardCapture(artifactId) {
+		this.assertLive();
+		if (!artifactId.trim()) throw new BrowserSurfaceError("INVALID_ID", "Browser Surface capture requires an artifact ID");
+		this.calls.browserSurfaceCaptureDiscards.push({
+			taskId: this.taskId,
+			id: this.id,
+			artifactId
+		});
 	}
 	setState(patch) {
 		this.assertLive();

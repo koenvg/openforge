@@ -21,6 +21,11 @@ function managerFake() {
     goForward: vi.fn(async () => ({ url: 'https://example.com' })),
     reload: vi.fn(async () => ({ url: 'https://example.com' })),
     stop: vi.fn(async () => ({ url: 'https://example.com' })),
+    selectVisibleRegion: vi.fn(async () => ({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })),
+    captureVisibleViewport: vi.fn(async () => ({
+      artifactId: 'capture-1', mediaType: 'image/png', width: 800, height: 600, dataUrl: 'data:image/png;base64,cG5n',
+    })),
+    discardCapture: vi.fn(async () => undefined),
     resetSession: vi.fn(async () => undefined),
     destroyPlugin: vi.fn(),
   }
@@ -63,6 +68,36 @@ describe('Task Browser Surface IPC router', () => {
     }, 10)
     expect(manager.detach).toHaveBeenCalledWith('surface-1', 'attachment-2', 2)
   })
+
+  it('routes capture and discard with explicit plugin, Task, window, and surface generation scope', async () => {
+    const manager = managerFake()
+    const router = new TaskBrowserSurfaceIpcRouter(manager as never)
+    const owner = {
+      pluginId: 'browser',
+      taskId: 'T-1',
+      surfaceId: 'surface-1',
+      generation: 7,
+    }
+
+    await expect(router.handle('task_browser_surface_select_visible_region', owner, 10)).resolves.toMatchObject({
+      ok: true,
+      value: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+    })
+    expect(manager.selectVisibleRegion).toHaveBeenCalledWith({ windowId: 10, ...owner })
+
+    await expect(router.handle('task_browser_surface_capture_visible_viewport', owner, 10)).resolves.toMatchObject({
+      ok: true,
+      value: { artifactId: 'capture-1', width: 800, height: 600 },
+    })
+    expect(manager.captureVisibleViewport).toHaveBeenCalledWith({ windowId: 10, ...owner })
+
+    await expect(router.handle('task_browser_surface_discard_capture', {
+      ...owner,
+      artifactId: 'capture-1',
+    }, 10)).resolves.toMatchObject({ ok: true })
+    expect(manager.discardCapture).toHaveBeenCalledWith({ windowId: 10, ...owner, artifactId: 'capture-1' })
+  })
+
 
   it('checks window ownership for controller operations and returns named error envelopes', async () => {
     const manager = managerFake()

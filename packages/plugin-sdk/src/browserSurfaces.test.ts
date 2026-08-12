@@ -72,6 +72,9 @@ describe('browser surfaces SDK contract', () => {
       'goForward',
       'reload',
       'stop',
+      'selectVisibleRegion',
+      'captureVisibleViewport',
+      'discardCapture',
     ] as const
     const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
     const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-1', id: 'main' })
@@ -181,6 +184,34 @@ describe('browser surfaces SDK contract', () => {
     expect(api.__testing.calls.browserSurfaceControls).toEqual([
       { taskId: 'T-history', id: 'main', action: 'goBack' },
       { taskId: 'T-history', id: 'main', action: 'goForward' },
+    ])
+  })
+
+  it('captures and explicitly discards a serializable immutable viewport artifact in the testing fake', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'browser' })
+    const surface = await api.browserSurfaces.getOrCreate({ taskId: 'T-capture', id: 'main' })
+
+    const selection = await surface.selectVisibleRegion()
+    const capture = await surface.captureVisibleViewport()
+
+    expect(capture).toEqual({
+      artifactId: expect.stringMatching(/^capture-/),
+      mediaType: 'image/png',
+      width: 800,
+      height: 600,
+      dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
+    })
+    expect(selection).toEqual({
+      region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+      comment: 'Example visual feedback',
+    })
+    expect(JSON.parse(JSON.stringify(capture))).toEqual(capture)
+    expect(api.__testing.calls.browserSurfaceSelections).toEqual([{ taskId: 'T-capture', id: 'main' }])
+    expect(api.__testing.calls.browserSurfaceCaptures).toEqual([{ taskId: 'T-capture', id: 'main' }])
+
+    await surface.discardCapture(capture.artifactId)
+    expect(api.__testing.calls.browserSurfaceCaptureDiscards).toEqual([
+      { taskId: 'T-capture', id: 'main', artifactId: capture.artifactId },
     ])
   })
 })

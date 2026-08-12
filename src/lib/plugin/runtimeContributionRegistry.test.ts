@@ -446,6 +446,15 @@ describe('runtime contribution registry', () => {
       goForward: vi.fn(async () => state),
       reload: vi.fn(async () => state),
       stop: vi.fn(async () => state),
+      selectVisibleRegion: vi.fn(async () => ({
+        region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+        comment: 'Example visual feedback',
+      })),
+      cancelVisibleRegionSelection: vi.fn(async () => undefined),
+      captureVisibleViewport: vi.fn(async () => ({
+        artifactId: 'capture-1', mediaType: 'image/png' as const, width: 1, height: 1, dataUrl: 'data:image/png;base64,cG5n',
+      })),
+      discardCapture: vi.fn(async () => undefined),
     }
     const host = {
       getOrCreateBrowserSurface: vi.fn(async () => controller),

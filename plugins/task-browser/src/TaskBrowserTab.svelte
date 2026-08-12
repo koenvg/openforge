@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, RefreshCw, X } from '@lucide/svelte'
+  import { ArrowLeft, ArrowRight, MessageSquarePlus, RefreshCw, Trash2, X } from '@lucide/svelte'
   import type {
+    BrowserSurfaceCapture,
     PluginTaskPaneProps,
     TaskBrowserSurfaceState,
   } from '@openforge-app/plugin-sdk/frontend'
@@ -11,6 +12,20 @@
   } from './browserTabSession'
 
   interface Props extends PluginTaskPaneProps {}
+
+  interface NormalizedCaptureRect {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+
+  interface CaptureAnnotation {
+    number: number
+    rect: NormalizedCaptureRect
+    comment: string
+    capture: BrowserSurfaceCapture
+  }
 
   let { api, taskId }: Props = $props()
 
@@ -30,6 +45,11 @@
   let editingAddress = $state(false)
   let opening = $state(true)
   let actionError = $state<string | null>(null)
+  let captureBusy = $state(false)
+  let feedbackModeActive = $state(false)
+  let annotations = $state<CaptureAnnotation[]>([])
+  let nextAnnotationNumber = $state(1)
+  let feedbackStatus = $state('')
   let activeTaskId: string | null = null
   let lifecycleGeneration = 0
   let actionGeneration = 0
@@ -37,6 +57,12 @@
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+  }
+
+  function resetFeedbackEditor() {
+    annotations = []
+    nextAnnotationNumber = 1
+    feedbackStatus = ''
   }
 
   function applyState(state: TaskBrowserSurfaceState) {
@@ -52,7 +78,13 @@
     actionGeneration += 1
     activeTaskId = nextTaskId
     const previousSession = session
+    feedbackModeActive = false
+    void previousSession?.surface.cancelVisibleRegionSelection().catch(() => undefined)
+    const previousCaptures = annotations.map(annotation => annotation.capture)
     session = null
+    resetFeedbackEditor()
+    captureBusy = false
+    feedbackModeActive = false
     surfaceState = blankState
     address = ''
     opening = true
@@ -60,7 +92,11 @@
 
     if (previousSession !== null) {
       try {
-        await previousSession.dispose()
+        await Promise.allSettled([
+          ...previousCaptures.map(previousCapture =>
+            previousSession.surface.discardCapture(previousCapture.artifactId)),
+          previousSession.dispose(),
+        ])
       } catch {
         // Failed cleanup must not prevent the newly selected Task from opening.
       }
@@ -119,6 +155,81 @@
     }
   }
 
+  function isCurrentSession(targetSession: BrowserTabSession, generation: number): boolean {
+    return !destroyed && session === targetSession && lifecycleGeneration === generation
+  }
+
+
+
+  async function runFeedbackMode(targetSession: BrowserTabSession, generation: number) {
+    while (feedbackModeActive && isCurrentSession(targetSession, generation)) {
+      let createdCapture: BrowserSurfaceCapture | null = null
+      try {
+        const selection = await targetSession.surface.selectVisibleRegion()
+        if (selection === null || !feedbackModeActive || !isCurrentSession(targetSession, generation)) break
+        createdCapture = await targetSession.surface.captureVisibleViewport()
+        if (!feedbackModeActive || !isCurrentSession(targetSession, generation)) {
+          await targetSession.surface.discardCapture(createdCapture.artifactId).catch(() => undefined)
+          break
+        }
+        const number = nextAnnotationNumber
+        annotations = [...annotations, {
+          number,
+          rect: selection.region,
+          comment: selection.comment,
+          capture: createdCapture,
+        }]
+        nextAnnotationNumber += 1
+        feedbackStatus = `Feedback ${number} saved`
+      } catch (error) {
+        if (createdCapture !== null) {
+          await targetSession.surface.discardCapture(createdCapture.artifactId).catch(() => undefined)
+        }
+        if (isCurrentSession(targetSession, generation)) actionError = errorMessage(error)
+        break
+      }
+    }
+    if (isCurrentSession(targetSession, generation)) {
+      feedbackModeActive = false
+      captureBusy = false
+    }
+  }
+
+  async function toggleFeedbackMode() {
+    const targetSession = session
+    if (targetSession === null) return
+    if (feedbackModeActive) {
+      feedbackModeActive = false
+      await targetSession.surface.cancelVisibleRegionSelection().catch(() => undefined)
+      captureBusy = false
+      return
+    }
+    feedbackModeActive = true
+    captureBusy = true
+    actionError = null
+    await runFeedbackMode(targetSession, lifecycleGeneration)
+  }
+
+  async function discardCapture() {
+    const targetSession = session
+    const currentAnnotations = annotations
+    if (targetSession === null || currentAnnotations.length === 0 || captureBusy) return
+    const generation = lifecycleGeneration
+    captureBusy = true
+    actionError = null
+    try {
+      await Promise.all(currentAnnotations.map(annotation =>
+        targetSession.surface.discardCapture(annotation.capture.artifactId)))
+      if (isCurrentSession(targetSession, generation) && annotations === currentAnnotations) {
+        resetFeedbackEditor()
+      }
+    } catch (error) {
+      if (isCurrentSession(targetSession, generation)) actionError = errorMessage(error)
+    } finally {
+      if (isCurrentSession(targetSession, generation)) captureBusy = false
+    }
+  }
+
   function submitAddress(event: SubmitEvent) {
     event.preventDefault()
     editingAddress = false
@@ -142,8 +253,17 @@
     lifecycleGeneration += 1
     actionGeneration += 1
     const currentSession = session
+    feedbackModeActive = false
+    void currentSession?.surface.cancelVisibleRegionSelection().catch(() => undefined)
+    const currentCaptures = annotations.map(annotation => annotation.capture)
     session = null
-    if (currentSession !== null) void currentSession.dispose().catch(() => undefined)
+    if (currentSession !== null) {
+      void Promise.allSettled([
+        ...currentCaptures.map(currentCapture =>
+          currentSession.surface.discardCapture(currentCapture.artifactId)),
+        currentSession.dispose(),
+      ])
+    }
   })
 </script>
 
@@ -205,6 +325,34 @@
     <button class="btn btn-primary btn-sm" type="submit" disabled={opening || address.trim().length === 0}>
       Go
     </button>
+
+    {#if !opening && session !== null}
+      <button
+        class:btn-primary={feedbackModeActive}
+        class:btn-ghost={!feedbackModeActive}
+        class="btn btn-square btn-sm"
+        type="button"
+        aria-label={feedbackModeActive ? 'Stop adding visual feedback' : 'Add visual feedback'}
+        title={feedbackModeActive ? 'Stop adding visual feedback' : 'Add visual feedback'}
+        aria-pressed={feedbackModeActive}
+        onclick={() => void toggleFeedbackMode()}
+      >
+        <MessageSquarePlus size={17} aria-hidden="true" />
+      </button>
+      {#if annotations.length > 0}
+        <span class="text-xs text-base-content/60">{annotations.length} {annotations.length === 1 ? 'comment' : 'comments'}</span>
+        <button
+          class="btn btn-ghost btn-square btn-sm"
+          type="button"
+          aria-label="Discard visual feedback"
+          title="Discard visual feedback"
+          disabled={captureBusy}
+          onclick={() => void discardCapture()}
+        >
+          <Trash2 size={16} aria-hidden="true" />
+        </button>
+      {/if}
+    {/if}
   </form>
 
   <div class="flex min-h-6 items-center gap-2 border-b border-base-300 px-3 py-1 text-xs" aria-live="polite">

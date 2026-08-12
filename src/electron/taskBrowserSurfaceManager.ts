@@ -9,6 +9,8 @@ import type {
   TaskBrowserNativeState,
   PluginBrowserSessionPartition,
   TaskBrowserSurfaceManagerOptions,
+  TaskBrowserSurfaceCapture,
+  TaskBrowserSurfaceCaptureRequest,
   TaskBrowserSurfaceReference,
 } from './taskBrowserSurfaceContract.js'
 import { TaskBrowserSurfaceLifecycle } from './taskBrowserSurfaceLifecycle.js'
@@ -270,6 +272,73 @@ export class TaskBrowserSurfaceManager {
     return copyState(surface.native.getState())
   }
 
+  async selectVisibleRegion(request: TaskBrowserSurfaceCaptureRequest) {
+    const surface = this.requireCaptureSurface(request)
+    if (!surface.attached) {
+      throw new TaskBrowserSurfaceError('CAPTURE_UNAVAILABLE', 'Task Browser Surface must be visible before selecting feedback')
+    }
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    const selection = await surface.native.selectVisibleRegion()
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    return selection
+  }
+
+  async cancelVisibleRegionSelection(request: TaskBrowserSurfaceCaptureRequest): Promise<void> {
+    const surface = this.requireCaptureSurface(request)
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    await surface.native.cancelVisibleRegionSelection()
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+  }
+
+  async captureVisibleViewport(request: TaskBrowserSurfaceCaptureRequest): Promise<TaskBrowserSurfaceCapture> {
+    const surface = this.requireCaptureSurface(request)
+    if (!surface.attached) {
+      throw new TaskBrowserSurfaceError('CAPTURE_UNAVAILABLE', 'Task Browser Surface must be visible before it can be captured')
+    }
+
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    const nativeCapture = await surface.native.captureVisibleViewport()
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+
+    const stored = await this.options.artifacts.store({
+      pluginId: request.pluginId,
+      taskId: request.taskId,
+      png: nativeCapture.png,
+    })
+    try {
+      this.assertCaptureSurfaceCurrent(surface, request.generation)
+    } catch (error) {
+      await this.options.artifacts.discard({
+        pluginId: request.pluginId,
+        taskId: request.taskId,
+        artifactId: stored.artifactId,
+      }).catch(() => undefined)
+      throw error
+    }
+
+    return {
+      artifactId: stored.artifactId,
+      mediaType: 'image/png',
+      width: nativeCapture.width,
+      height: nativeCapture.height,
+      dataUrl: `data:image/png;base64,${Buffer.from(nativeCapture.png).toString('base64')}`,
+    }
+  }
+
+  async discardCapture(request: TaskBrowserSurfaceCaptureRequest & { artifactId: string }): Promise<void> {
+    const surface = this.requireCaptureSurface(request)
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    await this.options.artifacts.discard({
+      pluginId: request.pluginId,
+      taskId: request.taskId,
+      artifactId: request.artifactId,
+    })
+  }
+
   /**
    * Blast radius is the whole plugin: every Task loses its login, because they all share one
    * Plugin Browser Session. See ADR 0012.
@@ -295,6 +364,7 @@ export class TaskBrowserSurfaceManager {
     if (!taskId.trim()) return
     this.lifecycle.invalidateTask(taskId)
     this.destroyWhere(surface => surface.taskId === taskId)
+    void this.options.artifacts.cleanupTask(taskId).catch(() => undefined)
   }
 
   destroyPlugin(pluginId: string): void {
@@ -390,6 +460,27 @@ export class TaskBrowserSurfaceManager {
       const failure = cleanupResults.find(result => result.status === 'rejected')
       if (failure?.status === 'rejected') throw failure.reason
     })
+  }
+
+  private requireCaptureSurface(request: TaskBrowserSurfaceCaptureRequest): SurfaceRecord {
+    const surface = this.requireSurface(request.surfaceId)
+    if (surface.generation !== request.generation) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface generation has been superseded')
+    }
+    if (
+      surface.windowId !== request.windowId
+      || surface.pluginId !== request.pluginId
+      || surface.taskId !== request.taskId
+    ) {
+      throw new TaskBrowserSurfaceError('SURFACE_ACCESS_DENIED', 'Task Browser capture does not belong to this window, plugin, and Task')
+    }
+    return surface
+  }
+
+  private assertCaptureSurfaceCurrent(surface: SurfaceRecord, generation: number): void {
+    if (this.surfacesById.get(surface.surfaceId) !== surface || surface.generation !== generation) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface capture was superseded by lifecycle cleanup')
+    }
   }
 
   private requireSurface(surfaceId: string): SurfaceRecord {

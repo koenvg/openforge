@@ -11,7 +11,7 @@ import {
 
 describe('Task Browser Surface Manager lifecycle', () => {
   it('preserves Plugin Browser Session data through destruction, plugin cleanup, LRU eviction, and restart', async () => {
-    const { manager, factory, permissions } = createManager()
+    const { manager, factory, permissions, artifacts } = createManager()
     const savedUrl = 'https://example.com/restored'
     const original = await manager.getOrCreate({
       windowId: 10,
@@ -79,6 +79,7 @@ describe('Task Browser Surface Manager lifecycle', () => {
       factory,
       registry: new FakePartitionRegistry(),
       permissions,
+      artifacts,
       authorize: async () => undefined,
       authorizePlugin: async () => undefined,
     })

@@ -45,6 +45,21 @@ function createSurface(
     goForward: vi.fn(async () => state),
     reload: vi.fn(async () => state),
     stop: vi.fn(async () => state),
+    selectVisibleRegion: vi.fn()
+      .mockResolvedValueOnce({
+        region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+        comment: 'Button alignment is off',
+      })
+      .mockResolvedValue(null),
+    cancelVisibleRegionSelection: vi.fn(async () => undefined),
+    captureVisibleViewport: vi.fn(async () => ({
+      artifactId: 'capture-1',
+      mediaType: 'image/png',
+      width: 640,
+      height: 480,
+      dataUrl: 'data:image/png;base64,cG5n',
+    })),
+    discardCapture: vi.fn(async () => undefined),
   }
 }
 
@@ -152,5 +167,38 @@ describe('TaskBrowserTab lifecycle', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
 
     await screen.findByDisplayValue('https://recovered.example/')
+  })
+
+  it('exposes a comment icon only after the Browser Surface is live', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const openingSurface = deferred<TaskBrowserSurfaceController>()
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockReturnValue(openingSurface.promise)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    expect(screen.queryByRole('button', { name: 'Add visual feedback' })).toBeNull()
+
+    openingSurface.resolve(createSurface('https://live.example/'))
+    expect(await screen.findByRole('button', { name: 'Add visual feedback' })).toBeTruthy()
+  })
+
+  it('captures selected live-page feedback in the background without replacing the browser', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    const address = await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+
+    await waitFor(() => expect(surface.selectVisibleRegion).toHaveBeenCalledTimes(2))
+    expect(surface.captureVisibleViewport).toHaveBeenCalledTimes(1)
+    expect(surface.selectVisibleRegion).toHaveBeenCalledBefore(surface.captureVisibleViewport as never)
+    expect(address).toBeTruthy()
+    expect(screen.queryByRole('img', { name: 'Captured browser viewport' })).toBeNull()
+    expect(screen.queryByText('Return to browser')).toBeNull()
+    expect(screen.queryByText('Review capture')).toBeNull()
+    expect(screen.getByText('1 comment')).toBeTruthy()
+    expect(surface.detach).not.toHaveBeenCalled()
+    expect(surface.destroy).not.toHaveBeenCalled()
   })
 })
