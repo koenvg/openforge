@@ -8,6 +8,9 @@ export type BrowserSurfaceErrorCode =
   | 'INVALID_ID'
   | 'INVALID_URL'
   | 'INVALID_BOUNDS'
+  | 'CAPTURE_UNAVAILABLE'
+  | 'CAPTURE_FAILED'
+  | 'SURFACE_ACCESS_DENIED'
   | 'SURFACE_DESTROYED'
 
 export class BrowserSurfaceError extends Error {
@@ -35,12 +38,31 @@ export interface TaskBrowserSurfaceState {
   error: BrowserSurfaceNavigationError | null
 }
 
+export interface BrowserSurfaceCapture {
+  artifactId: string
+  mediaType: 'image/png'
+  width: number
+  height: number
+  dataUrl: string
+}
+
 export interface GetOrCreateBrowserSurfaceRequest {
   taskId: string
   id: string
   initialUrl?: string
 }
 
+export interface BrowserSurfaceRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface BrowserSurfaceFeedbackSelection {
+  region: BrowserSurfaceRegion
+  comment: string
+}
 export interface TaskBrowserSurfaceController {
   attach(element: HTMLElement): Promise<Disposable>
   detach(): Promise<void>
@@ -52,6 +74,10 @@ export interface TaskBrowserSurfaceController {
   goForward(): Promise<TaskBrowserSurfaceState>
   reload(): Promise<TaskBrowserSurfaceState>
   stop(): Promise<TaskBrowserSurfaceState>
+  selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null>
+  cancelVisibleRegionSelection(): Promise<void>
+  captureVisibleViewport(): Promise<BrowserSurfaceCapture>
+  discardCapture(artifactId: string): Promise<void>
 }
 
 export interface BrowserSurfacesAPI {

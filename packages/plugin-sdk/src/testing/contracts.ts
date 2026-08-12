@@ -75,6 +75,9 @@ export interface TestingOpenForgeApiCalls {
   browserSurfaceDestroys: Array<{ taskId: string; id: string }>
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
+  browserSurfaceSelections: Array<{ taskId: string; id: string }>
+  browserSurfaceCaptures: Array<{ taskId: string; id: string }>
+  browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>
   storageGets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string }>
   storageSets: Array<{ scope: TestingRuntimeScope; scopeId: string | null; key: string; value: JsonValue }>

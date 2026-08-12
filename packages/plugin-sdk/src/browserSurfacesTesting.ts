@@ -4,6 +4,8 @@ import {
 } from './browserSurfaces'
 import type {
   BrowserSurfacesAPI,
+  BrowserSurfaceCapture,
+  BrowserSurfaceFeedbackSelection,
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
@@ -17,6 +19,9 @@ export interface TestingBrowserSurfaceCalls {
   browserSurfaceDestroys: Array<{ taskId: string; id: string }>
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
+  browserSurfaceSelections: Array<{ taskId: string; id: string }>
+  browserSurfaceCaptures: Array<{ taskId: string; id: string }>
+  browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>
 }
 
@@ -154,6 +159,37 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.calls.browserSurfaceControls.push({ taskId: this.taskId, id: this.id, action: 'stop' })
     this.publish({ loading: false })
     return this.getState()
+  }
+
+  async selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection> {
+    this.assertLive()
+    this.calls.browserSurfaceSelections.push({ taskId: this.taskId, id: this.id })
+    return {
+      region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+      comment: 'Example visual feedback',
+    }
+  }
+
+  async cancelVisibleRegionSelection(): Promise<void> {
+    this.assertLive()
+  }
+
+  async captureVisibleViewport(): Promise<BrowserSurfaceCapture> {
+    this.assertLive()
+    this.calls.browserSurfaceCaptures.push({ taskId: this.taskId, id: this.id })
+    return {
+      artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+      mediaType: 'image/png',
+      width: 800,
+      height: 600,
+      dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+    }
+  }
+
+  async discardCapture(artifactId: string): Promise<void> {
+    this.assertLive()
+    if (!artifactId.trim()) throw new BrowserSurfaceError('INVALID_ID', 'Browser Surface capture requires an artifact ID')
+    this.calls.browserSurfaceCaptureDiscards.push({ taskId: this.taskId, id: this.id, artifactId })
   }
 
   setState(patch: Partial<TaskBrowserSurfaceState>): void {

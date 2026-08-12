@@ -1,4 +1,7 @@
 import type {
+  BrowserSurfaceCapture,
+  BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceRegion,
   BrowserSurfaceErrorCode,
   BrowserSurfaceNavigationError,
   BrowserSurfacesAPI,
@@ -65,6 +68,9 @@ export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugi
 export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
 
 export type {
+  BrowserSurfaceCapture,
+  BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceRegion,
   BrowserSurfaceErrorCode,
   BrowserSurfaceNavigationError,
   BrowserSurfacesAPI,

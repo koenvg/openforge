@@ -18,6 +18,7 @@ import type {
 export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
   readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop'> = []
+  readonly captureCalls: Array<Record<string, never>> = []
   readonly bounds: TaskBrowserBounds[] = []
   readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
   private readonly history = ['about:blank']
@@ -86,6 +87,20 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   stop(): void {
     this.controlCalls.push('stop')
     this.emitHistoryState({ loading: false })
+  }
+
+  async selectVisibleRegion() {
+    return {
+      region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+      comment: 'Example visual feedback',
+    }
+  }
+
+  async cancelVisibleRegionSelection(): Promise<void> {
+  }
+  async captureVisibleViewport() {
+    this.captureCalls.push({})
+    return { png: Buffer.from('fake-visible-png'), width: 800, height: 600 }
   }
 
   emit(patch: Partial<TaskBrowserNativeState> = {}): void {
@@ -182,11 +197,17 @@ export function createTaskBrowserSurfaceManagerFixture(
     createSessionHandler: vi.fn(async () => permissionHandler),
     clearSession: vi.fn<(pluginId: string) => Promise<void>>(async () => undefined),
   }
+  const artifacts = {
+    store: vi.fn(async () => ({ artifactId: '11111111-1111-4111-8111-111111111111' })),
+    discard: vi.fn(async () => undefined),
+    cleanupTask: vi.fn(async () => undefined),
+  }
   const stateEvents: TaskBrowserSurfaceStateEvent[] = []
   const manager = new TaskBrowserSurfaceManager({
     factory,
     registry,
     permissions,
+    artifacts,
     authorize,
     authorizePlugin,
     onStateChanged: event => stateEvents.push(event),
@@ -199,6 +220,7 @@ export function createTaskBrowserSurfaceManagerFixture(
     factory,
     registry,
     permissions,
+    artifacts,
     permissionHandler,
     authorize,
     authorizePlugin,

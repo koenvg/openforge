@@ -258,6 +258,20 @@ const stateSubscription = surface.onStateChanged(async state => {
 })
 
 const attachment = await surface.attach(browserRegionElement)
+
+// OpenForge highlights sensible live-page targets and also allows manual drag selection.
+// The host-owned composer returns normalized geometry plus the saved comment.
+const feedback = await surface.selectVisibleRegion()
+if (feedback === null) return // Escape cancels selection
+
+// Capture the selected viewport in the background. Plugins may retain the opaque artifact
+// for later Agent submission without replacing the live Browser Surface with its data URL.
+const capture = await surface.captureVisibleViewport()
+console.log(feedback.region, feedback.comment, capture.artifactId, capture.width, capture.height)
+
+// Delete the Task/plugin-owned runtime artifact when the user discards it.
+await surface.discardCapture(capture.artifactId)
+
 // On component teardown:
 await attachment.dispose() // detaches but keeps the live page when capacity permits
 await stateSubscription.dispose()
@@ -270,15 +284,19 @@ await surface.destroy()
 
 Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds, scrolling, resizing, visibility, and disconnection. A newer attachment atomically replaces an older one, and disposing stale attachment cleanup cannot detach the newer attachment. Detaching may preserve the background-throttled live page; each OpenForge window retains at most four detached surfaces before least-recently-used eviction. Attached surfaces are protected. After destruction or eviction, reacquire with `getOrCreate` and the URL saved in task-scoped plugin storage.
 
+`selectVisibleRegion()` is available only while the exact surface generation is visibly attached. Electron main installs a temporary host-owned interaction layer inside the live page. Hovering highlights sensible page areas, dragging selects an arbitrary viewport rectangle, clicking accepts the highlighted target, and Escape cancels. A compact host-owned comment composer remains over the live page; Enter saves and Shift+Enter adds a newline. A plugin can call `selectVisibleRegion()` repeatedly for a continuous feedback mode and use `cancelVisibleRegionSelection()` to stop the currently pending selection. After save, OpenForge removes the interactive selector and composer but leaves a numbered, pointer-transparent outline over the commented page area, so normal page clicks and scrolling continue to work. Saved outlines are retained by exact page URL within the live surface: navigating elsewhere hides them, and returning to that URL restores them. The public plugin receives only `{ region: { x, y, width, height }, comment }`—never DOM nodes, selectors, page content, or a general script-injection facility.
+
+`captureVisibleViewport()` uses Electron's visible-page capture rather than a full scrolling-page capture, writes an immutable PNG to host-managed Task/plugin runtime storage under `userData`, and returns a JSON-serializable `{ artifactId, mediaType, width, height, dataUrl }`. Call it immediately after successful live-page feedback to preserve the selected state in the background; do not replace the live Browser Surface merely to display the returned data URL. The opaque `artifactId` is not a filesystem path. `discardCapture(artifactId)` deletes only an artifact owned by that same window, plugin, Task, surface, and generation. Selecting, capturing, and discarding do not detach, destroy, or reset the Plugin Browser Session.
+
 All surfaces of one plugin share a single durable Plugin Browser Session, spanning every Task and project, so a login performed in one Task is available in all of them. Sessions are isolated across plugins, never within a plugin. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, Task deletion, and app restart. `openforge.browserSurfaces.resetSession()` takes no Task: it destroys that plugin's live surfaces in every Task and clears the shared browser session data and remembered site permissions, without clearing plugin task storage. Warn the user before calling it — it signs them out everywhere at once. See [ADR 0012](./adr/0012-plugin-scoped-browser-sessions.md).
 
 Electron main owns the non-configurable sandboxed browser security baseline, top-level HTTP(S)-only policy, native bounds, resource limits, and cleanup. Recognized site permissions are mediated by host-owned prompts; unknown or malformed permission requests fail closed. Policy-approved HTTP(S) popups may open for ordinary browsing and authentication as host-owned child windows. Those children share the parent Plugin Browser Session and its secure navigation, permission, and download policy, and close with the parent surface. Popup requests using unsupported schemes or trying to override protected web preferences are denied.
 
 Every download is mediated by an Electron-main-owned native Save dialog. The host sanitizes the page's suggested filename, while the user decides whether and where to save; canceling the dialog, losing the owning window, or failing to configure the dialog cancels the download. The public plugin API has no direct popup or download controls: plugins cannot auto-accept popups or downloads, choose or learn download destinations, or access Electron, preload IPC, `WebContentsView`, `webContents`, session objects, popup handles, child-window handles, download items, file paths, script injection, DOM inspection, CDP, or DevTools policy. Do not import desktop IPC wrappers or Electron APIs directly.
 
-Calls fail with `BrowserSurfaceError` and a stable `code` such as `HOST_UNAVAILABLE`, `INVALID_TASK`, `PLUGIN_NOT_ENABLED`, `INVALID_ID`, `INVALID_URL`, or `SURFACE_DESTROYED`. Vite-only renderer development has no Electron host and therefore reports `HOST_UNAVAILABLE`; it does not emulate a live browser.
+Calls fail with `BrowserSurfaceError` and a stable `code` such as `HOST_UNAVAILABLE`, `INVALID_TASK`, `PLUGIN_NOT_ENABLED`, `INVALID_ID`, `INVALID_URL`, `CAPTURE_UNAVAILABLE`, `CAPTURE_FAILED`, `SURFACE_ACCESS_DENIED`, or `SURFACE_DESTROYED`. Cross-window, cross-plugin, and cross-Task capture attempts use `SURFACE_ACCESS_DENIED`; destroyed, stale, evicted, and superseded-generation references use `SURFACE_DESTROYED`. Vite-only renderer development has no Electron host and therefore reports `HOST_UNAVAILABLE`; it does not emulate a live browser.
 
-The testing API provides the same in-memory capability through `createMockFrontendOpenForgeApi(...)` and `createOpenForgeRegistryFake(...).frontendApi`. Calls are recorded in `api.__testing.calls`, and tests can drive a full state update with `api.__testing.registry.setBrowserSurfaceState(taskId, id, patch)`. The fake covers idempotence, attachment lifecycle, history controls, state subscriptions, navigation validation, destroy, and session reset.
+The testing API provides the same in-memory capability through `createMockFrontendOpenForgeApi(...)` and `createOpenForgeRegistryFake(...).frontendApi`. Calls are recorded in `api.__testing.calls`, including `browserSurfaceSelections`, `browserSurfaceCaptures`, and `browserSurfaceCaptureDiscards`, and tests can drive a full state update with `api.__testing.registry.setBrowserSurfaceState(taskId, id, patch)`. The fake covers idempotence, attachment lifecycle, history controls, state subscriptions, navigation validation, live-region selection, visible-viewport capture, explicit artifact discard, destroy, and session reset.
 
 ## Storage and configuration
 

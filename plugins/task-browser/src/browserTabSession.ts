@@ -14,6 +14,7 @@ export interface BrowserTabSession {
   readonly surface: TaskBrowserSurfaceController
   navigate(address: string): Promise<TaskBrowserSurfaceState>
   stop(): Promise<TaskBrowserSurfaceState>
+  setPresentation(element: HTMLElement | null): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -108,6 +109,25 @@ export async function createBrowserTabSession({
   }
 
   let disposed = false
+  let presentation = Promise.resolve()
+  function setPresentation(nextElement: HTMLElement | null): Promise<void> {
+    const update = presentation.then(async () => {
+      if (disposed) throw new BrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser tab session has been disposed')
+      const previousAttachment = attachment
+      attachment = null
+      await previousAttachment?.dispose()
+      if (nextElement === null || disposed) return
+      const nextAttachment = await surface.attach(nextElement)
+      if (disposed) {
+        await nextAttachment.dispose()
+        return
+      }
+      attachment = nextAttachment
+    })
+    presentation = update.catch(() => undefined)
+    return update
+  }
+
   return {
     surface,
     navigate(address) {
@@ -125,9 +145,11 @@ export async function createBrowserTabSession({
         throw error
       }
     },
+    setPresentation,
     async dispose() {
       if (disposed) return
       disposed = true
+      await presentation.catch(() => undefined)
       const resources = [attachment, subscription]
       attachment = null
       subscription = null

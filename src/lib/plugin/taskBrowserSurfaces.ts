@@ -1,5 +1,7 @@
 import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import type {
+  BrowserSurfaceCapture,
+  BrowserSurfaceFeedbackSelection,
   BrowserSurfaceErrorCode,
   BrowserSurfacesAPI,
   Disposable,
@@ -157,6 +159,35 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
 
   stop(): Promise<TaskBrowserSurfaceState> {
     return this.control('task_browser_surface_stop', { surfaceId: this.reference.surfaceId })
+  }
+
+  selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null> {
+    this.assertLive()
+    return invokeHost<BrowserSurfaceFeedbackSelection | null>('task_browser_surface_select_visible_region', this.captureOwner())
+  }
+
+  async cancelVisibleRegionSelection(): Promise<void> {
+    this.assertLive()
+    await invokeHost<void>('task_browser_surface_cancel_visible_region_selection', this.captureOwner())
+  }
+  captureVisibleViewport(): Promise<BrowserSurfaceCapture> {
+    this.assertLive()
+    return invokeHost<BrowserSurfaceCapture>('task_browser_surface_capture_visible_viewport', this.captureOwner())
+  }
+
+  async discardCapture(artifactId: string): Promise<void> {
+    this.assertLive()
+    if (!artifactId.trim()) throw new BrowserSurfaceError('INVALID_ID', 'Task Browser capture requires an artifact ID')
+    await invokeHost<void>('task_browser_surface_discard_capture', { ...this.captureOwner(), artifactId })
+  }
+
+  private captureOwner() {
+    return {
+      pluginId: this.pluginId,
+      taskId: this.taskId,
+      surfaceId: this.reference.surfaceId,
+      generation: this.reference.generation,
+    }
   }
 
   private async control(command: string, payload: unknown): Promise<TaskBrowserSurfaceState> {

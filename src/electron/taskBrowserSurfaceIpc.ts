@@ -18,6 +18,10 @@ const COMMANDS = new Set([
   'task_browser_surface_go_forward',
   'task_browser_surface_reload',
   'task_browser_surface_stop',
+  'task_browser_surface_select_visible_region',
+  'task_browser_surface_cancel_visible_region_selection',
+  'task_browser_surface_capture_visible_viewport',
+  'task_browser_surface_discard_capture',
   'task_browser_surface_reset_session',
   'task_browser_surface_destroy_plugin',
 ])
@@ -56,6 +60,14 @@ function attachmentGenerationField(payload: Record<string, unknown>): number {
   const value = payload.attachmentGeneration
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Attachment requires a valid generation')
+  }
+  return value
+}
+
+function surfaceGenerationField(payload: Record<string, unknown>): number {
+  const value = payload.generation
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser Surface capture requires a valid generation')
   }
   return value
 }
@@ -120,6 +132,33 @@ export class TaskBrowserSurfaceIpcRouter {
       if (command === 'task_browser_surface_destroy_plugin') {
         this.manager.assertWindowRegistered(windowId)
         this.manager.destroyPlugin(stringField(payload, 'pluginId'))
+        return { ok: true, value: undefined }
+      }
+
+      if (
+        command === 'task_browser_surface_select_visible_region'
+        || command === 'task_browser_surface_cancel_visible_region_selection'
+        || command === 'task_browser_surface_capture_visible_viewport'
+        || command === 'task_browser_surface_discard_capture'
+      ) {
+        const owner = {
+          windowId,
+          pluginId: stringField(payload, 'pluginId'),
+          taskId: stringField(payload, 'taskId'),
+          surfaceId: stringField(payload, 'surfaceId'),
+          generation: surfaceGenerationField(payload),
+        }
+        if (command === 'task_browser_surface_select_visible_region') {
+          return { ok: true, value: await this.manager.selectVisibleRegion(owner) }
+        }
+        if (command === 'task_browser_surface_cancel_visible_region_selection') {
+          await this.manager.cancelVisibleRegionSelection(owner)
+          return { ok: true, value: undefined }
+        }
+        if (command === 'task_browser_surface_capture_visible_viewport') {
+          return { ok: true, value: await this.manager.captureVisibleViewport(owner) }
+        }
+        await this.manager.discardCapture({ ...owner, artifactId: stringField(payload, 'artifactId') })
         return { ok: true, value: undefined }
       }
 

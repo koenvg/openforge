@@ -97,6 +97,10 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'goForward'
       | 'reload'
       | 'stop'
+      | 'selectVisibleRegion'
+      | 'cancelVisibleRegionSelection'
+      | 'captureVisibleViewport'
+      | 'discardCapture'
     > = true
 
     expect({ apiContractIsExact, controllerContractIsExact }).toEqual({
@@ -105,6 +109,49 @@ describe('renderer Task Browser Surface host adapter', () => {
     })
   })
 
+  it('serializes capture ownership and generation without exposing desktop transports to the plugin', async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'task_browser_surface_get_or_create') {
+        return { ok: true, value: { surfaceId: 'surface-capture', generation: 9, state: blankState } }
+      }
+      if (command === 'task_browser_surface_select_visible_region') {
+        return { ok: true, value: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 } }
+      }
+      if (command === 'task_browser_surface_capture_visible_viewport') {
+        return {
+          ok: true,
+          value: {
+            artifactId: 'capture-1',
+            mediaType: 'image/png',
+            width: 640,
+            height: 480,
+            dataUrl: 'data:image/png;base64,cG5n',
+          },
+        }
+      }
+      return { ok: true, value: undefined }
+    })
+    window.openforge = { version: 1, invoke, onEvent: () => () => undefined }
+    const controller = await createHostBrowserSurfaces('browser').getOrCreate({ taskId: 'T-1', id: 'main' })
+
+    const selection = await controller.selectVisibleRegion()
+    const capture = await controller.captureVisibleViewport()
+    await controller.discardCapture(capture.artifactId)
+
+    const owner = {
+      pluginId: 'browser',
+      taskId: 'T-1',
+      surfaceId: 'surface-capture',
+      generation: 9,
+    }
+    expect(selection).toEqual({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_select_visible_region', owner)
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_visible_viewport', owner)
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_discard_capture', {
+      ...owner,
+      artifactId: 'capture-1',
+    })
+  })
   it('qualifies requests, serializes DOM bounds, forwards state, and disposes attachments safely', async () => {
     const invocations: Array<{ command: string; payload: unknown }> = []
     let stateHandler: ((payload: unknown) => void) | null = null

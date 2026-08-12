@@ -102,6 +102,11 @@ const electronFakes = vi.hoisted(() => {
     destroyed = false
     reloadCalls = 0
     stopCalls = 0
+    capturePageCalls: unknown[] = []
+    captureSize = { width: 640, height: 480 }
+    capturePng = Buffer.from('visible-viewport-png')
+    executeJavaScriptCalls: string[] = []
+    executeJavaScriptResult: unknown = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }
     backgroundThrottling: boolean[] = []
     windowOpenHandler: ((details: unknown) => unknown) | null = null
     loadError: Error | null = null
@@ -125,6 +130,19 @@ const electronFakes = vi.hoisted(() => {
     async loadURL(url: string): Promise<void> {
       if (this.loadError) throw this.loadError
       this.url = url
+    }
+
+    async capturePage(rect?: unknown): Promise<{ getSize(): { width: number; height: number }; toPNG(): Buffer }> {
+      this.capturePageCalls.push(rect)
+      return {
+        getSize: () => ({ ...this.captureSize }),
+        toPNG: () => Buffer.from(this.capturePng),
+      }
+    }
+
+    async executeJavaScript(script: string): Promise<unknown> {
+      this.executeJavaScriptCalls.push(script)
+      return this.executeJavaScriptResult
     }
 
     reload(): void { this.reloadCalls += 1 }
@@ -297,6 +315,61 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     surface.destroy()
     expect(view.webContents.destroyed).toBe(true)
   })
+
+  it('collects a region on the live page while preserving native page scrolling', async () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-live-selection',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 640, height: 480 })
+
+    electronFakes.views[0].webContents.executeJavaScriptResult = {
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      comment: 'Navigation spacing is unclear',
+      annotation: { number: 1, x: 64, y: 96, width: 192, height: 192 },
+    }
+
+    await expect(surface.selectVisibleRegion()).resolves.toEqual({
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      comment: 'Navigation spacing is unclear',
+    })
+
+    const script = electronFakes.views[0].webContents.executeJavaScriptCalls.at(-1) ?? ''
+    expect(script).toContain('Feedback comment')
+    expect(script).toContain('elementsFromPoint')
+    expect(script).toContain('__openforge_visual_feedback_annotations__')
+    expect(script).toContain('savedAnnotations.forEach(renderAnnotation)')
+    expect(script).toContain('annotationsRoot.dataset.pageUrl = location.href')
+    expect(script).toContain("annotation.style.cssText = 'position:absolute")
+    expect(script).toContain('pointer-events:none')
+    expect(script).not.toContain('outerHTML')
+    expect(script).not.toContain('querySelector')
+  })
+
+  it('captures only the current visible viewport as PNG with native dimensions', async () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-capture',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 640, height: 480 })
+
+    const capture = await surface.captureVisibleViewport()
+
+    const contents = electronFakes.views[0].webContents
+    expect(contents.capturePageCalls).toEqual([undefined])
+    expect(capture).toEqual({
+      png: Buffer.from('visible-viewport-png'),
+      width: 640,
+      height: 480,
+    })
+  })
+
 
   it('reports the renderer zoom factor of the owning window and falls back to unzoomed', () => {
     const window = electronFakes.registerWindow(10)

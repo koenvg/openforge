@@ -1,3 +1,4 @@
+import type { TaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import type { TaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
 import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 
@@ -8,6 +9,9 @@ export type TaskBrowserSurfaceErrorCode =
   | 'INVALID_ID'
   | 'INVALID_URL'
   | 'INVALID_BOUNDS'
+  | 'CAPTURE_UNAVAILABLE'
+  | 'CAPTURE_FAILED'
+  | 'SURFACE_ACCESS_DENIED'
   | 'SURFACE_DESTROYED'
 
 export class TaskBrowserSurfaceError extends Error {
@@ -72,6 +76,23 @@ export interface TaskBrowserSurfaceCreateOptions {
   permissionHandler?: TaskBrowserPermissionSessionHandler
 }
 
+export interface TaskBrowserSurfaceRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface TaskBrowserSurfaceFeedbackSelection {
+  region: TaskBrowserSurfaceRegion
+  comment: string
+}
+export interface TaskBrowserNativeCapture {
+  png: Uint8Array
+  width: number
+  height: number
+}
+
 export interface NativeTaskBrowserSurface {
   getState(): TaskBrowserNativeState
   onStateChanged(listener: (state: TaskBrowserNativeState) => void): () => void
@@ -83,6 +104,9 @@ export interface NativeTaskBrowserSurface {
   goForward(): Promise<void>
   reload(): Promise<void>
   stop(): void
+  selectVisibleRegion(): Promise<TaskBrowserSurfaceFeedbackSelection | null>
+  cancelVisibleRegionSelection(): Promise<void>
+  captureVisibleViewport(): Promise<TaskBrowserNativeCapture>
 }
 
 export interface NativeTaskBrowserSurfaceFactory {
@@ -106,6 +130,7 @@ export interface TaskBrowserSurfaceManagerOptions {
   factory: NativeTaskBrowserSurfaceFactory
   registry: TaskBrowserPartitionRegistry
   permissions: TaskBrowserPermissionController
+  artifacts: TaskBrowserCaptureArtifactStore
   authorize(pluginId: string, taskId: string): Promise<void>
   /** Authorizes a plugin-wide operation that names no Task, such as a session reset. */
   authorizePlugin(pluginId: string): Promise<void>
@@ -130,4 +155,20 @@ export interface TaskBrowserSurfaceReference {
   surfaceId: string
   generation: number
   state: TaskBrowserNativeState
+}
+
+export interface TaskBrowserSurfaceCaptureRequest {
+  windowId: number
+  pluginId: string
+  taskId: string
+  surfaceId: string
+  generation: number
+}
+
+export interface TaskBrowserSurfaceCapture {
+  artifactId: string
+  mediaType: 'image/png'
+  width: number
+  height: number
+  dataUrl: string
 }

@@ -1,5 +1,8 @@
 export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfaces'
 export type {
+  BrowserSurfaceCapture,
+  BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceRegion,
   BrowserSurfaceErrorCode,
   BrowserSurfaceNavigationError,
   BrowserSurfacesAPI,

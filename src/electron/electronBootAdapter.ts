@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { handleElectronInvoke } from './backendBridge.js'
+import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
 import { TaskBrowserPermissionPolicy } from './taskBrowserPermissionPolicy.js'
 import { taskBrowserPermissionPromptOptions } from './taskBrowserPermissionPrompt.js'
@@ -133,6 +134,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     factory: new ElectronTaskBrowserSurfaceFactory(),
     registry: taskBrowserPartitionRegistry,
     permissions: taskBrowserPermissionPolicy,
+    artifacts: new FileTaskBrowserCaptureArtifactStore(
+      () => join(app.getPath('userData'), 'task-artifacts', 'browser-captures'),
+    ),
     authorize: createTaskBrowserSurfaceAuthorizer(invokeForTaskBrowserAuthorization),
     authorizePlugin: createPluginBrowserSessionAuthorizer(invokeForTaskBrowserAuthorization),
     rendererZoomFactor: electronRendererZoomFactor,
