@@ -34,6 +34,7 @@ export {
 } from './testing'
 
 export {
+  TaskFollowUpError,
   MAX_SUPPORTED_API_VERSION,
   MIN_SUPPORTED_API_VERSION,
   OPENFORGE_PLUGIN_API_VERSION,
@@ -95,7 +96,11 @@ export type {
   ShellSpawnRequest,
   ShellWriteRequest,
   StartPromptContribution,
+  SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
+  TaskFollowUpDisposition,
+  TaskFollowUpErrorCode,
+  TaskFollowUpReceipt,
   SubscriptionSink,
   SupportedOpenForgeApiVersion,
   SystemAPI,

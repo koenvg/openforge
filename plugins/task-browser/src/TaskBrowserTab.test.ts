@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { TaskFollowUpError } from '@openforge-app/plugin-sdk'
 import { tick } from 'svelte'
 import type {
   Disposable,
@@ -54,9 +55,13 @@ function createSurface(
     cancelVisibleRegionSelection: vi.fn(async () => undefined),
     captureVisibleViewport: vi.fn(async () => ({
       artifactId: 'capture-1',
+      absolutePath: '/tmp/openforge/capture-1.png',
       mediaType: 'image/png' as const,
       width: 640,
       height: 480,
+      url: state.url,
+      title: state.title,
+      capturedAt: '2026-08-11T14:30:00.000Z',
       dataUrl: 'data:image/png;base64,cG5n',
     })),
     discardCapture: vi.fn(async () => undefined),
@@ -69,6 +74,29 @@ function props(api: ReturnType<typeof createMockFrontendOpenForgeApi>, taskId: s
     context: api.context.getSnapshot(),
     taskId,
     projectId: 'P-1',
+  }
+}
+
+function task(taskId: string) {
+  return {
+    id: taskId,
+    initial_prompt: 'Improve checkout',
+    status: 'doing' as const,
+    prompt: null,
+    title: 'Checkout polish',
+    title_source: 'manual' as const,
+    title_generated_at: null,
+    summary: null,
+    agent: 'worker',
+    permission_mode: null,
+    worktree_source: null,
+    worktree_branch: null,
+    handoff_notes_enabled: true,
+    source_ticket_url: null,
+    depends_on: [],
+    project_id: 'P-1',
+    created_at: 0,
+    updated_at: 0,
   }
 }
 
@@ -200,5 +228,137 @@ describe('TaskBrowserTab lifecycle', () => {
     expect(screen.getByText('1 comment')).toBeTruthy()
     expect(surface.detach).not.toHaveBeenCalled()
     expect(surface.destroy).not.toHaveBeenCalled()
+  })
+
+  it('allows sending while region selection remains active', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    const selectionCancelled = deferred<null>()
+    vi.mocked(surface.selectVisibleRegion)
+      .mockReset()
+      .mockResolvedValueOnce({
+        region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
+        comment: 'Button alignment is off',
+      })
+      .mockImplementationOnce(() => selectionCancelled.promise)
+    vi.mocked(surface.cancelVisibleRegionSelection).mockImplementation(async () => {
+      selectionCancelled.resolve(null)
+    })
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    api.tasks.get = vi.fn(async taskId => task(taskId))
+    api.tasks.sendFollowUp = vi.fn(async request => ({
+      taskId: request.taskId,
+      sessionId: 'S-1',
+      disposition: 'queued',
+    }))
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 comment')
+
+    const send = screen.getByRole('button', { name: 'Send visual feedback to agent' }) as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+    await fireEvent.click(send)
+
+    await waitFor(() => expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByText('1 comment')).toBeNull())
+  })
+
+  it('restores the feedback count and send action after leaving and reopening the Task Browser', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    const firstView = render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 comment')
+    firstView.unmount()
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+
+    expect(screen.getByText('1 comment')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send visual feedback to agent' })).toBeTruthy()
+    expect(surface.discardCapture).not.toHaveBeenCalled()
+  })
+  it('submits immediately once, then clears acknowledged feedback while retaining artifacts', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    const delivery = deferred<{ taskId: string; sessionId: string; disposition: 'queued' }>()
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    api.tasks.get = vi.fn(async taskId => task(taskId))
+    api.tasks.sendFollowUp = vi.fn(() => delivery.promise)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 comment')
+
+    const send = screen.getByRole('button', { name: 'Send visual feedback to agent' })
+    await fireEvent.click(send)
+    await fireEvent.click(send)
+
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1)
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'T-A',
+      message: expect.stringContaining('PNG: `/tmp/openforge/capture-1.png`'),
+    }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect((send as HTMLButtonElement).disabled).toBe(true)
+
+    delivery.resolve({ taskId: 'T-A', sessionId: 'S-1', disposition: 'queued' })
+    await waitFor(() => expect(screen.queryByText('1 comment')).toBeNull())
+    expect(surface.discardCapture).not.toHaveBeenCalled()
+  })
+
+  it('retains the unchanged collection after a typed failure and retries successfully', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://capture.example/')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+    api.tasks.get = vi.fn(async taskId => task(taskId))
+    api.tasks.sendFollowUp = vi.fn()
+      .mockRejectedValueOnce(new TaskFollowUpError('NO_SESSION', 'No Agent Session exists for Task T-A'))
+      .mockResolvedValueOnce({ taskId: 'T-A', sessionId: 'S-1', disposition: 'delivered' })
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://capture.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 comment')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
+    expect(await screen.findByText('No Agent Session exists for Task T-A')).toBeTruthy()
+    expect(screen.getByText('1 comment')).toBeTruthy()
+    expect(surface.discardCapture).not.toHaveBeenCalled()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
+    await waitFor(() => expect(screen.queryByText('1 comment')).toBeNull())
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(2)
+  })
+
+  it('retains acknowledged artifacts when the Task changes during delivery', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const firstSurface = createSurface('https://task-a.example/')
+    const secondSurface = createSurface('https://task-b.example/')
+    const delivery = deferred<{ taskId: string; sessionId: string; disposition: 'delivered' }>()
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockImplementation(async request =>
+      request.taskId === 'T-A' ? firstSurface : secondSurface)
+    api.tasks.get = vi.fn(async taskId => task(taskId))
+    api.tasks.sendFollowUp = vi.fn(() => delivery.promise)
+
+    const view = render(TaskBrowserTab, { props: props(api, 'T-A') })
+    await screen.findByDisplayValue('https://task-a.example/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await screen.findByText('1 comment')
+    await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
+
+    const switching = view.rerender(props(api, 'T-B'))
+    delivery.resolve({ taskId: 'T-A', sessionId: 'S-1', disposition: 'delivered' })
+    await switching
+    await screen.findByDisplayValue('https://task-b.example/')
+
+    expect(firstSurface.discardCapture).not.toHaveBeenCalled()
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1)
   })
 })

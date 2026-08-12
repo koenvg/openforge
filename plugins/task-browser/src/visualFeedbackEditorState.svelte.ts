@@ -4,7 +4,7 @@ import type {
   TaskBrowserSurfaceController,
 } from '@openforge-app/plugin-sdk/frontend'
 
-interface CaptureAnnotation {
+export interface CaptureAnnotation {
   number: number
   rect: BrowserSurfaceRegion
   comment: string
@@ -19,9 +19,11 @@ export interface VisualFeedbackEditorState {
   readonly active: boolean
   readonly busy: boolean
   readonly annotations: readonly CaptureAnnotation[]
+  setErrorHandler(handler: (error: string | null) => void): void
   setSurface(surface: TaskBrowserSurfaceController | null): Promise<void>
   toggle(): Promise<void>
   discard(): Promise<void>
+  send(deliver: (annotations: readonly CaptureAnnotation[]) => Promise<void>): Promise<void>
   destroy(): Promise<void>
 }
 
@@ -34,9 +36,21 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
   let busy = $state(false)
   let annotations = $state<CaptureAnnotation[]>([])
   let nextAnnotationNumber = 1
+  let errorHandler = onError
+  let lastError: string | null = null
 
+  function reportError(error: string | null): void {
+    lastError = error
+    errorHandler(error)
+  }
+
+  function setErrorHandler(handler: (error: string | null) => void): void {
+    errorHandler = handler
+    handler(lastError)
+  }
   let surface: TaskBrowserSurfaceController | null = null
   let generation = 0
+  let pendingSend: Promise<void> | null = null
   let destroyed = false
 
   function isCurrent(targetSurface: TaskBrowserSurfaceController, targetGeneration: number): boolean {
@@ -65,12 +79,11 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
 
     generation += 1
     const previousSurface = surface
-    const previousCaptures = annotations.map(annotation => annotation.capture)
+    active = false
     surface = nextSurface
-    resetState()
 
     if (previousSurface !== null) {
-      await releaseSurfaceResources(previousSurface, previousCaptures)
+      await previousSurface.cancelVisibleRegionSelection().catch(() => undefined)
     }
   }
 
@@ -101,31 +114,26 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
         if (createdCapture !== null) {
           await targetSurface.discardCapture(createdCapture.artifactId).catch(() => undefined)
         }
-        if (isCurrent(targetSurface, targetGeneration)) onError(errorMessage(error))
+        if (isCurrent(targetSurface, targetGeneration)) reportError(errorMessage(error))
         break
       }
     }
 
-    if (isCurrent(targetSurface, targetGeneration)) {
-      active = false
-      busy = false
-    }
+    if (isCurrent(targetSurface, targetGeneration)) active = false
   }
 
   async function toggle(): Promise<void> {
     const targetSurface = surface
-    if (targetSurface === null) return
+    if (targetSurface === null || busy) return
 
     if (active) {
       active = false
       await targetSurface.cancelVisibleRegionSelection().catch(() => undefined)
-      busy = false
       return
     }
 
     active = true
-    busy = true
-    onError(null)
+    reportError(null)
     await runSelectionLoop(targetSurface, generation)
   }
 
@@ -136,7 +144,9 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
 
     const targetGeneration = generation
     busy = true
-    onError(null)
+    active = false
+    reportError(null)
+    await targetSurface.cancelVisibleRegionSelection().catch(() => undefined)
     try {
       await Promise.all(currentAnnotations.map(annotation =>
         targetSurface.discardCapture(annotation.capture.artifactId)))
@@ -145,14 +155,47 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
         nextAnnotationNumber = 1
       }
     } catch (error) {
-      if (isCurrent(targetSurface, targetGeneration)) onError(errorMessage(error))
+      if (isCurrent(targetSurface, targetGeneration)) reportError(errorMessage(error))
     } finally {
       if (isCurrent(targetSurface, targetGeneration)) busy = false
     }
   }
 
+  async function send(deliver: (annotations: readonly CaptureAnnotation[]) => Promise<void>): Promise<void> {
+    const targetSurface = surface
+    const currentAnnotations = annotations
+    if (targetSurface === null || currentAnnotations.length === 0 || busy) return
+
+    busy = true
+    active = false
+    reportError(null)
+    const operation = (async () => {
+      try {
+        await targetSurface.cancelVisibleRegionSelection().catch(() => undefined)
+        await deliver(currentAnnotations)
+        if (annotations === currentAnnotations) {
+          annotations = []
+          nextAnnotationNumber = 1
+        }
+      } catch (error) {
+        reportError(errorMessage(error))
+      } finally {
+        busy = false
+      }
+    })()
+    pendingSend = operation
+    try {
+      await operation
+    } finally {
+      if (pendingSend === operation) pendingSend = null
+    }
+  }
+
   async function destroy(): Promise<void> {
     if (destroyed) return
+
+    const inFlightSend = pendingSend
+    if (inFlightSend !== null) await inFlightSend
 
     destroyed = true
     generation += 1
@@ -170,9 +213,11 @@ export function createVisualFeedbackEditor({ onError }: VisualFeedbackEditorOpti
     get active() { return active },
     get busy() { return busy },
     get annotations() { return annotations },
+    setErrorHandler,
     setSurface,
     toggle,
     discard,
+    send,
     destroy,
   }
 }

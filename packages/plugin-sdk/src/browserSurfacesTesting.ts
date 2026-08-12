@@ -179,9 +179,13 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.calls.browserSurfaceCaptures.push({ taskId: this.taskId, id: this.id })
     return {
       artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+      absolutePath: `/tmp/openforge-browser-captures/${this.taskId}/capture-${this.calls.browserSurfaceCaptures.length}.png`,
       mediaType: 'image/png',
       width: 800,
       height: 600,
+      url: this.state.url,
+      title: this.state.title,
+      capturedAt: '2026-01-01T00:00:00.000Z',
       dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
     }
   }

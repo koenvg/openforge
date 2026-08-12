@@ -17,6 +17,7 @@ async function liveCaptureFixture() {
 describe('Task Browser Surface viewport capture', () => {
   it('reauthorizes live-region selection and the exact capture generation', async () => {
     const { manager, factory, artifacts, authorize, reference } = await liveCaptureFixture()
+    factory.surfaces[0].emit({ url: 'https://example.test/account', title: 'Account settings' })
     const owner = {
       windowId: 10,
       pluginId: 'browser',
@@ -40,9 +41,13 @@ describe('Task Browser Surface viewport capture', () => {
     })
     expect(capture).toEqual({
       artifactId: '11111111-1111-4111-8111-111111111111',
+      absolutePath: '/tmp/openforge/task-browser/capture.png',
       mediaType: 'image/png',
       width: 800,
       height: 600,
+      url: 'https://example.test/account',
+      title: 'Account settings',
+      capturedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       dataUrl: `data:image/png;base64,${Buffer.from('fake-visible-png').toString('base64')}`,
     })
   })

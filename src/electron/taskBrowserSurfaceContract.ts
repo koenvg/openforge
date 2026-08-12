@@ -167,8 +167,12 @@ export interface TaskBrowserSurfaceCaptureRequest {
 
 export interface TaskBrowserSurfaceCapture {
   artifactId: string
+  absolutePath: string
   mediaType: 'image/png'
   width: number
   height: number
+  url: string
+  title: string
+  capturedAt: string
   dataUrl: string
 }

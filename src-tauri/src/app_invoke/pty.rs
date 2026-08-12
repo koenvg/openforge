@@ -1,5 +1,36 @@
 use super::pty_payload::{PtyResizePayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload};
 use super::*;
+use serde::Serialize;
+
+const MAX_AGENT_FOLLOW_UP_BYTES: usize = 256 * 1024;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentFollowUpReceipt {
+    task_id: String,
+    session_id: String,
+    disposition: &'static str,
+}
+
+fn follow_up_disposition(status: &str) -> Option<&'static str> {
+    match status {
+        "completed" => Some("delivered"),
+        "running" | "paused" => Some("queued"),
+        _ => None,
+    }
+}
+
+fn terminal_follow_up_input(message: &str) -> Vec<u8> {
+    let sanitized: String = message
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .collect();
+    let mut input = Vec::with_capacity(sanitized.len() + 13);
+    input.extend_from_slice(b"\x1b[200~");
+    input.extend_from_slice(sanitized.as_bytes());
+    input.extend_from_slice(b"\x1b[201~\r");
+    input
+}
 
 fn pty_command_error_response(
     action: &str,
@@ -49,6 +80,56 @@ pub(super) async fn handle_app_pty_command(
                 .await
                 .map_err(|e| pty_command_error_response("Failed to spawn shell PTY", e))?;
             json_value(instance_id)?
+        }
+        "send_agent_follow_up" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let message = payload_string(&request.payload, "message")?;
+            if message.trim().is_empty() || message.len() > MAX_AGENT_FOLLOW_UP_BYTES {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "AGENT_FOLLOW_UP_DELIVERY_FAILED: follow-up message must be non-empty and at most 256 KiB".to_string(),
+                ));
+            }
+
+            let session = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_latest_session_for_ticket(&task_id)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("AGENT_FOLLOW_UP_DELIVERY_FAILED: failed to load Agent Session: {error}"),
+                        )
+                    })?
+            };
+            let Some(session) = session else {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("AGENT_FOLLOW_UP_NO_SESSION: Task {task_id} has no Agent Session"),
+                ));
+            };
+            let Some(disposition) = follow_up_disposition(&session.status) else {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "AGENT_FOLLOW_UP_NO_SESSION: Task {task_id} has no active Agent Session"
+                    ),
+                ));
+            };
+
+            pty_manager
+                .write_pty(&task_id, &terminal_follow_up_input(&message))
+                .await
+                .map_err(|error| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("AGENT_FOLLOW_UP_DELIVERY_FAILED: Agent Session could not accept the follow-up: {error}"),
+                    )
+                })?;
+            json_value(AgentFollowUpReceipt {
+                task_id,
+                session_id: session.id,
+                disposition,
+            })?
         }
         "pty_write" => {
             let payload = PtyWritePayload::decode(&request.command, &request.payload)?;

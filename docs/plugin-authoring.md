@@ -286,7 +286,7 @@ Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds,
 
 `selectVisibleRegion()` is available only while the exact surface generation is visibly attached. Electron main installs a temporary host-owned interaction layer inside the live page. Hovering highlights sensible page areas, dragging selects an arbitrary viewport rectangle, clicking accepts the highlighted target, and Escape cancels. A compact host-owned comment composer remains over the live page; Enter saves and Shift+Enter adds a newline. A plugin can call `selectVisibleRegion()` repeatedly for a continuous feedback mode and use `cancelVisibleRegionSelection()` to stop the currently pending selection. After save, OpenForge removes the interactive selector and composer but leaves a numbered, pointer-transparent outline over the commented page area, so normal page clicks and scrolling continue to work. Saved outlines are retained by exact page URL within the live surface: navigating elsewhere hides them, and returning to that URL restores them. The public plugin receives only `{ region: { x, y, width, height }, comment }`—never DOM nodes, selectors, page content, or a general script-injection facility.
 
-`captureVisibleViewport()` uses Electron's visible-page capture rather than a full scrolling-page capture, writes an immutable PNG to host-managed Task/plugin runtime storage under `userData`, and returns a JSON-serializable `{ artifactId, mediaType, width, height, dataUrl }`. Call it immediately after successful live-page feedback to preserve the selected state in the background; do not replace the live Browser Surface merely to display the returned data URL. The opaque `artifactId` is not a filesystem path. `discardCapture(artifactId)` deletes only an artifact owned by that same window, plugin, Task, surface, and generation. Selecting, capturing, and discarding do not detach, destroy, or reset the Plugin Browser Session.
+`captureVisibleViewport()` uses Electron's visible-page capture rather than a full scrolling-page capture, writes an immutable PNG to host-managed Task/plugin runtime storage under `userData`, and returns a JSON-serializable `{ artifactId, absolutePath, mediaType, width, height, url, title, capturedAt, dataUrl }`. `absolutePath` is the Agent-readable local PNG path; `url`, `title`, and ISO `capturedAt` describe the immutable viewport capture. Call it immediately after successful live-page feedback to preserve the selected state in the background; do not replace the live Browser Surface merely to display the returned data URL. `discardCapture(artifactId)` deletes only an artifact owned by that same window, plugin, Task, surface, and generation. Selecting, capturing, and discarding do not detach, destroy, or reset the Plugin Browser Session. Retain acknowledged artifacts when an Agent follow-up references their paths; Task runtime cleanup removes them with the Task.
 
 All surfaces of one plugin share a single durable Plugin Browser Session, spanning every Task and project, so a login performed in one Task is available in all of them. Sessions are isolated across plugins, never within a plugin. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, Task deletion, and app restart. `openforge.browserSurfaces.resetSession()` takes no Task: it destroys that plugin's live surfaces in every Task and clears the shared browser session data and remembered site permissions, without clearing plugin task storage. Warn the user before calling it — it signs them out everywhere at once. See [ADR 0012](./adr/0012-plugin-scoped-browser-sessions.md).
 
@@ -332,6 +332,12 @@ const run = await openforge.tasks.startImplementation({
   taskId: task.id
 })
 
+const receipt = await openforge.tasks.sendFollowUp({
+  taskId: task.id,
+  message: '# Review feedback\n\nInspect `/absolute/path/to/capture.png`.'
+})
+// receipt.disposition is `delivered` for an idle Agent or `queued` for active work.
+
 await openforge.tasks.configureStartPromptContribution({
   projectId,
   id: 'handoff-notes-workflow',
@@ -346,6 +352,7 @@ Behavior and limits:
 - `projectId` is required for plugin-created Tasks.
 - `tasks.create` creates backlog Tasks. Plugins may attach dependency task IDs and label names; missing labels are created by the host.
 - `tasks.startImplementation` starts OpenForge's native implementation flow and returns `{ taskId, sessionId, workspacePath }` once launch is accepted.
+- `tasks.sendFollowUp({ taskId, message })` submits immediately to that Task's latest active Agent Session through its provider PTY. It returns `{ taskId, sessionId, disposition }`, where `delivered` means the Agent was idle and `queued` means work was running or paused. Failures throw `TaskFollowUpError` with retryable `NO_SESSION` or `DELIVERY_FAILED` codes; callers must retain user work until a receipt is returned.
 - The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call or through start-prompt contribution configuration.
 - Start-prompt content may use `{{taskId}}` or `{{task_id}}` for the active Task ID. A contribution with the reserved `handoff-notes-workflow` ID may also use `{{handoffNotesTemplate}}` to inject the project's current Handoff Notes Template at run start. OpenForge escapes a literal `</handoff_notes_template>` in the injected template so it cannot close the host prompt block.
 - For backward compatibility, OpenForge also refreshes the template inside the exact full handoff workflow envelope generated by pre-placeholder OpenForge versions. Plugins should use `{{handoffNotesTemplate}}` rather than copy that retired host envelope; all other content without the placeholder remains plugin-owned and is not rewritten.

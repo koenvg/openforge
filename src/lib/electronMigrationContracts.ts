@@ -117,6 +117,7 @@ export const ipcCommandContracts = [
   { functionName: 'resetCompanionHostIdentity', ipcCommand: 'reset_companion_host_identity', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getTaskDetail', ipcCommand: 'get_task_detail', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getLatestSession', ipcCommand: 'get_latest_session', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
+  { functionName: 'sendAgentFollowUp', ipcCommand: 'send_agent_follow_up', payloadKeys: ['taskId', 'message'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getLatestSessions', ipcCommand: 'get_latest_sessions', payloadKeys: ['taskIds'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'getGithubUsername', ipcCommand: 'get_github_username', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'fetchReviewPrs', ipcCommand: 'fetch_review_prs', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },

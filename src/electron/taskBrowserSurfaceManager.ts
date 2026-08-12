@@ -300,6 +300,8 @@ export class TaskBrowserSurfaceManager {
 
     await this.options.authorize(request.pluginId, request.taskId)
     this.assertCaptureSurfaceCurrent(surface, request.generation)
+    const capturedAt = new Date().toISOString()
+    const capturedState = surface.native.getState()
     const nativeCapture = await surface.native.captureVisibleViewport()
     this.assertCaptureSurfaceCurrent(surface, request.generation)
 
@@ -321,9 +323,13 @@ export class TaskBrowserSurfaceManager {
 
     return {
       artifactId: stored.artifactId,
+      absolutePath: stored.absolutePath,
       mediaType: 'image/png',
       width: nativeCapture.width,
       height: nativeCapture.height,
+      url: capturedState.url,
+      title: capturedState.title,
+      capturedAt,
       dataUrl: `data:image/png;base64,${Buffer.from(nativeCapture.png).toString('base64')}`,
     }
   }

@@ -126,6 +126,14 @@ var SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVe
 var OPENFORGE_PLUGIN_API_VERSION = SUPPORTED_OPENFORGE_API_VERSIONS[0];
 var MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS);
 var MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS);
+var TaskFollowUpError = class extends Error {
+	code;
+	constructor(code, message) {
+		super(message);
+		this.name = "TaskFollowUpError";
+		this.code = code;
+	}
+};
 function makePluginViewKey(pluginId, viewId) {
 	return `plugin:${pluginId}:${viewId}`;
 }
@@ -317,6 +325,7 @@ function createTestingCalls() {
 		taskCreations: [],
 		startPromptContributionConfigurations: [],
 		taskImplementationStarts: [],
+		taskFollowUps: [],
 		taskListRequests: [],
 		taskSummaryUpdates: [],
 		taskStatusUpdates: [],
@@ -643,6 +652,14 @@ var TestingCommonApiFake = class {
 						taskId: request.taskId,
 						workspacePath: "/mock-workspace",
 						sessionId: "mock-session"
+					};
+				},
+				sendFollowUp: async (request) => {
+					this.services.calls.taskFollowUps.push(request);
+					return {
+						taskId: request.taskId,
+						sessionId: "mock-session",
+						disposition: "delivered"
 					};
 				},
 				getWorkspace: async () => null,
@@ -988,9 +1005,13 @@ var TestingTaskBrowserSurface = class {
 		});
 		return {
 			artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+			absolutePath: `/tmp/openforge-browser-captures/${this.taskId}/capture-${this.calls.browserSurfaceCaptures.length}.png`,
 			mediaType: "image/png",
 			width: 800,
 			height: 600,
+			url: this.state.url,
+			title: this.state.title,
+			capturedAt: "2026-01-01T00:00:00.000Z",
 			dataUrl: "data:image/png;base64,iVBORw0KGgo="
 		};
 	}
@@ -1743,4 +1764,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { BrowserSurfaceError, MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { BrowserSurfaceError, MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

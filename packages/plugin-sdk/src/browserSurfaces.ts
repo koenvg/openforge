@@ -40,9 +40,14 @@ export interface TaskBrowserSurfaceState {
 
 export interface BrowserSurfaceCapture {
   artifactId: string
+  /** Absolute local PNG path retained for the Task Agent after acknowledgement. */
+  absolutePath: string
   mediaType: 'image/png'
   width: number
   height: number
+  url: string
+  title: string
+  capturedAt: string
   dataUrl: string
 }
 

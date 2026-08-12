@@ -359,6 +359,7 @@ describe('runtime contribution registry', () => {
       listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, handoff_notes_enabled: true, source_ticket_url: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
       createTask: vi.fn(async () => createdTask),
       startTaskImplementation: vi.fn(async () => ({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })),
+      sendTaskFollowUp: vi.fn(async () => ({ taskId: 'T-2', sessionId: 'S-1', disposition: 'queued' as const })),
       readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
       openUrl: vi.fn(async () => undefined),
       getNavigation: vi.fn(() => ({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })),
@@ -389,6 +390,10 @@ describe('runtime contribution registry', () => {
     await expect(api.tasks.startImplementation({
       taskId: 'T-2',
     })).resolves.toEqual({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })
+    await expect(api.tasks.sendFollowUp({
+      taskId: 'T-2',
+      message: 'Review visual feedback',
+    })).resolves.toEqual({ taskId: 'T-2', sessionId: 'S-1', disposition: 'queued' })
     await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
     await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
@@ -413,6 +418,7 @@ describe('runtime contribution registry', () => {
       taskId: 'T-2',
     })
     expect(host.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'README.md' })
+    expect(host.sendTaskFollowUp).toHaveBeenCalledWith({ taskId: 'T-2', message: 'Review visual feedback' })
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
     expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
@@ -452,7 +458,9 @@ describe('runtime contribution registry', () => {
       })),
       cancelVisibleRegionSelection: vi.fn(async () => undefined),
       captureVisibleViewport: vi.fn(async () => ({
-        artifactId: 'capture-1', mediaType: 'image/png' as const, width: 1, height: 1, dataUrl: 'data:image/png;base64,cG5n',
+        artifactId: 'capture-1', absolutePath: '/tmp/capture-1.png', mediaType: 'image/png' as const,
+        width: 1, height: 1, url: 'about:blank', title: '', capturedAt: '2026-01-01T00:00:00.000Z',
+        dataUrl: 'data:image/png;base64,cG5n',
       })),
       discardCapture: vi.fn(async () => undefined),
     }

@@ -76,6 +76,7 @@ export class RuntimeCommonApiRegistry {
         listStartPromptContributions: async (projectId) => this.services.host.listStartPromptContributions ? this.services.host.listStartPromptContributions(projectId) : unavailableCapability('tasks.listStartPromptContributions'),
         configureStartPromptContribution: async (request) => this.services.host.configureStartPromptContribution ? this.services.host.configureStartPromptContribution(request) : unavailableCapability('tasks.configureStartPromptContribution'),
         startImplementation: async (request) => this.services.host.startTaskImplementation ? this.services.host.startTaskImplementation(request) : unavailableCapability('tasks.startImplementation'),
+        sendFollowUp: async (request) => this.services.host.sendTaskFollowUp ? this.services.host.sendTaskFollowUp(request) : unavailableCapability('tasks.sendFollowUp'),
         getWorkspace: async (taskId) => this.services.host.getTaskWorkspace ? this.services.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
         getLatestSession: async (taskId) => this.services.host.getLatestSession ? this.services.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
       },

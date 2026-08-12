@@ -198,7 +198,10 @@ export function createTaskBrowserSurfaceManagerFixture(
     clearSession: vi.fn<(pluginId: string) => Promise<void>>(async () => undefined),
   }
   const artifacts = {
-    store: vi.fn(async () => ({ artifactId: '11111111-1111-4111-8111-111111111111' })),
+    store: vi.fn(async () => ({
+      artifactId: '11111111-1111-4111-8111-111111111111',
+      absolutePath: '/tmp/openforge/task-browser/capture.png',
+    })),
     discard: vi.fn(async () => undefined),
     cleanupTask: vi.fn(async () => undefined),
   }

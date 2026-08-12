@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
-import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TaskLinkHandler, TaskLinkOpenRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
+import { TaskFollowUpError } from '@openforge-app/plugin-sdk'
+import type { BackendReadyState, ConfigureStartPromptContributionRequest, CreateTaskRequest, ImplementationRun, SendTaskFollowUpRequest, ShellSpawnRequest, StartPromptContribution, StartTaskImplementationRequest, TaskFollowUpReceipt, TaskLinkHandler, TaskLinkOpenRequest, TerminalImageProtocol } from '@openforge-app/plugin-sdk'
 import {
   createTask,
   fsReadDir,
@@ -25,6 +26,7 @@ import {
   setConfig,
   setProjectConfig,
   spawnShellPty,
+  sendAgentFollowUp,
   startImplementation,
   updateTaskStatus,
   updateTaskSummary,
@@ -97,6 +99,30 @@ function normalizeImplementationRun(status: Awaited<ReturnType<typeof startImple
     taskId: status.task_id,
     sessionId: status.session_id,
     workspacePath: status.workspace_path,
+  }
+}
+
+async function sendTaskFollowUpFromPluginRequest(request: SendTaskFollowUpRequest): Promise<TaskFollowUpReceipt> {
+  if (!request.taskId?.trim()) {
+    throw new TaskFollowUpError('DELIVERY_FAILED', 'Sending Agent follow-up requires a Task ID')
+  }
+  if (!request.message?.trim()) {
+    throw new TaskFollowUpError('DELIVERY_FAILED', 'Sending Agent follow-up requires a message')
+  }
+
+  try {
+    return await sendAgentFollowUp(request.taskId, request.message)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const noSessionPrefix = 'AGENT_FOLLOW_UP_NO_SESSION:'
+    const deliveryPrefix = 'AGENT_FOLLOW_UP_DELIVERY_FAILED:'
+    if (message.includes(noSessionPrefix)) {
+      throw new TaskFollowUpError('NO_SESSION', message.slice(message.indexOf(noSessionPrefix) + noSessionPrefix.length).trim())
+    }
+    if (message.includes(deliveryPrefix)) {
+      throw new TaskFollowUpError('DELIVERY_FAILED', message.slice(message.indexOf(deliveryPrefix) + deliveryPrefix.length).trim())
+    }
+    throw new TaskFollowUpError('DELIVERY_FAILED', message)
   }
 }
 
@@ -232,6 +258,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),
     configureStartPromptContribution: (request: ConfigureStartPromptContributionRequest) => configureStartPromptContributionForProject(request),
     startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
+    sendTaskFollowUp: (request: SendTaskFollowUpRequest) => sendTaskFollowUpFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
     getLatestSession: (taskId: string) => getLatestSession(taskId),
     // The Claude catalog is project-scoped in the sidecar; with no project there
@@ -431,6 +458,11 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
     }
     case 'startImplementation':
       return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })
+    case 'sendTaskFollowUp':
+      return sendTaskFollowUpFromPluginRequest({
+        taskId: String(commandPayload?.taskId ?? ''),
+        message: String(commandPayload?.message ?? ''),
+      })
     case 'navigate': {
       // activeProjectId first — see the capture-ordering note in the navigate() host
       // method above: the snapshot subscriber must see the outgoing project's view.

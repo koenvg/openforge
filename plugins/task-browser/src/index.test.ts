@@ -30,7 +30,7 @@ describe('task-browser plugin', () => {
   it('declares valid frontend Task Browser Surface metadata', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['taskPane', 'browserSurfaces', 'storage', 'taskLinks', 'navigation']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['taskPane', 'browserSurfaces', 'tasks', 'storage', 'taskLinks', 'navigation']))
   })
 
   it('registers one Task browser tab and owns its cleanup through subscriptions', async () => {
