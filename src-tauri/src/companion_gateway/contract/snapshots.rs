@@ -281,6 +281,7 @@ async fn task_detail_handler(
 
     Json(CompanionTaskDetailResponse {
         task_id: detail.task_id,
+        initial_prompt: detail.initial_prompt,
         title: detail.title,
         project_id: detail.project_id,
         project_name: detail.project_name,

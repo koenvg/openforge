@@ -21,6 +21,7 @@ pub(crate) struct CompanionDependentTask {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CompanionTaskDetail {
     pub(crate) task_id: String,
+    pub(crate) initial_prompt: String,
     pub(crate) title: String,
     pub(crate) project_id: String,
     pub(crate) project_name: String,
@@ -144,6 +145,7 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             .collect::<Result<Vec<_>, String>>()?;
         Ok(Some(CompanionTaskDetail {
             task_id: task.id.clone(),
+            initial_prompt: task.initial_prompt.clone(),
             title: task_display_title(&task),
             project_id: project.id,
             project_name: project.name,

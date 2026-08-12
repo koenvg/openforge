@@ -152,6 +152,7 @@ void main() {
         detailProperties.keys,
         unorderedEquals(<String>[
           'taskId',
+          'initialPrompt',
           'title',
           'projectId',
           'projectName',
@@ -268,6 +269,7 @@ void main() {
       expect(created.taskId, 'KVG-3093');
       expect(created.projectId, 'P-4');
       expect(created.boardStatus, 'backlog');
+      expect(detail.initialPrompt, contains('Render the **full** prompt'));
       expect(detail.title, 'Add mobile Task detail');
       expect(detail.boardStatus, 'doing');
       expect(detail.handoffNotes, 'Ready for review.');

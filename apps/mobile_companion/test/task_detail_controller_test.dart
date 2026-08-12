@@ -20,6 +20,7 @@ final _trustRecord = CompanionTrustRecord(
 
 final _detail = TaskDetail(
   taskId: 'KVG-2946',
+  initialPrompt: 'Show mobile Task detail.',
   title: 'Mobile Task detail',
   projectId: 'P-1',
   projectName: 'OpenForge',
@@ -34,6 +35,7 @@ final _detail = TaskDetail(
 
 final _backlogDetail = TaskDetail(
   taskId: 'KVG-2946',
+  initialPrompt: 'Start mobile Task work.',
   title: 'Mobile Task detail',
   projectId: 'P-1',
   projectName: 'OpenForge',

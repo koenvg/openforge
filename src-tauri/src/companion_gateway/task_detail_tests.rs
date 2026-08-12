@@ -69,6 +69,7 @@ async fn response_json(response: Response) -> serde_json::Value {
 fn detail() -> CompanionTaskDetail {
     CompanionTaskDetail {
         task_id: "KVG-2946".to_string(),
+        initial_prompt: "## Investigate mobile detail\n\nShow the **complete** prompt.".to_string(),
         title: "Mobile Task detail".to_string(),
         project_id: "P-1".to_string(),
         project_name: "OpenForge".to_string(),
@@ -118,6 +119,10 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let json = response_json(response).await;
     assert_eq!(json["taskId"], "KVG-2946");
+    assert_eq!(
+        json["initialPrompt"],
+        "## Investigate mobile detail\n\nShow the **complete** prompt."
+    );
     assert_eq!(json["boardStatus"], "doing");
     assert_eq!(json["handoffNotes"], "Ready for review.");
     assert_eq!(json["agentState"], "failed");
@@ -143,6 +148,7 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
             "dependencies",
             "dependentTasks",
             "handoffNotes",
+            "initialPrompt",
             "labels",
             "projectId",
             "projectName",
@@ -202,7 +208,7 @@ async fn task_detail_maps_authorization_not_found_and_source_failures_to_stable_
 }
 
 #[tokio::test]
-async fn sqlite_task_detail_matches_title_handoff_board_and_safe_agent_semantics() {
+async fn sqlite_task_detail_includes_full_prompt_handoff_and_safe_agent_semantics() {
     let (database, path) = crate::db::test_helpers::make_test_db("companion_task_detail");
     let project = database
         .create_project("OpenForge", "/Users/secret/repository")
@@ -299,6 +305,10 @@ async fn sqlite_task_detail_matches_title_handoff_board_and_safe_agent_semantics
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let json = response_json(response).await;
     assert_eq!(json["title"], "Prompt-derived title");
+    assert_eq!(
+        json["initialPrompt"],
+        "\n[image#1]: data:image/png;base64,cHJvbXB0LXNlY3JldA==\nPrompt-derived title"
+    );
     assert_eq!(json["projectName"], "OpenForge");
     assert_eq!(json["boardStatus"], "doing");
     assert_eq!(json["handoffNotes"], "Current Handoff Notes");

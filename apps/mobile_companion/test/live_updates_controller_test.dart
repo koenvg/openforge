@@ -27,6 +27,7 @@ final _snapshot = AttentionSnapshot(
 
 final _detail = TaskDetail(
   taskId: 'KVG-2947',
+  initialPrompt: 'Keep Task detail current while the app is foregrounded.',
   title: 'Foreground live updates',
   projectId: 'P-1',
   projectName: 'OpenForge',

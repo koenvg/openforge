@@ -33,6 +33,7 @@
   },
   "taskDetail": {
     "taskId": "KVG-2946",
+    "initialPrompt": "## Add mobile Task detail\n\nRender the **full** prompt as Markdown.",
     "title": "Add mobile Task detail",
     "projectId": "P-4",
     "projectName": "OpenForge",
