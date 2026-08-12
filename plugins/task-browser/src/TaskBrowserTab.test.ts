@@ -54,7 +54,7 @@ function createSurface(
     cancelVisibleRegionSelection: vi.fn(async () => undefined),
     captureVisibleViewport: vi.fn(async () => ({
       artifactId: 'capture-1',
-      mediaType: 'image/png',
+      mediaType: 'image/png' as const,
       width: 640,
       height: 480,
       dataUrl: 'data:image/png;base64,cG5n',
