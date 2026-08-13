@@ -1,5 +1,11 @@
 use super::AppState;
-use crate::{app_events::publish_app_event_to_runtime, db};
+use crate::{
+    app_events::publish_app_event_to_runtime,
+    db,
+    plugin_command_broker::{
+        PluginCommandBroker, PluginCommandDiscoveryContext, PluginCommandDiscoveryError,
+    },
+};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -7,7 +13,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +43,14 @@ pub struct ReloadPluginRequest {
     pub project_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DescribePluginCommandRequest {
+    pub command_id: String,
+    pub task_id: Option<String>,
+    pub project_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ReloadPluginResponse {
     pub plugin_id: String,
@@ -52,6 +66,11 @@ pub(super) fn router() -> Router<AppState> {
         )
         .route("/set_plugin_enabled", post(set_plugin_enabled_handler))
         .route("/reload_plugin", post(reload_plugin_handler))
+        .route("/plugin_commands/list", post(list_plugin_commands_handler))
+        .route(
+            "/plugin_commands/describe",
+            post(describe_plugin_command_handler),
+        )
 }
 
 fn http_plugin_platform(
@@ -78,6 +97,53 @@ fn map_http_plugin_error(message: String) -> (StatusCode, String) {
         message,
         crate::plugin_platform_adapter::PluginPlatformTransport::HttpPluginManagement,
     )
+}
+
+fn map_plugin_command_error(error: PluginCommandDiscoveryError) -> (StatusCode, String) {
+    let status = match &error {
+        PluginCommandDiscoveryError::MissingContext
+        | PluginCommandDiscoveryError::TaskMissingProject { .. } => StatusCode::BAD_REQUEST,
+        PluginCommandDiscoveryError::ConflictingContext { .. } => StatusCode::CONFLICT,
+        PluginCommandDiscoveryError::TaskNotFound { .. }
+        | PluginCommandDiscoveryError::ProjectNotFound { .. }
+        | PluginCommandDiscoveryError::PluginNotInstalled { .. }
+        | PluginCommandDiscoveryError::BackendUnavailable { .. }
+        | PluginCommandDiscoveryError::CommandNotFound { .. } => StatusCode::NOT_FOUND,
+        PluginCommandDiscoveryError::PluginDisabled { .. } => StatusCode::FORBIDDEN,
+        PluginCommandDiscoveryError::Runtime(_) => StatusCode::SERVICE_UNAVAILABLE,
+        PluginCommandDiscoveryError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (status, error.to_string())
+}
+
+async fn list_plugin_commands_handler(
+    State(state): State<AppState>,
+    Json(context): Json<PluginCommandDiscoveryContext>,
+) -> Result<Json<Vec<crate::plugin_command_broker::AgentCommandDescriptor>>, (StatusCode, String)> {
+    let platform = http_plugin_platform(&state, false)?;
+    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    broker
+        .list(&context)
+        .await
+        .map(Json)
+        .map_err(map_plugin_command_error)
+}
+
+async fn describe_plugin_command_handler(
+    State(state): State<AppState>,
+    Json(request): Json<DescribePluginCommandRequest>,
+) -> Result<Json<crate::plugin_command_broker::AgentCommandDescriptor>, (StatusCode, String)> {
+    let platform = http_plugin_platform(&state, false)?;
+    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    let context = PluginCommandDiscoveryContext {
+        task_id: request.task_id,
+        project_id: request.project_id,
+    };
+    broker
+        .describe(&context, &request.command_id)
+        .await
+        .map(Json)
+        .map_err(map_plugin_command_error)
 }
 
 async fn install_plugin_from_local_handler(

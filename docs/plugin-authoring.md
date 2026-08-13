@@ -198,6 +198,47 @@ Backend-only registries:
 
 Backend plugins can also register commands/events and use common host capabilities through the backend host callback bridge. They cannot register Svelte views, task-pane tabs, settings sections, or use frontend-only navigation/backend-readiness helpers.
 
+### Agent-facing backend commands
+
+Backend Plugin Commands are unavailable to Agent Sessions by default. Opt an existing command into agent access by adding `agent` metadata to the normal `openforge.commands.register(...)` registration:
+
+```ts
+context.subscriptions.add(openforge.commands.register({
+  id: 'sync',
+  title: 'Sync project',
+  // User-facing Command Palette visibility is independent.
+  discoverable: false,
+  agent: {
+    description: 'Synchronize the enabled project with its configured remote source.',
+    examples: [{ force: true }],
+    // Agent catalog visibility defaults to true.
+    discoverable: true
+  },
+  input: {
+    type: 'object',
+    properties: { force: { type: 'boolean' } }
+  },
+  output: {
+    type: 'object',
+    required: ['synced'],
+    properties: { synced: { type: 'number' } }
+  },
+  handler: async ({ force = false }: { force?: boolean }) => ({
+    synced: await synchronize({ force })
+  })
+}))
+```
+
+The `agent.description` must be concise and non-empty. `agent.examples` contains zero or more JSON inputs governed by the command's existing input schema. Agent metadata is additive: registrations without it remain backward compatible and cannot be discovered by agents.
+
+The two visibility flags serve different audiences:
+
+- Top-level `discoverable` controls user-facing surfaces such as the Command Palette.
+- `agent.discoverable` controls routine results from `openforge plugin command list`. Set it to `false` for an advanced agent-enabled command that should remain hidden from the catalog; an agent can still request it exactly with `openforge plugin command describe --command-id <plugin-id>.<command-id>`.
+
+Discovery requires Task or Project context. `--task-id` resolves the Task's authoritative Project, while `--project-id` selects Project scope directly. Inside an Implementation Run, `openforge plugin command list` defaults Task context from `OPENFORGE_TASK_ID`. OpenForge rejects missing or conflicting context and returns only commands whose Trusted Plugin is installed, enabled for the resolved Project, and provides a backend runtime.
+
+Descriptions are serializable guidance only. Discovery returns qualified command and plugin identifiers, the `backend` runtime requirement, schemas, description, examples, and catalog visibility; executable handlers never cross the runtime boundary.
 ## Capabilities
 
 Capabilities are host APIs exposed through the `openforge` object. Unsupported calls fail with named capability errors; they are not no-ops.

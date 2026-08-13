@@ -365,6 +365,8 @@ mod tests {
         assert!(cli_content.contains("openforge project labels list"));
         assert!(cli_content.contains("openforge task labels list"));
         assert!(cli_content.contains("openforge task labels remove"));
+        assert!(cli_content.contains("openforge plugin command list"));
+        assert!(cli_content.contains("openforge plugin command describe"));
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();

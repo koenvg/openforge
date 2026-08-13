@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
-import type { AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
+import type { AgentCommandDescriptor, AgentCommandMetadata, AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -128,8 +128,58 @@ function commandDescriptor(command: RuntimeBackendCommand): CommandDescriptor {
     title: command.title,
     icon: command.icon,
     shortcut: command.shortcut,
+    discoverable: command.discoverable ?? true,
     input: command.input,
     output: command.output,
+  }
+}
+
+function agentCommandDescriptor(command: RuntimeBackendCommand): AgentCommandDescriptor | null {
+  if (!command.agent) return null
+  return {
+    qualifiedId: command.qualifiedId,
+    pluginId: command.pluginId,
+    runtime: 'backend',
+    description: command.agent.description,
+    examples: command.agent.examples ?? [],
+    discoverable: command.agent.discoverable ?? true,
+    input: command.input,
+    output: command.output,
+  }
+}
+
+function isJsonValue(value: unknown, seen = new Set<object>()): value is JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (typeof value !== 'object') return false
+  if (seen.has(value)) return false
+  seen.add(value)
+  const valid = Array.isArray(value)
+    ? value.every(entry => isJsonValue(entry, seen))
+    : Object.values(value).every(entry => isJsonValue(entry, seen))
+  seen.delete(value)
+  return valid
+}
+
+function normalizeAgentMetadata(metadata: unknown): AgentCommandMetadata | undefined {
+  if (metadata === undefined) return undefined
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new RuntimeValidationError('commands', 'agent metadata must be an object')
+  }
+  const candidate = metadata as Partial<AgentCommandMetadata>
+  if (!isNonEmptyString(candidate.description)) {
+    throw new RuntimeValidationError('commands', 'agent metadata requires a non-empty description')
+  }
+  if (candidate.examples !== undefined && (!Array.isArray(candidate.examples) || !candidate.examples.every(example => isJsonValue(example)))) {
+    throw new RuntimeValidationError('commands', 'agent metadata examples must contain only JSON values')
+  }
+  if (candidate.discoverable !== undefined && typeof candidate.discoverable !== 'boolean') {
+    throw new RuntimeValidationError('commands', 'agent metadata discoverable must be a boolean')
+  }
+  return {
+    description: candidate.description.trim(),
+    examples: candidate.examples ? [...candidate.examples] : [],
+    discoverable: candidate.discoverable ?? true,
   }
 }
 
@@ -585,6 +635,14 @@ export class PluginHostRuntime {
     return Array.from(globalCommands.values()).map(commandDescriptor)
   }
 
+  async listAgentCommands(input: ActivateBackendInput): Promise<AgentCommandDescriptor[]> {
+    await this.whenBackendReady(input)
+    const state = this.getOrCreateState(input.pluginId)
+    return Array.from(state.commands.values())
+      .map(agentCommandDescriptor)
+      .filter((descriptor): descriptor is AgentCommandDescriptor => descriptor !== null)
+  }
+
   async getBackendState(pluginId: string): Promise<BackendStateSnapshot> {
     assertLocalId('backend', pluginId)
     const state = this.getOrCreateState(pluginId)
@@ -616,6 +674,8 @@ export class PluginHostRuntime {
           return { jsonrpc: '2.0', id: request.id, result: await this.getBackendState(this.requirePluginId(params)) }
         case 'plugin.backend.whenReady':
           return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
+        case 'plugin.commands.list':
+          return { jsonrpc: '2.0', id: request.id, result: await this.listAgentCommands(this.requireActivationParams(params)) }
         case 'plugin.backend.invoke':
           return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
         default:
@@ -818,6 +878,7 @@ export class PluginHostRuntime {
     if (!isNonEmptyString(registration.title)) {
       throw new RuntimeValidationError('commands', 'requires a non-empty title')
     }
+    const agent = normalizeAgentMetadata(registration.agent)
     const localId = registration.id.trim()
     const qualifiedId = `${state.pluginId}.${localId}`
     if (state.commands.has(localId)) {
@@ -826,6 +887,7 @@ export class PluginHostRuntime {
 
     const runtimeCommand: RuntimeBackendCommand = {
       ...registration,
+      agent,
       localId,
       qualifiedId,
       pluginId: state.pluginId,

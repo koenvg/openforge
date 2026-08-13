@@ -669,4 +669,74 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.handleJsonRpcRequest({ jsonrpc: '2.0', id: 4, method: 'ready.sync.backend.whenReady', params: { pluginId: 'ready', backendPath, command: 'sync.backend.whenReady' } })).toMatchObject({ jsonrpc: '2.0', id: 4, result: 'plugin whenReady handler' })
     expect(await runtime.handleJsonRpcRequest({ jsonrpc: '2.0', id: 5, method: 'ready.ping', params: { pluginId: 'ready', backendPath, command: 'ping' } })).toMatchObject({ jsonrpc: '2.0', id: 5, result: 'pong' })
   })
+
+  it('projects explicitly agent-facing backend commands into serializable descriptors', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.commands.register({
+            id: 'sync',
+            title: 'Sync for people',
+            discoverable: false,
+            agent: {
+              description: 'Synchronize the enabled project with its remote source.',
+              examples: [{ force: true }]
+            },
+            input: { type: 'object', properties: { force: { type: 'boolean' } } },
+            output: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } },
+            handler() { return { ok: true } }
+          }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'repair',
+            title: 'Repair',
+            agent: {
+              description: 'Repair cached synchronization state.',
+              discoverable: false
+            },
+            handler() { return null }
+          }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'ordinary',
+            title: 'Ordinary command',
+            handler() { return null }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    const response = await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 99,
+      method: 'plugin.commands.list',
+      params: { pluginId: 'backend', backendPath, projectId: 'P-1' },
+    })
+    expect(response.error).toBeUndefined()
+    const descriptors = JSON.parse(JSON.stringify(response.result)) as Array<Record<string, unknown>>
+
+    expect(descriptors).toEqual([
+      {
+        qualifiedId: 'backend.sync',
+        pluginId: 'backend',
+        runtime: 'backend',
+        description: 'Synchronize the enabled project with its remote source.',
+        examples: [{ force: true }],
+        discoverable: true,
+        input: { type: 'object', properties: { force: { type: 'boolean' } } },
+        output: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } },
+      },
+      {
+        qualifiedId: 'backend.repair',
+        pluginId: 'backend',
+        runtime: 'backend',
+        description: 'Repair cached synchronization state.',
+        examples: [],
+        discoverable: false,
+      },
+    ])
+    expect(descriptors).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ qualifiedId: 'backend.ordinary' }),
+    ]))
+    expect(descriptors.every(descriptor => !('handler' in descriptor))).toBe(true)
+  })
 })

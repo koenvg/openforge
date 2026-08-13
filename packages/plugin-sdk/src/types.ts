@@ -171,6 +171,29 @@ export type CommandShortcutMetadata = string | {
   when?: string
 }
 
+export interface AgentCommandMetadata {
+  /** Concise guidance explaining when and why an agent should use this command. */
+  description: string
+  /** Example plugin-owned JSON inputs. Task and Project context are supplied separately. */
+  examples?: JsonValue[]
+  /** Whether the command appears in the routine agent catalog. Defaults to true. */
+  discoverable?: boolean
+}
+
+export type AgentCommandRuntime = 'backend' | 'frontend'
+
+/** Serializable agent-facing projection of a Plugin Command. Never contains its handler. */
+export interface AgentCommandDescriptor {
+  qualifiedId: string
+  pluginId: string
+  runtime: AgentCommandRuntime
+  description: string
+  examples: JsonValue[]
+  discoverable: boolean
+  input?: JsonSchema
+  output?: JsonSchema
+}
+
 export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   id: string
   title: string
@@ -178,6 +201,8 @@ export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   shortcut?: CommandShortcutMetadata
   /** Whether this command should appear in user-facing discovery surfaces such as the Command Palette. Defaults to true. */
   discoverable?: boolean
+  /** Explicitly opts this command into agent access. Omitted commands are unavailable to agents. */
+  agent?: AgentCommandMetadata
   input?: JsonSchema
   output?: JsonSchema
   handler(input: TInput): MaybePromise<TOutput>

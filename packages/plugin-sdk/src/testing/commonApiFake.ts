@@ -10,6 +10,7 @@ import {
   assertTitle,
   commandDescriptor,
   createDisposable,
+  normalizeAgentCommandMetadata,
   type TestingRegistryServices,
 } from './support'
 import type {
@@ -204,10 +205,12 @@ export class TestingCommonApiFake {
     const qualifiedId = this.services.localQualifiedId('commands', registration.id)
     assertTitle('commands', registration.title)
     assertFunction('commands', 'handler', registration.handler)
+    const agent = normalizeAgentCommandMetadata(registration.agent)
     this.services.claims.claim('commands', qualifiedId)
 
     const contribution: TestingCommandContribution = {
       ...registration,
+      agent,
       id: registration.id.trim(),
       title: registration.title.trim(),
       qualifiedId,

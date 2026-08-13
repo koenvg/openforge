@@ -372,6 +372,20 @@ impl<'a> PluginPlatform<'a> {
             .await
     }
 
+    pub(crate) async fn agent_command_descriptors(
+        &self,
+        plugin_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<crate::plugin_command_broker::AgentCommandDescriptor>, String> {
+        let backend_path = self.resolve_installed_backend_path(plugin_id)?;
+        let plugin_host = self
+            .plugin_host
+            .ok_or_else(|| "plugin host state is not available".to_string())?;
+        plugin_host
+            .list_agent_commands(plugin_id, &backend_path, project_id)
+            .await
+    }
+
     pub(crate) async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
         let plugin_host = self
             .plugin_host

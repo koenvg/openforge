@@ -194,4 +194,48 @@ describe('plugin SDK testing utilities', () => {
       { projectId: 'P-1', includeDone: true },
     ])
   })
+
+  it('keeps agent access explicit and independent from user-facing command discovery', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'sync', projectId: 'P-1' })
+
+    registry.backendApi.commands.register({
+      id: 'agent-sync',
+      title: 'Sync',
+      discoverable: false,
+      agent: {
+        description: 'Synchronize the current project.',
+        examples: [{ force: true }],
+      },
+      handler: async () => null,
+    })
+    registry.backendApi.commands.register({
+      id: 'ordinary',
+      title: 'Ordinary',
+      handler: async () => null,
+    })
+
+    expect(registry.snapshot.commands).toMatchObject([
+      {
+        qualifiedId: 'sync.agent-sync',
+        discoverable: false,
+        agent: {
+          description: 'Synchronize the current project.',
+          examples: [{ force: true }],
+          discoverable: true,
+        },
+      },
+      { qualifiedId: 'sync.ordinary', agent: undefined },
+    ])
+    await expect(registry.backendApi.commands.list()).resolves.toMatchObject([
+      { qualifiedId: 'sync.agent-sync', discoverable: false },
+      { qualifiedId: 'sync.ordinary', discoverable: true },
+    ])
+
+    expect(() => registry.backendApi.commands.register({
+      id: 'invalid-agent-command',
+      title: 'Invalid',
+      agent: { description: '   ' },
+      handler: async () => null,
+    })).toThrow('commands registration agent metadata requires a non-empty description')
+  })
 })
