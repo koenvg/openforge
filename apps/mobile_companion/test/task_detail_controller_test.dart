@@ -204,6 +204,29 @@ void main() {
     expect(storage.saveCalls, 0);
   });
 
+  test(
+    'Task refresh keeps the current detail visible until replacement',
+    () async {
+      final client = _FakeClient();
+      final controller = TaskDetailController(
+        taskId: 'KVG-2946',
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+      final currentDetail = controller.state;
+      client.pendingDetail = Completer<TaskDetail>();
+
+      final refresh = controller.refreshWithOutcome();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.state, same(currentDetail));
+      client.pendingDetail!.complete(_detail);
+      expect(await refresh, CompanionRefreshOutcome.loaded);
+      expect(controller.state, isA<TaskDetailLoaded>());
+    },
+  );
+
   test('maps stable protocol errors to typed Task detail states', () async {
     for (final scenario in <({String code, TaskDetailViewState state})>[
       (code: 'not_found', state: const TaskDetailNotFound()),

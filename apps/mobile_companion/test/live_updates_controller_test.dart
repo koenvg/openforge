@@ -74,6 +74,7 @@ final class _FakeClient implements CompanionClient {
   var taskDetailCalls = 0;
   var projectCatalogCalls = 0;
   final List<String> projectBoardRequests = <String>[];
+  Completer<ProjectBoard>? pendingProjectBoard;
   Object? attentionError;
   Object? taskDetailError;
   AttentionSnapshot attentionSnapshot = _snapshot;
@@ -120,6 +121,8 @@ final class _FakeClient implements CompanionClient {
     String projectId,
   ) async {
     projectBoardRequests.add(projectId);
+    final pending = pendingProjectBoard;
+    if (pending != null) return pending.future;
     return _emptyBoard(projectId, projectId == 'P-1' ? 'OpenForge' : 'Other');
   }
 
@@ -265,16 +268,22 @@ void main() {
             client.projectBoardRequests.length == 3,
       );
 
+      final currentSnapshot = board.state;
+      final pendingGapBoard = Completer<ProjectBoard>();
+      client.pendingProjectBoard = pendingGapBoard;
       connection.controller.add(const CompanionStreamGap(eventId: 'epoch:4'));
       await _until(
         () =>
             client.projectCatalogCalls == 3 &&
             client.projectBoardRequests.length == 4,
       );
+      expect(board.state, same(currentSnapshot));
+      pendingGapBoard.complete(_emptyBoard('P-1', 'OpenForge'));
+      await _until(() => !identical(board.state, currentSnapshot));
       expect(board.state, isA<ProjectBoardLoaded>());
 
       await live.suspend();
-      expect(board.state, isA<ProjectBoardLoading>());
+      expect(board.state, isA<ProjectBoardLoaded>());
     },
   );
   test(
@@ -392,7 +401,7 @@ void main() {
     await live.suspend();
   });
 
-  test('stream gaps discard views and obtain fresh snapshots', () async {
+  test('stream gaps refresh views in place with fresh snapshots', () async {
     final connection = _FakeConnection();
     final client = _FakeClient()..connections.add(connection);
     final storage = _FakeStorage();
@@ -491,7 +500,7 @@ void main() {
     await _until(() => client.attentionCalls == 1);
     final suspension = live.suspend();
     await _until(() => first.closeCalls == 1);
-    expect(attention.state, isA<AttentionLoading>());
+    expect(attention.state, isA<AttentionLoaded>());
 
     live.resume();
     await _until(

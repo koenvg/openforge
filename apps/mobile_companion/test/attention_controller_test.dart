@@ -167,8 +167,8 @@ void main() {
       controller.addListener(() => states.add(controller.state));
       await controller.refresh();
 
-      expect(states.first, isA<AttentionLoading>());
-      expect(states.last, isA<AttentionLoaded>());
+      expect(states, hasLength(1));
+      expect(states.single, isA<AttentionLoaded>());
       expect(
         (controller.state as AttentionLoaded).snapshot.items.single.taskId,
         'T-2',
