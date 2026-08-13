@@ -1,39 +1,30 @@
 import type { BrowserSurfaceCapture, BrowserSurfaceRegion } from '@openforge-app/plugin-sdk/frontend'
-import type { Task } from '@openforge-app/plugin-sdk'
+
+export interface VisualFeedbackReportCapture {
+  number: number
+  evidence: BrowserSurfaceCapture
+}
 
 export interface VisualFeedbackReportAnnotation {
   number: number
+  captureNumber: number
   rect: BrowserSurfaceRegion
   comment: string
-  capture: BrowserSurfaceCapture
 }
 
 function inlineCode(value: string): string {
   return `\`${value.replaceAll('`', '\\`')}\``
 }
-
-function taskTitle(task: Task): string {
-  const explicitTitle = task.title?.trim()
-  if (explicitTitle) return explicitTitle
-  return task.initial_prompt.split('\n', 1)[0].trim() || 'Untitled Task'
-}
-
-function markerSection(annotation: VisualFeedbackReportAnnotation): string {
-  const { capture, rect } = annotation
+function annotationSection(annotation: VisualFeedbackReportAnnotation): string {
   const quotedComment = annotation.comment
     .split('\n')
     .map(line => `> ${line}`.trimEnd())
     .join('\n')
 
   return [
-    `## Marker ${annotation.number}`,
+    `### Annotation ${annotation.number}`,
     '',
-    `- URL: ${capture.url}`,
-    `- Title: ${capture.title}`,
-    `- Captured: ${capture.capturedAt}`,
-    `- Viewport: ${capture.width} × ${capture.height}`,
-    `- PNG: ${inlineCode(capture.absolutePath)}`,
-    `- Region: x=${rect.x}, y=${rect.y}, width=${rect.width}, height=${rect.height}`,
+    `- Region: x=${annotation.rect.x}, y=${annotation.rect.y}, width=${annotation.rect.width}, height=${annotation.rect.height}`,
     '',
     'Comment:',
     '',
@@ -41,16 +32,36 @@ function markerSection(annotation: VisualFeedbackReportAnnotation): string {
   ].join('\n')
 }
 
-export function formatVisualFeedbackReport(
-  task: Task,
+function captureSection(
+  capture: VisualFeedbackReportCapture,
   annotations: readonly VisualFeedbackReportAnnotation[],
 ): string {
-  const orderedMarkers = [...annotations].sort((left, right) => left.number - right.number)
+  const evidence = capture.evidence
+  const orderedAnnotations = annotations
+    .filter(annotation => annotation.captureNumber === capture.number)
+    .sort((left, right) => left.number - right.number)
+
+  return [
+    `## Capture ${capture.number}`,
+    '',
+    `- URL: ${evidence.url}`,
+    `- Title: ${evidence.title}`,
+    `- Captured: ${evidence.capturedAt}`,
+    `- Viewport: ${evidence.width} × ${evidence.height}`,
+    `- PNG: ${inlineCode(evidence.absolutePath)}`,
+    '',
+    orderedAnnotations.map(annotationSection).join('\n\n'),
+  ].join('\n')
+}
+
+export function formatVisualFeedbackReport(
+  captures: readonly VisualFeedbackReportCapture[],
+  annotations: readonly VisualFeedbackReportAnnotation[],
+): string {
+  const orderedCaptures = [...captures].sort((left, right) => left.number - right.number)
   return [
     '# Task Browser visual feedback',
     '',
-    `Task: ${inlineCode(task.id)} — ${taskTitle(task)}`,
-    '',
-    ...orderedMarkers.flatMap(marker => [markerSection(marker), '']),
+    ...orderedCaptures.flatMap(capture => [captureSection(capture, annotations), '']),
   ].join('\n')
 }

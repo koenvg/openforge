@@ -84,6 +84,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     browserSurfaceNavigations: [],
     browserSurfaceControls: [],
     browserSurfaceSelections: [],
+    browserSurfaceFeedbackClears: [],
     browserSurfaceCaptures: [],
     browserSurfaceCaptureDiscards: [],
     browserSurfaceSessionResets: [],

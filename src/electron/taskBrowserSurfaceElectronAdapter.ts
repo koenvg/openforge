@@ -212,6 +212,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
 
   async loadURL(url: string): Promise<void> {
     this.navigationError = null
+    this.hideVisualFeedbackForNavigation()
     try {
       await this.view.webContents.loadURL(url)
     } catch (error) {
@@ -266,15 +267,18 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   }
 
   async goBack(): Promise<void> {
+    this.hideVisualFeedbackForNavigation()
     if (this.view.webContents.navigationHistory.canGoBack()) this.view.webContents.navigationHistory.goBack()
   }
 
   async goForward(): Promise<void> {
+    this.hideVisualFeedbackForNavigation()
     if (this.view.webContents.navigationHistory.canGoForward()) this.view.webContents.navigationHistory.goForward()
   }
 
   async reload(): Promise<void> {
     this.navigationError = null
+    this.hideVisualFeedbackForNavigation()
     this.view.webContents.reload()
   }
 
@@ -295,6 +299,9 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     try {
       const pageUrl = this.view.webContents.getURL()
       const savedAnnotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
+      const nextAnnotationNumber = Array.from(this.feedbackAnnotationsByUrl.values())
+        .flat()
+        .reduce((maximum, annotation) => Math.max(maximum, annotation.number), 0) + 1
       const cancelled = new Promise<null>(resolve => {
         requestCancel = () => resolve(null)
       })
@@ -327,7 +334,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
         annotationsRoot.replaceChildren();
         annotationsRoot.dataset.pageUrl = location.href;
         savedAnnotations.forEach(renderAnnotation);
-        const nextAnnotationNumber = savedAnnotations.reduce((maximum, annotation) => Math.max(maximum, annotation.number), 0) + 1;
+        const nextAnnotationNumber = ${nextAnnotationNumber};
 
         const root = document.createElement('div');
         root.id = overlayId;
@@ -559,6 +566,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       return {
         region: { x: region.x, y: region.y, width: region.width, height: region.height },
         comment: comment.trim(),
+        annotationNumber: annotation.number,
       }
     } catch (error) {
       if (error instanceof TaskBrowserSurfaceError) throw error
@@ -585,6 +593,15 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     })()`, true).catch(() => undefined)
   }
 
+  async clearVisualFeedback(): Promise<void> {
+    await this.cancelVisibleRegionSelection()
+    this.feedbackAnnotationsByUrl.clear()
+    if (this.destroyed || this.view.webContents.isDestroyed()) return
+    await this.view.webContents.executeJavaScript(`(() => {
+      document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
+    })()`, true).catch(() => undefined)
+  }
+
   async captureVisibleViewport() {
     if (this.destroyed) {
       throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface has been destroyed')
@@ -593,6 +610,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       throw new TaskBrowserSurfaceError('CAPTURE_UNAVAILABLE', 'Task Browser Surface must be visible before it can be captured')
     }
 
+    await this.setVisualFeedbackVisibility('hidden')
     try {
       const image = await this.view.webContents.capturePage()
       const { width, height } = image.getSize()
@@ -607,7 +625,62 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
         'CAPTURE_FAILED',
         `Could not capture the visible Task Browser viewport: ${error instanceof Error ? error.message : String(error)}`,
       )
+    } finally {
+      await this.setVisualFeedbackVisibility('')
     }
+  }
+
+  private async setVisualFeedbackVisibility(visibility: '' | 'hidden'): Promise<void> {
+    if (this.destroyed || this.view.webContents.isDestroyed()) return
+    await this.view.webContents.executeJavaScript(`(() => {
+      const annotations = document.getElementById('__openforge_visual_feedback_annotations__');
+      if (annotations) annotations.style.visibility = ${JSON.stringify(visibility)};
+      if (${visibility === 'hidden'}) return new Promise(resolve => requestAnimationFrame(() => resolve()));
+    })()`, true).catch(() => undefined)
+  }
+
+  private hideVisualFeedbackForNavigation(): void {
+    this.cancelSelection?.()
+    this.cancelSelection = null
+    if (this.destroyed || this.view.webContents.isDestroyed()) return
+    void this.view.webContents.executeJavaScript(`(() => {
+      document.getElementById('__openforge_visual_feedback_selector__')?.remove();
+      document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
+    })()`, true).catch(() => undefined)
+  }
+
+  private refreshVisualFeedbackForCurrentUrl(): void {
+    const contents = this.view.webContents
+    if (this.destroyed || contents.isDestroyed()) return
+    const pageUrl = contents.getURL()
+    const savedAnnotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
+    void contents.executeJavaScript(`(() => {
+      const expectedUrl = ${JSON.stringify(pageUrl)};
+      if (location.href !== expectedUrl) return;
+      const annotationsId = '__openforge_visual_feedback_annotations__';
+      let annotationsRoot = document.getElementById(annotationsId);
+      if (!annotationsRoot) {
+        annotationsRoot = document.createElement('div');
+        annotationsRoot.id = annotationsId;
+        annotationsRoot.setAttribute('aria-label', 'Saved visual feedback');
+        annotationsRoot.style.cssText = 'position:absolute;inset:0;z-index:2147483646;pointer-events:none;overflow:visible;';
+        document.documentElement.append(annotationsRoot);
+      }
+      const renderAnnotation = (annotationData) => {
+        const annotation = document.createElement('div');
+        annotation.setAttribute('role', 'note');
+        annotation.setAttribute('aria-label', 'Feedback ' + annotationData.number + ': ' + annotationData.comment);
+        annotation.style.cssText = 'position:absolute;left:' + annotationData.x + 'px;top:' + annotationData.y + 'px;width:' + annotationData.width + 'px;height:' + annotationData.height + 'px;border:2px solid #60a5fa;background:rgba(59,130,246,.14);box-sizing:border-box;border-radius:4px;pointer-events:none;';
+        const badge = document.createElement('span');
+        badge.textContent = String(annotationData.number);
+        badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#2563eb;color:white;font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
+        annotation.append(badge);
+        annotationsRoot.append(annotation);
+      };
+      annotationsRoot.replaceChildren();
+      annotationsRoot.dataset.pageUrl = expectedUrl;
+      ${JSON.stringify(savedAnnotations)}.forEach(renderAnnotation);
+    })()`, true).catch(() => undefined)
   }
 
   private ownsWebContents(webContents: WebContents): boolean {
@@ -655,10 +728,18 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
 
   private configureSecurityPolicy(contents: WebContents): void {
     contents.on('will-navigate', (event, url) => {
-      if (!allowedTopLevelUrl(url)) event.preventDefault()
+      if (!allowedTopLevelUrl(url)) {
+        event.preventDefault()
+        return
+      }
+      if (contents === this.view.webContents) this.hideVisualFeedbackForNavigation()
     })
     contents.on('will-redirect', (event, url) => {
-      if (!allowedTopLevelUrl(url)) event.preventDefault()
+      if (!allowedTopLevelUrl(url)) {
+        event.preventDefault()
+        return
+      }
+      if (contents === this.view.webContents) this.hideVisualFeedbackForNavigation()
     })
     contents.setWindowOpenHandler(({ url, features }) => {
       if (!this.options.popupPolicy.isAllowed({ url, features })) return { action: 'deny' }
@@ -712,11 +793,18 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private configureStatePublication(contents: WebContents): void {
     contents.on('did-start-loading', () => {
       this.navigationError = null
+      this.hideVisualFeedbackForNavigation()
       this.publish()
     })
     contents.on('did-stop-loading', () => this.publish())
-    contents.on('did-navigate', () => this.publish())
-    contents.on('did-navigate-in-page', () => this.publish())
+    contents.on('did-navigate', () => {
+      this.refreshVisualFeedbackForCurrentUrl()
+      this.publish()
+    })
+    contents.on('did-navigate-in-page', () => {
+      this.refreshVisualFeedbackForCurrentUrl()
+      this.publish()
+    })
     contents.on('page-title-updated', () => this.publish())
     contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame || errorCode === -3) return

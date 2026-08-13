@@ -86,6 +86,7 @@ export interface TaskBrowserSurfaceRegion {
 export interface TaskBrowserSurfaceFeedbackSelection {
   region: TaskBrowserSurfaceRegion
   comment: string
+  annotationNumber: number
 }
 export interface TaskBrowserNativeCapture {
   png: Uint8Array
@@ -106,6 +107,7 @@ export interface NativeTaskBrowserSurface {
   stop(): void
   selectVisibleRegion(): Promise<TaskBrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
+  clearVisualFeedback(): Promise<void>
   captureVisibleViewport(): Promise<TaskBrowserNativeCapture>
 }
 

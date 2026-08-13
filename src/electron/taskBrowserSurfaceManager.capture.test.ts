@@ -29,6 +29,7 @@ describe('Task Browser Surface viewport capture', () => {
     await expect(manager.selectVisibleRegion(owner)).resolves.toEqual({
       region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
       comment: 'Example visual feedback',
+      annotationNumber: 1,
     })
     const capture = await manager.captureVisibleViewport(owner)
 

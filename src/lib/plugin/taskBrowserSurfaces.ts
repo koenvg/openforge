@@ -170,6 +170,11 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
     this.assertLive()
     await invokeHost<void>('task_browser_surface_cancel_visible_region_selection', this.captureOwner())
   }
+
+  async clearVisualFeedback(): Promise<void> {
+    this.assertLive()
+    await invokeHost<void>('task_browser_surface_clear_visual_feedback', this.captureOwner())
+  }
   captureVisibleViewport(): Promise<BrowserSurfaceCapture> {
     this.assertLive()
     return invokeHost<BrowserSurfaceCapture>('task_browser_surface_capture_visible_viewport', this.captureOwner())

@@ -20,6 +20,7 @@ const COMMANDS = new Set([
   'task_browser_surface_stop',
   'task_browser_surface_select_visible_region',
   'task_browser_surface_cancel_visible_region_selection',
+  'task_browser_surface_clear_visual_feedback',
   'task_browser_surface_capture_visible_viewport',
   'task_browser_surface_discard_capture',
   'task_browser_surface_reset_session',
@@ -139,6 +140,7 @@ export class TaskBrowserSurfaceIpcRouter {
         command === 'task_browser_surface_select_visible_region'
         || command === 'task_browser_surface_cancel_visible_region_selection'
         || command === 'task_browser_surface_capture_visible_viewport'
+        || command === 'task_browser_surface_clear_visual_feedback'
         || command === 'task_browser_surface_discard_capture'
       ) {
         const owner = {
@@ -153,6 +155,10 @@ export class TaskBrowserSurfaceIpcRouter {
         }
         if (command === 'task_browser_surface_cancel_visible_region_selection') {
           await this.manager.cancelVisibleRegionSelection(owner)
+          return { ok: true, value: undefined }
+        }
+        if (command === 'task_browser_surface_clear_visual_feedback') {
+          await this.manager.clearVisualFeedback(owner)
           return { ok: true, value: undefined }
         }
         if (command === 'task_browser_surface_capture_visible_viewport') {

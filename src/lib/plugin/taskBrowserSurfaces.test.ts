@@ -99,6 +99,7 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'stop'
       | 'selectVisibleRegion'
       | 'cancelVisibleRegionSelection'
+      | 'clearVisualFeedback'
       | 'captureVisibleViewport'
       | 'discardCapture'
     > = true
@@ -136,6 +137,7 @@ describe('renderer Task Browser Surface host adapter', () => {
 
     const selection = await controller.selectVisibleRegion()
     const capture = await controller.captureVisibleViewport()
+    await controller.clearVisualFeedback()
     await controller.discardCapture(capture.artifactId)
 
     const owner = {
@@ -146,6 +148,7 @@ describe('renderer Task Browser Surface host adapter', () => {
     }
     expect(selection).toEqual({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_select_visible_region', owner)
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_clear_visual_feedback', owner)
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_visible_viewport', owner)
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_discard_capture', {
       ...owner,

@@ -1,14 +1,20 @@
 <script lang="ts">
-  import { MessageSquarePlus, Send as SendIcon, Trash2 } from '@lucide/svelte'
+  import { List, MessageSquarePlus, Send as SendIcon, Trash2 } from '@lucide/svelte'
   import type { VisualFeedbackEditorState } from './visualFeedbackEditorState.svelte'
 
   interface Props {
     available: boolean
     editor: VisualFeedbackEditorState
+    reviewing: boolean
+    onReview: () => void
     onSend: () => void
   }
 
-  let { available, editor, onSend }: Props = $props()
+  let { available, editor, reviewing, onReview, onSend }: Props = $props()
+
+  function countLabel(count: number, singular: string, plural: string): string {
+    return `${count} ${count === 1 ? singular : plural}`
+  }
 </script>
 
 {#if available}
@@ -26,9 +32,22 @@
     <MessageSquarePlus size={17} aria-hidden="true" />
   </button>
   {#if editor.annotations.length > 0}
-    <span class="text-xs text-base-content/60">
-      {editor.annotations.length} {editor.annotations.length === 1 ? 'comment' : 'comments'}
+    <span class="whitespace-nowrap text-xs text-base-content/60" aria-live="polite">
+      {countLabel(editor.captures.length, 'screenshot', 'screenshots')} ·
+      {countLabel(editor.annotations.length, 'annotation', 'annotations')}
     </span>
+    <button
+      class:btn-active={reviewing}
+      class="btn btn-ghost btn-sm"
+      type="button"
+      aria-label="Review visual feedback"
+      aria-expanded={reviewing}
+      disabled={editor.busy}
+      onclick={onReview}
+    >
+      <List size={16} aria-hidden="true" />
+      Review
+    </button>
     <button
       class="btn btn-primary btn-sm"
       type="button"

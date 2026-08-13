@@ -343,6 +343,7 @@ function createTestingCalls() {
 		browserSurfaceNavigations: [],
 		browserSurfaceControls: [],
 		browserSurfaceSelections: [],
+		browserSurfaceFeedbackClears: [],
 		browserSurfaceCaptures: [],
 		browserSurfaceCaptureDiscards: [],
 		browserSurfaceSessionResets: [],
@@ -854,6 +855,7 @@ var TestingTaskBrowserSurface = class {
 	listeners = /* @__PURE__ */ new Set();
 	currentAttachment = 0;
 	destroyed = false;
+	nextAnnotationNumber = 1;
 	constructor(taskId, id, initialUrl, calls, onDestroyed) {
 		this.taskId = taskId;
 		this.id = id;
@@ -991,11 +993,20 @@ var TestingTaskBrowserSurface = class {
 				width: .4,
 				height: .4
 			},
-			comment: "Example visual feedback"
+			comment: "Example visual feedback",
+			annotationNumber: this.nextAnnotationNumber++
 		};
 	}
 	async cancelVisibleRegionSelection() {
 		this.assertLive();
+	}
+	async clearVisualFeedback() {
+		this.assertLive();
+		this.calls.browserSurfaceFeedbackClears.push({
+			taskId: this.taskId,
+			id: this.id
+		});
+		this.nextAnnotationNumber = 1;
 	}
 	async captureVisibleViewport() {
 		this.assertLive();
