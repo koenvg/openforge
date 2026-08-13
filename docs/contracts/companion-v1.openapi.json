@@ -428,7 +428,7 @@
         "in": "header",
         "required": true,
         "description": "Major Companion protocol version. Device authentication is evaluated before compatibility so this header never bypasses trust.",
-        "schema": { "type": "integer", "const": 1 }
+        "schema": { "type": "integer", "const": 2 }
       }
     },
     "schemas": {
@@ -495,7 +495,7 @@
         "required": ["hostId", "protocolVersion", "serverTime"],
         "properties": {
           "hostId": { "type": "string", "format": "uuid" },
-          "protocolVersion": { "type": "integer", "const": 1 },
+          "protocolVersion": { "type": "integer", "const": 2 },
           "serverTime": { "type": "string", "format": "date-time" }
         }
       },

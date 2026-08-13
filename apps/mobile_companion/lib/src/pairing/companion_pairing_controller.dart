@@ -289,7 +289,7 @@ final class CompanionPairingController extends ChangeNotifier {
         _setState(const CertificateMismatch());
         return;
       }
-      if (status.protocolVersion != 1) {
+      if (status.protocolVersion.toString() != companionV1ProtocolVersion) {
         _setState(const IncompatibleProtocol());
         return;
       }

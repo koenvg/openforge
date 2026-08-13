@@ -79,7 +79,7 @@ void main() {
       expect(
         transport.requests.every(
           (request) =>
-              request.headers['openforge-companion-protocol-version'] == '1',
+              request.headers['openforge-companion-protocol-version'] == '2',
         ),
         isTrue,
       );
@@ -160,7 +160,7 @@ void main() {
     );
     expect(
       transport.requests.single.headers['openforge-companion-protocol-version'],
-      '1',
+      '2',
     );
   });
 }

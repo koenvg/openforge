@@ -14,7 +14,7 @@
   },
   "hostStatus": {
     "hostId": "65d91f21-6732-45a6-9418-3dfaf4c93f52",
-    "protocolVersion": 1,
+    "protocolVersion": 2,
     "serverTime": "2026-07-30T12:00:01Z"
   },
   "attentionSnapshot": {
