@@ -3,7 +3,7 @@ import 'package:xterm/xterm.dart' as xterm;
 
 import 'quiet_paper_theme.dart';
 
-/// Builds the dark inset terminal palette for the active Quiet Paper appearance.
+/// Builds the terminal palette for the active Quiet Paper appearance.
 xterm.TerminalTheme quietPaperTerminalTheme(BuildContext context) {
   final theme = Theme.of(context);
   final colors =
@@ -83,24 +83,24 @@ final class _AnsiPalette {
 }
 
 const _lightAnsi = _AnsiPalette(
-  black: Color(0xFF0A111D),
-  red: Color(0xFFFF7B83),
-  green: Color(0xFF75D69C),
-  yellow: Color(0xFFE7C66B),
-  blue: Color(0xFF7EB0FF),
-  magenta: Color(0xFFC69CFF),
-  cyan: Color(0xFF65D6E5),
-  white: Color(0xFFDCE5F0),
-  brightBlack: Color(0xFF718096),
-  brightRed: Color(0xFFFFA1A7),
-  brightGreen: Color(0xFFA3E8BD),
-  brightYellow: Color(0xFFFFDE8A),
-  brightBlue: Color(0xFFAFC8FF),
-  brightMagenta: Color(0xFFDCC2FF),
-  brightCyan: Color(0xFF9BE8F1),
-  brightWhite: Color(0xFFFFFFFF),
-  searchHitBackground: Color(0xFFE7C66B),
-  searchHitBackgroundCurrent: Color(0xFFFFDE8A),
+  black: Color(0xFF000000),
+  red: Color(0xFFC62828),
+  green: Color(0xFF2E7D32),
+  yellow: Color(0xFF5D4037),
+  blue: Color(0xFF1565C0),
+  magenta: Color(0xFF6A1B9A),
+  cyan: Color(0xFF006064),
+  white: Color(0xFF616161),
+  brightBlack: Color(0xFF616161),
+  brightRed: Color(0xFFD32F2F),
+  brightGreen: Color(0xFF2E7D32),
+  brightYellow: Color(0xFF6D4C41),
+  brightBlue: Color(0xFF1976D2),
+  brightMagenta: Color(0xFF7B1FA2),
+  brightCyan: Color(0xFF00838F),
+  brightWhite: Color(0xFF000000),
+  searchHitBackground: Color(0xFFFFF176),
+  searchHitBackgroundCurrent: Color(0xFFFFCA28),
 );
 
 const _darkAnsi = _AnsiPalette(

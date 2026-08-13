@@ -226,7 +226,7 @@ void main() {
     expect(lightView.keyboardAppearance, Brightness.light);
     expect(
       lightView.theme.background.computeLuminance(),
-      lessThan(lightView.theme.foreground.computeLuminance()),
+      greaterThan(lightView.theme.foreground.computeLuminance()),
     );
     expect(lightView.readOnly, isFalse);
     expect(lightView.simulateScroll, isFalse);
