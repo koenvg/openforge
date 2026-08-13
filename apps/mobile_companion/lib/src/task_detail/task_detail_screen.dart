@@ -299,8 +299,6 @@ class _TaskDetailViewState extends State<TaskDetailView>
     if (!action.requiresConfirmation) return true;
     final running = detail.agentState == 'running';
     final message = switch (action.id) {
-      CompanionActionId.mergePullRequest =>
-        'Merge the single currently ready pull request for “${detail.title}”?',
       CompanionActionId.deleteTask =>
         'This completes the Task using the desktop lifecycle. The Completed Task stays available as reference data, while runtime workspace state is removed.',
       CompanionActionId.completeTask =>

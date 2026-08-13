@@ -104,9 +104,7 @@ final class MobilePaletteAction {
   };
 
   bool get requiresConfirmation => switch (id) {
-    CompanionActionId.mergePullRequest ||
-    CompanionActionId.deleteTask ||
-    CompanionActionId.completeTask => true,
+    CompanionActionId.deleteTask || CompanionActionId.completeTask => true,
     _ => false,
   };
 
