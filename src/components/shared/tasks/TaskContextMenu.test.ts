@@ -156,7 +156,7 @@ describe('TaskContextMenu', () => {
     expect(setAsideIndex).toBeGreaterThan(completeIndex)
   })
 
-  it('shows Move task back in focus for doing tasks already in Out of Focus', () => {
+  it('shows Return to Board for doing tasks already in Out of Focus', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, {
       props: {
@@ -169,7 +169,7 @@ describe('TaskContextMenu', () => {
         onReturnToBoard: vi.fn(),
       },
     })
-    expect(screen.getByText('Move task back in focus')).toBeTruthy()
+    expect(screen.getByText('Return to Board')).toBeTruthy()
     expect(screen.queryByText('Move to Focus')).toBeNull()
     expect(screen.queryByText('Move to Out of Focus')).toBeNull()
   })
@@ -194,7 +194,7 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('calls the return handler and closes when Move task back in focus is clicked', async () => {
+  it('calls the return handler and closes when Return to Board is clicked', async () => {
     const onReturnToBoard = vi.fn()
     const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'doing')])
@@ -209,7 +209,7 @@ describe('TaskContextMenu', () => {
         onReturnToBoard,
       },
     })
-    await fireEvent.click(screen.getByText('Move task back in focus'))
+    await fireEvent.click(screen.getByText('Return to Board'))
     expect(onReturnToBoard).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
   })

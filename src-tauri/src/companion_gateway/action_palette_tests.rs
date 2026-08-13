@@ -138,7 +138,32 @@ async fn task_actions_snapshot_is_typed_ordered_and_task_scoped() {
         response_json(response).await,
         serde_json::json!({
             "taskId": "KVG-3233",
-            "actions": ["merge_pull_request", "set_aside_task", "complete_task"]
+            "actions": [
+                {
+                    "id": "merge_pull_request",
+                    "label": "Merge Pull Request",
+                    "keywords": ["merge", "pull request", "pr", "github"],
+                    "icon": "merge",
+                    "requiresConfirmation": false,
+                    "destructive": false
+                },
+                {
+                    "id": "complete_task",
+                    "label": "Complete",
+                    "keywords": ["complete", "finish", "close", "done"],
+                    "icon": "complete",
+                    "requiresConfirmation": true,
+                    "destructive": true
+                },
+                {
+                    "id": "set_aside_task",
+                    "label": "Set aside",
+                    "keywords": ["set aside", "out of focus", "hide", "defer"],
+                    "icon": "visibility_off",
+                    "requiresConfirmation": false,
+                    "destructive": false
+                }
+            ]
         })
     );
 }
@@ -155,7 +180,14 @@ async fn project_actions_snapshot_advertises_only_supported_project_capabilities
         response_json(response).await,
         serde_json::json!({
             "projectId": "P-1",
-            "actions": ["refresh_github"]
+            "actions": [{
+                "id": "refresh_github",
+                "label": "Refresh GitHub",
+                "keywords": ["sync", "github", "refresh", "pull"],
+                "icon": "refresh",
+                "requiresConfirmation": false,
+                "destructive": false
+            }]
         })
     );
 }

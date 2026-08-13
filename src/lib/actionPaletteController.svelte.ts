@@ -51,7 +51,12 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
         if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
         break
       case 'delete-task':
-        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction(task.status === 'backlog' ? 'Delete' : 'Complete')) {
+        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Delete')) {
+          await options.taskActions.deleteTaskAndReload(task.id)
+        }
+        break
+      case 'complete-task':
+        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Complete')) {
           await options.taskActions.deleteTaskAndReload(task.id)
         }
         break

@@ -4,19 +4,9 @@ mod pairing;
 mod snapshots;
 mod task_actions;
 mod task_creation;
-#[cfg(test)]
 use super::{
-    action_palette::UnavailableCompanionActionPaletteService,
-    attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
-    project_board::UnavailableCompanionProjectBoardSource,
-    task_actions::UnavailableCompanionTaskActionService,
-    task_creation::UnavailableCompanionTaskCreator,
-    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
-};
-use super::{
-    action_palette::{
-        CompanionActionPaletteService, CompanionProjectActionId, CompanionTaskActionId,
-    },
+    action_palette::CompanionActionPaletteService,
+    action_presentation::{CompanionProjectActionPresentation, CompanionTaskActionPresentation},
     attention::CompanionAttentionSource,
     live_events::CompanionStreamAccess,
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
@@ -27,6 +17,15 @@ use super::{
     task_detail::CompanionTaskDetailSource,
     task_start::CompanionTaskStarter,
     terminal::CompanionTerminalRegistry,
+};
+#[cfg(test)]
+use super::{
+    action_palette::UnavailableCompanionActionPaletteService,
+    attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
+    project_board::UnavailableCompanionProjectBoardSource,
+    task_actions::UnavailableCompanionTaskActionService,
+    task_creation::UnavailableCompanionTaskCreator,
+    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::app_events::AppEventBus;
 use axum::{
@@ -278,14 +277,14 @@ pub(crate) struct CompanionTaskCreateResponse {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionTaskActionsResponse {
     pub(crate) task_id: String,
-    pub(crate) actions: Vec<CompanionTaskActionId>,
+    pub(crate) actions: Vec<CompanionTaskActionPresentation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionProjectActionsResponse {
     pub(crate) project_id: String,
-    pub(crate) actions: Vec<CompanionProjectActionId>,
+    pub(crate) actions: Vec<CompanionProjectActionPresentation>,
 }
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(

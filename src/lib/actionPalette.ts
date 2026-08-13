@@ -1,13 +1,21 @@
 import { getAppShortcutHelpLabel, getPrimaryAppShortcutKey } from './appShortcutDefinitions'
+import {
+  getProjectActionPresentation,
+  getTaskActionPresentation,
+  TASK_ACTION_PRESENTATION,
+} from './actionPalettePresentation'
 import { getMergeReadiness } from './types'
+import type {
+  ActionPaletteIcon,
+  ActionPresentationMetadata,
+  TaskPaletteActionId,
+} from './actionPalettePresentation'
 import type { PullRequestInfo, Task } from './types'
 
-export interface PaletteAction {
+export interface PaletteAction extends ActionPresentationMetadata {
   id: string
-  label: string
   shortcut: string | null
   category: 'task' | 'navigation' | 'general'
-  keywords: string[]
 }
 
 export interface TaskActionCapabilities {
@@ -18,37 +26,33 @@ const DEFAULT_TASK_ACTION_CAPABILITIES: TaskActionCapabilities = {
   canRunApp: false,
 }
 
+function taskPaletteAction(id: TaskPaletteActionId): PaletteAction {
+  return {
+    id,
+    shortcut: null,
+    category: 'task',
+    ...getTaskActionPresentation(id),
+  }
+}
+
 export function getTaskActions(
   task: Task,
   taskPrs: PullRequestInfo[] = [],
   outOfFocusTaskIds: Set<string> = new Set(),
   capabilities: TaskActionCapabilities = DEFAULT_TASK_ACTION_CAPABILITIES,
 ): PaletteAction[] {
-  const actions: PaletteAction[] = []
+  const availableActionIds = new Set<TaskPaletteActionId>()
 
   if (task.status === 'backlog') {
-    actions.push({
-      id: 'start-task',
-      label: 'Start Task',
-      shortcut: null,
-      category: 'task',
-      keywords: ['run', 'execute', 'begin', 'agent'],
-    })
+    availableActionIds.add('start-task')
   }
-
 
   const readyToMergePrs = taskPrs.filter((pr) => {
     const readiness = getMergeReadiness(pr)
     return readiness.status === 'ready_to_merge' && readiness.action === 'merge'
   })
   if (readyToMergePrs.length === 1) {
-    actions.push({
-      id: 'merge-pr',
-      label: 'Merge Pull Request',
-      shortcut: null,
-      category: 'task',
-      keywords: ['merge', 'pull request', 'pr', 'github'],
-    })
+    availableActionIds.add('merge-pr')
   }
 
   const readyToEnqueuePrs = taskPrs.filter((pr) => {
@@ -56,68 +60,61 @@ export function getTaskActions(
     return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue'
   })
   if (readyToEnqueuePrs.length === 1) {
-    actions.push({
-      id: 'enqueue-pr',
-      label: 'Enqueue Pull Request',
-      shortcut: null,
-      category: 'task',
-      keywords: ['enqueue', 'merge queue', 'pull request', 'pr', 'github'],
-    })
+    availableActionIds.add('enqueue-pr')
   }
 
-  if (task.status === 'doing' && outOfFocusTaskIds.has(task.id)) {
-    actions.push({
-      id: 'return-to-board',
-      label: 'Move task back in focus',
-      shortcut: null,
-      category: 'task',
-      keywords: ['focus', 'board', 'move', 'out of focus'],
-    })
+  const isOutOfFocus = task.status === 'doing' && outOfFocusTaskIds.has(task.id)
+  if (isOutOfFocus) {
+    availableActionIds.add('return-to-board')
   }
 
-  actions.push({
-    id: 'delete-task',
-    label: task.status === 'backlog' ? 'Delete' : 'Complete',
-    shortcut: null,
-    category: 'task',
-    keywords: ['remove', 'trash', 'complete', 'finish', 'close', 'done'],
-  })
+  availableActionIds.add(task.status === 'backlog' ? 'delete-task' : 'complete-task')
 
-  if (task.status === 'doing' && !outOfFocusTaskIds.has(task.id)) {
-    actions.push({
-      id: 'set-aside-task',
-      label: 'Set aside',
-      shortcut: null,
-      category: 'task',
-      keywords: ['set aside', 'out of focus', 'hide', 'defer'],
-    })
+  if (task.status === 'doing' && !isOutOfFocus) {
+    availableActionIds.add('set-aside-task')
   }
 
   if (capabilities.canRunApp) {
-    actions.push({
-      id: 'run-app',
-      label: 'Run app',
-      shortcut: null,
-      category: 'task',
-      keywords: ['run', 'app', 'local', 'terminal', 'serve', 'dev'],
-    })
+    availableActionIds.add('run-app')
   }
 
-  return actions
+  return [...TASK_ACTION_PRESENTATION.keys()]
+    .filter((id) => availableActionIds.has(id))
+    .map(taskPaletteAction)
 }
 
-interface GlobalActionDefinition {
+interface GlobalActionDefinition extends ActionPresentationMetadata {
   id: string
   category: PaletteAction['category']
-  keywords: string[]
+}
+
+function localGlobalAction(
+  id: string,
+  category: PaletteAction['category'],
+  keywords: readonly string[],
+  icon: ActionPaletteIcon,
+): GlobalActionDefinition {
+  return {
+    id,
+    category,
+    label: '',
+    keywords,
+    icon,
+    requiresConfirmation: false,
+    destructive: false,
+  }
 }
 
 const GLOBAL_ACTION_DEFINITIONS: readonly GlobalActionDefinition[] = [
-  { id: 'go-back', category: 'navigation', keywords: ['back', 'previous', 'navigate'] },
-  { id: 'search-tasks', category: 'general', keywords: ['find', 'search', 'lookup'] },
-  { id: 'new-task', category: 'general', keywords: ['create', 'add', 'task'] },
-  { id: 'switch-project', category: 'navigation', keywords: ['project', 'switch', 'change'] },
-  { id: 'refresh-github', category: 'general', keywords: ['sync', 'github', 'refresh', 'pull'] },
+  localGlobalAction('go-back', 'navigation', ['back', 'previous', 'navigate'], 'arrow_back'),
+  localGlobalAction('search-tasks', 'general', ['find', 'search', 'lookup'], 'search'),
+  localGlobalAction('new-task', 'general', ['create', 'add', 'task'], 'add'),
+  localGlobalAction('switch-project', 'navigation', ['project', 'switch', 'change'], 'switch'),
+  {
+    id: 'refresh-github',
+    category: 'general',
+    ...getProjectActionPresentation('refresh-github'),
+  },
 ]
 
 function getShortcutBackedGlobalAction(definition: GlobalActionDefinition): PaletteAction {
@@ -127,11 +124,9 @@ function getShortcutBackedGlobalAction(definition: GlobalActionDefinition): Pale
   }
 
   return {
-    id: definition.id,
+    ...definition,
     label,
     shortcut: getPrimaryAppShortcutKey(definition.id),
-    category: definition.category,
-    keywords: definition.keywords,
   }
 }
 

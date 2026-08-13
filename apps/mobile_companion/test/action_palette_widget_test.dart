@@ -1,6 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/action_palette/action_palette.dart';
+import 'package:openforge_companion/src/generated/companion_v1_client.dart';
+
+MobilePaletteAction _taskAction(
+  CompanionTaskActionId id,
+  String label,
+  List<String> keywords,
+  CompanionActionIcon icon, {
+  bool requiresConfirmation = false,
+  bool destructive = false,
+}) => MobilePaletteAction.task(
+  CompanionTaskActionPresentation(
+    id: id,
+    label: label,
+    keywords: keywords,
+    icon: icon,
+    requiresConfirmation: requiresConfirmation,
+    destructive: destructive,
+  ),
+);
+
+MobilePaletteAction _projectAction(
+  CompanionProjectActionId id,
+  String label,
+  List<String> keywords,
+  CompanionActionIcon icon,
+) => MobilePaletteAction.project(
+  CompanionProjectActionPresentation(
+    id: id,
+    label: label,
+    keywords: keywords,
+    icon: icon,
+    requiresConfirmation: false,
+    destructive: false,
+  ),
+);
 
 void main() {
   testWidgets(
@@ -12,10 +47,27 @@ void main() {
           home: Scaffold(
             body: MobileActionPalette(
               title: 'Task actions',
-              actions: const <MobilePaletteAction>[
-                MobilePaletteAction.task(CompanionActionId.startTask),
-                MobilePaletteAction.task(CompanionActionId.setAsideTask),
-                MobilePaletteAction.task(CompanionActionId.completeTask),
+              actions: <MobilePaletteAction>[
+                _taskAction(
+                  CompanionTaskActionId.startTask,
+                  'Start Task',
+                  <String>['run'],
+                  CompanionActionIcon.play,
+                ),
+                _taskAction(
+                  CompanionTaskActionId.setAsideTask,
+                  'Set aside',
+                  <String>['defer'],
+                  CompanionActionIcon.visibilityOff,
+                ),
+                _taskAction(
+                  CompanionTaskActionId.completeTask,
+                  'Complete',
+                  <String>['finish'],
+                  CompanionActionIcon.complete,
+                  requiresConfirmation: true,
+                  destructive: true,
+                ),
               ],
               onExecute: (action) async => executed.add(action.id),
             ),
@@ -49,10 +101,15 @@ void main() {
           home: Scaffold(
             body: MobileActionPalette(
               title: 'Actions',
-              actions: const <MobilePaletteAction>[
-                MobilePaletteAction.general(CompanionActionId.newTask),
-                MobilePaletteAction.general(CompanionActionId.refreshBoard),
-                MobilePaletteAction.general(CompanionActionId.refreshGithub),
+              actions: <MobilePaletteAction>[
+                MobilePaletteAction.newTask,
+                MobilePaletteAction.refreshBoard,
+                _projectAction(
+                  CompanionProjectActionId.refreshGithub,
+                  'Refresh GitHub',
+                  <String>['github'],
+                  CompanionActionIcon.refresh,
+                ),
               ],
               onExecute: (action) async => executed.add(action.id),
             ),
@@ -81,9 +138,21 @@ void main() {
           home: Scaffold(
             body: MobileActionPalette(
               title: 'Task actions',
-              actions: const <MobilePaletteAction>[
-                MobilePaletteAction.task(CompanionActionId.mergePullRequest),
-                MobilePaletteAction.task(CompanionActionId.completeTask),
+              actions: <MobilePaletteAction>[
+                _taskAction(
+                  CompanionTaskActionId.mergePullRequest,
+                  'Merge Pull Request',
+                  <String>['merge'],
+                  CompanionActionIcon.merge,
+                ),
+                _taskAction(
+                  CompanionTaskActionId.completeTask,
+                  'Complete',
+                  <String>['finish'],
+                  CompanionActionIcon.complete,
+                  requiresConfirmation: true,
+                  destructive: true,
+                ),
               ],
               onConfirm: (action) async {
                 confirmed.add(action.id);

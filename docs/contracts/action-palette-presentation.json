@@ -1,0 +1,87 @@
+{
+  "taskActions": [
+    {
+      "id": "start_task",
+      "desktopId": "start-task",
+      "label": "Start Task",
+      "keywords": ["run", "execute", "begin", "agent"],
+      "icon": "play",
+      "requiresConfirmation": false,
+      "destructive": false
+    },
+    {
+      "id": "merge_pull_request",
+      "desktopId": "merge-pr",
+      "label": "Merge Pull Request",
+      "keywords": ["merge", "pull request", "pr", "github"],
+      "icon": "merge",
+      "requiresConfirmation": false,
+      "destructive": false
+    },
+    {
+      "id": "enqueue_pull_request",
+      "desktopId": "enqueue-pr",
+      "label": "Enqueue Pull Request",
+      "keywords": ["enqueue", "merge queue", "pull request", "pr", "github"],
+      "icon": "queue",
+      "requiresConfirmation": false,
+      "destructive": false
+    },
+    {
+      "id": "return_to_board",
+      "desktopId": "return-to-board",
+      "label": "Return to Board",
+      "keywords": ["focus", "board", "move", "out of focus"],
+      "icon": "visibility",
+      "requiresConfirmation": false,
+      "destructive": false
+    },
+    {
+      "id": "delete_task",
+      "desktopId": "delete-task",
+      "label": "Delete",
+      "keywords": ["remove", "trash", "delete"],
+      "icon": "delete",
+      "requiresConfirmation": true,
+      "destructive": true
+    },
+    {
+      "id": "complete_task",
+      "desktopId": "complete-task",
+      "label": "Complete",
+      "keywords": ["complete", "finish", "close", "done"],
+      "icon": "complete",
+      "requiresConfirmation": true,
+      "destructive": true
+    },
+    {
+      "id": "set_aside_task",
+      "desktopId": "set-aside-task",
+      "label": "Set aside",
+      "keywords": ["set aside", "out of focus", "hide", "defer"],
+      "icon": "visibility_off",
+      "requiresConfirmation": false,
+      "destructive": false
+    },
+    {
+      "id": "run_app",
+      "desktopId": "run-app",
+      "label": "Run app",
+      "keywords": ["run", "app", "local", "terminal", "serve", "dev"],
+      "icon": "rocket",
+      "requiresConfirmation": false,
+      "destructive": false
+    }
+  ],
+  "projectActions": [
+    {
+      "id": "refresh_github",
+      "desktopId": "refresh-github",
+      "label": "Refresh GitHub",
+      "keywords": ["sync", "github", "refresh", "pull"],
+      "icon": "refresh",
+      "requiresConfirmation": false,
+      "destructive": false
+    }
+  ]
+}

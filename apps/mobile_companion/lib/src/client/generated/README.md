@@ -33,6 +33,7 @@ of the source contract.
 - authenticated host status;
 - authenticated Project catalog and four-lane Project Board snapshots;
 - authenticated attention snapshots and task-detail domain reads;
+- authenticated ordered Action Palette descriptors whose labels, keywords, confirmation flags, destructive treatment, and semantic icons are desktop-authoritative;
 - authenticated prompt-only backlog Task Create in a visible Project without automatic mutation retry;
 - authenticated identity-only Companion Task Start without automatic mutation retry;
 - authenticated backlog Task Delete without automatic mutation retry;

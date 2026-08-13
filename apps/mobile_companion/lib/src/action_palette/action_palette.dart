@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../generated/companion_v1_client.dart' as generated;
+
 enum CompanionActionId {
   startTask,
   mergePullRequest,
@@ -17,13 +19,70 @@ enum CompanionActionId {
 enum MobilePaletteCategory { task, general }
 
 final class MobilePaletteAction {
-  const MobilePaletteAction.task(this.id)
-    : category = MobilePaletteCategory.task;
-  const MobilePaletteAction.general(this.id)
-    : category = MobilePaletteCategory.general;
+  static const newTask = MobilePaletteAction.native(
+    id: CompanionActionId.newTask,
+    label: 'New task',
+    keywords: <String>['create', 'add', 'task'],
+    icon: Icons.add_task_rounded,
+  );
+
+  static const refreshBoard = MobilePaletteAction.native(
+    id: CompanionActionId.refreshBoard,
+    label: 'Refresh Board',
+    keywords: <String>['sync', 'refresh', 'board'],
+    icon: Icons.refresh_rounded,
+  );
+  factory MobilePaletteAction.task(
+    generated.CompanionTaskActionPresentation presentation,
+  ) => MobilePaletteAction._(
+    id: _taskActionId(presentation.id),
+    category: MobilePaletteCategory.task,
+    label: presentation.label,
+    keywords: presentation.keywords,
+    icon: _materialIcon(presentation.icon),
+    requiresConfirmation: presentation.requiresConfirmation,
+    destructive: presentation.destructive,
+  );
+
+  factory MobilePaletteAction.project(
+    generated.CompanionProjectActionPresentation presentation,
+  ) => MobilePaletteAction._(
+    id: _projectActionId(presentation.id),
+    category: MobilePaletteCategory.general,
+    label: presentation.label,
+    keywords: presentation.keywords,
+    icon: _materialIcon(presentation.icon),
+    requiresConfirmation: presentation.requiresConfirmation,
+    destructive: presentation.destructive,
+  );
+
+  const MobilePaletteAction.native({
+    required this.id,
+    required this.label,
+    required this.keywords,
+    required this.icon,
+    this.category = MobilePaletteCategory.general,
+    this.requiresConfirmation = false,
+    this.destructive = false,
+  });
+
+  const MobilePaletteAction._({
+    required this.id,
+    required this.category,
+    required this.label,
+    required this.keywords,
+    required this.icon,
+    required this.requiresConfirmation,
+    required this.destructive,
+  });
 
   final CompanionActionId id;
   final MobilePaletteCategory category;
+  final String label;
+  final List<String> keywords;
+  final IconData icon;
+  final bool requiresConfirmation;
+  final bool destructive;
 
   @override
   bool operator ==(Object other) =>
@@ -33,105 +92,48 @@ final class MobilePaletteAction {
 
   @override
   int get hashCode => Object.hash(id, category);
-
-  String get label => switch (id) {
-    CompanionActionId.startTask => 'Start Task',
-    CompanionActionId.mergePullRequest => 'Merge Pull Request',
-    CompanionActionId.enqueuePullRequest => 'Enqueue Pull Request',
-    CompanionActionId.returnToBoard => 'Move task back in focus',
-    CompanionActionId.deleteTask => 'Delete',
-    CompanionActionId.completeTask => 'Complete',
-    CompanionActionId.setAsideTask => 'Set aside',
-    CompanionActionId.runApp => 'Run app',
-    CompanionActionId.newTask => 'New task',
-    CompanionActionId.refreshBoard => 'Refresh Board',
-    CompanionActionId.refreshGithub => 'Refresh GitHub',
-  };
-
-  List<String> get keywords => switch (id) {
-    CompanionActionId.startTask => const <String>[
-      'run',
-      'execute',
-      'begin',
-      'agent',
-    ],
-    CompanionActionId.mergePullRequest => const <String>[
-      'merge',
-      'pull request',
-      'pr',
-      'github',
-    ],
-    CompanionActionId.enqueuePullRequest => const <String>[
-      'enqueue',
-      'merge queue',
-      'pull request',
-      'pr',
-    ],
-    CompanionActionId.returnToBoard => const <String>[
-      'focus',
-      'board',
-      'move',
-      'out of focus',
-    ],
-    CompanionActionId.deleteTask || CompanionActionId.completeTask =>
-      const <String>['remove', 'trash', 'complete', 'finish', 'close', 'done'],
-    CompanionActionId.setAsideTask => const <String>[
-      'set aside',
-      'out of focus',
-      'hide',
-      'defer',
-    ],
-    CompanionActionId.runApp => const <String>[
-      'run',
-      'app',
-      'local',
-      'terminal',
-      'serve',
-      'dev',
-    ],
-    CompanionActionId.newTask => const <String>['create', 'add', 'task'],
-    CompanionActionId.refreshBoard => const <String>[
-      'sync',
-      'refresh',
-      'board',
-    ],
-    CompanionActionId.refreshGithub => const <String>[
-      'sync',
-      'github',
-      'refresh',
-      'pull',
-    ],
-  };
-
-  bool get requiresConfirmation => switch (id) {
-    CompanionActionId.deleteTask || CompanionActionId.completeTask => true,
-    _ => false,
-  };
-
-  bool get destructive =>
-      id == CompanionActionId.deleteTask ||
-      id == CompanionActionId.completeTask;
-
-  IconData get icon => switch (id) {
-    CompanionActionId.startTask => Icons.play_arrow_rounded,
-    CompanionActionId.mergePullRequest => Icons.merge_rounded,
-    CompanionActionId.enqueuePullRequest => Icons.queue_rounded,
-    CompanionActionId.returnToBoard => Icons.visibility_rounded,
-    CompanionActionId.deleteTask => Icons.delete_outline_rounded,
-    CompanionActionId.completeTask => Icons.flag_outlined,
-    CompanionActionId.setAsideTask => Icons.visibility_off_outlined,
-    CompanionActionId.runApp => Icons.rocket_launch_outlined,
-    CompanionActionId.newTask => Icons.add_task_rounded,
-    CompanionActionId.refreshBoard => Icons.refresh_rounded,
-    CompanionActionId.refreshGithub => Icons.sync_rounded,
-  };
 }
+
+CompanionActionId _taskActionId(generated.CompanionTaskActionId id) =>
+    switch (id) {
+      generated.CompanionTaskActionId.startTask => CompanionActionId.startTask,
+      generated.CompanionTaskActionId.mergePullRequest =>
+        CompanionActionId.mergePullRequest,
+      generated.CompanionTaskActionId.enqueuePullRequest =>
+        CompanionActionId.enqueuePullRequest,
+      generated.CompanionTaskActionId.returnToBoard =>
+        CompanionActionId.returnToBoard,
+      generated.CompanionTaskActionId.deleteTask =>
+        CompanionActionId.deleteTask,
+      generated.CompanionTaskActionId.completeTask =>
+        CompanionActionId.completeTask,
+      generated.CompanionTaskActionId.setAsideTask =>
+        CompanionActionId.setAsideTask,
+      generated.CompanionTaskActionId.runApp => CompanionActionId.runApp,
+    };
+
+CompanionActionId _projectActionId(generated.CompanionProjectActionId id) =>
+    switch (id) {
+      generated.CompanionProjectActionId.refreshGithub =>
+        CompanionActionId.refreshGithub,
+    };
+
+IconData _materialIcon(generated.CompanionActionIcon icon) => switch (icon) {
+  generated.CompanionActionIcon.play => Icons.play_arrow_rounded,
+  generated.CompanionActionIcon.merge => Icons.merge_rounded,
+  generated.CompanionActionIcon.queue => Icons.queue_rounded,
+  generated.CompanionActionIcon.visibility => Icons.visibility_rounded,
+  generated.CompanionActionIcon.delete => Icons.delete_outline_rounded,
+  generated.CompanionActionIcon.complete => Icons.flag_outlined,
+  generated.CompanionActionIcon.visibilityOff => Icons.visibility_off_outlined,
+  generated.CompanionActionIcon.rocket => Icons.rocket_launch_outlined,
+  generated.CompanionActionIcon.refresh => Icons.sync_rounded,
+};
 
 typedef PaletteActionExecutor =
     Future<void> Function(MobilePaletteAction action);
 typedef PaletteActionConfirmer =
     Future<bool> Function(MobilePaletteAction action);
-
 Future<MobilePaletteAction?> showMobileActionPalette({
   required BuildContext context,
   required String title,

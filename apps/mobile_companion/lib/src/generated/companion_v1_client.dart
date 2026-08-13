@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '9423de0f413ddf0a79c74820876d340a603b15e35ef7752e33151796f010d3ae';
+    '8672f8747e2e65ed3704c9b3d9d362cfc0c31f88c5bdab6214e5c150ef346a1b';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '2';
 
@@ -51,6 +51,34 @@ final class CompanionV1Exception implements Exception {
 
   @override
   String toString() => 'CompanionV1Exception($statusCode, $code)';
+}
+
+enum CompanionActionIcon {
+  play('play'),
+  merge('merge'),
+  queue('queue'),
+  visibility('visibility'),
+  delete('delete'),
+  complete('complete'),
+  visibilityOff('visibility_off'),
+  rocket('rocket'),
+  refresh('refresh'),
+  ;
+
+  const CompanionActionIcon(this.wireValue);
+
+  final String wireValue;
+
+  static CompanionActionIcon fromWire(String value) =>
+      tryFromWire(value) ??
+      (throw FormatException('Invalid CompanionActionIcon value: $value.'));
+
+  static CompanionActionIcon? tryFromWire(String value) {
+    for (final candidate in values) {
+      if (candidate.wireValue == value) return candidate;
+    }
+    return null;
+  }
 }
 
 enum CompanionProjectActionId {
@@ -268,52 +296,132 @@ final class ErrorEnvelopeError {
   final String? requestId;
 }
 
+final class CompanionProjectActionPresentation {
+  CompanionProjectActionPresentation({
+    required this.id,
+    required this.label,
+    required List<String> keywords,
+    required this.icon,
+    required this.requiresConfirmation,
+    required this.destructive,
+  }) : keywords = List<String>.unmodifiable(keywords);
+
+  factory CompanionProjectActionPresentation.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'id', 'label', 'keywords', 'icon', 'requiresConfirmation', 'destructive'});
+    final model = CompanionProjectActionPresentation(
+      id: _required(json, 'id', (value) => CompanionProjectActionId.fromWire(_asString(value, 'id'))),
+      label: _required(json, 'label', (value) => _asString(value, 'label', minLength: 1)),
+      keywords: _required(json, 'keywords', (value) => _asList(value, 'keywords', minItems: 1).map((item) => _asString(item, 'keywordsItem', minLength: 1)).toList()),
+      icon: _required(json, 'icon', (value) => CompanionActionIcon.fromWire(_asString(value, 'icon'))),
+      requiresConfirmation: _required(json, 'requiresConfirmation', (value) => _asBool(value, 'requiresConfirmation')),
+      destructive: _required(json, 'destructive', (value) => _asBool(value, 'destructive')),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'id': id.wireValue,
+      'label': label,
+      'keywords': keywords.map((item) => item).toList(),
+      'icon': icon.wireValue,
+      'requiresConfirmation': requiresConfirmation,
+      'destructive': destructive,
+  };
+
+  final CompanionProjectActionId id;
+  final String label;
+  final List<String> keywords;
+  final CompanionActionIcon icon;
+  final bool requiresConfirmation;
+  final bool destructive;
+}
+
 final class ProjectActionsSnapshot {
   ProjectActionsSnapshot({
     required this.projectId,
-    required List<CompanionProjectActionId> actions,
-  }) : actions = List<CompanionProjectActionId>.unmodifiable(actions);
+    required List<CompanionProjectActionPresentation> actions,
+  }) : actions = List<CompanionProjectActionPresentation>.unmodifiable(actions);
 
   factory ProjectActionsSnapshot.fromJson(Map<String, Object?> json) {
     _expectOnly(json, const <String>{'projectId', 'actions'});
     final model = ProjectActionsSnapshot(
       projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
-      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionProjectActionId.fromWire(_asString(item, 'actionsItem'))).toList()),
+      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionProjectActionPresentation.fromJson(_asObject(item, 'actionsItem'))).toList()),
     );
     return model;
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
       'projectId': projectId,
-      'actions': actions.map((item) => item.wireValue).toList(),
+      'actions': actions.map((item) => item.toJson()).toList(),
   };
 
   final String projectId;
-  final List<CompanionProjectActionId> actions;
+  final List<CompanionProjectActionPresentation> actions;
+}
+
+final class CompanionTaskActionPresentation {
+  CompanionTaskActionPresentation({
+    required this.id,
+    required this.label,
+    required List<String> keywords,
+    required this.icon,
+    required this.requiresConfirmation,
+    required this.destructive,
+  }) : keywords = List<String>.unmodifiable(keywords);
+
+  factory CompanionTaskActionPresentation.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'id', 'label', 'keywords', 'icon', 'requiresConfirmation', 'destructive'});
+    final model = CompanionTaskActionPresentation(
+      id: _required(json, 'id', (value) => CompanionTaskActionId.fromWire(_asString(value, 'id'))),
+      label: _required(json, 'label', (value) => _asString(value, 'label', minLength: 1)),
+      keywords: _required(json, 'keywords', (value) => _asList(value, 'keywords', minItems: 1).map((item) => _asString(item, 'keywordsItem', minLength: 1)).toList()),
+      icon: _required(json, 'icon', (value) => CompanionActionIcon.fromWire(_asString(value, 'icon'))),
+      requiresConfirmation: _required(json, 'requiresConfirmation', (value) => _asBool(value, 'requiresConfirmation')),
+      destructive: _required(json, 'destructive', (value) => _asBool(value, 'destructive')),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'id': id.wireValue,
+      'label': label,
+      'keywords': keywords.map((item) => item).toList(),
+      'icon': icon.wireValue,
+      'requiresConfirmation': requiresConfirmation,
+      'destructive': destructive,
+  };
+
+  final CompanionTaskActionId id;
+  final String label;
+  final List<String> keywords;
+  final CompanionActionIcon icon;
+  final bool requiresConfirmation;
+  final bool destructive;
 }
 
 final class TaskActionsSnapshot {
   TaskActionsSnapshot({
     required this.taskId,
-    required List<CompanionTaskActionId> actions,
-  }) : actions = List<CompanionTaskActionId>.unmodifiable(actions);
+    required List<CompanionTaskActionPresentation> actions,
+  }) : actions = List<CompanionTaskActionPresentation>.unmodifiable(actions);
 
   factory TaskActionsSnapshot.fromJson(Map<String, Object?> json) {
     _expectOnly(json, const <String>{'taskId', 'actions'});
     final model = TaskActionsSnapshot(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
-      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionTaskActionId.fromWire(_asString(item, 'actionsItem'))).toList()),
+      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionTaskActionPresentation.fromJson(_asObject(item, 'actionsItem'))).toList()),
     );
     return model;
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
       'taskId': taskId,
-      'actions': actions.map((item) => item.wireValue).toList(),
+      'actions': actions.map((item) => item.toJson()).toList(),
   };
 
   final String taskId;
-  final List<CompanionTaskActionId> actions;
+  final List<CompanionTaskActionPresentation> actions;
 }
 
 final class PairingSubmission {
