@@ -1720,6 +1720,26 @@ async fn test_plugin_command_discovery_routes_reject_missing_and_conflicting_con
         "plugin command discovery requires --task-id or --project-id"
     );
 
+    let invoke_missing = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/plugin_commands/invoke")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"commandId":"com.example.sync.run","input":{"force":true}}"#,
+                ))
+                .expect("missing invocation context request"),
+        )
+        .await
+        .expect("missing invocation context response");
+    assert_eq!(invoke_missing.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_body_text(invoke_missing).await,
+        "plugin command discovery requires --task-id or --project-id"
+    );
+
     let conflict = router
         .oneshot(
             Request::builder()

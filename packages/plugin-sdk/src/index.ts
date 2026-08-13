@@ -45,6 +45,9 @@ export {
 } from './types'
 
 export type {
+  AgentCommandDescriptor,
+  AgentCommandMetadata,
+  AgentCommandRuntime,
   AttentionAPI,
   BackendReadyState,
   CommandDescriptor,
@@ -74,6 +77,8 @@ export type {
   OpenForgePluginCapability,
   OpenForgePluginContext,
   OpenForgePluginPackageJson,
+  PluginCommandInvocationContext,
+  PluginCommandInvocationSource,
   PluginComponentLoader,
   PluginComponentModule,
   PluginEntry,

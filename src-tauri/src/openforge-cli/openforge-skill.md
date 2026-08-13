@@ -28,6 +28,17 @@ Use canonical nested command groups (`openforge task create`, `openforge task up
 
 Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
 
+## Agent-facing Plugin Commands
+
+Use the generic Plugin Command workflow for capabilities contributed by enabled Trusted Plugins:
+
+1. Discover routine commands with `openforge plugin command list`. Pass `--task-id <id>` or `--project-id <id>`; inside an Implementation Run, Task context defaults from `OPENFORGE_TASK_ID` when neither flag is supplied.
+2. Inspect the exact command before using it with `openforge plugin command describe --command-id <qualified-id>`. The JSON descriptor contains plugin-owned input/output schemas, examples, runtime, and guidance. Commands hidden from routine listing can still be described and invoked only by their exact qualified identifier when explicitly agent-enabled.
+3. Invoke with `openforge plugin command invoke --command-id <qualified-id> [--input '<json>']`. Use `--task-id` or `--project-id` under the same context rules as discovery. Omit `--input` when the command takes no input.
+4. Read the JSON result and handle failures rather than assuming success. Invalid JSON, schema violations, unavailable or disabled plugins, unknown commands, and plugin handler failures are actionable errors; correct the request or report the blocker.
+
+Task and Project targeting are host-owned invocation context, not plugin input. Never add `taskId` or `projectId` to `--input` unless the command's own input schema explicitly declares that plugin-owned field.
+
 ## Task Creation checklist
 
 Before creating follow-up Tasks, run the project label discovery command when you know the project id. Reuse an existing project label when it fits; only create a new label through `--label` when the category is genuinely new and useful. When dependency order is known, add useful --label values and dependency links during Task Creation with `--label` and `--depends-on`; do not invent noisy labels or guessed ordering just because labels and dependencies exist.

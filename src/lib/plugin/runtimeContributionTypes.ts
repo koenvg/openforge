@@ -28,6 +28,7 @@ import type {
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,
   OpenForgePackageMetadata,
+  PluginCommandInvocationContext,
   PluginStorage,
   Project,
   ProjectAttention,
@@ -45,7 +46,10 @@ import type {
 export type MaybePromise<T> = T | Promise<T>
 export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints'
 export type RuntimeScope = 'global' | 'project' | 'task'
-export type RuntimeHandler = (payload?: unknown) => MaybePromise<unknown>
+export type RuntimeHandler = (
+  payload?: unknown,
+  context?: PluginCommandInvocationContext,
+) => MaybePromise<unknown>
 export type RuntimeEventHandler = (payload: unknown) => void
 
 export type RuntimeHostBridge = {

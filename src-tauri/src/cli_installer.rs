@@ -367,6 +367,7 @@ mod tests {
         assert!(cli_content.contains("openforge task labels remove"));
         assert!(cli_content.contains("openforge plugin command list"));
         assert!(cli_content.contains("openforge plugin command describe"));
+        assert!(cli_content.contains("openforge plugin command invoke"));
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
@@ -379,6 +380,11 @@ mod tests {
         assert!(skill_content.contains("openforge task labels add"));
         assert!(skill_content.contains("openforge task labels remove"));
         assert!(skill_content.contains("openforge task delete"));
+        assert!(skill_content.contains("openforge plugin command list"));
+        assert!(skill_content.contains("openforge plugin command describe --command-id"));
+        assert!(skill_content.contains("openforge plugin command invoke --command-id"));
+        assert!(skill_content.contains("OPENFORGE_TASK_ID"));
+        assert!(skill_content.contains("host-owned invocation context"));
         assert!(skill_content.contains("Task summaries are Markdown-formatted"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
         assert!(skill_content.contains("openforge task create --help"));

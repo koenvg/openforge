@@ -487,6 +487,32 @@ async function describePluginCommand(flags) {
   }));
 }
 
+function optionalJsonInput(flags) {
+  if (flags.input === undefined) return undefined;
+  if (typeof flags.input !== 'string') {
+    throw new Error('--input requires a JSON value');
+  }
+  try {
+    return JSON.parse(flags.input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`invalid --input JSON: ${message}`);
+  }
+}
+
+async function invokePluginCommand(flags) {
+  const payload = {
+    commandId: requireFlag(flags, 'commandId'),
+    ...pluginCommandContext(flags),
+  };
+  const input = optionalJsonInput(flags);
+  if (input !== undefined) payload.input = input;
+  printJson(await requestJson('/plugin_commands/invoke', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }));
+}
+
 const COMMAND_SPECS = [
   {
     path: ['task', 'create'],
@@ -595,6 +621,12 @@ const COMMAND_SPECS = [
     flags: ['commandId', 'taskId', 'projectId'],
     usage: 'openforge plugin command describe --command-id <qualified-id> [--task-id <id> | --project-id <id>]',
     handler: describePluginCommand,
+  },
+  {
+    path: ['plugin', 'command', 'invoke'],
+    flags: ['commandId', 'input', 'taskId', 'projectId'],
+    usage: 'openforge plugin command invoke --command-id <qualified-id> [--input <json>] [--task-id <id> | --project-id <id>]',
+    handler: invokePluginCommand,
   },
   {
     path: ['plugin', 'install'],

@@ -194,6 +194,15 @@ export interface AgentCommandDescriptor {
   output?: JsonSchema
 }
 
+export type PluginCommandInvocationSource = 'agent-cli' | 'plugin'
+
+/** Host-resolved targeting information supplied separately from plugin-owned command input. */
+export interface PluginCommandInvocationContext {
+  taskId: string | null
+  projectId: string | null
+  source: PluginCommandInvocationSource
+}
+
 export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   id: string
   title: string
@@ -205,7 +214,7 @@ export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   agent?: AgentCommandMetadata
   input?: JsonSchema
   output?: JsonSchema
-  handler(input: TInput): MaybePromise<TOutput>
+  handler(input: TInput, context: PluginCommandInvocationContext): MaybePromise<TOutput>
 }
 
 export interface CommandDescriptor {

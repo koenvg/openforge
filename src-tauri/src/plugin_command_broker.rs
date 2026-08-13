@@ -26,11 +26,41 @@ pub struct AgentCommandDescriptor {
     pub discoverable: bool,
 }
 
+fn is_exact_backend_descriptor(plugin_id: &str, descriptor: &AgentCommandDescriptor) -> bool {
+    descriptor.plugin_id == plugin_id
+        && descriptor.runtime == AgentCommandRuntime::Backend
+        && descriptor
+            .qualified_id
+            .strip_prefix(plugin_id)
+            .and_then(|suffix| suffix.strip_prefix('.'))
+            .is_some_and(|local_id| !local_id.is_empty())
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginCommandDiscoveryContext {
     pub task_id: Option<String>,
     pub project_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginCommandInvocationSource {
+    AgentCli,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCommandInvocationContext {
+    pub task_id: Option<String>,
+    pub project_id: String,
+    pub source: PluginCommandInvocationSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedPluginCommandContext {
+    task_id: Option<String>,
+    project_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +131,14 @@ pub trait BackendAgentCommandCatalog {
         plugin_id: &'a str,
         project_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>>;
+    fn invoke_agent_command<'a>(
+        &'a self,
+        plugin_id: &'a str,
+        project_id: &'a str,
+        command_id: &'a str,
+        input: Option<Value>,
+        context: PluginCommandInvocationContext,
+    ) -> BoxFuture<'a, Result<Value, String>>;
 }
 
 impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
@@ -110,6 +148,20 @@ impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
         project_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>> {
         Box::pin(async move { self.agent_command_descriptors(plugin_id, project_id).await })
+    }
+
+    fn invoke_agent_command<'a>(
+        &'a self,
+        plugin_id: &'a str,
+        project_id: &'a str,
+        command_id: &'a str,
+        input: Option<Value>,
+        context: PluginCommandInvocationContext,
+    ) -> BoxFuture<'a, Result<Value, String>> {
+        Box::pin(async move {
+            self.invoke_agent_command(plugin_id, project_id, command_id, input, context)
+                .await
+        })
     }
 }
 
@@ -155,7 +207,9 @@ where
                         plugin.id
                     ))
                 })?;
-            descriptors.extend(commands.into_iter().filter(|command| command.discoverable));
+            descriptors.extend(commands.into_iter().filter(|command| {
+                command.discoverable && is_exact_backend_descriptor(&plugin.id, command)
+            }));
         }
         Ok(descriptors)
     }
@@ -215,9 +269,46 @@ where
                 ))
             })?
             .into_iter()
-            .find(|command| command.qualified_id == command_id)
+            .find(|command| {
+                command.qualified_id == command_id
+                    && is_exact_backend_descriptor(&plugin.id, command)
+            })
             .ok_or_else(|| PluginCommandDiscoveryError::CommandNotFound {
                 command_id: command_id.to_string(),
+            })
+    }
+
+    pub async fn invoke(
+        &self,
+        context: &PluginCommandDiscoveryContext,
+        command_id: &str,
+        input: Option<Value>,
+    ) -> Result<Value, PluginCommandDiscoveryError> {
+        let descriptor = self.describe(context, command_id).await?;
+        if descriptor.runtime != AgentCommandRuntime::Backend {
+            return Err(PluginCommandDiscoveryError::BackendUnavailable {
+                plugin_id: descriptor.plugin_id,
+            });
+        }
+        let resolved = self.resolve_context(context)?;
+        let invocation_context = PluginCommandInvocationContext {
+            task_id: resolved.task_id,
+            project_id: resolved.project_id.clone(),
+            source: PluginCommandInvocationSource::AgentCli,
+        };
+        self.catalog
+            .invoke_agent_command(
+                &descriptor.plugin_id,
+                &resolved.project_id,
+                command_id,
+                input,
+                invocation_context,
+            )
+            .await
+            .map_err(|error| {
+                PluginCommandDiscoveryError::Runtime(format!(
+                    "Failed to invoke backend Plugin Command {command_id}: {error}"
+                ))
             })
     }
 
@@ -270,6 +361,22 @@ where
         Ok(project_id.to_string())
     }
 
+    fn resolve_context(
+        &self,
+        context: &PluginCommandDiscoveryContext,
+    ) -> Result<ResolvedPluginCommandContext, PluginCommandDiscoveryError> {
+        let project_id = self.resolve_project_id(context)?;
+        let task_id = context
+            .task_id
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+            .cloned();
+        Ok(ResolvedPluginCommandContext {
+            task_id,
+            project_id,
+        })
+    }
+
     fn require_project(
         &self,
         database: &crate::db::Database,
@@ -309,9 +416,20 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct FakeInvocation {
+        plugin_id: String,
+        project_id: String,
+        command_id: String,
+        input: Option<Value>,
+        context: PluginCommandInvocationContext,
+    }
+
     #[derive(Default)]
     struct FakeBackendCatalog {
         descriptors: HashMap<String, Vec<AgentCommandDescriptor>>,
+        invocation_result: Value,
+        invocations: Mutex<Vec<FakeInvocation>>,
     }
 
     impl BackendAgentCommandCatalog for FakeBackendCatalog {
@@ -323,6 +441,27 @@ mod tests {
             Box::pin(
                 async move { Ok(self.descriptors.get(plugin_id).cloned().unwrap_or_default()) },
             )
+        }
+
+        fn invoke_agent_command<'a>(
+            &'a self,
+            plugin_id: &'a str,
+            project_id: &'a str,
+            command_id: &'a str,
+            input: Option<Value>,
+            context: PluginCommandInvocationContext,
+        ) -> BoxFuture<'a, Result<Value, String>> {
+            self.invocations
+                .lock()
+                .expect("invocations")
+                .push(FakeInvocation {
+                    plugin_id: plugin_id.to_string(),
+                    project_id: project_id.to_string(),
+                    command_id: command_id.to_string(),
+                    input,
+                    context,
+                });
+            Box::pin(async move { Ok(self.invocation_result.clone()) })
         }
     }
 
@@ -385,6 +524,11 @@ mod tests {
                     vec![
                         descriptor("com.example.sync", "visible", true),
                         descriptor("com.example.sync", "hidden", false),
+                        {
+                            let mut spoofed = descriptor("com.example.other", "spoofed", true);
+                            spoofed.qualified_id = "com.example.sync.spoofed".to_string();
+                            spoofed
+                        },
                     ],
                 ),
                 (
@@ -392,6 +536,7 @@ mod tests {
                     vec![descriptor("com.example.disabled", "visible", true)],
                 ),
             ]),
+            ..Default::default()
         };
         let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
 
@@ -432,6 +577,7 @@ mod tests {
                 "com.example.sync".to_string(),
                 vec![descriptor("com.example.sync", "hidden", false)],
             )]),
+            ..Default::default()
         };
         let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
 
@@ -492,6 +638,60 @@ mod tests {
                 .expect_err("uninstalled plugin"),
             PluginCommandDiscoveryError::PluginNotInstalled { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn invokes_hidden_exact_backend_command_with_authoritative_separate_context() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_invoke");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        let task = database
+            .create_task("Task", "doing", Some(&project.id), None, None)
+            .expect("task");
+        seed_plugin(&database, "com.example.sync", true);
+        database
+            .set_plugin_enabled(&project.id, "com.example.sync", true)
+            .expect("enable plugin");
+        let runtime = FakeBackendCatalog {
+            descriptors: HashMap::from([(
+                "com.example.sync".to_string(),
+                vec![descriptor("com.example.sync", "hidden", false)],
+            )]),
+            invocation_result: json!({ "synced": 3 }),
+            ..Default::default()
+        };
+        let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
+        let input = json!({ "force": true });
+
+        let result = broker
+            .invoke(
+                &PluginCommandDiscoveryContext {
+                    task_id: Some(task.id.clone()),
+                    project_id: None,
+                },
+                "com.example.sync.hidden",
+                Some(input.clone()),
+            )
+            .await
+            .expect("invoke hidden command");
+
+        assert_eq!(result, json!({ "synced": 3 }));
+        assert_eq!(
+            runtime.invocations.lock().expect("invocations").as_slice(),
+            &[FakeInvocation {
+                plugin_id: "com.example.sync".to_string(),
+                project_id: project.id.clone(),
+                command_id: "com.example.sync.hidden".to_string(),
+                input: Some(input),
+                context: PluginCommandInvocationContext {
+                    task_id: Some(task.id),
+                    project_id: project.id,
+                    source: PluginCommandInvocationSource::AgentCli,
+                },
+            }]
+        );
     }
 
     #[test]

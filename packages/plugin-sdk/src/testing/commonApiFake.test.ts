@@ -8,11 +8,17 @@ describe('TestingCommonApiFake', () => {
     const fake = new TestingCommonApiFake(services)
     const api = fake.createApi()
     const listener = vi.fn()
+    const handler = vi.fn(async () => 'ok')
 
-    api.commands.register({ id: 'sync', title: 'Sync', handler: async () => 'ok' })
+    api.commands.register({ id: 'sync', title: 'Sync', handler })
     api.events.on('sync.finished', listener)
 
     await expect(api.commands.invoke('sync')).resolves.toBe('ok')
+    expect(handler).toHaveBeenCalledWith(undefined, {
+      taskId: null,
+      projectId: 'project-1',
+      source: 'plugin',
+    })
     await api.events.emit('sync.finished', { count: 1 })
     await api.system.openUrl('https://openforge.dev')
 
