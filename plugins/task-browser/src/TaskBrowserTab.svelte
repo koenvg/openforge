@@ -10,6 +10,7 @@
     type BrowserTabSession,
   } from './browserTabSession'
   import VisualFeedbackEditor from './VisualFeedbackEditor.svelte'
+  import VisualFeedbackReview from './VisualFeedbackReview.svelte'
   import { getTaskVisualFeedbackEditor } from './visualFeedbackEditorRegistry'
   import { formatVisualFeedbackReport } from './visualFeedbackReport'
 
@@ -34,6 +35,7 @@
   let editingAddress = $state(false)
   let opening = $state(true)
   let actionError = $state<string | null>(null)
+  let reviewingFeedback = $state(false)
   function handleFeedbackError(error: string | null) {
     actionError = error
   }
@@ -74,6 +76,7 @@
     address = ''
     opening = true
     actionError = null
+    reviewingFeedback = false
 
     await Promise.allSettled([
       previousFeedbackEditor.setSurface(null),
@@ -142,11 +145,10 @@
 
   function sendFeedback() {
     const sendingTaskId = taskId
-    void feedbackEditor.send(async (annotations) => {
-      const task = await api.tasks.get(sendingTaskId)
-      if (task === null) throw new Error(`Task ${sendingTaskId} is no longer available`)
-      const message = formatVisualFeedbackReport(task, annotations)
+    void feedbackEditor.send(async (captures, annotations) => {
+      const message = formatVisualFeedbackReport(captures, annotations)
       await api.tasks.sendFollowUp({ taskId: sendingTaskId, message })
+      reviewingFeedback = false
     })
   }
 
@@ -242,7 +244,13 @@
       Go
     </button>
 
-    <VisualFeedbackEditor available={!opening && session !== null} editor={feedbackEditor} onSend={sendFeedback} />
+    <VisualFeedbackEditor
+      available={!opening && session !== null}
+      editor={feedbackEditor}
+      reviewing={reviewingFeedback}
+      onReview={() => { reviewingFeedback = !reviewingFeedback }}
+      onSend={sendFeedback}
+    />
   </form>
 
   <div class="flex min-h-6 items-center gap-2 border-b border-base-300 px-3 py-1 text-xs" aria-live="polite">
@@ -257,6 +265,14 @@
       <span class="truncate text-base-content/60">{surfaceState.title || surfaceState.url || 'Ready'}</span>
     {/if}
   </div>
+
+  {#if reviewingFeedback && feedbackEditor.annotations.length > 0}
+    <VisualFeedbackReview
+      captures={feedbackEditor.captures}
+      annotations={feedbackEditor.annotations}
+      onClose={() => { reviewingFeedback = false }}
+    />
+  {/if}
 
   <div bind:this={browserRegion} class="relative min-h-0 flex-1 overflow-hidden">
     {#if opening}

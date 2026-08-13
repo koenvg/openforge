@@ -78,6 +78,7 @@ export interface TestingOpenForgeApiCalls {
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
+  browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
   browserSurfaceCaptures: Array<{ taskId: string; id: string }>
   browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>

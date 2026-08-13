@@ -17,7 +17,7 @@ import type {
 
 export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
-  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop'> = []
+  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop' | 'clearVisualFeedback'> = []
   readonly captureCalls: Array<Record<string, never>> = []
   readonly bounds: TaskBrowserBounds[] = []
   readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
@@ -93,10 +93,15 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
     return {
       region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
       comment: 'Example visual feedback',
+      annotationNumber: 1,
     }
   }
 
   async cancelVisibleRegionSelection(): Promise<void> {
+  }
+
+  async clearVisualFeedback(): Promise<void> {
+    this.controlCalls.push('clearVisualFeedback')
   }
   async captureVisibleViewport() {
     this.captureCalls.push({})

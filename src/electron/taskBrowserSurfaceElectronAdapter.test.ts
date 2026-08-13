@@ -335,6 +335,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     await expect(surface.selectVisibleRegion()).resolves.toEqual({
       region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
       comment: 'Navigation spacing is unclear',
+      annotationNumber: 1,
     })
 
     const script = electronFakes.views[0].webContents.executeJavaScriptCalls.at(-1) ?? ''
@@ -347,6 +348,70 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     expect(script).toContain('pointer-events:none')
     expect(script).not.toContain('outerHTML')
     expect(script).not.toContain('querySelector')
+
+    await surface.loadURL('https://second.example/')
+    electronFakes.views[0].webContents.executeJavaScriptResult = {
+      region: { x: 0.2, y: 0.3, width: 0.2, height: 0.2 },
+      comment: 'Second page feedback',
+      annotation: { number: 2, x: 128, y: 144, width: 128, height: 96 },
+    }
+    await surface.selectVisibleRegion()
+    expect(electronFakes.views[0].webContents.executeJavaScriptCalls.at(-1)).toContain('const nextAnnotationNumber = 2')
+
+    await surface.clearVisualFeedback()
+    expect(electronFakes.views[0].webContents.executeJavaScriptCalls.at(-1)).toContain("document.getElementById('__openforge_visual_feedback_annotations__')?.remove()")
+  })
+
+  it('hides stale annotations during navigation and restores the destination URL annotations automatically', async () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-navigation-feedback',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 640, height: 480 })
+    const contents = electronFakes.views[0].webContents
+
+    await surface.loadURL('https://first.example/')
+    contents.executeJavaScriptResult = {
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      comment: 'First page feedback',
+      annotation: { number: 1, x: 64, y: 96, width: 192, height: 192 },
+    }
+    await surface.selectVisibleRegion()
+
+    await surface.loadURL('https://second.example/')
+    contents.executeJavaScriptResult = {
+      region: { x: 0.2, y: 0.3, width: 0.2, height: 0.2 },
+      comment: 'Second page feedback',
+      annotation: { number: 2, x: 128, y: 144, width: 128, height: 96 },
+    }
+    await surface.selectVisibleRegion()
+    contents.executeJavaScriptCalls.length = 0
+
+    contents.emit('will-navigate', { preventDefault: vi.fn() }, 'https://first.example/')
+    expect(contents.executeJavaScriptCalls.at(-1)).toContain("document.getElementById('__openforge_visual_feedback_annotations__')?.remove()")
+
+    contents.url = 'https://first.example/'
+    contents.emit('did-navigate')
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.at(-1)).toContain('First page feedback'))
+    expect(contents.executeJavaScriptCalls.at(-1)).not.toContain('Second page feedback')
+
+    contents.url = 'https://second.example/'
+    contents.emit('did-navigate-in-page')
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.at(-1)).toContain('Second page feedback'))
+    expect(contents.executeJavaScriptCalls.at(-1)).not.toContain('First page feedback')
+
+    contents.executeJavaScriptCalls.length = 0
+    contents.historyIndex = 1
+    contents.historyLength = 2
+    await surface.goBack()
+    expect(contents.executeJavaScriptCalls.at(-1)).toContain("document.getElementById('__openforge_visual_feedback_annotations__')?.remove()")
+
+    contents.url = 'https://first.example/'
+    contents.emit('did-navigate')
+    await vi.waitFor(() => expect(contents.executeJavaScriptCalls.at(-1)).toContain('First page feedback'))
   })
 
   it('captures only the current visible viewport as PNG with native dimensions', async () => {
@@ -363,6 +428,9 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
     const contents = electronFakes.views[0].webContents
     expect(contents.capturePageCalls).toEqual([undefined])
+    expect(contents.executeJavaScriptCalls).toHaveLength(2)
+    expect(contents.executeJavaScriptCalls[0]).toContain("annotations.style.visibility = \"hidden\"")
+    expect(contents.executeJavaScriptCalls[1]).toContain("annotations.style.visibility = \"\"")
     expect(capture).toEqual({
       png: Buffer.from('visible-viewport-png'),
       width: 640,

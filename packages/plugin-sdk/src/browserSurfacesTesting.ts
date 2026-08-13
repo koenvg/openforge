@@ -20,6 +20,7 @@ export interface TestingBrowserSurfaceCalls {
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
+  browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
   browserSurfaceCaptures: Array<{ taskId: string; id: string }>
   browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>
@@ -63,6 +64,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
   private readonly listeners = new Set<(state: TaskBrowserSurfaceState) => void>()
   private currentAttachment = 0
   private destroyed = false
+  private nextAnnotationNumber = 1
 
   constructor(
     readonly taskId: string,
@@ -167,11 +169,18 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     return {
       region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
       comment: 'Example visual feedback',
+      annotationNumber: this.nextAnnotationNumber++,
     }
   }
 
   async cancelVisibleRegionSelection(): Promise<void> {
     this.assertLive()
+  }
+
+  async clearVisualFeedback(): Promise<void> {
+    this.assertLive()
+    this.calls.browserSurfaceFeedbackClears.push({ taskId: this.taskId, id: this.id })
+    this.nextAnnotationNumber = 1
   }
 
   async captureVisibleViewport(): Promise<BrowserSurfaceCapture> {

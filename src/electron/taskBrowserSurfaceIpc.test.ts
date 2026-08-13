@@ -22,6 +22,7 @@ function managerFake() {
     reload: vi.fn(async () => ({ url: 'https://example.com' })),
     stop: vi.fn(async () => ({ url: 'https://example.com' })),
     selectVisibleRegion: vi.fn(async () => ({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })),
+    clearVisualFeedback: vi.fn(async () => undefined),
     captureVisibleViewport: vi.fn(async () => ({
       artifactId: 'capture-1', mediaType: 'image/png', width: 800, height: 600, dataUrl: 'data:image/png;base64,cG5n',
     })),
@@ -84,6 +85,9 @@ describe('Task Browser Surface IPC router', () => {
       value: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
     })
     expect(manager.selectVisibleRegion).toHaveBeenCalledWith({ windowId: 10, ...owner })
+
+    await expect(router.handle('task_browser_surface_clear_visual_feedback', owner, 10)).resolves.toMatchObject({ ok: true })
+    expect(manager.clearVisualFeedback).toHaveBeenCalledWith({ windowId: 10, ...owner })
 
     await expect(router.handle('task_browser_surface_capture_visible_viewport', owner, 10)).resolves.toMatchObject({
       ok: true,

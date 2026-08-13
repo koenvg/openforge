@@ -292,6 +292,14 @@ export class TaskBrowserSurfaceManager {
     this.assertCaptureSurfaceCurrent(surface, request.generation)
   }
 
+  async clearVisualFeedback(request: TaskBrowserSurfaceCaptureRequest): Promise<void> {
+    const surface = this.requireCaptureSurface(request)
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    await surface.native.clearVisualFeedback()
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+  }
+
   async captureVisibleViewport(request: TaskBrowserSurfaceCaptureRequest): Promise<TaskBrowserSurfaceCapture> {
     const surface = this.requireCaptureSurface(request)
     if (!surface.attached) {

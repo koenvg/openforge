@@ -193,6 +193,7 @@ describe('browser surfaces SDK contract', () => {
 
     const selection = await surface.selectVisibleRegion()
     const capture = await surface.captureVisibleViewport()
+    await surface.clearVisualFeedback()
 
     expect(capture).toEqual({
       artifactId: expect.stringMatching(/^capture-/),
@@ -208,9 +209,11 @@ describe('browser surfaces SDK contract', () => {
     expect(selection).toEqual({
       region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
       comment: 'Example visual feedback',
+      annotationNumber: 1,
     })
     expect(JSON.parse(JSON.stringify(capture))).toEqual(capture)
     expect(api.__testing.calls.browserSurfaceSelections).toEqual([{ taskId: 'T-capture', id: 'main' }])
+    expect(api.__testing.calls.browserSurfaceFeedbackClears).toEqual([{ taskId: 'T-capture', id: 'main' }])
     expect(api.__testing.calls.browserSurfaceCaptures).toEqual([{ taskId: 'T-capture', id: 'main' }])
 
     await surface.discardCapture(capture.artifactId)
