@@ -1,11 +1,17 @@
 #[cfg(test)]
 pub(super) use super::listener_runtime::unique_offered_endpoints;
 pub(crate) use super::listener_runtime::CompanionGatewayEndpoint;
+#[cfg(test)]
 use super::{
-    action_palette::{
-        CompanionActionPaletteService, DatabaseCompanionActionPaletteService,
-        UnavailableCompanionActionPaletteService,
-    },
+    action_palette::UnavailableCompanionActionPaletteService,
+    attention::UnavailableCompanionAttentionSource,
+    project_board::UnavailableCompanionProjectBoardSource,
+    tailscale::FixedTailscaleHostnameProvider, task_actions::UnavailableCompanionTaskActionService,
+    task_creation::UnavailableCompanionTaskCreator,
+    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
+};
+use super::{
+    action_palette::{CompanionActionPaletteService, DatabaseCompanionActionPaletteService},
     advertisement::{CompanionAdvertisement, CompanionAdvertiser, MdnsCompanionAdvertiser},
     attention::{CompanionAttentionSource, DatabaseCompanionAttentionSource},
     contract,
@@ -24,14 +30,6 @@ use super::{
     task_creation::{CompanionTaskCreator, DatabaseCompanionTaskCreator},
     task_detail::{CompanionTaskDetailSource, DatabaseCompanionTaskDetailSource},
     task_start::CompanionTaskStarter,
-};
-#[cfg(test)]
-use super::{
-    attention::UnavailableCompanionAttentionSource,
-    project_board::UnavailableCompanionProjectBoardSource,
-    tailscale::FixedTailscaleHostnameProvider, task_actions::UnavailableCompanionTaskActionService,
-    task_creation::UnavailableCompanionTaskCreator,
-    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::{
     app_events::AppEventBus,

@@ -19,6 +19,7 @@ pub(crate) enum CompanionTaskActionId {
 }
 
 impl CompanionTaskActionId {
+    #[cfg(test)]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::StartTask => "start_task",
@@ -43,8 +44,6 @@ pub(crate) enum CompanionProjectActionId {
 pub(crate) enum CompanionActionPaletteError {
     NotFound,
     InvalidTaskState,
-    OperationInProgress,
-    DesktopActionRequired,
     TemporarilyUnavailable,
 }
 
@@ -83,6 +82,7 @@ pub(crate) struct DatabaseCompanionActionPaletteService {
 }
 
 impl DatabaseCompanionActionPaletteService {
+    #[cfg(test)]
     pub(crate) fn new(database: Arc<Mutex<crate::db::Database>>) -> Self {
         Self::production(
             database,
@@ -445,9 +445,11 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub(crate) struct UnavailableCompanionActionPaletteService;
 
+#[cfg(test)]
 impl CompanionActionPaletteService for UnavailableCompanionActionPaletteService {
     fn available_actions(
         &self,
