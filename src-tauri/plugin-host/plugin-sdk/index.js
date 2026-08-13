@@ -404,6 +404,29 @@ function commandDescriptor(command) {
 		output: command.output
 	};
 }
+function normalizeAgentCommandMetadata(metadata) {
+	if (metadata === void 0) return void 0;
+	if (metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) throw new Error("commands registration agent metadata must be an object");
+	const candidate = metadata;
+	if (typeof candidate.description !== "string" || candidate.description.trim().length === 0) throw new Error("commands registration agent metadata requires a non-empty description");
+	if (candidate.examples !== void 0 && (!Array.isArray(candidate.examples) || !candidate.examples.every((example) => isJsonValue(example)))) throw new Error("commands registration agent metadata examples must contain only JSON values");
+	if (candidate.discoverable !== void 0 && typeof candidate.discoverable !== "boolean") throw new Error("commands registration agent metadata discoverable must be a boolean");
+	return {
+		description: candidate.description.trim(),
+		examples: candidate.examples ? [...candidate.examples] : [],
+		discoverable: candidate.discoverable ?? true
+	};
+}
+function isJsonValue(value, seen = /* @__PURE__ */ new Set()) {
+	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+	if (typeof value === "number") return Number.isFinite(value);
+	if (typeof value !== "object") return false;
+	if (seen.has(value)) return false;
+	seen.add(value);
+	const valid = Array.isArray(value) ? value.every((entry) => isJsonValue(entry, seen)) : Object.values(value).every((entry) => isJsonValue(entry, seen));
+	seen.delete(value);
+	return valid;
+}
 function assertLocalId(kind, id) {
 	if (typeof id !== "string" || id.trim().length === 0) throw new Error(`${kind} registration requires a non-empty id`);
 	const trimmed = id.trim();
@@ -750,9 +773,13 @@ var TestingCommonApiFake = class {
 		const qualifiedId = this.services.localQualifiedId("commands", registration.id);
 		assertTitle("commands", registration.title);
 		assertFunction("commands", "handler", registration.handler);
+		const agent = normalizeAgentCommandMetadata(registration.agent);
+		if (agent && registration.input !== void 0 && !isJsonValue(registration.input)) throw new Error("commands registration agent-facing input schema must be a JSON value");
+		if (agent && registration.output !== void 0 && !isJsonValue(registration.output)) throw new Error("commands registration agent-facing output schema must be a JSON value");
 		this.services.claims.claim("commands", qualifiedId);
 		const contribution = {
 			...registration,
+			agent,
 			id: registration.id.trim(),
 			title: registration.title.trim(),
 			qualifiedId,

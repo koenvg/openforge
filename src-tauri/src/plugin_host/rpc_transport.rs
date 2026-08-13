@@ -64,6 +64,33 @@ impl PluginHost {
         .await
     }
 
+    pub async fn list_agent_commands(
+        &self,
+        plugin_id: &str,
+        backend_path: &std::path::Path,
+        project_id: &str,
+    ) -> Result<Vec<crate::plugin_command_broker::AgentCommandDescriptor>, String> {
+        let params = json!({
+            "pluginId": plugin_id,
+            "backendPath": backend_path.to_string_lossy(),
+            "projectId": project_id,
+        });
+        let (request_id, request) =
+            crate::plugin_rpc::format_request("plugin", "commands.list", params);
+        let value = self
+            .send_request_and_wait(
+                request_id,
+                &request,
+                &format!("agent-facing Plugin Command discovery: {plugin_id}"),
+                &format!("discovering agent-facing Plugin Commands for {plugin_id}"),
+                crate::plugin_rpc::DEFAULT_TIMEOUT,
+            )
+            .await?;
+        serde_json::from_value(value).map_err(|error| {
+            format!("invalid agent-facing Plugin Command descriptors for {plugin_id}: {error}")
+        })
+    }
+
     pub async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
         let params = json!({ "pluginId": plugin_id });
         let (request_id, request) =

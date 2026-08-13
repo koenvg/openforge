@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -73,8 +73,8 @@ function buildCliBridgeTestEnv(env = {}) {
   return merged;
 }
 
-async function runCli(args, env = {}) {
-  return execFileAsync('node', [CLI_PATH, ...args], {
+async function runCli(args, env = {}, cliPath = CLI_PATH) {
+  return execFileAsync('node', [cliPath, ...args], {
     env: buildCliBridgeTestEnv(env),
   });
 }
@@ -136,7 +136,7 @@ async function writePlanFile(name, plan) {
   return planPath;
 }
 
-async function runCliAgainstRequestSequence(args, steps, env = {}) {
+async function runCliAgainstRequestSequence(args, steps, env = {}, cliPath = CLI_PATH) {
   const seenRequests = [];
   const server = createServer((req, res) => {
     const step = steps[seenRequests.length];
@@ -163,7 +163,7 @@ async function runCliAgainstRequestSequence(args, steps, env = {}) {
   const port = await listen(server);
 
   try {
-    const result = await runCli(args, { ...env, OPENFORGE_HTTP_PORT: String(port) });
+    const result = await runCli(args, { ...env, OPENFORGE_HTTP_PORT: String(port) }, cliPath);
     return { ...result, seenRequests };
   } catch (error) {
     error.seenRequests = seenRequests;
@@ -1630,4 +1630,102 @@ describe('OpenForge CLI', () => {
       await close(server);
     }
   });
-});
+
+  it('runs installed CLI Plugin Command discovery using explicit or Agent Session Task context', async () => {
+    const installDir = await mkdtemp(join(tmpdir(), 'openforge-installed-cli-'));
+    const installedCliPath = join(installDir, 'cli.js');
+    await writeFile(installedCliPath, await readFile(CLI_PATH, 'utf8'), 'utf8');
+    const listed = [{
+      qualifiedId: 'com.example.sync.run',
+      pluginId: 'com.example.sync',
+      runtime: 'backend',
+      description: 'Run synchronization.',
+      examples: [{ force: true }],
+      discoverable: true,
+    }];
+    const fromEnvironment = await runCliAgainstRequestSequence(
+      ['plugin', 'command', 'list'],
+      [{
+        method: 'POST',
+        url: '/plugin_commands/list',
+        response: listed,
+      }],
+      { OPENFORGE_TASK_ID: 'T-42' },
+      installedCliPath,
+    );
+
+    expect(fromEnvironment.seenRequests).toEqual([{
+      method: 'POST',
+      url: '/plugin_commands/list',
+      body: { taskId: 'T-42' },
+    }]);
+    expect(JSON.parse(fromEnvironment.stdout)).toEqual(listed);
+
+    const explicitProject = await runCliAgainstRequestSequence(
+      ['plugin', 'command', 'list', '--project-id', 'P-7'],
+      [{ method: 'POST', url: '/plugin_commands/list', response: listed }],
+      { OPENFORGE_TASK_ID: 'T-42' },
+      installedCliPath,
+    );
+    expect(explicitProject.seenRequests[0].body).toEqual({ projectId: 'P-7' });
+    await rm(installDir, { recursive: true, force: true });
+  });
+
+  it('describes an exact enabled backend Plugin Command including hidden commands', async () => {
+    const descriptor = {
+      qualifiedId: 'com.example.sync.hidden',
+      pluginId: 'com.example.sync',
+      runtime: 'backend',
+      input: { type: 'object' },
+      output: { type: 'boolean' },
+      description: 'Run a targeted repair.',
+      examples: [{}],
+      discoverable: false,
+    };
+
+    const result = await runCliAgainstJsonBridge([
+      'plugin',
+      'command',
+      'describe',
+      '--command-id',
+      'com.example.sync.hidden',
+      '--task-id',
+      'T-9',
+      '--project-id',
+      'P-1',
+    ], {
+      method: 'POST',
+      url: '/plugin_commands/describe',
+      expectedBody: {
+        commandId: 'com.example.sync.hidden',
+        taskId: 'T-9',
+        projectId: 'P-1',
+      },
+      response: descriptor,
+    });
+
+    expect(result).toEqual(descriptor);
+  });
+
+  it('rejects Plugin Command discovery without Task or Project context before contacting the bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli(['plugin', 'command', 'list'], {
+        OPENFORGE_HTTP_PORT: String(port),
+        OPENFORGE_TASK_ID: '',
+      })).rejects.toMatchObject({
+        stderr: expect.stringContaining('plugin command discovery requires --task-id or --project-id'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+})

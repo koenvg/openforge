@@ -456,6 +456,37 @@ async function reloadPlugin(flags) {
   }));
 }
 
+function pluginCommandContext(flags) {
+  const projectId = optionalString(flags, 'projectId');
+  const explicitTaskId = optionalString(flags, 'taskId');
+  const environmentTaskId = typeof process.env.OPENFORGE_TASK_ID === 'string' && process.env.OPENFORGE_TASK_ID.length > 0
+    ? process.env.OPENFORGE_TASK_ID
+    : undefined;
+  const taskId = explicitTaskId ?? (projectId === undefined ? environmentTaskId : undefined);
+  if (!taskId && !projectId) {
+    throw new Error('plugin command discovery requires --task-id or --project-id');
+  }
+  return { taskId, projectId };
+}
+
+async function listPluginCommands(flags) {
+  printJson(await requestJson('/plugin_commands/list', {
+    method: 'POST',
+    body: JSON.stringify(pluginCommandContext(flags)),
+  }));
+}
+
+async function describePluginCommand(flags) {
+  const payload = {
+    commandId: requireFlag(flags, 'commandId'),
+    ...pluginCommandContext(flags),
+  };
+  printJson(await requestJson('/plugin_commands/describe', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }));
+}
+
 const COMMAND_SPECS = [
   {
     path: ['task', 'create'],
@@ -552,6 +583,18 @@ const COMMAND_SPECS = [
     flags: ['projectId'],
     usage: 'openforge project labels list --project-id <id>',
     handler: listProjectLabels,
+  },
+  {
+    path: ['plugin', 'command', 'list'],
+    flags: ['taskId', 'projectId'],
+    usage: 'openforge plugin command list [--task-id <id> | --project-id <id>]',
+    handler: listPluginCommands,
+  },
+  {
+    path: ['plugin', 'command', 'describe'],
+    flags: ['commandId', 'taskId', 'projectId'],
+    usage: 'openforge plugin command describe --command-id <qualified-id> [--task-id <id> | --project-id <id>]',
+    handler: describePluginCommand,
   },
   {
     path: ['plugin', 'install'],
