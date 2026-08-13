@@ -386,6 +386,30 @@ impl<'a> PluginPlatform<'a> {
             .await
     }
 
+    pub(crate) async fn invoke_agent_command(
+        &self,
+        plugin_id: &str,
+        project_id: &str,
+        command_id: &str,
+        input: Option<Value>,
+        context: crate::plugin_command_broker::PluginCommandInvocationContext,
+    ) -> Result<Value, String> {
+        let backend_path = self.resolve_installed_backend_path(plugin_id)?;
+        let plugin_host = self
+            .plugin_host
+            .ok_or_else(|| "plugin host state is not available".to_string())?;
+        plugin_host
+            .invoke_agent_command(
+                plugin_id,
+                &backend_path,
+                project_id,
+                command_id,
+                input,
+                context,
+            )
+            .await
+    }
+
     pub(crate) async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
         let plugin_host = self
             .plugin_host

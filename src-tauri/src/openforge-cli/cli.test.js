@@ -96,7 +96,7 @@ function close(server) {
   });
 }
 
-async function runCliAgainstJsonBridge(args, { url, method = 'GET', response = { ok: true }, expectedBody = null } = {}) {
+async function runCliAgainstJsonBridge(args, { url, method = 'GET', response = { ok: true }, expectedBody = null, env = {} } = {}) {
   let seenRequest = null;
   const server = createServer((req, res) => {
     if (req.url !== url || req.method !== method) {
@@ -122,7 +122,7 @@ async function runCliAgainstJsonBridge(args, { url, method = 'GET', response = {
   const port = await listen(server);
 
   try {
-    const { stdout } = await runCli(args, { OPENFORGE_HTTP_PORT: String(port) });
+    const { stdout } = await runCli(args, { ...env, OPENFORGE_HTTP_PORT: String(port) });
     expect(seenRequest).toEqual({ method, url, body: expectedBody });
     return JSON.parse(stdout);
   } finally {
@@ -1668,6 +1668,23 @@ describe('OpenForge CLI', () => {
       installedCliPath,
     );
     expect(explicitProject.seenRequests[0].body).toEqual({ projectId: 'P-7' });
+    const invoked = await runCliAgainstRequestSequence(
+      [
+        'plugin', 'command', 'invoke',
+        '--command-id', 'com.example.sync.run',
+        '--input', '{"force":true}',
+      ],
+      [{ method: 'POST', url: '/plugin_commands/invoke', response: { synced: 3 } }],
+      { OPENFORGE_TASK_ID: 'T-42' },
+      installedCliPath,
+    );
+    expect(invoked.seenRequests[0].body).toEqual({
+      commandId: 'com.example.sync.run',
+      taskId: 'T-42',
+      input: { force: true },
+    });
+    expect(JSON.parse(invoked.stdout)).toEqual({ synced: 3 });
+
     await rm(installDir, { recursive: true, force: true });
   });
 
@@ -1707,7 +1724,53 @@ describe('OpenForge CLI', () => {
     expect(result).toEqual(descriptor);
   });
 
-  it('rejects Plugin Command discovery without Task or Project context before contacting the bridge', async () => {
+  it('invokes an exact backend Plugin Command with JSON input and Agent Session Task context', async () => {
+    const result = await runCliAgainstJsonBridge([
+      'plugin',
+      'command',
+      'invoke',
+      '--command-id',
+      'com.example.sync.run',
+      '--input',
+      '{"force":true}',
+    ], {
+      method: 'POST',
+      url: '/plugin_commands/invoke',
+      expectedBody: {
+        commandId: 'com.example.sync.run',
+        taskId: 'T-42',
+        input: { force: true },
+      },
+      response: { synced: 3 },
+      env: { OPENFORGE_TASK_ID: 'T-42' },
+    });
+
+    expect(result).toEqual({ synced: 3 });
+  });
+
+  it('invokes a project-scoped Plugin Command without plugin input', async () => {
+    const result = await runCliAgainstJsonBridge([
+      'plugin',
+      'command',
+      'invoke',
+      '--command-id',
+      'com.example.sync.status',
+      '--project-id',
+      'P-7',
+    ], {
+      method: 'POST',
+      url: '/plugin_commands/invoke',
+      expectedBody: {
+        commandId: 'com.example.sync.status',
+        projectId: 'P-7',
+      },
+      response: { ready: true },
+    });
+
+    expect(result).toEqual({ ready: true });
+  });
+
+  it('rejects invalid Plugin Command context and JSON before contacting the bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
       requestCount += 1;
@@ -1722,6 +1785,16 @@ describe('OpenForge CLI', () => {
         OPENFORGE_TASK_ID: '',
       })).rejects.toMatchObject({
         stderr: expect.stringContaining('plugin command discovery requires --task-id or --project-id'),
+      });
+      await expect(runCli([
+        'plugin', 'command', 'invoke',
+        '--command-id', 'com.example.sync.run',
+        '--input', '{invalid',
+        '--task-id', 'T-42',
+      ], {
+        OPENFORGE_HTTP_PORT: String(port),
+      })).rejects.toMatchObject({
+        stderr: expect.stringContaining('invalid --input JSON'),
       });
       expect(requestCount).toBe(0);
     } finally {

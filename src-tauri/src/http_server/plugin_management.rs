@@ -51,6 +51,23 @@ pub struct DescribePluginCommandRequest {
     pub project_id: Option<String>,
 }
 
+fn deserialize_present_json<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    serde_json::Value::deserialize(deserializer).map(Some)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvokePluginCommandRequest {
+    pub command_id: String,
+    pub task_id: Option<String>,
+    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present_json")]
+    pub input: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ReloadPluginResponse {
     pub plugin_id: String,
@@ -70,6 +87,10 @@ pub(super) fn router() -> Router<AppState> {
         .route(
             "/plugin_commands/describe",
             post(describe_plugin_command_handler),
+        )
+        .route(
+            "/plugin_commands/invoke",
+            post(invoke_plugin_command_handler),
         )
 }
 
@@ -141,6 +162,23 @@ async fn describe_plugin_command_handler(
     };
     broker
         .describe(&context, &request.command_id)
+        .await
+        .map(Json)
+        .map_err(map_plugin_command_error)
+}
+
+async fn invoke_plugin_command_handler(
+    State(state): State<AppState>,
+    Json(request): Json<InvokePluginCommandRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let platform = http_plugin_platform(&state, false)?;
+    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    let context = PluginCommandDiscoveryContext {
+        task_id: request.task_id,
+        project_id: request.project_id,
+    };
+    broker
+        .invoke(&context, &request.command_id, request.input)
         .await
         .map(Json)
         .map_err(map_plugin_command_error)
@@ -247,6 +285,24 @@ mod tests {
                 .expect("reload request");
         assert_eq!(reload.plugin_id, "plugin.test");
         assert_eq!(reload.project_id.as_deref(), Some("P-1"));
+
+        let missing_input: InvokePluginCommandRequest =
+            serde_json::from_str(r#"{"commandId":"plugin.test.run","projectId":"P-1"}"#)
+                .expect("missing input request");
+        assert_eq!(missing_input.input, None);
+        let null_input: InvokePluginCommandRequest = serde_json::from_str(
+            r#"{"commandId":"plugin.test.run","projectId":"P-1","input":null}"#,
+        )
+        .expect("null input request");
+        assert_eq!(null_input.input, Some(serde_json::Value::Null));
+        let object_input: InvokePluginCommandRequest = serde_json::from_str(
+            r#"{"commandId":"plugin.test.run","projectId":"P-1","input":{"force":true}}"#,
+        )
+        .expect("object input request");
+        assert_eq!(
+            object_input.input,
+            Some(serde_json::json!({ "force": true }))
+        );
     }
 
     #[test]

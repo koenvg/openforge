@@ -206,7 +206,11 @@ export class RuntimeCommonApiRegistry {
       throw new Error(`Unknown command: ${qualifiedId}`)
     }
     validateSchemaValue(command.input, payload, `${qualifiedId} input`)
-    const output = await command.handler(payload)
+    const output = await command.handler(payload, {
+      taskId: null,
+      projectId: command.projectId,
+      source: 'plugin',
+    })
     validateSchemaValue(command.output, output, `${qualifiedId} output`)
     return output as TOutput
   }

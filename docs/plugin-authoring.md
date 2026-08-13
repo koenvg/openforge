@@ -239,6 +239,18 @@ The two visibility flags serve different audiences:
 Discovery requires Task or Project context. `--task-id` resolves the Task's authoritative Project, while `--project-id` selects Project scope directly. Inside an Implementation Run, `openforge plugin command list` defaults Task context from `OPENFORGE_TASK_ID`. OpenForge rejects missing or conflicting context and returns only commands whose Trusted Plugin is installed, enabled for the resolved Project, and provides a backend runtime.
 
 Descriptions are serializable guidance only. Discovery returns qualified command and plugin identifiers, the `backend` runtime requirement, schemas, description, examples, and catalog visibility; executable handlers never cross the runtime boundary.
+
+Invoke an exact backend command with `openforge plugin command invoke --command-id <plugin-id>.<command-id> [--input '<json>']` and the same Task/Project context flags. OpenForge validates input before the handler and output after it. The handler receives plugin-owned input as its first argument and a separate host-owned context as its second argument:
+
+```ts
+handler: async (input, invocation) => {
+  // invocation = { taskId: string | null, projectId: string | null, source: 'agent-cli' | 'plugin' }
+  return synchronize(input, invocation.projectId)
+}
+```
+
+For Agent CLI invocation, `source` is `agent-cli`, Project identity is resolved authoritatively, and Task identity is present only in Task scope. OpenForge never mutates plugin input to inject context. Existing one-argument handlers remain compatible because JavaScript handlers may ignore the second argument.
+
 ## Capabilities
 
 Capabilities are host APIs exposed through the `openforge` object. Unsupported calls fail with named capability errors; they are not no-ops.

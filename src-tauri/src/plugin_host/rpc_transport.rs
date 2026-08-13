@@ -91,6 +91,37 @@ impl PluginHost {
         })
     }
 
+    pub async fn invoke_agent_command(
+        &self,
+        plugin_id: &str,
+        backend_path: &std::path::Path,
+        project_id: &str,
+        command_id: &str,
+        input: Option<Value>,
+        context: crate::plugin_command_broker::PluginCommandInvocationContext,
+    ) -> Result<Value, String> {
+        let mut params = json!({
+            "pluginId": plugin_id,
+            "backendPath": backend_path.to_string_lossy(),
+            "projectId": project_id,
+            "commandId": command_id,
+            "context": context,
+        });
+        if let Some(input) = input {
+            params["input"] = input;
+        }
+        let (request_id, request) =
+            crate::plugin_rpc::format_request("plugin", "commands.invoke", params);
+        self.send_request_and_wait(
+            request_id,
+            &request,
+            &format!("agent-facing Plugin Command response: {command_id}"),
+            &format!("invoking agent-facing Plugin Command {command_id}"),
+            crate::plugin_rpc::DEFAULT_TIMEOUT,
+        )
+        .await
+    }
+
     pub async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
         let params = json!({ "pluginId": plugin_id });
         let (request_id, request) =

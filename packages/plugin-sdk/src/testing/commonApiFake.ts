@@ -272,7 +272,11 @@ export class TestingCommonApiFake {
     this.services.calls.globalCommandInvocations.push({ qualifiedId, payload })
     const command = this.commands.get(qualifiedId)
     if (!command) throw new Error(`Unknown command: ${qualifiedId}`)
-    return await command.handler(payload) as TOutput
+    return await command.handler(payload, {
+      taskId: null,
+      projectId: command.projectId,
+      source: 'plugin',
+    }) as TOutput
   }
 
   private async emitEvent<TPayload>(event: string, payload: TPayload, global: boolean): Promise<void> {

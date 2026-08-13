@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
-import type { AgentCommandDescriptor, AgentCommandMetadata, AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
+import type { AgentCommandDescriptor, AgentCommandMetadata, AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginCommandInvocationContext, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -71,6 +71,12 @@ type InvokeBackendInput = {
   projectId?: string | null
   packageMetadata?: OpenForgePackageMetadata
   payload?: unknown
+}
+
+type InvokeAgentCommandInput = ActivateBackendInput & {
+  commandId: string
+  input?: unknown
+  context: PluginCommandInvocationContext
 }
 
 type RuntimeBackendService = BackgroundServiceRegistration & {
@@ -333,6 +339,30 @@ function isJsonRpcResponse(value: JsonRpcRequest | JsonRpcResponse): value is Js
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function requireAgentInvocationContext(value: unknown, projectId: string | null | undefined): PluginCommandInvocationContext {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new RuntimeValidationError('commands', 'agent invocation context must be an object')
+  }
+  const context = value as Partial<PluginCommandInvocationContext>
+  if (context.taskId !== null && !isNonEmptyString(context.taskId)) {
+    throw new RuntimeValidationError('commands', 'agent invocation context taskId must be a non-empty string or null')
+  }
+  if (!isNonEmptyString(context.projectId)) {
+    throw new RuntimeValidationError('commands', 'agent invocation context requires a non-empty projectId')
+  }
+  if (context.source !== 'agent-cli') {
+    throw new RuntimeValidationError('commands', 'agent invocation context source must be agent-cli')
+  }
+  if (projectId !== context.projectId) {
+    throw new RuntimeValidationError('commands', `agent invocation context Project ${context.projectId} does not match activated Project ${projectId ?? 'none'}`)
+  }
+  return {
+    taskId: context.taskId,
+    projectId: context.projectId,
+    source: context.source,
+  }
 }
 
 function assertLocalId(kind: 'backend' | 'background' | 'commands' | 'events', id: unknown): asserts id is string {
@@ -630,6 +660,36 @@ export class PluginHostRuntime {
     return this.invokeGlobalCommand(`${input.pluginId}.${input.command.trim()}`, input.payload, input.pluginId)
   }
 
+  async invokeAgentCommand(input: InvokeAgentCommandInput): Promise<unknown> {
+    assertLocalId('commands', input.pluginId)
+    if (!isNonEmptyString(input.commandId)) {
+      throw new RuntimeValidationError('commands', 'agent invocation requires a qualified commandId')
+    }
+    await this.whenBackendReady(input)
+
+    const state = this.getOrCreateState(input.pluginId)
+    if (state.state !== 'ready') {
+      throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+    }
+    const prefix = `${input.pluginId}.`
+    const localId = input.commandId.startsWith(prefix) ? input.commandId.slice(prefix.length) : ''
+    const command = localId ? state.commands.get(localId) : undefined
+    if (!command || command.qualifiedId !== input.commandId || !command.agent) {
+      throw new Error(`Unknown agent-facing Plugin Command: ${input.commandId}`)
+    }
+    const invocationContext = requireAgentInvocationContext(input.context, input.projectId)
+    validateSchemaValue(command.input, input.input, `${input.commandId} input`)
+    try {
+      const result = await withPluginConsole(command.pluginId, async () => await command.handler(input.input as never, invocationContext))
+      validateSchemaValue(command.output, result, `${input.commandId} output`)
+      return result
+    } catch (error) {
+      const pluginError = toError(error)
+      logPluginHostError(command.pluginId, `agent command error in ${input.commandId}: ${pluginError.message}`)
+      throw pluginError
+    }
+  }
+
   async invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown> {
     const command = globalCommands.get(qualifiedId)
     if (!command) {
@@ -640,7 +700,8 @@ export class PluginHostRuntime {
     }
     validateSchemaValue(command.input, payload, `${qualifiedId} input`)
     try {
-      const result = await withPluginConsole(command.pluginId, async () => await command.handler(payload as never))
+      const invocationContext: PluginCommandInvocationContext = { taskId: null, projectId: command.projectId, source: 'plugin' }
+      const result = await withPluginConsole(command.pluginId, async () => await command.handler(payload as never, invocationContext))
       validateSchemaValue(command.output, result, `${qualifiedId} output`)
       return result
     } catch (error) {
@@ -695,6 +756,8 @@ export class PluginHostRuntime {
           return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
         case 'plugin.commands.list':
           return { jsonrpc: '2.0', id: request.id, result: await this.listAgentCommands(this.requireActivationParams(params)) }
+        case 'plugin.commands.invoke':
+          return { jsonrpc: '2.0', id: request.id, result: await this.invokeAgentCommand(this.requireAgentCommandParams(params)) }
         case 'plugin.backend.invoke':
           return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
         default:
@@ -1048,6 +1111,22 @@ export class PluginHostRuntime {
     }
   }
 
+  private requireAgentCommandParams(params: JsonRpcRequest['params']): InvokeAgentCommandInput {
+    const commandId = params?.commandId
+    if (!isNonEmptyString(commandId)) {
+      throw new Error('Missing qualified agent Plugin Command commandId')
+    }
+    return {
+      pluginId: this.requirePluginId(params),
+      backendPath: params?.backendPath,
+      projectId: params?.projectId,
+      packageMetadata: params?.packageMetadata,
+      commandId,
+      input: params?.input,
+      context: params?.context as PluginCommandInvocationContext,
+    }
+  }
+
   private requireInvokeParams(params: JsonRpcRequest['params'], rpcMethod: string | undefined): InvokeBackendInput {
     const pluginId = this.requirePluginId(params)
     const command = isNonEmptyString(params?.command)
@@ -1075,9 +1154,9 @@ export class PluginHostRuntime {
   }
 
   private errorCodeFor(error: unknown): number {
-    const message = toError(error).message
-    if (message.includes('not found')) return -32601
-    if (message.includes('Missing') || message.includes('Invalid') || message.includes('requires')) return -32602
+    const message = toError(error).message.toLowerCase()
+    if (message.includes('not found') || message.startsWith('unknown ')) return -32601
+    if (message.includes('missing') || message.includes('invalid') || message.includes('requires')) return -32602
     return -32603
   }
 }

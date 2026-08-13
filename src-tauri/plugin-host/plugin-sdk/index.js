@@ -832,7 +832,11 @@ var TestingCommonApiFake = class {
 		});
 		const command = this.commands.get(qualifiedId);
 		if (!command) throw new Error(`Unknown command: ${qualifiedId}`);
-		return await command.handler(payload);
+		return await command.handler(payload, {
+			taskId: null,
+			projectId: command.projectId,
+			source: "plugin"
+		});
 	}
 	async emitEvent(event, payload, global) {
 		const qualifiedEvent = global ? event : this.services.localQualifiedId("events", event);

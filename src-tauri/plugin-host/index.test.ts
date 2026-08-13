@@ -740,6 +740,151 @@ describe('plugin-host backend runtime', () => {
     expect(descriptors.every(descriptor => !('handler' in descriptor))).toBe(true)
   })
 
+  it('invokes only agent-facing backend commands with separate host-owned context', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.commands.register({
+            id: 'sync',
+            title: 'Sync',
+            agent: { description: 'Synchronize a project.' },
+            input: {
+              type: 'object',
+              required: ['force'],
+              additionalProperties: false,
+              properties: { force: { type: 'boolean' } }
+            },
+            output: {
+              type: 'object',
+              required: ['input', 'context'],
+              properties: {
+                input: { type: 'object' },
+                context: {
+                  type: 'object',
+                  required: ['taskId', 'projectId', 'source'],
+                  properties: {
+                    taskId: { type: 'string' },
+                    projectId: { type: 'string' },
+                    source: { const: 'agent-cli' }
+                  }
+                }
+              }
+            },
+            handler(input, invocationContext) {
+              return { input, context: invocationContext }
+            }
+          }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'ordinary',
+            title: 'Ordinary',
+            handler() { return { shouldNotRun: true } }
+          }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'fail',
+            title: 'Fail',
+            agent: { description: 'Fail explicitly.' },
+            handler() { throw new Error('sync exploded') }
+          }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'bad-output',
+            title: 'Bad output',
+            agent: { description: 'Return invalid output.' },
+            output: { type: 'boolean' },
+            handler() { return 'not a boolean' }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+    const response = await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 101,
+      method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend',
+        backendPath,
+        projectId: 'P-1',
+        commandId: 'backend.sync',
+        input: { force: true },
+        context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
+      },
+    })
+
+    expect(response).toEqual({
+      jsonrpc: '2.0',
+      id: 101,
+      result: {
+        input: { force: true },
+        context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
+      },
+    })
+
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 102,
+      method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend',
+        backendPath,
+        projectId: 'P-1',
+        commandId: 'backend.sync',
+        input: {},
+        context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
+      },
+    })).resolves.toMatchObject({
+      error: { message: expect.stringMatching(/backend\.sync input.*force/i) },
+    })
+
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 103,
+      method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend',
+        backendPath,
+        projectId: 'P-1',
+        commandId: 'backend.sync',
+        input: { force: true },
+        context: { taskId: 'T-42', projectId: 'P-2', source: 'agent-cli' },
+      },
+    })).resolves.toMatchObject({
+      error: { message: 'commands registration agent invocation context Project P-2 does not match activated Project P-1' },
+    })
+
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 104,
+      method: 'plugin.commands.invoke',
+      params: {
+        pluginId: 'backend',
+        backendPath,
+        projectId: 'P-1',
+        commandId: 'backend.ordinary',
+        context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
+      },
+    })).resolves.toMatchObject({
+      error: { message: 'Unknown agent-facing Plugin Command: backend.ordinary' },
+    })
+
+    for (const [id, commandId, message] of [
+      [105, 'backend.fail', 'sync exploded'],
+      [106, 'backend.bad-output', 'backend.bad-output output expected boolean'],
+    ] as const) {
+      await expect(runtime.handleJsonRpcRequest({
+        jsonrpc: '2.0',
+        id,
+        method: 'plugin.commands.invoke',
+        params: {
+          pluginId: 'backend',
+          backendPath,
+          projectId: 'P-1',
+          commandId,
+          context: { taskId: 'T-42', projectId: 'P-1', source: 'agent-cli' },
+        },
+      })).resolves.toMatchObject({ error: { message: expect.stringContaining(message) } })
+    }
+  })
+
   it('rejects non-serializable schemas on agent-facing command registrations', async () => {
     const backendPath = await writeBackendModule(`
       export default {
