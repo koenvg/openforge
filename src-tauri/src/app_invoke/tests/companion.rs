@@ -56,7 +56,10 @@ async fn companion_gateway_commands_persist_opt_in_and_report_lifecycle_state() 
     let qr: serde_json::Value =
         serde_json::from_str(pairing["qrPayload"].as_str().expect("pairing QR payload"))
             .expect("pairing QR JSON");
-    assert_eq!(qr["protocolVersion"], 1);
+    assert_eq!(
+        qr["protocolVersion"],
+        crate::companion_gateway::PROTOCOL_VERSION
+    );
     assert_eq!(qr["hostId"], running["hostId"]);
     assert_eq!(
         qr.as_object()

@@ -37,7 +37,7 @@ final class _EndpointAwareTransport implements CompanionV1Transport {
       return const CompanionV1HttpResponse(
         statusCode: 200,
         body:
-            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":1,"serverTime":"2026-08-01T12:00:00Z"}',
+            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":2,"serverTime":"2026-08-01T12:00:00Z"}',
       );
     }
     return const CompanionV1HttpResponse(

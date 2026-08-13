@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../generated/companion_v1_client.dart';
+
 final class PairingBootstrap {
   PairingBootstrap({
     required this.protocolVersion,
@@ -40,7 +42,7 @@ final class PairingBootstrap {
         .map(Uri.parse)
         .toList(growable: false);
     final normalizedFingerprint = certificateSha256.replaceAll(':', '');
-    if (protocolVersion != 1 ||
+    if (protocolVersion.toString() != companionV1ProtocolVersion ||
         hostId.isEmpty ||
         !RegExp(r'^[0-9A-Fa-f]{64}$').hasMatch(normalizedFingerprint) ||
         endpointCandidates.isEmpty ||

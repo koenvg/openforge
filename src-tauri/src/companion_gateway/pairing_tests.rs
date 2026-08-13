@@ -1,5 +1,5 @@
 use super::{
-    contract::{create_router, CompanionErrorEnvelope, CompanionHostStatus},
+    contract::{create_router, CompanionErrorEnvelope, CompanionHostStatus, PROTOCOL_VERSION},
     devices::{CompanionDeviceStore, DatabaseCompanionDeviceStore},
     pairing::{PairingBootstrap, PairingCoordinator, PairingDecision},
 };
@@ -59,7 +59,7 @@ fn shared_dart_fixtures_conform_to_the_openapi_schemas() {
 
 fn bootstrap() -> PairingBootstrap {
     PairingBootstrap {
-        protocol_version: 1,
+        protocol_version: PROTOCOL_VERSION,
         host_id: HOST_ID.to_string(),
         certificate_sha256: FINGERPRINT.to_string(),
         endpoint_candidates: vec![ENDPOINT.to_string()],
@@ -280,7 +280,7 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
     assert_eq!(status_response.status(), StatusCode::OK);
     let status_json = response_json(status_response).await;
     assert_eq!(status_json["hostId"], HOST_ID);
-    assert_eq!(status_json["protocolVersion"], 1);
+    assert_eq!(status_json["protocolVersion"], PROTOCOL_VERSION);
 
     let devices = coordinator.devices().expect("paired devices");
     assert_eq!(devices.len(), 1);

@@ -3,7 +3,7 @@ use super::{
     contract::{
         create_router, create_router_with_sources_event_access_and_pty, AllowAllAuthorizer,
         CompanionAuthorizer, CompanionErrorCode, CompanionHostStatus, CompanionRouterSources,
-        PairingUnavailableAuthorizer, PROTOCOL_VERSION_HEADER,
+        PairingUnavailableAuthorizer, PROTOCOL_VERSION, PROTOCOL_VERSION_HEADER,
     },
     devices::InMemoryCompanionDeviceStore,
     live_events::{CompanionStreamAccess, CompanionStreamTermination},
@@ -38,6 +38,13 @@ fn upgrade_request(protocol_version: Option<&str>) -> Request<Body> {
     request.body(Body::empty()).expect("upgrade request")
 }
 
+fn current_protocol_version_header() -> axum::http::HeaderValue {
+    PROTOCOL_VERSION
+        .to_string()
+        .parse()
+        .expect("protocol version")
+}
+
 type TestTerminalSocket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -51,10 +58,9 @@ async fn connect_terminal(address: std::net::SocketAddr) -> TestTerminalSocket {
             .parse()
             .expect("authorization"),
     );
-    request.headers_mut().insert(
-        PROTOCOL_VERSION_HEADER,
-        "1".parse().expect("protocol version"),
-    );
+    request
+        .headers_mut()
+        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
     tokio_tungstenite::connect_async(request)
         .await
         .expect("WebSocket upgrade")
@@ -105,12 +111,13 @@ async fn agent_terminal_upgrade_requires_device_authorization_and_protocol_versi
     .expect("incompatible response");
     assert_eq!(incompatible.status(), axum::http::StatusCode::CONFLICT);
 
+    let protocol_version = PROTOCOL_VERSION.to_string();
     let accepted = create_router(
         CompanionHostStatus::new("65d91f21-6732-45a6-9418-3dfaf4c93f52".to_string()),
         Arc::new(AllowAllAuthorizer),
         pairing(),
     )
-    .oneshot(upgrade_request(Some("1")))
+    .oneshot(upgrade_request(Some(&protocol_version)))
     .await
     .expect("upgrade response");
     // tower::oneshot has no hyper OnUpgrade extension; reaching 426 proves
@@ -193,10 +200,9 @@ async fn authenticated_websocket_revalidates_no_active_agent_terminal() {
             .parse()
             .expect("authorization"),
     );
-    request.headers_mut().insert(
-        PROTOCOL_VERSION_HEADER,
-        "1".parse().expect("protocol version"),
-    );
+    request
+        .headers_mut()
+        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
 
     let (mut socket, _) = tokio_tungstenite::connect_async(request)
         .await
@@ -251,10 +257,9 @@ async fn terminal_websocket_rejects_oversized_text_and_binary_frames() {
                 .parse()
                 .expect("authorization"),
         );
-        request.headers_mut().insert(
-            PROTOCOL_VERSION_HEADER,
-            "1".parse().expect("protocol version"),
-        );
+        request
+            .headers_mut()
+            .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
         let (mut socket, _) = tokio_tungstenite::connect_async(request)
             .await
             .expect("WebSocket upgrade");
@@ -521,10 +526,9 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
             .parse()
             .expect("authorization"),
     );
-    request.headers_mut().insert(
-        PROTOCOL_VERSION_HEADER,
-        "1".parse().expect("protocol version"),
-    );
+    request
+        .headers_mut()
+        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
     let (mut socket, _) = tokio_tungstenite::connect_async(request)
         .await
         .expect("WebSocket upgrade");
@@ -569,10 +573,9 @@ fn authenticated_terminal_request(address: std::net::SocketAddr) -> axum::http::
             .parse()
             .expect("authorization"),
     );
-    request.headers_mut().insert(
-        PROTOCOL_VERSION_HEADER,
-        "1".parse().expect("protocol version"),
-    );
+    request
+        .headers_mut()
+        .insert(PROTOCOL_VERSION_HEADER, current_protocol_version_header());
     request
 }
 

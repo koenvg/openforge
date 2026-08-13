@@ -6,9 +6,9 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '4cc9e91d89e4dcf3566f02189a81d68575645c12cbe3e25ce2b8ffca3a3a42e7';
+    'f3e9e63509a646f0b9170f0ce599ed93e0f8b46c566c239bc06706dd04b221a1';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
-const companionV1ProtocolVersion = '1';
+const companionV1ProtocolVersion = '2';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({
@@ -328,7 +328,7 @@ final class HostStatus {
     _expectOnly(json, const <String>{'hostId', 'protocolVersion', 'serverTime'});
     final model = HostStatus(
       hostId: _required(json, 'hostId', (value) => _asString(value, 'hostId')),
-      protocolVersion: _required(json, 'protocolVersion', (value) => _asInt(value, 'protocolVersion', constant: 1)),
+      protocolVersion: _required(json, 'protocolVersion', (value) => _asInt(value, 'protocolVersion', constant: 2)),
       serverTime: _required(json, 'serverTime', (value) => _asDateTime(value, 'serverTime')),
     );
     return model;

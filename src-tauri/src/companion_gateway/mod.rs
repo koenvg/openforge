@@ -45,6 +45,8 @@ pub(crate) fn tailscale_hostname_preference(
         .transpose()
 }
 
+#[cfg(test)]
+pub(crate) use contract::PROTOCOL_VERSION;
 pub(crate) use lifecycle::CompanionGatewayManager;
 pub(crate) use pairing::PairingDecision;
 pub(crate) use tailscale::normalize_magicdns_hostname;

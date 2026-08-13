@@ -262,7 +262,7 @@ void main() {
       );
 
       expect(status.hostId, '65d91f21-6732-45a6-9418-3dfaf4c93f52');
-      expect(status.protocolVersion, 1);
+      expect(status.protocolVersion, 2);
       expect(attention.items.single.taskId, 'KVG-2945');
       expect(attention.items.single.projectName, 'OpenForge');
       expect(attention.items.single.state, 'needs-input');
@@ -300,7 +300,7 @@ void main() {
       );
       expect(
         transport.requests[2].headers['openforge-companion-protocol-version'],
-        '1',
+        '2',
       );
       expect(transport.requests[3].uri.path, '/companion/v1/attention');
       expect(
@@ -309,7 +309,7 @@ void main() {
       );
       expect(
         transport.requests[3].headers['openforge-companion-protocol-version'],
-        '1',
+        '2',
       );
       expect(transport.requests[4].method, 'POST');
       expect(
@@ -330,7 +330,7 @@ void main() {
       );
       expect(
         transport.requests[5].headers['openforge-companion-protocol-version'],
-        '1',
+        '2',
       );
       expect(transport.requests[6].method, 'POST');
       expect(
@@ -351,7 +351,7 @@ void main() {
       expect(eventRequest.headers, <String, String>{
         'accept': 'text/event-stream',
         'authorization': 'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'openforge-companion-protocol-version': '1',
+        'openforge-companion-protocol-version': '2',
         'last-event-id': 'epoch:12',
       });
       expect(
@@ -380,7 +380,7 @@ void main() {
     expect(
       () => HostStatus.fromJson(<String, Object?>{
         'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-        'protocolVersion': 1,
+        'protocolVersion': 2,
         'serverTime': '2026-07-30T12:00:01Z',
         'unexpected': true,
       }),
@@ -591,7 +591,7 @@ void main() {
             const CompanionV1HttpResponse(
               statusCode: 200,
               body:
-                  '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":1,"serverTime":"2026-08-01T12:00:00Z"}',
+                  '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":2,"serverTime":"2026-08-01T12:00:00Z"}',
             ),
             const SocketException('uncertain mutation outcome'),
           ],
@@ -698,7 +698,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode(<String, Object>{
               'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-              'protocolVersion': 1,
+              'protocolVersion': 2,
               'serverTime': '2026-07-30T12:00:01Z',
             }),
           ),
@@ -770,7 +770,7 @@ void main() {
       const hostStatusResponse = CompanionV1HttpResponse(
         statusCode: 200,
         body:
-            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":1,"serverTime":"2026-08-01T09:00:00Z"}',
+            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":2,"serverTime":"2026-08-01T09:00:00Z"}',
       );
       final outcomes = <String, Object>{
         '192.168.1.20': never,
@@ -798,7 +798,7 @@ void main() {
         },
       );
       final bootstrap = PairingBootstrap(
-        protocolVersion: 1,
+        protocolVersion: 2,
         hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
         certificateSha256: 'trusted-pin',
         endpointCandidates: <Uri>[

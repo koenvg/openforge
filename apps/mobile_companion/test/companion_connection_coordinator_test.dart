@@ -77,7 +77,7 @@ void main() {
         attentionController: attention,
         liveUpdatesController: live,
         navigatorKey: navigatorKey,
-        initialState: const Connected(hostId: 'host-1', protocolVersion: 1),
+        initialState: const Connected(hostId: 'host-1', protocolVersion: 2),
       );
       addTearDown(pairing.dispose);
       addTearDown(board.dispose);
@@ -115,7 +115,7 @@ final class _LifecycleClient implements CompanionClient {
     endpoint: trustRecord.endpointCandidates.single,
     status: HostStatus(
       hostId: trustRecord.hostId,
-      protocolVersion: 1,
+      protocolVersion: 2,
       serverTime: DateTime.utc(2026, 1, 1),
     ),
   );

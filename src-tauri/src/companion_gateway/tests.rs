@@ -750,7 +750,10 @@ async fn advertisement_follows_gateway_enable_disable_and_shutdown_lifecycle() {
             state.announcements[0].host_id,
             first.host_id.clone().unwrap()
         );
-        assert_eq!(state.announcements[0].protocol_version, 1);
+        assert_eq!(
+            state.announcements[0].protocol_version,
+            super::contract::PROTOCOL_VERSION
+        );
         assert_eq!(
             state.announcements[0].addresses.as_slice(),
             &[IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)]
@@ -1348,7 +1351,7 @@ async fn incompatible_protocol_is_reported_only_after_device_authentication() {
     .oneshot(
         Request::builder()
             .uri("/companion/v1/status")
-            .header("openforge-companion-protocol-version", "2")
+            .header("openforge-companion-protocol-version", "1")
             .body(Body::empty())
             .expect("request"),
     )
@@ -1370,7 +1373,7 @@ async fn incompatible_protocol_is_reported_only_after_device_authentication() {
     .oneshot(
         Request::builder()
             .uri("/companion/v1/status")
-            .header("openforge-companion-protocol-version", "2")
+            .header("openforge-companion-protocol-version", "1")
             .body(Body::empty())
             .expect("request"),
     )
@@ -1406,7 +1409,10 @@ async fn authenticated_routes_apply_a_conservative_per_peer_rate_limit() {
             .oneshot(
                 Request::builder()
                     .uri("/companion/v1/status")
-                    .header("openforge-companion-protocol-version", "1")
+                    .header(
+                        super::contract::PROTOCOL_VERSION_HEADER,
+                        super::contract::PROTOCOL_VERSION.to_string(),
+                    )
                     .extension(peer)
                     .body(Body::empty())
                     .expect("request"),
@@ -1420,7 +1426,10 @@ async fn authenticated_routes_apply_a_conservative_per_peer_rate_limit() {
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/status")
-                .header("openforge-companion-protocol-version", "1")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
                 .extension(peer)
                 .body(Body::empty())
                 .expect("request"),

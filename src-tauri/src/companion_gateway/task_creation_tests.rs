@@ -1,7 +1,7 @@
 use super::{
     contract::{
         create_router_with_task_creation, AllowAllAuthorizer, CompanionHostStatus,
-        PairingUnavailableAuthorizer,
+        PairingUnavailableAuthorizer, PROTOCOL_VERSION, PROTOCOL_VERSION_HEADER,
     },
     devices::InMemoryCompanionDeviceStore,
     pairing::PairingCoordinator,
@@ -51,7 +51,7 @@ async fn paired_device_creates_a_backlog_task_in_the_visible_project() {
                 .method("POST")
                 .uri(format!("/companion/v1/projects/{}/tasks", project.id))
                 .header("content-type", "application/json")
-                .header("openforge-companion-protocol-version", "1")
+                .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
                 .body(Body::from(
                     r#"{"initialPrompt":"Investigate mobile creation"}"#,
                 ))
@@ -127,7 +127,7 @@ async fn task_creation_rejects_invalid_hidden_and_unauthenticated_requests_safel
                     .method("POST")
                     .uri(format!("/companion/v1/projects/{}/tasks", visible.id))
                     .header("content-type", "application/json")
-                    .header("openforge-companion-protocol-version", "1")
+                    .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
                     .body(Body::from(body))
                     .expect("request"),
             )
@@ -142,7 +142,7 @@ async fn task_creation_rejects_invalid_hidden_and_unauthenticated_requests_safel
                 .method("POST")
                 .uri(format!("/companion/v1/projects/{}/tasks", hidden.id))
                 .header("content-type", "application/json")
-                .header("openforge-companion-protocol-version", "1")
+                .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
                 .body(Body::from(r#"{"initialPrompt":"Do not create"}"#))
                 .expect("request"),
         )
@@ -162,7 +162,7 @@ async fn task_creation_rejects_invalid_hidden_and_unauthenticated_requests_safel
             .method("POST")
             .uri(format!("/companion/v1/projects/{}/tasks", visible.id))
             .header("content-type", "application/json")
-            .header("openforge-companion-protocol-version", "1")
+            .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
             .body(Body::from(r#"{"initialPrompt":"Do not create"}"#))
             .expect("request"),
     )
