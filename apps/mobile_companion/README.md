@@ -126,6 +126,8 @@ pnpm mobile:contract:check     # Fail on any generated-client drift
 ./scripts/mobile-companion run
 ```
 
+Supported build commands derive a monotonically increasing build number from the full Git commit count instead of shipping `pubspec.yaml`'s placeholder `+1`. Debug builds expose the number in both the patch version and build code; release builds use `OPENFORGE_MOBILE_BUILD_NAME` for the semantic version. See the [private release guide](../../docs/mobile-companion-release.md#versioning) for installed-APK inspection commands and the controlled build-number override.
+
 `docs/contracts/companion-v1.openapi.json` is the sole source for the generated
 models, operations, stable error codes, and embedded source SHA-256. The generator
 owns the formatting of `lib/src/generated/companion_v1_client.dart`; normal Dart

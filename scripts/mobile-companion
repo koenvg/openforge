@@ -31,20 +31,45 @@ require_environment() {
   fi
 }
 
-release_version_args=()
-configure_release_version_args() {
-  if [[ -n "${OPENFORGE_MOBILE_BUILD_NAME:-}" || -n "${OPENFORGE_MOBILE_BUILD_NUMBER:-}" ]]; then
-    require_environment OPENFORGE_MOBILE_BUILD_NAME OPENFORGE_MOBILE_BUILD_NUMBER
-    release_version_args=(
-      "--build-name=$OPENFORGE_MOBILE_BUILD_NAME"
-      "--build-number=$OPENFORGE_MOBILE_BUILD_NUMBER"
-    )
+version_args=()
+configure_version_args() {
+  local channel="$1"
+  local pubspec_version
+  local build_name="${OPENFORGE_MOBILE_BUILD_NAME:-}"
+  local build_number="${OPENFORGE_MOBILE_BUILD_NUMBER:-}"
+
+  pubspec_version="$(awk '$1 == "version:" { print $2; exit }' "$app_dir/pubspec.yaml")"
+  if [[ -z "$build_number" ]]; then
+    build_number="$(git -C "$repo_root" rev-list --count HEAD)"
   fi
+  if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]] || (( build_number > 2100000000 )); then
+    echo "Mobile build number must be an integer from 1 through 2100000000." >&2
+    return 1
+  fi
+
+  if [[ -z "$build_name" ]]; then
+    build_name="${pubspec_version%%+*}"
+    if [[ "$channel" == "debug" ]]; then
+      local major minor
+      IFS=. read -r major minor _ <<< "$build_name"
+      build_name="$major.$minor.$build_number"
+    fi
+  fi
+  if [[ ! "$build_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Mobile build name must contain three numeric components (for example, 1.2.3)." >&2
+    return 1
+  fi
+
+  version_args=(
+    "--build-name=$build_name"
+    "--build-number=$build_number"
+  )
+  printf 'OpenForge Companion version %s+%s\n' "$build_name" "$build_number"
 }
 
 build_ios_release() {
   require_environment OPENFORGE_IOS_DEVELOPMENT_TEAM
-  configure_release_version_args
+  configure_version_args release
 
   local signing_config="$app_dir/ios/Flutter/Signing.xcconfig"
   local signing_backup=""
@@ -117,7 +142,7 @@ $provisioning_profiles_xml
 </plist>
 EOF
 
-  "$flutter_path" build ipa --release --export-options-plist="$export_options" "${release_version_args[@]}"
+  "$flutter_path" build ipa --release --export-options-plist="$export_options" "${version_args[@]}"
 }
 
 cd "$app_dir"
@@ -151,10 +176,12 @@ case "${1:-}" in
     "$flutter_path" test
     ;;
   build-android)
-    "$flutter_path" build apk --debug
+    configure_version_args debug
+    "$flutter_path" build apk --debug "${version_args[@]}"
     ;;
   build-ios)
-    "$flutter_path" build ios --simulator --debug
+    configure_version_args debug
+    "$flutter_path" build ios --simulator --debug "${version_args[@]}"
     ;;
   build-android-release)
     require_environment \
@@ -162,13 +189,13 @@ case "${1:-}" in
       OPENFORGE_ANDROID_STORE_PASSWORD \
       OPENFORGE_ANDROID_KEY_ALIAS \
       OPENFORGE_ANDROID_KEY_PASSWORD
-    configure_release_version_args
+    configure_version_args release
     if [[ ! -f "$OPENFORGE_ANDROID_KEYSTORE_PATH" ]]; then
       echo "Android release keystore does not exist: $OPENFORGE_ANDROID_KEYSTORE_PATH" >&2
       exit 1
     fi
-    "$flutter_path" build apk --release "${release_version_args[@]}"
-    "$flutter_path" build appbundle --release "${release_version_args[@]}"
+    "$flutter_path" build apk --release "${version_args[@]}"
+    "$flutter_path" build appbundle --release "${version_args[@]}"
     ;;
   build-ios-release)
     build_ios_release

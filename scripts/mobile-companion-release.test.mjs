@@ -1,11 +1,18 @@
 import { mkdtemp, readFile, writeFile, chmod } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 const repoRoot = join(import.meta.dirname, '..')
 const mobileScript = join(repoRoot, 'scripts/mobile-companion')
+
+function sourceBuildNumber() {
+  return execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  }).trim()
+}
 
 async function fakeFlutterDirectory() {
   const directory = await mkdtemp(join(tmpdir(), 'openforge-mobile-release-'))
@@ -44,10 +51,55 @@ function runMobileScript(command, env) {
   })
 }
 
-describe('Mobile Companion private release commands', () => {
+describe('Mobile Companion build commands', () => {
+  it('gives debug APKs a source-derived visible version and build number', async () => {
+    const { directory, flutter } = await fakeFlutterDirectory()
+    const log = join(directory, 'flutter.log')
+    const buildNumber = sourceBuildNumber()
+
+    const result = await runMobileScript('build-android', {
+      FLUTTER_BIN: flutter,
+      FAKE_FLUTTER_LOG: log,
+      OPENFORGE_MOBILE_BUILD_NAME: '',
+      OPENFORGE_MOBILE_BUILD_NUMBER: '',
+    })
+
+    expect(result).toMatchObject({ status: 0 })
+    expect(result.stdout).toContain(`OpenForge Companion version 1.0.${buildNumber}+${buildNumber}`)
+    expect(await readFile(log, 'utf8')).toBe(
+      `build apk --debug --build-name=1.0.${buildNumber} --build-number=${buildNumber}\n`,
+    )
+  })
+
+  it('gives debug iOS simulator builds the same source-derived version', async () => {
+    const { directory, flutter } = await fakeFlutterDirectory()
+    const log = join(directory, 'flutter.log')
+    const buildNumber = sourceBuildNumber()
+
+    const result = await runMobileScript('build-ios', {
+      FLUTTER_BIN: flutter,
+      FAKE_FLUTTER_LOG: log,
+      OPENFORGE_MOBILE_BUILD_NAME: '',
+      OPENFORGE_MOBILE_BUILD_NUMBER: '',
+    })
+
+    expect(result).toMatchObject({ status: 0 })
+    expect(await readFile(log, 'utf8')).toBe(
+      `build ios --simulator --debug --build-name=1.0.${buildNumber} --build-number=${buildNumber}\n`,
+    )
+  })
+
+  it('checks out full history before CI derives debug build versions', async () => {
+    const workflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+    const mobileBuildJob = workflow.slice(workflow.indexOf('  mobile-builds:'), workflow.indexOf('  rust:'))
+
+    expect(mobileBuildJob).toContain('fetch-depth: 0')
+    expect(mobileBuildJob).toContain('./scripts/mobile-companion ${{ matrix.command }}')
+  })
   it('builds signed Android APK and app bundle artifacts for direct and internal distribution', async () => {
     const { directory, flutter } = await fakeFlutterDirectory()
     const log = join(directory, 'flutter.log')
+    const buildNumber = sourceBuildNumber()
     const keystore = join(directory, 'openforge-upload.jks')
     await writeFile(keystore, 'test fixture only')
 
@@ -59,13 +111,13 @@ describe('Mobile Companion private release commands', () => {
       OPENFORGE_ANDROID_KEY_PASSWORD: 'key-password',
       OPENFORGE_ANDROID_STORE_PASSWORD: 'store-password',
       OPENFORGE_MOBILE_BUILD_NAME: '1.0.0',
-      OPENFORGE_MOBILE_BUILD_NUMBER: '42',
+      OPENFORGE_MOBILE_BUILD_NUMBER: '',
     })
 
     expect(result).toMatchObject({ status: 0 })
     expect(await readFile(log, 'utf8')).toBe(
-      'build apk --release --build-name=1.0.0 --build-number=42\n' +
-        'build appbundle --release --build-name=1.0.0 --build-number=42\n',
+      `build apk --release --build-name=1.0.0 --build-number=${buildNumber}\n` +
+        `build appbundle --release --build-name=1.0.0 --build-number=${buildNumber}\n`,
     )
   })
 
@@ -141,6 +193,10 @@ describe('Mobile Companion private release commands', () => {
     expect(workflow).toContain('environment: ios-testflight')
     expect(workflow).toContain('./scripts/mobile-companion build-android-release')
     expect(workflow).toContain('./scripts/mobile-companion build-ios-release')
+    expect(workflow).toContain('fetch-depth: 0')
+    expect(workflow).toContain('git rev-list --count HEAD')
+    expect(workflow).toContain('needs.version.outputs.build_number')
+    expect(workflow).not.toContain('${{ inputs.build_number }}')
     expect(workflow).toContain('build/app/outputs/flutter-apk/app-release.apk')
     expect(workflow).toContain('build/app/outputs/bundle/release/app-release.aab')
     expect(workflow).toContain('build/ios/ipa/*.ipa')

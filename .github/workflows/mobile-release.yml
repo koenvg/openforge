@@ -8,10 +8,6 @@ on:
         required: true
         default: 1.0.0
         type: string
-      build_number:
-        description: Monotonically increasing iOS/Android build number
-        required: true
-        type: string
       upload_testflight:
         description: Upload the signed IPA to TestFlight after building
         required: true
@@ -22,7 +18,21 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Resolve Mobile Companion version
+    runs-on: ubuntu-latest
+    outputs:
+      build_number: ${{ steps.source-version.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Derive monotonic build number from source history
+        id: source-version
+        run: echo "build_number=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
   android:
+    needs: version
     name: Android private artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -32,7 +42,7 @@ jobs:
       OPENFORGE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       OPENFORGE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       OPENFORGE_MOBILE_BUILD_NAME: ${{ inputs.version_name }}
-      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ inputs.build_number }}
+      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
 
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +74,7 @@ jobs:
       - name: Upload Android private artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openforge-companion-android-${{ inputs.version_name }}-${{ inputs.build_number }}
+          name: openforge-companion-android-${{ inputs.version_name }}-${{ needs.version.outputs.build_number }}
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -72,6 +82,7 @@ jobs:
             apps/mobile_companion/build/app/outputs/bundle/release/app-release.aab
 
   ios:
+    needs: version
     name: iOS TestFlight artifact
     runs-on: macos-14
     timeout-minutes: 35
@@ -79,7 +90,7 @@ jobs:
     env:
       OPENFORGE_IOS_DEVELOPMENT_TEAM: ${{ secrets.IOS_DEVELOPMENT_TEAM }}
       OPENFORGE_MOBILE_BUILD_NAME: ${{ inputs.version_name }}
-      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ inputs.build_number }}
+      OPENFORGE_MOBILE_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +136,7 @@ jobs:
       - name: Upload iOS private artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openforge-companion-ios-${{ inputs.version_name }}-${{ inputs.build_number }}
+          name: openforge-companion-ios-${{ inputs.version_name }}-${{ needs.version.outputs.build_number }}
           if-no-files-found: error
           retention-days: 14
           path: apps/mobile_companion/build/ios/ipa/*.ipa

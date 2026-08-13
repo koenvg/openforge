@@ -4,6 +4,8 @@ description: "Mobile Companion for Task views, Task completion, and interactive 
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
+# This is the semantic-version baseline only. Supported build commands override
+# both values with source-derived metadata; +1 must not identify an artifact.
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
 # followed by an optional build number separated by a +.
