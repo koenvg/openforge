@@ -456,6 +456,30 @@ export interface ImplementationRun {
   sessionId: string
   workspacePath: string
 }
+export type TaskFollowUpDisposition = 'delivered' | 'queued'
+
+export interface SendTaskFollowUpRequest {
+  taskId: string
+  message: string
+}
+
+export interface TaskFollowUpReceipt {
+  taskId: string
+  sessionId: string
+  disposition: TaskFollowUpDisposition
+}
+
+export type TaskFollowUpErrorCode = 'NO_SESSION' | 'DELIVERY_FAILED'
+
+export class TaskFollowUpError extends Error {
+  readonly code: TaskFollowUpErrorCode
+
+  constructor(code: TaskFollowUpErrorCode, message: string) {
+    super(message)
+    this.name = 'TaskFollowUpError'
+    this.code = code
+  }
+}
 
 export interface TasksAPI {
   /**
@@ -473,6 +497,7 @@ export interface TasksAPI {
   listStartPromptContributions(projectId: string): Promise<StartPromptContribution[]>
   configureStartPromptContribution(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
   startImplementation(request: StartTaskImplementationRequest): Promise<ImplementationRun>
+  sendFollowUp(request: SendTaskFollowUpRequest): Promise<TaskFollowUpReceipt>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>
 }

@@ -136,6 +136,7 @@ describe('plugin SDK testing utilities', () => {
     await api.notifications.notify({ title: 'Ready' })
     const task = await api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
     const run = await api.tasks.startImplementation({ taskId: task.id })
+    const followUp = await api.tasks.sendFollowUp({ taskId: task.id, message: 'Review the captured feedback' })
     await frontendApi.storage.global.set('flag', true)
     await api.shell.spawn({ taskId: 'T-1', terminalIndex: 2, cwd: '/repo', cols: 80, rows: 24, terminalImageProtocol: 'iterm2' })
     await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
@@ -145,10 +146,12 @@ describe('plugin SDK testing utilities', () => {
 
     expect(task).toMatchObject({ initial_prompt: 'Scheduled prompt', project_id: 'P-1', status: 'backlog', agent: null, permission_mode: null })
     expect(run).toMatchObject({ taskId: task.id, workspacePath: '/mock-workspace', sessionId: 'mock-session' })
+    expect(followUp).toEqual({ taskId: task.id, sessionId: 'mock-session', disposition: 'delivered' })
     expect(api.__testing.calls.openUrl).toEqual(['https://example.com'])
     expect(api.__testing.calls.notify).toEqual([{ title: 'Ready' }])
     expect(api.__testing.calls.taskCreations).toEqual([{ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] }])
     expect(api.__testing.calls.taskImplementationStarts).toEqual([{ taskId: task.id }])
+    expect(api.__testing.calls.taskFollowUps).toEqual([{ taskId: task.id, message: 'Review the captured feedback' }])
     expect(api.__testing.calls.shellSpawns).toEqual([{
       taskId: 'T-1',
       terminalIndex: 2,

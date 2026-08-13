@@ -33,7 +33,9 @@ import type {
   ProjectAttention,
   ShellSpawnRequest,
   StartPromptContribution,
+  SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
+  TaskFollowUpReceipt,
   Task,
   TaskWorkspaceInfo,
   WritableBoardStatus,
@@ -57,6 +59,7 @@ export type RuntimeHostBridge = {
   listStartPromptContributions?(projectId: string): Promise<StartPromptContribution[]>
   configureStartPromptContribution?(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>
   startTaskImplementation?(request: StartTaskImplementationRequest): Promise<ImplementationRun>
+  sendTaskFollowUp?(request: SendTaskFollowUpRequest): Promise<TaskFollowUpReceipt>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
   listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>

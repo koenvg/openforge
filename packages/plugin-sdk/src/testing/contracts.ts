@@ -19,6 +19,7 @@ import type {
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
   ShellSpawnRequest,
+  SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
   TaskLinkOpenRequest,
 } from '../types'
@@ -59,6 +60,7 @@ export interface TestingOpenForgeApiCalls {
   taskCreations: CreateTaskRequest[]
   startPromptContributionConfigurations: ConfigureStartPromptContributionRequest[]
   taskImplementationStarts: StartTaskImplementationRequest[]
+  taskFollowUps: SendTaskFollowUpRequest[]
   taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
   taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>

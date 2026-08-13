@@ -410,6 +410,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('resume_startup_sessions')).toBe(true)
     expect(isSidecarBackedCommand('start_implementation')).toBe(true)
     expect(isSidecarBackedCommand('finalize_agent_session')).toBe(true)
+    expect(isSidecarBackedCommand('send_agent_follow_up')).toBe(true)
     expect(isSidecarBackedCommand('finalize_claude_session')).toBe(false)
     expect(isSidecarBackedCommand('get_task_workspace')).toBe(true)
     expect(isSidecarBackedCommand('pty_spawn_shell')).toBe(true)

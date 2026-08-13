@@ -196,9 +196,13 @@ describe('browser surfaces SDK contract', () => {
 
     expect(capture).toEqual({
       artifactId: expect.stringMatching(/^capture-/),
+      absolutePath: expect.stringMatching(/^\/tmp\/openforge-browser-captures\/T-capture\/capture-/),
       mediaType: 'image/png',
       width: 800,
       height: 600,
+      url: 'about:blank',
+      title: '',
+      capturedAt: '2026-01-01T00:00:00.000Z',
       dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
     })
     expect(selection).toEqual({

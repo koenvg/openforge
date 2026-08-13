@@ -180,3 +180,111 @@ async fn rejects_shell_spawn_when_workspace_cwd_is_missing_instead_of_falling_ba
     );
     let _ = std::fs::remove_file(path);
 }
+
+fn seed_follow_up_session(state: &crate::http_server::AppState, status: &str) -> (String, String) {
+    let db = crate::db::acquire_db(&state.db);
+    let project = db
+        .create_project("Follow-up Project", "/tmp/openforge-follow-up")
+        .expect("create project");
+    let task = db
+        .create_task(
+            "review visual feedback",
+            "doing",
+            Some(&project.id),
+            None,
+            None,
+        )
+        .expect("create task");
+    let session_id = format!("session-{}", status);
+    db.create_agent_session(&session_id, &task.id, None, "implementing", status, "pi")
+        .expect("create agent session");
+    (task.id, session_id)
+}
+
+async fn wait_for_file(path: &std::path::Path) -> String {
+    for _ in 0..100 {
+        if let Ok(contents) = std::fs::read_to_string(path) {
+            if contents.contains("Marker 1: Fix alignment") {
+                return contents;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("timed out waiting for follow-up delivery");
+}
+
+#[tokio::test]
+async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessions() {
+    for (status, expected_disposition) in [
+        ("completed", "delivered"),
+        ("running", "queued"),
+        ("paused", "queued"),
+    ] {
+        let (state, db_path) = test_state(&format!("app_invoke_follow_up_{status}"));
+        let (task_id, session_id) = seed_follow_up_session(&state, status);
+        let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let output_path = temp_dir.path().join("follow-up.txt");
+        let script = format!(
+            "cat > {}",
+            shell_single_quote(&output_path.to_string_lossy())
+        );
+        state
+            .pty_manager
+            .as_ref()
+            .expect("pty manager")
+            .spawn_companion_test_agent_pty(&task_id, temp_dir.path(), &script)
+            .await
+            .expect("spawn test Agent PTY");
+
+        let receipt = invoke_ok(
+            &state,
+            "send_agent_follow_up",
+            json!({ "taskId": task_id, "message": "# Visual feedback\n\nMarker 1: Fix alignment" }),
+        )
+        .await;
+
+        assert_eq!(receipt["taskId"], task_id);
+        assert_eq!(receipt["sessionId"], session_id);
+        assert_eq!(receipt["disposition"], expected_disposition);
+        let delivered = wait_for_file(&output_path).await;
+        assert!(delivered.contains("Marker 1: Fix alignment"));
+
+        let _ = state
+            .pty_manager
+            .as_ref()
+            .expect("pty manager")
+            .kill_pty(&task_id)
+            .await;
+        let _ = std::fs::remove_file(db_path);
+    }
+}
+
+#[tokio::test]
+async fn task_follow_up_failures_are_specific_and_task_isolated() {
+    let (state, path) = test_state("app_invoke_follow_up_failures");
+    let (task_id, _) = seed_follow_up_session(&state, "running");
+
+    let no_session = invoke(
+        &state,
+        "send_agent_follow_up",
+        json!({ "taskId": "T-other", "message": "Visual feedback" }),
+    )
+    .await
+    .expect_err("another Task must not reuse this Task's Agent Session");
+    assert_eq!(no_session.0, StatusCode::CONFLICT);
+    assert!(no_session.1.contains("AGENT_FOLLOW_UP_NO_SESSION"));
+
+    let delivery_failure = invoke(
+        &state,
+        "send_agent_follow_up",
+        json!({ "taskId": task_id, "message": "Visual feedback" }),
+    )
+    .await
+    .expect_err("missing Agent PTY should be retryable");
+    assert_eq!(delivery_failure.0, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(delivery_failure
+        .1
+        .contains("AGENT_FOLLOW_UP_DELIVERY_FAILED"));
+
+    let _ = std::fs::remove_file(path);
+}

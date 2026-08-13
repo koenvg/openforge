@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, rm, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { TaskBrowserSurfaceError } from './taskBrowserSurfaceContract.js'
 
@@ -17,7 +17,7 @@ export interface DiscardTaskBrowserCaptureRequest {
 }
 
 export interface TaskBrowserCaptureArtifactStore {
-  store(request: StoreTaskBrowserCaptureRequest): Promise<{ artifactId: string }>
+  store(request: StoreTaskBrowserCaptureRequest): Promise<{ artifactId: string; absolutePath: string }>
   discard(request: DiscardTaskBrowserCaptureRequest): Promise<void>
   cleanupTask(taskId: string): Promise<void>
 }
@@ -31,12 +31,13 @@ function ownershipKey(value: string): string {
 export class FileTaskBrowserCaptureArtifactStore implements TaskBrowserCaptureArtifactStore {
   constructor(private readonly rootDirectory: () => string) {}
 
-  async store(request: StoreTaskBrowserCaptureRequest): Promise<{ artifactId: string }> {
+  async store(request: StoreTaskBrowserCaptureRequest): Promise<{ artifactId: string; absolutePath: string }> {
     const artifactId = randomUUID()
     const directory = this.ownerDirectory(request.taskId, request.pluginId)
+    const absolutePath = resolve(directory, `${artifactId}.png`)
     await mkdir(directory, { recursive: true, mode: 0o700 })
-    await writeFile(join(directory, `${artifactId}.png`), request.png, { flag: 'wx', mode: 0o600 })
-    return { artifactId }
+    await writeFile(absolutePath, request.png, { flag: 'wx', mode: 0o600 })
+    return { artifactId, absolutePath }
   }
 
   async discard(request: DiscardTaskBrowserCaptureRequest): Promise<void> {

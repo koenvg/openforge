@@ -1,6 +1,6 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
-import type { JsonValue } from '@openforge-app/plugin-sdk'
+import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
@@ -387,6 +387,10 @@ export async function getTaskDetail(taskId: string): Promise<Task> {
 
 export async function getLatestSession(taskId: string): Promise<AgentSession | null> {
   return invoke<AgentSession | null>("get_latest_session", { taskId });
+}
+
+export async function sendAgentFollowUp(taskId: string, message: string): Promise<TaskFollowUpReceipt> {
+  return invoke<TaskFollowUpReceipt>('send_agent_follow_up', { taskId, message })
 }
 
 export async function getLatestSessions(taskIds: string[]): Promise<AgentSession[]> {

@@ -33,6 +33,7 @@
     "requires": [
       "taskPane",
       "browserSurfaces",
+      "tasks",
       "storage",
       "taskLinks",
       "navigation"

@@ -10,7 +10,8 @@
     type BrowserTabSession,
   } from './browserTabSession'
   import VisualFeedbackEditor from './VisualFeedbackEditor.svelte'
-  import { createVisualFeedbackEditor } from './visualFeedbackEditorState.svelte'
+  import { getTaskVisualFeedbackEditor } from './visualFeedbackEditorRegistry'
+  import { formatVisualFeedbackReport } from './visualFeedbackReport'
 
   interface Props extends PluginTaskPaneProps {}
 
@@ -33,11 +34,18 @@
   let editingAddress = $state(false)
   let opening = $state(true)
   let actionError = $state<string | null>(null)
-  const feedbackEditor = createVisualFeedbackEditor({
-    onError(error) {
-      actionError = error
-    },
-  })
+  function handleFeedbackError(error: string | null) {
+    actionError = error
+  }
+  function initialFeedbackEditor() {
+    return {
+      taskId,
+      editor: getTaskVisualFeedbackEditor(api, taskId, handleFeedbackError),
+    }
+  }
+  const initialFeedback = initialFeedbackEditor()
+  let feedbackEditorTaskId = initialFeedback.taskId
+  let feedbackEditor = $state.raw(initialFeedback.editor)
   let activeTaskId: string | null = null
   let lifecycleGeneration = 0
   let actionGeneration = 0
@@ -60,6 +68,7 @@
     actionGeneration += 1
     activeTaskId = nextTaskId
     const previousSession = session
+    const previousFeedbackEditor = feedbackEditor
     session = null
     surfaceState = blankState
     address = ''
@@ -67,11 +76,17 @@
     actionError = null
 
     await Promise.allSettled([
-      feedbackEditor.setSurface(null),
+      previousFeedbackEditor.setSurface(null),
       previousSession?.dispose(),
     ])
     if (destroyed || generation !== lifecycleGeneration) return
 
+    if (feedbackEditorTaskId !== nextTaskId) {
+      feedbackEditorTaskId = nextTaskId
+      feedbackEditor = getTaskVisualFeedbackEditor(api, nextTaskId, handleFeedbackError)
+    } else {
+      feedbackEditor.setErrorHandler(handleFeedbackError)
+    }
     try {
       const nextSession = await createBrowserTabSession({
         api,
@@ -125,6 +140,16 @@
     }
   }
 
+  function sendFeedback() {
+    const sendingTaskId = taskId
+    void feedbackEditor.send(async (annotations) => {
+      const task = await api.tasks.get(sendingTaskId)
+      if (task === null) throw new Error(`Task ${sendingTaskId} is no longer available`)
+      const message = formatVisualFeedbackReport(task, annotations)
+      await api.tasks.sendFollowUp({ taskId: sendingTaskId, message })
+    })
+  }
+
   function submitAddress(event: SubmitEvent) {
     event.preventDefault()
     editingAddress = false
@@ -148,9 +173,11 @@
     lifecycleGeneration += 1
     actionGeneration += 1
     const currentSession = session
+    const currentFeedbackEditor = feedbackEditor
+    currentFeedbackEditor.setErrorHandler(() => undefined)
     session = null
     void Promise.allSettled([
-      feedbackEditor.destroy(),
+      currentFeedbackEditor.setSurface(null),
       currentSession?.dispose(),
     ])
   })
@@ -215,7 +242,7 @@
       Go
     </button>
 
-    <VisualFeedbackEditor available={!opening && session !== null} editor={feedbackEditor} />
+    <VisualFeedbackEditor available={!opening && session !== null} editor={feedbackEditor} onSend={sendFeedback} />
   </form>
 
   <div class="flex min-h-6 items-center gap-2 border-b border-base-300 px-3 py-1 text-xs" aria-live="polite">

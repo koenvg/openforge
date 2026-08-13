@@ -125,7 +125,36 @@ describe('plugin host commands', () => {
       terminalImageProtocol: null,
     })
   })
+  it('routes typed Task follow-ups through the Agent Session host lifecycle', async () => {
+    const { invoke } = installDesktopBridge({
+      taskId: 'T-2',
+      sessionId: 'S-1',
+      disposition: 'queued',
+    })
+    const host = createPluginRuntimeHost('com.openforge.task-browser')
 
+    await expect(host.sendTaskFollowUp?.({
+      taskId: 'T-2',
+      message: '# Visual feedback',
+    })).resolves.toEqual({ taskId: 'T-2', sessionId: 'S-1', disposition: 'queued' })
+    expect(invoke).toHaveBeenCalledWith('send_agent_follow_up', {
+      taskId: 'T-2',
+      message: '# Visual feedback',
+    })
+  })
+
+  it('preserves typed retryable Task follow-up failures', async () => {
+    const { invoke } = installDesktopBridge()
+    invoke
+      .mockRejectedValueOnce(new Error('AGENT_FOLLOW_UP_NO_SESSION: Task T-2 has no Agent Session'))
+      .mockRejectedValueOnce(new Error('AGENT_FOLLOW_UP_DELIVERY_FAILED: Agent PTY unavailable'))
+    const host = createPluginRuntimeHost('com.openforge.task-browser')
+
+    await expect(host.sendTaskFollowUp?.({ taskId: 'T-2', message: 'Retry me' }))
+      .rejects.toMatchObject({ name: 'TaskFollowUpError', code: 'NO_SESSION' })
+    await expect(host.sendTaskFollowUp?.({ taskId: 'T-2', message: 'Retry me' }))
+      .rejects.toMatchObject({ name: 'TaskFollowUpError', code: 'DELIVERY_FAILED' })
+  })
   it('routes generic start prompt contribution configuration through project config only', async () => {
     const { invoke } = installDesktopBridge(null)
     invoke.mockResolvedValueOnce(JSON.stringify([{ id: 'existing', enabled: true, content: 'Existing', order: 0 }]))

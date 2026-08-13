@@ -105,6 +105,14 @@ export class TestingCommonApiFake {
             sessionId: 'mock-session',
           }
         },
+        sendFollowUp: async (request) => {
+          this.services.calls.taskFollowUps.push(request)
+          return {
+            taskId: request.taskId,
+            sessionId: 'mock-session',
+            disposition: 'delivered',
+          }
+        },
         getWorkspace: async () => null,
         getLatestSession: async () => null,
       },

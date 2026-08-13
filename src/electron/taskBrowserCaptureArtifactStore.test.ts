@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore'
@@ -20,6 +20,10 @@ describe('Task Browser capture artifact storage', () => {
     const second = await store.store({ pluginId: 'plugin-a', taskId: 'T-1', png })
 
     expect(first.artifactId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(isAbsolute(first.absolutePath)).toBe(true)
+    expect(first.absolutePath.startsWith(root)).toBe(true)
+    expect(first.absolutePath.endsWith(`${first.artifactId}.png`)).toBe(true)
+    expect(await readFile(first.absolutePath)).toEqual(png)
     expect(second.artifactId).not.toBe(first.artifactId)
     const files = await filesBelow(root)
     expect(files).toHaveLength(2)
