@@ -742,7 +742,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
   );
 
   testWidgets(
-    'Task terminal follows foreground lifecycle without opening from Details',
+    'Task terminal stays attached while inactive and suspends when backgrounded',
     (tester) async {
       addTearDown(() {
         tester.binding.handleAppLifecycleStateChanged(
@@ -768,7 +768,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pump();
-      expect(presentation.foreground, isFalse);
+      expect(presentation.foreground, isTrue);
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
@@ -780,6 +780,11 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       expect(presentation.visible, isTrue);
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(presentation.foreground, isTrue);
+      expect(presentation.visible, isTrue);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump();
       expect(presentation.foreground, isFalse);
     },
