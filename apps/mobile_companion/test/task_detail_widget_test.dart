@@ -629,6 +629,42 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     },
   );
 
+  testWidgets('software keyboard does not resize the Terminal tab viewport', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetViewInsets);
+    final presentation = _TerminalPresentation()
+      ..setState(const AgentTerminalReady());
+    const terminalKey = Key('keyboard-stable-terminal');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail(agentTerminalAvailable: true)),
+          onRefresh: () async {},
+          terminalSurface: AgentTerminalSurface(
+            presentation: presentation,
+            terminal: const ColoredBox(key: terminalKey, color: Colors.black),
+            dispose: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Terminal'));
+    await tester.pumpAndSettle();
+    final initialSize = tester.getSize(find.byKey(terminalKey));
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).resizeToAvoidBottomInset,
+      isFalse,
+    );
+    expect(tester.getSize(find.byKey(terminalKey)), initialSize);
+  });
+
   testWidgets(
     'Task terminal follows foreground lifecycle without opening from Details',
     (tester) async {
