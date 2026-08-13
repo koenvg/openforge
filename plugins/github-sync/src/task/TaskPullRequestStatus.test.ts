@@ -104,7 +104,7 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getAllByRole('button', { name: 'Enqueue' }).length).toBe(1)
   })
 
-  it('requires confirmation, cancels without RPC, and suppresses duplicate merge requests', async () => {
+  it('starts a merge immediately, shows progress, and suppresses duplicate requests', async () => {
     let resolveMerge!: () => void
     const mergeRequest = new Promise<void>((resolve) => { resolveMerge = resolve })
     const invoke = vi.fn(async (method: string) => {
@@ -116,13 +116,10 @@ describe('GitHub Sync Task pull request section', () => {
 
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
-    expect(screen.getByText('Merge owner/repo pull request #42 “Test PR”?')).toBeTruthy()
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(invoke).not.toHaveBeenCalledWith('mergeTaskPullRequest', expect.anything())
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Merge' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
+    expect(screen.queryByText('Merge owner/repo pull request #42 “Test PR”?')).toBeNull()
     expect((screen.getByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Merging…' }))
     expect(invoke.mock.calls.filter(([method]) => method === 'mergeTaskPullRequest')).toHaveLength(1)
 

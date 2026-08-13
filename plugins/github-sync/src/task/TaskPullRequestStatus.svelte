@@ -26,7 +26,7 @@
   let prUrl = $state('')
   let linkError = $state<string | null>(null)
   let linking = $state(false)
-  let confirming = $state<{ pr: PullRequestInfo; action: 'merge' | 'enqueue' } | null>(null)
+  let confirmingEnqueue = $state<PullRequestInfo | null>(null)
   let loadGeneration = 0
 
   function errorMessage(error: unknown): string {
@@ -133,14 +133,17 @@
   function openExternal(url: string) { void api.system.openUrl(url) }
   function requestAction(pr: PullRequestInfo, action: 'merge' | 'enqueue') {
     if (orchestration.pendingPrId !== null) return
-    confirming = { pr, action }
+    if (action === 'merge') {
+      void orchestration.merge(pr)
+      return
+    }
+    confirmingEnqueue = pr
   }
-  async function confirmAction() {
-    const request = confirming
-    if (!request) return
-    confirming = null
-    if (request.action === 'merge') await orchestration.merge(request.pr)
-    else await orchestration.enqueue(request.pr)
+  async function confirmEnqueue() {
+    const pr = confirmingEnqueue
+    if (!pr) return
+    confirmingEnqueue = null
+    await orchestration.enqueue(pr)
   }
 </script>
 
@@ -192,8 +195,25 @@
           <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
             {#if detail}<div class="text-[0.7rem] text-base-content/60">{detail}</div>{/if}
             <div class="flex items-center gap-2">
-              {#if canEnqueuePullRequest(pr)}<Button size="xs" disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'enqueue')}>{orchestration.pendingPrId === pr.id ? 'Enqueueing…' : 'Enqueue'}</Button>
-              {:else if canMergePullRequest(pr)}<Button size="xs" disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'merge')}>{orchestration.pendingPrId === pr.id ? 'Merging…' : 'Merge'}</Button>{/if}
+              {#if canEnqueuePullRequest(pr)}
+                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id ? 'Enqueueing…' : 'Enqueue'} disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'enqueue')}>
+                  {#if orchestration.pendingPrId === pr.id}
+                    <span class="loading loading-spinner loading-xs" role="status" aria-label="Enqueueing pull request"></span>
+                    Enqueueing…
+                  {:else}
+                    Enqueue
+                  {/if}
+                </Button>
+              {:else if canMergePullRequest(pr)}
+                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id ? 'Merging…' : 'Merge'} disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'merge')}>
+                  {#if orchestration.pendingPrId === pr.id}
+                    <span class="loading loading-spinner loading-xs" role="status" aria-label="Merging pull request"></span>
+                    Merging…
+                  {:else}
+                    Merge
+                  {/if}
+                </Button>
+              {/if}
               {#if feedback}<span class="text-[0.7rem] {feedback.kind === 'success' ? 'text-success' : feedback.kind === 'warning' ? 'text-warning' : 'text-error'}">{feedback.message}</span>{/if}
             </div>
           </div>
@@ -206,9 +226,15 @@
   </div>
 </section>
 
-{#if confirming}
-  <Modal onClose={() => { confirming = null }} ariaLabel={`${confirming.action === 'merge' ? 'Merge' : 'Enqueue'} pull request confirmation`} maxWidth="32rem">
-    {#snippet header()}<h2 class="text-lg font-semibold">Confirm {confirming.action === 'merge' ? 'Merge' : 'Enqueue'}</h2>{/snippet}
-    <div class="flex flex-col gap-4 p-5"><p> {confirming.action === 'merge' ? 'Merge' : 'Enqueue'} {confirming.pr.repo_owner}/{confirming.pr.repo_name} pull request #{prNumber(confirming.pr)} “{confirming.pr.title}”?</p><div class="flex justify-end gap-2"><button class="btn btn-ghost btn-sm" onclick={() => { confirming = null }}>Cancel</button><button class="btn btn-primary btn-sm" onclick={() => void confirmAction()}>Confirm {confirming.action === 'merge' ? 'Merge' : 'Enqueue'}</button></div></div>
+{#if confirmingEnqueue}
+  <Modal onClose={() => { confirmingEnqueue = null }} ariaLabel="Enqueue pull request confirmation" maxWidth="32rem">
+    {#snippet header()}<h2 class="text-lg font-semibold">Confirm Enqueue</h2>{/snippet}
+    <div class="flex flex-col gap-4 p-5">
+      <p>Enqueue {confirmingEnqueue.repo_owner}/{confirmingEnqueue.repo_name} pull request #{prNumber(confirmingEnqueue)} “{confirmingEnqueue.title}”?</p>
+      <div class="flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" onclick={() => { confirmingEnqueue = null }}>Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick={() => void confirmEnqueue()}>Confirm Enqueue</button>
+      </div>
+    </div>
   </Modal>
 {/if}

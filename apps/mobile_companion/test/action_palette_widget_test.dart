@@ -71,39 +71,37 @@ void main() {
     },
   );
 
-  testWidgets('destructive and merge actions require confirmation', (
-    tester,
-  ) async {
-    final confirmed = <CompanionActionId>[];
-    final executed = <CompanionActionId>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: MobileActionPalette(
-            title: 'Task actions',
-            actions: const <MobilePaletteAction>[
-              MobilePaletteAction.task(CompanionActionId.mergePullRequest),
-              MobilePaletteAction.task(CompanionActionId.completeTask),
-            ],
-            onConfirm: (action) async {
-              confirmed.add(action.id);
-              return action.id == CompanionActionId.mergePullRequest;
-            },
-            onExecute: (action) async => executed.add(action.id),
+  testWidgets(
+    'merge executes immediately while destructive actions require confirmation',
+    (tester) async {
+      final confirmed = <CompanionActionId>[];
+      final executed = <CompanionActionId>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MobileActionPalette(
+              title: 'Task actions',
+              actions: const <MobilePaletteAction>[
+                MobilePaletteAction.task(CompanionActionId.mergePullRequest),
+                MobilePaletteAction.task(CompanionActionId.completeTask),
+              ],
+              onConfirm: (action) async {
+                confirmed.add(action.id);
+                return false;
+              },
+              onExecute: (action) async => executed.add(action.id),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Merge Pull Request'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Complete'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Merge Pull Request'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Complete'));
+      await tester.pumpAndSettle();
 
-    expect(confirmed, <CompanionActionId>[
-      CompanionActionId.mergePullRequest,
-      CompanionActionId.completeTask,
-    ]);
-    expect(executed, <CompanionActionId>[CompanionActionId.mergePullRequest]);
-  });
+      expect(confirmed, <CompanionActionId>[CompanionActionId.completeTask]);
+      expect(executed, <CompanionActionId>[CompanionActionId.mergePullRequest]);
+    },
+  );
 }
