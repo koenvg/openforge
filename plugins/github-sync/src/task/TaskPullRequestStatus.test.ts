@@ -87,6 +87,48 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('owner/other')).toBeTruthy()
   })
 
+  it('does not flash a loading message while switching quickly to another task', async () => {
+    let resolveNextTask!: (pullRequests: PullRequestInfo[]) => void
+    const nextTaskRequest = new Promise<PullRequestInfo[]>((resolve) => { resolveNextTask = resolve })
+    const invoke = vi.fn(async (method: string, payload?: { taskId?: string }) => {
+      if (method === 'listTaskPullRequests') {
+        return payload?.taskId === 'T-43' ? nextTaskRequest : []
+      }
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    const { api, rerender } = renderSection(invoke)
+    expect(await screen.findByText('No linked pull requests yet')).toBeTruthy()
+
+    await rerender({
+      api,
+      context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-43' },
+      taskId: 'T-43',
+      projectId: 'P-1',
+    })
+
+    expect(screen.queryByText('No linked pull requests yet')).toBeNull()
+    expect(screen.queryByText('Loading pull requests…')).toBeNull()
+
+    resolveNextTask([])
+    expect(await screen.findByText('No linked pull requests yet')).toBeTruthy()
+    expect(screen.queryByText('Loading pull requests…')).toBeNull()
+  })
+
+  it('shows loading feedback when a task pull request lookup is slow', async () => {
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return new Promise<PullRequestInfo[]>(() => {})
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    expect(screen.queryByText('Loading pull requests…')).toBeNull()
+    expect(await screen.findByText('Loading pull requests…', {}, { timeout: 600 })).toBeTruthy()
+  })
+
   it('shows Merge versus Enqueue only for the eligible pull request', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return [

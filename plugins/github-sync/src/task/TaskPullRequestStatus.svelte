@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
@@ -18,7 +18,8 @@
   const client = createGithubTaskClient(untrack(() => api))
   let pullRequests = $state<PullRequestInfo[]>([])
   let commentsByPrId = $state<Map<number, PrComment[]>>(new Map())
-  let loading = $state(true)
+  let loading = $state(false)
+  let showLoading = $state(false)
   let loadError = $state<string | null>(null)
   let refreshError = $state<string | null>(null)
   let refreshing = $state(false)
@@ -28,21 +29,31 @@
   let linking = $state(false)
   let confirming = $state<{ pr: PullRequestInfo; action: 'merge' | 'enqueue' } | null>(null)
   let loadGeneration = 0
+  let requestedTaskId: string | null = null
+  let loadingIndicatorTimer: ReturnType<typeof setTimeout> | null = null
+
+  const LOADING_INDICATOR_DELAY_MS = 300
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
   }
 
-  async function loadPullRequests() {
-    const generation = ++loadGeneration
-    const next = await client.listPullRequests(taskId)
-    if (generation !== loadGeneration) return
-    pullRequests = next
-    loadError = null
-    void loadComments(next, generation)
+  function clearLoadingIndicatorTimer() {
+    if (loadingIndicatorTimer === null) return
+    clearTimeout(loadingIndicatorTimer)
+    loadingIndicatorTimer = null
   }
 
-  async function loadComments(prs: PullRequestInfo[], generation: number) {
+  async function loadPullRequests(requestTaskId: string = taskId) {
+    const generation = ++loadGeneration
+    const next = await client.listPullRequests(requestTaskId)
+    if (generation !== loadGeneration || requestedTaskId !== requestTaskId) return
+    pullRequests = next
+    loadError = null
+    void loadComments(next, generation, requestTaskId)
+  }
+
+  async function loadComments(prs: PullRequestInfo[], generation: number, requestTaskId: string) {
     const results = await Promise.all(prs.map(async (pr) => {
       try {
         return [pr.id, await client.getComments(pr.id)] as const
@@ -50,22 +61,50 @@
         return [pr.id, commentsByPrId.get(pr.id) ?? []] as const
       }
     }))
-    if (generation === loadGeneration) commentsByPrId = new Map(results)
+    if (generation === loadGeneration && requestedTaskId === requestTaskId) {
+      commentsByPrId = new Map(results)
+    }
   }
 
   async function refreshAfterAction() {
-    await client.refreshTask(taskId)
-    await loadPullRequests()
+    const currentTaskId = taskId
+    await client.refreshTask(currentTaskId)
+    await loadPullRequests(currentTaskId)
   }
 
   const orchestration = useMergeOrchestration(client, refreshAfterAction)
 
   $effect(() => {
     const currentTaskId = taskId
+    if (currentTaskId === requestedTaskId) return
+
+    requestedTaskId = currentTaskId
+    pullRequests = []
+    commentsByPrId = new Map()
+    loadError = null
+    refreshError = null
     loading = true
-    void loadPullRequests()
-      .catch((error) => { if (currentTaskId === taskId) loadError = errorMessage(error) })
-      .finally(() => { if (currentTaskId === taskId) loading = false })
+    showLoading = false
+    clearLoadingIndicatorTimer()
+    loadingIndicatorTimer = setTimeout(() => {
+      if (requestedTaskId === currentTaskId && loading) showLoading = true
+    }, LOADING_INDICATOR_DELAY_MS)
+
+    void loadPullRequests(currentTaskId)
+      .catch((error) => {
+        if (requestedTaskId === currentTaskId) loadError = errorMessage(error)
+      })
+      .finally(() => {
+        if (requestedTaskId !== currentTaskId) return
+        loading = false
+        showLoading = false
+        clearLoadingIndicatorTimer()
+      })
+  })
+
+  onDestroy(() => {
+    loadGeneration += 1
+    clearLoadingIndicatorTimer()
   })
 
   async function refreshGithubStatus() {
@@ -156,10 +195,14 @@
     </div>
   </div>
 
-  <div class="flex flex-col gap-2.5 px-3 py-2">
+  <div
+    class="flex flex-col gap-2.5 px-3 py-2"
+    class:min-h-8={loading && !adding && pullRequests.length === 0}
+    aria-busy={loading}
+  >
     {#if loadError}<p class="m-0 text-xs text-error" role="alert">Could not load pull requests: {loadError}</p>{/if}
     {#if refreshError}<p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {refreshError}</p>{/if}
-    {#if loading}<p class="m-0 text-xs text-base-content/55">Loading pull requests…</p>{/if}
+    {#if showLoading}<p class="m-0 text-xs text-base-content/55">Loading pull requests…</p>{/if}
 
     {#if adding}
       <form class="flex flex-col gap-2 rounded-lg border border-dashed border-base-300 bg-base-100/60 px-3 py-2" novalidate onsubmit={(event) => { event.preventDefault(); void submitPullRequestLink() }}>
