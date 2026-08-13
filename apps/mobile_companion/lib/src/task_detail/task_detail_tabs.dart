@@ -37,7 +37,7 @@ class _TaskDetailTabs extends StatelessWidget {
         ],
       ),
     ),
-    bottomNavigationBar: bottomAction,
+    bottomNavigationBar: selectedTab == 0 ? bottomAction : null,
     body: SafeArea(
       child: IndexedStack(
         index: selectedTab,

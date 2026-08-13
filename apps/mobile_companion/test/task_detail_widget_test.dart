@@ -330,7 +330,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
   );
 
   testWidgets(
-    'Complete is offered for doing Task detail but never backlog detail',
+    'Complete is offered only on doing Task Details',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -341,6 +341,14 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
           ),
         ),
       );
+      expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
+
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, 'Complete'), findsNothing);
+
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
       expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
 
       await tester.pumpWidget(
