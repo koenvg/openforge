@@ -70,6 +70,13 @@ export interface BrowserSurfaceFeedbackSelection {
   /** Host-assigned number rendered on the live page. Older hosts may omit it. */
   annotationNumber?: number
 }
+export interface BrowserSurfaceVisualFeedback {
+  annotationNumber: number
+  url: string
+  region: BrowserSurfaceRegion
+  comment: string
+}
+
 export interface TaskBrowserSurfaceController {
   attach(element: HTMLElement): Promise<Disposable>
   detach(): Promise<void>
@@ -84,6 +91,8 @@ export interface TaskBrowserSurfaceController {
   selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>
+  replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void>
+  captureExists(artifactId: string): Promise<boolean>
   captureVisibleViewport(): Promise<BrowserSurfaceCapture>
   discardCapture(artifactId: string): Promise<void>
 }

@@ -100,6 +100,8 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'selectVisibleRegion'
       | 'cancelVisibleRegionSelection'
       | 'clearVisualFeedback'
+      | 'replaceVisualFeedback'
+      | 'captureExists'
       | 'captureVisibleViewport'
       | 'discardCapture'
     > = true
@@ -118,6 +120,7 @@ describe('renderer Task Browser Surface host adapter', () => {
       if (command === 'task_browser_surface_select_visible_region') {
         return { ok: true, value: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 } }
       }
+      if (command === 'task_browser_surface_capture_exists') return { ok: true, value: true }
       if (command === 'task_browser_surface_capture_visible_viewport') {
         return {
           ok: true,
@@ -138,6 +141,13 @@ describe('renderer Task Browser Surface host adapter', () => {
     const selection = await controller.selectVisibleRegion()
     const capture = await controller.captureVisibleViewport()
     await controller.clearVisualFeedback()
+    await controller.replaceVisualFeedback([{
+      annotationNumber: 1,
+      url: 'https://example.com/',
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      comment: 'Corrected feedback',
+    }])
+    expect(await controller.captureExists(capture.artifactId)).toBe(true)
     await controller.discardCapture(capture.artifactId)
 
     const owner = {
@@ -149,6 +159,16 @@ describe('renderer Task Browser Surface host adapter', () => {
     expect(selection).toEqual({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_select_visible_region', owner)
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_clear_visual_feedback', owner)
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_replace_visual_feedback', {
+      ...owner,
+      feedback: [{
+        annotationNumber: 1,
+        url: 'https://example.com/',
+        region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+        comment: 'Corrected feedback',
+      }],
+    })
+    expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_exists', { ...owner, artifactId: 'capture-1' })
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_capture_visible_viewport', owner)
     expect(invoke).toHaveBeenCalledWith('task_browser_surface_discard_capture', {
       ...owner,

@@ -7,6 +7,7 @@ import type {
   TaskBrowserBounds,
   TaskBrowserNativeState,
   TaskBrowserSurfaceCreateOptions,
+  TaskBrowserSurfaceVisualFeedback,
   TaskBrowserSurfaceStateEvent,
 } from './taskBrowserSurfaceManager.js'
 import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
@@ -19,6 +20,7 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
   readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop' | 'clearVisualFeedback'> = []
   readonly captureCalls: Array<Record<string, never>> = []
+  readonly feedbackReplacements: TaskBrowserSurfaceVisualFeedback[][] = []
   readonly bounds: TaskBrowserBounds[] = []
   readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
   private readonly history = ['about:blank']
@@ -102,6 +104,10 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
 
   async clearVisualFeedback(): Promise<void> {
     this.controlCalls.push('clearVisualFeedback')
+  }
+
+  async replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void> {
+    this.feedbackReplacements.push(feedback.map(marker => ({ ...marker, region: { ...marker.region } })))
   }
   async captureVisibleViewport() {
     this.captureCalls.push({})
@@ -207,6 +213,7 @@ export function createTaskBrowserSurfaceManagerFixture(
       artifactId: '11111111-1111-4111-8111-111111111111',
       absolutePath: '/tmp/openforge/task-browser/capture.png',
     })),
+    exists: vi.fn(async () => true),
     discard: vi.fn(async () => undefined),
     cleanupTask: vi.fn(async () => undefined),
   }

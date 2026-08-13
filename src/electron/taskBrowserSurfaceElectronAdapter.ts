@@ -11,6 +11,7 @@ import type {
   TaskBrowserNativeState,
   TaskBrowserNavigationError,
   TaskBrowserSurfaceCreateOptions,
+  TaskBrowserSurfaceVisualFeedback,
 } from './taskBrowserSurfaceManager.js'
 import type { TaskBrowserPermissionSessionHandler } from './taskBrowserPermissionPolicy.js'
 
@@ -149,6 +150,10 @@ function permissionRouterFor(browserSession: Session): ElectronTaskBrowserPermis
   return router
 }
 
+type StoredVisualFeedback = TaskBrowserVisualFeedbackAnnotation & {
+  region: TaskBrowserSurfaceVisualFeedback['region']
+}
+
 class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private readonly view: WebContentsView
   private readonly browserSession: Session
@@ -156,7 +161,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   private readonly listeners = new Set<(state: TaskBrowserNativeState) => void>()
   private readonly childWindows = new Set<BrowserWindow>()
   private readonly activeDownloads = new Map<DownloadItem, () => void>()
-  private readonly feedbackAnnotationsByUrl = new Map<string, TaskBrowserVisualFeedbackAnnotation[]>()
+  private readonly feedbackAnnotationsByUrl = new Map<string, StoredVisualFeedback[]>()
   private attachedWindow: BrowserWindow | null = null
   private navigationError: TaskBrowserNavigationError | null = null
   private cancelSelection: (() => void) | null = null
@@ -308,7 +313,10 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       const result = await Promise.race([selection, cancelled])
       if (result === null) return null
       const pageAnnotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
-      pageAnnotations.push(result.annotation)
+      pageAnnotations.push({
+        ...result.annotation,
+        region: { ...result.region },
+      })
       this.feedbackAnnotationsByUrl.set(pageUrl, pageAnnotations)
       return {
         region: result.region,
@@ -347,6 +355,48 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     await this.view.webContents.executeJavaScript(`(() => {
       document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
     })()`, true).catch(() => undefined)
+  }
+
+  async replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void> {
+    await this.cancelVisibleRegionSelection()
+    if (this.destroyed || this.view.webContents.isDestroyed()) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface has been destroyed')
+    }
+
+    const current = await this.view.webContents.executeJavaScript(`({
+      url: location.href,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    })`, true) as { url: string; width: number; height: number; scrollX: number; scrollY: number }
+    const existing = new Map(Array.from(this.feedbackAnnotationsByUrl.values())
+      .flat()
+      .map(annotation => [annotation.number, annotation]))
+    const replacement = new Map<string, StoredVisualFeedback[]>()
+
+    for (const marker of feedback) {
+      const previous = existing.get(marker.annotationNumber)
+      const viewportWidth = previous === undefined ? current.width : previous.width / previous.region.width
+      const viewportHeight = previous === undefined ? current.height : previous.height / previous.region.height
+      const scrollX = previous === undefined ? (marker.url === current.url ? current.scrollX : 0) : previous.x - previous.region.x * viewportWidth
+      const scrollY = previous === undefined ? (marker.url === current.url ? current.scrollY : 0) : previous.y - previous.region.y * viewportHeight
+      const annotations = replacement.get(marker.url) ?? []
+      annotations.push({
+        number: marker.annotationNumber,
+        comment: marker.comment,
+        region: { ...marker.region },
+        x: scrollX + marker.region.x * viewportWidth,
+        y: scrollY + marker.region.y * viewportHeight,
+        width: marker.region.width * viewportWidth,
+        height: marker.region.height * viewportHeight,
+      })
+      replacement.set(marker.url, annotations)
+    }
+
+    this.feedbackAnnotationsByUrl.clear()
+    for (const [url, annotations] of replacement) this.feedbackAnnotationsByUrl.set(url, annotations)
+    await this.refreshVisualFeedbackForCurrentUrl()
   }
 
   async captureVisibleViewport() {
@@ -396,12 +446,12 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     })()`, true).catch(() => undefined)
   }
 
-  private refreshVisualFeedbackForCurrentUrl(): void {
+  private async refreshVisualFeedbackForCurrentUrl(): Promise<void> {
     const contents = this.view.webContents
     if (this.destroyed || contents.isDestroyed()) return
     const pageUrl = contents.getURL()
     const savedAnnotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
-    void contents.executeJavaScript(`(() => {
+    await contents.executeJavaScript(`(() => {
       const expectedUrl = ${JSON.stringify(pageUrl)};
       if (location.href !== expectedUrl) return;
       const annotationsId = '__openforge_visual_feedback_annotations__';
@@ -427,7 +477,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       annotationsRoot.replaceChildren();
       annotationsRoot.dataset.pageUrl = expectedUrl;
       ${JSON.stringify(savedAnnotations)}.forEach(renderAnnotation);
-    })()`, true).catch(() => undefined)
+    })()`, true)
   }
 
   private ownsWebContents(webContents: WebContents): boolean {
@@ -545,11 +595,11 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     })
     contents.on('did-stop-loading', () => this.publish())
     contents.on('did-navigate', () => {
-      this.refreshVisualFeedbackForCurrentUrl()
+      void this.refreshVisualFeedbackForCurrentUrl().catch(() => undefined)
       this.publish()
     })
     contents.on('did-navigate-in-page', () => {
-      this.refreshVisualFeedbackForCurrentUrl()
+      void this.refreshVisualFeedbackForCurrentUrl().catch(() => undefined)
       this.publish()
     })
     contents.on('page-title-updated', () => this.publish())

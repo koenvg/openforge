@@ -344,6 +344,8 @@ function createTestingCalls() {
 		browserSurfaceControls: [],
 		browserSurfaceSelections: [],
 		browserSurfaceFeedbackClears: [],
+		browserSurfaceFeedbackReplacements: [],
+		browserSurfaceCaptureChecks: [],
 		browserSurfaceCaptures: [],
 		browserSurfaceCaptureDiscards: [],
 		browserSurfaceSessionResets: [],
@@ -887,6 +889,7 @@ var TestingTaskBrowserSurface = class {
 	currentAttachment = 0;
 	destroyed = false;
 	nextAnnotationNumber = 1;
+	capturedArtifactIds = /* @__PURE__ */ new Set();
 	constructor(taskId, id, initialUrl, calls, onDestroyed) {
 		this.taskId = taskId;
 		this.id = id;
@@ -1039,14 +1042,38 @@ var TestingTaskBrowserSurface = class {
 		});
 		this.nextAnnotationNumber = 1;
 	}
+	async replaceVisualFeedback(feedback) {
+		this.assertLive();
+		this.calls.browserSurfaceFeedbackReplacements.push({
+			taskId: this.taskId,
+			id: this.id,
+			feedback: feedback.map((marker) => ({
+				...marker,
+				region: { ...marker.region }
+			}))
+		});
+		this.nextAnnotationNumber = feedback.reduce((maximum, marker) => Math.max(maximum, marker.annotationNumber), 0) + 1;
+	}
+	async captureExists(artifactId) {
+		this.assertLive();
+		if (!artifactId.trim()) throw new BrowserSurfaceError("INVALID_ID", "Browser Surface capture requires an artifact ID");
+		this.calls.browserSurfaceCaptureChecks.push({
+			taskId: this.taskId,
+			id: this.id,
+			artifactId
+		});
+		return this.capturedArtifactIds.has(artifactId);
+	}
 	async captureVisibleViewport() {
 		this.assertLive();
 		this.calls.browserSurfaceCaptures.push({
 			taskId: this.taskId,
 			id: this.id
 		});
+		const artifactId = `capture-${this.calls.browserSurfaceCaptures.length}`;
+		this.capturedArtifactIds.add(artifactId);
 		return {
-			artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+			artifactId,
 			absolutePath: `/tmp/openforge-browser-captures/${this.taskId}/capture-${this.calls.browserSurfaceCaptures.length}.png`,
 			mediaType: "image/png",
 			width: 800,
@@ -1065,6 +1092,7 @@ var TestingTaskBrowserSurface = class {
 			id: this.id,
 			artifactId
 		});
+		this.capturedArtifactIds.delete(artifactId);
 	}
 	setState(patch) {
 		this.assertLive();

@@ -194,6 +194,13 @@ describe('browser surfaces SDK contract', () => {
     const selection = await surface.selectVisibleRegion()
     const capture = await surface.captureVisibleViewport()
     await surface.clearVisualFeedback()
+    await surface.replaceVisualFeedback([{
+      annotationNumber: 1,
+      url: 'https://example.com/',
+      region: { x: 0.2, y: 0.1, width: 0.4, height: 0.4 },
+      comment: 'Corrected example feedback',
+    }])
+    await expect(surface.captureExists(capture.artifactId)).resolves.toBe(true)
 
     expect(capture).toEqual({
       artifactId: expect.stringMatching(/^capture-/),
@@ -215,8 +222,22 @@ describe('browser surfaces SDK contract', () => {
     expect(api.__testing.calls.browserSurfaceSelections).toEqual([{ taskId: 'T-capture', id: 'main' }])
     expect(api.__testing.calls.browserSurfaceFeedbackClears).toEqual([{ taskId: 'T-capture', id: 'main' }])
     expect(api.__testing.calls.browserSurfaceCaptures).toEqual([{ taskId: 'T-capture', id: 'main' }])
+    expect(api.__testing.calls.browserSurfaceFeedbackReplacements).toEqual([{
+      taskId: 'T-capture',
+      id: 'main',
+      feedback: [{
+        annotationNumber: 1,
+        url: 'https://example.com/',
+        region: { x: 0.2, y: 0.1, width: 0.4, height: 0.4 },
+        comment: 'Corrected example feedback',
+      }],
+    }])
+    expect(api.__testing.calls.browserSurfaceCaptureChecks).toEqual([{
+      taskId: 'T-capture', id: 'main', artifactId: capture.artifactId,
+    }])
 
     await surface.discardCapture(capture.artifactId)
+    await expect(surface.captureExists(capture.artifactId)).resolves.toBe(false)
     expect(api.__testing.calls.browserSurfaceCaptureDiscards).toEqual([
       { taskId: 'T-capture', id: 'main', artifactId: capture.artifactId },
     ])

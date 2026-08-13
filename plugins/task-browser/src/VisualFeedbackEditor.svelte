@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { List, MessageSquarePlus, Send as SendIcon, Trash2 } from '@lucide/svelte'
+  import { List, MessageSquarePlus, RefreshCw, Send as SendIcon, Trash2, Undo2 } from '@lucide/svelte'
   import type { VisualFeedbackEditorState } from './visualFeedbackEditorState.svelte'
 
   interface Props {
@@ -14,6 +14,12 @@
 
   function countLabel(count: number, singular: string, plural: string): string {
     return `${count} ${count === 1 ? singular : plural}`
+  }
+
+  function discardSession(): void {
+    if (window.confirm('Discard all unsent visual feedback and background captures? This does not reset the browser.')) {
+      void editor.discard()
+    }
   }
 </script>
 
@@ -31,6 +37,31 @@
   >
     <MessageSquarePlus size={17} aria-hidden="true" />
   </button>
+  {#if editor.canUndo}
+    <button
+      class="btn btn-ghost btn-square btn-sm"
+      type="button"
+      aria-label="Undo last visual feedback change"
+      title="Undo last change"
+      disabled={editor.busy}
+      onclick={() => void editor.undo()}
+    >
+      <Undo2 size={16} aria-hidden="true" />
+    </button>
+  {/if}
+  {#if editor.saveError !== null}
+    <span class="max-w-48 truncate text-xs text-error" title={editor.saveError} role="alert">{editor.saveError}</span>
+    <button
+      class="btn btn-warning btn-sm"
+      type="button"
+      aria-label="Retry saving visual feedback"
+      disabled={editor.busy}
+      onclick={() => void editor.retrySave()}
+    >
+      <RefreshCw size={15} aria-hidden="true" />
+      Retry save
+    </button>
+  {/if}
   {#if editor.annotations.length > 0}
     <span class="whitespace-nowrap text-xs text-base-content/60" aria-live="polite">
       {countLabel(editor.captures.length, 'screenshot', 'screenshots')} ·
@@ -69,7 +100,7 @@
       aria-label="Discard visual feedback"
       title="Discard visual feedback"
       disabled={editor.busy}
-      onclick={() => void editor.discard()}
+      onclick={discardSession}
     >
       <Trash2 size={16} aria-hidden="true" />
     </button>

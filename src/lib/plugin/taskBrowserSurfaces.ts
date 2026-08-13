@@ -2,6 +2,7 @@ import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import type {
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceVisualFeedback,
   BrowserSurfaceErrorCode,
   BrowserSurfacesAPI,
   Disposable,
@@ -174,6 +175,17 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
   async clearVisualFeedback(): Promise<void> {
     this.assertLive()
     await invokeHost<void>('task_browser_surface_clear_visual_feedback', this.captureOwner())
+  }
+
+  async replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void> {
+    this.assertLive()
+    await invokeHost<void>('task_browser_surface_replace_visual_feedback', { ...this.captureOwner(), feedback })
+  }
+
+  async captureExists(artifactId: string): Promise<boolean> {
+    this.assertLive()
+    if (!artifactId.trim()) throw new BrowserSurfaceError('INVALID_ID', 'Task Browser capture requires an artifact ID')
+    return invokeHost<boolean>('task_browser_surface_capture_exists', { ...this.captureOwner(), artifactId })
   }
   captureVisibleViewport(): Promise<BrowserSurfaceCapture> {
     this.assertLive()

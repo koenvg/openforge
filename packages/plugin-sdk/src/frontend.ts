@@ -1,6 +1,7 @@
 import type {
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceVisualFeedback,
   BrowserSurfaceRegion,
   BrowserSurfaceErrorCode,
   BrowserSurfaceNavigationError,
@@ -70,6 +71,7 @@ export { BrowserSurfaceError, isAllowedBrowserSurfaceUrl } from './browserSurfac
 export type {
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceVisualFeedback,
   BrowserSurfaceRegion,
   BrowserSurfaceErrorCode,
   BrowserSurfaceNavigationError,

@@ -362,6 +362,40 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     expect(electronFakes.views[0].webContents.executeJavaScriptCalls.at(-1)).toContain("document.getElementById('__openforge_visual_feedback_annotations__')?.remove()")
   })
 
+  it('replaces corrected normalized markers on the live page without detaching it', async () => {
+    const window = electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-corrected-feedback',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 640, height: 480 })
+    const contents = electronFakes.views[0].webContents
+    await surface.loadURL('https://example.com/')
+    contents.executeJavaScriptResult = {
+      url: 'https://example.com/',
+      width: 640,
+      height: 480,
+      scrollX: 0,
+      scrollY: 120,
+    }
+
+    await surface.replaceVisualFeedback([{
+      annotationNumber: 1,
+      url: 'https://example.com/',
+      region: { x: 0.25, y: 0.1, width: 0.5, height: 0.2 },
+      comment: 'Corrected live marker',
+    }])
+
+    const script = contents.executeJavaScriptCalls.at(-1) ?? ''
+    expect(script).toContain('Corrected live marker')
+    expect(script).toContain('"region":{"x":0.25,"y":0.1,"width":0.5,"height":0.2}')
+    expect(script).toContain('"x":160')
+    expect(script).toContain('"y":168')
+    expect(window.removedViews).toEqual([])
+    expect(contents.capturePageCalls).toEqual([])
+  })
   it('hides stale annotations during navigation and restores the destination URL annotations automatically', async () => {
     electronFakes.registerWindow(10)
     const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({

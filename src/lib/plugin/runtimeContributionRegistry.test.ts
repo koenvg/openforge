@@ -458,6 +458,8 @@ describe('runtime contribution registry', () => {
       })),
       cancelVisibleRegionSelection: vi.fn(async () => undefined),
       clearVisualFeedback: vi.fn(async () => undefined),
+      replaceVisualFeedback: vi.fn(async () => undefined),
+      captureExists: vi.fn(async () => true),
       captureVisibleViewport: vi.fn(async () => ({
         artifactId: 'capture-1', absolutePath: '/tmp/capture-1.png', mediaType: 'image/png' as const,
         width: 1, height: 1, url: 'about:blank', title: '', capturedAt: '2026-01-01T00:00:00.000Z',

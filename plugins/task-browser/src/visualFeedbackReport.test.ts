@@ -74,4 +74,19 @@ Comment:
 > Confirmation marker
 `)
   })
+
+  it('reports a missing background artifact on each affected finding without dropping corrected data', () => {
+    const report = formatVisualFeedbackReport([{
+      number: 1,
+      evidence: capture({ absolutePath: '/tmp/missing.png' }),
+      artifactState: 'missing',
+      artifactError: 'Background capture is missing at /tmp/missing.png',
+    }], [
+      { number: 1, captureNumber: 1, rect, comment: 'First corrected finding' },
+      { number: 2, captureNumber: 1, rect, comment: 'Second corrected finding' },
+    ])
+
+    expect(report.match(/Background artifact: Background capture is missing/g)).toHaveLength(2)
+    expect(report.indexOf('First corrected finding')).toBeLessThan(report.indexOf('Second corrected finding'))
+  })
 })

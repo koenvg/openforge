@@ -3,6 +3,8 @@ import type { BrowserSurfaceCapture, BrowserSurfaceRegion } from '@openforge-app
 export interface VisualFeedbackReportCapture {
   number: number
   evidence: BrowserSurfaceCapture
+  artifactState?: 'available' | 'missing' | 'unknown'
+  artifactError?: string | null
 }
 
 export interface VisualFeedbackReportAnnotation {
@@ -15,16 +17,23 @@ export interface VisualFeedbackReportAnnotation {
 function inlineCode(value: string): string {
   return `\`${value.replaceAll('`', '\\`')}\``
 }
-function annotationSection(annotation: VisualFeedbackReportAnnotation): string {
+function annotationSection(
+  annotation: VisualFeedbackReportAnnotation,
+  capture: VisualFeedbackReportCapture,
+): string {
   const quotedComment = annotation.comment
     .split('\n')
     .map(line => `> ${line}`.trimEnd())
     .join('\n')
 
+  const background = capture.artifactState !== undefined && capture.artifactState !== 'available'
+    ? `- Background artifact: ${capture.artifactError ?? 'Unavailable'}`
+    : null
   return [
     `### Annotation ${annotation.number}`,
     '',
     `- Region: x=${annotation.rect.x}, y=${annotation.rect.y}, width=${annotation.rect.width}, height=${annotation.rect.height}`,
+    ...(background === null ? [] : [background]),
     '',
     'Comment:',
     '',
@@ -50,7 +59,7 @@ function captureSection(
     `- Viewport: ${evidence.width} × ${evidence.height}`,
     `- PNG: ${inlineCode(evidence.absolutePath)}`,
     '',
-    orderedAnnotations.map(annotationSection).join('\n\n'),
+    orderedAnnotations.map(annotation => annotationSection(annotation, capture)).join('\n\n'),
   ].join('\n')
 }
 

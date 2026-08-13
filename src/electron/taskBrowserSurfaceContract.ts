@@ -83,6 +83,13 @@ export interface TaskBrowserSurfaceRegion {
   height: number
 }
 
+export interface TaskBrowserSurfaceVisualFeedback {
+  annotationNumber: number
+  url: string
+  region: TaskBrowserSurfaceRegion
+  comment: string
+}
+
 export interface TaskBrowserSurfaceFeedbackSelection {
   region: TaskBrowserSurfaceRegion
   comment: string
@@ -108,6 +115,7 @@ export interface NativeTaskBrowserSurface {
   selectVisibleRegion(): Promise<TaskBrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>
+  replaceVisualFeedback(feedback: readonly TaskBrowserSurfaceVisualFeedback[]): Promise<void>
   captureVisibleViewport(): Promise<TaskBrowserNativeCapture>
 }
 

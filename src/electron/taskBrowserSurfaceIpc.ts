@@ -5,6 +5,7 @@ import type {
   TaskBrowserBounds,
   TaskBrowserSurfaceErrorCode,
   TaskBrowserSurfaceManager,
+  TaskBrowserSurfaceVisualFeedback,
 } from './taskBrowserSurfaceManager.js'
 
 const COMMANDS = new Set([
@@ -21,6 +22,8 @@ const COMMANDS = new Set([
   'task_browser_surface_select_visible_region',
   'task_browser_surface_cancel_visible_region_selection',
   'task_browser_surface_clear_visual_feedback',
+  'task_browser_surface_replace_visual_feedback',
+  'task_browser_surface_capture_exists',
   'task_browser_surface_capture_visible_viewport',
   'task_browser_surface_discard_capture',
   'task_browser_surface_reset_session',
@@ -91,6 +94,55 @@ function boundsField(payload: Record<string, unknown>): TaskBrowserBounds | null
   }
 }
 
+function visualFeedbackField(payload: Record<string, unknown>): TaskBrowserSurfaceVisualFeedback[] {
+  if (!Array.isArray(payload.feedback)) {
+    throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser visual feedback requires an array')
+  }
+  const numbers = new Set<number>()
+  return payload.feedback.map(entry => {
+    const value = record(entry)
+    const annotationNumber = value.annotationNumber
+    if (typeof annotationNumber !== 'number' || !Number.isSafeInteger(annotationNumber) || annotationNumber <= 0 || numbers.has(annotationNumber)) {
+      throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser visual feedback requires unique positive annotation numbers')
+    }
+    numbers.add(annotationNumber)
+    const url = stringField(value, 'url')
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(url)
+    } catch {
+      throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser visual feedback requires a valid HTTP(S) URL')
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new TaskBrowserSurfaceError('INVALID_URL', 'Task Browser visual feedback requires a valid HTTP(S) URL')
+    }
+    const comment = stringField(value, 'comment').trim()
+    const regionValue = value.region
+    if (typeof regionValue !== 'object' || regionValue === null || Array.isArray(regionValue)) {
+      throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser visual feedback requires normalized marker geometry')
+    }
+    const region = regionValue as Record<string, unknown>
+    const values = [region.x, region.y, region.width, region.height]
+    if (!values.every(item => typeof item === 'number' && Number.isFinite(item))
+      || (region.x as number) < 0 || (region.y as number) < 0
+      || (region.width as number) <= 0 || (region.height as number) <= 0
+      || (region.x as number) + (region.width as number) > 1
+      || (region.y as number) + (region.height as number) > 1) {
+      throw new TaskBrowserSurfaceError('INVALID_BOUNDS', 'Task Browser visual feedback geometry must stay within normalized bounds')
+    }
+    return {
+      annotationNumber,
+      url,
+      comment,
+      region: {
+        x: region.x as number,
+        y: region.y as number,
+        width: region.width as number,
+        height: region.height as number,
+      },
+    }
+  })
+}
 function errorResponse(error: unknown): TaskBrowserSurfaceHostResponse<never> {
   if (error instanceof TaskBrowserSurfaceError) {
     return { ok: false, error: { code: error.code, message: error.message } }
@@ -141,6 +193,8 @@ export class TaskBrowserSurfaceIpcRouter {
         || command === 'task_browser_surface_cancel_visible_region_selection'
         || command === 'task_browser_surface_capture_visible_viewport'
         || command === 'task_browser_surface_clear_visual_feedback'
+        || command === 'task_browser_surface_replace_visual_feedback'
+        || command === 'task_browser_surface_capture_exists'
         || command === 'task_browser_surface_discard_capture'
       ) {
         const owner = {
@@ -160,6 +214,13 @@ export class TaskBrowserSurfaceIpcRouter {
         if (command === 'task_browser_surface_clear_visual_feedback') {
           await this.manager.clearVisualFeedback(owner)
           return { ok: true, value: undefined }
+        }
+        if (command === 'task_browser_surface_replace_visual_feedback') {
+          await this.manager.replaceVisualFeedback(owner, visualFeedbackField(payload))
+          return { ok: true, value: undefined }
+        }
+        if (command === 'task_browser_surface_capture_exists') {
+          return { ok: true, value: await this.manager.captureExists({ ...owner, artifactId: stringField(payload, 'artifactId') }) }
         }
         if (command === 'task_browser_surface_capture_visible_viewport') {
           return { ok: true, value: await this.manager.captureVisibleViewport(owner) }
