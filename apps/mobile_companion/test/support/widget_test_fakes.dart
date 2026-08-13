@@ -223,6 +223,7 @@ final class DomainCompanionClient implements CompanionClient {
     String taskId,
   ) async => TaskDetail(
     taskId: taskId,
+    initialPrompt: 'Handle this sensitive Task.',
     title: 'Sensitive Task',
     projectId: 'P-private',
     projectName: 'Private Project',

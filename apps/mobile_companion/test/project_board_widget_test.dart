@@ -58,6 +58,7 @@ final class _WidgetClient implements CompanionClient {
     String taskId,
   ) async => TaskDetail(
     taskId: taskId,
+    initialPrompt: 'Start this Backlog Task.',
     title: 'Backlog Task',
     projectId: 'P-1',
     projectName: 'Alpha',

@@ -418,6 +418,7 @@ void main() {
         ]
         ..taskDetails['T-1'] = TaskDetail(
           taskId: 'T-1',
+          initialPrompt: 'Investigate the primary Task.',
           title: 'Primary Task',
           projectId: 'P-1',
           projectName: 'OpenForge',
@@ -439,6 +440,7 @@ void main() {
         )
         ..taskDetails['T-2'] = TaskDetail(
           taskId: 'T-2',
+          initialPrompt: 'Investigate the related Task.',
           title: 'Related Task',
           projectId: 'P-1',
           projectName: 'OpenForge',
@@ -751,6 +753,7 @@ final class _SuccessfulTailscaleClient implements CompanionClient {
     if (configured != null) return configured;
     return TaskDetail(
       taskId: taskId,
+      initialPrompt: 'Investigate Task one.',
       title: 'Task one',
       projectId: 'P-1',
       projectName: 'OpenForge',

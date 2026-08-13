@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    'e643499b33af610f5397c6e0d1365ff7caef2047ac44e742ab2108ad0601a5e2';
+    '4cc9e91d89e4dcf3566f02189a81d68575645c12cbe3e25ce2b8ffca3a3a42e7';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '1';
 
@@ -681,6 +681,7 @@ final class DependentTask {
 final class TaskDetail {
   TaskDetail({
     required this.taskId,
+    required this.initialPrompt,
     required this.title,
     required this.projectId,
     required this.projectName,
@@ -700,9 +701,10 @@ final class TaskDetail {
        dependentTasks = List<DependentTask>.unmodifiable(dependentTasks);
 
   factory TaskDetail.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'projectId', 'projectName', 'boardStatus', 'handoffNotes', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
+    _expectOnly(json, const <String>{'taskId', 'initialPrompt', 'title', 'projectId', 'projectName', 'boardStatus', 'handoffNotes', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
     final model = TaskDetail(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
+      initialPrompt: _required(json, 'initialPrompt', (value) => _asString(value, 'initialPrompt', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
       projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
       projectName: _required(json, 'projectName', (value) => _asString(value, 'projectName', minLength: 1)),
@@ -723,6 +725,7 @@ final class TaskDetail {
 
   Map<String, Object?> toJson() => <String, Object?>{
       'taskId': taskId,
+      'initialPrompt': initialPrompt,
       'title': title,
       'projectId': projectId,
       'projectName': projectName,
@@ -740,6 +743,7 @@ final class TaskDetail {
   };
 
   final String taskId;
+  final String initialPrompt;
   final String title;
   final String projectId;
   final String projectName;

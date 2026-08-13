@@ -14,6 +14,7 @@ import 'package:openforge_companion/src/task_detail/task_detail_screen.dart';
 
 TaskDetail _detail({
   String title = 'Mobile Task detail',
+  String initialPrompt = 'Investigate the mobile Task detail.',
   String? handoffNotes = 'Ready for review.',
   String boardStatus = 'doing',
   String agentState = 'running',
@@ -24,6 +25,7 @@ TaskDetail _detail({
   List<DependentTask> dependentTasks = const <DependentTask>[],
 }) => TaskDetail(
   taskId: 'KVG-2946',
+  initialPrompt: initialPrompt,
   title: title,
   projectId: 'P-1',
   projectName: 'OpenForge',
@@ -70,12 +72,14 @@ void main() {
     expect(find.text('Mobile Task detail'), findsOneWidget);
     expect(find.text('OpenForge'), findsOneWidget);
     expect(find.text('Doing'), findsOneWidget);
+    expect(find.text('Investigate the mobile Task detail.'), findsOneWidget);
     expect(find.text('Ready for review.'), findsOneWidget);
     expect(find.text('Failed'), findsOneWidget);
     expect(
       find.text('Agent failed. Review details on the desktop.'),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(find.text('Created'), 200);
     expect(find.text('Created'), findsOneWidget);
     expect(find.text('Task updated'), findsOneWidget);
     expect(find.text('Agent updated'), findsOneWidget);
@@ -85,6 +89,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.bySemanticsLabel('Initial Prompt'), findsOneWidget);
     expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
     expect(find.bySemanticsLabel('Ready for review.'), findsOneWidget);
     expect(find.text('Labels'), findsNothing);
@@ -245,9 +250,57 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       isTrue,
     );
     expect(find.byType(Image), findsNothing);
-    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(find.byType(SelectionArea), findsNWidgets(2));
     expect(find.byType(SelectableText), findsNothing);
     expect(find.text(markdown.trim()), findsNothing);
+  });
+
+  testWidgets('Initial Prompt renders complete Markdown content', (
+    tester,
+  ) async {
+    final prompt = <String>[
+      '# Initial mobile request',
+      '<openforge_task_management>',
+      'Visible workflow instruction.',
+      '</openforge_task_management>',
+      '**Render this formatting** for the paired device.',
+      '- Preserve lists',
+      '- Preserve `inline code`',
+      ...List<String>.generate(
+        30,
+        (index) => 'Context paragraph ${index + 1}.',
+      ),
+      'Final instruction remains visible.',
+    ].join('\n\n');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail(initialPrompt: prompt)),
+          onRefresh: () async {},
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('Initial Prompt'), findsOneWidget);
+    expect(find.text('Initial mobile request'), findsOneWidget);
+    expect(find.text('<openforge_task_management>'), findsOneWidget);
+    expect(find.text('Visible workflow instruction.'), findsOneWidget);
+    expect(find.text('</openforge_task_management>'), findsOneWidget);
+    expect(
+      find.text(
+        'Render this formatting for the paired device.',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Preserve lists', findRichText: true), findsOneWidget);
+    expect(
+      find.text('Preserve inline code', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text('Final instruction remains visible.'), findsOneWidget);
+    expect(find.text(prompt), findsNothing);
   });
 
   testWidgets(

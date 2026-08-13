@@ -212,6 +212,7 @@ pub(crate) struct CompanionDependentTaskResponse {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) task_id: String,
+    pub(crate) initial_prompt: String,
     pub(crate) title: String,
     pub(crate) project_id: String,
     pub(crate) project_name: String,

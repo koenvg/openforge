@@ -111,6 +111,7 @@ fn pairing() -> Arc<PairingCoordinator> {
 fn detail(board_status: &str) -> CompanionTaskDetail {
     CompanionTaskDetail {
         task_id: TASK_ID.to_string(),
+        initial_prompt: "Start this Task from mobile".to_string(),
         title: "Start from mobile".to_string(),
         project_id: PROJECT_ID.to_string(),
         project_name: "OpenForge".to_string(),

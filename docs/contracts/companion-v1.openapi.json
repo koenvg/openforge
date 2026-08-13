@@ -637,6 +637,7 @@
         "additionalProperties": false,
         "required": [
           "taskId",
+          "initialPrompt",
           "title",
           "projectId",
           "projectName",
@@ -654,6 +655,7 @@
         ],
         "properties": {
           "taskId": { "type": "string", "minLength": 1 },
+          "initialPrompt": { "type": "string", "minLength": 1 },
           "title": { "type": "string", "minLength": 1 },
           "projectId": { "type": "string", "minLength": 1 },
           "projectName": { "type": "string", "minLength": 1 },

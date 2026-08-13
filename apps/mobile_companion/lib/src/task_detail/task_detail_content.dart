@@ -136,31 +136,12 @@ class _LoadedTaskDetail extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
-          Semantics(
-            container: true,
-            explicitChildNodes: true,
-            label: 'Handoff Notes',
-            child: _DetailCard(
-              children: <Widget>[
-                ExcludeSemantics(
-                  child: Text(
-                    'Handoff Notes',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SelectionArea(
-                  child: MarkdownBody(
-                    data: visibleHandoff,
-                    builders: <String, MarkdownElementBuilder>{
-                      'a': _HandoffLinkBuilder(),
-                    },
-                    imageBuilder: _buildHandoffImagePlaceholder,
-                  ),
-                ),
-              ],
-            ),
+          _MarkdownDetailCard(
+            label: 'Initial Prompt',
+            data: detail.initialPrompt,
           ),
+          const SizedBox(height: 16),
+          _MarkdownDetailCard(label: 'Handoff Notes', data: visibleHandoff),
           const SizedBox(height: 16),
           Semantics(
             container: true,
@@ -266,6 +247,37 @@ class _DetailCard extends StatelessWidget {
   );
 }
 
+class _MarkdownDetailCard extends StatelessWidget {
+  const _MarkdownDetailCard({required this.label, required this.data});
+
+  final String label;
+  final String data;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    explicitChildNodes: true,
+    label: label,
+    child: _DetailCard(
+      children: <Widget>[
+        ExcludeSemantics(
+          child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        const SizedBox(height: 8),
+        SelectionArea(
+          child: MarkdownBody(
+            data: data,
+            builders: <String, MarkdownElementBuilder>{
+              'a': _SafeMarkdownLinkBuilder(),
+            },
+            imageBuilder: _buildSafeMarkdownImagePlaceholder,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _LabeledValue extends StatelessWidget {
   const _LabeledValue({required this.label, required this.value});
 
@@ -337,7 +349,7 @@ class _DetailState extends StatelessWidget {
   );
 }
 
-final class _HandoffLinkBuilder extends MarkdownElementBuilder {
+final class _SafeMarkdownLinkBuilder extends MarkdownElementBuilder {
   @override
   Widget? visitElementAfterWithContext(
     BuildContext context,
@@ -346,7 +358,7 @@ final class _HandoffLinkBuilder extends MarkdownElementBuilder {
     TextStyle? parentStyle,
   ) {
     final styleSheet = MarkdownStyleSheet.fromTheme(Theme.of(context));
-    final children = _buildHandoffLinkSpans(element.children, styleSheet);
+    final children = _buildSafeMarkdownLinkSpans(element.children, styleSheet);
     final destination = element.attributes['href']?.trim();
     if (destination != null &&
         destination.isNotEmpty &&
@@ -360,15 +372,15 @@ final class _HandoffLinkBuilder extends MarkdownElementBuilder {
   }
 }
 
-List<InlineSpan> _buildHandoffLinkSpans(
+List<InlineSpan> _buildSafeMarkdownLinkSpans(
   List<markdown.Node>? nodes,
   MarkdownStyleSheet styleSheet,
 ) => <InlineSpan>[
   for (final node in nodes ?? const <markdown.Node>[])
-    _buildHandoffLinkSpan(node, styleSheet),
+    _buildSafeMarkdownLinkSpan(node, styleSheet),
 ];
 
-InlineSpan _buildHandoffLinkSpan(
+InlineSpan _buildSafeMarkdownLinkSpan(
   markdown.Node node,
   MarkdownStyleSheet styleSheet,
 ) {
@@ -377,7 +389,7 @@ InlineSpan _buildHandoffLinkSpan(
   if (node.tag == 'img') {
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
-      child: _buildHandoffImagePlaceholder(
+      child: _buildSafeMarkdownImagePlaceholder(
         Uri.tryParse(node.attributes['src'] ?? '') ?? Uri(),
         node.attributes['title'],
         node.attributes['alt'],
@@ -385,7 +397,7 @@ InlineSpan _buildHandoffLinkSpan(
     );
   }
 
-  final children = _buildHandoffLinkSpans(node.children, styleSheet);
+  final children = _buildSafeMarkdownLinkSpans(node.children, styleSheet);
   final childText = children.map((span) => span.toPlainText()).join();
   final useTextFallback =
       node.textContent.isNotEmpty && childText != node.textContent;
@@ -396,7 +408,7 @@ InlineSpan _buildHandoffLinkSpan(
   );
 }
 
-Widget _buildHandoffImagePlaceholder(Uri _, String? title, String? alt) {
+Widget _buildSafeMarkdownImagePlaceholder(Uri _, String? title, String? alt) {
   final description = switch ((alt?.trim(), title?.trim())) {
     (final altText?, _) when altText.isNotEmpty => altText,
     (_, final titleText?) when titleText.isNotEmpty => titleText,
