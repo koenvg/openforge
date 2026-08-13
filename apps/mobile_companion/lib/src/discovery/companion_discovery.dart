@@ -1,3 +1,5 @@
+import '../generated/companion_v1_client.dart';
+
 const companionBonjourServiceType = '_openforge._tcp';
 
 final class CompanionDiscoveryPermissionDenied implements Exception {
@@ -51,7 +53,7 @@ final class TrustedCompanionEndpointDiscovery
     final seen = <Uri>{};
     for (final service in services) {
       if (service.attributes['hostId'] != hostId ||
-          service.attributes['protocolVersion'] != '1' ||
+          service.attributes['protocolVersion'] != companionV1ProtocolVersion ||
           service.port < 1 ||
           service.port > 65535) {
         continue;

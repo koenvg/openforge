@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/discovery/bonjour_discovery_browser.dart';
 import 'package:openforge_companion/src/discovery/companion_discovery.dart';
+import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 
 const _trustedHostId = '65d91f21-6732-45a6-9418-3dfaf4c93f52';
 const _settingsChannel = MethodChannel('app.openforge.companion/settings');
@@ -67,7 +68,7 @@ void main() {
           DiscoveredCompanionService(
             attributes: <String, String>{
               'hostId': _trustedHostId,
-              'protocolVersion': '1',
+              'protocolVersion': companionV1ProtocolVersion,
             },
             hostAddresses: <String>['192.168.1.20', 'fe80::1234'],
             port: 17424,
