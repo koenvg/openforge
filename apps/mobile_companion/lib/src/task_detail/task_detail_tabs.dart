@@ -19,6 +19,7 @@ class _TaskDetailTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    resizeToAvoidBottomInset: selectedTab != 1,
     appBar: AppBar(
       title: const Text('Task'),
       actions: <Widget>[
