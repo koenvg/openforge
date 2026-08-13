@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/quiet_paper_theme.dart';
+
 class CompanionAppShell extends StatelessWidget {
   const CompanionAppShell({
     required this.navigatorKey,
@@ -15,17 +17,8 @@ class CompanionAppShell extends StatelessWidget {
     navigatorKey: navigatorKey,
     debugShowCheckedModeBanner: false,
     title: 'OpenForge Companion',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-      useMaterial3: true,
-    ),
-    darkTheme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.indigo,
-        brightness: Brightness.dark,
-      ),
-      useMaterial3: true,
-    ),
+    theme: QuietPaperTheme.light,
+    darkTheme: QuietPaperTheme.dark,
     themeMode: ThemeMode.system,
     home: home,
   );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/quiet_paper_theme.dart';
+
 import '../action_palette/action_palette.dart';
 import '../action_palette/action_palette_controller.dart';
 import '../generated/companion_v1_client.dart';
@@ -105,13 +107,17 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
   }
 
   Future<void> _showTaskComposer() async {
+    final state = widget.controller.state;
+    if (state is! ProjectBoardLoaded) return;
     final created = await showModalBottomSheet<TaskCreateResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) =>
-          TaskCreationSheet(onCreate: widget.controller.createTask),
+      builder: (context) => TaskCreationSheet(
+        projectName: state.board.projectName,
+        onCreate: widget.controller.createTask,
+      ),
     );
     if (!mounted || created == null) return;
     widget.onTaskSelected?.call(created.taskId);

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/quiet_paper_theme.dart';
+
 import '../generated/companion_v1_client.dart';
 import 'project_board_controller.dart';
 
 class TaskCreationSheet extends StatefulWidget {
-  const TaskCreationSheet({required this.onCreate, super.key});
+  const TaskCreationSheet({
+    required this.projectName,
+    required this.onCreate,
+    super.key,
+  });
 
+  final String projectName;
   final Future<TaskCreateResult> Function(String initialPrompt) onCreate;
 
   @override
@@ -58,10 +65,10 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
       top: false,
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          24,
-          20,
-          24,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
+          QuietPaperSpacing.gutter,
+          QuietPaperSpacing.gutter,
+          QuietPaperSpacing.gutter,
+          QuietPaperSpacing.section + MediaQuery.viewInsetsOf(context).bottom,
         ),
         child: Center(
           child: ConstrainedBox(
@@ -71,14 +78,42 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Text('Create Task', style: theme.textTheme.headlineSmall),
-                const SizedBox(height: 8),
-                Text(
-                  'Add a Task to this Project’s Backlog. Desktop-saved Project defaults will be used when it starts.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                const SizedBox(height: QuietPaperSpacing.related),
+                Text('Project', style: theme.textTheme.labelLarge),
+                const SizedBox(height: QuietPaperSpacing.compact),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(
+                      QuietPaperShapes.controlRadius,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(QuietPaperSpacing.related),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.layers_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: QuietPaperSpacing.compact),
+                        Expanded(
+                          child: Text(
+                            widget.projectName,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: QuietPaperSpacing.related),
+                Text(
+                  'Creates a Task in Backlog using desktop-saved Project defaults.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: QuietPaperSpacing.section),
                 TextField(
                   controller: _promptController,
                   autofocus: true,
@@ -89,7 +124,7 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.newline,
                   decoration: InputDecoration(
-                    labelText: 'Task initial prompt',
+                    labelText: 'What needs to be done?',
                     alignLabelWithHint: true,
                     hintText: 'Describe what should be done…',
                     border: const OutlineInputBorder(),
@@ -100,8 +135,10 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                   }),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  spacing: QuietPaperSpacing.related,
+                  overflowSpacing: QuietPaperSpacing.compact,
                   children: <Widget>[
                     TextButton(
                       onPressed: _submitting
@@ -109,7 +146,6 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                           : () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
                     ),
-                    const SizedBox(width: 12),
                     FilledButton(
                       onPressed: _canSubmit ? _submit : null,
                       child: _submitting

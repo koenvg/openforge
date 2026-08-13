@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart' as xterm;
 
+import '../design_system/quiet_paper_terminal_theme.dart';
+
 import 'companion_terminal_protocol.dart';
 import 'openforge_terminal.dart';
 

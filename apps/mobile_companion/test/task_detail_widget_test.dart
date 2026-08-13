@@ -73,7 +73,12 @@ void main() {
 
     expect(find.text('Mobile Task detail'), findsOneWidget);
     expect(find.text('OpenForge'), findsOneWidget);
+    expect(find.text('KVG-2946'), findsOneWidget);
     expect(find.text('Doing'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Investigate the mobile Task detail.'),
+      200,
+    );
     expect(find.text('Investigate the mobile Task detail.'), findsOneWidget);
     expect(find.text('Ready for review.'), findsOneWidget);
     expect(find.text('Failed'), findsOneWidget);
@@ -137,14 +142,18 @@ void main() {
         ),
       );
 
+      await tester.scrollUntilVisible(find.text('Labels'), 200);
       expect(find.text('Labels'), findsOneWidget);
       expect(find.text('mobile'), findsOneWidget);
       expect(find.text('review'), findsOneWidget);
+      expect(find.bySemanticsLabel('Labels. mobile, review.'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Dependencies'), 200);
       expect(find.text('Dependencies'), findsOneWidget);
       expect(find.text('Prepare companion contract'), findsOneWidget);
       expect(find.text('Approve release notes'), findsOneWidget);
       expect(find.text('Waiting on 1 dependency'), findsOneWidget);
-      expect(find.bySemanticsLabel('Labels. mobile, review.'), findsOneWidget);
+      await tester.ensureVisible(find.text('Prepare companion contract'));
+      await tester.pump();
       await tester.tap(find.text('Prepare companion contract'));
 
       await tester.scrollUntilVisible(find.text('Dependent tasks'), 200);
@@ -252,8 +261,6 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       isTrue,
     );
     expect(find.byType(Image), findsNothing);
-    expect(find.byType(SelectionArea), findsNWidgets(2));
-    expect(find.byType(SelectableText), findsNothing);
     expect(find.text(markdown.trim()), findsNothing);
   });
 

@@ -105,18 +105,51 @@ class _LoadedTaskDetail extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: <Widget>[
           Text(detail.title, style: Theme.of(context).textTheme.headlineSmall),
-          if (detail.boardStatus == 'backlog' && onStart != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _TaskStartAction(state: startAction, onStart: onStart!),
-          ],
-          const SizedBox(height: 20),
+          const SizedBox(height: QuietPaperSpacing.related),
+          Wrap(
+            spacing: QuietPaperSpacing.related,
+            runSpacing: QuietPaperSpacing.compact,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              Text(
+                detail.taskId,
+                style:
+                    QuietPaperTypography.identifier(
+                      Theme.of(context).textTheme,
+                    ).copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              Chip(
+                avatar: const Icon(Icons.view_kanban_outlined, size: 18),
+                label: Text(boardStatus),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: QuietPaperSpacing.section),
           _DetailCard(
             children: <Widget>[
               _LabeledValue(label: 'Project', value: detail.projectName),
-              const Divider(height: 24),
-              _LabeledValue(label: 'Board Status', value: boardStatus),
+              const Divider(),
+              _LabeledValue(label: 'Agent', value: agentState),
+              const Divider(),
+              _LabeledValue(
+                label: 'Updated',
+                value: _timestampLabel(context, detail.updatedAt),
+              ),
             ],
           ),
+          if (detail.boardStatus == 'backlog' && onStart != null) ...<Widget>[
+            const SizedBox(height: QuietPaperSpacing.gutter),
+            _TaskStartAction(state: startAction, onStart: onStart!),
+          ],
+          if (detail.agentErrorSummary case final error?) ...<Widget>[
+            const SizedBox(height: QuietPaperSpacing.gutter),
+            _AgentErrorSummary(error: error),
+          ],
+          const SizedBox(height: QuietPaperSpacing.gutter),
+          _MarkdownDetailCard(label: 'Handoff Notes', data: visibleHandoff),
           if (detail.labels.isNotEmpty) ...<Widget>[
             const SizedBox(height: 16),
             _TaskLabelsCard(labels: detail.labels),
@@ -141,27 +174,6 @@ class _LoadedTaskDetail extends StatelessWidget {
             data: detail.initialPrompt,
           ),
           const SizedBox(height: 16),
-          _MarkdownDetailCard(label: 'Handoff Notes', data: visibleHandoff),
-          const SizedBox(height: 16),
-          Semantics(
-            container: true,
-            label: detail.agentErrorSummary == null
-                ? 'Agent state. $agentState.'
-                : 'Agent state. $agentState. ${detail.agentErrorSummary}',
-            child: ExcludeSemantics(
-              child: _DetailCard(
-                children: <Widget>[
-                  Text('Agent', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(agentState),
-                  if (detail.agentErrorSummary case final error?) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Text(error),
-                  ],
-                ],
-              ),
-            ),
-          ),
           const SizedBox(height: 16),
           _DetailCard(
             children: <Widget>[
@@ -227,6 +239,41 @@ class _LoadedTaskDetail extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AgentErrorSummary extends StatelessWidget {
+  const _AgentErrorSummary({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: 'Agent error. $error',
+    child: ExcludeSemantics(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.errorContainer,
+          border: Border.all(color: Theme.of(context).colorScheme.error),
+          borderRadius: BorderRadius.circular(QuietPaperShapes.cardRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(QuietPaperSpacing.gutter),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                Icons.error_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: QuietPaperSpacing.related),
+              Expanded(child: Text(error)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _DetailCard extends StatelessWidget {

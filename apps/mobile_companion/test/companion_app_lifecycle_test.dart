@@ -492,6 +492,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(client.taskDetailCalls, 1);
       await tester.scrollUntilVisible(find.text('Related Task'), 200);
+      await tester.ensureVisible(find.text('Related Task'));
+      await tester.pump();
       await tester.tap(find.text('Related Task'));
       await tester.pumpAndSettle();
       expect(find.text('Related notes'), findsOneWidget);

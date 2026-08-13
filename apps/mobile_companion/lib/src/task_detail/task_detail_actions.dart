@@ -15,7 +15,8 @@ class _CompleteTaskAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    elevation: 4,
+    elevation: 0,
+    color: Theme.of(context).colorScheme.surfaceContainerLowest,
     child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -45,8 +46,6 @@ class _CompleteTaskAction extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: pending ? null : onPressed,
               style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
                 minimumSize: const Size.fromHeight(48),
               ),
               icon: pending
@@ -133,7 +132,9 @@ class _TaskStartAction extends StatelessWidget {
             child: ExcludeSemantics(
               child: Material(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(
+                  QuietPaperShapes.controlRadius,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
