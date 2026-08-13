@@ -70,7 +70,7 @@
         { "task_id": "T-input", "title": "Needs a decision", "lane": "focus", "state": "needs-input", "reason": "Agent needs your input to continue.", "activity_at": 900 },
         { "task_id": "T-failed", "title": "Repair failed automation", "lane": "focus", "state": "failed", "reason": "Agent failed — check the error log.", "activity_at": 800 },
         { "task_id": "T-completed", "title": "Completed changes", "lane": "focus", "state": "agent-done", "reason": "Agent completed — review the changes.", "activity_at": 750 },
-        { "task_id": "T-comments", "title": "Review feedback", "lane": "focus", "state": "ready-to-merge", "reason": "Ready to merge — all checks passed.", "activity_at": 650 },
+        { "task_id": "T-comments", "title": "Review feedback", "lane": "focus", "state": "ready-to-merge", "reason": "Ready to merge — all checks passed.", "activity_at": 650, "pull_request_count": 1, "primary_pull_request_number": 101 },
         { "task_id": "T-idle", "title": "Fallback from prompt", "lane": "focus", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 500 }
       ],
       "in_flight": [

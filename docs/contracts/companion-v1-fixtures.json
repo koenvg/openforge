@@ -114,7 +114,12 @@
           "lane": "focus",
           "state": "needs-input",
           "reason": "Agent needs your input to continue.",
-          "activityAt": "2026-08-01T11:59:00Z"
+          "activityAt": "2026-08-01T11:59:00Z",
+          "dependencyCount": 2,
+          "waitingDependencyCount": 1,
+          "labels": [],
+          "pullRequestCount": 1,
+          "primaryPullRequestNumber": 42
         }
       ],
       "inFlight": [
@@ -124,7 +129,12 @@
           "lane": "in_flight",
           "state": "active",
           "reason": "Agent is running — no action needed right now.",
-          "activityAt": "2026-08-01T11:58:00Z"
+          "activityAt": "2026-08-01T11:58:00Z",
+          "dependencyCount": 0,
+          "waitingDependencyCount": 0,
+          "labels": [],
+          "pullRequestCount": 0,
+          "primaryPullRequestNumber": null
         }
       ],
       "outOfFocus": [
@@ -134,7 +144,12 @@
           "lane": "out_of_focus",
           "state": "idle",
           "reason": "No agent running. Start when ready.",
-          "activityAt": "2026-08-01T11:57:00Z"
+          "activityAt": "2026-08-01T11:57:00Z",
+          "dependencyCount": 0,
+          "waitingDependencyCount": 0,
+          "labels": [],
+          "pullRequestCount": 0,
+          "primaryPullRequestNumber": null
         }
       ],
       "backlog": [
@@ -144,7 +159,12 @@
           "lane": "backlog",
           "state": "egg",
           "reason": "In backlog — not started yet.",
-          "activityAt": "2026-08-01T11:56:00Z"
+          "activityAt": "2026-08-01T11:56:00Z",
+          "dependencyCount": 0,
+          "waitingDependencyCount": 0,
+          "labels": ["mobile", "review"],
+          "pullRequestCount": 0,
+          "primaryPullRequestNumber": null
         }
       ]
     }

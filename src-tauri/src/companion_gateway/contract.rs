@@ -170,6 +170,11 @@ pub(crate) struct CompanionProjectBoardTask {
     pub(crate) state: String,
     pub(crate) reason: String,
     pub(crate) activity_at: String,
+    pub(crate) dependency_count: usize,
+    pub(crate) waiting_dependency_count: usize,
+    pub(crate) labels: Vec<String>,
+    pub(crate) pull_request_count: usize,
+    pub(crate) primary_pull_request_number: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

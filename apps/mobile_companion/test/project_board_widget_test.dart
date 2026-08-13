@@ -12,6 +12,11 @@ import 'package:openforge_companion/src/project_board/project_board_home.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
 
+const _longTaskTitle =
+    '123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890';
+const _truncatedLongTaskTitle =
+    '12345678901234567890123456789012345678901234567890123456789012345678901234567890...';
+
 final class _WidgetClient implements CompanionClient {
   final List<(String, String)> creationRequests = <(String, String)>[];
   Object? creationError;
@@ -250,7 +255,9 @@ void main() {
       );
 
       final row = find.bySemanticsLabel(
-        RegExp(r'^Task Focus Task, Needs input, Waiting for your answer, '),
+        RegExp(
+          r'^Task T-focus, Focus Task, Needs Input, Waiting for your answer, ',
+        ),
       );
       expect(row, findsOneWidget);
       await tester.tap(row);
@@ -258,6 +265,72 @@ void main() {
       expect(find.text('Start'), findsNothing);
       expect(find.text('Complete'), findsNothing);
       expect(find.text('Delete'), findsNothing);
+    },
+  );
+
+  testWidgets('Backlog cards mirror desktop task metadata and hierarchy', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = ProjectBoardController(
+      client: _WidgetClient(),
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+    controller.selectLane(ProjectBoardLane.backlog);
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProjectBoardHome(controller: controller)),
+    );
+
+    expect(find.text('T-backlog'), findsOneWidget);
+    expect(find.text('Backlog Task'), findsOneWidget);
+    expect(find.text('Backlog'), findsOneWidget);
+    expect(find.text('2 deps'), findsOneWidget);
+    expect(find.text('4 labels'), findsOneWidget);
+    expect(find.text('2 PRs'), findsOneWidget);
+    expect(find.text('PR #42'), findsOneWidget);
+    expect(find.text('Waiting on 1 dep'), findsOneWidget);
+    expect(find.text('mobile'), findsOneWidget);
+    expect(find.text('review'), findsOneWidget);
+    expect(find.text('urgent'), findsOneWidget);
+    expect(find.text('overflow'), findsNothing);
+    expect(find.text('5m ago'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        RegExp(
+          r'^Task T-backlog, Backlog Task, Backlog, Ready to start, '
+          r'2 dependencies, 4 labels: mobile, review, urgent, overflow, '
+          r'2 pull requests, primary pull request 42, last activity ',
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'cards truncate long titles visually but announce the full title',
+    (tester) async {
+      final controller = ProjectBoardController(
+        client: _LongTitleWidgetClient(),
+        storage: _WidgetStorage(),
+      );
+      await controller.refresh();
+      controller.selectLane(ProjectBoardLane.backlog);
+
+      await tester.pumpWidget(
+        MaterialApp(home: ProjectBoardHome(controller: controller)),
+      );
+
+      expect(find.text(_truncatedLongTaskTitle), findsOneWidget);
+      expect(find.text(_longTaskTitle), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('^Task T-long, ${RegExp.escape(_longTaskTitle)}, Backlog,'),
+        ),
+        findsOneWidget,
+      );
     },
   );
 
@@ -306,7 +379,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final row = find.bySemanticsLabel(
-      RegExp(r'^Task Backlog Task, Backlog, Ready to start, '),
+      RegExp(r'^Task T-backlog, Backlog Task, Backlog, Ready to start, '),
     );
     await tester.tap(row);
     await tester.pumpAndSettle();
@@ -356,7 +429,7 @@ void main() {
     final boardCallsBeforeDelete = client.projectBoardCalls;
 
     await tester.tap(
-      find.bySemanticsLabel(RegExp(r'^Task Backlog Task, Backlog,')),
+      find.bySemanticsLabel(RegExp(r'^Task T-backlog, Backlog Task, Backlog,')),
     );
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -600));
@@ -373,6 +446,38 @@ void main() {
     expect(find.text('Backlog Task'), findsNothing);
     expect(find.text('No Tasks are waiting in the Backlog.'), findsOneWidget);
   });
+}
+
+final class _LongTitleWidgetClient extends _WidgetClient {
+  @override
+  Future<ProjectBoard> fetchProjectBoard(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async => ProjectBoard(
+    snapshotAt: DateTime.now(),
+    projectId: projectId,
+    projectName: projectId == 'P-1' ? 'Alpha' : 'Beta',
+    counts: const ProjectBoardCounts(
+      focus: 0,
+      inFlight: 0,
+      outOfFocus: 0,
+      backlog: 1,
+    ),
+    lanes: ProjectBoardLanes(
+      focus: const <ProjectBoardTask>[],
+      inFlight: const <ProjectBoardTask>[],
+      outOfFocus: const <ProjectBoardTask>[],
+      backlog: <ProjectBoardTask>[
+        _task(
+          'T-long',
+          _longTaskTitle,
+          ProjectBoardLane.backlog,
+          'egg',
+          'Ready to start',
+        ),
+      ],
+    ),
+  );
 }
 
 final class _EmptyWidgetClient extends _WidgetClient {
@@ -474,6 +579,11 @@ ProjectBoard _board(String projectId, String projectName) => ProjectBoard(
         ProjectBoardLane.backlog,
         'backlog',
         'Ready to start',
+        dependencyCount: 2,
+        waitingDependencyCount: 1,
+        labels: const <String>['mobile', 'review', 'urgent', 'overflow'],
+        pullRequestCount: 2,
+        primaryPullRequestNumber: 42,
       ),
     ],
   ),
@@ -502,12 +612,22 @@ ProjectBoardTask _task(
   String title,
   ProjectBoardLane lane,
   String state,
-  String reason,
-) => ProjectBoardTask(
+  String reason, {
+  int dependencyCount = 0,
+  int waitingDependencyCount = 0,
+  List<String> labels = const <String>[],
+  int pullRequestCount = 0,
+  int? primaryPullRequestNumber,
+}) => ProjectBoardTask(
   taskId: taskId,
   title: title,
   lane: lane,
   state: state,
   reason: reason,
-  activityAt: DateTime.utc(2026, 8, 1, 12),
+  activityAt: DateTime.now().subtract(const Duration(minutes: 5)),
+  dependencyCount: dependencyCount,
+  waitingDependencyCount: waitingDependencyCount,
+  labels: labels,
+  pullRequestCount: pullRequestCount,
+  primaryPullRequestNumber: primaryPullRequestNumber,
 );

@@ -561,14 +561,34 @@
     "ProjectBoardTask": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["taskId", "title", "lane", "state", "reason", "activityAt"],
+      "required": [
+        "taskId",
+        "title",
+        "lane",
+        "state",
+        "reason",
+        "activityAt",
+        "dependencyCount",
+        "waitingDependencyCount",
+        "labels",
+        "pullRequestCount",
+        "primaryPullRequestNumber"
+      ],
       "properties": {
         "taskId": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
         "lane": { "$ref": "#/components/schemas/ProjectBoardLane" },
         "state": { "type": "string", "minLength": 1 },
         "reason": { "type": "string", "minLength": 1 },
-        "activityAt": { "type": "string", "format": "date-time" }
+        "activityAt": { "type": "string", "format": "date-time" },
+        "dependencyCount": { "type": "integer", "minimum": 0 },
+        "waitingDependencyCount": { "type": "integer", "minimum": 0 },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "pullRequestCount": { "type": "integer", "minimum": 0 },
+        "primaryPullRequestNumber": { "type": ["integer", "null"], "minimum": 1 }
       }
     },
     "ProjectBoardCounts": {

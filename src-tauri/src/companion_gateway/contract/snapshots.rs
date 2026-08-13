@@ -128,6 +128,11 @@ fn board_task(row: crate::project_board::ProjectBoardTask) -> Option<CompanionPr
         state: row.state,
         reason: row.reason,
         activity_at: detail_timestamp(row.activity_at)?,
+        dependency_count: row.dependency_count,
+        waiting_dependency_count: row.waiting_dependency_count,
+        labels: row.labels,
+        pull_request_count: row.pull_request_count,
+        primary_pull_request_number: row.primary_pull_request_number,
     })
 }
 
