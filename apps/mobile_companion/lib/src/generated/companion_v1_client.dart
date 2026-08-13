@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    'f3e9e63509a646f0b9170f0ce599ed93e0f8b46c566c239bc06706dd04b221a1';
+    'd0d982a32049e8031c01688f54144ad520526fe041e78fe207e3f4cea31a199f';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '2';
 
@@ -462,17 +462,22 @@ final class ProjectCatalog {
 }
 
 final class ProjectBoardTask {
-  const ProjectBoardTask({
+  ProjectBoardTask({
     required this.taskId,
     required this.title,
     required this.lane,
     required this.state,
     required this.reason,
     required this.activityAt,
-  });
+    required this.dependencyCount,
+    required this.waitingDependencyCount,
+    required List<String> labels,
+    required this.pullRequestCount,
+    required this.primaryPullRequestNumber,
+  }) : labels = List<String>.unmodifiable(labels);
 
   factory ProjectBoardTask.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'lane', 'state', 'reason', 'activityAt'});
+    _expectOnly(json, const <String>{'taskId', 'title', 'lane', 'state', 'reason', 'activityAt', 'dependencyCount', 'waitingDependencyCount', 'labels', 'pullRequestCount', 'primaryPullRequestNumber'});
     final model = ProjectBoardTask(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
@@ -480,6 +485,11 @@ final class ProjectBoardTask {
       state: _required(json, 'state', (value) => _asString(value, 'state', minLength: 1)),
       reason: _required(json, 'reason', (value) => _asString(value, 'reason', minLength: 1)),
       activityAt: _required(json, 'activityAt', (value) => _asDateTime(value, 'activityAt')),
+      dependencyCount: _required(json, 'dependencyCount', (value) => _asInt(value, 'dependencyCount', minimum: 0)),
+      waitingDependencyCount: _required(json, 'waitingDependencyCount', (value) => _asInt(value, 'waitingDependencyCount', minimum: 0)),
+      labels: _required(json, 'labels', (value) => _asList(value, 'labels').map((item) => _asString(item, 'labelsItem', minLength: 1)).toList()),
+      pullRequestCount: _required(json, 'pullRequestCount', (value) => _asInt(value, 'pullRequestCount', minimum: 0)),
+      primaryPullRequestNumber: _requiredNullable(json, 'primaryPullRequestNumber', (value) => _asInt(value, 'primaryPullRequestNumber', minimum: 1)),
     );
     return model;
   }
@@ -491,6 +501,11 @@ final class ProjectBoardTask {
       'state': state,
       'reason': reason,
       'activityAt': activityAt.toUtc().toIso8601String(),
+      'dependencyCount': dependencyCount,
+      'waitingDependencyCount': waitingDependencyCount,
+      'labels': labels.map((item) => item).toList(),
+      'pullRequestCount': pullRequestCount,
+      'primaryPullRequestNumber': primaryPullRequestNumber == null ? null : primaryPullRequestNumber!,
   };
 
   final String taskId;
@@ -499,6 +514,11 @@ final class ProjectBoardTask {
   final String state;
   final String reason;
   final DateTime activityAt;
+  final int dependencyCount;
+  final int waitingDependencyCount;
+  final List<String> labels;
+  final int pullRequestCount;
+  final int? primaryPullRequestNumber;
 }
 
 final class ProjectBoardCounts {

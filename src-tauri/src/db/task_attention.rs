@@ -172,6 +172,8 @@ impl super::Database {
                     title: task.title,
                     initial_prompt: task.initial_prompt,
                     updated_at: task.updated_at,
+                    depends_on: task.depends_on,
+                    labels: task.labels.into_iter().map(|label| label.name).collect(),
                 })
                 .collect(),
             sessions: sessions
@@ -187,6 +189,7 @@ impl super::Database {
                 .into_iter()
                 .map(|pr| TaskAttentionPullRequest {
                     ticket_id: pr.ticket_id,
+                    pr_number: Some(pr.pr_number),
                     state: pr.state,
                     head_sha: pr.head_sha,
                     ci_status: pr.ci_status,

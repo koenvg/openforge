@@ -205,6 +205,27 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
     let legacy = database
         .create_task("Legacy completed", "done", Some(&project.id), None, None)
         .expect("legacy");
+    database
+        .set_task_dependencies(&backlog.id, &[completed.id.clone(), in_flight.id.clone()])
+        .expect("backlog dependencies");
+    database
+        .set_task_labels(&backlog.id, &["mobile".to_string(), "review".to_string()])
+        .expect("backlog labels");
+    database
+        .insert_pull_request_with_number(
+            3032,
+            42,
+            &focus_newer.id,
+            "openforge",
+            "desktop",
+            "Mobile card parity",
+            "https://example.invalid/pull/42",
+            "open",
+            100,
+            700,
+            false,
+        )
+        .expect("focus pull request");
     {
         let connection = database.connection();
         let connection = connection.lock().expect("connection");
@@ -268,6 +289,8 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
     );
     assert_eq!(json["lanes"]["focus"][0]["taskId"], focus_newer.id);
     assert_eq!(json["lanes"]["focus"][0]["title"], "Gateway fix");
+    assert_eq!(json["lanes"]["focus"][0]["pullRequestCount"], 1);
+    assert_eq!(json["lanes"]["focus"][0]["primaryPullRequestNumber"], 42);
     assert_eq!(
         json["lanes"]["focus"][1]["title"],
         "Review generated changes"
@@ -277,6 +300,12 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
     assert_eq!(json["lanes"]["outOfFocus"][0]["taskId"], out_of_focus.id);
     assert_eq!(json["lanes"]["backlog"][0]["taskId"], backlog.id);
     assert_eq!(json["lanes"]["backlog"][0]["lane"], "backlog");
+    assert_eq!(json["lanes"]["backlog"][0]["dependencyCount"], 2);
+    assert_eq!(json["lanes"]["backlog"][0]["waitingDependencyCount"], 1);
+    assert_eq!(
+        json["lanes"]["backlog"][0]["labels"],
+        serde_json::json!(["mobile", "review"])
+    );
     let serialized = json.to_string();
     for sensitive in [
         "/secret/openforge",

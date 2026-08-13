@@ -71,6 +71,11 @@ void main() {
       expect(board.lanes.inFlight.single.lane, ProjectBoardLane.inFlight);
       expect(board.lanes.outOfFocus.single.lane, ProjectBoardLane.outOfFocus);
       expect(board.lanes.backlog.single.lane, ProjectBoardLane.backlog);
+      expect(board.lanes.focus.single.dependencyCount, 2);
+      expect(board.lanes.focus.single.waitingDependencyCount, 1);
+      expect(board.lanes.focus.single.pullRequestCount, 1);
+      expect(board.lanes.focus.single.primaryPullRequestNumber, 42);
+      expect(board.lanes.backlog.single.labels, <String>['mobile', 'review']);
       expect(transport.requests[0].uri.path, '/companion/v1/projects');
       expect(
         transport.requests[1].uri.path,

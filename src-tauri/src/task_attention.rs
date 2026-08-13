@@ -36,6 +36,10 @@ pub(crate) struct TaskAttentionTask {
     pub title: Option<String>,
     pub initial_prompt: String,
     pub updated_at: i64,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -49,6 +53,8 @@ pub(crate) struct TaskAttentionSession {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub(crate) struct TaskAttentionPullRequest {
     pub ticket_id: String,
+    #[serde(default)]
+    pub pr_number: Option<i64>,
     pub state: String,
     pub head_sha: String,
     pub ci_status: Option<String>,
@@ -131,7 +137,9 @@ fn readiness_priority(pr: &TaskAttentionPullRequest) -> i32 {
     }
 }
 
-fn driving_pr<'a>(prs: &'a [&TaskAttentionPullRequest]) -> Option<&'a TaskAttentionPullRequest> {
+pub(crate) fn driving_pr<'a>(
+    prs: &'a [&TaskAttentionPullRequest],
+) -> Option<&'a TaskAttentionPullRequest> {
     let mut best = None;
     let mut best_priority = i32::MIN;
     for pr in prs.iter().copied().filter(|pr| pr.state == "open") {
@@ -382,6 +390,7 @@ mod tests {
     fn pull_request() -> TaskAttentionPullRequest {
         TaskAttentionPullRequest {
             ticket_id: "T-1".to_string(),
+            pr_number: Some(1),
             state: "open".to_string(),
             head_sha: "sha".to_string(),
             ci_status: None,
