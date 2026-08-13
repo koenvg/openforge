@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
+import '../action_palette/action_palette.dart';
+import '../action_palette/action_palette_controller.dart';
 import '../generated/companion_v1_client.dart';
 import '../terminal/agent_terminal_pane.dart';
 import '../terminal/agent_terminal_surface.dart';
@@ -18,6 +20,7 @@ class TaskDetailScreen extends StatefulWidget {
   const TaskDetailScreen({
     required this.controller,
     this.terminalSurface,
+    this.actionPaletteController,
     this.onRefresh,
     this.onOpenTask,
     this.onCompleted,
@@ -28,6 +31,7 @@ class TaskDetailScreen extends StatefulWidget {
 
   final TaskDetailController controller;
   final AgentTerminalSurface? terminalSurface;
+  final MobileActionPaletteController? actionPaletteController;
   final Future<void> Function()? onRefresh;
   final void Function(String taskId)? onOpenTask;
   final Future<void> Function()? onCompleted;
@@ -89,6 +93,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     startAction: _startAction,
     onStart: widget.controller.start,
     terminalSurface: widget.terminalSurface,
+    actionPaletteController: widget.actionPaletteController,
   );
 }
 
@@ -107,6 +112,7 @@ class TaskDetailView extends StatefulWidget {
     this.startAction = const TaskStartIdle(),
     this.onStart,
     this.terminalSurface,
+    this.actionPaletteController,
     super.key,
   });
 
@@ -123,6 +129,7 @@ class TaskDetailView extends StatefulWidget {
   final TaskStartActionState startAction;
   final Future<void> Function()? onStart;
   final AgentTerminalSurface? terminalSurface;
+  final MobileActionPaletteController? actionPaletteController;
 
   @override
   State<TaskDetailView> createState() => _TaskDetailViewState();
@@ -285,6 +292,95 @@ class _TaskDetailViewState extends State<TaskDetailView>
     if (mounted) setState(() => _deleteBusy = false);
   }
 
+  Future<bool> _confirmPaletteAction(
+    MobilePaletteAction action,
+    TaskDetail detail,
+  ) async {
+    if (!action.requiresConfirmation) return true;
+    final running = detail.agentState == 'running';
+    final message = switch (action.id) {
+      CompanionActionId.mergePullRequest =>
+        'Merge the single currently ready pull request for “${detail.title}”?',
+      CompanionActionId.deleteTask =>
+        'This completes the Task using the desktop lifecycle. The Completed Task stays available as reference data, while runtime workspace state is removed.',
+      CompanionActionId.completeTask =>
+        'This keeps the Completed Task as reference data while its runtime workspace is removed.'
+            '${running ? ' The running Agent and all Task shells will stop first.' : ''}',
+      _ => action.label,
+    };
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('${action.label} “${detail.title}”?'),
+            content: Text(message),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(action.label),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _openActionPalette() async {
+    final palette = widget.actionPaletteController;
+    final state = widget.state;
+    if (palette == null || state is! TaskDetailLoaded) return;
+    final detail = state.detail;
+    final action = await showMobileActionPalette(
+      context: context,
+      title: 'Task actions',
+      actions: palette.loadTaskActions(detail.taskId),
+      onConfirm: (action) => _confirmPaletteAction(action, detail),
+    );
+    if (!mounted || action == null) return;
+    final terminal =
+        action.id == CompanionActionId.completeTask ||
+        action.id == CompanionActionId.deleteTask;
+    try {
+      if (terminal) {
+        try {
+          await widget.terminalSurface?.presentation.closeForTaskCompletion();
+        } on Object {
+          // The desktop lifecycle remains authoritative and closes the channel.
+        }
+      }
+      await palette.executeTaskAction(detail.taskId, action.id);
+      if (!mounted) return;
+      if (action.id == CompanionActionId.completeTask) {
+        await widget.onCompleted?.call();
+      } else if (action.id == CompanionActionId.deleteTask) {
+        await widget.onDeleteSucceeded?.call();
+      } else {
+        await widget.onRefresh();
+      }
+      if (!mounted) return;
+      if (terminal && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
+      }
+    } on Object {
+      if (!mounted) return;
+      await widget.onRefresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${action.label} failed. Task state was refreshed.'),
+          ),
+        );
+      }
+    }
+  }
+
   Widget? _completeAction() {
     final state = widget.state;
     final onComplete = widget.onComplete;
@@ -310,13 +406,17 @@ class _TaskDetailViewState extends State<TaskDetailView>
     controller: _tabs,
     selectedTab: _selectedTab,
     onRefresh: widget.onRefresh,
+    onActions: widget.actionPaletteController == null
+        ? null
+        : _openActionPalette,
     bottomAction: _completeAction(),
     details: _TaskDetailBody(
       state: widget.state,
       onRefresh: widget.onRefresh,
       onOpenTask: widget.onOpenTask,
       deleteBusy: _deleteBusy,
-      deleteAvailable: widget.onDelete != null,
+      deleteAvailable:
+          widget.onDelete != null && widget.actionPaletteController == null,
       onDelete: _confirmDelete,
       startAction: widget.startAction,
       onStart: widget.onStart,

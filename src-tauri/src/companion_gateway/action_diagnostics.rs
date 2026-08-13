@@ -6,6 +6,11 @@ enum CompanionTaskAction {
     Start,
     Delete,
     Complete,
+    SetAside,
+    ReturnToBoard,
+    Merge,
+    Enqueue,
+    RunApp,
 }
 
 impl CompanionTaskAction {
@@ -21,6 +26,11 @@ impl CompanionTaskAction {
             "start" => Self::Start,
             "delete" => Self::Delete,
             "complete" => Self::Complete,
+            "set-aside" => Self::SetAside,
+            "return-to-board" => Self::ReturnToBoard,
+            "merge" => Self::Merge,
+            "enqueue" => Self::Enqueue,
+            "run-app" => Self::RunApp,
             _ => return None,
         };
         Some((action, task_id))
@@ -31,6 +41,11 @@ impl CompanionTaskAction {
             Self::Start => "start",
             Self::Delete => "delete",
             Self::Complete => "complete",
+            Self::SetAside => "set_aside",
+            Self::ReturnToBoard => "return_to_board",
+            Self::Merge => "merge",
+            Self::Enqueue => "enqueue",
+            Self::RunApp => "run_app",
         }
     }
 }

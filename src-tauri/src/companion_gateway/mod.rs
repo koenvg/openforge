@@ -1,4 +1,5 @@
 mod action_diagnostics;
+mod action_palette;
 mod advertisement;
 mod attention;
 mod contract;
@@ -97,6 +98,8 @@ pub(crate) fn non_cancelling_test_manager() -> (
     )
 }
 
+#[cfg(test)]
+mod action_palette_tests;
 #[cfg(test)]
 mod attention_tests;
 #[cfg(test)]

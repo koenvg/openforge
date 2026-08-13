@@ -244,6 +244,7 @@ async fn start_http_server_with_app_state(
         db.clone(),
         app_event_bus.clone(),
         pty_manager.clone(),
+        github_client.clone(),
         app.clone(),
         task_claims.clone(),
     );

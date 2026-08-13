@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../action_palette/action_palette_controller.dart';
 import '../project_board/project_board_controller.dart';
 import '../terminal/agent_terminal_surface.dart';
 import 'task_detail_controller.dart';
@@ -18,6 +19,7 @@ final class TaskDetailCoordinator {
     this._controllerFactory,
     this._terminalSurfaceFactory,
     this._projectBoardController,
+    this._actionPaletteController,
     this._onOpenTaskChanged,
   });
 
@@ -25,6 +27,7 @@ final class TaskDetailCoordinator {
   TaskDetailControllerFactory? _controllerFactory;
   AgentTerminalSurfaceFactory? _terminalSurfaceFactory;
   ProjectBoardController? _projectBoardController;
+  MobileActionPaletteController? _actionPaletteController;
   void Function(TaskDetailController? controller)? _onOpenTaskChanged;
   TaskDetailController? _openTaskController;
 
@@ -35,11 +38,13 @@ final class TaskDetailCoordinator {
     TaskDetailControllerFactory? controllerFactory,
     AgentTerminalSurfaceFactory? terminalSurfaceFactory,
     ProjectBoardController? projectBoardController,
+    MobileActionPaletteController? actionPaletteController,
     void Function(TaskDetailController? controller)? onOpenTaskChanged,
   }) {
     _controllerFactory = controllerFactory;
     _terminalSurfaceFactory = terminalSurfaceFactory;
     _projectBoardController = projectBoardController;
+    _actionPaletteController = actionPaletteController;
     _onOpenTaskChanged = onOpenTaskChanged;
     _onOpenTaskChanged?.call(_openTaskController);
   }
@@ -62,6 +67,7 @@ final class TaskDetailCoordinator {
           builder: (_) => TaskDetailScreen(
             controller: controller,
             terminalSurface: terminalSurface,
+            actionPaletteController: _actionPaletteController,
             onRefresh: () => refreshTaskAndBoard(controller),
             onOpenTask: openTaskFromSelection,
             onCompleted: refreshBoard,

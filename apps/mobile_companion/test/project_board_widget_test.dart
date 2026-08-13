@@ -3,6 +3,7 @@ import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openforge_companion/src/action_palette/action_palette_controller.dart';
 import 'package:openforge_companion/src/app.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/connection/companion_connection_state.dart';
@@ -17,8 +18,13 @@ const _longTaskTitle =
 const _truncatedLongTaskTitle =
     '12345678901234567890123456789012345678901234567890123456789012345678901234567890...';
 
-final class _WidgetClient implements CompanionClient {
+final class _WidgetClient
+    implements
+        CompanionClient,
+        CompanionTaskActionClient,
+        CompanionActionPaletteClient {
   final List<(String, String)> creationRequests = <(String, String)>[];
+  final List<String> actionRequests = <String>[];
   Object? creationError;
   @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
@@ -75,6 +81,42 @@ final class _WidgetClient implements CompanionClient {
     updatedAt: DateTime.utc(2026, 8, 1, 11),
     agentUpdatedAt: null,
   );
+
+  @override
+  Future<ProjectActionsSnapshot> fetchProjectActions(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async => ProjectActionsSnapshot(
+    projectId: projectId,
+    actions: const <CompanionProjectActionId>[
+      CompanionProjectActionId.refreshGithub,
+    ],
+  );
+
+  @override
+  Future<TaskActionsSnapshot> fetchTaskActions(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async => TaskActionsSnapshot(
+    taskId: taskId,
+    actions: const <CompanionTaskActionId>[
+      CompanionTaskActionId.setAsideTask,
+      CompanionTaskActionId.completeTask,
+    ],
+  );
+
+  @override
+  Future<void> setAsideTask(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) async => actionRequests.add('set-aside:$taskId');
+
+  @override
+  Future<void> refreshProjectGithub(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async => actionRequests.add('refresh-github:$projectId');
+
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
     'Unexpected client call: ${invocation.memberName}',
@@ -446,6 +488,49 @@ void main() {
     expect(find.text('Backlog Task'), findsNothing);
     expect(find.text('No Tasks are waiting in the Backlog.'), findsOneWidget);
   });
+
+  testWidgets(
+    'opens global and task-scoped Action Palettes from visible controls',
+    (tester) async {
+      final client = _WidgetClient();
+      final storage = _WidgetStorage();
+      final controller = ProjectBoardController(
+        client: client,
+        storage: storage,
+      );
+      await controller.refresh();
+      final paletteController = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: storage,
+        onRefresh: controller.refresh,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProjectBoardHome(
+            controller: controller,
+            actionPaletteController: paletteController,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Actions'));
+      await tester.pumpAndSettle();
+      expect(find.text('New task'), findsOneWidget);
+      expect(find.text('Refresh Board'), findsOneWidget);
+      expect(find.text('Refresh GitHub'), findsOneWidget);
+      await tester.tap(find.text('Refresh GitHub'));
+      await tester.pumpAndSettle();
+      expect(client.actionRequests, <String>['refresh-github:P-1']);
+
+      await tester.tap(find.byTooltip('Actions for Focus Task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Set aside'), findsOneWidget);
+      expect(find.text('Complete'), findsOneWidget);
+    },
+  );
 }
 
 final class _LongTitleWidgetClient extends _WidgetClient {

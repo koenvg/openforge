@@ -7,6 +7,7 @@ class _ProjectBoardBody extends StatelessWidget {
     required this.scrollController,
     required this.onRefresh,
     required this.onTaskSelected,
+    required this.onTaskActions,
   });
 
   final ProjectBoardViewState state;
@@ -14,6 +15,7 @@ class _ProjectBoardBody extends StatelessWidget {
   final ScrollController scrollController;
   final Future<void> Function() onRefresh;
   final ValueChanged<String>? onTaskSelected;
+  final ValueChanged<ProjectBoardTask>? onTaskActions;
 
   @override
   Widget build(BuildContext context) => switch (state) {
@@ -41,6 +43,7 @@ class _ProjectBoardBody extends StatelessWidget {
       scrollController: scrollController,
       onRefresh: onRefresh,
       onTaskSelected: onTaskSelected,
+      onTaskActions: onTaskActions,
     ),
   };
 }
@@ -52,6 +55,7 @@ class _LaneView extends StatelessWidget {
     required this.scrollController,
     required this.onRefresh,
     required this.onTaskSelected,
+    required this.onTaskActions,
   });
 
   final ProjectBoardLane lane;
@@ -59,6 +63,7 @@ class _LaneView extends StatelessWidget {
   final ScrollController scrollController;
   final Future<void> Function() onRefresh;
   final ValueChanged<String>? onTaskSelected;
+  final ValueChanged<ProjectBoardTask>? onTaskActions;
 
   @override
   Widget build(BuildContext context) => RefreshIndicator(
@@ -85,6 +90,9 @@ class _LaneView extends StatelessWidget {
                 onTap: onTaskSelected == null
                     ? null
                     : () => onTaskSelected!(task.taskId),
+                onActions: onTaskActions == null
+                    ? null
+                    : () => onTaskActions!(task),
               );
             },
           ),
@@ -137,10 +145,15 @@ class _LaneEmpty extends StatelessWidget {
 }
 
 class _BoardTaskRow extends StatelessWidget {
-  const _BoardTaskRow({required this.task, required this.onTap});
+  const _BoardTaskRow({
+    required this.task,
+    required this.onTap,
+    required this.onActions,
+  });
 
   final ProjectBoardTask task;
   final VoidCallback? onTap;
+  final VoidCallback? onActions;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +172,7 @@ class _BoardTaskRow extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
+            onLongPress: onActions,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
@@ -234,6 +248,14 @@ class _BoardTaskRow extends StatelessWidget {
                               ],
                             ),
                           ),
+                          if (onActions != null) ...<Widget>[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              onPressed: onActions,
+                              tooltip: 'Actions for ${task.title}',
+                              icon: const Icon(Icons.more_vert_rounded),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 12),

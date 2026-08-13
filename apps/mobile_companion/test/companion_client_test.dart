@@ -104,6 +104,14 @@ void main() {
       expect(encodedContract, contains('startCompanionTask'));
       expect(encodedContract, contains('deleteCompanionBacklogTask'));
       expect(encodedContract, contains('streamCompanionEvents'));
+      expect(encodedContract, contains('getCompanionTaskActions'));
+      expect(encodedContract, contains('getCompanionProjectActions'));
+      expect(encodedContract, contains('setAsideCompanionTask'));
+      expect(encodedContract, contains('returnCompanionTaskToBoard'));
+      expect(encodedContract, contains('mergeCompanionTaskPullRequest'));
+      expect(encodedContract, contains('enqueueCompanionTaskPullRequest'));
+      expect(encodedContract, contains('runCompanionTaskApp'));
+      expect(encodedContract, contains('refreshCompanionProjectGithub'));
       final paths = contract['paths']! as Map<String, Object?>;
       expect(
         paths.keys,
@@ -119,6 +127,14 @@ void main() {
           '/tasks/{taskId}/complete',
           '/tasks/{taskId}/start',
           '/tasks/{taskId}/delete',
+          '/tasks/{taskId}/actions',
+          '/tasks/{taskId}/set-aside',
+          '/tasks/{taskId}/return-to-board',
+          '/tasks/{taskId}/merge',
+          '/tasks/{taskId}/enqueue',
+          '/tasks/{taskId}/run-app',
+          '/projects/{projectId}/actions',
+          '/projects/{projectId}/refresh-github',
           '/events',
         ]),
       );
