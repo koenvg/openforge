@@ -8,6 +8,7 @@ import '../design_system/quiet_paper_theme.dart';
 
 import '../action_palette/action_palette.dart';
 import '../action_palette/action_palette_controller.dart';
+import '../companion_app_lifecycle.dart';
 import '../generated/companion_v1_client.dart';
 import '../terminal/agent_terminal_pane.dart';
 import '../terminal/agent_terminal_surface.dart';
@@ -149,8 +150,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
   void initState() {
     super.initState();
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    _foreground =
-        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    _foreground = keepsCompanionSessionActive(lifecycleState);
     WidgetsBinding.instance.addObserver(this);
     _tabs = TabController(length: 2, vsync: this)..addListener(_onTabChanged);
     widget.terminalSurface?.presentation.setForeground(_foreground);
@@ -199,7 +199,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
+    _foreground = keepsCompanionSessionActive(state);
     widget.terminalSurface?.presentation.setForeground(_foreground);
   }
 

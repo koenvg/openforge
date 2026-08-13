@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'action_palette/action_palette_controller.dart';
 import 'attention/attention_controller.dart';
 import 'attention/attention_home.dart';
+import 'companion_app_lifecycle.dart';
 import 'connection/companion_connection_coordinator.dart';
 import 'connection/companion_connection_state.dart';
 import 'live/live_updates_controller.dart';
@@ -87,7 +88,7 @@ class _CompanionAppState extends State<CompanionApp>
     );
 
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
-    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
+    if (!keepsCompanionSessionActive(lifecycleState)) {
       _connectionCoordinator.suspend();
     } else if (_connectionState is Connected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -167,7 +168,7 @@ class _CompanionAppState extends State<CompanionApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (keepsCompanionSessionActive(state)) {
       _connectionCoordinator.resume();
     } else {
       _connectionCoordinator.suspend();

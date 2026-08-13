@@ -322,7 +322,7 @@ void main() {
     },
   );
   testWidgets(
-    'pairing and controller replacement keep live networking suspended in the background',
+    'inactive keeps live networking connected while background and replacement stay suspended',
     (tester) async {
       final endpoint = Uri.parse(_tailscaleEndpoint);
       final client = _SuccessfulTailscaleClient(endpoint);
@@ -372,6 +372,14 @@ void main() {
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
+      await tester.pump();
+      expect(oldLiveClient.liveConnections, hasLength(1));
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(oldLiveClient.liveConnections.single.closed, isFalse);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       expect(oldLiveClient.liveConnections, hasLength(1));
 
