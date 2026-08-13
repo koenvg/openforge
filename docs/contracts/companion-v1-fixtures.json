@@ -157,7 +157,7 @@
           "taskId": "KVG-3030",
           "title": "Prepare follow-up",
           "lane": "backlog",
-          "state": "egg",
+          "state": "backlog",
           "reason": "In backlog — not started yet.",
           "activityAt": "2026-08-01T11:56:00Z",
           "dependencyCount": 0,

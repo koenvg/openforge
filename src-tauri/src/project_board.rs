@@ -165,7 +165,7 @@ pub(crate) fn project_task_board(
             .unwrap_or_default();
         let metadata = task_card_metadata(Some(task), &tasks_by_id, task_pull_requests);
         let state = if task.status == "backlog" {
-            "egg"
+            "backlog"
         } else {
             task_state(session, task_pull_requests)
         };

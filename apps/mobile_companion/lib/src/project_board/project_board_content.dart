@@ -549,7 +549,7 @@ List<ProjectBoardTask> _tasksFor(ProjectBoard board, ProjectBoardLane lane) =>
     };
 
 const _compactStateLabels = <String, String>{
-  'egg': 'Backlog',
+  'backlog': 'Backlog',
   'idle': 'Idle',
   'active': 'Active',
   'needs-input': 'Needs Input',

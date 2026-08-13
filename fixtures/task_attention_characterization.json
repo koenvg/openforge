@@ -80,7 +80,7 @@
         { "task_id": "T-set-aside", "title": "Set aside", "lane": "out_of_focus", "state": "idle", "reason": "No agent running. Start when ready.", "activity_at": 1100 }
       ],
       "backlog": [
-        { "task_id": "T-backlog", "title": "Backlog", "lane": "backlog", "state": "egg", "reason": "In backlog — not started yet.", "activity_at": 1200 }
+        { "task_id": "T-backlog", "title": "Backlog", "lane": "backlog", "state": "backlog", "reason": "In backlog — not started yet.", "activity_at": 1200 }
       ]
     },
     "P-beta": {

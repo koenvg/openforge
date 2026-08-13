@@ -55,13 +55,13 @@ describe('getTaskListItemPresentation', () => {
 })
 
 describe('getTaskReasonText', () => {
-  it('uses Backlog as the business-friendly egg label', () => {
-    expect(TASK_STATE_LABELS.egg).toBe('Backlog')
+  it('uses Backlog as the business-friendly backlog label', () => {
+    expect(TASK_STATE_LABELS.backlog).toBe('Backlog')
   })
 
   describe('TaskState mappings', () => {
-    it('returns "In backlog — not started yet." for egg state', () => {
-      const reason = getTaskReasonText('egg', [])
+    it('returns "In backlog — not started yet." for backlog state', () => {
+      const reason = getTaskReasonText('backlog', [])
       expect(reason).toBe('In backlog — not started yet.')
     })
 
