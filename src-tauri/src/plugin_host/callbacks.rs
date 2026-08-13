@@ -12,6 +12,13 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
 
     match command {
         "forceGithubSync" => Ok("force_github_sync"),
+        "getPullRequests" => Ok("get_pull_requests"),
+        "refreshTaskGithubStatus" => Ok("refresh_task_github_status"),
+        "linkPullRequest" => Ok("link_pull_request"),
+        "getPrComments" => Ok("get_pr_comments"),
+        "markCommentAddressed" => Ok("mark_comment_addressed"),
+        "mergeTaskPullRequest" => Ok("merge_task_pull_request"),
+        "enqueueTaskPullRequest" => Ok("enqueue_task_pull_request"),
         "fetchReviewPrs" => Ok("fetch_review_prs"),
         "getReviewPrs" => Ok("get_review_prs"),
         "fetchAuthoredPrs" => Ok("fetch_authored_prs"),

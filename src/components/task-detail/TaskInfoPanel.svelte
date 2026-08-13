@@ -1,16 +1,13 @@
 <script lang="ts">
-  import type { Task, TaskLabel, PullRequestInfo } from '../../lib/types'
-  import { deriveTaskDetailSignal, type TaskDetailSignalTone } from '../../lib/taskDetailSignal'
-  import { activeSessions, dependencyReferenceTasks, tasks as allTasks, ticketPrs } from '../../lib/stores'
-  import { addTaskLabel, getPullRequests, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
+  import type { Task, TaskLabel } from '../../lib/types'
+  import { activeSessions, dependencyReferenceTasks, tasks as allTasks } from '../../lib/stores'
+  import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
-  import { buildTicketPullRequestMap } from '../../lib/pullRequestStore'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from './CopyButton.svelte'
   import SourceTicketLink from './SourceTicketLink.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
-  import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
   import TaskGitStatus from './TaskGitStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
@@ -22,39 +19,29 @@
     workspacePath: string | null
     allTasksOverride?: Task[]
     dependencyReferenceTasksOverride?: Task[]
-    taskPrsOverride?: PullRequestInfo[]
-    allowCommentAddressing?: boolean
     surface?: 'default' | 'transparent'
     onEditPrompt?: () => void
     onOpenDependentTask?: (taskId: string) => void
   }
 
-  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, taskPrsOverride, allowCommentAddressing = false, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
+  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
   let previousTaskLabelSignature = ''
 
-  let taskPrs = $derived((taskPrsOverride ?? $ticketPrs.get(task.id)) || [])
   let activeTaskList = $derived(allTasksOverride ?? $allTasks)
   let dependencyTaskList = $derived([...activeTaskList, ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks)])
   let dependencies = $derived(getTaskDependencySummaries(task, dependencyTaskList))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, dependencyTaskList))
   let dependents = $derived(getTaskDependentSummaries(task, activeTaskList, dependencyTaskList))
   let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
-  let detailSignal = $derived(deriveTaskDetailSignal(taskPrs, waitingDependencyCount))
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
     return JSON.stringify(nextLabels.map((label) => [label.id, label.name]))
   }
 
-  function chipClass(tone: TaskDetailSignalTone): string {
-    if (tone === 'error') return 'badge-error badge-outline'
-    if (tone === 'warning') return 'badge-warning badge-outline'
-    if (tone === 'success') return 'badge-success badge-outline'
-    return 'badge-info badge-outline'
-  }
 
   $effect(() => {
     const taskLabels = getTaskLabels(task)
@@ -88,11 +75,6 @@
     replaceTaskLabelsInStore(labels)
   }
 
-  async function refreshLinkedPullRequests() {
-    const prs = await getPullRequests()
-    ticketPrs.set(buildTicketPullRequestMap(prs, $ticketPrs))
-  }
-
   async function handleSaveSourceTicket(nextUrl: string | null) {
     await updateTaskSourceTicketUrl(task.id, nextUrl)
     allTasks.update((current) => current.map((storedTask) => {
@@ -106,19 +88,9 @@
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
-  {#if detailSignal}
-    <CollapsibleInfoSection sectionKey="attention" title="Attention" cardId="attention">
-      <div class="flex flex-wrap items-center gap-1.5 px-3 py-2">
-        <span class="badge badge-sm rounded-md {chipClass(detailSignal.tone)}">{detailSignal.message}</span>
-      </div>
-    </CollapsibleInfoSection>
-  {/if}
-
-  <TaskPullRequestStatus taskId={task.id} {taskPrs} onPullRequestLinked={refreshLinkedPullRequests} onGithubStatusRefreshed={refreshLinkedPullRequests} {allowCommentAddressing} />
+  <PluginSlot slotType="taskUISections" taskId={task.id} projectId={task.project_id} />
 
   <TaskPromptSummary {task} {onEditPrompt} />
-
-  <PluginSlot slotType="taskUISections" taskId={task.id} projectId={task.project_id} />
 
   <CollapsibleInfoSection sectionKey="details" title="Details" cardId="details">
     <div class="px-3 py-2 border-b border-base-300/70">

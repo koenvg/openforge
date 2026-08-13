@@ -6,14 +6,18 @@ import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/fron
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
 
-const { mockPrReviewView } = vi.hoisted(() => ({
+const { mockPrReviewView, mockTaskPullRequestStatus } = vi.hoisted(() => ({
   mockPrReviewView: { name: 'PrReviewViewComponent' },
+  mockTaskPullRequestStatus: { name: 'TaskPullRequestStatusComponent' },
 }))
 
 vi.mock('./review/pr/PrReviewView.svelte', () => ({
   default: mockPrReviewView,
 }))
 
+vi.mock('./task/TaskPullRequestStatus.svelte', () => ({
+  default: mockTaskPullRequestStatus,
+}))
 import packageJson from '../package.json'
 
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
@@ -28,6 +32,7 @@ function getPackageMetadata() {
 
 function makeRuntimeHarness() {
   const packageMetadata = getPackageMetadata()
+  const sectionDisposable = { dispose: vi.fn() }
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn(async () => null)
   const backendInvoke = vi.fn(async () => null)
@@ -36,6 +41,7 @@ function makeRuntimeHarness() {
   const navigate = vi.fn(async () => ({ activeProjectId: 'project-1', currentView: 'board', selectedTaskId: null }))
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    taskUI: { registerSection: vi.fn(() => sectionDisposable) },
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })), invokeGlobal },
     backend: { invoke: backendInvoke, whenReady: backendWhenReady },
     events: { onGlobal },
@@ -45,7 +51,7 @@ function makeRuntimeHarness() {
     },
   } as unknown as FrontendOpenForgeAPI
   const context = { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions } as FrontendPluginContext
-  return { api, context, subscriptions, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
+  return { api, context, subscriptions, sectionDisposable, invokeGlobal, backendInvoke, backendWhenReady, onGlobal, navigate }
 }
 
 function findCommandHandler(api: FrontendOpenForgeAPI, id: string) {
@@ -79,6 +85,18 @@ describe('github-sync plugin', () => {
     expect(prReviewSource).toContain('createGithubSyncPrReviewClient(api)')
     expect(prReviewSource).toContain('api.navigation.navigate')
   })
+  it('keeps the Task pull request contribution behind public plugin boundaries', () => {
+    const taskSources = [
+      readFileSync(join(pluginSrcDir, 'task/TaskPullRequestStatus.svelte'), 'utf8'),
+      readFileSync(join(pluginSrcDir, 'task/githubTaskClient.ts'), 'utf8'),
+      readFileSync(join(pluginSrcDir, 'task/useMergeOrchestration.svelte.ts'), 'utf8'),
+    ].join('\n')
+
+    expect(taskSources).not.toMatch(/(?:\.\.\/)+\.\.\/src\//)
+    expect(taskSources).not.toContain('/lib/ipc')
+    expect(taskSources).not.toMatch(/electron|preload|src-tauri/)
+    expect(taskSources).toContain("@openforge-app/plugin-sdk")
+  })
 
   it('uses shared PR review UI components instead of plugin-local duplicate leaf components', () => {
     const prReviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewView.svelte'), 'utf8')
@@ -102,6 +120,28 @@ describe('github-sync plugin', () => {
 
   it('does not keep a legacy host-app PR review UI copy alongside the GitHub Sync plugin view', () => {
     expect(existsSync(join(repoRoot, 'src/components/review/pr'))).toBe(false)
+  })
+
+  it('registers and disposes the plugin-owned Task pull request section', async () => {
+    const { default: plugin, TaskPullRequestStatusComponent } = await import('./index')
+    const { api, context, subscriptions, sectionDisposable } = makeRuntimeHarness()
+
+    await plugin.activate(api, context)
+
+    expect(api.taskUI.registerSection).toHaveBeenCalledWith({
+      id: 'task_pull_request_status',
+      order: 10,
+      component: TaskPullRequestStatusComponent,
+    })
+    expect(TaskPullRequestStatusComponent).toBe(mockTaskPullRequestStatus)
+    expect(subscriptions.add).toHaveBeenCalledWith(sectionDisposable)
+
+    const registered = vi.mocked(subscriptions.add).mock.calls.map(([subscription]) => subscription)
+    await Promise.all(registered.map(async (subscription) => {
+      if (typeof subscription === 'function') await subscription()
+      else await subscription.dispose()
+    }))
+    expect(sectionDisposable.dispose).toHaveBeenCalledOnce()
   })
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {
@@ -219,7 +259,14 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('startAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('abortAgentWalkthrough', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('markReviewPrUnviewed', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(21)
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('listTaskPullRequests', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('refreshTaskGithubStatus', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('linkTaskPullRequest', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getTaskPrComments', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('markTaskPrCommentAddressed', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('mergeTaskPullRequest', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('enqueueTaskPullRequest', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(28)
   })
 
   it('does not add a GitHub-specific SDK namespace', () => {

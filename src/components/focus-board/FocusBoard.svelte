@@ -478,7 +478,6 @@
         task={selectedTask}
         allTasks={tasks}
         {dependencyReferenceTasks}
-        pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
         onEditTask={onEditTask}
         onOpenLinkedTask={onOpenTask}
         onOpenFullView={() => {

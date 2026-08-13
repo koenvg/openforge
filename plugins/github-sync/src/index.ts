@@ -3,11 +3,18 @@ import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import PrReviewView from './review/pr/PrReviewView.svelte'
 import { createGithubSyncPrReviewClient } from './review/pr/githubSyncClient'
 import { pendingReviewPrOpen } from './lib/stores'
+import TaskPullRequestStatus from './task/TaskPullRequestStatus.svelte'
 
 export const PrReviewViewComponent = PrReviewView
+export const TaskPullRequestStatusComponent = TaskPullRequestStatus
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
+    context.subscriptions.add(openforge.taskUI.registerSection({
+      id: 'task_pull_request_status',
+      order: 10,
+      component: TaskPullRequestStatus,
+    }))
     context.subscriptions.add(openforge.views.register({
       id: 'pr_review',
       title: 'Pull Requests',

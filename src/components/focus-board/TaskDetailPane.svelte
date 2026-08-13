@@ -1,18 +1,17 @@
 <script lang="ts">
-  import type { Task, PullRequestInfo } from '../../lib/types'
+  import type { Task } from '../../lib/types'
   import TaskInfoPanel from '../task-detail/TaskInfoPanel.svelte'
 
   interface Props {
     task: Task | null
     allTasks?: Task[]
     dependencyReferenceTasks?: Task[]
-    pullRequests?: PullRequestInfo[]
     onOpenFullView?: () => void
     onOpenLinkedTask?: (taskId: string) => void
     onEditTask?: (taskId: string) => void
   }
 
-  let { task, allTasks = [], dependencyReferenceTasks = [], pullRequests = [], onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
+  let { task, allTasks = [], dependencyReferenceTasks = [], onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
 </script>
 
 {#if task === null}
@@ -36,8 +35,6 @@
       workspacePath={null}
       allTasksOverride={allTasks}
       dependencyReferenceTasksOverride={dependencyReferenceTasks}
-      taskPrsOverride={pullRequests}
-      allowCommentAddressing={true}
       surface="transparent"
       onEditPrompt={onEditTask ? () => onEditTask?.(task.id) : undefined}
       onOpenDependentTask={onOpenLinkedTask}
