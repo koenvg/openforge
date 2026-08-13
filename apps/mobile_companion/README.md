@@ -7,7 +7,7 @@ explicit Start/Delete/Complete Task actions, foreground live updates, and an
 interactive attachment to an already-running Task Agent terminal,
 pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
 Tailscale MagicDNS fallback, and explicit connection and recovery states.
-The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md), [Mobile Task Creation design](../../docs/superpowers/specs/2026-08-10-mobile-task-creation-design.md), and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
+The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md), [Mobile Task Creation design](../../docs/superpowers/specs/2026-08-10-mobile-task-creation-design.md), [Quiet Paper design system](../../docs/superpowers/specs/2026-08-13-mobile-companion-quiet-paper-design-system.md), and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
 
 ## Data and trust boundary
 
