@@ -9,6 +9,8 @@ import 'package:openforge_companion/src/attention/attention_home.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/terminal/agent_terminal_controller.dart';
 import 'package:openforge_companion/src/terminal/agent_terminal_surface.dart';
+import 'package:openforge_companion/src/terminal/companion_terminal_protocol.dart';
+import 'package:openforge_companion/src/terminal/xterm_terminal_adapter.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_controller.dart';
 import 'package:openforge_companion/src/task_detail/task_detail_screen.dart';
 
@@ -687,41 +689,57 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     },
   );
 
-  testWidgets('software keyboard does not resize the Terminal tab viewport', (
-    tester,
-  ) async {
-    addTearDown(tester.view.resetViewInsets);
-    final presentation = _TerminalPresentation()
-      ..setState(const AgentTerminalReady());
-    const terminalKey = Key('keyboard-stable-terminal');
+  testWidgets(
+    'software keyboard reveals the Terminal bottom without resizing the PTY',
+    (tester) async {
+      addTearDown(tester.view.resetViewInsets);
+      final presentation = _TerminalPresentation()
+        ..setState(const AgentTerminalReady());
+      final grids = <TerminalDimensions>[];
+      final adapter = XtermOpenForgeTerminal(onResize: grids.add);
+      const terminalKey = Key('keyboard-visible-terminal');
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: TaskDetailView(
-          state: TaskDetailLoaded(_detail(agentTerminalAvailable: true)),
-          onRefresh: () async {},
-          terminalSurface: AgentTerminalSurface(
-            presentation: presentation,
-            terminal: const ColoredBox(key: terminalKey, color: Colors.black),
-            dispose: () {},
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TaskDetailView(
+            state: TaskDetailLoaded(_detail(agentTerminalAvailable: true)),
+            onRefresh: () async {},
+            terminalSurface: AgentTerminalSurface(
+              presentation: presentation,
+              terminal: SizedBox.expand(
+                key: terminalKey,
+                child: OpenForgeTerminalView(
+                  adapter: adapter,
+                  inputState: presentation,
+                  isInputEnabled: () => true,
+                ),
+              ),
+              dispose: () {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Terminal'));
-    await tester.pumpAndSettle();
-    final initialSize = tester.getSize(find.byKey(terminalKey));
+      await tester.tap(find.text('Terminal'));
+      await tester.pumpAndSettle();
+      final initialSize = tester.getSize(find.byKey(terminalKey));
+      final initialTop = tester.getTopLeft(find.byKey(terminalKey)).dy;
+      final resizeCount = grids.length;
 
-    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
-    await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+      await tester.pumpAndSettle();
 
-    expect(
-      tester.widget<Scaffold>(find.byType(Scaffold)).resizeToAvoidBottomInset,
-      isFalse,
-    );
-    expect(tester.getSize(find.byKey(terminalKey)), initialSize);
-  });
+      expect(tester.getSize(find.byKey(terminalKey)), initialSize);
+      expect(
+        tester.getTopLeft(find.byKey(terminalKey)).dy,
+        closeTo(initialTop - 240 / tester.view.devicePixelRatio, 0.1),
+      );
+      expect(grids, hasLength(resizeCount));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      adapter.dispose();
+    },
+  );
 
   testWidgets(
     'Task terminal follows foreground lifecycle without opening from Details',
