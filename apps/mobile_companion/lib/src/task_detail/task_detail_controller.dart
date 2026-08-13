@@ -162,7 +162,6 @@ final class TaskDetailController extends ChangeNotifier {
     if (_deletePending) return CompanionRefreshOutcome.superseded;
     final generation = ++_generation;
     if (!_completePending) _completeError = null;
-    _setState(const TaskDetailLoading());
     try {
       final trustRecord = await _storage.load();
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;

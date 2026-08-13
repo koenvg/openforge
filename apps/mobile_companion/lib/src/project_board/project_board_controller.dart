@@ -147,9 +147,6 @@ final class ProjectBoardController extends ChangeNotifier {
   Future<CompanionRefreshOutcome> refreshWithOutcome() async {
     final generation = ++_generation;
     final previousSelectedProjectId = _selectedProjectId;
-    _projects = const <ProjectCatalogItem>[];
-    _selectedProjectId = null;
-    _setState(ProjectBoardLoading());
     try {
       final trustRecord = await _storage.load();
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
@@ -157,10 +154,11 @@ final class ProjectBoardController extends ChangeNotifier {
 
       final catalog = await _client.fetchProjectCatalog(trustRecord);
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
-      _projects = List<ProjectCatalogItem>.unmodifiable(catalog.projects);
-      if (_projects.isEmpty) {
+      final projects = List<ProjectCatalogItem>.unmodifiable(catalog.projects);
+      if (projects.isEmpty) {
         await _clearSelectedProject(trustRecord.hostId);
         if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
+        _projects = projects;
         _selectedProjectId = null;
         _selectedLane = ProjectBoardLane.focus;
         _scrollOffsets.clear();
@@ -170,21 +168,22 @@ final class ProjectBoardController extends ChangeNotifier {
 
       final persisted = await _loadSelectedProject(trustRecord.hostId);
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
-      final selected =
-          _projects.any((project) => project.projectId == persisted)
+      final selected = projects.any((project) => project.projectId == persisted)
           ? persisted!
-          : _projects.first.projectId;
-      if (previousSelectedProjectId != null &&
-          previousSelectedProjectId != selected) {
-        _selectedLane = ProjectBoardLane.focus;
-        _scrollOffsets.clear();
-      }
-      _selectedProjectId = selected;
+          : projects.first.projectId;
       if (selected != persisted) {
         await _saveSelectedProject(trustRecord.hostId, selected);
         if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
       }
-      return await _loadBoard(generation, trustRecord, selected);
+      return await _loadBoard(
+        generation,
+        trustRecord,
+        selected,
+        projects: projects,
+        resetLaneContext:
+            previousSelectedProjectId != null &&
+            previousSelectedProjectId != selected,
+      );
     } on CompanionV1Exception catch (error) {
       return _handleCompanionError(generation, error);
     } on Object {
@@ -225,9 +224,6 @@ final class ProjectBoardController extends ChangeNotifier {
     final selected = _selectedProjectId;
     if (selected == null || _projects.isEmpty) return refreshWithOutcome();
     final generation = ++_generation;
-    _setState(
-      ProjectBoardLoading(projects: _projects, selectedProjectId: selected),
-    );
     try {
       final trustRecord = await _storage.load();
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
@@ -243,8 +239,10 @@ final class ProjectBoardController extends ChangeNotifier {
   Future<CompanionRefreshOutcome> _loadBoard(
     int generation,
     CompanionTrustRecord trustRecord,
-    String selected,
-  ) async {
+    String selected, {
+    List<ProjectCatalogItem>? projects,
+    bool resetLaneContext = false,
+  }) async {
     final board = await _client.fetchProjectBoard(trustRecord, selected);
     if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;
     if (board.projectId != selected) {
@@ -252,6 +250,12 @@ final class ProjectBoardController extends ChangeNotifier {
         'Project Board response did not match the Selected Project.',
       );
     }
+    if (projects != null) _projects = projects;
+    if (resetLaneContext) {
+      _selectedLane = ProjectBoardLane.focus;
+      _scrollOffsets.clear();
+    }
+    _selectedProjectId = selected;
     _setState(
       ProjectBoardLoaded(
         projects: _projects,

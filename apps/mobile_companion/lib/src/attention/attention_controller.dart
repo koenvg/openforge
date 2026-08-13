@@ -49,7 +49,6 @@ final class AttentionController extends ChangeNotifier {
 
   Future<CompanionRefreshOutcome> refreshWithOutcome() async {
     final generation = ++_generation;
-    _setState(const AttentionLoading());
     try {
       final trustRecord = await _storage.load();
       if (!_isCurrent(generation)) return CompanionRefreshOutcome.superseded;

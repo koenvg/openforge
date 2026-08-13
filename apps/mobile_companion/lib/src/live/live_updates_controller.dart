@@ -105,13 +105,13 @@ final class LiveUpdatesController {
     _running = false;
     final connection = _connection;
     _connection = null;
-    _clearViews();
     await connection?.close();
   }
 
   Future<void> stop() async {
     _lastEventId = null;
     await suspend();
+    _clearViews();
   }
 
   void _startLoop() {
@@ -157,7 +157,7 @@ final class LiveUpdatesController {
               await _handleInvalidation(event);
               reconnectAttempts = 0;
             case CompanionStreamGap():
-              await _refreshViews(clearFirst: true);
+              await _refreshViews(clearFirst: false);
               reconnectAttempts = 0;
             case CompanionAuthorizationRevoked():
               await _authorizationLost();

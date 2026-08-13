@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/client/companion_client.dart';
+import 'package:openforge_companion/src/client/companion_refresh_outcome.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/project_board/project_board_controller.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
@@ -221,6 +222,29 @@ void main() {
       expect(controller.scrollOffsetFor(ProjectBoardLane.outOfFocus), 128);
     },
   );
+  test(
+    'Board refresh keeps the current snapshot visible until replacement',
+    () async {
+      final client = _FakeClient();
+      final controller = ProjectBoardController(
+        client: client,
+        storage: _FakeStorage(),
+      );
+      await controller.refresh();
+      final currentSnapshot = controller.state;
+      final pending = Completer<ProjectBoard>();
+      client.pendingBoards['P-1'] = pending;
+
+      final refresh = controller.refreshSelectedBoardWithOutcome();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.state, same(currentSnapshot));
+      pending.complete(_board('P-1', 'Alpha'));
+      expect(await refresh, CompanionRefreshOutcome.loaded);
+      expect(controller.state, isA<ProjectBoardLoaded>());
+    },
+  );
+
   test(
     'catalog fallback changes Project and resets lane context to Focus',
     () async {
