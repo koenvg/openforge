@@ -231,7 +231,7 @@ pub(crate) fn task_reason(state: &str, prs: &[&TaskAttentionPullRequest]) -> Str
     }
 
     match state {
-        "egg" => "In backlog — not started yet.",
+        "backlog" => "In backlog — not started yet.",
         "idle" => "No agent running. Start when ready.",
         "active" => "Agent is running — no action needed right now.",
         "needs-input" => "Agent needs your input to continue.",

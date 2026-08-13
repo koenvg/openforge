@@ -365,6 +365,12 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
   })
 })
 
+describe('computeTaskState - Task lifecycle states', () => {
+  it('returns backlog for a Task that has not started', () => {
+    expect(computeTaskState(createTask({ status: 'backlog' }), null, [])).toBe('backlog')
+  })
+})
+
 // ============================================================================
 // PART 4: taskStateToBorderClass mapping
 // ============================================================================
@@ -414,8 +420,8 @@ describe('taskStateToBorderClass', () => {
     expect(taskStateToBorderClass('pr-queued')).toBe('ready-to-merge')
   })
 
-  it('returns empty string for egg', () => {
-    expect(taskStateToBorderClass('egg')).toBe('')
+  it('returns empty string for backlog', () => {
+    expect(taskStateToBorderClass('backlog')).toBe('')
   })
 
   it('returns empty string for idle', () => {

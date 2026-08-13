@@ -557,7 +557,7 @@ final class _LongTitleWidgetClient extends _WidgetClient {
           'T-long',
           _longTaskTitle,
           ProjectBoardLane.backlog,
-          'egg',
+          'backlog',
           'Ready to start',
         ),
       ],

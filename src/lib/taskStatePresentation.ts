@@ -3,7 +3,7 @@ import type { TaskState } from './taskState'
 import type { PullRequestInfo } from './types'
 
 export const TASK_STATE_LABELS: Record<TaskState, string> = {
-  egg: 'Backlog',
+  backlog: 'Backlog',
   idle: 'Idle',
   active: 'Running',
   'needs-input': 'Needs Input',
@@ -28,7 +28,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
 }
 
 export const TASK_STATE_COMPACT_LABELS: Record<TaskState, string> = {
-  egg: 'Backlog',
+  backlog: 'Backlog',
   idle: 'Idle',
   active: 'Active',
   'needs-input': 'Needs Input',
@@ -88,13 +88,13 @@ export function getTaskStateBadgeClass(state: TaskState): string {
     case 'ready-to-merge': return 'badge-info'
     case 'ready-to-enqueue': return 'badge-info'
     case 'pr-queued': return 'badge-info'
-    case 'egg': return 'badge-ghost'
+    case 'backlog': return 'badge-ghost'
     default: return ''
   }
 }
 
 const STATE_REASONS: Record<TaskState, string> = {
-  'egg': 'In backlog — not started yet.',
+  'backlog': 'In backlog — not started yet.',
   'idle': 'No agent running. Start when ready.',
   'active': 'Agent is running — no action needed right now.',
   'needs-input': 'Agent needs your input to continue.',

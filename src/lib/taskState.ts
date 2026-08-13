@@ -2,7 +2,7 @@ import type { Task, AgentSession, PullRequestInfo } from './types'
 import { getMergeReadiness, getMostAttentionWorthyPullRequest, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest } from './types'
 
 export type TaskState =
-  | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
+  | 'backlog' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
   | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'ready-to-enqueue' | 'pr-queued' | 'pr-merged' | 'pr-closed' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
 
 export const ALL_TASK_STATES: TaskState[] = [
@@ -92,9 +92,9 @@ export function computeTaskState(task: Task, session: AgentSession | null, prs: 
     return 'done'
   }
 
-  // Backlog tasks are always eggs
+  // Backlog tasks have not started
   if (task.status === 'backlog') {
-    return 'egg'
+    return 'backlog'
   }
 
   // Doing tasks map to various states based on session
