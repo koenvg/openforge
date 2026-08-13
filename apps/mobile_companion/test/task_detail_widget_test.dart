@@ -329,32 +329,37 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     },
   );
 
-  testWidgets(
-    'Complete is offered for doing Task detail but never backlog detail',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: TaskDetailView(
-            state: TaskDetailLoaded(_detail()),
-            onRefresh: () async {},
-            onComplete: () async => TaskCompleteAttempt.completed,
-          ),
+  testWidgets('Complete is offered only on doing Task Details', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail()),
+          onRefresh: () async {},
+          onComplete: () async => TaskCompleteAttempt.completed,
         ),
-      );
-      expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
+      ),
+    );
+    expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: TaskDetailView(
-            state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
-            onRefresh: () async {},
-            onComplete: () async => TaskCompleteAttempt.completed,
-          ),
+    await tester.tap(find.text('Terminal'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Complete'), findsNothing);
+
+    await tester.tap(find.text('Details'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Complete'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaskDetailView(
+          state: TaskDetailLoaded(_detail(boardStatus: 'backlog')),
+          onRefresh: () async {},
+          onComplete: () async => TaskCompleteAttempt.completed,
         ),
-      );
-      expect(find.widgetWithText(FilledButton, 'Complete'), findsNothing);
-    },
-  );
+      ),
+    );
+    expect(find.widgetWithText(FilledButton, 'Complete'), findsNothing);
+  });
 
   testWidgets(
     'Complete confirmation names the Task and warns for a running Agent',
