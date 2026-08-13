@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/quiet_paper_theme.dart';
+
 import '../connection/companion_connection_state.dart';
 import 'connected_host_status_card.dart';
 
@@ -40,20 +42,37 @@ class ConnectionShell extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
-                    Icon(
-                      content.icon,
-                      size: 64,
-                      semanticLabel: content.iconLabel,
-                    ),
-                    const SizedBox(height: 24),
+                    if (state is Unpaired)
+                      const _PairingTrustIllustration()
+                    else
+                      Icon(
+                        content.icon,
+                        size: 64,
+                        color: Theme.of(context).colorScheme.primary,
+                        semanticLabel: content.iconLabel,
+                      ),
+                    const SizedBox(height: QuietPaperSpacing.section),
+                    if (state is Unpaired) ...<Widget>[
+                      Text(
+                        content.title,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: QuietPaperSpacing.compact),
+                    ],
                     Text(
-                      content.title,
+                      state is Unpaired
+                          ? 'Pair with your desktop'
+                          : content.title,
                       style: Theme.of(context).textTheme.headlineMedium,
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: QuietPaperSpacing.related),
                     Text(
-                      content.message,
+                      state is Unpaired
+                          ? 'Scan the pairing code shown in OpenForge Settings.'
+                          : content.message,
                       style: Theme.of(context).textTheme.bodyLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -66,11 +85,14 @@ class ConnectionShell extends StatelessWidget {
                             state is PairingUnavailable) &&
                         onPair != null) ...<Widget>[
                       const SizedBox(height: 32),
-                      FilledButton.icon(
-                        key: const Key('pair-with-desktop'),
-                        onPressed: onPair,
-                        icon: const Icon(Icons.qr_code_scanner),
-                        label: const Text('Pair with desktop'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const Key('pair-with-desktop'),
+                          onPressed: onPair,
+                          icon: const Icon(Icons.qr_code_scanner),
+                          label: const Text('Scan pairing code'),
+                        ),
                       ),
                     ],
                     if ((state is Unpaired ||
@@ -78,11 +100,24 @@ class ConnectionShell extends StatelessWidget {
                             state is PairingUnavailable) &&
                         onManualPair != null) ...<Widget>[
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        key: const Key('pair-manually'),
-                        onPressed: onManualPair,
-                        icon: const Icon(Icons.keyboard_alt_outlined),
-                        label: const Text('Enter pairing payload'),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          key: const Key('pair-manually'),
+                          onPressed: onManualPair,
+                          icon: const Icon(Icons.keyboard_alt_outlined),
+                          label: const Text('Enter code manually'),
+                        ),
+                      ),
+                    ],
+                    if (state is Unpaired) ...<Widget>[
+                      const SizedBox(height: QuietPaperSpacing.section),
+                      const _PinnedConnectionNotice(),
+                      const SizedBox(height: QuietPaperSpacing.related),
+                      Text(
+                        content.message,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
                       ),
                     ],
                     if ((state is Revoked || state is CertificateMismatch) &&
@@ -143,6 +178,84 @@ class ConnectionShell extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PairingTrustIllustration extends StatelessWidget {
+  const _PairingTrustIllustration();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      image: true,
+      label: 'Trusted encrypted connection between this phone and desktop',
+      child: ExcludeSemantics(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.all(QuietPaperSpacing.section),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerLow,
+            border: Border.all(color: colors.outlineVariant),
+            borderRadius: BorderRadius.circular(QuietPaperShapes.cardRadius),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                Icons.laptop_mac_outlined,
+                size: 52,
+                color: colors.onSurface,
+              ),
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(child: Divider(color: colors.outline)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: QuietPaperSpacing.compact,
+                      ),
+                      child: Icon(
+                        Icons.verified_user_outlined,
+                        color: colors.primary,
+                      ),
+                    ),
+                    Expanded(child: Divider(color: colors.outline)),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.phone_iphone_outlined,
+                size: 48,
+                color: colors.onSurface,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedConnectionNotice extends StatelessWidget {
+  const _PinnedConnectionNotice();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: 'Pinned, encrypted connection',
+    child: ExcludeSemantics(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(
+            Icons.shield_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: QuietPaperSpacing.compact),
+          const Flexible(child: Text('Pinned, encrypted connection')),
+        ],
+      ),
+    ),
+  );
 }
 
 _ConnectionContent _contentFor(

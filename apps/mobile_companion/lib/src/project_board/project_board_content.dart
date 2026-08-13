@@ -192,12 +192,13 @@ class _BoardTaskRow extends StatelessWidget {
                               children: <Widget>[
                                 Text(
                                   task.taskId,
-                                  style: Theme.of(context).textTheme.labelMedium
-                                      ?.copyWith(
+                                  style:
+                                      QuietPaperTypography.identifier(
+                                        Theme.of(context).textTheme,
+                                      ).copyWith(
                                         color: Theme.of(
                                           context,
                                         ).colorScheme.primary,
-                                        fontWeight: FontWeight.w700,
                                       ),
                                 ),
                                 _StateBadge(state: task.state, label: state),
@@ -260,7 +261,7 @@ class _BoardTaskRow extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        _truncateTaskTitle(task.title),
+                        task.title,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
@@ -605,9 +606,6 @@ String _stateLabel(String state) =>
 
 String _pluralize(int count, String singular, [String? plural]) =>
     '$count ${count == 1 ? singular : plural ?? '${singular}s'}';
-
-String _truncateTaskTitle(String title) =>
-    title.length > 80 ? '${title.substring(0, 80)}...' : title;
 
 String _relativeActivity(DateTime activityAt, DateTime now) {
   final elapsed = now.difference(activityAt);

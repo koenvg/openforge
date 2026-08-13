@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openforge_companion/src/app.dart';
+import 'package:openforge_companion/src/design_system/quiet_paper_theme.dart';
 import 'package:openforge_companion/src/terminal/companion_terminal_protocol.dart';
 import 'package:openforge_companion/src/terminal/xterm_terminal_adapter.dart';
 import 'package:xterm/xterm.dart' show TerminalKey, TerminalView;
@@ -186,7 +187,9 @@ void main() {
     Future<void> pump(Brightness brightness) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: ThemeData(brightness: brightness),
+          theme: brightness == Brightness.light
+              ? QuietPaperTheme.light
+              : QuietPaperTheme.dark,
           themeMode: ThemeMode.light,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
@@ -221,7 +224,10 @@ void main() {
     }
     final lightView = tester.widget<TerminalView>(find.byType(TerminalView));
     expect(lightView.keyboardAppearance, Brightness.light);
-    expect(lightView.theme.background, Colors.white);
+    expect(
+      lightView.theme.background.computeLuminance(),
+      lessThan(lightView.theme.foreground.computeLuminance()),
+    );
     expect(lightView.readOnly, isFalse);
     expect(lightView.simulateScroll, isFalse);
     expect(lightView.textStyle.fontSize, 13);
@@ -237,7 +243,8 @@ void main() {
     await pump(Brightness.dark);
     final darkView = tester.widget<TerminalView>(find.byType(TerminalView));
     expect(darkView.keyboardAppearance, Brightness.dark);
-    expect(darkView.theme.background, Colors.black);
+    expect(darkView.theme.background, isNot(lightView.theme.background));
+    expect(darkView.theme.red, isNot(lightView.theme.red));
 
     await tester.tap(find.bySemanticsLabel('Escape key'));
     expect(utf8.decode(input.single), '\x1b');

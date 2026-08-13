@@ -76,9 +76,7 @@ class _OpenForgeTerminalViewState extends State<OpenForgeTerminalView>
                       textStyle: const xterm.TerminalStyle(fontSize: 13),
                       textScaler: MediaQuery.textScalerOf(context),
                       keyboardAppearance: brightness,
-                      theme: brightness == Brightness.dark
-                          ? _darkTerminalTheme
-                          : _lightTerminalTheme,
+                      theme: quietPaperTerminalTheme(context),
                     ),
                   );
                 },
@@ -170,55 +168,3 @@ final class _ResponsiveTerminalViewportCoordinator {
 
   void dispose() => scrollController.dispose();
 }
-
-const _darkTerminalTheme = xterm.TerminalTheme(
-  cursor: Colors.white,
-  selection: Colors.blueGrey,
-  foreground: Colors.white,
-  background: Colors.black,
-  black: Colors.black,
-  red: Colors.redAccent,
-  green: Colors.lightGreenAccent,
-  yellow: Colors.yellowAccent,
-  blue: Colors.lightBlueAccent,
-  magenta: Colors.purpleAccent,
-  cyan: Colors.cyanAccent,
-  white: Colors.white,
-  brightBlack: Colors.grey,
-  brightRed: Colors.redAccent,
-  brightGreen: Colors.lightGreenAccent,
-  brightYellow: Colors.yellowAccent,
-  brightBlue: Colors.lightBlueAccent,
-  brightMagenta: Colors.purpleAccent,
-  brightCyan: Colors.cyanAccent,
-  brightWhite: Colors.white,
-  searchHitBackground: Colors.yellow,
-  searchHitBackgroundCurrent: Colors.amber,
-  searchHitForeground: Colors.black,
-);
-
-final _lightTerminalTheme = xterm.TerminalTheme(
-  cursor: Colors.black,
-  selection: Colors.blue.shade200,
-  foreground: Colors.black,
-  background: Colors.white,
-  black: Colors.black,
-  red: Colors.red.shade800,
-  green: Colors.green.shade800,
-  yellow: Colors.brown.shade700,
-  blue: Colors.blue.shade800,
-  magenta: Colors.purple.shade800,
-  cyan: Colors.cyan.shade900,
-  white: Colors.grey.shade700,
-  brightBlack: Colors.grey.shade700,
-  brightRed: Colors.red.shade700,
-  brightGreen: Colors.green.shade800,
-  brightYellow: Colors.brown.shade600,
-  brightBlue: Colors.blue.shade700,
-  brightMagenta: Colors.purple.shade700,
-  brightCyan: Colors.cyan.shade800,
-  brightWhite: Colors.black,
-  searchHitBackground: Colors.yellow.shade300,
-  searchHitBackgroundCurrent: Colors.amber.shade400,
-  searchHitForeground: Colors.black,
-);

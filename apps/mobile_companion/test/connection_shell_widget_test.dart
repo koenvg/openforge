@@ -61,6 +61,25 @@ void main() {
     expect(retried, isTrue);
   });
 
+  testWidgets('unpaired state presents focused secure pairing actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ConnectionShell(
+          state: const Unpaired(),
+          onPair: () {},
+          onManualPair: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Pair with your desktop'), findsOneWidget);
+    expect(find.text('Scan pairing code'), findsOneWidget);
+    expect(find.text('Enter code manually'), findsOneWidget);
+    expect(find.text('Pinned, encrypted connection'), findsOneWidget);
+  });
+
   for (final scenario in <({CompanionConnectionState state, String title})>[
     (state: const Restoring(), title: 'Restoring connection'),
     (state: const Unpaired(), title: 'Not paired'),

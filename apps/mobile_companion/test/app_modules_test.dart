@@ -32,6 +32,39 @@ void main() {
   );
 
   testWidgets(
+    'system appearance propagates without resetting navigation state',
+    (tester) async {
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        CompanionAppShell(
+          navigatorKey: navigatorKey,
+          home: const SizedBox.shrink(),
+        ),
+      );
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (context) => Scaffold(
+            body: Text(
+              'Preserved route · ${Theme.of(context).brightness.name}',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Preserved route · light'), findsOneWidget);
+
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      tester.platformDispatcher.onPlatformBrightnessChanged?.call();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preserved route · dark'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'connection view composes authenticated content only for connected state',
     (tester) async {
       Widget buildView(CompanionConnectionState state) => MaterialApp(

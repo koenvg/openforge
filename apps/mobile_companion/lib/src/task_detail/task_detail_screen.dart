@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as markdown;
 
+import '../design_system/quiet_paper_theme.dart';
+
 import '../action_palette/action_palette.dart';
 import '../action_palette/action_palette_controller.dart';
 import '../generated/companion_v1_client.dart';

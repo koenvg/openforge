@@ -15,8 +15,6 @@ import 'package:openforge_companion/src/task_detail/task_detail_controller.dart'
 
 const _longTaskTitle =
     '123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890';
-const _truncatedLongTaskTitle =
-    '12345678901234567890123456789012345678901234567890123456789012345678901234567890...';
 
 final class _WidgetClient
     implements
@@ -204,6 +202,14 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Create new Task'));
     await tester.pumpAndSettle();
     expect(find.text('Create Task'), findsWidgets);
+    expect(find.text('Project'), findsOneWidget);
+    expect(
+      find.text(
+        'Creates a Task in Backlog using desktop-saved Project defaults.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('What needs to be done?'), findsOneWidget);
     await tester.enterText(
       find.byType(TextField),
       'Investigate mobile creation',
@@ -351,30 +357,28 @@ void main() {
     );
   });
 
-  testWidgets(
-    'cards truncate long titles visually but announce the full title',
-    (tester) async {
-      final controller = ProjectBoardController(
-        client: _LongTitleWidgetClient(),
-        storage: _WidgetStorage(),
-      );
-      await controller.refresh();
-      controller.selectLane(ProjectBoardLane.backlog);
+  testWidgets('cards show the full Task title without visual truncation', (
+    tester,
+  ) async {
+    final controller = ProjectBoardController(
+      client: _LongTitleWidgetClient(),
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+    controller.selectLane(ProjectBoardLane.backlog);
 
-      await tester.pumpWidget(
-        MaterialApp(home: ProjectBoardHome(controller: controller)),
-      );
+    await tester.pumpWidget(
+      MaterialApp(home: ProjectBoardHome(controller: controller)),
+    );
 
-      expect(find.text(_truncatedLongTaskTitle), findsOneWidget);
-      expect(find.text(_longTaskTitle), findsNothing);
-      expect(
-        find.bySemanticsLabel(
-          RegExp('^Task T-long, ${RegExp.escape(_longTaskTitle)}, Backlog,'),
-        ),
-        findsOneWidget,
-      );
-    },
-  );
+    expect(find.text(_longTaskTitle), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        RegExp('^Task T-long, ${RegExp.escape(_longTaskTitle)}, Backlog,'),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('each lane has a calm lane-specific empty state', (tester) async {
     final controller = ProjectBoardController(
