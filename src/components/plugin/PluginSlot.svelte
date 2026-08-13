@@ -17,6 +17,7 @@
     projectId?: string | null
     projectName?: string
     projectPath?: string
+    taskActionPending?: boolean
     /**
      * Resolve contributions from these plugin ids instead of the project-enabled set.
      * The global settings page uses this to render an installed plugin's global
@@ -25,7 +26,7 @@
     sourcePluginIds?: string[] | null
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', sourcePluginIds = null }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -171,7 +172,7 @@
         />
       {/snippet}
       {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
-      <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} />
+      <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} {taskActionPending} />
     </svelte:boundary>
   {:else if slotType !== 'taskUISections'}
     <div data-contribution-id={contrib.contributionId}></div>
