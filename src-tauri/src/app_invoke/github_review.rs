@@ -157,6 +157,89 @@ pub(super) async fn handle_app_github_review_command(
                 .set(focused, active_project_id, global_view_open);
             serde_json::Value::Null
         }
+        "merge_task_pull_request" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let pr_id = payload_i64(&request.payload, "prId")?;
+            let expected_head_sha = payload_string(&request.payload, "expectedHeadSha")?;
+            crate::github_poller::refresh_task_github_status_for_sidecar(
+                state.db.clone(),
+                &state.github_client,
+                state.app_event_tx.clone(),
+                &task_id,
+            )
+            .await
+            .map_err(refresh_task_github_status_error)?;
+            let pr = crate::github_runtime::get_pull_requests(&state.db)
+                .map_err(runtime_error)?
+                .into_iter()
+                .find(|pr| pr.id == pr_id && pr.ticket_id == task_id)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        "Pull request not found for task".to_string(),
+                    )
+                })?;
+            if pr.head_sha != expected_head_sha
+                || pr.merge_readiness_status.as_deref() != Some("ready_to_merge")
+                || pr.merge_readiness_action.as_deref() != Some("merge")
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "Pull request is no longer ready to merge".to_string(),
+                ));
+            }
+            crate::github_runtime::merge_pull_request(
+                &state.github_client,
+                &pr.repo_owner,
+                &pr.repo_name,
+                pr.pr_number,
+            )
+            .await
+            .map_err(runtime_error)?;
+            serde_json::Value::Null
+        }
+        "enqueue_task_pull_request" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let pr_id = payload_i64(&request.payload, "prId")?;
+            let expected_head_sha = payload_string(&request.payload, "expectedHeadSha")?;
+            crate::github_poller::refresh_task_github_status_for_sidecar(
+                state.db.clone(),
+                &state.github_client,
+                state.app_event_tx.clone(),
+                &task_id,
+            )
+            .await
+            .map_err(refresh_task_github_status_error)?;
+            let pr = crate::github_runtime::get_pull_requests(&state.db)
+                .map_err(runtime_error)?
+                .into_iter()
+                .find(|pr| pr.id == pr_id && pr.ticket_id == task_id)
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        "Pull request not found for task".to_string(),
+                    )
+                })?;
+            if pr.head_sha != expected_head_sha
+                || pr.merge_readiness_status.as_deref() != Some("ready_to_enqueue")
+                || pr.merge_readiness_action.as_deref() != Some("enqueue")
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "Pull request is no longer ready to enqueue".to_string(),
+                ));
+            }
+            crate::github_runtime::enqueue_pull_request(
+                &state.db,
+                &state.github_client,
+                &pr.repo_owner,
+                &pr.repo_name,
+                pr.pr_number,
+            )
+            .await
+            .map_err(runtime_error)?;
+            serde_json::Value::Null
+        }
         "merge_pull_request" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;

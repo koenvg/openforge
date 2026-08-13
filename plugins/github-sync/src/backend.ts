@@ -11,6 +11,15 @@ import type {
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
 import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+
+type TaskPullRequestActionRequest = {
+  taskId: string
+  prId: number
+  owner: string
+  repo: string
+  prNumber: number
+  expectedHeadSha: string
+}
 import { randomUUID } from 'node:crypto'
 import {
   beginWalkthroughGeneration,
@@ -157,6 +166,36 @@ export default defineBackendPlugin({
           sessionKey: request.walkthroughSessionKey,
         }).catch(() => undefined)
       },
+    }))
+    context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>('listTaskPullRequests', {
+      handler: async ({ taskId }) => {
+        const pullRequests = await invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>(openforge, 'getPullRequests')
+        return pullRequests.filter((pr) => pr.ticket_id === taskId)
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, PollResult>('refreshTaskGithubStatus', {
+      handler: (request) => invokeHostCommand<PollResult>(openforge, 'refreshTaskGithubStatus', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string; prUrl: string }, import('@openforge-app/plugin-sdk/domain').PullRequestInfo>('linkTaskPullRequest', {
+      handler: (request) => invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo>(openforge, 'linkPullRequest', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ prId: number }, import('@openforge-app/plugin-sdk/domain').PrComment[]>('getTaskPrComments', {
+      handler: (request) => invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PrComment[]>(openforge, 'getPrComments', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ commentId: number }, void>('markTaskPrCommentAddressed', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'markCommentAddressed', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<TaskPullRequestActionRequest, void>('mergeTaskPullRequest', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'mergeTaskPullRequest', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<TaskPullRequestActionRequest, void>('enqueueTaskPullRequest', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'enqueueTaskPullRequest', request),
     }))
   },
 })

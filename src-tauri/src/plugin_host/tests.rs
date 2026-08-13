@@ -439,6 +439,19 @@ async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge()
         .expect("global command callback");
     assert_eq!(review_prs, json!([]));
 
+    let task_prs = host
+        .handle_host_callback(
+            "openforge.commands.invokeGlobal",
+            &json!({
+                "qualifiedId": "openforge.getPullRequests",
+                "payload": null,
+                "callerPluginId": "com.openforge.github-sync"
+            }),
+        )
+        .await
+        .expect("Task pull request callback");
+    assert_eq!(task_prs, json!([]));
+
     let unauthorized = host
         .handle_host_callback(
             "openforge.commands.invokeGlobal",

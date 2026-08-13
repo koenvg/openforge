@@ -32,7 +32,9 @@
     "icon": "git-pull-request",
     "frontend": "./dist/frontend.js",
     "backend": "./dist/backend.js",
+    "frontendStyles": ["./dist/plugin-github-sync.css"],
     "requires": [
+      "taskPane",
       "views",
       "backend",
       "commands",

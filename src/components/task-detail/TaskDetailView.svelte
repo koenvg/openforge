@@ -400,7 +400,6 @@
                 <TaskInfoPanel
                   task={task}
                   {workspacePath}
-                  allowCommentAddressing={true}
                   onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined}
                   onOpenDependentTask={onOpenTask}
                 />
