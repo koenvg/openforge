@@ -1573,6 +1573,12 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         "Start",
         "Delete",
         "Complete",
+        "Set Aside",
+        "Return to Board",
+        "Merge",
+        "Enqueue",
+        "Run app",
+        "Refresh GitHub",
     ] {
         assert!(
             api_description.contains(disclosed_authority),
@@ -1581,7 +1587,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     }
     assert!(!api_description.to_ascii_lowercase().contains("read-only"));
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 12);
+    assert_eq!(paths.len(), 20);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1683,6 +1689,49 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         "Task Start must be one explicit Task-scoped mutation",
     );
     assert!(task_start_path["post"].get("requestBody").is_none());
+    let task_actions_path = paths["/tasks/{taskId}/actions"]
+        .as_object()
+        .expect("Task actions path item");
+    assert_eq!(
+        task_actions_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
+    );
+    let project_actions_path = paths["/projects/{projectId}/actions"]
+        .as_object()
+        .expect("Project actions path item");
+    assert_eq!(
+        project_actions_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
+    );
+    let explicit_action_paths = [
+        ("/tasks/{taskId}/set-aside", "setAsideCompanionTask"),
+        (
+            "/tasks/{taskId}/return-to-board",
+            "returnCompanionTaskToBoard",
+        ),
+        ("/tasks/{taskId}/merge", "mergeCompanionTaskPullRequest"),
+        ("/tasks/{taskId}/enqueue", "enqueueCompanionTaskPullRequest"),
+        ("/tasks/{taskId}/run-app", "runCompanionTaskApp"),
+        (
+            "/projects/{projectId}/refresh-github",
+            "refreshCompanionProjectGithub",
+        ),
+    ];
+    for (path, operation_id) in explicit_action_paths {
+        let item = paths[path].as_object().expect("explicit action path item");
+        assert_eq!(
+            item.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["post"]
+        );
+        assert_eq!(item["post"]["operationId"], operation_id);
+        assert!(item["post"].get("requestBody").is_none());
+    }
     let events_path = paths["/events"].as_object().expect("events path item");
     assert_eq!(
         events_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1742,6 +1791,14 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         &task_complete_path["post"],
         &task_delete_path["post"],
         &task_start_path["post"],
+        &task_actions_path["get"],
+        &project_actions_path["get"],
+        &paths["/tasks/{taskId}/set-aside"]["post"],
+        &paths["/tasks/{taskId}/return-to-board"]["post"],
+        &paths["/tasks/{taskId}/merge"]["post"],
+        &paths["/tasks/{taskId}/enqueue"]["post"],
+        &paths["/tasks/{taskId}/run-app"]["post"],
+        &paths["/projects/{projectId}/refresh-github"]["post"],
         &events_path["get"],
     ] {
         assert!(

@@ -102,10 +102,40 @@ abstract interface class CompanionTaskActionClient {
   );
 }
 
+abstract interface class CompanionActionPaletteClient {
+  Future<ProjectActionsSnapshot> fetchProjectActions(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  );
+  Future<TaskActionsSnapshot> fetchTaskActions(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
+  Future<void> setAsideTask(CompanionTrustRecord trustRecord, String taskId);
+  Future<void> returnTaskToBoard(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
+  Future<void> mergeTaskPullRequest(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
+  Future<void> enqueueTaskPullRequest(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  );
+  Future<void> runTaskApp(CompanionTrustRecord trustRecord, String taskId);
+  Future<void> refreshProjectGithub(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  );
+}
+
 final class GeneratedCompanionClient
     implements
         CompanionClient,
         CompanionTaskActionClient,
+        CompanionActionPaletteClient,
         CompanionTerminalClient {
   factory GeneratedCompanionClient({
     CompanionEndpointTransportFactory transportFactory = _pinnedTransport,
@@ -302,6 +332,96 @@ final class GeneratedCompanionClient
     ),
   );
 
+  @override
+  Future<ProjectActionsSnapshot> fetchProjectActions(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) => client.getCompanionProjectActions(
+      projectId: projectId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+  @override
+  Future<TaskActionsSnapshot> fetchTaskActions(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) => client.getCompanionTaskActions(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
+  @override
+  Future<void> setAsideTask(CompanionTrustRecord trustRecord, String taskId) =>
+      _singleAttemptMutation(
+        trustRecord,
+        (client) => client.setAsideCompanionTask(
+          taskId: taskId,
+          credential: trustRecord.deviceCredential,
+        ),
+      );
+
+  @override
+  Future<void> returnTaskToBoard(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.returnCompanionTaskToBoard(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
+  @override
+  Future<void> mergeTaskPullRequest(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.mergeCompanionTaskPullRequest(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
+  @override
+  Future<void> enqueueTaskPullRequest(
+    CompanionTrustRecord trustRecord,
+    String taskId,
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.enqueueCompanionTaskPullRequest(
+      taskId: taskId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
+  @override
+  Future<void> runTaskApp(CompanionTrustRecord trustRecord, String taskId) =>
+      _singleAttemptMutation(
+        trustRecord,
+        (client) => client.runCompanionTaskApp(
+          taskId: taskId,
+          credential: trustRecord.deviceCredential,
+        ),
+      );
+
+  @override
+  Future<void> refreshProjectGithub(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => _singleAttemptMutation(
+    trustRecord,
+    (client) => client.refreshCompanionProjectGithub(
+      projectId: projectId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
   @override
   Future<TaskCompleteResult> completeTask(
     CompanionTrustRecord trustRecord,

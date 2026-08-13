@@ -253,6 +253,9 @@ async fn hidden_project_task_events_do_not_expose_resource_identifiers() {
             project_board,
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             events: events.clone(),

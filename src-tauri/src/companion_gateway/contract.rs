@@ -1,9 +1,22 @@
+mod action_palette;
 mod live_events;
 mod pairing;
 mod snapshots;
 mod task_actions;
 mod task_creation;
+#[cfg(test)]
 use super::{
+    action_palette::UnavailableCompanionActionPaletteService,
+    attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
+    project_board::UnavailableCompanionProjectBoardSource,
+    task_actions::UnavailableCompanionTaskActionService,
+    task_creation::UnavailableCompanionTaskCreator,
+    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
+};
+use super::{
+    action_palette::{
+        CompanionActionPaletteService, CompanionProjectActionId, CompanionTaskActionId,
+    },
     attention::CompanionAttentionSource,
     live_events::CompanionStreamAccess,
     pairing::{CompanionAuthenticatedDevice, PairingCoordinator},
@@ -14,14 +27,6 @@ use super::{
     task_detail::CompanionTaskDetailSource,
     task_start::CompanionTaskStarter,
     terminal::CompanionTerminalRegistry,
-};
-#[cfg(test)]
-use super::{
-    attention::UnavailableCompanionAttentionSource, live_events::GatewayCompanionStreamAccess,
-    project_board::UnavailableCompanionProjectBoardSource,
-    task_actions::UnavailableCompanionTaskActionService,
-    task_creation::UnavailableCompanionTaskCreator,
-    task_detail::UnavailableCompanionTaskDetailSource, task_start::UnavailableCompanionTaskStarter,
 };
 use crate::app_events::AppEventBus;
 use axum::{
@@ -268,6 +273,20 @@ pub(crate) struct CompanionTaskCreateResponse {
     pub(crate) project_id: String,
     pub(crate) board_status: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionTaskActionsResponse {
+    pub(crate) task_id: String,
+    pub(crate) actions: Vec<CompanionTaskActionId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompanionProjectActionsResponse {
+    pub(crate) project_id: String,
+    pub(crate) actions: Vec<CompanionProjectActionId>,
+}
 pub(crate) trait CompanionAuthorizer: Send + Sync {
     fn authorize(
         &self,
@@ -311,6 +330,7 @@ pub(crate) struct CompanionRouterSources {
     pub(crate) project_board: Arc<dyn CompanionProjectBoardSource>,
     pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(crate) task_actions: Arc<dyn CompanionTaskActionService>,
+    pub(crate) action_palette: Arc<dyn CompanionActionPaletteService>,
     pub(crate) task_creator: Arc<dyn CompanionTaskCreator>,
     pub(crate) task_start: Arc<dyn CompanionTaskStarter>,
     pub(crate) pty_manager: crate::pty_manager::PtyManager,
@@ -327,6 +347,7 @@ struct CompanionRouterState {
     project_board: Arc<dyn CompanionProjectBoardSource>,
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
+    action_palette: Arc<dyn CompanionActionPaletteService>,
     task_creator: Arc<dyn CompanionTaskCreator>,
     task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
@@ -472,6 +493,9 @@ pub(crate) fn create_router_with_project_board(
             project_board,
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(UnavailableCompanionTaskCreator),
             task_start: Arc::new(UnavailableCompanionTaskStarter),
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -498,6 +522,9 @@ pub(crate) fn create_router_with_task_creation(
             project_board,
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator,
             task_start: Arc::new(UnavailableCompanionTaskStarter),
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -526,6 +553,7 @@ pub(crate) fn create_router_with_task_actions(
             project_board,
             task_detail,
             task_actions,
+            action_palette: Arc::new(UnavailableCompanionActionPaletteService),
             task_creator: Arc::new(UnavailableCompanionTaskCreator),
             task_start: Arc::new(UnavailableCompanionTaskStarter),
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -554,6 +582,9 @@ pub(crate) fn create_router_with_task_start(
             project_board,
             task_detail,
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(UnavailableCompanionTaskCreator),
             task_start,
             pty_manager: crate::pty_manager::PtyManager::new(),
@@ -620,6 +651,9 @@ pub(crate) fn create_router_with_sources_and_event_access(
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail,
             task_actions: Arc::new(UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(UnavailableCompanionTaskCreator),
             task_start: Arc::new(UnavailableCompanionTaskStarter),
             events,
@@ -640,6 +674,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
         project_board,
         task_detail,
         task_actions,
+        action_palette,
         task_creator,
         task_start,
         pty_manager,
@@ -657,6 +692,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
     let authenticated_routes = Router::new()
         .merge(snapshots::routes())
         .merge(task_actions::routes())
+        .merge(action_palette::routes())
         .merge(task_creation::routes())
         .merge(live_events::routes())
         .route_layer(middleware::from_fn_with_state(
@@ -676,6 +712,7 @@ pub(crate) fn create_router_with_sources_event_access_and_pty(
             project_board,
             task_detail,
             task_actions,
+            action_palette,
             task_creator,
             task_start,
             pty_manager,

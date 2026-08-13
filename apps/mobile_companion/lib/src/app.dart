@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
+import 'action_palette/action_palette_controller.dart';
 import 'attention/attention_controller.dart';
 import 'attention/attention_home.dart';
 import 'connection/companion_connection_coordinator.dart';
@@ -23,6 +24,7 @@ class CompanionApp extends StatefulWidget {
   const CompanionApp({
     this.controller,
     this.projectBoardController,
+    this.actionPaletteController,
     this.attentionController,
     this.taskDetailControllerFactory,
     this.agentTerminalSurfaceFactory,
@@ -33,6 +35,7 @@ class CompanionApp extends StatefulWidget {
 
   final CompanionPairingController? controller;
   final ProjectBoardController? projectBoardController;
+  final MobileActionPaletteController? actionPaletteController;
   final AttentionController? attentionController;
   final TaskDetailControllerFactory? taskDetailControllerFactory;
   final AgentTerminalSurfaceFactory? agentTerminalSurfaceFactory;
@@ -79,6 +82,7 @@ class _CompanionAppState extends State<CompanionApp>
       controllerFactory: widget.taskDetailControllerFactory,
       terminalSurfaceFactory: widget.agentTerminalSurfaceFactory,
       projectBoardController: widget.projectBoardController,
+      actionPaletteController: widget.actionPaletteController,
       onOpenTaskChanged: _connectionCoordinator.setOpenTask,
     );
 
@@ -129,6 +133,7 @@ class _CompanionAppState extends State<CompanionApp>
       controllerFactory: widget.taskDetailControllerFactory,
       terminalSurfaceFactory: widget.agentTerminalSurfaceFactory,
       projectBoardController: widget.projectBoardController,
+      actionPaletteController: widget.actionPaletteController,
       onOpenTaskChanged: _connectionCoordinator.setOpenTask,
     );
   }
@@ -202,6 +207,7 @@ class _CompanionAppState extends State<CompanionApp>
     if (board != null) {
       return ProjectBoardHome(
         controller: board,
+        actionPaletteController: widget.actionPaletteController,
         onTaskSelected: _taskDetailCoordinator.canOpenTask
             ? _taskDetailCoordinator.openTaskFromSelection
             : null,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../action_palette/action_palette.dart';
+import '../action_palette/action_palette_controller.dart';
 import '../generated/companion_v1_client.dart';
 import 'project_board_controller.dart';
 import 'task_creation_sheet.dart';
@@ -10,11 +12,13 @@ class ProjectBoardHome extends StatefulWidget {
   const ProjectBoardHome({
     required this.controller,
     this.onTaskSelected,
+    this.actionPaletteController,
     super.key,
   });
 
   final ProjectBoardController controller;
   final ValueChanged<String>? onTaskSelected;
+  final MobileActionPaletteController? actionPaletteController;
 
   @override
   State<ProjectBoardHome> createState() => _ProjectBoardHomeState();
@@ -113,6 +117,119 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     widget.onTaskSelected?.call(created.taskId);
   }
 
+  Future<MobilePaletteAction?> _showPalette({
+    required String title,
+    required Future<List<MobilePaletteAction>> actions,
+    String? taskTitle,
+  }) => showMobileActionPalette(
+    context: context,
+    title: title,
+    actions: actions,
+    onConfirm: (action) => _confirmPaletteAction(action, taskTitle),
+  );
+
+  Future<bool> _confirmPaletteAction(
+    MobilePaletteAction action,
+    String? taskTitle,
+  ) async {
+    if (!action.requiresConfirmation) return true;
+    final subject = taskTitle == null ? '' : ' “$taskTitle”';
+    final message = switch (action.id) {
+      CompanionActionId.mergePullRequest =>
+        'Merge the single currently ready pull request$subject?',
+      CompanionActionId.deleteTask =>
+        'Delete$subject? The Completed Task stays available as reference data while runtime workspace state is removed.',
+      CompanionActionId.completeTask =>
+        'Complete$subject? The Completed Task stays available as reference data while its runtime workspace is removed.',
+      _ => action.label,
+    };
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(action.label),
+            content: Text(message),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(action.label),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _showGeneralActions() async {
+    final palette = widget.actionPaletteController;
+    final projectId = widget.controller.selectedProjectId;
+    if (palette == null || projectId == null) return;
+    final action = await _showPalette(
+      title: 'Actions',
+      actions: (() async => <MobilePaletteAction>[
+        const MobilePaletteAction.general(CompanionActionId.newTask),
+        const MobilePaletteAction.general(CompanionActionId.refreshBoard),
+        ...await palette.loadProjectActions(projectId),
+      ])(),
+    );
+    if (!mounted || action == null) return;
+    try {
+      switch (action.id) {
+        case CompanionActionId.newTask:
+          await _showTaskComposer();
+        case CompanionActionId.refreshBoard:
+          await widget.controller.refresh();
+        case CompanionActionId.refreshGithub:
+          await palette.refreshProjectGithub(projectId);
+        default:
+          return;
+      }
+      if (mounted && action.id != CompanionActionId.newTask) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
+      }
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${action.label} failed. Refresh and try again.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showTaskActions(ProjectBoardTask task) async {
+    final palette = widget.actionPaletteController;
+    if (palette == null) return;
+    final action = await _showPalette(
+      title: 'Task actions',
+      taskTitle: task.title,
+      actions: palette.loadTaskActions(task.taskId),
+    );
+    if (!mounted || action == null) return;
+    try {
+      await palette.executeTaskAction(task.taskId, action.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
+      }
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${action.label} failed. Task state was refreshed.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.state;
@@ -128,6 +245,13 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
             tooltip: 'Refresh Mobile Project Board',
             icon: const Icon(Icons.refresh),
           ),
+          if (state is ProjectBoardLoaded &&
+              widget.actionPaletteController != null)
+            IconButton(
+              onPressed: _showGeneralActions,
+              tooltip: 'Actions',
+              icon: const Icon(Icons.more_vert_rounded),
+            ),
         ],
         bottom: state is ProjectBoardLoaded
             ? _BoardTabs(
@@ -160,6 +284,9 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
           scrollController: _scrollControllers[widget.controller.selectedLane]!,
           onRefresh: widget.controller.refresh,
           onTaskSelected: widget.onTaskSelected,
+          onTaskActions: widget.actionPaletteController == null
+              ? null
+              : _showTaskActions,
         ),
       ),
     );

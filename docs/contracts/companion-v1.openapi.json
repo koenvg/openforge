@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenForge Companion API",
     "version": "1.0.0",
-    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; every existing and newly approved paired-device credential receives interactive Agent terminal access plus the fixed authority to Create backlog Tasks and Start, Delete, or Complete Tasks through explicit Project- and Task-scoped operations. Desktop-authoritative reads and mutations expose no generic command dispatch or sensitive desktop state."
+    "description": "Purpose-built HTTP boundary for the OpenForge Mobile Companion. Pairing request submission bootstraps trust; every existing and newly approved paired-device credential receives interactive Agent terminal access plus fixed authority for explicit Create, Start, Delete, Complete, Set Aside, Return to Board, Merge, Enqueue, Run app, and Refresh GitHub operations. Desktop-authoritative reads and mutations expose no generic command dispatch or sensitive desktop state."
   },
   "servers": [
     { "url": "/companion/v1" }
@@ -359,6 +359,418 @@
         }
       }
     },
+      "/tasks/{taskId}/actions": {
+        "get": {
+          "operationId": "getCompanionTaskActions",
+          "summary": "Read the currently available desktop-authoritative actions for one Task",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Ordered available Task action identifiers",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TaskActionsSnapshot"
+                  }
+                }
+              }
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+      "/tasks/{taskId}/set-aside": {
+        "post": {
+          "operationId": "setAsideCompanionTask",
+          "summary": "Set aside one active Task",
+          "description": "Explicit Task-scoped mutation. The client makes one attempt, then refreshes authoritative Task and Board state before offering another action.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Action accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+      "/tasks/{taskId}/return-to-board": {
+        "post": {
+          "operationId": "returnCompanionTaskToBoard",
+          "summary": "Return one Out of Focus Task to the normal Board flow",
+          "description": "Explicit Task-scoped mutation. The client makes one attempt, then refreshes authoritative Task and Board state before offering another action.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Action accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+      "/tasks/{taskId}/merge": {
+        "post": {
+          "operationId": "mergeCompanionTaskPullRequest",
+          "summary": "Merge the single currently ready pull request for one Task",
+          "description": "Explicit Task-scoped mutation. The client makes one attempt, then refreshes authoritative Task and Board state before offering another action.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Action accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+      "/tasks/{taskId}/enqueue": {
+        "post": {
+          "operationId": "enqueueCompanionTaskPullRequest",
+          "summary": "Enqueue the single currently ready pull request for one Task",
+          "description": "Explicit Task-scoped mutation. The client makes one attempt, then refreshes authoritative Task and Board state before offering another action.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Action accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+      "/tasks/{taskId}/run-app": {
+        "post": {
+          "operationId": "runCompanionTaskApp",
+          "summary": "Run the saved Project command in the active Task workspace shell",
+          "description": "Explicit Task-scoped mutation. The client makes one attempt, then refreshes authoritative Task and Board state before offering another action.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "taskId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Action accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+        "/projects/{projectId}/actions": {
+        "get": {
+          "operationId": "getCompanionProjectActions",
+          "summary": "Read the currently available actions for the Selected Project",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "projectId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Ordered available Project action identifiers",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProjectActionsSnapshot"
+                  }
+                }
+              }
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
+    "/projects/{projectId}/refresh-github": {
+        "post": {
+          "operationId": "refreshCompanionProjectGithub",
+          "summary": "Refresh GitHub status for the selected Project",
+          "description": "Explicit Project-scoped mutation. The client makes one attempt and then refreshes authoritative resources.",
+          "security": [
+            {
+              "companionDeviceBearer": []
+            }
+          ],
+          "parameters": [
+            {
+              "$ref": "#/components/parameters/CompanionProtocolVersion"
+            },
+            {
+              "name": "projectId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          ],
+          "responses": {
+            "204": {
+              "description": "Project GitHub refresh accepted"
+            },
+            "400": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "401": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "404": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "409": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "429": {
+              "$ref": "#/components/responses/CompanionError"
+            },
+            "503": {
+              "$ref": "#/components/responses/CompanionError"
+            }
+          }
+        }
+      },
     "/events": {
       "get": {
         "operationId": "streamCompanionEvents",
@@ -419,7 +831,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "OpenForge companion device credential",
-        "description": "A fixed pre-release paired-device credential authorizes desktop-authoritative reads, interactive Agent terminal attachment, and only the explicit Create, Start, Delete, and Complete Task operations. Existing credentials inherit this authority without reapproval or migration; revocation, gateway disablement, host identity reset, credential failure, or certificate-pin failure removes access."
+        "description": "A fixed pre-release paired-device credential authorizes desktop-authoritative reads, interactive Agent terminal attachment, and only the explicit Companion Project and Task action operations. Existing credentials inherit this authority without reapproval or migration; revocation, gateway disablement, host identity reset, credential failure, or certificate-pin failure removes access."
       }
     },
     "parameters": {
@@ -432,6 +844,65 @@
       }
     },
     "schemas": {
+          "CompanionProjectActionId": {
+          "type": "string",
+          "enum": [
+            "refresh_github"
+          ]
+        },
+        "ProjectActionsSnapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "projectId",
+            "actions"
+          ],
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/CompanionProjectActionId"
+              }
+            }
+          }
+        },
+      "CompanionTaskActionId": {
+          "type": "string",
+          "enum": [
+            "start_task",
+            "merge_pull_request",
+            "enqueue_pull_request",
+            "return_to_board",
+            "delete_task",
+            "complete_task",
+            "set_aside_task",
+            "run_app"
+          ]
+        },
+        "TaskActionsSnapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "taskId",
+            "actions"
+          ],
+          "properties": {
+            "taskId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/CompanionTaskActionId"
+              }
+            }
+          }
+        },
       "PairingSubmission": {
         "type": "object",
         "additionalProperties": false,

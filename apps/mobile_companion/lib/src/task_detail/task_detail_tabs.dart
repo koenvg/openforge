@@ -5,6 +5,7 @@ class _TaskDetailTabs extends StatelessWidget {
     required this.controller,
     required this.selectedTab,
     required this.onRefresh,
+    required this.onActions,
     required this.details,
     required this.terminalSurface,
     this.bottomAction,
@@ -13,6 +14,7 @@ class _TaskDetailTabs extends StatelessWidget {
   final TabController controller;
   final int selectedTab;
   final Future<void> Function() onRefresh;
+  final VoidCallback? onActions;
   final Widget details;
   final AgentTerminalSurface? terminalSurface;
   final Widget? bottomAction;
@@ -28,6 +30,12 @@ class _TaskDetailTabs extends StatelessWidget {
           tooltip: 'Refresh Task detail',
           icon: const Icon(Icons.refresh),
         ),
+        if (onActions != null)
+          IconButton(
+            onPressed: onActions,
+            tooltip: 'Task actions',
+            icon: const Icon(Icons.more_vert_rounded),
+          ),
       ],
       bottom: TabBar(
         controller: controller,

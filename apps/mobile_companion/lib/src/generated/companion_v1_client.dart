@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    'd0d982a32049e8031c01688f54144ad520526fe041e78fe207e3f4cea31a199f';
+    '9423de0f413ddf0a79c74820876d340a603b15e35ef7752e33151796f010d3ae';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '2';
 
@@ -51,6 +51,53 @@ final class CompanionV1Exception implements Exception {
 
   @override
   String toString() => 'CompanionV1Exception($statusCode, $code)';
+}
+
+enum CompanionProjectActionId {
+  refreshGithub('refresh_github'),
+  ;
+
+  const CompanionProjectActionId(this.wireValue);
+
+  final String wireValue;
+
+  static CompanionProjectActionId fromWire(String value) =>
+      tryFromWire(value) ??
+      (throw FormatException('Invalid CompanionProjectActionId value: $value.'));
+
+  static CompanionProjectActionId? tryFromWire(String value) {
+    for (final candidate in values) {
+      if (candidate.wireValue == value) return candidate;
+    }
+    return null;
+  }
+}
+
+enum CompanionTaskActionId {
+  startTask('start_task'),
+  mergePullRequest('merge_pull_request'),
+  enqueuePullRequest('enqueue_pull_request'),
+  returnToBoard('return_to_board'),
+  deleteTask('delete_task'),
+  completeTask('complete_task'),
+  setAsideTask('set_aside_task'),
+  runApp('run_app'),
+  ;
+
+  const CompanionTaskActionId(this.wireValue);
+
+  final String wireValue;
+
+  static CompanionTaskActionId fromWire(String value) =>
+      tryFromWire(value) ??
+      (throw FormatException('Invalid CompanionTaskActionId value: $value.'));
+
+  static CompanionTaskActionId? tryFromWire(String value) {
+    for (final candidate in values) {
+      if (candidate.wireValue == value) return candidate;
+    }
+    return null;
+  }
 }
 
 enum ProjectBoardLane {
@@ -219,6 +266,54 @@ final class ErrorEnvelopeError {
   final ErrorCode code;
   final String message;
   final String? requestId;
+}
+
+final class ProjectActionsSnapshot {
+  ProjectActionsSnapshot({
+    required this.projectId,
+    required List<CompanionProjectActionId> actions,
+  }) : actions = List<CompanionProjectActionId>.unmodifiable(actions);
+
+  factory ProjectActionsSnapshot.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'projectId', 'actions'});
+    final model = ProjectActionsSnapshot(
+      projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
+      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionProjectActionId.fromWire(_asString(item, 'actionsItem'))).toList()),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'projectId': projectId,
+      'actions': actions.map((item) => item.wireValue).toList(),
+  };
+
+  final String projectId;
+  final List<CompanionProjectActionId> actions;
+}
+
+final class TaskActionsSnapshot {
+  TaskActionsSnapshot({
+    required this.taskId,
+    required List<CompanionTaskActionId> actions,
+  }) : actions = List<CompanionTaskActionId>.unmodifiable(actions);
+
+  factory TaskActionsSnapshot.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'taskId', 'actions'});
+    final model = TaskActionsSnapshot(
+      taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
+      actions: _required(json, 'actions', (value) => _asList(value, 'actions').map((item) => CompanionTaskActionId.fromWire(_asString(item, 'actionsItem'))).toList()),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'taskId': taskId,
+      'actions': actions.map((item) => item.wireValue).toList(),
+  };
+
+  final String taskId;
+  final List<CompanionTaskActionId> actions;
 }
 
 final class PairingSubmission {
@@ -1205,6 +1300,130 @@ final class CompanionV1Client {
     return TaskStartResult.fromJson(
       _successJson(response, const <int>{200}),
     );
+  }
+
+  Future<TaskActionsSnapshot> getCompanionTaskActions({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/actions'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return TaskActionsSnapshot.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
+  Future<void> setAsideCompanionTask({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/set-aside'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
+  }
+
+  Future<void> returnCompanionTaskToBoard({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/return-to-board'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
+  }
+
+  Future<void> mergeCompanionTaskPullRequest({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/merge'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
+  }
+
+  Future<void> enqueueCompanionTaskPullRequest({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/enqueue'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
+  }
+
+  Future<void> runCompanionTaskApp({
+    required String taskId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/run-app'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
+  }
+
+  Future<ProjectActionsSnapshot> getCompanionProjectActions({
+    required String projectId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/actions'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return ProjectActionsSnapshot.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
+  Future<void> refreshCompanionProjectGithub({
+    required String projectId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'POST',
+      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/refresh-github'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    _successJson(response, const <int>{204});
   }
 
   CompanionV1StreamRequest streamCompanionEvents({

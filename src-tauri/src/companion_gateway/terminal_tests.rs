@@ -299,6 +299,9 @@ async fn terminal_websocket_gates_and_validates_binary_utf8_input() {
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             pty_manager: pty_manager.clone(),
@@ -401,6 +404,9 @@ async fn assert_ready_terminal_termination_blocks_input(
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             pty_manager: pty_manager.clone(),
@@ -503,6 +509,9 @@ async fn revocation_before_attach_cannot_receive_active_terminal_replay() {
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             pty_manager: pty_manager.clone(),
@@ -589,6 +598,9 @@ fn terminal_router(pty_manager: crate::pty_manager::PtyManager) -> axum::Router 
             project_board: Arc::new(UnavailableCompanionProjectBoardSource),
             task_detail: Arc::new(UnavailableCompanionTaskDetailSource),
             task_actions: Arc::new(super::task_actions::UnavailableCompanionTaskActionService),
+            action_palette: Arc::new(
+                super::action_palette::UnavailableCompanionActionPaletteService,
+            ),
             task_creator: Arc::new(super::task_creation::UnavailableCompanionTaskCreator),
             task_start: Arc::new(super::task_start::UnavailableCompanionTaskStarter),
             pty_manager,

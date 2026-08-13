@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'src/action_palette/action_palette_controller.dart';
 import 'src/app.dart';
 import 'src/project_board/project_board_controller.dart';
 import 'src/client/companion_client.dart';
@@ -29,6 +30,14 @@ void main() {
     storage: storage,
     onAuthorizationLost: pairingController.authorizationLost,
   );
+  final actionPaletteController = MobileActionPaletteController(
+    taskClient: client,
+    completionClient: client,
+    paletteClient: client,
+    storage: storage,
+    onRefresh: projectBoardController.refresh,
+    onAuthorizationLost: pairingController.authorizationLost,
+  );
   final liveUpdatesController = LiveUpdatesController(
     client: client,
     storage: storage,
@@ -44,6 +53,7 @@ void main() {
     CompanionApp(
       controller: pairingController,
       projectBoardController: projectBoardController,
+      actionPaletteController: actionPaletteController,
       liveUpdatesController: liveUpdatesController,
       taskDetailControllerFactory: (taskId) => TaskDetailController(
         taskId: taskId,
