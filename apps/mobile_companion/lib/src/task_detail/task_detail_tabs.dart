@@ -43,7 +43,10 @@ class _TaskDetailTabs extends StatelessWidget {
         index: selectedTab,
         children: <Widget>[
           details,
-          AgentTerminalPane(surface: terminalSurface),
+          Transform.translate(
+            offset: Offset(0, -MediaQuery.viewInsetsOf(context).bottom),
+            child: AgentTerminalPane(surface: terminalSurface),
+          ),
         ],
       ),
     ),
