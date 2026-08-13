@@ -16,14 +16,25 @@ The iOS and Android signing owners should each have at least two trusted maintai
 
 ## Versioning
 
-Use the same semantic version and monotonically increasing numeric build number on both platforms:
+Supported build commands always pass explicit Flutter build metadata; artifacts never inherit the placeholder `1.0.0+1` value from `pubspec.yaml`.
+
+The numeric build number is `git rev-list --count HEAD`. It increases with source history and is shared by Android and iOS. CI checks out full history before deriving it. Debug builds also put that number in the user-visible patch component, so source build `3451` appears as `1.0.3451 (3451)` in Android app information. Signed releases keep an operator-selected semantic version name and use the same source-derived build number:
 
 ```sh
 export OPENFORGE_MOBILE_BUILD_NAME=1.0.0
-export OPENFORGE_MOBILE_BUILD_NUMBER=42
+./scripts/mobile-companion build-android-release
 ```
 
-The release commands accept these variables together. Omitting both uses `apps/mobile_companion/pubspec.yaml`; setting only one fails.
+`OPENFORGE_MOBILE_BUILD_NUMBER` remains an escape hatch for release-store recovery. When set, it must be a positive integer no greater than Android's `2100000000` limit and greater than every previously distributed build number. Do not use it for routine builds.
+
+To identify an installed Android build, first read **Settings → Apps → OpenForge Companion → App details**. Android versions that omit the build code can report both values over USB debugging:
+
+```sh
+adb shell dumpsys package com.openforge.app.companion \
+  | grep -E 'version(Name|Code)='
+```
+
+Compare `versionName` and `versionCode` with the build log's `OpenForge Companion version <name>+<number>` line. For an APK that is not installed, Android Studio's APK Analyzer shows the same manifest values. TestFlight and App Store Connect show the signed iOS semantic version and build number together.
 
 ## Android private release
 
@@ -80,7 +91,7 @@ For TestFlight, upload the IPA with the release owner's App Store Connect toolin
 
 ## Manual CI workflow
 
-Run **Mobile Companion Private Release** (`.github/workflows/mobile-release.yml`) with `version_name`, `build_number`, and the optional `upload_testflight` flag. The workflow is manual-only and uses protected GitHub environments:
+Run **Mobile Companion Private Release** (`.github/workflows/mobile-release.yml`) with `version_name` and the optional `upload_testflight` flag. The workflow derives the build number from full source history and uses protected GitHub environments:
 
 ### `android-internal` secrets
 
