@@ -773,6 +773,8 @@ var TestingCommonApiFake = class {
 		assertTitle("commands", registration.title);
 		assertFunction("commands", "handler", registration.handler);
 		const agent = normalizeAgentCommandMetadata(registration.agent);
+		if (agent && registration.input !== void 0 && !isJsonValue(registration.input)) throw new Error("commands registration agent-facing input schema must be a JSON value");
+		if (agent && registration.output !== void 0 && !isJsonValue(registration.output)) throw new Error("commands registration agent-facing output schema must be a JSON value");
 		this.services.claims.claim("commands", qualifiedId);
 		const contribution = {
 			...registration,

@@ -514,7 +514,11 @@ export class PluginHostRuntime {
       throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
     }
 
-    if (state.state === 'ready' && state.backendPath === input.backendPath) {
+    if (
+      state.state === 'ready'
+      && state.backendPath === input.backendPath
+      && state.projectId === (input.projectId ?? null)
+    ) {
       return this.getBackendState(input.pluginId)
     }
 
@@ -555,8 +559,23 @@ export class PluginHostRuntime {
     assertLocalId('backend', input.pluginId)
     const state = this.getOrCreateState(input.pluginId)
 
-    if (state.state === 'ready') {
+    if (
+      state.state === 'ready'
+      && (!input.backendPath || (
+        state.backendPath === input.backendPath
+        && state.projectId === (input.projectId ?? null)
+      ))
+    ) {
       return this.getBackendState(input.pluginId)
+    }
+
+    if (state.state === 'ready' && input.backendPath) {
+      return await this.activateBackend({
+        pluginId: input.pluginId,
+        backendPath: input.backendPath,
+        projectId: input.projectId,
+        packageMetadata: input.packageMetadata,
+      })
     }
 
     if (state.state === 'starting' && state.activationPromise) {
@@ -879,6 +898,12 @@ export class PluginHostRuntime {
       throw new RuntimeValidationError('commands', 'requires a non-empty title')
     }
     const agent = normalizeAgentMetadata(registration.agent)
+    if (agent && registration.input !== undefined && !isJsonValue(registration.input)) {
+      throw new RuntimeValidationError('commands', 'agent-facing input schema must be a JSON value')
+    }
+    if (agent && registration.output !== undefined && !isJsonValue(registration.output)) {
+      throw new RuntimeValidationError('commands', 'agent-facing output schema must be a JSON value')
+    }
     const localId = registration.id.trim()
     const qualifiedId = `${state.pluginId}.${localId}`
     if (state.commands.has(localId)) {

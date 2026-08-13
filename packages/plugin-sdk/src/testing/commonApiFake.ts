@@ -10,6 +10,7 @@ import {
   assertTitle,
   commandDescriptor,
   createDisposable,
+  isJsonValue,
   normalizeAgentCommandMetadata,
   type TestingRegistryServices,
 } from './support'
@@ -206,6 +207,12 @@ export class TestingCommonApiFake {
     assertTitle('commands', registration.title)
     assertFunction('commands', 'handler', registration.handler)
     const agent = normalizeAgentCommandMetadata(registration.agent)
+    if (agent && registration.input !== undefined && !isJsonValue(registration.input)) {
+      throw new Error('commands registration agent-facing input schema must be a JSON value')
+    }
+    if (agent && registration.output !== undefined && !isJsonValue(registration.output)) {
+      throw new Error('commands registration agent-facing output schema must be a JSON value')
+    }
     this.services.claims.claim('commands', qualifiedId)
 
     const contribution: TestingCommandContribution = {

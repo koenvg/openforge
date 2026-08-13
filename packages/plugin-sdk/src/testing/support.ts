@@ -159,7 +159,7 @@ export function normalizeAgentCommandMetadata(metadata: unknown): AgentCommandMe
   }
 }
 
-function isJsonValue(value: unknown, seen = new Set<object>()): value is JsonValue {
+export function isJsonValue(value: unknown, seen = new Set<object>()): value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
   if (typeof value === 'number') return Number.isFinite(value)
   if (typeof value !== 'object') return false

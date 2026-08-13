@@ -739,4 +739,54 @@ describe('plugin-host backend runtime', () => {
     ]))
     expect(descriptors.every(descriptor => !('handler' in descriptor))).toBe(true)
   })
+
+  it('rejects non-serializable schemas on agent-facing command registrations', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          const input = { type: 'object' }
+          input.self = input
+          context.subscriptions.add(openforge.commands.register({
+            id: 'invalid',
+            title: 'Invalid',
+            agent: { description: 'Invalid schema example.' },
+            input,
+            handler() { return null }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await expect(runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 100,
+      method: 'plugin.commands.list',
+      params: { pluginId: 'backend', backendPath, projectId: 'P-1' },
+    })).resolves.toMatchObject({
+      error: { message: 'commands registration agent-facing input schema must be a JSON value' },
+    })
+  })
+
+  it('reactivates backend command discovery when the resolved Project changes', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          const projectId = openforge.context.getSnapshot().projectId
+          context.subscriptions.add(openforge.commands.register({
+            id: projectId === 'P-2' ? 'second' : 'first',
+            title: 'Project command',
+            agent: { description: 'Command for ' + projectId },
+            handler() { return null }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await expect(runtime.listAgentCommands({ pluginId: 'backend', backendPath, projectId: 'P-1' }))
+      .resolves.toMatchObject([{ qualifiedId: 'backend.first', description: 'Command for P-1' }])
+    await expect(runtime.listAgentCommands({ pluginId: 'backend', backendPath, projectId: 'P-2' }))
+      .resolves.toMatchObject([{ qualifiedId: 'backend.second', description: 'Command for P-2' }])
+  })
 })
