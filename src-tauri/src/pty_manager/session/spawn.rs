@@ -1494,6 +1494,7 @@ mod tests {
     async fn agent_pty_starts_process_with_actual_workspace_cwd_containing_spaces() {
         let mut manager = PtyManager::new();
         let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
         manager.set_pid_dir(temp_dir.path().join("pids"));
         let workspace_path = temp_dir.path().join("Snooze Vault");
         std::fs::create_dir_all(&workspace_path).expect("workspace with spaces should be created");
@@ -1512,28 +1513,34 @@ mod tests {
                     cols: 80,
                     rows: 24,
                     app_handle: None,
-                    app_event_tx: None,
+                    app_event_tx: Some(app_event_tx),
                 },
                 None,
             )
             .await
             .expect("agent PTY should spawn in workspace with spaces");
 
-        let mut output = String::new();
-        for _ in 0..20 {
-            if let Some(buffer) = manager.get_pty_buffer("agent-space-cwd").await {
-                output = buffer;
-                if output.contains(&expected_cwd) {
-                    break;
+        let output = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut output = String::new();
+            loop {
+                let event = app_event_rx
+                    .recv()
+                    .await
+                    .expect("PTY event channel should remain open");
+                match event.event_name.as_str() {
+                    "pty-output-agent-space-cwd" => output.push_str(
+                        event.payload["data"]
+                            .as_str()
+                            .expect("PTY output event should contain text data"),
+                    ),
+                    "pty-exit-agent-space-cwd" => break output,
+                    _ => {}
                 }
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
+        })
+        .await
+        .expect("agent PTY should emit output and exit");
 
-        manager
-            .kill_pty("agent-space-cwd")
-            .await
-            .expect("test PTY should be cleaned up");
         assert!(
             output
                 .lines()
