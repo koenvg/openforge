@@ -150,7 +150,7 @@ export default defineBackendPlugin({
     context.subscriptions.add(openforge.backend.registerMethod('syncProjectNotes', {
       input: {
         type: 'object',
-        properties: { projectId: { type: ['string', 'null'] } }
+        properties: { projectId: { anyOf: [{ type: 'string' }, { type: 'null' }] } }
       },
       output: {
         type: 'object',
