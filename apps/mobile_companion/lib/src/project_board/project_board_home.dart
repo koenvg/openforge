@@ -138,14 +138,11 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     String? taskTitle,
   ) async {
     if (!action.requiresConfirmation) return true;
-    final subject = taskTitle == null ? '' : ' “$taskTitle”';
-    final message = switch (action.id) {
-      CompanionActionId.deleteTask =>
-        'Delete$subject? This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
-      CompanionActionId.completeTask =>
-        'Complete$subject? The Completed Task stays available as reference data while its runtime workspace is removed.',
-      _ => action.label,
-    };
+    final message = mobileActionPaletteConfirmationMessage(
+      action,
+      taskTitle: taskTitle,
+      inlineTaskQuestion: true,
+    );
     return await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
