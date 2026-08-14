@@ -243,11 +243,6 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
           onSelected: widget.controller.selectProject,
         ),
         actions: <Widget>[
-          IconButton(
-            onPressed: widget.controller.refresh,
-            tooltip: 'Refresh Mobile Project Board',
-            icon: const Icon(Icons.refresh),
-          ),
           if (state is ProjectBoardLoaded &&
               widget.actionPaletteController != null)
             IconButton(
