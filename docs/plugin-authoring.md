@@ -198,9 +198,9 @@ Backend-only registries:
 
 Backend plugins can also register commands/events and use common host capabilities through the backend host callback bridge. They cannot register Svelte views, task-pane tabs, settings sections, or use frontend-only navigation/backend-readiness helpers.
 
-### Agent-facing backend commands
+### Agent-facing commands
 
-Backend Plugin Commands are unavailable to Agent Sessions by default. Opt an existing command into agent access by adding `agent` metadata to the normal `openforge.commands.register(...)` registration:
+Plugin Commands are unavailable to Agent Sessions by default in both frontend and backend runtimes. Opt an existing command into agent access by adding `agent` metadata to the normal `openforge.commands.register(...)` registration:
 
 ```ts
 context.subscriptions.add(openforge.commands.register({
@@ -236,11 +236,11 @@ The two visibility flags serve different audiences:
 - Top-level `discoverable` controls user-facing surfaces such as the Command Palette.
 - `agent.discoverable` controls routine results from `openforge plugin command list`. Set it to `false` for an advanced agent-enabled command that should remain hidden from the catalog; an agent can still request it exactly with `openforge plugin command describe --command-id <plugin-id>.<command-id>`.
 
-Discovery requires Task or Project context. `--task-id` resolves the Task's authoritative Project, while `--project-id` selects Project scope directly. Inside an Implementation Run, `openforge plugin command list` defaults Task context from `OPENFORGE_TASK_ID`. OpenForge rejects missing or conflicting context and returns only commands whose Trusted Plugin is installed, enabled for the resolved Project, and provides a backend runtime.
+Discovery requires Task or Project context. `--task-id` resolves the Task's authoritative Project, while `--project-id` selects Project scope directly. Inside an Implementation Run, `openforge plugin command list` defaults Task context from `OPENFORGE_TASK_ID`. OpenForge rejects missing or conflicting context and returns only commands whose Trusted Plugin is installed and enabled for the resolved Project.
 
-Descriptions are serializable guidance only. Discovery returns qualified command and plugin identifiers, the `backend` runtime requirement, schemas, description, examples, and catalog visibility; executable handlers never cross the runtime boundary.
+Descriptions are serializable guidance only. Discovery returns qualified command and plugin identifiers, a `backend` or `frontend` runtime requirement, schemas, description, examples, and catalog visibility; executable handlers never cross runtime boundaries.
 
-Invoke an exact backend command with `openforge plugin command invoke --command-id <plugin-id>.<command-id> [--input '<json>']` and the same Task/Project context flags. OpenForge validates input before the handler and output after it. The handler receives plugin-owned input as its first argument and a separate host-owned context as its second argument:
+Invoke an exact command with `openforge plugin command invoke --command-id <plugin-id>.<command-id> [--input '<json>']` and the same Task/Project context flags. OpenForge validates input before the handler and output after it. The handler receives plugin-owned input as its first argument and a separate host-owned context as its second argument:
 
 ```ts
 handler: async (input, invocation) => {
@@ -250,6 +250,8 @@ handler: async (input, invocation) => {
 ```
 
 For Agent CLI invocation, `source` is `agent-cli`, Project identity is resolved authoritatively, and Task identity is present only in Task scope. OpenForge never mutates plugin input to inject context. Existing one-argument handlers remain compatible because JavaScript handlers may ignore the second argument.
+
+Backend commands remain available whenever the plugin backend runtime is active. Frontend commands require a currently running OpenForge desktop app, its trusted renderer, the enabled plugin frontend runtime, and the exact registered command. Frontend requests are transient: OpenForge does not persist, queue, or replay them. Renderer loss, plugin deactivation, app shutdown, or the bounded host timeout ends the invocation with a stable error; acknowledgements arriving after termination are ignored. Plugin authors should surface these availability errors rather than assuming a frontend command will run later.
 
 ## Capabilities
 

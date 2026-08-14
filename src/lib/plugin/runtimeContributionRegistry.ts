@@ -9,10 +9,12 @@ import type {
   BackendPluginContext,
 } from '@openforge-app/plugin-sdk/backend'
 import type {
+  AgentCommandDescriptor,
   Disposable,
   InjectionPointLocation,
   OpenForgeContextSnapshot,
   OpenForgePackageMetadata,
+  PluginCommandInvocationContext,
 } from '@openforge-app/plugin-sdk'
 import { RuntimeBackendServices } from './runtimeBackendServices'
 import { RuntimeCommonApiRegistry } from './runtimeCommonApi'
@@ -126,6 +128,17 @@ class RuntimeContributionRegistry {
     }
   }
 
+  listFrontendAgentCommands(): AgentCommandDescriptor[] {
+    return this.commonApi.listAgentCommands()
+  }
+
+  invokeFrontendAgentCommand(
+    qualifiedId: string,
+    input: unknown,
+    context: PluginCommandInvocationContext,
+  ): Promise<unknown> {
+    return this.commonApi.invokeAgentCommand(qualifiedId, input, context)
+  }
   getFrontendApi(): FrontendOpenForgeAPI {
     if (!this.frontendApi) {
       this.frontendApi = {

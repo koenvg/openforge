@@ -402,6 +402,72 @@ async fn scans_a_plugin_folder_for_installable_plugin_packages() {
 }
 
 #[tokio::test]
+async fn acknowledges_frontend_plugin_commands_exactly_once() {
+    use crate::frontend_plugin_command_transport::FrontendPluginCommandTransport;
+    use crate::plugin_command_broker::{
+        FrontendAgentCommandCatalog, PluginCommandInvocationContext, PluginCommandInvocationSource,
+    };
+    use std::time::Duration;
+
+    let (mut state, path) = test_state("app_invoke_frontend_plugin_command_ack");
+    let (event_sender, mut event_receiver) = tokio::sync::broadcast::channel(4);
+    state.frontend_plugin_commands =
+        FrontendPluginCommandTransport::new(Some(event_sender), Duration::from_secs(1));
+    let request_transport = state.frontend_plugin_commands.clone();
+    let invocation = tokio::spawn(async move {
+        request_transport
+            .invoke_frontend_agent_command(
+                "com.example.browser",
+                "P-1",
+                "com.example.browser.open",
+                Some(json!({ "url": "http://localhost:5173" })),
+                PluginCommandInvocationContext {
+                    task_id: Some("T-1".to_string()),
+                    project_id: "P-1".to_string(),
+                    source: PluginCommandInvocationSource::AgentCli,
+                },
+            )
+            .await
+    });
+    let request = event_receiver.recv().await.expect("frontend request");
+    let correlation_id = request.payload["correlationId"]
+        .as_str()
+        .expect("correlation id")
+        .to_string();
+    let acknowledgement = json!({
+        "correlationId": correlation_id,
+        "outcome": {
+            "status": "success",
+            "output": { "accepted": true }
+        }
+    });
+
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "plugin_frontend_command_acknowledge",
+            acknowledgement.clone(),
+        )
+        .await,
+        json!(true)
+    );
+    assert_eq!(
+        invocation.await.expect("join").expect("result"),
+        json!({ "accepted": true })
+    );
+    assert_eq!(
+        invoke_ok(
+            &state,
+            "plugin_frontend_command_acknowledge",
+            acknowledgement,
+        )
+        .await,
+        json!(false)
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+#[tokio::test]
 async fn scanning_a_missing_plugin_folder_is_a_bad_request() {
     let (state, path) = test_state("app_invoke_scan_plugin_folder_missing");
 

@@ -1,6 +1,10 @@
 import { get } from 'svelte/store'
 import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
-import type { OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk'
+import type {
+  AgentCommandDescriptor,
+  OpenForgeContextSnapshot,
+  PluginCommandInvocationContext,
+} from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { openUrl } from '../ipc'
 import { activeProjectId } from '../stores'
@@ -9,6 +13,7 @@ import { clearLoadedPlugin, loadPluginFrontend, deactivatePlugin as deactivatePl
 import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
 import type { RuntimeContributionRegistryInstance } from './runtimeContributionRegistry'
 import { createIpcPluginStorage } from './pluginStorage'
+import { failPendingFrontendPluginCommands } from './frontendPluginCommandBridge'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
 import {
@@ -251,6 +256,37 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
   return activationRecord.promise
 }
 
+function activeFrontendRegistry(pluginId: string, projectId: string): RuntimeContributionRegistryInstance {
+  const registry = activeRuntimeRegistries.get(pluginId)
+  if (!registry) {
+    throw new Error(`Frontend runtime for Plugin ${pluginId} is unavailable`)
+  }
+  if (registry.getContextSnapshot().projectId !== projectId) {
+    throw new Error(`Frontend runtime for Plugin ${pluginId} is unavailable for Project ${projectId}`)
+  }
+  return registry
+}
+
+export async function listFrontendAgentCommands(
+  pluginId: string,
+  projectId: string,
+): Promise<AgentCommandDescriptor[]> {
+  return activeFrontendRegistry(pluginId, projectId).listFrontendAgentCommands()
+}
+
+export async function invokeFrontendAgentCommand(
+  pluginId: string,
+  projectId: string,
+  commandId: string,
+  input: unknown,
+  context: PluginCommandInvocationContext,
+): Promise<unknown> {
+  if (context.projectId !== projectId) {
+    throw new Error(`Frontend Plugin Command ${commandId} received conflicting Project context`)
+  }
+  return activeFrontendRegistry(pluginId, projectId)
+    .invokeFrontendAgentCommand(commandId, input, context)
+}
 export async function executePluginCommand(pluginId: string, commandId: string, payload?: unknown): Promise<boolean> {
   if (!hasPluginCommandHandler(pluginId, commandId)) {
     const activated = await activatePlugin(pluginId)
@@ -402,6 +438,10 @@ export async function deactivatePluginById(pluginId: string): Promise<void> {
     }
   }
 
+  await attempt(() => failPendingFrontendPluginCommands(
+    pluginId,
+    `Frontend runtime for Plugin ${pluginId} deactivated before the command completed`,
+  ))
   await attempt(() => deactivatePluginBackend(pluginId))
   bumpPluginFrontendReloadGeneration(pluginId)
   await attempt(() => destroyPluginBrowserSurfaces(pluginId))

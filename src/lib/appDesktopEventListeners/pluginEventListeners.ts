@@ -1,3 +1,8 @@
+import {
+  invokeFrontendAgentCommand,
+  listFrontendAgentCommands,
+} from '../plugin/pluginActivationLifecycle'
+import { handleFrontendPluginCommandRequest } from '../plugin/frontendPluginCommandBridge'
 import { loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForProject } from '../plugin/pluginRegistry'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
@@ -12,6 +17,13 @@ type PluginEventDeps = Pick<
 
 export function createPluginEventListeners(deps: PluginEventDeps) {
   return {
+    frontendPluginCommandRequest: defineDesktopEventListener<unknown>(
+      'plugin-frontend-command-request',
+      async (event) => handleFrontendPluginCommandRequest(event.payload, {
+        list: listFrontendAgentCommands,
+        invoke: invokeFrontendAgentCommand,
+      }),
+    ),
     pluginInstallationChanged: defineDesktopEventListener<{ plugin_id: string }>(
       'plugin-installation-changed',
       async (event) => {

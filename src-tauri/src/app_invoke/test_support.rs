@@ -23,6 +23,10 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(pty_manager),
             github_client: GitHubClient::new(),
+            frontend_plugin_commands:
+                crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+                    Some(app_event_tx.clone()),
+                ),
             plugin_host: Some(PluginHost::new(AppHandle::new())),
             plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: Some(app_event_tx),

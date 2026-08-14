@@ -31,7 +31,7 @@ export interface AppEventForwarderDeps {
   windows: () => readonly BrowserWindowLike[]
   sleep?: (ms: number) => Promise<void>
   reconnectDelayMs?: number
-  onEvent?: (envelope: OpenForgeEventEnvelope) => void
+  onEvent?: (envelope: OpenForgeEventEnvelope) => boolean | void
   failureReporter?: ElectronFailureReporter | null
 }
 
@@ -116,7 +116,7 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
     if (typeof envelope.id === 'string' && envelope.id.length > 0) {
       lastEventId = envelope.id
     }
-    deps.onEvent?.(envelope)
+    if (deps.onEvent?.(envelope) === false) return
     for (const window of deps.windows()) {
       window.webContents.send(OPENFORGE_EVENT_CHANNEL, envelope)
     }

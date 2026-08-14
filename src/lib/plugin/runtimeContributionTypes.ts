@@ -14,6 +14,7 @@ import type {
   BackgroundServiceRegistration,
 } from '@openforge-app/plugin-sdk/backend'
 import type {
+  AgentCommandMetadata,
   AgentSession,
   BackendReadyState,
   CommandInfo,
@@ -118,6 +119,7 @@ export type RuntimeCommandContribution = RuntimeContributionBase & {
   icon?: string
   shortcut?: CommandShortcutMetadata
   discoverable?: boolean
+  agent?: AgentCommandMetadata
   input?: JsonSchema
   output?: JsonSchema
   handler: RuntimeHandler

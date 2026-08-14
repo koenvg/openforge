@@ -1,5 +1,13 @@
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
-import type { CommandDescriptor, Disposable, OpenForgeCommonAPI } from '@openforge-app/plugin-sdk'
+import type {
+  AgentCommandDescriptor,
+  AgentCommandMetadata,
+  CommandDescriptor,
+  Disposable,
+  JsonValue,
+  OpenForgeCommonAPI,
+  PluginCommandInvocationContext,
+} from '@openforge-app/plugin-sdk'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import {
   assertHandler,
@@ -21,6 +29,48 @@ export type RuntimeCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, '
 const globalCommands = new Map<string, RuntimeCommandContribution>()
 const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
 
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return true
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  if (typeof value !== 'object') return false
+  return Object.values(value as Record<string, unknown>).every(isJsonValue)
+}
+
+function normalizeAgentMetadata(metadata: unknown): AgentCommandMetadata | undefined {
+  if (metadata === undefined) return undefined
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new RuntimeValidationError('commands', 'agent metadata must be an object')
+  }
+  const candidate = metadata as Partial<AgentCommandMetadata>
+  if (!isNonEmptyString(candidate.description)) {
+    throw new RuntimeValidationError('commands', 'agent metadata requires a non-empty description')
+  }
+  if (candidate.examples !== undefined && (!Array.isArray(candidate.examples) || !candidate.examples.every(isJsonValue))) {
+    throw new RuntimeValidationError('commands', 'agent metadata examples must contain only JSON values')
+  }
+  if (candidate.discoverable !== undefined && typeof candidate.discoverable !== 'boolean') {
+    throw new RuntimeValidationError('commands', 'agent metadata discoverable must be a boolean')
+  }
+  return {
+    description: candidate.description.trim(),
+    examples: candidate.examples ?? [],
+    discoverable: candidate.discoverable ?? true,
+  }
+}
+
+function agentCommandDescriptor(command: RuntimeCommandContribution): AgentCommandDescriptor | null {
+  if (!command.agent) return null
+  return {
+    qualifiedId: command.qualifiedId,
+    pluginId: command.pluginId,
+    runtime: 'frontend',
+    description: command.agent.description,
+    examples: command.agent.examples ?? [],
+    discoverable: command.agent.discoverable ?? true,
+    input: command.input,
+    output: command.output,
+  }
+}
 function commandDescriptor(command: RuntimeCommandContribution): CommandDescriptor {
   return {
     id: command.id,
@@ -133,16 +183,41 @@ export class RuntimeCommonApiRegistry {
     }
   }
 
+  listAgentCommands(): AgentCommandDescriptor[] {
+    return Array.from(this.commands.values())
+      .map(agentCommandDescriptor)
+      .filter((descriptor): descriptor is AgentCommandDescriptor => descriptor !== null)
+  }
+
+  async invokeAgentCommand(
+    qualifiedId: string,
+    payload: unknown,
+    context: PluginCommandInvocationContext,
+  ): Promise<unknown> {
+    const command = this.commands.get(qualifiedId)
+    if (!command?.agent) {
+      throw new Error(`Unknown agent-facing Plugin Command: ${qualifiedId}`)
+    }
+    return this.invokeRegisteredCommand(command, payload, context)
+  }
   private registerCommand(registration: Parameters<FrontendOpenForgeAPI['commands']['register']>[0]): Disposable {
     const qualifiedId = this.services.qualifiedId('commands', registration?.id)
     assertTitle('commands', registration?.title)
     assertHandler('commands', registration?.handler)
+    const agent = normalizeAgentMetadata(registration?.agent)
+    if (agent && registration.input !== undefined && !isJsonValue(registration.input)) {
+      throw new RuntimeValidationError('commands', 'agent-facing input schema must be a JSON value')
+    }
+    if (agent && registration.output !== undefined && !isJsonValue(registration.output)) {
+      throw new RuntimeValidationError('commands', 'agent-facing output schema must be a JSON value')
+    }
     this.services.claims.claim('commands', qualifiedId)
 
     const contribution: RuntimeCommandContribution = {
       ...registration,
       id: registration.id.trim(),
       title: registration.title.trim(),
+      agent,
       qualifiedId,
       pluginId: this.services.pluginId,
       projectId: this.services.projectId,
@@ -205,16 +280,23 @@ export class RuntimeCommonApiRegistry {
       }
       throw new Error(`Unknown command: ${qualifiedId}`)
     }
-    validateSchemaValue(command.input, payload, `${qualifiedId} input`)
-    const output = await command.handler(payload, {
+    return this.invokeRegisteredCommand(command, payload, {
       taskId: null,
       projectId: command.projectId,
       source: 'plugin',
-    })
-    validateSchemaValue(command.output, output, `${qualifiedId} output`)
-    return output as TOutput
+    }) as Promise<TOutput>
   }
 
+  private async invokeRegisteredCommand(
+    command: RuntimeCommandContribution,
+    payload: unknown,
+    context: PluginCommandInvocationContext,
+  ): Promise<unknown> {
+    validateSchemaValue(command.input, payload, `${command.qualifiedId} input`)
+    const output = await command.handler(payload, context)
+    validateSchemaValue(command.output, output, `${command.qualifiedId} output`)
+    return output
+  }
   private async emitEvent<TPayload>(qualifiedEvent: string, payload: TPayload): Promise<void> {
     const handlers = [
       ...Array.from(this.eventHandlers.get(qualifiedEvent) ?? []),

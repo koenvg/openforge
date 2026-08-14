@@ -23,6 +23,7 @@ import { handleTaskBrowserSurfaceLifecycleEvent } from './taskBrowserSurfaceLife
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
+import { FrontendPluginCommandRelay } from './frontendPluginCommandRelay.js'
 import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
 import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createAppEventForwarder } from './eventForwarder.js'
@@ -77,6 +78,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
   const rendererTrustAdapter = new ElectronRendererTrustAdapter()
   let backendInvokeContext: BootBackendInvokeContext | null = null
+  let mainRendererWindow: BrowserWindow | null = null
 
   function createInvokeDeps(context: BootBackendInvokeContext): ElectronInvokeDeps {
     return {
@@ -103,6 +105,15 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     }
   }
 
+  const frontendPluginCommandRelay = new FrontendPluginCommandRelay({
+    acknowledgeSidecar: async acknowledgement => {
+      if (!backendInvokeContext) return false
+      return handleElectronInvoke(
+        { command: 'plugin_frontend_command_acknowledge', payload: acknowledgement },
+        createInvokeDeps(backendInvokeContext),
+      )
+    },
+  })
   const taskBrowserPartitionRegistry = new FileTaskBrowserPartitionRegistry(
     () => join(app.getPath('userData'), 'task-browser-partitions.json'),
     { logger: developerLogSink },
@@ -188,6 +199,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     })
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
+    mainRendererWindow = window
     const updateTaskBrowserWindowBounds = () => {
       const { width, height } = window.getContentBounds()
       taskBrowserSurfaceManager.updateWindowBounds(window.id, { x: 0, y: 0, width, height })
@@ -195,11 +207,18 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     const { width, height } = window.getContentBounds()
     taskBrowserSurfaceManager.registerWindow(window.id, { x: 0, y: 0, width, height })
     window.on('resize', updateTaskBrowserWindowBounds)
-    window.on('closed', () => taskBrowserSurfaceManager.unregisterWindow(window.id))
+    window.on('closed', () => {
+      taskBrowserSurfaceManager.unregisterWindow(window.id)
+      if (mainRendererWindow === window) mainRendererWindow = null
+      void frontendPluginCommandRelay.rendererLost(mainWebContentsId)
+    })
 
     const rendererUrl = rendererTrustAdapter.trustedRendererUrlFromEnv(options.env)
     const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)
     const mainWebContentsId = window.webContents.id
+    window.webContents.on('render-process-gone', () => {
+      void frontendPluginCommandRelay.rendererLost(mainWebContentsId)
+    })
     window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
       callback(rendererTrustAdapter.shouldGrantMediaPermission({
         permission,
@@ -228,6 +247,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       backendInvokeContext = context
       ipcMain.handle('openforge:invoke', async (event, request: unknown) => {
         const typedRequest = request as { command?: unknown; payload?: unknown }
+        if (typedRequest.command === 'plugin_frontend_command_acknowledge') {
+          return frontendPluginCommandRelay.acknowledge(event.sender.id, typedRequest.payload)
+        }
         if (typeof typedRequest.command === 'string' && isTaskBrowserSurfaceCommand(typedRequest.command)) {
           const owningWindow = BrowserWindow.fromWebContents(event.sender)
           const windowId = owningWindow && owningWindow.webContents.id === event.sender.id ? owningWindow.id : null
@@ -251,6 +273,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
       app.on('before-quit', event => {
+        void frontendPluginCommandRelay.shutdown()
         taskBrowserSurfaceManager.destroyAll()
         handler(event)
       })
@@ -294,6 +317,16 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
             sidecarConfig,
             fetch: (url, init) => fetch(url, init),
             onEvent: envelope => {
+              const renderer = mainRendererWindow
+                && !mainRendererWindow.isDestroyed()
+                && !mainRendererWindow.webContents.isDestroyed()
+                ? {
+                    id: mainRendererWindow.webContents.id,
+                    send: (channel: string, payload: unknown) =>
+                      mainRendererWindow?.webContents.send(channel, payload),
+                  }
+                : null
+              if (frontendPluginCommandRelay.forward(envelope, renderer)) return false
               handleTaskBrowserSurfaceLifecycleEvent(taskBrowserSurfaceManager, envelope)
               eventListener?.(envelope)
               if (shouldDrainTaskBrowserSessionPurges(envelope)) {
