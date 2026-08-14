@@ -103,7 +103,7 @@ Assessment:
 
 Current files:
 
-- `TaskContextMenu.svelte` — task-specific context menu with Start Task, Set aside, Return to board, and confirmed `Complete 🏁`; intentionally app-private and task-domain-specific.
+- `TaskContextMenu.svelte` — task-specific context menu with Start Task, Set aside, Return to board, and confirmed `Complete`; intentionally app-private and task-domain-specific.
 - `TaskLabelEditor.svelte` — label assignment editor that loads labels through `src/lib/ipc.ts` and task label helpers.
 - `TaskLabelPills.svelte` — display-only label pills.
 - `TaskRelationshipDetailSection.svelte` — task relationship details with tests.
