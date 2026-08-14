@@ -76,7 +76,7 @@ final class MobileActionPaletteController {
     CompanionActionId action,
   ) async {
     final trustRecord = await _trustRecord();
-    try {
+    await _runMutation(() async {
       switch (action) {
         case CompanionActionId.startTask:
           final result = await _taskClient.startTask(trustRecord, taskId);
@@ -115,24 +115,19 @@ final class MobileActionPaletteController {
             CompanionActionId.refreshGithub:
           throw ArgumentError.value(action, 'action', 'Task action required.');
       }
-      await _onRefresh?.call();
-    } on generated.CompanionV1Exception catch (error) {
-      if (error.code == 'revoked' || error.code == 'unauthenticated') {
-        _onAuthorizationLost?.call();
-      } else {
-        await _onRefresh?.call();
-      }
-      rethrow;
-    } on Object {
-      await _onRefresh?.call();
-      rethrow;
-    }
+    });
   }
 
   Future<void> refreshProjectGithub(String projectId) async {
     final trustRecord = await _trustRecord();
+    await _runMutation(
+      () => _paletteClient.refreshProjectGithub(trustRecord, projectId),
+    );
+  }
+
+  Future<void> _runMutation(Future<void> Function() mutation) async {
     try {
-      await _paletteClient.refreshProjectGithub(trustRecord, projectId);
+      await mutation();
       await _onRefresh?.call();
     } on generated.CompanionV1Exception catch (error) {
       if (error.code == 'revoked' || error.code == 'unauthenticated') {
