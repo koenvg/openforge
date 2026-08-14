@@ -271,7 +271,10 @@ export interface PluginTaskPaneProps extends Record<string, unknown> {
   projectId: string | null
 }
 
-export type PluginTaskUISectionProps = PluginTaskPaneProps
+export interface PluginTaskUISectionProps extends PluginTaskPaneProps {
+  /** True while the host is running a task-scoped action represented by the section. */
+  taskActionPending: boolean
+}
 
 export interface PluginSettingsSectionProps extends Record<string, unknown> {
   api: FrontendOpenForgeAPI

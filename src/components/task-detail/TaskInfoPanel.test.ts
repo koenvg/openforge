@@ -4,7 +4,7 @@ import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo, TaskLabel, AgentSession } from '../../lib/types'
-import { activeSessions, dependencyReferenceTasks, tasks, ticketPrs } from '../../lib/stores'
+import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
@@ -96,6 +96,7 @@ describe('TaskInfoPanel', () => {
     clearInfoPanelSectionCollapse()
     activeSessions.set(new Map())
     ticketPrs.set(new Map())
+    mergingTaskIds.set(new Set())
     tasks.set([])
     dependencyReferenceTasks.set([])
     installedPlugins.set(new Map())
@@ -211,6 +212,38 @@ describe('TaskInfoPanel', () => {
     const prompt = requireElement(document.querySelector('[data-task-info-card="initial-prompt"]'), HTMLElement)
     expect(Boolean(sourceTicket.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     expect(Boolean(section.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  it('passes action-palette merge progress into task UI sections', async () => {
+    const pluginId = 'plugin.task-context'
+    installedPlugins.set(new Map([[
+      pluginId,
+      {
+        manifest: {
+          id: pluginId,
+          name: 'Task Context',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Task context test plugin',
+          permissions: [],
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set([pluginId]))
+    runtimeContributionSources.set(new Map([[
+      pluginId,
+      { pluginId, taskUISections: [{ id: 'context', order: 10 }] },
+    ]]))
+    registerRenderableContributionComponent('taskUISections', `${pluginId}:context`, PluginSlotTestView)
+    mergingTaskIds.set(new Set([baseTask.id]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    expect((await screen.findByTestId('plugin-slot-view')).getAttribute('data-task-action-pending')).toBe('true')
   })
 
   it('shows a copyable resume command in details when the active session can be resumed', () => {

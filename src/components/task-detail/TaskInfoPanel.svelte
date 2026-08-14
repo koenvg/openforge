@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, TaskLabel } from '../../lib/types'
-  import { activeSessions, dependencyReferenceTasks, tasks as allTasks } from '../../lib/stores'
+  import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks as allTasks } from '../../lib/stores'
   import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
@@ -88,7 +88,12 @@
 <div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
-  <PluginSlot slotType="taskUISections" taskId={task.id} projectId={task.project_id} />
+  <PluginSlot
+    slotType="taskUISections"
+    taskId={task.id}
+    projectId={task.project_id}
+    taskActionPending={$mergingTaskIds.has(task.id)}
+  />
 
   <TaskPromptSummary {task} {onEditPrompt} />
 

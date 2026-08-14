@@ -52,15 +52,16 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
   }
 }
 
-function renderSection(invoke: ReturnType<typeof vi.fn>) {
+function renderSection(invoke: ReturnType<typeof vi.fn>, taskActionPending = false) {
   const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.github-sync', projectId: 'P-1' })
   api.backend.whenReady = vi.fn(async () => undefined)
   api.backend.invoke = invoke
-  const props: PluginTaskUISectionProps = {
+  const props: PluginTaskUISectionProps & { taskActionPending: boolean } = {
     api,
     context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' },
     taskId: 'T-42',
     projectId: 'P-1',
+    taskActionPending,
   }
   return { api, ...render(TaskPullRequestStatus, { props }) }
 }
@@ -167,5 +168,18 @@ describe('GitHub Sync Task pull request section', () => {
 
     resolveMerge()
     await waitFor(() => expect(screen.getByText('Pull request merged successfully.')).toBeTruthy())
+  })
+
+  it('shows merge progress for an action started outside the pull request section', async () => {
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [createPullRequest()]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke, true)
+
+    expect((await screen.findByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
   })
 })

@@ -12,8 +12,10 @@
   import { createGithubTaskClient } from './githubTaskClient'
   import { useMergeOrchestration } from './useMergeOrchestration.svelte'
 
-  interface Props extends PluginTaskUISectionProps {}
-  let { api, taskId }: Props = $props()
+  interface Props extends PluginTaskUISectionProps {
+    taskActionPending?: boolean
+  }
+  let { api, taskId, taskActionPending = false }: Props = $props()
 
   const client = createGithubTaskClient(untrack(() => api))
   let pullRequests = $state<PullRequestInfo[]>([])
@@ -239,8 +241,8 @@
             {#if detail}<div class="text-[0.7rem] text-base-content/60">{detail}</div>{/if}
             <div class="flex items-center gap-2">
               {#if canEnqueuePullRequest(pr)}
-                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id ? 'Enqueueing…' : 'Enqueue'} disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'enqueue')}>
-                  {#if orchestration.pendingPrId === pr.id}
+                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id || taskActionPending ? 'Enqueueing…' : 'Enqueue'} disabled={orchestration.pendingPrId !== null || taskActionPending} onclick={() => requestAction(pr, 'enqueue')}>
+                  {#if orchestration.pendingPrId === pr.id || taskActionPending}
                     <span class="loading loading-spinner loading-xs" role="status" aria-label="Enqueueing pull request"></span>
                     Enqueueing…
                   {:else}
@@ -248,8 +250,8 @@
                   {/if}
                 </Button>
               {:else if canMergePullRequest(pr)}
-                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id ? 'Merging…' : 'Merge'} disabled={orchestration.pendingPrId !== null} onclick={() => requestAction(pr, 'merge')}>
-                  {#if orchestration.pendingPrId === pr.id}
+                <Button size="xs" aria-label={orchestration.pendingPrId === pr.id || taskActionPending ? 'Merging…' : 'Merge'} disabled={orchestration.pendingPrId !== null || taskActionPending} onclick={() => requestAction(pr, 'merge')}>
+                  {#if orchestration.pendingPrId === pr.id || taskActionPending}
                     <span class="loading loading-spinner loading-xs" role="status" aria-label="Merging pull request"></span>
                     Merging…
                   {:else}
