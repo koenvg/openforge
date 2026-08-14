@@ -21,7 +21,7 @@ class _TaskDetailTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    resizeToAvoidBottomInset: selectedTab != 1,
+    resizeToAvoidBottomInset: true,
     appBar: AppBar(
       title: const Text('Task'),
       actions: <Widget>[
@@ -51,10 +51,7 @@ class _TaskDetailTabs extends StatelessWidget {
         index: selectedTab,
         children: <Widget>[
           details,
-          Transform.translate(
-            offset: Offset(0, -MediaQuery.viewInsetsOf(context).bottom),
-            child: AgentTerminalPane(surface: terminalSurface),
-          ),
+          AgentTerminalPane(surface: terminalSurface),
         ],
       ),
     ),
