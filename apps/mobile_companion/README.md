@@ -46,9 +46,11 @@ Start accepts only a Task identifier and resolves Project, provider, agent,
 permission, workspace, branch, prompt, and model choices from desktop state. It
 never retries automatically. Delete and Complete also accept only a Task
 identifier and use the shared desktop terminal Task lifecycle. Delete is backlog
-only. Complete is active-Task only, can stop a running Agent and Task shells,
-retains the Completed Task as reference data, and schedules the normal safe
-worktree and owned-branch cleanup. After transport uncertainty the client clears
+only, permanently removes the Task and its reference data, and schedules the
+normal safe worktree and owned-branch cleanup. Complete is active-Task only,
+can stop a running Agent and Task shells, retains the Completed Task as reference
+data, and schedules the same safe runtime workspace cleanup. After transport
+uncertainty the client clears
 stale state and refetches Task detail and the Project Board before offering
 another action.
 
@@ -192,9 +194,10 @@ or relay; Tailscale remains user-selected network infrastructure.
    action-required branch/workspace choice refuses safely, duplicate taps are blocked,
    no provider/workspace inputs are offered, and uncertain network outcomes refetch
    before another attempt.
-6. Confirmed Delete must remove a backlog Task from the active Board while retaining
-   Completed Task reference data. Confirmed Complete must work in Focus, In Flight,
-   and Out of Focus, disclose cleanup, and stop a running Agent/Task shells when an
+6. Confirmed Delete must permanently remove a backlog Task from the active Board
+   and from Completed Task reference data. Confirmed Complete must work in Focus,
+   In Flight, and Out of Focus, disclose cleanup, and stop a running Agent/Task
+   shells when an
    Agent terminal is attached. Cancellation sends no request.
 7. Lock the Mac while OpenForge and Companion Gateway remain running. Repeat Start,
    Delete, and Complete from each phone over LAN and Tailscale; all three actions must

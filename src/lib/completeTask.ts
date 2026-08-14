@@ -2,15 +2,14 @@ import { get } from 'svelte/store'
 import { deleteTask } from './ipc'
 import { completingTasks, error } from './stores'
 
-// Started Tasks use "Complete" while backlog Tasks use "Delete". Both terminal
-// actions share the completion lifecycle: runtime workspace state is removed while
-// the Completed Task remains available as reference data (there is no reopen flow).
-// Because runtime cleanup is destructive, every terminal action must confirm first.
+// Started Tasks use "Complete" and retain a Completed Task reference, while backlog
+// Tasks use permanent "Delete" and remove the Task entirely. Both terminal actions
+// remove runtime workspace state, so every terminal action must confirm first.
 export const COMPLETE_TASK_CONFIRM_MESSAGE =
   'Complete this task? Its runtime workspace state will be removed — this cannot be undone. The Completed Task will remain available for reference.'
 
 export const DELETE_BACKLOG_TASK_CONFIRM_MESSAGE =
-  'Delete this task from the backlog? Any runtime workspace state will be removed — this cannot be undone. The Task will remain available as a completed reference.'
+  'Delete this task from the backlog? The Task and any runtime workspace state will be permanently deleted — this cannot be undone. The Task will not remain available for reference.'
 
 /** Prompt the user to confirm destructive runtime cleanup for the displayed action. */
 export function confirmTerminalTaskAction(action: 'Complete' | 'Delete'): boolean {

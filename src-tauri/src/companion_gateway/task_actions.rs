@@ -15,7 +15,7 @@ pub(crate) type CompanionTaskActionFuture<'a> = Pin<
 /// Task-scoped mutation boundary used by the authenticated Companion router.
 ///
 /// The implementation delegates to the shared terminal Task completion service,
-/// so Companion and desktop completion retain one lifecycle owner.
+/// so Companion and desktop Delete/Complete actions retain one lifecycle owner.
 pub(crate) trait CompanionTaskActionService: Send + Sync {
     fn complete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a>;
     fn delete<'a>(&'a self, task_id: &'a str) -> CompanionTaskActionFuture<'a>;

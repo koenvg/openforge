@@ -259,7 +259,7 @@ class _TaskDetailViewState extends State<TaskDetailView>
       builder: (dialogContext) => AlertDialog(
         title: Text('Delete “${detail.title}”?'),
         content: const Text(
-          'This completes the Task using the desktop lifecycle. The Completed Task stays available as reference data, while runtime workspace state is removed.',
+          'This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
         ),
         actions: <Widget>[
           TextButton(

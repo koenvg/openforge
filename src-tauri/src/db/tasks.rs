@@ -1202,14 +1202,46 @@ impl super::Database {
         Ok(links)
     }
 
-    /// Hard-delete a newly created task during rollback before it is user-visible.
+    /// Permanently delete a task and every associated row.
     ///
-    /// This removes the task row and every associated row. Normal completion must use
-    /// the terminal Task completion service so Completed Tasks remain available as reference data.
+    /// Callers performing a user-visible lifecycle action must stop the Task runtime
+    /// before this write. Rollback callers may use this before a Task is user-visible.
     pub fn hard_delete_task(&self, id: &str) -> Result<()> {
+        self.delete_task_internal(id, None).map(|_| ())
+    }
+
+    /// Atomically delete a task only when it still has the state validated by the
+    /// terminal Task completion service.
+    pub fn delete_task_if_status(
+        &self,
+        id: &str,
+        expected_status: &str,
+    ) -> Result<CompleteTaskWriteOutcome> {
+        self.delete_task_internal(id, Some(expected_status))
+    }
+
+    fn delete_task_internal(
+        &self,
+        id: &str,
+        expected_status: Option<&str>,
+    ) -> Result<CompleteTaskWriteOutcome> {
         let conn = self.conn.lock().unwrap();
         conn.execute_batch("BEGIN IMMEDIATE")?;
-        let result = (|| -> Result<()> {
+        let result = (|| -> Result<CompleteTaskWriteOutcome> {
+            let current_status = conn
+                .query_row(
+                    "SELECT status FROM tasks WHERE id = ?1",
+                    rusqlite::params![id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            let Some(current_status) = current_status else {
+                return Ok(CompleteTaskWriteOutcome::NotFound);
+            };
+            if expected_status.is_some_and(|expected| expected != current_status) {
+                return Ok(CompleteTaskWriteOutcome::StaleState { current_status });
+            }
+
             conn.execute(
                 "DELETE FROM agent_sessions WHERE ticket_id = ?1",
                 rusqlite::params![id],
@@ -1236,16 +1268,16 @@ impl super::Database {
                 rusqlite::params![id],
             )?;
             conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
-            Ok(())
+            Ok(CompleteTaskWriteOutcome::Completed)
         })();
         match result {
-            Ok(()) => {
+            Ok(outcome) => {
                 conn.execute_batch("COMMIT")?;
-                Ok(())
+                Ok(outcome)
             }
-            Err(e) => {
+            Err(error) => {
                 let _ = conn.execute_batch("ROLLBACK");
-                Err(e)
+                Err(error)
             }
         }
     }
@@ -1255,7 +1287,7 @@ impl super::Database {
     /// Runtime data that depends on a live workspace is removed, but the task row, labels,
     /// and dependency links remain available for CLI/agent lookup.
     #[cfg(test)]
-    pub fn delete_task(&self, id: &str) -> Result<()> {
+    pub fn complete_task(&self, id: &str) -> Result<()> {
         self.complete_task_internal(id, None).map(|_| ())
     }
 
@@ -2293,8 +2325,8 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_task_preserves_dependency_edges_for_completed_references() {
-        let (db, path) = make_test_db("delete_task_dependency_edges");
+    fn test_complete_task_preserves_dependency_edges_for_completed_references() {
+        let (db, path) = make_test_db("complete_task_dependency_edges");
         db.set_config("task_id_prefix", "T").unwrap();
         let prerequisite = db
             .create_task("Prerequisite", "done", None, None, None)
@@ -2305,8 +2337,8 @@ mod tests {
         db.add_task_dependency(&dependent.id, &prerequisite.id)
             .expect("add dependency");
 
-        db.delete_task(&prerequisite.id)
-            .expect("delete prerequisite");
+        db.complete_task(&prerequisite.id)
+            .expect("complete prerequisite");
 
         let dependent = db.get_task(&dependent.id).expect("get dependent").unwrap();
         assert_eq!(dependent.depends_on, vec![prerequisite.id.clone()]);
@@ -2316,8 +2348,8 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_task_completes_record_and_removes_worktree_metadata() {
-        let (db, path) = make_test_db("delete_task_completes_record");
+    fn test_complete_task_retains_record_and_removes_worktree_metadata() {
+        let (db, path) = make_test_db("complete_task_retains_record");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -2338,7 +2370,7 @@ mod tests {
             .expect("get worktree")
             .is_some());
 
-        db.delete_task(&task.id).expect("complete failed");
+        db.complete_task(&task.id).expect("complete failed");
 
         let completed = db
             .get_task(&task.id)
@@ -2366,8 +2398,8 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_task_with_children() {
-        let (db, path) = make_test_db("delete_task_children");
+    fn test_complete_task_removes_runtime_children() {
+        let (db, path) = make_test_db("complete_task_children");
         insert_test_task(&db);
 
         db.create_agent_session("ses-del", "T-100", None, "implement", "running", "opencode")
@@ -2402,7 +2434,7 @@ mod tests {
         db.insert_self_review_comment("T-100", "issue", Some("main.rs"), Some(5), "Looks wrong")
             .expect("insert self review failed");
 
-        db.delete_task("T-100").expect("complete failed");
+        db.complete_task("T-100").expect("complete failed");
 
         let task = db
             .get_task("T-100")

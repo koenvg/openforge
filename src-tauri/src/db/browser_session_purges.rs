@@ -78,16 +78,16 @@ mod tests {
         }
     }
 
-    /// A Plugin Browser Session outlives every Task that browsed with it, so deleting a Task must
+    /// A Plugin Browser Session outlives every Task that browsed with it, so completing a Task must
     /// never schedule a purge — that would log the user out everywhere. See ADR 0012.
     #[test]
-    fn task_deletion_records_no_browser_purge_intent() {
+    fn task_completion_records_no_browser_purge_intent() {
         let (db, path) = make_test_db("browser_purge_task_completion");
         insert_test_task(&db);
 
-        db.delete_task("T-100").expect("delete task");
-        db.delete_task("T-100")
-            .expect("repeat delete is idempotent");
+        db.complete_task("T-100").expect("complete task");
+        db.complete_task("T-100")
+            .expect("repeat completion is idempotent");
 
         assert!(db
             .list_browser_session_purge_intents()

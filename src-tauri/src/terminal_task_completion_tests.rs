@@ -173,7 +173,7 @@ async fn completion_publishes_through_the_canonical_task_event_bus() {
 }
 
 #[tokio::test]
-async fn background_cleanup_failure_keeps_completion_and_releases_its_claim() {
+async fn background_cleanup_failure_keeps_deletion_and_releases_its_claim() {
     let temp = tempfile::tempdir().expect("create tempdir");
     let repo_path = temp.path().join("not-a-repository");
     let worktree_path = temp.path().join("worktree");
@@ -232,15 +232,13 @@ async fn background_cleanup_failure_keeps_completion_and_releases_its_claim() {
         );
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    assert_eq!(
+    assert!(
         crate::db::acquire_db(&db)
             .get_task(&task_id)
-            .expect("get completed task")
-            .expect("Completed Task remains")
-            .status,
-        "done"
+            .expect("get deleted task")
+            .is_none(),
+        "background cleanup failure must not restore a permanently deleted Task",
     );
-
     let _ = std::fs::remove_file(path);
 }
 
