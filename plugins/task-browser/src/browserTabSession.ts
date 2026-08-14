@@ -6,6 +6,10 @@ import {
   type TaskBrowserSurfaceController,
   type TaskBrowserSurfaceState,
 } from '@openforge-app/plugin-sdk/frontend'
+import {
+  getBrowserNavigationCoordinator,
+  type BrowserNavigationToken,
+} from './browserNavigationCoordinator'
 
 const LAST_BROWSER_URL_KEY = 'lastBrowserUrl'
 const LEGACY_DEFAULT_BROWSER_URL = 'https://example.com/'
@@ -13,6 +17,9 @@ const LEGACY_DEFAULT_BROWSER_URL = 'https://example.com/'
 export interface BrowserTabSession {
   readonly surface: TaskBrowserSurfaceController
   navigate(address: string): Promise<TaskBrowserSurfaceState>
+  goBack(): Promise<TaskBrowserSurfaceState>
+  goForward(): Promise<TaskBrowserSurfaceState>
+  reload(): Promise<TaskBrowserSurfaceState>
   stop(): Promise<TaskBrowserSurfaceState>
   setPresentation(element: HTMLElement | null): Promise<void>
   dispose(): Promise<void>
@@ -53,10 +60,10 @@ export async function persistSuccessfulBrowserState(
   api: FrontendOpenForgeAPI,
   taskId: string,
   state: TaskBrowserSurfaceState,
+  token?: BrowserNavigationToken,
 ): Promise<boolean> {
-  if (state.loading || state.error !== null || !isAllowedBrowserSurfaceUrl(state.url)) return false
-  await api.storage.task(taskId).set(LAST_BROWSER_URL_KEY, state.url)
-  return true
+  const coordinator = getBrowserNavigationCoordinator(api)
+  return coordinator.persist(token ?? coordinator.current(taskId), state)
 }
 
 export async function createBrowserTabSession({
@@ -65,6 +72,7 @@ export async function createBrowserTabSession({
   element,
   onStateChanged,
 }: CreateBrowserTabSessionOptions): Promise<BrowserTabSession> {
+  const navigationCoordinator = getBrowserNavigationCoordinator(api)
   const initialUrl = await savedInitialUrl(api, taskId)
   const surface = await api.browserSurfaces.getOrCreate({
     taskId,
@@ -76,8 +84,9 @@ export async function createBrowserTabSession({
   let latestState: TaskBrowserSurfaceState | null = null
   let persistenceSuppression: 'none' | 'awaiting-stop-settle' | 'awaiting-next-load' = 'none'
   function queueStatePersistence(state: TaskBrowserSurfaceState) {
+    const token = navigationCoordinator.current(taskId)
     persistence = persistence
-      .then(() => persistSuccessfulBrowserState(api, taskId, state))
+      .then(() => persistSuccessfulBrowserState(api, taskId, state, token))
       .then(() => undefined)
       .catch(() => undefined)
   }
@@ -131,9 +140,24 @@ export async function createBrowserTabSession({
   return {
     surface,
     navigate(address) {
-      return surface.navigate(normalizeBrowserAddress(address))
+      const url = normalizeBrowserAddress(address)
+      navigationCoordinator.begin(taskId)
+      return surface.navigate(url)
+    },
+    goBack() {
+      navigationCoordinator.begin(taskId)
+      return surface.goBack()
+    },
+    goForward() {
+      navigationCoordinator.begin(taskId)
+      return surface.goForward()
+    },
+    reload() {
+      navigationCoordinator.begin(taskId)
+      return surface.reload()
     },
     async stop() {
+      navigationCoordinator.begin(taskId)
       const shouldSuppressPersistence = latestState?.loading === true
       if (shouldSuppressPersistence) persistenceSuppression = 'awaiting-stop-settle'
       try {
