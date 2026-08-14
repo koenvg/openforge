@@ -10,7 +10,7 @@ MobilePaletteAction _taskAction(
   CompanionActionIcon icon, {
   bool requiresConfirmation = false,
   bool destructive = false,
-}) => MobilePaletteAction.task(
+}) => MobilePaletteActionContractAdapter.fromTaskPresentation(
   CompanionTaskActionPresentation(
     id: id,
     label: label,
@@ -26,7 +26,7 @@ MobilePaletteAction _projectAction(
   String label,
   List<String> keywords,
   CompanionActionIcon icon,
-) => MobilePaletteAction.project(
+) => MobilePaletteActionContractAdapter.fromProjectPresentation(
   CompanionProjectActionPresentation(
     id: id,
     label: label,
@@ -102,8 +102,8 @@ void main() {
             body: MobileActionPalette(
               title: 'Actions',
               actions: <MobilePaletteAction>[
-                MobilePaletteAction.newTask,
-                MobilePaletteAction.refreshBoard,
+                MobileNativePaletteActions.newTask,
+                MobileNativePaletteActions.refreshBoard,
                 _projectAction(
                   CompanionProjectActionId.refreshGithub,
                   'Refresh GitHub',

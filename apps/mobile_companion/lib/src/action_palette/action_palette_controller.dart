@@ -54,7 +54,7 @@ final class MobileActionPaletteController {
       );
     }
     return snapshot.actions
-        .map(MobilePaletteAction.project)
+        .map(MobilePaletteActionContractAdapter.fromProjectPresentation)
         .toList(growable: false);
   }
 
@@ -67,7 +67,7 @@ final class MobileActionPaletteController {
       );
     }
     return snapshot.actions
-        .map(MobilePaletteAction.task)
+        .map(MobilePaletteActionContractAdapter.fromTaskPresentation)
         .toList(growable: false);
   }
 
