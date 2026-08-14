@@ -195,6 +195,7 @@ impl<'a, Catalog> PluginCommandBroker<'a, Catalog>
 where
     Catalog: BackendAgentCommandCatalog + Sync,
 {
+    #[cfg(test)]
     pub fn new(database: Arc<Mutex<crate::db::Database>>, backend: &'a Catalog) -> Self {
         Self {
             database,
