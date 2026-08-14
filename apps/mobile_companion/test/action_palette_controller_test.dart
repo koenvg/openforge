@@ -57,7 +57,8 @@ final class _Client
         CompanionTaskActionClient,
         CompanionActionPaletteClient {
   final calls = <String>[];
-
+  Object? taskMutationError;
+  Object? projectGithubRefreshError;
   @override
   Future<ProjectActionsSnapshot> fetchProjectActions(
     CompanionTrustRecord trustRecord,
@@ -105,7 +106,13 @@ final class _Client
   Future<void> mergeTaskPullRequest(
     CompanionTrustRecord trustRecord,
     String taskId,
-  ) async => calls.add('merge:$taskId');
+  ) async {
+    calls.add('merge:$taskId');
+    final error = taskMutationError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
   Future<void> setAsideTask(
@@ -124,6 +131,18 @@ final class _Client
       boardStatus: 'done',
       cleanupScheduled: false,
     );
+  }
+
+  @override
+  Future<void> refreshProjectGithub(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async {
+    calls.add('refresh-github:$projectId');
+    final error = projectGithubRefreshError;
+    if (error != null) {
+      throw error;
+    }
   }
 
   @override
@@ -197,6 +216,136 @@ void main() {
 
       expect(client.calls, <String>['merge:T-1', 'complete:T-1']);
       expect(refreshes, 2);
+    },
+  );
+
+  test(
+    'refreshProjectGithub dispatches once and refreshes authoritative state',
+    () async {
+      final client = _Client();
+      var refreshes = 0;
+      final controller = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: _Storage(),
+        onRefresh: () async => refreshes += 1,
+      );
+
+      await controller.refreshProjectGithub('P-1');
+
+      expect(client.calls, <String>['refresh-github:P-1']);
+      expect(refreshes, 1);
+    },
+  );
+
+  test(
+    'executeTaskAction reports revoked authorization without refreshing',
+    () async {
+      const error = CompanionV1Exception(
+        statusCode: 401,
+        code: 'revoked',
+        message: 'Device authorization was revoked.',
+      );
+      final client = _Client()..taskMutationError = error;
+      var refreshes = 0;
+      var authorizationLosses = 0;
+      final controller = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: _Storage(),
+        onRefresh: () async => refreshes += 1,
+        onAuthorizationLost: () => authorizationLosses += 1,
+      );
+
+      await expectLater(
+        controller.executeTaskAction('T-1', CompanionActionId.mergePullRequest),
+        throwsA(same(error)),
+      );
+
+      expect(refreshes, 0);
+      expect(authorizationLosses, 1);
+    },
+  );
+
+  test(
+    'executeTaskAction refreshes before rethrowing other failures',
+    () async {
+      final error = StateError('mutation failed');
+      final client = _Client()..taskMutationError = error;
+      var refreshes = 0;
+      final controller = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: _Storage(),
+        onRefresh: () async => refreshes += 1,
+      );
+
+      await expectLater(
+        controller.executeTaskAction('T-1', CompanionActionId.mergePullRequest),
+        throwsA(same(error)),
+      );
+
+      expect(refreshes, 1);
+    },
+  );
+
+  test(
+    'refreshProjectGithub reports unauthenticated access without refreshing',
+    () async {
+      const error = CompanionV1Exception(
+        statusCode: 401,
+        code: 'unauthenticated',
+        message: 'Device authentication is required.',
+      );
+      final client = _Client()..projectGithubRefreshError = error;
+      var refreshes = 0;
+      var authorizationLosses = 0;
+      final controller = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: _Storage(),
+        onRefresh: () async => refreshes += 1,
+        onAuthorizationLost: () => authorizationLosses += 1,
+      );
+
+      await expectLater(
+        controller.refreshProjectGithub('P-1'),
+        throwsA(same(error)),
+      );
+
+      expect(refreshes, 0);
+      expect(authorizationLosses, 1);
+    },
+  );
+
+  test(
+    'refreshProjectGithub refreshes before rethrowing other failures',
+    () async {
+      const error = CompanionV1Exception(
+        statusCode: 503,
+        code: 'temporarily_unavailable',
+        message: 'GitHub is temporarily unavailable.',
+      );
+      final client = _Client()..projectGithubRefreshError = error;
+      var refreshes = 0;
+      final controller = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: _Storage(),
+        onRefresh: () async => refreshes += 1,
+      );
+
+      await expectLater(
+        controller.refreshProjectGithub('P-1'),
+        throwsA(same(error)),
+      );
+
+      expect(refreshes, 1);
     },
   );
 }
