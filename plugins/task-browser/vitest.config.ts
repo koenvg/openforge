@@ -1,7 +1,7 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
 import { defineConfig } from 'vitest/config'
-import { createOpenForgePluginSdkSourceAliases } from '../../packages/plugin-sdk/src/vite'
+import { createOpenForgePluginSdkSourceAliases } from '../../packages/plugin-sdk/src/vite.ts'
 
 const repoRoot = new URL('../..', import.meta.url)
 
