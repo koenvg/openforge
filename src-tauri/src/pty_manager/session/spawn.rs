@@ -873,7 +873,7 @@ mod tests {
         sessions: PtySessions,
         prepared_tx: Option<mpsc::Sender<()>>,
         command_delay: Duration,
-        output: &'static str,
+        script: &'static str,
         check_lock: bool,
     }
 
@@ -902,10 +902,7 @@ mod tests {
             if !self.command_delay.is_zero() {
                 std::thread::sleep(self.command_delay);
             }
-            vec![
-                "-lc".to_string(),
-                format!("printf {}; sleep 5", self.output),
-            ]
+            vec!["-lc".to_string(), format!("{}; sleep 5", self.script)]
         }
 
         fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
@@ -940,7 +937,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
             command_delay: Duration::ZERO,
-            output: "lock-free-agent",
+            script: "printf lock-free-agent",
             check_lock: true,
         };
 
@@ -1001,7 +998,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
             command_delay: Duration::ZERO,
-            output: "before;sleep 0.2;printf after",
+            script: "stty -echo; IFS= read -r _; printf before; IFS= read -r _; printf after",
             check_lock: true,
         };
         manager
@@ -1020,19 +1017,37 @@ mod tests {
             .await
             .expect("agent PTY");
 
-        let mut attachment = loop {
-            let attachment = manager
-                .attach_agent_terminal(task_id)
-                .await
-                .expect("running Agent attachment");
-            if attachment.replay() == b"before" {
-                break attachment;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        };
-        assert!(manager.agent_terminal_available(task_id).await);
+        let event_timeout = Duration::from_secs(5);
+        let mut before_replay = manager
+            .attach_agent_terminal(task_id)
+            .await
+            .expect("running Agent attachment");
+        assert!(before_replay.replay().is_empty());
+        before_replay
+            .write_input(b"\n")
+            .await
+            .expect("release replay output");
         assert_eq!(
-            tokio::time::timeout(Duration::from_secs(1), attachment.recv())
+            tokio::time::timeout(event_timeout, before_replay.recv())
+                .await
+                .expect("replay output deadline")
+                .expect("replay output"),
+            crate::pty_manager::AgentTerminalEvent::Output(b"before".to_vec()),
+        );
+
+        let mut attachment = manager
+            .attach_agent_terminal(task_id)
+            .await
+            .expect("running Agent attachment");
+        assert_eq!(attachment.replay(), b"before");
+        drop(before_replay);
+        assert!(manager.agent_terminal_available(task_id).await);
+        attachment
+            .write_input(b"\n")
+            .await
+            .expect("release live output");
+        assert_eq!(
+            tokio::time::timeout(event_timeout, attachment.recv())
                 .await
                 .expect("live output deadline")
                 .expect("live output"),
@@ -1041,7 +1056,7 @@ mod tests {
 
         manager.kill_pty(task_id).await.expect("PTY cleanup");
         assert_eq!(
-            tokio::time::timeout(Duration::from_secs(1), attachment.recv())
+            tokio::time::timeout(event_timeout, attachment.recv())
                 .await
                 .expect("exit deadline")
                 .expect("exit event"),
@@ -1070,7 +1085,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
             command_delay: Duration::ZERO,
-            output: "blocked-agent",
+            script: "printf blocked-agent",
             check_lock: false,
         };
 
@@ -1289,7 +1304,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: Some(old_prepared_tx),
             command_delay: Duration::from_millis(150),
-            output: "old-agent",
+            script: "printf old-agent",
             check_lock: false,
         };
         let old_spawn = std::thread::spawn(move || {
@@ -1319,7 +1334,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: None,
             command_delay: Duration::ZERO,
-            output: "new-agent",
+            script: "printf new-agent",
             check_lock: false,
         };
         let new_instance_id = manager
@@ -1388,7 +1403,7 @@ mod tests {
             sessions: Arc::clone(&manager.sessions),
             prepared_tx: Some(prepared_tx),
             command_delay: Duration::from_millis(150),
-            output: "killed-agent",
+            script: "printf killed-agent",
             check_lock: false,
         };
         let pending_spawn = std::thread::spawn(move || {

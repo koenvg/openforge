@@ -676,25 +676,42 @@ mod tests {
 
     #[test]
     fn security_cli_timeout_requests_graceful_helper_termination() {
-        let marker = std::env::temp_dir().join(format!(
-            "openforge-keychain-helper-terminated-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let script = format!(
-            "trap 'printf terminated > {} ; exit 0' TERM; while :; do sleep 0.02; done",
-            marker.display()
+        let temp_dir = tempfile::tempdir().expect("termination marker tempdir");
+        let ready_marker = temp_dir.path().join("ready");
+        let terminated_marker = temp_dir.path().join("terminated");
+        let ready_path = ready_marker.to_string_lossy();
+        let terminated_path = terminated_marker.to_string_lossy();
+        let script = r#"trap 'printf terminated > "$2"; exit 0' TERM; printf ready > "$1"; while :; do :; done"#;
+
+        let error = run_command_with_timeout_observing(
+            "/bin/sh",
+            &[
+                "-c",
+                script,
+                "openforge-keychain-test",
+                ready_path.as_ref(),
+                terminated_path.as_ref(),
+            ],
+            Duration::from_millis(100),
+            &SecretStoreCancellation::default(),
+            |_| {
+                let readiness_deadline = Instant::now() + Duration::from_secs(5);
+                while !ready_marker.exists() && Instant::now() < readiness_deadline {
+                    std::thread::sleep(KEYCHAIN_PROCESS_POLL_INTERVAL);
+                }
+            },
+        )
+        .expect_err("stuck helper must time out");
+
+        assert!(
+            ready_marker.exists(),
+            "Keychain helper must install its signal handler before the timeout starts"
         );
-
-        let error =
-            run_command_with_timeout("/bin/sh", &["-c", &script], Duration::from_millis(100))
-                .expect_err("stuck helper must time out");
-
         assert!(error.starts_with("Timed out reading secret from macOS Keychain"));
         assert_eq!(
-            std::fs::read_to_string(&marker).ok().as_deref(),
+            std::fs::read_to_string(&terminated_marker).ok().as_deref(),
             Some("terminated"),
             "Keychain helper must receive graceful termination before any forced kill"
         );
-        let _ = std::fs::remove_file(marker);
     }
 }
