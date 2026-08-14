@@ -190,7 +190,7 @@ const PROVIDER_RECORD_COMPLETE: &str = "openforge-provider-record=complete";
 #[cfg(unix)]
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let script = format!(
-        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\nexit 0\n",
+        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\n# Keep the fake provider alive until the test tears down its PTY. This prevents\n# an immediate child exit from racing PTY session registration on macOS.\nIFS= read -r _\nexit 0\n",
         log_path.display()
     );
     let path = bin_dir.join(command);
@@ -204,7 +204,7 @@ fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let escaped_log_path = log_path.to_string_lossy().replace('\'', "''");
     let script = format!(
-        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}; Add-Content -LiteralPath $log -Value '{}'\" -- %*\r\nexit /b 0\r\n",
+        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}; Add-Content -LiteralPath $log -Value '{}'\" -- %*\r\nrem Keep the fake provider alive until the test tears down its PTY.\r\nset /p \"OPENFORGE_PROVIDER_RELEASE=\" >nul\r\nexit /b 0\r\n",
         escaped_log_path, command, PROVIDER_RECORD_COMPLETE
     );
     fs::write(bin_dir.join(format!("{command}.cmd")), script)
