@@ -157,16 +157,6 @@ fn action_error_response(error: CompanionActionPaletteError) -> Response {
             CompanionErrorCode::InvalidTaskState,
             "Action is no longer available for the current Task state",
         ),
-        CompanionActionPaletteError::OperationInProgress => error_response(
-            StatusCode::CONFLICT,
-            CompanionErrorCode::OperationInProgress,
-            "Another Task action is already in progress",
-        ),
-        CompanionActionPaletteError::DesktopActionRequired => error_response(
-            StatusCode::CONFLICT,
-            CompanionErrorCode::DesktopActionRequired,
-            "Open the Task on desktop before running this action",
-        ),
         CompanionActionPaletteError::TemporarilyUnavailable => error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             CompanionErrorCode::TemporarilyUnavailable,
