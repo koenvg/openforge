@@ -104,24 +104,35 @@ final class _WidgetClient
     String taskId,
   ) async => TaskActionsSnapshot(
     taskId: taskId,
-    actions: <CompanionTaskActionPresentation>[
-      CompanionTaskActionPresentation(
-        id: CompanionTaskActionId.setAsideTask,
-        label: 'Set aside',
-        keywords: <String>['defer'],
-        icon: CompanionActionIcon.visibilityOff,
-        requiresConfirmation: false,
-        destructive: false,
-      ),
-      CompanionTaskActionPresentation(
-        id: CompanionTaskActionId.completeTask,
-        label: 'Complete',
-        keywords: <String>['finish'],
-        icon: CompanionActionIcon.complete,
-        requiresConfirmation: true,
-        destructive: true,
-      ),
-    ],
+    actions: taskId == 'T-backlog'
+        ? <CompanionTaskActionPresentation>[
+            CompanionTaskActionPresentation(
+              id: CompanionTaskActionId.deleteTask,
+              label: 'Delete',
+              keywords: <String>['delete'],
+              icon: CompanionActionIcon.delete,
+              requiresConfirmation: true,
+              destructive: true,
+            ),
+          ]
+        : <CompanionTaskActionPresentation>[
+            CompanionTaskActionPresentation(
+              id: CompanionTaskActionId.setAsideTask,
+              label: 'Set aside',
+              keywords: <String>['defer'],
+              icon: CompanionActionIcon.visibilityOff,
+              requiresConfirmation: false,
+              destructive: false,
+            ),
+            CompanionTaskActionPresentation(
+              id: CompanionTaskActionId.completeTask,
+              label: 'Complete',
+              keywords: <String>['finish'],
+              icon: CompanionActionIcon.complete,
+              requiresConfirmation: true,
+              destructive: true,
+            ),
+          ],
   );
 
   @override
@@ -530,6 +541,103 @@ void main() {
     expect(find.text('Backlog Task'), findsNothing);
     expect(find.text('No Tasks are waiting in the Backlog.'), findsOneWidget);
   });
+
+  testWidgets(
+    'backlog Delete palette confirmation warns that deletion is permanent',
+    (tester) async {
+      final client = _WidgetClient();
+      final storage = _WidgetStorage();
+      final controller = ProjectBoardController(
+        client: client,
+        storage: storage,
+      );
+      await controller.refresh();
+      controller.selectLane(ProjectBoardLane.backlog);
+      final paletteController = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: storage,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProjectBoardHome(
+            controller: controller,
+            actionPaletteController: paletteController,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Actions for Backlog Task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Delete “Backlog Task”? This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Completed Task stays available'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'Task detail Delete palette confirmation warns that deletion is permanent',
+    (tester) async {
+      final client = _WidgetClient();
+      final storage = _WidgetStorage();
+      final controller = ProjectBoardController(
+        client: client,
+        storage: storage,
+      );
+      await controller.refresh();
+      controller.selectLane(ProjectBoardLane.backlog);
+      final paletteController = MobileActionPaletteController(
+        taskClient: client,
+        completionClient: client,
+        paletteClient: client,
+        storage: storage,
+      );
+      await tester.pumpWidget(
+        CompanionApp(
+          initialState: const Connected(hostId: 'host-1', protocolVersion: 1),
+          projectBoardController: controller,
+          taskDetailControllerFactory: (taskId) => TaskDetailController(
+            taskId: taskId,
+            client: client,
+            storage: storage,
+          ),
+          actionPaletteController: paletteController,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.bySemanticsLabel(
+          RegExp(r'^Task T-backlog, Backlog Task, Backlog,'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Task actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete “Backlog Task”?'), findsOneWidget);
+      expect(
+        find.text(
+          'This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'opens global and task-scoped Action Palettes from visible controls',
