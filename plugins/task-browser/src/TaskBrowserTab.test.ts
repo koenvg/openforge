@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
-import { TaskFollowUpError } from '@openforge-app/plugin-sdk'
+import { TaskFollowUpError, type JsonValue } from '@openforge-app/plugin-sdk'
 import { tick } from 'svelte'
 import type {
   Disposable,
-  JsonValue,
   PluginStorageScope,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,

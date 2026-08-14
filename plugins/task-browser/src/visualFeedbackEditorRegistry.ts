@@ -1,4 +1,5 @@
-import type { FrontendOpenForgeAPI, JsonValue } from '@openforge-app/plugin-sdk/frontend'
+import type { JsonValue } from '@openforge-app/plugin-sdk'
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import {
   createVisualFeedbackEditor,
   type VisualFeedbackEditorState,
