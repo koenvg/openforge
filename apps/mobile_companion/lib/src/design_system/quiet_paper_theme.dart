@@ -488,12 +488,12 @@ const _lightSemanticColors = QuietPaperColors(
   onInfo: Color(0xFFFFFFFF),
   infoContainer: Color(0xFFE8F0FF),
   onInfoContainer: Color(0xFF0B327F),
-  terminalCanvas: Color(0xFF06182B),
-  terminalSurface: Color(0xFF0B223B),
-  terminalForeground: Color(0xFFE8EEF7),
-  terminalMuted: Color(0xFFA9B7CA),
-  terminalCursor: Color(0xFFFFFFFF),
-  terminalSelection: Color(0xFF31547A),
+  terminalCanvas: Color(0xFFFFFFFF),
+  terminalSurface: Color(0xFFF7F6F2),
+  terminalForeground: Color(0xFF000000),
+  terminalMuted: Color(0xFF566176),
+  terminalCursor: Color(0xFF000000),
+  terminalSelection: Color(0xFFBBDEFB),
 );
 
 final _darkScheme =
