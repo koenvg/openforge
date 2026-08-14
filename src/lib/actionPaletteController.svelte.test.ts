@@ -69,15 +69,17 @@ describe('useActionPaletteController', () => {
   it.each([
     {
       action: 'Complete',
+      actionId: 'complete-task',
       task: selectedTask,
       message: COMPLETE_TASK_CONFIRM_MESSAGE,
     },
     {
       action: 'Delete',
+      actionId: 'delete-task',
       task: { ...selectedTask, status: 'backlog' as const },
       message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
     },
-  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ task, message }) => {
+  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ actionId, task, message }) => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
@@ -97,7 +99,7 @@ describe('useActionPaletteController', () => {
     })
 
     controller.openActionPalette()
-    await controller.executeAction('delete-task')
+    await controller.executeAction(actionId)
 
     expect(confirmSpy).toHaveBeenCalledWith(message)
     expect(taskActions.deleteTaskAndReload).toHaveBeenCalledWith(task.id)
@@ -124,7 +126,7 @@ describe('useActionPaletteController', () => {
     })
 
     controller.openActionPalette()
-    await controller.executeAction('delete-task')
+    await controller.executeAction('complete-task')
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(taskActions.deleteTaskAndReload).not.toHaveBeenCalled()

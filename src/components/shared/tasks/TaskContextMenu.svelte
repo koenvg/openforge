@@ -1,9 +1,16 @@
 <script lang="ts">
+  import { getTaskActionPresentation } from '../../../lib/actionPalettePresentation'
   import type { BoardStatus } from '../../../lib/types'
   import { completingTasks, tasks } from '../../../lib/stores'
   import { confirmTerminalTaskAction, runCompleteTask } from '../../../lib/completeTask'
   import ContextMenu from '../ui/ContextMenu.svelte'
   import ContextMenuItem from '../ui/ContextMenuItem.svelte'
+
+  const startPresentation = getTaskActionPresentation('start-task')
+  const returnPresentation = getTaskActionPresentation('return-to-board')
+  const deletePresentation = getTaskActionPresentation('delete-task')
+  const completePresentation = getTaskActionPresentation('complete-task')
+  const setAsidePresentation = getTaskActionPresentation('set-aside-task')
 
   interface Props {
     visible: boolean
@@ -66,19 +73,19 @@
 
 <ContextMenu {visible} {x} {y} {onClose}>
   {#if hasStartAction}
-    <ContextMenuItem label="Start Task" variant="primary" onclick={handleStart} />
+    <ContextMenuItem label={startPresentation.label} variant="primary" onclick={handleStart} />
   {/if}
   {#if hasEditAction}
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
   {#if hasReturnToBoardAction}
-    <ContextMenuItem label="Move task back in focus" onclick={handleReturnToBoard} />
+    <ContextMenuItem label={returnPresentation.label} onclick={handleReturnToBoard} />
   {/if}
   {#if hasActionsBeforeComplete}
     <div class="border-t border-base-content/10 my-1"></div>
   {/if}
-  <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? 'Delete' : 'Complete'} disabled={isCompleting} onclick={handleComplete} />
+  <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? deletePresentation.label : completePresentation.label} disabled={isCompleting} onclick={handleComplete} />
   {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}
-    <ContextMenuItem label="Set aside" onclick={handleSetAside} />
+    <ContextMenuItem label={setAsidePresentation.label} onclick={handleSetAside} />
   {/if}
 </ContextMenu>

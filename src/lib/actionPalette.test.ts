@@ -76,17 +76,24 @@ describe('getTaskActions', () => {
     expect(actions.some(a => a.label === 'Complete')).toBe(false)
   })
 
-  it('returns Set aside + Complete for a doing task outside Out of Focus', () => {
+  it('returns canonical metadata for doing task actions', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getTaskActions(task, [])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('start-task')
-    expect(ids).not.toContain('move-to-done')
-    expect(actions.find(a => a.id === 'set-aside-task')?.label).toBe('Set aside')
+    expect(ids).not.toContain('delete-task')
+    expect(actions.find(a => a.id === 'set-aside-task')).toMatchObject({
+      label: 'Set aside',
+      icon: 'visibility_off',
+      requiresConfirmation: false,
+    })
     expect(ids).not.toContain('return-to-board')
-    expect(ids).toContain('delete-task')
-    expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Complete')
-    expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('delete-task'))
+    expect(actions.find(a => a.id === 'complete-task')).toMatchObject({
+      label: 'Complete',
+      icon: 'complete',
+      requiresConfirmation: true,
+    })
+    expect(ids.indexOf('set-aside-task')).toBeGreaterThan(ids.indexOf('complete-task'))
   })
 
   it('appends Run app without displacing the existing task action order when available', () => {
@@ -102,21 +109,25 @@ describe('getTaskActions', () => {
     expect(availableActions.filter(action => action.id !== 'run-app')).toEqual(unavailableActions)
   })
 
-  it('returns Move task back in focus for doing task already Out of Focus', () => {
+  it('returns Return to Board for doing task already Out of Focus', () => {
     const task = makeTask({ status: 'doing' })
     const actions = getTaskActions(task, [], new Set([task.id]))
     const ids = actions.map(a => a.id)
-    expect(actions.find(a => a.id === 'return-to-board')?.label).toBe('Move task back in focus')
+    expect(actions.find(a => a.id === 'return-to-board')).toMatchObject({
+      label: 'Return to Board',
+      icon: 'visibility',
+      requiresConfirmation: false,
+    })
     expect(ids).not.toContain('set-aside-task')
-    expect(ids).toContain('delete-task')
+    expect(ids).toContain('complete-task')
   })
 
   it('labels the terminal action Complete for a done task', () => {
     const task = makeTask({ status: 'done' })
     const actions = getTaskActions(task, [])
     const ids = actions.map(a => a.id)
-    expect(ids).toContain('delete-task')
-    expect(actions.find(a => a.id === 'delete-task')?.label).toBe('Complete')
+    expect(ids).toContain('complete-task')
+    expect(actions.find(a => a.id === 'complete-task')?.label).toBe('Complete')
     expect(actions.some(a => a.label === 'Delete')).toBe(false)
     expect(ids).not.toContain('move-to-done')
     expect(ids).not.toContain('start-task')
@@ -248,7 +259,7 @@ describe('getAvailableActions', () => {
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('move-to-done')
     expect(ids).toContain('set-aside-task')
-    expect(ids).toContain('delete-task')
+    expect(ids).toContain('complete-task')
     expect(ids).toContain('go-back')
     expect(ids).toContain('search-tasks')
   })

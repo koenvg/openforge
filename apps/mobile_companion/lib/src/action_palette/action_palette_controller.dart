@@ -54,14 +54,7 @@ final class MobileActionPaletteController {
       );
     }
     return snapshot.actions
-        .map(
-          (action) => switch (action) {
-            generated.CompanionProjectActionId.refreshGithub =>
-              const MobilePaletteAction.general(
-                CompanionActionId.refreshGithub,
-              ),
-          },
-        )
+        .map(MobilePaletteAction.project)
         .toList(growable: false);
   }
 
@@ -74,7 +67,7 @@ final class MobileActionPaletteController {
       );
     }
     return snapshot.actions
-        .map((action) => MobilePaletteAction.task(_mobileActionId(action)))
+        .map(MobilePaletteAction.task)
         .toList(growable: false);
   }
 
@@ -163,21 +156,3 @@ final class MobileActionPaletteController {
     return trustRecord;
   }
 }
-
-CompanionActionId _mobileActionId(generated.CompanionTaskActionId action) =>
-    switch (action) {
-      generated.CompanionTaskActionId.startTask => CompanionActionId.startTask,
-      generated.CompanionTaskActionId.mergePullRequest =>
-        CompanionActionId.mergePullRequest,
-      generated.CompanionTaskActionId.enqueuePullRequest =>
-        CompanionActionId.enqueuePullRequest,
-      generated.CompanionTaskActionId.returnToBoard =>
-        CompanionActionId.returnToBoard,
-      generated.CompanionTaskActionId.deleteTask =>
-        CompanionActionId.deleteTask,
-      generated.CompanionTaskActionId.completeTask =>
-        CompanionActionId.completeTask,
-      generated.CompanionTaskActionId.setAsideTask =>
-        CompanionActionId.setAsideTask,
-      generated.CompanionTaskActionId.runApp => CompanionActionId.runApp,
-    };

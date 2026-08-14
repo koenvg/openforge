@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CompanionTaskActionId {
     StartTask,
@@ -33,7 +33,7 @@ impl CompanionTaskActionId {
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CompanionProjectActionId {
     RefreshGithub,

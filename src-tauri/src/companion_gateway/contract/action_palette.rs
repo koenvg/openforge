@@ -5,6 +5,7 @@ use super::{
 use crate::companion_gateway::{
     action_diagnostics::record_task_action,
     action_palette::{CompanionActionPaletteError, CompanionTaskActionId},
+    action_presentation::{project_action_presentations, task_action_presentations},
 };
 use axum::{
     body::Bytes,
@@ -59,7 +60,10 @@ async fn task_actions_handler(
         return authorization_error_response(code);
     }
     match state.action_palette.available_actions(&task_id) {
-        Ok(actions) => Json(CompanionTaskActionsResponse { task_id, actions }).into_response(),
+        Ok(available) => match task_action_presentations(&available) {
+            Ok(actions) => Json(CompanionTaskActionsResponse { task_id, actions }).into_response(),
+            Err(error) => action_error_response(error),
+        },
         Err(error) => action_error_response(error),
     }
 }
@@ -73,11 +77,14 @@ async fn project_actions_handler(
         return authorization_error_response(code);
     }
     match state.action_palette.available_project_actions(&project_id) {
-        Ok(actions) => Json(CompanionProjectActionsResponse {
-            project_id,
-            actions,
-        })
-        .into_response(),
+        Ok(available) => match project_action_presentations(&available) {
+            Ok(actions) => Json(CompanionProjectActionsResponse {
+                project_id,
+                actions,
+            })
+            .into_response(),
+            Err(error) => action_error_response(error),
+        },
         Err(error) => action_error_response(error),
     }
 }

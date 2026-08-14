@@ -5,6 +5,34 @@ import 'package:openforge_companion/src/client/companion_client.dart';
 import 'package:openforge_companion/src/generated/companion_v1_client.dart';
 import 'package:openforge_companion/src/storage/companion_secure_storage.dart';
 
+CompanionTaskActionPresentation _taskAction(
+  CompanionTaskActionId id,
+  String label,
+  CompanionActionIcon icon, {
+  bool requiresConfirmation = false,
+  bool destructive = false,
+}) => CompanionTaskActionPresentation(
+  id: id,
+  label: label,
+  keywords: <String>[label.toLowerCase()],
+  icon: icon,
+  requiresConfirmation: requiresConfirmation,
+  destructive: destructive,
+);
+
+CompanionProjectActionPresentation _projectAction(
+  CompanionProjectActionId id,
+  String label,
+  CompanionActionIcon icon,
+) => CompanionProjectActionPresentation(
+  id: id,
+  label: label,
+  keywords: <String>[label.toLowerCase()],
+  icon: icon,
+  requiresConfirmation: false,
+  destructive: false,
+);
+
 final class _Storage implements CompanionSecureStorage {
   final record = CompanionTrustRecord(
     hostId: 'host-1',
@@ -36,8 +64,12 @@ final class _Client
     String projectId,
   ) async => ProjectActionsSnapshot(
     projectId: projectId,
-    actions: const <CompanionProjectActionId>[
-      CompanionProjectActionId.refreshGithub,
+    actions: <CompanionProjectActionPresentation>[
+      _projectAction(
+        CompanionProjectActionId.refreshGithub,
+        'Refresh GitHub',
+        CompanionActionIcon.refresh,
+      ),
     ],
   );
 
@@ -47,10 +79,25 @@ final class _Client
     String taskId,
   ) async => TaskActionsSnapshot(
     taskId: taskId,
-    actions: const <CompanionTaskActionId>[
-      CompanionTaskActionId.mergePullRequest,
-      CompanionTaskActionId.setAsideTask,
-      CompanionTaskActionId.completeTask,
+    actions: <CompanionTaskActionPresentation>[
+      _taskAction(
+        CompanionTaskActionId.mergePullRequest,
+        'Merge Pull Request',
+        CompanionActionIcon.merge,
+        requiresConfirmation: false,
+      ),
+      _taskAction(
+        CompanionTaskActionId.setAsideTask,
+        'Set aside',
+        CompanionActionIcon.visibilityOff,
+      ),
+      _taskAction(
+        CompanionTaskActionId.completeTask,
+        'Complete',
+        CompanionActionIcon.complete,
+        requiresConfirmation: true,
+        destructive: true,
+      ),
     ],
   );
 
@@ -95,11 +142,17 @@ void main() {
       storage: _Storage(),
     );
 
-    expect(await controller.loadTaskActions('T-1'), const <MobilePaletteAction>[
-      MobilePaletteAction.task(CompanionActionId.mergePullRequest),
-      MobilePaletteAction.task(CompanionActionId.setAsideTask),
-      MobilePaletteAction.task(CompanionActionId.completeTask),
+    final actions = await controller.loadTaskActions('T-1');
+
+    expect(actions.map((action) => action.id), <CompanionActionId>[
+      CompanionActionId.mergePullRequest,
+      CompanionActionId.setAsideTask,
+      CompanionActionId.completeTask,
     ]);
+    expect(actions.first.label, 'Merge Pull Request');
+    expect(actions.first.keywords, <String>['merge pull request']);
+    expect(actions.first.requiresConfirmation, isFalse);
+    expect(actions.last.destructive, isTrue);
   });
 
   test(
@@ -113,12 +166,13 @@ void main() {
         storage: _Storage(),
       );
 
-      expect(
-        await controller.loadProjectActions('P-1'),
-        const <MobilePaletteAction>[
-          MobilePaletteAction.general(CompanionActionId.refreshGithub),
-        ],
-      );
+      final actions = await controller.loadProjectActions('P-1');
+
+      expect(actions.map((action) => action.id), <CompanionActionId>[
+        CompanionActionId.refreshGithub,
+      ]);
+      expect(actions.single.label, 'Refresh GitHub');
+      expect(actions.single.keywords, <String>['refresh github']);
     },
   );
 

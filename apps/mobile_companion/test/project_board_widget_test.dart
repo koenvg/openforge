@@ -86,8 +86,15 @@ final class _WidgetClient
     String projectId,
   ) async => ProjectActionsSnapshot(
     projectId: projectId,
-    actions: const <CompanionProjectActionId>[
-      CompanionProjectActionId.refreshGithub,
+    actions: <CompanionProjectActionPresentation>[
+      CompanionProjectActionPresentation(
+        id: CompanionProjectActionId.refreshGithub,
+        label: 'Refresh GitHub',
+        keywords: <String>['github'],
+        icon: CompanionActionIcon.refresh,
+        requiresConfirmation: false,
+        destructive: false,
+      ),
     ],
   );
 
@@ -97,9 +104,23 @@ final class _WidgetClient
     String taskId,
   ) async => TaskActionsSnapshot(
     taskId: taskId,
-    actions: const <CompanionTaskActionId>[
-      CompanionTaskActionId.setAsideTask,
-      CompanionTaskActionId.completeTask,
+    actions: <CompanionTaskActionPresentation>[
+      CompanionTaskActionPresentation(
+        id: CompanionTaskActionId.setAsideTask,
+        label: 'Set aside',
+        keywords: <String>['defer'],
+        icon: CompanionActionIcon.visibilityOff,
+        requiresConfirmation: false,
+        destructive: false,
+      ),
+      CompanionTaskActionPresentation(
+        id: CompanionTaskActionId.completeTask,
+        label: 'Complete',
+        keywords: <String>['finish'],
+        icon: CompanionActionIcon.complete,
+        requiresConfirmation: true,
+        destructive: true,
+      ),
     ],
   );
 
