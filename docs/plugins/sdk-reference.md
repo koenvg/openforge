@@ -146,6 +146,22 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 
 All storage/config values are `JsonValue` (`string`, `number`, `boolean`, `null`, arrays, or objects). File APIs use the exported domain file types such as `FileEntry` and `FileContent`.
 
+## Plugin Command schema validation
+
+OpenForge validates a Plugin Command's `input` before calling its handler and its `output` after the handler returns. Validation errors include the qualified command id, `input` or `output`, and the nested property or array index when applicable.
+
+Command schemas intentionally use a lightweight JSON Schema subset:
+
+- single `type` values: `string`, `number`, `integer`, `boolean`, `object`, `array`, and `null`
+- object `required`, `properties`, and `additionalProperties: false`
+- array `items` with one item schema
+- JSON-valued `const`
+- string `pattern` using JavaScript regular-expression syntax
+- string `format: 'uri'`; other format names are not enforced
+- `anyOf` and `oneOf` candidate arrays as unions; the runtime accepts the first matching candidate and does not enforce `oneOf` exclusivity
+
+Other JSON Schema features are intentionally not enforced. This includes boolean schemas; `type` arrays; schema-valued `additionalProperties`; `$ref`/`$defs`; `allOf`, `not`, and conditional schemas; `enum`; string, number, object, and array size/range constraints; `patternProperties`; `propertyNames`; `contains`; `uniqueItems`; and formats other than `uri`. Plugin authors must enforce rules outside this subset in the command handler and should not present unsupported keywords as host-validated constraints.
+
 ## Metadata validation
 
 Plugin packages declare OpenForge metadata in `package.json#openforge`:

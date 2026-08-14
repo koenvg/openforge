@@ -13,6 +13,25 @@ function schemaTypeMatches(expected: string, value: unknown): boolean {
   }
 }
 
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => jsonValuesEqual(item, right[index]))
+  }
+  if (
+    left !== null && right !== null
+    && typeof left === 'object' && typeof right === 'object'
+    && !Array.isArray(left) && !Array.isArray(right)
+  ) {
+    const leftObject = left as Record<string, unknown>
+    const rightObject = right as Record<string, unknown>
+    const leftKeys = Object.keys(leftObject)
+    return leftKeys.length === Object.keys(rightObject).length
+      && leftKeys.every(key => Object.hasOwn(rightObject, key) && jsonValuesEqual(leftObject[key], rightObject[key]))
+  }
+  return false
+}
+
 export function validateSchemaValue(schema: JsonSchema | undefined, value: unknown, label: string): void {
   if (!schema) return
 
@@ -30,9 +49,33 @@ export function validateSchemaValue(schema: JsonSchema | undefined, value: unkno
     throw new Error(`${label} does not match any allowed schema: ${errors.join('; ')}`)
   }
 
+  if (Object.hasOwn(schema, 'const') && !jsonValuesEqual(schema.const, value)) {
+    throw new Error(`${label} expected constant ${JSON.stringify(schema.const)}`)
+  }
+
   const type = schema.type
   if (typeof type === 'string' && !schemaTypeMatches(type, value)) {
     throw new Error(`${label} expected ${type}`)
+  }
+
+  if (typeof schema.pattern === 'string' && typeof value === 'string') {
+    let matchesPattern = false
+    try {
+      matchesPattern = new RegExp(schema.pattern).test(value)
+    } catch {
+      throw new Error(`${label} uses invalid pattern ${schema.pattern}`)
+    }
+    if (!matchesPattern) {
+      throw new Error(`${label} must match pattern ${schema.pattern}`)
+    }
+  }
+
+  if (schema.format === 'uri' && typeof value === 'string') {
+    try {
+      new URL(value)
+    } catch {
+      throw new Error(`${label} must be a valid uri`)
+    }
   }
 
   if (type === 'object' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -50,6 +93,12 @@ export function validateSchemaValue(schema: JsonSchema | undefined, value: unkno
     for (const [key, propertySchema] of Object.entries(properties)) {
       if (key in objectValue) {
         validateSchemaValue(propertySchema, objectValue[key], `${label}.${key}`)
+      }
+    }
+    if (schema.additionalProperties === false) {
+      const unexpectedProperty = Object.keys(objectValue).find(key => !Object.hasOwn(properties, key))
+      if (unexpectedProperty !== undefined) {
+        throw new Error(`${label}.${unexpectedProperty} is not allowed`)
       }
     }
   }
