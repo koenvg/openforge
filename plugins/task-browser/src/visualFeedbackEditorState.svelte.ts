@@ -3,39 +3,25 @@ import type {
   BrowserSurfaceRegion,
   TaskBrowserSurfaceController,
 } from '@openforge-app/plugin-sdk/frontend'
+import { createVisualFeedbackArtifacts } from './visualFeedbackArtifacts'
+import {
+  createVisualFeedbackDraftStore,
+  InvalidVisualFeedbackDraftError,
+} from './visualFeedbackDraftStore'
+import { synchronizeVisualFeedbackMarkers } from './visualFeedbackLiveMarkers'
+import type {
+  CaptureAnnotation,
+  VisualFeedbackCapture,
+  VisualFeedbackDraftData,
+  VisualFeedbackDraftPersistence,
+} from './visualFeedbackEditorTypes'
 
-export interface VisualFeedbackCapture {
-  number: number
-  evidence: BrowserSurfaceCapture
-  artifactState: 'available' | 'missing' | 'unknown'
-  artifactError: string | null
-}
-
-export interface CaptureAnnotation {
-  number: number
-  captureNumber: number
-  rect: BrowserSurfaceRegion
-  comment: string
-}
-
-export interface VisualFeedbackDraftPersistence {
-  load(): Promise<unknown>
-  save(draft: PersistedVisualFeedbackDraft): Promise<void>
-  clear(): Promise<void>
-}
-
-export interface PersistedVisualFeedbackDraft {
-  version: 1
-  captures: Array<{
-    number: number
-    evidence: Omit<BrowserSurfaceCapture, 'dataUrl'>
-  }>
-  annotations: CaptureAnnotation[]
-  pendingArtifactDiscards: Array<{
-    number: number
-    evidence: Omit<BrowserSurfaceCapture, 'dataUrl'>
-  }>
-}
+export type {
+  CaptureAnnotation,
+  PersistedVisualFeedbackDraft,
+  VisualFeedbackCapture,
+  VisualFeedbackDraftPersistence,
+} from './visualFeedbackEditorTypes'
 
 interface VisualFeedbackEditorOptions {
   onError(error: string | null): void
@@ -77,70 +63,6 @@ function sameViewport(left: BrowserSurfaceCapture, right: BrowserSurfaceCapture)
     && left.height === right.height
 }
 
-function parsePersistedCaptures(value: unknown): PersistedVisualFeedbackDraft['captures'] | null {
-  if (!Array.isArray(value)) return null
-  const captures: PersistedVisualFeedbackDraft['captures'] = []
-  for (const entry of value) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
-    const capture = entry as Record<string, unknown>
-    const evidence = capture.evidence
-    if (typeof capture.number !== 'number' || !Number.isSafeInteger(capture.number) || capture.number <= 0
-      || typeof evidence !== 'object' || evidence === null || Array.isArray(evidence)) return null
-    const item = evidence as Record<string, unknown>
-    if (typeof item.artifactId !== 'string' || typeof item.absolutePath !== 'string'
-      || item.mediaType !== 'image/png' || typeof item.width !== 'number' || typeof item.height !== 'number'
-      || typeof item.url !== 'string' || typeof item.title !== 'string' || typeof item.capturedAt !== 'string') return null
-    captures.push({
-      number: capture.number,
-      evidence: {
-        artifactId: item.artifactId,
-        absolutePath: item.absolutePath,
-        mediaType: 'image/png',
-        width: item.width,
-        height: item.height,
-        url: item.url,
-        title: item.title,
-        capturedAt: item.capturedAt,
-      },
-    })
-  }
-  return captures
-}
-function parseDraft(value: unknown): PersistedVisualFeedbackDraft | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  const draft = value as Record<string, unknown>
-  if (draft.version !== 1 || !Array.isArray(draft.captures) || !Array.isArray(draft.annotations)) return null
-  const captures = parsePersistedCaptures(draft.captures)
-  const pendingArtifactDiscards = parsePersistedCaptures(draft.pendingArtifactDiscards ?? [])
-  if (captures === null || pendingArtifactDiscards === null) return null
-  const annotations: CaptureAnnotation[] = []
-  for (const entry of draft.annotations) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
-    const annotation = entry as Record<string, unknown>
-    const rect = annotation.rect
-    if (typeof annotation.number !== 'number' || !Number.isSafeInteger(annotation.number) || annotation.number <= 0
-      || typeof annotation.captureNumber !== 'number' || !Number.isSafeInteger(annotation.captureNumber)
-      || typeof annotation.comment !== 'string' || annotation.comment.trim().length === 0
-      || typeof rect !== 'object' || rect === null || Array.isArray(rect)) return null
-    const region = rect as Record<string, unknown>
-    if (![region.x, region.y, region.width, region.height].every(item => typeof item === 'number' && Number.isFinite(item))) return null
-    annotations.push({
-      number: annotation.number,
-      captureNumber: annotation.captureNumber,
-      comment: annotation.comment,
-      rect: {
-        x: region.x as number,
-        y: region.y as number,
-        width: region.width as number,
-        height: region.height as number,
-      },
-    })
-  }
-  const captureNumbers = new Set(captures.map(capture => capture.number))
-  return annotations.every(annotation => captureNumbers.has(annotation.captureNumber))
-    ? { version: 1, captures, annotations, pendingArtifactDiscards }
-    : null
-}
 interface EditorSnapshot {
   captures: VisualFeedbackCapture[]
   annotations: CaptureAnnotation[]
@@ -154,9 +76,9 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
   let nextCaptureNumber = 1
   let nextAnnotationNumber = 1
   let undoSnapshot = $state<EditorSnapshot | null>(null)
-  let pendingArtifactDiscards: VisualFeedbackCapture[] = []
+  const artifacts = createVisualFeedbackArtifacts()
+  const draftStore = createVisualFeedbackDraftStore(persistence)
   let saveError = $state<string | null>(null)
-  let persistenceQueue = Promise.resolve()
   let restoration = Promise.resolve()
   let errorHandler = onError
   let lastError: string | null = null
@@ -187,30 +109,17 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     }
   }
 
-  function persistedDraft(): PersistedVisualFeedbackDraft {
+  function draftData(): VisualFeedbackDraftData {
     return {
-      version: 1,
-      captures: captures.map(capture => {
-        const { dataUrl: _dataUrl, ...evidence } = capture.evidence
-        return { number: capture.number, evidence }
-      }),
-      annotations: annotations.map(annotation => ({ ...annotation, rect: { ...annotation.rect } })),
-      pendingArtifactDiscards: pendingArtifactDiscards.map(capture => {
-        const { dataUrl: _dataUrl, ...evidence } = capture.evidence
-        return { number: capture.number, evidence }
-      }),
+      captures,
+      annotations,
+      pendingArtifactDiscards: [...artifacts.pendingDiscards],
     }
   }
 
   async function persistDraft(): Promise<void> {
-    if (persistence === undefined) return
-    const draft = persistedDraft()
-    const operation = persistenceQueue.then(() => draft.annotations.length === 0 && draft.pendingArtifactDiscards.length === 0
-      ? persistence.clear()
-      : persistence.save(draft))
-    persistenceQueue = operation.catch(() => undefined)
     try {
-      await operation
+      await draftStore.persist(draftData())
       if (saveError?.startsWith('Could not save visual feedback:')) saveError = null
     } catch (error) {
       saveError = `Could not save visual feedback: ${errorMessage(error)}`
@@ -219,33 +128,18 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
   }
 
   async function restoreDraft(): Promise<void> {
-    if (persistence === undefined) return
     try {
-      const stored = await persistence.load()
-      if (stored === null) return
-      const draft = parseDraft(stored)
-      if (draft === null) {
-        saveError = 'Saved visual feedback is invalid and could not be restored'
-        reportError(`${saveError}. The live Browser Surface remains available.`)
-        return
-      }
-      captures = draft.captures.map(capture => ({
-        number: capture.number,
-        evidence: { ...capture.evidence, dataUrl: '' },
-        artifactState: 'unknown',
-        artifactError: null,
-      }))
-      annotations = draft.annotations.map(annotation => ({ ...annotation, rect: { ...annotation.rect } }))
-      pendingArtifactDiscards = draft.pendingArtifactDiscards.map(capture => ({
-        number: capture.number,
-        evidence: { ...capture.evidence, dataUrl: '' },
-        artifactState: 'unknown',
-        artifactError: null,
-      }))
+      const draft = await draftStore.restore()
+      if (draft === null) return
+      captures = draft.captures
+      annotations = draft.annotations
+      artifacts.restorePendingDiscards(draft.pendingArtifactDiscards)
       nextCaptureNumber = Math.max(0, ...captures.map(capture => capture.number)) + 1
       nextAnnotationNumber = Math.max(0, ...annotations.map(annotation => annotation.number)) + 1
     } catch (error) {
-      saveError = `Could not restore visual feedback: ${errorMessage(error)}`
+      saveError = error instanceof InvalidVisualFeedbackDraftError
+        ? error.message
+        : `Could not restore visual feedback: ${errorMessage(error)}`
       reportError(`${saveError}. The live Browser Surface remains available.`)
     }
   }
@@ -254,42 +148,17 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     const targetSurface = surface
     if (targetSurface === null || captures.length === 0) return
     const targetGeneration = generation
-    const statuses = await Promise.all(captures.map(async capture => {
-      try {
-        const available = await targetSurface.captureExists(capture.evidence.artifactId)
-        return {
-          ...capture,
-          artifactState: available ? 'available' as const : 'missing' as const,
-          artifactError: available ? null : `Background capture is missing at ${capture.evidence.absolutePath}`,
-        }
-      } catch (error) {
-        return {
-          ...capture,
-          artifactState: 'unknown' as const,
-          artifactError: `Could not verify background capture: ${errorMessage(error)}`,
-        }
-      }
-    }))
+    const result = await artifacts.validateAvailability(targetSurface, captures)
     if (!isCurrent(targetSurface, targetGeneration)) return
-    captures = statuses
-    const unavailable = statuses.find(capture => capture.artifactState !== 'available')
-    if (unavailable?.artifactError) reportError(unavailable.artifactError)
+    captures = result.captures
+    if (result.firstError !== null) reportError(result.firstError)
   }
 
   async function syncVisualFeedback(): Promise<void> {
     const targetSurface = surface
     if (targetSurface === null) return
-    const feedback = annotations.map(annotation => {
-      const capture = captures.find(candidate => candidate.number === annotation.captureNumber)
-      return {
-        annotationNumber: annotation.number,
-        url: capture?.evidence.url ?? '',
-        region: { ...annotation.rect },
-        comment: annotation.comment,
-      }
-    }).filter(marker => marker.url.length > 0)
     try {
-      await targetSurface.replaceVisualFeedback(feedback)
+      await synchronizeVisualFeedbackMarkers(targetSurface, captures, annotations)
       if (saveError?.startsWith('Could not save live marker changes:')) saveError = null
     } catch (error) {
       saveError = `Could not save live marker changes: ${errorMessage(error)}`
@@ -299,17 +168,10 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
 
   async function finalizePendingArtifactDiscards(): Promise<void> {
     const targetSurface = surface
-    if (targetSurface === null || pendingArtifactDiscards.length === 0) return
-    const pending = pendingArtifactDiscards
-    pendingArtifactDiscards = []
-    const outcomes = await Promise.allSettled(pending.map(capture =>
-      targetSurface.discardCapture(capture.evidence.artifactId)))
-    outcomes.forEach((outcome, index) => {
-      if (outcome.status === 'rejected') pendingArtifactDiscards.push(pending[index])
-    })
-    const failure = outcomes.find(outcome => outcome.status === 'rejected')
-    if (failure?.status === 'rejected') {
-      saveError = `Could not remove an unreferenced background capture: ${errorMessage(failure.reason)}`
+    if (targetSurface === null || !artifacts.hasPendingDiscards) return
+    const failure = await artifacts.cleanupPending(targetSurface)
+    if (failure !== null) {
+      saveError = `Could not remove an unreferenced background capture: ${errorMessage(failure)}`
       reportError(`${saveError}. Cleanup can be retried safely.`)
     } else if (saveError?.startsWith('Could not remove an unreferenced background capture:')) {
       saveError = null
@@ -321,7 +183,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     undoSnapshot = snapshot()
   }
 
-  function resetState(): void {
+  function resetState(clearPendingDiscards = true): void {
     active = false
     busy = false
     captures = []
@@ -329,19 +191,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     nextCaptureNumber = 1
     nextAnnotationNumber = 1
     undoSnapshot = null
-    pendingArtifactDiscards = []
-  }
-
-  async function releaseSurfaceResources(
-    targetSurface: TaskBrowserSurfaceController,
-    currentCaptures: readonly VisualFeedbackCapture[],
-  ): Promise<VisualFeedbackCapture[]> {
-    const outcomes = await Promise.allSettled([
-      targetSurface.cancelVisibleRegionSelection(),
-      targetSurface.clearVisualFeedback(),
-      ...currentCaptures.map(capture => targetSurface.discardCapture(capture.evidence.artifactId)),
-    ])
-    return currentCaptures.filter((_capture, index) => outcomes[index + 2]?.status === 'rejected')
+    if (clearPendingDiscards) artifacts.clearPendingDiscards()
   }
 
   async function setSurface(nextSurface: TaskBrowserSurfaceController | null): Promise<void> {
@@ -352,7 +202,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     const previousSurface = surface
     active = false
     surface = nextSurface
-    if (nextSurface !== null && pendingArtifactDiscards.length > 0 && undoSnapshot === null) {
+    if (nextSurface !== null && artifacts.hasPendingDiscards && undoSnapshot === null) {
       await finalizePendingArtifactDiscards()
       await persistDraft()
     }
@@ -487,7 +337,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     const stillReferenced = annotations.some(annotation => annotation.captureNumber === existing.captureNumber)
     if (!stillReferenced) {
       const removedCapture = captures.find(capture => capture.number === existing.captureNumber)
-      if (removedCapture !== undefined) pendingArtifactDiscards.push(removedCapture)
+      if (removedCapture !== undefined) artifacts.scheduleDiscard(removedCapture)
       captures = captures.filter(capture => capture.number !== existing.captureNumber)
     }
     await syncVisualFeedback()
@@ -500,7 +350,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     await beginMutation()
     captures = captures.filter(capture => capture.number !== captureNumber)
     annotations = annotations.filter(annotation => annotation.captureNumber !== captureNumber)
-    pendingArtifactDiscards.push(removedCapture)
+    artifacts.scheduleDiscard(removedCapture)
     await syncVisualFeedback()
     await persistDraft()
   }
@@ -509,11 +359,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     const previous = undoSnapshot
     if (previous === null || busy) return
     const currentCaptures = captures
-    const restoredIds = new Set(previous.captures.map(capture => capture.evidence.artifactId))
-    pendingArtifactDiscards = pendingArtifactDiscards
-      .filter(capture => !restoredIds.has(capture.evidence.artifactId))
-    pendingArtifactDiscards.push(...currentCaptures
-      .filter(capture => !restoredIds.has(capture.evidence.artifactId)))
+    artifacts.reconcileUndo(previous.captures, currentCaptures)
     captures = previous.captures
     annotations = previous.annotations
     undoSnapshot = null
@@ -536,8 +382,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
   async function discard(): Promise<void> {
     const targetSurface = surface
     const currentCaptures = captures
-    const allCaptures = Array.from(new Map([...currentCaptures, ...pendingArtifactDiscards]
-      .map(capture => [capture.evidence.artifactId, capture])).values())
+    const allCaptures = artifacts.allArtifacts(currentCaptures)
     if (targetSurface === null || allCaptures.length === 0 || busy) return
 
     const targetGeneration = generation
@@ -549,8 +394,7 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
       await Promise.all(allCaptures.map(capture =>
         targetSurface.discardCapture(capture.evidence.artifactId)))
       await targetSurface.clearVisualFeedback()
-      await persistenceQueue
-      await persistence?.clear()
+      await draftStore.replace({ captures: [], annotations: [], pendingArtifactDiscards: [] })
       if (isCurrent(targetSurface, targetGeneration) && captures === currentCaptures) resetState()
     } catch (error) {
       if (isCurrent(targetSurface, targetGeneration)) reportError(errorMessage(error))
@@ -578,15 +422,11 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
         await finalizePendingArtifactDiscards()
         await deliver(currentCaptures, currentAnnotations)
         await targetSurface.clearVisualFeedback().catch(error => reportError(errorMessage(error)))
-        if (isCurrent(targetSurface, targetGeneration)) {
-          const cleanupPending = pendingArtifactDiscards
-          resetState()
-          pendingArtifactDiscards = cleanupPending
-        }
+        if (isCurrent(targetSurface, targetGeneration)) resetState(false)
         try {
-          await persistenceQueue
-          if (pendingArtifactDiscards.length > 0) await persistence?.save(persistedDraft())
-          else await persistence?.clear()
+          await draftStore.replace(artifacts.hasPendingDiscards
+            ? draftData()
+            : { captures: [], annotations: [], pendingArtifactDiscards: [] })
           if (saveError?.startsWith('Could not clear sent visual feedback:')) saveError = null
         } catch (error) {
           saveError = `Could not clear sent visual feedback: ${errorMessage(error)}`
@@ -615,20 +455,19 @@ export function createVisualFeedbackEditor({ onError, persistence }: VisualFeedb
     destroyed = true
     generation += 1
     const previousSurface = surface
-    const previousCaptures = Array.from(new Map([...captures, ...pendingArtifactDiscards]
-      .map(capture => [capture.evidence.artifactId, capture])).values())
+    const resourceCleanup = previousSurface === null
+      ? Promise.resolve()
+      : Promise.allSettled([
+          previousSurface.cancelVisibleRegionSelection(),
+          previousSurface.clearVisualFeedback(),
+        ]).then(() => undefined)
+    const artifactCleanup = artifacts.release(previousSurface, captures)
     surface = null
-    resetState()
+    resetState(false)
 
-    const failedCaptures = previousSurface === null
-      ? previousCaptures
-      : await releaseSurfaceResources(previousSurface, previousCaptures)
-    pendingArtifactDiscards = failedCaptures
-    await persistenceQueue
-    await (failedCaptures.length > 0
-      ? persistence?.save(persistedDraft())
-      : persistence?.clear())
-      ?.catch(error => reportError(`Could not persist destroyed visual feedback cleanup: ${errorMessage(error)}`))
+    await Promise.all([resourceCleanup, artifactCleanup])
+    await draftStore.replace(draftData())
+      .catch(error => reportError(`Could not persist destroyed visual feedback cleanup: ${errorMessage(error)}`))
   }
 
   restoration = restoreDraft()
