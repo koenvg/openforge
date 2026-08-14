@@ -30,6 +30,60 @@ async fn handler_uses_shared_boundary() {
 }
 
 #[tokio::test]
+async fn get_pull_requests_scopes_results_to_the_requested_task() {
+    let (state, path) = test_state("app_invoke_get_pull_requests_for_task");
+    let (requested_task_id, other_task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let requested_task = db
+            .create_task("Requested PR task", "doing", None, None, None)
+            .expect("create requested task");
+        let other_task = db
+            .create_task("Other PR task", "doing", None, None, None)
+            .expect("create other task");
+        db.insert_pull_request(
+            10,
+            &requested_task.id,
+            "owner",
+            "repo",
+            "Requested PR",
+            "https://github.com/owner/repo/pull/10",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert requested PR");
+        db.insert_pull_request(
+            11,
+            &other_task.id,
+            "owner",
+            "repo",
+            "Other PR",
+            "https://github.com/owner/repo/pull/11",
+            "open",
+            1000,
+            3000,
+            false,
+        )
+        .expect("insert other PR");
+        (requested_task.id, other_task.id)
+    };
+
+    let value = invoke_ok(
+        &state,
+        "get_pull_requests",
+        json!({ "taskId": requested_task_id }),
+    )
+    .await;
+
+    assert_eq!(value.as_array().map(Vec::len), Some(1));
+    assert_eq!(value[0]["ticket_id"], requested_task_id);
+    assert_ne!(value[0]["ticket_id"], other_task_id);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn link_pull_request_persists_pr_for_task() {
     let (state, path) = test_state("app_invoke_link_pull_request");
     let task_id = {

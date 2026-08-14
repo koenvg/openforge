@@ -168,10 +168,7 @@ export default defineBackendPlugin({
       },
     }))
     context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>('listTaskPullRequests', {
-      handler: async ({ taskId }) => {
-        const pullRequests = await invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>(openforge, 'getPullRequests')
-        return pullRequests.filter((pr) => pr.ticket_id === taskId)
-      },
+      handler: (request) => invokeHostCommand<import('@openforge-app/plugin-sdk/domain').PullRequestInfo[]>(openforge, 'getPullRequests', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ taskId: string }, PollResult>('refreshTaskGithubStatus', {

@@ -269,6 +269,24 @@ describe('github-sync plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledTimes(28)
   })
 
+  it('passes the requested Task through to the local pull-request query', async () => {
+    const { default: backend } = await import('./backend')
+    const subscriptions = { add: vi.fn() }
+    const invokeGlobal = vi.fn(async () => [{ id: 42, ticket_id: 'T-42' }])
+    let listTaskPullRequests: ((request: { taskId: string }) => Promise<unknown>) | undefined
+    const registerMethod = vi.fn((method: string, registration: { handler: (request: { taskId: string }) => Promise<unknown> }) => {
+      if (method === 'listTaskPullRequests') listTaskPullRequests = registration.handler
+      return { dispose: vi.fn() }
+    })
+    const api = { backend: { registerMethod }, commands: { invokeGlobal } }
+    const packageMetadata = getPackageMetadata()
+
+    await backend.activate(api as never, { pluginId: packageMetadata.id, apiVersion: packageMetadata.apiVersion, packageMetadata, subscriptions })
+    await listTaskPullRequests?.({ taskId: 'T-42' })
+
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getPullRequests', { taskId: 'T-42' })
+  })
+
   it('does not add a GitHub-specific SDK namespace', () => {
     const sdkTypesSource = readFileSync(join(repoRoot, 'packages/plugin-sdk/src/types.ts'), 'utf8')
     const sdkIndexSource = readFileSync(join(repoRoot, 'packages/plugin-sdk/src/index.ts'), 'utf8')

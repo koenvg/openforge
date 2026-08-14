@@ -1,4 +1,6 @@
-use super::{json_value, payload_field, payload_i64, payload_string, AppResult};
+use super::{
+    json_value, payload_field, payload_i64, payload_optional_string, payload_string, AppResult,
+};
 use crate::{
     app_events::publish_app_event_to_runtime, http_server::AppInvokeRequest, http_server::AppState,
 };
@@ -61,9 +63,17 @@ pub(super) async fn handle_app_github_review_command(
     request: &AppInvokeRequest,
 ) -> AppResult<Option<serde_json::Value>> {
     let value = match request.command.as_str() {
-        "get_pull_requests" => to_app_value(
-            crate::github_runtime::get_pull_requests(&state.db).map_err(runtime_error)?,
-        )?,
+        "get_pull_requests" => {
+            let task_id = payload_optional_string(&request.payload, "taskId")?;
+            let pull_requests = match task_id {
+                Some(task_id) => {
+                    crate::github_runtime::get_pull_requests_for_task(&state.db, &task_id)
+                }
+                None => crate::github_runtime::get_pull_requests(&state.db),
+            }
+            .map_err(runtime_error)?;
+            to_app_value(pull_requests)?
+        }
         "link_pull_request" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let pr_url = payload_string(&request.payload, "prUrl")?;
