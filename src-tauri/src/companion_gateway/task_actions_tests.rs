@@ -331,7 +331,7 @@ async fn complete_conceals_hidden_tasks_and_rejects_stale_or_duplicate_operation
 }
 
 #[tokio::test]
-async fn authenticated_delete_is_backlog_only_bodyless_and_preserves_reference_data() {
+async fn authenticated_delete_is_backlog_only_bodyless_and_permanent() {
     let (database, path) = crate::db::test_helpers::make_test_db("companion_delete_route");
     let database = Arc::new(Mutex::new(database));
     let (project_id, backlog_id, doing_id) = {
@@ -373,16 +373,26 @@ async fn authenticated_delete_is_backlog_only_bodyless_and_preserves_reference_d
         response_json(response).await,
         serde_json::json!({"taskId": backlog_id, "outcome": "deleted"}),
     );
-    let completed = crate::db::acquire_db(&database)
-        .get_task(&backlog_id)
-        .expect("read completed Task")
-        .expect("Completed Task remains as reference data");
-    assert_eq!(completed.status, "done");
-    assert_eq!(completed.summary.as_deref(), Some("Reference notes"));
+    assert_eq!(
+        runtime.calls(),
+        vec![
+            ("agent".to_string(), "backlog".to_string()),
+            ("shells".to_string(), "backlog".to_string()),
+        ],
+        "runtime shutdown must finish before permanent deletion",
+    );
+    assert!(
+        crate::db::acquire_db(&database)
+            .get_task(&backlog_id)
+            .expect("read deleted Task")
+            .is_none(),
+        "Delete must not retain a Completed Task reference",
+    );
     let AppEventFrame::Event(event) = subscription.recv().await.expect("Delete event") else {
         panic!("expected canonical Task event");
     };
     assert_eq!(event.event_name, "task-changed");
+    assert_eq!(event.payload["action"], "deleted");
     assert_eq!(event.payload["task_id"], backlog_id);
     assert_eq!(event.payload["project_id"], project_id);
 

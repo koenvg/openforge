@@ -285,8 +285,8 @@ async fn app_invoke_update_task_source_ticket_url_sets_and_clears() {
 }
 
 #[tokio::test]
-async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata() {
-    let (state, path) = test_state("app_invoke_delete_task_completes_record");
+async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata() {
+    let (state, path) = test_state("app_invoke_delete_task_permanent");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -328,15 +328,9 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
 
     {
         let db = crate::db::acquire_db(&state.db);
-        let completed = db
-            .get_task(&task_id)
-            .expect("get completed task")
-            .expect("completed task record should remain");
-        assert_eq!(completed.status, "done");
-        assert_eq!(completed.initial_prompt, "Preserve the handoff notes");
-        assert_eq!(
-            completed.summary.as_deref(),
-            Some("## Handoff Notes\nUseful reference")
+        assert!(
+            db.get_task(&task_id).expect("get deleted task").is_none(),
+            "backlog Delete must not retain Completed Task reference data",
         );
         assert!(db
             .get_worktree_for_task(&task_id)
@@ -346,11 +340,10 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
             .get_tasks_for_project_excluding_state(project_id, "done")
             .expect("get normal board tasks")
             .is_empty());
-        let completed_tasks = db
+        assert!(db
             .get_tasks_for_project_by_state(project_id, "done")
-            .expect("get completed tasks");
-        assert_eq!(completed_tasks.len(), 1);
-        assert_eq!(completed_tasks[0].id, task_id);
+            .expect("get completed tasks")
+            .is_empty());
     }
     let visible_tasks = invoke_ok(
         &state,
@@ -360,17 +353,14 @@ async fn app_invoke_delete_task_completes_record_and_removes_worktree_metadata()
     .await;
     assert_eq!(visible_tasks.as_array().expect("visible tasks").len(), 0);
 
-    // includeDone: true opts into the done task the default view drops.
+    // Permanent deletion stays absent even when completed Tasks are requested.
     let all_tasks = invoke_ok(
         &state,
         "get_tasks_for_project",
         json!({ "projectId": project_id, "includeDone": true }),
     )
     .await;
-    let all_tasks = all_tasks.as_array().expect("all tasks");
-    assert_eq!(all_tasks.len(), 1);
-    assert_eq!(all_tasks[0]["id"].as_str(), Some(task_id.as_str()));
-    assert_eq!(all_tasks[0]["status"].as_str(), Some("done"));
+    assert!(all_tasks.as_array().expect("all tasks").is_empty());
 
     // includeDone: false is explicitly the active-only default.
     let active_tasks = invoke_ok(

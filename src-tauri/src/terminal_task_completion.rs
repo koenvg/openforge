@@ -146,7 +146,10 @@ impl fmt::Display for TerminalTaskCompletionError {
             Self::RuntimeShutdown(message) => {
                 write!(formatter, "Failed to clean up Task runtime: {message}")
             }
-            Self::Persistence(message) => write!(formatter, "Failed to complete Task: {message}"),
+            Self::Persistence(message) => write!(
+                formatter,
+                "Failed to persist Task lifecycle action: {message}"
+            ),
         }
     }
 }
@@ -207,8 +210,8 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
         let context = self.load_context(&request)?;
 
         self.stop_runtime(&task_id).await?;
-        self.complete_reference_data(&task_id, &context.expected_status, context.action)?;
-        self.publish_completed_event(&task_id, context.project_id.as_deref());
+        self.persist_terminal_action(&task_id, &context.expected_status, context.action)?;
+        self.publish_terminal_action_event(&task_id, context.project_id.as_deref());
 
         let cleanup_scheduled = self.schedule_cleanup(&task_id, context.cleanup, claim);
         Ok(match context.action {
@@ -275,17 +278,20 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
         }
     }
 
-    fn complete_reference_data(
+    fn persist_terminal_action(
         &self,
         task_id: &str,
         expected_status: &str,
         action: TerminalTaskAction,
     ) -> Result<(), TerminalTaskCompletionError> {
         let db = crate::db::acquire_db(&self.db);
-        match db
-            .complete_task_if_status(task_id, expected_status)
-            .map_err(|error| TerminalTaskCompletionError::Persistence(error.to_string()))?
-        {
+        let outcome = match action {
+            TerminalTaskAction::Delete => db.delete_task_if_status(task_id, expected_status),
+            TerminalTaskAction::Complete => db.complete_task_if_status(task_id, expected_status),
+        }
+        .map_err(|error| TerminalTaskCompletionError::Persistence(error.to_string()))?;
+
+        match outcome {
             CompleteTaskWriteOutcome::Completed => Ok(()),
             CompleteTaskWriteOutcome::NotFound => Err(TerminalTaskCompletionError::NotFound),
             CompleteTaskWriteOutcome::StaleState { current_status } => {
@@ -297,12 +303,12 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
         }
     }
 
-    fn publish_completed_event(&self, task_id: &str, project_id: Option<&str>) {
+    fn publish_terminal_action_event(&self, task_id: &str, project_id: Option<&str>) {
         if let Some(events) = &self.app_event_bus {
             match events.tasks().completed(task_id, project_id) {
                 Ok(_) => return,
                 Err(error) => error!(
-                    "[terminal_task_completion] Failed to publish canonical Task completion event: {:?}",
+                    "[terminal_task_completion] Failed to publish canonical Task lifecycle event: {:?}",
                     error
                 ),
             }
@@ -374,7 +380,7 @@ async fn run_task_runtime_cleanup(task_id: &str, cleanup: TaskRuntimeCleanup) {
     .await;
     if let Err(error) = result {
         error!(
-            "[terminal_task_completion] Failed to remove worktree for completed Task {} error_bytes={}",
+            "[terminal_task_completion] Failed to remove worktree for terminal Task action {} error_bytes={}",
             task_id,
             error.to_string().len()
         );

@@ -21,27 +21,26 @@ beforeEach(() => {
 })
 
 describe('confirmTerminalTaskAction', () => {
-  it.each([
-    {
-      action: 'Complete' as const,
-      message: COMPLETE_TASK_CONFIRM_MESSAGE,
-      actionPrompt: 'Complete this task?',
-      retainedReference: 'Completed Task will remain available for reference',
-    },
-    {
-      action: 'Delete' as const,
-      message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
-      actionPrompt: 'Delete this task from the backlog?',
-      retainedReference: 'Task will remain available as a completed reference',
-    },
-  ])('confirms destructive cleanup for $action while explaining retained reference data', ({ action, message, actionPrompt, retainedReference }) => {
+  it('confirms Complete while explaining retained reference data', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    expect(confirmTerminalTaskAction(action)).toBe(true)
-    expect(confirmSpy).toHaveBeenCalledWith(message)
-    expect(message).toContain(actionPrompt)
-    expect(message).toContain('runtime workspace state will be removed')
-    expect(message).toContain(retainedReference)
+    expect(confirmTerminalTaskAction('Complete')).toBe(true)
+    expect(confirmSpy).toHaveBeenCalledWith(COMPLETE_TASK_CONFIRM_MESSAGE)
+    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('Complete this task?')
+    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('runtime workspace state will be removed')
+    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('Completed Task will remain available for reference')
+
+    confirmSpy.mockRestore()
+  })
+
+  it('confirms Delete while explaining permanent removal', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    expect(confirmTerminalTaskAction('Delete')).toBe(true)
+    expect(confirmSpy).toHaveBeenCalledWith(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE)
+    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('Delete this task from the backlog?')
+    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('permanently deleted')
+    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('will not remain available for reference')
 
     confirmSpy.mockRestore()
   })

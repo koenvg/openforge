@@ -826,6 +826,12 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Task'));
       await tester.pumpAndSettle();
       expect(find.text('Delete “Backlog cleanup”?'), findsOneWidget);
+      expect(
+        find.text(
+          'This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(calls, 0);
