@@ -81,15 +81,26 @@ fn with_serialized_keychain_access_cancellable<T, E>(
 where
     E: From<String>,
 {
+    with_serialized_keychain_access_cancellable_with_wait(cancellation, access, || {
+        std::thread::sleep(SECRET_STORE_LOCK_POLL_INTERVAL);
+    })
+}
+
+fn with_serialized_keychain_access_cancellable_with_wait<T, E>(
+    cancellation: &SecretStoreCancellation,
+    access: impl FnOnce() -> Result<T, E>,
+    mut wait: impl FnMut(),
+) -> Result<T, E>
+where
+    E: From<String>,
+{
     loop {
         if cancellation.is_cancelled() {
             return Err(E::from("Secret store operation was cancelled".to_string()));
         }
         match keychain_access_lock().try_lock() {
             Ok(_guard) => return access(),
-            Err(std::sync::TryLockError::WouldBlock) => {
-                std::thread::sleep(SECRET_STORE_LOCK_POLL_INTERVAL);
-            }
+            Err(std::sync::TryLockError::WouldBlock) => wait(),
             Err(std::sync::TryLockError::Poisoned(_)) => {
                 return Err(E::from("Keychain access lock was poisoned".to_string()));
             }
@@ -461,23 +472,36 @@ mod tests {
             .expect("Keychain access test lock");
         let cancellation = SecretStoreCancellation::default();
         let worker_cancellation = cancellation.clone();
+        let (waiting_tx, waiting_rx) = mpsc::channel();
+        let (retry_tx, retry_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
         let worker = std::thread::spawn(move || {
-            with_serialized_keychain_access_cancellable(&worker_cancellation, || {
-                Ok::<(), String>(())
-            })
+            let result = with_serialized_keychain_access_cancellable_with_wait(
+                &worker_cancellation,
+                || Ok::<(), String>(()),
+                || {
+                    waiting_tx.send(()).expect("report Keychain lock wait");
+                    retry_rx.recv().expect("resume Keychain lock retry");
+                },
+            );
+            result_tx.send(result).expect("report cancellation result");
         });
-        std::thread::sleep(Duration::from_millis(25));
 
-        let started_at = std::time::Instant::now();
+        let waiting = waiting_rx.recv_timeout(Duration::from_secs(5));
         cancellation.cancel();
-        let result = worker.join().expect("cancellable Keychain lock worker");
+        let retry = retry_tx.send(());
+        let result = result_rx.recv_timeout(Duration::from_secs(5));
+        drop(guard);
+        let worker_result = worker.join();
+
+        waiting.expect("worker must encounter the held Keychain lock");
+        retry.expect("resume cancelled lock retry");
+        worker_result.expect("cancellable Keychain lock worker");
 
         assert_eq!(
-            result.expect_err("lock wait must be cancelled"),
-            "Secret store operation was cancelled"
+            result.expect("cancelled lock retry must finish without acquiring the held lock"),
+            Err("Secret store operation was cancelled".to_string())
         );
-        assert!(started_at.elapsed() < Duration::from_millis(100));
-        drop(guard);
     }
 
     #[tokio::test(flavor = "current_thread")]
