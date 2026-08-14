@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { runTaskBrowserVisualFeedbackOverlay } from './taskBrowserVisualFeedbackOverlay'
+import {
+  TASK_BROWSER_VISUAL_FEEDBACK_THEME,
+  buildTaskBrowserVisualFeedbackAnnotationsScript,
+  runTaskBrowserVisualFeedbackOverlay,
+} from './taskBrowserVisualFeedbackOverlay'
 
 const executeInPage = async (script: string): Promise<unknown> => (0, eval)(script)
 
@@ -31,6 +35,34 @@ beforeEach(() => {
 })
 
 describe('Task Browser visual feedback overlay', () => {
+  it('renders saved feedback markers through the shared semantic overlay theme', async () => {
+    await executeInPage(`(() => {
+      ${buildTaskBrowserVisualFeedbackAnnotationsScript({
+        savedAnnotations: [{
+          number: 3,
+          comment: 'Use the shared marker renderer',
+          x: 16,
+          y: 32,
+          width: 96,
+          height: 48,
+        }],
+      })}
+    })()`)
+
+    const annotation = document.querySelector<HTMLElement>('[role="note"]')
+    const badge = annotation?.querySelector<HTMLElement>('span')
+    const expectedAnnotation = document.createElement('div')
+    expectedAnnotation.style.border = `2px solid ${TASK_BROWSER_VISUAL_FEEDBACK_THEME.annotationBorder}`
+    expectedAnnotation.style.background = TASK_BROWSER_VISUAL_FEEDBACK_THEME.annotationBackground
+    const expectedBadge = document.createElement('span')
+    expectedBadge.style.background = TASK_BROWSER_VISUAL_FEEDBACK_THEME.accentBackground
+    expectedBadge.style.color = TASK_BROWSER_VISUAL_FEEDBACK_THEME.foreground
+    expect(annotation?.style.border).toBe(expectedAnnotation.style.border)
+    expect(annotation?.style.background).toBe(expectedAnnotation.style.background)
+    expect(badge?.style.background).toBe(expectedBadge.style.background)
+    expect(badge?.style.color).toBe(expectedBadge.style.color)
+  })
+
   it('renders saved feedback markers and cancels the active selection with Escape', async () => {
     const selection = runTaskBrowserVisualFeedbackOverlay(executeInPage, {
       savedAnnotations: [{

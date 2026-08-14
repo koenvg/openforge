@@ -2,7 +2,10 @@ import { join } from 'node:path'
 import { BrowserWindow, WebContentsView, app, session as electronSession } from 'electron'
 import type { DownloadItem, Event as ElectronEvent, Session, WebContents } from 'electron'
 import { TaskBrowserSurfaceError, integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
-import { runTaskBrowserVisualFeedbackOverlay } from './taskBrowserVisualFeedbackOverlay.js'
+import {
+  buildTaskBrowserVisualFeedbackAnnotationsScript,
+  runTaskBrowserVisualFeedbackOverlay,
+} from './taskBrowserVisualFeedbackOverlay.js'
 import type { TaskBrowserVisualFeedbackAnnotation } from './taskBrowserVisualFeedbackOverlay.js'
 import type {
   NativeTaskBrowserSurface,
@@ -452,31 +455,10 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     const pageUrl = contents.getURL()
     const savedAnnotations = this.feedbackAnnotationsByUrl.get(pageUrl) ?? []
     await contents.executeJavaScript(`(() => {
-      const expectedUrl = ${JSON.stringify(pageUrl)};
-      if (location.href !== expectedUrl) return;
-      const annotationsId = '__openforge_visual_feedback_annotations__';
-      let annotationsRoot = document.getElementById(annotationsId);
-      if (!annotationsRoot) {
-        annotationsRoot = document.createElement('div');
-        annotationsRoot.id = annotationsId;
-        annotationsRoot.setAttribute('aria-label', 'Saved visual feedback');
-        annotationsRoot.style.cssText = 'position:absolute;inset:0;z-index:2147483646;pointer-events:none;overflow:visible;';
-        document.documentElement.append(annotationsRoot);
-      }
-      const renderAnnotation = (annotationData) => {
-        const annotation = document.createElement('div');
-        annotation.setAttribute('role', 'note');
-        annotation.setAttribute('aria-label', 'Feedback ' + annotationData.number + ': ' + annotationData.comment);
-        annotation.style.cssText = 'position:absolute;left:' + annotationData.x + 'px;top:' + annotationData.y + 'px;width:' + annotationData.width + 'px;height:' + annotationData.height + 'px;border:2px solid #60a5fa;background:rgba(59,130,246,.14);box-sizing:border-box;border-radius:4px;pointer-events:none;';
-        const badge = document.createElement('span');
-        badge.textContent = String(annotationData.number);
-        badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#2563eb;color:white;font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
-        annotation.append(badge);
-        annotationsRoot.append(annotation);
-      };
-      annotationsRoot.replaceChildren();
-      annotationsRoot.dataset.pageUrl = expectedUrl;
-      ${JSON.stringify(savedAnnotations)}.forEach(renderAnnotation);
+      ${buildTaskBrowserVisualFeedbackAnnotationsScript({
+        savedAnnotations,
+        expectedUrl: pageUrl,
+      })}
     })()`, true)
   }
 

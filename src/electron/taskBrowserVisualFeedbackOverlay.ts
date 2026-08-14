@@ -1,5 +1,35 @@
 import type { TaskBrowserSurfaceRegion } from './taskBrowserSurfaceContract.js'
 
+export interface TaskBrowserVisualFeedbackTheme {
+  readonly annotationBorder: string
+  readonly annotationBackground: string
+  readonly hoverBackground: string
+  readonly selectionBackground: string
+  readonly accentBackground: string
+  readonly foreground: string
+  readonly hintBackground: string
+  readonly hintShadow: string
+  readonly panelBackground: string
+  readonly panelShadow: string
+  readonly fieldBorder: string
+  readonly fieldBackground: string
+}
+
+export const TASK_BROWSER_VISUAL_FEEDBACK_THEME: Readonly<TaskBrowserVisualFeedbackTheme> = Object.freeze({
+  annotationBorder: '#60a5fa',
+  annotationBackground: 'rgba(59,130,246,.14)',
+  hoverBackground: 'rgba(59,130,246,.12)',
+  selectionBackground: 'rgba(59,130,246,.18)',
+  accentBackground: '#2563eb',
+  foreground: '#ffffff',
+  hintBackground: 'rgba(20,20,24,.92)',
+  hintShadow: 'rgba(0,0,0,.3)',
+  panelBackground: 'rgba(20,20,24,.96)',
+  panelShadow: 'rgba(0,0,0,.35)',
+  fieldBorder: 'rgba(255,255,255,.2)',
+  fieldBackground: '#111827',
+})
+
 export interface TaskBrowserVisualFeedbackAnnotation {
   number: number
   comment: string
@@ -22,13 +52,24 @@ export interface TaskBrowserVisualFeedbackOverlayResult {
 
 export type TaskBrowserPageScriptExecutor = (script: string, userGesture: boolean) => Promise<unknown>
 
-function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInput): string {
-  return `(() => new Promise((resolve) => {
-    const savedAnnotations = ${JSON.stringify(input.savedAnnotations)};
-    const overlayId = '__openforge_visual_feedback_selector__';
-    const annotationsId = '__openforge_visual_feedback_annotations__';
-    document.getElementById(overlayId)?.remove();
+export interface TaskBrowserVisualFeedbackAnnotationsScriptInput {
+  savedAnnotations: readonly TaskBrowserVisualFeedbackAnnotation[]
+  expectedUrl?: string
+}
 
+export function buildTaskBrowserVisualFeedbackAnnotationsScript(
+  input: TaskBrowserVisualFeedbackAnnotationsScriptInput,
+): string {
+  const expectedUrlGuard = input.expectedUrl === undefined
+    ? ''
+    : `const expectedUrl = ${JSON.stringify(input.expectedUrl)};
+    if (location.href !== expectedUrl) return;`
+  const pageUrlExpression = input.expectedUrl === undefined ? 'location.href' : 'expectedUrl'
+
+  return `const visualFeedbackTheme = ${JSON.stringify(TASK_BROWSER_VISUAL_FEEDBACK_THEME)};
+    ${expectedUrlGuard}
+    const savedAnnotations = ${JSON.stringify(input.savedAnnotations)};
+    const annotationsId = '__openforge_visual_feedback_annotations__';
     let annotationsRoot = document.getElementById(annotationsId);
     if (!annotationsRoot) {
       annotationsRoot = document.createElement('div');
@@ -41,31 +82,38 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       const annotation = document.createElement('div');
       annotation.setAttribute('role', 'note');
       annotation.setAttribute('aria-label', 'Feedback ' + annotationData.number + ': ' + annotationData.comment);
-      annotation.style.cssText = 'position:absolute;left:' + annotationData.x + 'px;top:' + annotationData.y + 'px;width:' + annotationData.width + 'px;height:' + annotationData.height + 'px;border:2px solid #60a5fa;background:rgba(59,130,246,.14);box-sizing:border-box;border-radius:4px;pointer-events:none;';
+      annotation.style.cssText = 'position:absolute;left:' + annotationData.x + 'px;top:' + annotationData.y + 'px;width:' + annotationData.width + 'px;height:' + annotationData.height + 'px;border:2px solid ' + visualFeedbackTheme.annotationBorder + ';background:' + visualFeedbackTheme.annotationBackground + ';box-sizing:border-box;border-radius:4px;pointer-events:none;';
       const badge = document.createElement('span');
       badge.textContent = String(annotationData.number);
-      badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#2563eb;color:white;font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
+      badge.style.cssText = 'position:absolute;left:-9px;top:-9px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.foreground + ';font:600 11px system-ui,sans-serif;box-sizing:border-box;pointer-events:none;';
       annotation.append(badge);
       annotationsRoot.append(annotation);
     };
     annotationsRoot.replaceChildren();
-    annotationsRoot.dataset.pageUrl = location.href;
-    savedAnnotations.forEach(renderAnnotation);
+    annotationsRoot.dataset.pageUrl = ${pageUrlExpression};
+    savedAnnotations.forEach(renderAnnotation);`
+}
+
+function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInput): string {
+  return `(() => new Promise((resolve) => {
+    const overlayId = '__openforge_visual_feedback_selector__';
+    document.getElementById(overlayId)?.remove();
+    ${buildTaskBrowserVisualFeedbackAnnotationsScript({ savedAnnotations: input.savedAnnotations })}
     const nextAnnotationNumber = ${input.nextAnnotationNumber};
 
     const root = document.createElement('div');
     root.id = overlayId;
     root.setAttribute('aria-label', 'Select a region for feedback');
-    root.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none;font:13px system-ui,sans-serif;color:white;';
+    root.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none;font:13px system-ui,sans-serif;color:' + visualFeedbackTheme.foreground + ';';
 
     const hint = document.createElement('div');
     hint.textContent = 'Highlight an area to comment · Esc to cancel';
-    hint.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:8px;background:rgba(20,20,24,.92);color:white;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+    hint.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);padding:8px 12px;border-radius:8px;background:' + visualFeedbackTheme.hintBackground + ';color:' + visualFeedbackTheme.foreground + ';pointer-events:none;box-shadow:0 4px 16px ' + visualFeedbackTheme.hintShadow + ';';
 
     const hover = document.createElement('div');
-    hover.style.cssText = 'position:fixed;display:none;border:2px solid #60a5fa;background:rgba(59,130,246,.12);pointer-events:none;box-sizing:border-box;border-radius:4px;';
+    hover.style.cssText = 'position:fixed;display:none;border:2px solid ' + visualFeedbackTheme.annotationBorder + ';background:' + visualFeedbackTheme.hoverBackground + ';pointer-events:none;box-sizing:border-box;border-radius:4px;';
     const selection = document.createElement('div');
-    selection.style.cssText = 'position:fixed;display:none;border:2px solid #60a5fa;background:rgba(59,130,246,.18);pointer-events:none;box-sizing:border-box;border-radius:4px;';
+    selection.style.cssText = 'position:fixed;display:none;border:2px solid ' + visualFeedbackTheme.annotationBorder + ';background:' + visualFeedbackTheme.selectionBackground + ';pointer-events:none;box-sizing:border-box;border-radius:4px;';
 
     const interaction = document.createElement('div');
     interaction.style.cssText = 'position:fixed;inset:0;cursor:crosshair;pointer-events:auto;background:transparent;';
@@ -135,7 +183,7 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       composer.setAttribute('aria-label', 'Visual feedback comment');
       const left = Math.min(Math.max(12, rect.x + rect.width + 8), Math.max(12, window.innerWidth - 300));
       const top = Math.min(Math.max(12, rect.y + rect.height + 8), Math.max(12, window.innerHeight - 142));
-      composer.style.cssText = 'position:fixed;left:' + left + 'px;top:' + top + 'px;width:280px;padding:10px;border-radius:10px;background:rgba(20,20,24,.96);box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:auto;box-sizing:border-box;';
+      composer.style.cssText = 'position:fixed;left:' + left + 'px;top:' + top + 'px;width:280px;padding:10px;border-radius:10px;background:' + visualFeedbackTheme.panelBackground + ';box-shadow:0 8px 30px ' + visualFeedbackTheme.panelShadow + ';pointer-events:auto;box-sizing:border-box;';
       const label = document.createElement('label');
       label.textContent = 'Feedback comment';
       label.style.cssText = 'display:block;margin-bottom:6px;font-weight:600;';
@@ -143,18 +191,18 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       textarea.setAttribute('aria-label', 'Feedback comment');
       textarea.placeholder = 'Describe what should change…';
       textarea.rows = 3;
-      textarea.style.cssText = 'display:block;width:100%;resize:none;box-sizing:border-box;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:8px;background:#111827;color:white;font:13px system-ui,sans-serif;outline:none;';
+      textarea.style.cssText = 'display:block;width:100%;resize:none;box-sizing:border-box;border:1px solid ' + visualFeedbackTheme.fieldBorder + ';border-radius:7px;padding:8px;background:' + visualFeedbackTheme.fieldBackground + ';color:' + visualFeedbackTheme.foreground + ';font:13px system-ui,sans-serif;outline:none;';
       const actions = document.createElement('div');
       actions.style.cssText = 'display:flex;justify-content:flex-end;gap:6px;margin-top:8px;';
       const cancel = document.createElement('button');
       cancel.type = 'button';
       cancel.textContent = 'Cancel';
-      cancel.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:transparent;color:white;cursor:pointer;';
+      cancel.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:transparent;color:' + visualFeedbackTheme.foreground + ';cursor:pointer;';
       const save = document.createElement('button');
       save.type = 'submit';
       save.textContent = 'Save';
       save.disabled = true;
-      save.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:#2563eb;color:white;cursor:pointer;';
+      save.style.cssText = 'border:0;border-radius:6px;padding:6px 10px;background:' + visualFeedbackTheme.accentBackground + ';color:' + visualFeedbackTheme.foreground + ';cursor:pointer;';
       actions.append(cancel, save);
       composer.append(label, textarea, actions);
       root.append(composer);
