@@ -128,10 +128,10 @@ fn map_plugin_command_error(error: PluginCommandDiscoveryError) -> (StatusCode, 
         PluginCommandDiscoveryError::TaskNotFound { .. }
         | PluginCommandDiscoveryError::ProjectNotFound { .. }
         | PluginCommandDiscoveryError::PluginNotInstalled { .. }
-        | PluginCommandDiscoveryError::BackendUnavailable { .. }
         | PluginCommandDiscoveryError::CommandNotFound { .. } => StatusCode::NOT_FOUND,
         PluginCommandDiscoveryError::PluginDisabled { .. } => StatusCode::FORBIDDEN,
-        PluginCommandDiscoveryError::Runtime(_) => StatusCode::SERVICE_UNAVAILABLE,
+        PluginCommandDiscoveryError::FrontendUnavailable { .. }
+        | PluginCommandDiscoveryError::Runtime(_) => StatusCode::SERVICE_UNAVAILABLE,
         PluginCommandDiscoveryError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     (status, error.to_string())
@@ -142,7 +142,11 @@ async fn list_plugin_commands_handler(
     Json(context): Json<PluginCommandDiscoveryContext>,
 ) -> Result<Json<Vec<crate::plugin_command_broker::AgentCommandDescriptor>>, (StatusCode, String)> {
     let platform = http_plugin_platform(&state, false)?;
-    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    let broker = PluginCommandBroker::with_frontend(
+        Arc::clone(&state.db),
+        &platform,
+        &state.frontend_plugin_commands,
+    );
     broker
         .list(&context)
         .await
@@ -155,7 +159,11 @@ async fn describe_plugin_command_handler(
     Json(request): Json<DescribePluginCommandRequest>,
 ) -> Result<Json<crate::plugin_command_broker::AgentCommandDescriptor>, (StatusCode, String)> {
     let platform = http_plugin_platform(&state, false)?;
-    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    let broker = PluginCommandBroker::with_frontend(
+        Arc::clone(&state.db),
+        &platform,
+        &state.frontend_plugin_commands,
+    );
     let context = PluginCommandDiscoveryContext {
         task_id: request.task_id,
         project_id: request.project_id,
@@ -172,7 +180,11 @@ async fn invoke_plugin_command_handler(
     Json(request): Json<InvokePluginCommandRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let platform = http_plugin_platform(&state, false)?;
-    let broker = PluginCommandBroker::new(Arc::clone(&state.db), &platform);
+    let broker = PluginCommandBroker::with_frontend(
+        Arc::clone(&state.db),
+        &platform,
+        &state.frontend_plugin_commands,
+    );
     let context = PluginCommandDiscoveryContext {
         task_id: request.task_id,
         project_id: request.project_id,

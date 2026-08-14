@@ -15,6 +15,7 @@ mod companion_gateway;
 mod data_identity;
 mod db;
 mod diff_parser;
+mod frontend_plugin_command_transport;
 mod git_clone;
 mod git_worktree;
 mod github_client;

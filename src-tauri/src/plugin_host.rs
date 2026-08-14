@@ -104,6 +104,10 @@ impl PluginHost {
             backend_token: None,
             pty_manager,
             github_client,
+            frontend_plugin_commands:
+                crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+                    self.app_event_tx.clone(),
+                ),
             plugin_host: Some(self.clone()),
             plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: self.app_event_tx.clone(),

@@ -94,6 +94,9 @@ pub(super) async fn shutdown_sidecar_runtime(
 ) {
     info!("[http_server] Rust sidecar shutdown cleanup started");
 
+    state
+        .frontend_plugin_commands
+        .shutdown("OpenForge is shutting down before the frontend Plugin Command completed");
     if let Some(companion_restore) = companion_restore {
         companion_restore.abort().await;
     }
@@ -260,6 +263,10 @@ async fn start_http_server_with_app_state(
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
         github_client: github_client.clone(),
+        frontend_plugin_commands:
+            crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+                Some(app_event_tx.clone()),
+            ),
         plugin_host,
         plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
         app_event_tx: Some(app_event_tx.clone()),

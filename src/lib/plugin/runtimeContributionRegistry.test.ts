@@ -655,6 +655,64 @@ describe('runtime contribution registry', () => {
     }))).rejects.toThrow(/duplicate.*github\.sync/i)
   })
 
+  it('projects and invokes agent-facing frontend commands through the existing validated registry', async () => {
+    const registry = makeRegistry()
+    const handler = vi.fn(async (input, context) => ({
+      accepted: input.url,
+      taskId: context.taskId,
+      projectId: context.projectId,
+      source: context.source,
+    }))
+    registry.getFrontendApi().commands.register({
+      id: 'open',
+      title: 'Open in browser',
+      discoverable: false,
+      agent: {
+        description: 'Open a verified browser URL.',
+        examples: [{ url: 'http://localhost:5173' }],
+      },
+      input: {
+        type: 'object',
+        required: ['url'],
+        properties: { url: { type: 'string' } },
+        additionalProperties: false,
+      },
+      output: { type: 'object' },
+      handler,
+    })
+    registry.getFrontendApi().commands.register({
+      id: 'ordinary',
+      title: 'Ordinary command',
+      handler: async () => null,
+    })
+
+    expect(registry.listFrontendAgentCommands()).toEqual([{
+      qualifiedId: 'github.open',
+      pluginId: 'github',
+      runtime: 'frontend',
+      description: 'Open a verified browser URL.',
+      examples: [{ url: 'http://localhost:5173' }],
+      discoverable: true,
+      input: expect.any(Object),
+      output: { type: 'object' },
+    }])
+    await expect(registry.invokeFrontendAgentCommand(
+      'github.open',
+      { url: 'http://localhost:5173/ready' },
+      { taskId: 'T-1', projectId: 'project-1', source: 'agent-cli' },
+    )).resolves.toEqual({
+      accepted: 'http://localhost:5173/ready',
+      taskId: 'T-1',
+      projectId: 'project-1',
+      source: 'agent-cli',
+    })
+    await expect(registry.invokeFrontendAgentCommand(
+      'github.open',
+      {},
+      { taskId: 'T-1', projectId: 'project-1', source: 'agent-cli' },
+    )).rejects.toThrow('github.open input')
+    expect(handler).toHaveBeenCalledOnce()
+  })
   it.each([
     {
       label: 'command id',

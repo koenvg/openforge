@@ -263,6 +263,18 @@ pub(super) async fn handle_app_plugin_command(
                     .map_err(map_plugin_platform_error)?,
             )?
         }
+        "plugin_frontend_command_acknowledge" => {
+            let acknowledgement = serde_json::from_value::<
+                crate::frontend_plugin_command_transport::FrontendPluginCommandAcknowledgement,
+            >(request.payload.clone())
+            .map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid frontend Plugin Command acknowledgement: {error}"),
+                )
+            })?;
+            serde_json::Value::Bool(state.frontend_plugin_commands.acknowledge(acknowledgement))
+        }
         "plugin_invoke" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let command = payload_string(&request.payload, "command")?;

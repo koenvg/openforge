@@ -180,6 +180,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_plugin_storage',
   'set_plugin_storage',
   'delete_plugin_storage',
+  'plugin_frontend_command_acknowledge',
   'plugin_invoke',
   'plugin_backend_deactivate',
   'plugin_backend_when_ready',

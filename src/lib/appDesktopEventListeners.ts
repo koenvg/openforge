@@ -39,6 +39,7 @@ export async function registerAppDesktopEventListeners(
     pullRequestAttentionListeners.reviewPrCountChanged,
     pullRequestAttentionListeners.authoredPrsUpdated,
     pullRequestAttentionListeners.githubRateLimited,
+    pluginListeners.frontendPluginCommandRequest,
     pluginListeners.pluginInstallationChanged,
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,

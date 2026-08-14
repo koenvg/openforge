@@ -26,9 +26,13 @@ pub struct AgentCommandDescriptor {
     pub discoverable: bool,
 }
 
-fn is_exact_backend_descriptor(plugin_id: &str, descriptor: &AgentCommandDescriptor) -> bool {
+fn is_exact_descriptor(
+    plugin_id: &str,
+    runtime: AgentCommandRuntime,
+    descriptor: &AgentCommandDescriptor,
+) -> bool {
     descriptor.plugin_id == plugin_id
-        && descriptor.runtime == AgentCommandRuntime::Backend
+        && descriptor.runtime == runtime
         && descriptor
             .qualified_id
             .strip_prefix(plugin_id)
@@ -87,8 +91,9 @@ pub enum PluginCommandDiscoveryError {
         plugin_id: String,
         project_id: String,
     },
-    BackendUnavailable {
+    FrontendUnavailable {
         plugin_id: String,
+        reason: String,
     },
     CommandNotFound {
         command_id: String,
@@ -112,8 +117,8 @@ impl fmt::Display for PluginCommandDiscoveryError {
             Self::PluginDisabled { plugin_id, project_id } => {
                 write!(formatter, "Plugin {plugin_id} is not enabled for Project {project_id}")
             }
-            Self::BackendUnavailable { plugin_id } => {
-                write!(formatter, "Plugin {plugin_id} does not provide a backend runtime")
+            Self::FrontendUnavailable { plugin_id, reason } => {
+                write!(formatter, "Frontend runtime for Plugin {plugin_id} is unavailable: {reason}")
             }
             Self::CommandNotFound { command_id } => {
                 write!(formatter, "Unknown agent-facing Plugin Command: {command_id}")
@@ -141,6 +146,21 @@ pub trait BackendAgentCommandCatalog {
     ) -> BoxFuture<'a, Result<Value, String>>;
 }
 
+pub trait FrontendAgentCommandCatalog: Sync {
+    fn list_frontend_agent_commands<'a>(
+        &'a self,
+        plugin_id: &'a str,
+        project_id: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>>;
+    fn invoke_frontend_agent_command<'a>(
+        &'a self,
+        plugin_id: &'a str,
+        project_id: &'a str,
+        command_id: &'a str,
+        input: Option<Value>,
+        context: PluginCommandInvocationContext,
+    ) -> BoxFuture<'a, Result<Value, String>>;
+}
 impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
     fn list_agent_commands<'a>(
         &'a self,
@@ -167,15 +187,32 @@ impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
 
 pub struct PluginCommandBroker<'a, Catalog> {
     database: Arc<Mutex<crate::db::Database>>,
-    catalog: &'a Catalog,
+    backend: &'a Catalog,
+    frontend: Option<&'a dyn FrontendAgentCommandCatalog>,
 }
 
 impl<'a, Catalog> PluginCommandBroker<'a, Catalog>
 where
     Catalog: BackendAgentCommandCatalog + Sync,
 {
-    pub fn new(database: Arc<Mutex<crate::db::Database>>, catalog: &'a Catalog) -> Self {
-        Self { database, catalog }
+    pub fn new(database: Arc<Mutex<crate::db::Database>>, backend: &'a Catalog) -> Self {
+        Self {
+            database,
+            backend,
+            frontend: None,
+        }
+    }
+
+    pub fn with_frontend(
+        database: Arc<Mutex<crate::db::Database>>,
+        backend: &'a Catalog,
+        frontend: &'a dyn FrontendAgentCommandCatalog,
+    ) -> Self {
+        Self {
+            database,
+            backend,
+            frontend: Some(frontend),
+        }
     }
 
     pub async fn list(
@@ -193,23 +230,43 @@ where
         };
 
         let mut descriptors = Vec::new();
-        for plugin in plugins
-            .into_iter()
-            .filter(|plugin| plugin.backend_entry.is_some())
-        {
-            let commands = self
-                .catalog
-                .list_agent_commands(&plugin.id, &project_id)
-                .await
-                .map_err(|error| {
-                    PluginCommandDiscoveryError::Runtime(format!(
-                        "Failed to discover backend Plugin Commands for {}: {error}",
-                        plugin.id
-                    ))
-                })?;
-            descriptors.extend(commands.into_iter().filter(|command| {
-                command.discoverable && is_exact_backend_descriptor(&plugin.id, command)
-            }));
+        for plugin in plugins {
+            if plugin.backend_entry.is_some() {
+                let commands = self
+                    .backend
+                    .list_agent_commands(&plugin.id, &project_id)
+                    .await
+                    .map_err(|error| {
+                        PluginCommandDiscoveryError::Runtime(format!(
+                            "Failed to discover backend Plugin Commands for {}: {error}",
+                            plugin.id
+                        ))
+                    })?;
+                descriptors.extend(commands.into_iter().filter(|command| {
+                    command.discoverable
+                        && is_exact_descriptor(&plugin.id, AgentCommandRuntime::Backend, command)
+                }));
+            }
+
+            if !plugin.frontend_entry.trim().is_empty() {
+                if let Some(frontend) = self.frontend {
+                    let commands = frontend
+                        .list_frontend_agent_commands(&plugin.id, &project_id)
+                        .await
+                        .map_err(|reason| PluginCommandDiscoveryError::FrontendUnavailable {
+                            plugin_id: plugin.id.clone(),
+                            reason,
+                        })?;
+                    descriptors.extend(commands.into_iter().filter(|command| {
+                        command.discoverable
+                            && is_exact_descriptor(
+                                &plugin.id,
+                                AgentCommandRuntime::Frontend,
+                                command,
+                            )
+                    }));
+                }
+            }
         }
         Ok(descriptors)
     }
@@ -251,31 +308,57 @@ where
                     project_id,
                 });
             }
-            if plugin.backend_entry.is_none() {
-                return Err(PluginCommandDiscoveryError::BackendUnavailable {
-                    plugin_id: plugin.id,
-                });
-            }
             plugin
         };
 
-        self.catalog
-            .list_agent_commands(&plugin.id, &project_id)
-            .await
-            .map_err(|error| {
-                PluginCommandDiscoveryError::Runtime(format!(
-                    "Failed to discover backend Plugin Commands for {}: {error}",
-                    plugin.id
-                ))
-            })?
-            .into_iter()
-            .find(|command| {
-                command.qualified_id == command_id
-                    && is_exact_backend_descriptor(&plugin.id, command)
-            })
-            .ok_or_else(|| PluginCommandDiscoveryError::CommandNotFound {
-                command_id: command_id.to_string(),
-            })
+        if plugin.backend_entry.is_some() {
+            if let Some(command) = self
+                .backend
+                .list_agent_commands(&plugin.id, &project_id)
+                .await
+                .map_err(|error| {
+                    PluginCommandDiscoveryError::Runtime(format!(
+                        "Failed to discover backend Plugin Commands for {}: {error}",
+                        plugin.id
+                    ))
+                })?
+                .into_iter()
+                .find(|command| {
+                    command.qualified_id == command_id
+                        && is_exact_descriptor(&plugin.id, AgentCommandRuntime::Backend, command)
+                })
+            {
+                return Ok(command);
+            }
+        }
+
+        if !plugin.frontend_entry.trim().is_empty() {
+            let Some(frontend) = self.frontend else {
+                return Err(PluginCommandDiscoveryError::FrontendUnavailable {
+                    plugin_id: plugin.id,
+                    reason: "the active trusted renderer is unavailable".to_string(),
+                });
+            };
+            if let Some(command) = frontend
+                .list_frontend_agent_commands(&plugin.id, &project_id)
+                .await
+                .map_err(|reason| PluginCommandDiscoveryError::FrontendUnavailable {
+                    plugin_id: plugin.id.clone(),
+                    reason,
+                })?
+                .into_iter()
+                .find(|command| {
+                    command.qualified_id == command_id
+                        && is_exact_descriptor(&plugin.id, AgentCommandRuntime::Frontend, command)
+                })
+            {
+                return Ok(command);
+            }
+        }
+
+        Err(PluginCommandDiscoveryError::CommandNotFound {
+            command_id: command_id.to_string(),
+        })
     }
 
     pub async fn invoke(
@@ -285,31 +368,50 @@ where
         input: Option<Value>,
     ) -> Result<Value, PluginCommandDiscoveryError> {
         let descriptor = self.describe(context, command_id).await?;
-        if descriptor.runtime != AgentCommandRuntime::Backend {
-            return Err(PluginCommandDiscoveryError::BackendUnavailable {
-                plugin_id: descriptor.plugin_id,
-            });
-        }
         let resolved = self.resolve_context(context)?;
         let invocation_context = PluginCommandInvocationContext {
             task_id: resolved.task_id,
             project_id: resolved.project_id.clone(),
             source: PluginCommandInvocationSource::AgentCli,
         };
-        self.catalog
-            .invoke_agent_command(
-                &descriptor.plugin_id,
-                &resolved.project_id,
-                command_id,
-                input,
-                invocation_context,
-            )
-            .await
-            .map_err(|error| {
-                PluginCommandDiscoveryError::Runtime(format!(
-                    "Failed to invoke backend Plugin Command {command_id}: {error}"
-                ))
-            })
+        match descriptor.runtime {
+            AgentCommandRuntime::Backend => self
+                .backend
+                .invoke_agent_command(
+                    &descriptor.plugin_id,
+                    &resolved.project_id,
+                    command_id,
+                    input,
+                    invocation_context,
+                )
+                .await
+                .map_err(|error| {
+                    PluginCommandDiscoveryError::Runtime(format!(
+                        "Failed to invoke backend Plugin Command {command_id}: {error}"
+                    ))
+                }),
+            AgentCommandRuntime::Frontend => {
+                let frontend = self.frontend.ok_or_else(|| {
+                    PluginCommandDiscoveryError::FrontendUnavailable {
+                        plugin_id: descriptor.plugin_id.clone(),
+                        reason: "the active trusted renderer is unavailable".to_string(),
+                    }
+                })?;
+                frontend
+                    .invoke_frontend_agent_command(
+                        &descriptor.plugin_id,
+                        &resolved.project_id,
+                        command_id,
+                        input,
+                        invocation_context,
+                    )
+                    .await
+                    .map_err(|reason| PluginCommandDiscoveryError::FrontendUnavailable {
+                        plugin_id: descriptor.plugin_id,
+                        reason,
+                    })
+            }
+        }
     }
 
     fn resolve_project_id(
@@ -694,6 +796,86 @@ mod tests {
         );
     }
 
+    impl FrontendAgentCommandCatalog for FakeBackendCatalog {
+        fn list_frontend_agent_commands<'a>(
+            &'a self,
+            plugin_id: &'a str,
+            _project_id: &'a str,
+        ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>> {
+            Box::pin(
+                async move { Ok(self.descriptors.get(plugin_id).cloned().unwrap_or_default()) },
+            )
+        }
+
+        fn invoke_frontend_agent_command<'a>(
+            &'a self,
+            plugin_id: &'a str,
+            project_id: &'a str,
+            command_id: &'a str,
+            input: Option<Value>,
+            context: PluginCommandInvocationContext,
+        ) -> BoxFuture<'a, Result<Value, String>> {
+            self.invoke_agent_command(plugin_id, project_id, command_id, input, context)
+        }
+    }
+
+    #[tokio::test]
+    async fn discovers_and_invokes_frontend_commands_through_the_shared_broker_seam() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_frontend");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        let task = database
+            .create_task("Task", "doing", Some(&project.id), None, None)
+            .expect("task");
+        seed_plugin(&database, "com.example.browser", false);
+        database
+            .set_plugin_enabled(&project.id, "com.example.browser", true)
+            .expect("enable plugin");
+
+        let backend = FakeBackendCatalog::default();
+        let mut frontend_command = descriptor("com.example.browser", "open", true);
+        frontend_command.runtime = AgentCommandRuntime::Frontend;
+        let frontend = FakeBackendCatalog {
+            descriptors: HashMap::from([(
+                "com.example.browser".to_string(),
+                vec![frontend_command.clone()],
+            )]),
+            invocation_result: json!({ "accepted": true }),
+            ..Default::default()
+        };
+        let broker =
+            PluginCommandBroker::with_frontend(Arc::new(Mutex::new(database)), &backend, &frontend);
+        let context = PluginCommandDiscoveryContext {
+            task_id: Some(task.id.clone()),
+            project_id: None,
+        };
+
+        assert_eq!(
+            broker.list(&context).await.expect("list"),
+            vec![frontend_command]
+        );
+        assert_eq!(
+            broker
+                .invoke(
+                    &context,
+                    "com.example.browser.open",
+                    Some(json!({ "url": "http://localhost:5173" })),
+                )
+                .await
+                .expect("invoke"),
+            json!({ "accepted": true })
+        );
+        assert_eq!(
+            frontend.invocations.lock().expect("invocations")[0].context,
+            PluginCommandInvocationContext {
+                task_id: Some(task.id),
+                project_id: project.id,
+                source: PluginCommandInvocationSource::AgentCli,
+            }
+        );
+    }
     #[test]
     fn agent_command_descriptor_round_trips_plugin_host_camel_case_json_without_handlers() {
         let value = json!({
