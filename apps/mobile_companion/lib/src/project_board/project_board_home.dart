@@ -173,8 +173,8 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     final action = await _showPalette(
       title: 'Actions',
       actions: (() async => <MobilePaletteAction>[
-        MobilePaletteAction.newTask,
-        MobilePaletteAction.refreshBoard,
+        MobileNativePaletteActions.newTask,
+        MobileNativePaletteActions.refreshBoard,
         ...await palette.loadProjectActions(projectId),
       ])(),
     );
