@@ -194,7 +194,7 @@
         aria-label="Go back"
         title="Go back"
         disabled={opening || !surfaceState.canGoBack}
-        onclick={() => void runSurfaceAction(activeSession => activeSession.surface.goBack())}
+        onclick={() => void runSurfaceAction(activeSession => activeSession.goBack())}
       >
         <ArrowLeft size={16} aria-hidden="true" />
       </button>
@@ -204,7 +204,7 @@
         aria-label="Go forward"
         title="Go forward"
         disabled={opening || !surfaceState.canGoForward}
-        onclick={() => void runSurfaceAction(activeSession => activeSession.surface.goForward())}
+        onclick={() => void runSurfaceAction(activeSession => activeSession.goForward())}
       >
         <ArrowRight size={16} aria-hidden="true" />
       </button>
@@ -216,7 +216,7 @@
         disabled={opening || session === null}
         onclick={() => void runSurfaceAction(activeSession => surfaceState.loading
           ? activeSession.stop()
-          : activeSession.surface.reload())}
+          : activeSession.reload())}
       >
         {#if surfaceState.loading}
           <X size={16} aria-hidden="true" />

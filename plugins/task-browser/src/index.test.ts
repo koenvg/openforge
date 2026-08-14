@@ -14,6 +14,7 @@ vi.mock('./TaskBrowserTab.svelte', () => ({ default: mockTaskBrowserTab }))
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
   const api = {
+    commands: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskUI: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
     taskLinks: { registerHandler: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
@@ -47,8 +48,9 @@ describe('task-browser plugin', () => {
       order: 20,
       component: mockTaskBrowserTab,
     })
+    expect(api.commands.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'open' }))
     expect(api.taskLinks.registerHandler).toHaveBeenCalledOnce()
-    expect(subscriptions.add).toHaveBeenCalledTimes(2)
+    expect(subscriptions.add).toHaveBeenCalledTimes(4)
   })
 
   it('opens a Task link in the durable main surface, persists it, and foregrounds Browser', async () => {

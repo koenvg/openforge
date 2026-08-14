@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createBrowserTabSession,
   normalizeBrowserAddress,
+  persistSuccessfulBrowserState,
 } from './browserTabSession'
+import { getBrowserNavigationCoordinator } from './browserNavigationCoordinator'
 
 describe('Task browser tab session', () => {
   it.each([
@@ -255,5 +257,33 @@ describe('Task browser tab session', () => {
 
     api.__testing.registry.setBrowserSurfaceState('T-5', 'main', { url: 'https://saved.example/' })
     await expect(session.dispose()).resolves.toBeUndefined()
+  })
+
+  it('does not complete an older persistence write after newer navigation begins', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser' })
+    const storage = api.storage.task('T-race')
+    vi.spyOn(api.storage, 'task').mockReturnValue(storage)
+    let markSetStarted!: () => void
+    const setStarted = new Promise<void>((resolve) => { markSetStarted = resolve })
+    let releaseSet!: () => void
+    const setReleased = new Promise<void>((resolve) => { releaseSet = resolve })
+    vi.spyOn(storage, 'set').mockImplementation(async () => {
+      markSetStarted()
+      await setReleased
+    })
+
+    const persistence = persistSuccessfulBrowserState(api, 'T-race', {
+      url: 'https://older.example/',
+      title: '',
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      error: null,
+    })
+    await setStarted
+    getBrowserNavigationCoordinator(api).begin('T-race')
+    releaseSet()
+
+    await expect(persistence).resolves.toBe(false)
   })
 })
