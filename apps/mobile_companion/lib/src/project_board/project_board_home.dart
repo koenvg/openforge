@@ -141,7 +141,7 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     final subject = taskTitle == null ? '' : ' “$taskTitle”';
     final message = switch (action.id) {
       CompanionActionId.deleteTask =>
-        'Delete$subject? The Completed Task stays available as reference data while runtime workspace state is removed.',
+        'Delete$subject? This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
       CompanionActionId.completeTask =>
         'Complete$subject? The Completed Task stays available as reference data while its runtime workspace is removed.',
       _ => action.label,
