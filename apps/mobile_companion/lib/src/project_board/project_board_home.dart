@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../design_system/quiet_paper_theme.dart';
-
 import '../action_palette/action_palette.dart';
 import '../action_palette/action_palette_controller.dart';
 import '../generated/companion_v1_client.dart';
 import 'project_board_controller.dart';
+import 'project_board_task_card.dart';
 import 'task_creation_sheet.dart';
 
 part 'project_board_content.dart';
