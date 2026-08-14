@@ -202,6 +202,23 @@ void main() {
     );
   });
 
+  testWidgets('uses pull-to-refresh without a redundant app-bar action', (
+    tester,
+  ) async {
+    final controller = ProjectBoardController(
+      client: _WidgetClient(),
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+
+    await tester.pumpWidget(
+      MaterialApp(home: ProjectBoardHome(controller: controller)),
+    );
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.byTooltip('Refresh Mobile Project Board'), findsNothing);
+  });
+
   testWidgets('creates a Task from the selected Project Board', (tester) async {
     final client = _WidgetClient();
     final selectedTasks = <String>[];
