@@ -1,8 +1,8 @@
 use super::*;
 
 #[tokio::test]
-async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
-    let (mut state, path) = test_state("http_delete_task_handler_completes_task");
+async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks() {
+    let (mut state, path) = test_state("http_delete_task_handler_permanent");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -65,7 +65,7 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_body_json(response).await;
     assert_eq!(json["task_id"], "T-1");
-    assert_eq!(json["status"], "completed");
+    assert_eq!(json["status"], "deleted");
     assert!(
         state
             .pty_manager
@@ -77,7 +77,7 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
         "legacy delete endpoint must run lifecycle-aware shell cleanup"
     );
 
-    let completed_response = router
+    let deleted_response = router
         .clone()
         .oneshot(
             Request::builder()
@@ -87,18 +87,8 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
                 .expect("build request"),
         )
         .await
-        .expect("get completed task should succeed");
-    assert_eq!(completed_response.status(), StatusCode::OK);
-    let completed_json = response_body_json(completed_response).await;
-    assert_eq!(completed_json["id"], "T-1");
-    assert_eq!(completed_json["status"], "done");
-    assert_eq!(completed_json["initial_prompt"], "Completed prompt");
-    assert_eq!(completed_json["prompt"], "Full prompt kept for agents");
-    assert_eq!(
-        completed_json["summary"],
-        "## Handoff Notes\nKeep this reference"
-    );
-
+        .expect("get deleted task should return a response");
+    assert_eq!(deleted_response.status(), StatusCode::NOT_FOUND);
     let normal_list_response = router
         .clone()
         .oneshot(
@@ -132,10 +122,10 @@ async fn test_delete_task_handler_completes_task_and_keeps_cli_retrieval() {
         .expect("list completed tasks should succeed");
     assert_eq!(completed_list_response.status(), StatusCode::OK);
     let completed_list = response_body_json(completed_list_response).await;
-    let completed_rows = completed_list.as_array().expect("completed list array");
-    assert_eq!(completed_rows.len(), 1);
-    assert_eq!(completed_rows[0]["id"], "T-1");
-    assert_eq!(completed_rows[0]["status"], "done");
+    assert!(completed_list
+        .as_array()
+        .expect("completed list array")
+        .is_empty());
 
     let _ = std::fs::remove_file(path);
 }

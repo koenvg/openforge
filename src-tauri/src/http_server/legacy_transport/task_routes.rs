@@ -216,7 +216,7 @@ pub async fn delete_task_handler(
 
     Ok(Json(DeleteTaskResponse {
         task_id,
-        status: "completed".to_string(),
+        status: "deleted".to_string(),
     }))
 }
 
