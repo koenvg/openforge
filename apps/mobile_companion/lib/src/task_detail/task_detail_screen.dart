@@ -299,15 +299,10 @@ class _TaskDetailViewState extends State<TaskDetailView>
     TaskDetail detail,
   ) async {
     if (!action.requiresConfirmation) return true;
-    final running = detail.agentState == 'running';
-    final message = switch (action.id) {
-      CompanionActionId.deleteTask =>
-        'This permanently deletes the Task and removes any runtime workspace state. The Task will not remain available as reference data. This cannot be undone.',
-      CompanionActionId.completeTask =>
-        'This keeps the Completed Task as reference data while its runtime workspace is removed.'
-            '${running ? ' The running Agent and all Task shells will stop first.' : ''}',
-      _ => action.label,
-    };
+    final message = mobileActionPaletteConfirmationMessage(
+      action,
+      agentRunning: detail.agentState == 'running',
+    );
     return await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(

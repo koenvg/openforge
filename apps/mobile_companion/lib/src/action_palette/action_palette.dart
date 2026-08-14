@@ -1,3 +1,4 @@
+export 'action_palette_confirmation.dart';
 export 'action_palette_contract_adapter.dart';
 export 'action_palette_models.dart';
 export 'action_palette_native_actions.dart';
