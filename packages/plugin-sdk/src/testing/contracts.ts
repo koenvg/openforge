@@ -1,3 +1,4 @@
+import type { BrowserSurfaceVisualFeedback } from '../browserSurfaces'
 import type { TestingOpenForgeRegistryFake } from './registryFake'
 import type {
   BackendMethodRegistration,
@@ -79,6 +80,8 @@ export interface TestingOpenForgeApiCalls {
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
   browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
+  browserSurfaceFeedbackReplacements: Array<{ taskId: string; id: string; feedback: BrowserSurfaceVisualFeedback[] }>
+  browserSurfaceCaptureChecks: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceCaptures: Array<{ taskId: string; id: string }>
   browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>

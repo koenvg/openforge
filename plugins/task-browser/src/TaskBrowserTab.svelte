@@ -268,8 +268,7 @@
 
   {#if reviewingFeedback && feedbackEditor.annotations.length > 0}
     <VisualFeedbackReview
-      captures={feedbackEditor.captures}
-      annotations={feedbackEditor.annotations}
+      editor={feedbackEditor}
       onClose={() => { reviewingFeedback = false }}
     />
   {/if}

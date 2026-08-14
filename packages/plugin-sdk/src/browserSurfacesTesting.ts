@@ -6,6 +6,7 @@ import type {
   BrowserSurfacesAPI,
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
+  BrowserSurfaceVisualFeedback,
   GetOrCreateBrowserSurfaceRequest,
   TaskBrowserSurfaceController,
   TaskBrowserSurfaceState,
@@ -21,6 +22,8 @@ export interface TestingBrowserSurfaceCalls {
   browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
   browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
+  browserSurfaceFeedbackReplacements: Array<{ taskId: string; id: string; feedback: BrowserSurfaceVisualFeedback[] }>
+  browserSurfaceCaptureChecks: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceCaptures: Array<{ taskId: string; id: string }>
   browserSurfaceCaptureDiscards: Array<{ taskId: string; id: string; artifactId: string }>
   browserSurfaceSessionResets: Array<Record<string, never>>
@@ -65,6 +68,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
   private currentAttachment = 0
   private destroyed = false
   private nextAnnotationNumber = 1
+  private readonly capturedArtifactIds = new Set<string>()
 
   constructor(
     readonly taskId: string,
@@ -183,11 +187,33 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.nextAnnotationNumber = 1
   }
 
+  async replaceVisualFeedback(feedback: readonly BrowserSurfaceVisualFeedback[]): Promise<void> {
+    this.assertLive()
+    this.calls.browserSurfaceFeedbackReplacements.push({
+      taskId: this.taskId,
+      id: this.id,
+      feedback: feedback.map(marker => ({ ...marker, region: { ...marker.region } })),
+    })
+    this.nextAnnotationNumber = feedback.reduce(
+      (maximum, marker) => Math.max(maximum, marker.annotationNumber),
+      0,
+    ) + 1
+  }
+
+  async captureExists(artifactId: string): Promise<boolean> {
+    this.assertLive()
+    if (!artifactId.trim()) throw new BrowserSurfaceError('INVALID_ID', 'Browser Surface capture requires an artifact ID')
+    this.calls.browserSurfaceCaptureChecks.push({ taskId: this.taskId, id: this.id, artifactId })
+    return this.capturedArtifactIds.has(artifactId)
+  }
+
   async captureVisibleViewport(): Promise<BrowserSurfaceCapture> {
     this.assertLive()
     this.calls.browserSurfaceCaptures.push({ taskId: this.taskId, id: this.id })
+    const artifactId = `capture-${this.calls.browserSurfaceCaptures.length}`
+    this.capturedArtifactIds.add(artifactId)
     return {
-      artifactId: `capture-${this.calls.browserSurfaceCaptures.length}`,
+      artifactId,
       absolutePath: `/tmp/openforge-browser-captures/${this.taskId}/capture-${this.calls.browserSurfaceCaptures.length}.png`,
       mediaType: 'image/png',
       width: 800,
@@ -203,6 +229,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.assertLive()
     if (!artifactId.trim()) throw new BrowserSurfaceError('INVALID_ID', 'Browser Surface capture requires an artifact ID')
     this.calls.browserSurfaceCaptureDiscards.push({ taskId: this.taskId, id: this.id, artifactId })
+    this.capturedArtifactIds.delete(artifactId)
   }
 
   setState(patch: Partial<TaskBrowserSurfaceState>): void {

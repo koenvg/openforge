@@ -23,6 +23,8 @@ function managerFake() {
     stop: vi.fn(async () => ({ url: 'https://example.com' })),
     selectVisibleRegion: vi.fn(async () => ({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })),
     clearVisualFeedback: vi.fn(async () => undefined),
+    replaceVisualFeedback: vi.fn(async () => undefined),
+    captureExists: vi.fn(async () => true),
     captureVisibleViewport: vi.fn(async () => ({
       artifactId: 'capture-1', mediaType: 'image/png', width: 800, height: 600, dataUrl: 'data:image/png;base64,cG5n',
     })),
@@ -88,6 +90,18 @@ describe('Task Browser Surface IPC router', () => {
 
     await expect(router.handle('task_browser_surface_clear_visual_feedback', owner, 10)).resolves.toMatchObject({ ok: true })
     expect(manager.clearVisualFeedback).toHaveBeenCalledWith({ windowId: 10, ...owner })
+
+    const feedback = [{
+      annotationNumber: 1,
+      url: 'https://example.com/',
+      region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      comment: 'Corrected feedback',
+    }]
+    await expect(router.handle('task_browser_surface_replace_visual_feedback', { ...owner, feedback }, 10)).resolves.toMatchObject({ ok: true })
+    expect(manager.replaceVisualFeedback).toHaveBeenCalledWith({ windowId: 10, ...owner }, feedback)
+    await expect(router.handle('task_browser_surface_capture_exists', { ...owner, artifactId: 'capture-1' }, 10))
+      .resolves.toEqual({ ok: true, value: true })
+    expect(manager.captureExists).toHaveBeenCalledWith({ windowId: 10, ...owner, artifactId: 'capture-1' })
 
     await expect(router.handle('task_browser_surface_capture_visible_viewport', owner, 10)).resolves.toMatchObject({
       ok: true,

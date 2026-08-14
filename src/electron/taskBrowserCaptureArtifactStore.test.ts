@@ -35,6 +35,8 @@ describe('Task Browser capture artifact storage', () => {
     const store = new FileTaskBrowserCaptureArtifactStore(() => root)
     const capture = await store.store({ pluginId: 'plugin-a', taskId: 'T-1', png: Buffer.from('png') })
 
+    await expect(store.exists({ pluginId: 'plugin-a', taskId: 'T-1', artifactId: capture.artifactId })).resolves.toBe(true)
+    await expect(store.exists({ pluginId: 'plugin-b', taskId: 'T-1', artifactId: capture.artifactId })).resolves.toBe(false)
     await store.discard({ pluginId: 'plugin-b', taskId: 'T-1', artifactId: capture.artifactId })
     await store.discard({ pluginId: 'plugin-a', taskId: 'T-2', artifactId: capture.artifactId })
     expect(await filesBelow(root)).toHaveLength(1)
@@ -47,6 +49,7 @@ describe('Task Browser capture artifact storage', () => {
 
     await store.discard({ pluginId: 'plugin-a', taskId: 'T-1', artifactId: capture.artifactId })
     expect(await filesBelow(root)).toHaveLength(0)
+    await expect(store.exists({ pluginId: 'plugin-a', taskId: 'T-1', artifactId: capture.artifactId })).resolves.toBe(false)
   })
 
   it('cleans one Task runtime directory without touching another Task', async () => {

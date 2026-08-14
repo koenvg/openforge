@@ -11,6 +11,7 @@ import type {
   TaskBrowserSurfaceManagerOptions,
   TaskBrowserSurfaceCapture,
   TaskBrowserSurfaceCaptureRequest,
+  TaskBrowserSurfaceVisualFeedback,
   TaskBrowserSurfaceReference,
 } from './taskBrowserSurfaceContract.js'
 import { TaskBrowserSurfaceLifecycle } from './taskBrowserSurfaceLifecycle.js'
@@ -41,6 +42,7 @@ export type {
   TaskBrowserSurfaceErrorCode,
   TaskBrowserSurfaceManagerOptions,
   TaskBrowserSurfaceReference,
+  TaskBrowserSurfaceVisualFeedback,
   TaskBrowserSurfaceStateEvent,
   TaskBrowserWebPreferences,
 } from './taskBrowserSurfaceContract.js'
@@ -300,6 +302,17 @@ export class TaskBrowserSurfaceManager {
     this.assertCaptureSurfaceCurrent(surface, request.generation)
   }
 
+  async replaceVisualFeedback(
+    request: TaskBrowserSurfaceCaptureRequest,
+    feedback: readonly TaskBrowserSurfaceVisualFeedback[],
+  ): Promise<void> {
+    const surface = this.requireCaptureSurface(request)
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    await surface.native.replaceVisualFeedback(feedback)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+  }
+
   async captureVisibleViewport(request: TaskBrowserSurfaceCaptureRequest): Promise<TaskBrowserSurfaceCapture> {
     const surface = this.requireCaptureSurface(request)
     if (!surface.attached) {
@@ -347,6 +360,16 @@ export class TaskBrowserSurfaceManager {
     await this.options.authorize(request.pluginId, request.taskId)
     this.assertCaptureSurfaceCurrent(surface, request.generation)
     await this.options.artifacts.discard({
+      pluginId: request.pluginId,
+      taskId: request.taskId,
+      artifactId: request.artifactId,
+    })
+  }
+  async captureExists(request: TaskBrowserSurfaceCaptureRequest & { artifactId: string }): Promise<boolean> {
+    const surface = this.requireCaptureSurface(request)
+    await this.options.authorize(request.pluginId, request.taskId)
+    this.assertCaptureSurfaceCurrent(surface, request.generation)
+    return this.options.artifacts.exists({
       pluginId: request.pluginId,
       taskId: request.taskId,
       artifactId: request.artifactId,

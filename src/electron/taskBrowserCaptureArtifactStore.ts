@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, rm, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import { TaskBrowserSurfaceError } from './taskBrowserSurfaceContract.js'
@@ -18,6 +18,7 @@ export interface DiscardTaskBrowserCaptureRequest {
 
 export interface TaskBrowserCaptureArtifactStore {
   store(request: StoreTaskBrowserCaptureRequest): Promise<{ artifactId: string; absolutePath: string }>
+  exists(request: DiscardTaskBrowserCaptureRequest): Promise<boolean>
   discard(request: DiscardTaskBrowserCaptureRequest): Promise<void>
   cleanupTask(taskId: string): Promise<void>
 }
@@ -40,13 +41,20 @@ export class FileTaskBrowserCaptureArtifactStore implements TaskBrowserCaptureAr
     return { artifactId, absolutePath }
   }
 
-  async discard(request: DiscardTaskBrowserCaptureRequest): Promise<void> {
-    if (!ARTIFACT_ID.test(request.artifactId)) {
-      throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser capture requires a safe artifact identity')
-    }
-
+  async exists(request: DiscardTaskBrowserCaptureRequest): Promise<boolean> {
+    const path = this.artifactPath(request)
     try {
-      await unlink(join(this.ownerDirectory(request.taskId, request.pluginId), `${request.artifactId}.png`))
+      await access(path)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+      throw error
+    }
+  }
+
+  async discard(request: DiscardTaskBrowserCaptureRequest): Promise<void> {
+    try {
+      await unlink(this.artifactPath(request))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
@@ -54,6 +62,13 @@ export class FileTaskBrowserCaptureArtifactStore implements TaskBrowserCaptureAr
 
   async cleanupTask(taskId: string): Promise<void> {
     await rm(join(this.rootDirectory(), ownershipKey(taskId)), { recursive: true, force: true })
+  }
+
+  private artifactPath(request: DiscardTaskBrowserCaptureRequest): string {
+    if (!ARTIFACT_ID.test(request.artifactId)) {
+      throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser capture requires a safe artifact identity')
+    }
+    return join(this.ownerDirectory(request.taskId, request.pluginId), `${request.artifactId}.png`)
   }
 
   private ownerDirectory(taskId: string, pluginId: string): string {
