@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
-  import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
+  import type { PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
   import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
@@ -10,6 +10,7 @@
   import PrStatusChip from '@openforge-app/pr-review-ui/PrStatusChip.svelte'
   import { getGitHubMarkdownImageBaseUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
   import { createGithubTaskClient } from './githubTaskClient'
+  import { getTaskPullRequestCache } from './taskPullRequestCache.svelte'
   import { useMergeOrchestration } from './useMergeOrchestration.svelte'
 
   interface Props extends PluginTaskUISectionProps {
@@ -18,19 +19,22 @@
   let { api, taskId, taskActionPending = false }: Props = $props()
 
   const client = createGithubTaskClient(untrack(() => api))
-  let pullRequests = $state<PullRequestInfo[]>([])
-  let commentsByPrId = $state<Map<number, PrComment[]>>(new Map())
-  let loading = $state(false)
+  const cache = getTaskPullRequestCache(untrack(() => api), client)
+  let cachedTask = $derived(cache.forTask(taskId))
+  let pullRequests = $derived(cachedTask.pullRequests)
+  let commentsByPrId = $derived(cachedTask.commentsByPrId)
+  let loading = $derived(cachedTask.loading)
+  let loadError = $derived(cachedTask.loaded ? null : cachedTask.error)
+  let cachedRefreshError = $derived(cachedTask.loaded ? cachedTask.error : null)
   let showLoading = $state(false)
-  let loadError = $state<string | null>(null)
   let refreshError = $state<string | null>(null)
+  let visibleRefreshError = $derived(refreshError ?? cachedRefreshError)
   let refreshing = $state(false)
   let adding = $state(false)
   let prUrl = $state('')
   let linkError = $state<string | null>(null)
   let linking = $state(false)
   let confirmingEnqueue = $state<PullRequestInfo | null>(null)
-  let loadGeneration = 0
   let requestedTaskId: string | null = null
   let loadingIndicatorTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -46,67 +50,53 @@
     loadingIndicatorTimer = null
   }
 
-  async function loadPullRequests(requestTaskId: string = taskId) {
-    const generation = ++loadGeneration
-    const next = await client.listPullRequests(requestTaskId)
-    if (generation !== loadGeneration || requestedTaskId !== requestTaskId) return
-    pullRequests = next
-    loadError = null
-    void loadComments(next, generation, requestTaskId)
-  }
-
-  async function loadComments(prs: PullRequestInfo[], generation: number, requestTaskId: string) {
-    const results = await Promise.all(prs.map(async (pr) => {
-      try {
-        return [pr.id, await client.getComments(pr.id)] as const
-      } catch {
-        return [pr.id, commentsByPrId.get(pr.id) ?? []] as const
-      }
-    }))
-    if (generation === loadGeneration && requestedTaskId === requestTaskId) {
-      commentsByPrId = new Map(results)
-    }
-  }
 
   async function refreshAfterAction() {
     const currentTaskId = taskId
     await client.refreshTask(currentTaskId)
-    await loadPullRequests(currentTaskId)
+    await cache.invalidateAndRefresh(currentTaskId)
   }
 
   const orchestration = useMergeOrchestration(client, refreshAfterAction)
+
+  const invalidationSubscriptions = [
+    'github-sync-complete',
+    'new-pr-comment',
+    'comment-addressed',
+    'ci-status-changed',
+    'review-status-changed',
+  ].map((eventName) => api.events.onGlobal(eventName, () => {
+    const visibleTaskId = taskId
+    void cache.invalidateAndRefresh(visibleTaskId).catch(() => undefined)
+  }))
 
   $effect(() => {
     const currentTaskId = taskId
     if (currentTaskId === requestedTaskId) return
 
     requestedTaskId = currentTaskId
-    pullRequests = []
-    commentsByPrId = new Map()
-    loadError = null
     refreshError = null
-    loading = true
     showLoading = false
     clearLoadingIndicatorTimer()
-    loadingIndicatorTimer = setTimeout(() => {
-      if (requestedTaskId === currentTaskId && loading) showLoading = true
-    }, LOADING_INDICATOR_DELAY_MS)
 
-    void loadPullRequests(currentTaskId)
-      .catch((error) => {
-        if (requestedTaskId === currentTaskId) loadError = errorMessage(error)
-      })
-      .finally(() => {
-        if (requestedTaskId !== currentTaskId) return
-        loading = false
-        showLoading = false
-        clearLoadingIndicatorTimer()
-      })
+    const request = cache.load(currentTaskId)
+    if (!cache.forTask(currentTaskId).loaded) {
+      loadingIndicatorTimer = setTimeout(() => {
+        const current = cache.forTask(currentTaskId)
+        if (requestedTaskId === currentTaskId && current.loading && !current.loaded) showLoading = true
+      }, LOADING_INDICATOR_DELAY_MS)
+    }
+
+    void request.catch(() => undefined).finally(() => {
+      if (requestedTaskId !== currentTaskId) return
+      showLoading = false
+      clearLoadingIndicatorTimer()
+    })
   })
 
   onDestroy(() => {
-    loadGeneration += 1
     clearLoadingIndicatorTimer()
+    for (const subscription of invalidationSubscriptions) subscription.dispose()
   })
 
   async function refreshGithubStatus() {
@@ -115,7 +105,7 @@
     refreshError = null
     try {
       await client.refreshTask(taskId)
-      await loadPullRequests()
+      await cache.invalidateAndRefresh(taskId)
     } catch (error) {
       refreshError = errorMessage(error)
     } finally {
@@ -133,7 +123,7 @@
     linkError = null
     try {
       await client.linkPullRequest(taskId, trimmedUrl)
-      await loadPullRequests()
+      await cache.invalidateAndRefresh(taskId)
       prUrl = ''
       adding = false
     } catch (error) {
@@ -143,10 +133,9 @@
     }
   }
 
-  async function markAddressed(commentId: number, prId: number) {
+  async function markAddressed(commentId: number) {
     await client.markCommentAddressed(commentId)
-    const next = await client.getComments(prId)
-    commentsByPrId = new Map(commentsByPrId).set(prId, next)
+    await cache.invalidateAndRefresh(taskId)
   }
 
   function prNumber(pr: PullRequestInfo): number { return pr.pr_number ?? pr.id }
@@ -206,7 +195,7 @@
     aria-busy={loading}
   >
     {#if loadError}<p class="m-0 text-xs text-error" role="alert">Could not load pull requests: {loadError}</p>{/if}
-    {#if refreshError}<p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {refreshError}</p>{/if}
+    {#if visibleRefreshError}<p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {visibleRefreshError}</p>{/if}
     {#if showLoading}<p class="m-0 text-xs text-base-content/55">Loading pull requests…</p>{/if}
 
     {#if adding}
@@ -264,7 +253,7 @@
           </div>
         {/if}
         {#if comments.length > 0}
-          <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments"><div class="text-[0.7rem] font-medium text-base-content/55">Unaddressed comments</div>{#each comments as comment (comment.id)}<article class="rounded-md border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}><div class="flex justify-between gap-2"><span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span><button class="btn btn-ghost btn-xs text-success" onclick={() => void markAddressed(comment.id, pr.id)}>✓ Mark addressed</button></div><div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrl(pr)} onOpenUrl={openExternal} /></div></article>{/each}</div>
+          <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Unaddressed comments"><div class="text-[0.7rem] font-medium text-base-content/55">Unaddressed comments</div>{#each comments as comment (comment.id)}<article class="rounded-md border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}><div class="flex justify-between gap-2"><span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span><button class="btn btn-ghost btn-xs text-success" onclick={() => void markAddressed(comment.id)}>✓ Mark addressed</button></div><div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrl(pr)} onOpenUrl={openExternal} /></div></article>{/each}</div>
         {/if}
       </article>
     {/each}

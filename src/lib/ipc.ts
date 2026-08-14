@@ -251,8 +251,8 @@ export async function getProjectRepo(projectId: string): Promise<{ owner: string
   return invoke<{ owner: string; name: string } | null>("get_project_repo", { projectId });
 }
 
-export async function getPullRequests(): Promise<PullRequestInfo[]> {
-  return invoke<PullRequestInfo[]>("get_pull_requests");
+export async function getPullRequests(taskId?: string): Promise<PullRequestInfo[]> {
+  return invoke<PullRequestInfo[]>("get_pull_requests", { taskId });
 }
 
 export async function linkPullRequest(taskId: string, prUrl: string): Promise<PullRequestInfo> {

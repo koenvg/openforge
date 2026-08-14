@@ -120,23 +120,36 @@ impl super::Database {
         Ok(result)
     }
 
-    pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
+    fn query_pull_requests(&self, task_id: Option<&str>) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
+        let task_filter = if task_id.is_some() {
+            " WHERE ticket_id = ?1"
+        } else {
+            ""
+        };
+        let sql = format!(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
-             FROM pull_requests
-             ORDER BY updated_at DESC",
-        )?;
-
-        let prs = stmt.query_map([], read_pr_row)?;
+             FROM pull_requests{task_filter}
+             ORDER BY updated_at DESC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let prs = stmt.query_map(rusqlite::params_from_iter(task_id), read_pr_row)?;
 
         let mut result = Vec::new();
         for pr in prs {
             result.push(pr?);
         }
         Ok(result)
+    }
+
+    pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
+        self.query_pull_requests(None)
+    }
+
+    pub fn get_pull_requests_for_task(&self, task_id: &str) -> Result<Vec<PrRow>> {
+        self.query_pull_requests(Some(task_id))
     }
 
     /// Insert a PR comment into the database
@@ -611,6 +624,58 @@ mod tests {
 
         let open_prs = db.get_open_prs().expect("get open prs failed");
         assert_eq!(open_prs.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn pull_requests_can_be_queried_for_one_task() {
+        let (db, path) = make_test_db("pr_for_task");
+        insert_test_task(&db);
+        {
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO tasks (id, initial_prompt, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params!["T-200", "Other task", "backlog", 1000, 1000],
+            )
+            .expect("insert second task failed");
+        }
+
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Requested task PR",
+            "https://github.com/acme/repo/pull/42",
+            "open",
+            1000,
+            2000,
+            false,
+        )
+        .expect("insert requested task PR failed");
+        db.insert_pull_request(
+            43,
+            "T-200",
+            "acme",
+            "repo",
+            "Other task PR",
+            "https://github.com/acme/repo/pull/43",
+            "open",
+            1000,
+            3000,
+            false,
+        )
+        .expect("insert other task PR failed");
+
+        let pull_requests = db
+            .get_pull_requests_for_task("T-100")
+            .expect("get task PRs failed");
+        assert_eq!(pull_requests.len(), 1);
+        assert_eq!(pull_requests[0].ticket_id, "T-100");
+        assert_eq!(pull_requests[0].title, "Requested task PR");
 
         drop(db);
         let _ = fs::remove_file(&path);

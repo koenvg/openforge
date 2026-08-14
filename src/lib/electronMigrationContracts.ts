@@ -85,7 +85,7 @@ export const ipcCommandContracts = [
   { functionName: 'refreshTaskGithubStatus', ipcCommand: 'refresh_task_github_status', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'setPollContext', ipcCommand: 'set_poll_context', payloadKeys: ['focused', 'activeProjectId', 'globalViewOpen'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getProjectRepo', ipcCommand: 'get_project_repo', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
-  { functionName: 'getPullRequests', ipcCommand: 'get_pull_requests', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'getPullRequests', ipcCommand: 'get_pull_requests', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'linkPullRequest', ipcCommand: 'link_pull_request', payloadKeys: ['taskId', 'prUrl'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'openUrl', ipcCommand: 'open_url', payloadKeys: ['url'], targetOwner: 'electron-main', domain: 'misc' },
   { functionName: 'openInEditor', ipcCommand: 'open_in_editor', payloadKeys: ['path'], targetOwner: 'electron-main', domain: 'misc' },

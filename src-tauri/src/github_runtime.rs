@@ -15,6 +15,7 @@ pub use polling::{
     mark_review_pr_unviewed, mark_review_pr_viewed,
 };
 pub use pr_actions::{
-    enqueue_pull_request, get_pr_comments, get_pull_requests, link_pull_request, merge_pull_request,
+    enqueue_pull_request, get_pr_comments, get_pull_requests, get_pull_requests_for_task,
+    link_pull_request, merge_pull_request,
 };
 pub use repo_resolution::get_project_repo;
