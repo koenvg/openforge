@@ -195,15 +195,6 @@ impl<'a, Catalog> PluginCommandBroker<'a, Catalog>
 where
     Catalog: BackendAgentCommandCatalog + Sync,
 {
-    #[cfg(test)]
-    pub fn new(database: Arc<Mutex<crate::db::Database>>, backend: &'a Catalog) -> Self {
-        Self {
-            database,
-            backend,
-            frontend: None,
-        }
-    }
-
     pub fn with_frontend(
         database: Arc<Mutex<crate::db::Database>>,
         backend: &'a Catalog,
@@ -602,6 +593,17 @@ mod tests {
         .expect("seed plugin");
     }
 
+    fn backend_only_broker<Catalog>(
+        database: Arc<Mutex<crate::db::Database>>,
+        backend: &Catalog,
+    ) -> PluginCommandBroker<'_, Catalog> {
+        PluginCommandBroker {
+            database,
+            backend,
+            frontend: None,
+        }
+    }
+
     #[tokio::test]
     async fn lists_only_catalog_discoverable_backend_commands_enabled_for_resolved_task_project() {
         let (database, _path) = crate::db::test_helpers::make_test_db("plugin_command_broker_list");
@@ -641,7 +643,7 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
+        let broker = backend_only_broker(Arc::new(Mutex::new(database)), &runtime);
 
         let commands = broker
             .list(&PluginCommandDiscoveryContext {
@@ -682,7 +684,7 @@ mod tests {
             )]),
             ..Default::default()
         };
-        let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
+        let broker = backend_only_broker(Arc::new(Mutex::new(database)), &runtime);
 
         let context = PluginCommandDiscoveryContext {
             task_id: Some(task.id.clone()),
@@ -765,7 +767,7 @@ mod tests {
             invocation_result: json!({ "synced": 3 }),
             ..Default::default()
         };
-        let broker = PluginCommandBroker::new(Arc::new(Mutex::new(database)), &runtime);
+        let broker = backend_only_broker(Arc::new(Mutex::new(database)), &runtime);
         let input = json!({ "force": true });
 
         let result = broker
