@@ -697,7 +697,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
   );
 
   testWidgets(
-    'software keyboard reveals the Terminal bottom without resizing the PTY',
+    'software keyboard reduces the visible Terminal viewport without resizing the PTY',
     (tester) async {
       addTearDown(tester.view.resetViewInsets);
       final presentation = _TerminalPresentation()
@@ -736,11 +736,12 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       tester.view.viewInsets = const FakeViewPadding(bottom: 240);
       await tester.pumpAndSettle();
 
-      expect(tester.getSize(find.byKey(terminalKey)), initialSize);
+      final keyboardInset = 240 / tester.view.devicePixelRatio;
       expect(
-        tester.getTopLeft(find.byKey(terminalKey)).dy,
-        closeTo(initialTop - 240 / tester.view.devicePixelRatio, 0.1),
+        tester.getSize(find.byKey(terminalKey)),
+        Size(initialSize.width, initialSize.height - keyboardInset),
       );
+      expect(tester.getTopLeft(find.byKey(terminalKey)).dy, initialTop);
       expect(grids, hasLength(resizeCount));
 
       await tester.pumpWidget(const SizedBox.shrink());

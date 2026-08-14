@@ -28,6 +28,12 @@ class _OpenForgeTerminalViewState extends State<OpenForgeTerminalView>
 
   @override
   void didChangeMetrics() {
+    if (!mounted) return;
+    _viewportCoordinator.updateKeyboardVisibility(
+      visible: View.of(context).viewInsets.bottom > 0,
+      dimensions: widget.adapter.dimensions,
+    );
+    setState(() {});
     _viewportCoordinator.restoreManualScrollOffset(isMounted: () => mounted);
   }
 
