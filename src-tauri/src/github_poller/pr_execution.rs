@@ -29,6 +29,7 @@ pub(super) struct PollSinglePrResult {
     pub(super) pr_id: i64,
     pub(super) ticket_id: String,
     pub(super) pr_title: String,
+    pub(super) github_node_id: Option<String>,
     /// PR source head SHA persisted on the pull_requests row.
     pub(super) head_sha: String,
     /// SHA whose CI signals were evaluated; can be a merge-group SHA.
@@ -62,6 +63,7 @@ pub(super) fn comment_fetch_error_result(
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
+        github_node_id: pr.github_node_id.clone(),
         head_sha: pr.head_sha.clone(),
         ci_validation_sha: pr.head_sha.clone(),
         old_ci_status,
@@ -262,6 +264,10 @@ pub(super) async fn poll_single_pr(
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
         pr_title: pr.title,
+        github_node_id: graphql_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.github_node_id.clone())
+            .or(pr.github_node_id),
         head_sha: result_head_sha,
         ci_validation_sha,
         old_ci_status,

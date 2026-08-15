@@ -77,6 +77,7 @@ fn make_pr(
             merge_queue_required: None,
             merge_queue_state: None,
             readiness_updated_at: None,
+            github_node_id: None,
             unaddressed_comment_count: 0,
         },
         project_id: project_id.to_string(),

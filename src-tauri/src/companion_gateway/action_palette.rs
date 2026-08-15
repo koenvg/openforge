@@ -268,17 +268,17 @@ impl DatabaseCompanionActionPaletteService {
             .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)
     }
 
-    async fn refresh_task_github(&self, task_id: &str) -> Result<(), CompanionActionPaletteError> {
-        self.visible_task(task_id)?;
-        crate::github_poller::refresh_task_github_status_for_sidecar(
-            Arc::clone(&self.database),
-            &self.github_client,
-            self.app_event_tx.clone(),
-            task_id,
-        )
-        .await
-        .map(|_| ())
-        .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)
+    fn publish_pull_request_action(&self, task_id: &str, pr_id: i64, action: &str) {
+        crate::app_events::publish_app_event_to_runtime(
+            self.app.as_ref(),
+            &self.app_event_tx,
+            "task-pull-request-updated",
+            &serde_json::json!({
+                "task_id": task_id,
+                "pr_id": pr_id,
+                "action": action,
+            }),
+        );
     }
 
     fn unique_ready_pull_request(
@@ -304,31 +304,34 @@ impl DatabaseCompanionActionPaletteService {
     }
 
     async fn merge_pull_request(&self, task_id: &str) -> Result<(), CompanionActionPaletteError> {
-        self.refresh_task_github(task_id).await?;
         let pull_request = self.unique_ready_pull_request(task_id, "ready_to_merge", "merge")?;
-        crate::github_runtime::merge_pull_request(
+        crate::github_runtime::merge_task_pull_request(
+            &self.database,
             &self.github_client,
-            &pull_request.repo_owner,
-            &pull_request.repo_name,
-            pull_request.pr_number,
+            task_id,
+            pull_request.id,
+            &pull_request.head_sha,
         )
         .await
-        .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)
+        .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)?;
+        self.publish_pull_request_action(task_id, pull_request.id, "merged");
+        Ok(())
     }
 
     async fn enqueue_pull_request(&self, task_id: &str) -> Result<(), CompanionActionPaletteError> {
-        self.refresh_task_github(task_id).await?;
         let pull_request =
             self.unique_ready_pull_request(task_id, "ready_to_enqueue", "enqueue")?;
-        crate::github_runtime::enqueue_pull_request(
+        crate::github_runtime::enqueue_task_pull_request(
             &self.database,
             &self.github_client,
-            &pull_request.repo_owner,
-            &pull_request.repo_name,
-            pull_request.pr_number,
+            task_id,
+            pull_request.id,
+            &pull_request.head_sha,
         )
         .await
-        .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)
+        .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)?;
+        self.publish_pull_request_action(task_id, pull_request.id, "enqueued");
+        Ok(())
     }
 }
 

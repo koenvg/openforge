@@ -320,4 +320,38 @@ describe('GitHub Sync Task pull request section', () => {
     expect((await screen.findByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
   })
+  it('keeps an in-flight action bound to its original Task without forcing GitHub Sync', async () => {
+    let resolveMerge!: () => void
+    const mergeRequest = new Promise<void>((resolve) => { resolveMerge = resolve })
+    const invoke = vi.fn(async (method: string, payload?: unknown) => {
+      if (method === 'listTaskPullRequests') {
+        const { taskId } = payload as { taskId: string }
+        return taskId === 'T-42'
+          ? [createPullRequest()]
+          : [createPullRequest({ id: 99, pr_number: 99, ticket_id: 'T-99', title: 'Other Task PR' })]
+      }
+      if (method === 'getTaskPrComments') return []
+      if (method === 'mergeTaskPullRequest') return mergeRequest
+      return emptyPollResult
+    })
+
+    const { rerender } = renderSection(invoke)
+    await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+    await rerender({
+      taskId: 'T-99',
+      projectId: 'P-1',
+      context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-99' },
+      taskActionPending: false,
+    })
+    expect(await screen.findByText('Other Task PR')).toBeTruthy()
+
+    resolveMerge()
+    await waitFor(() => {
+      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && (payload as { taskId: string }).taskId === 'T-42')).toHaveLength(2)
+    })
+
+    expect(invoke.mock.calls.filter(([method]) => method === 'mergeTaskPullRequest')).toHaveLength(1)
+    expect(invoke.mock.calls.filter(([method]) => method === 'refreshTaskGithubStatus')).toHaveLength(0)
+    expect(screen.queryByText('Pull request merged successfully.')).toBeNull()
+  })
 })

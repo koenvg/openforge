@@ -18,8 +18,9 @@
   }
   let { api, taskId, taskActionPending = false }: Props = $props()
 
-  const client = createGithubTaskClient(untrack(() => api))
-  const cache = getTaskPullRequestCache(untrack(() => api), client)
+  const initialApi = untrack(() => api)
+  const client = createGithubTaskClient(initialApi)
+  const cache = getTaskPullRequestCache(initialApi, client)
   let cachedTask = $derived(cache.forTask(taskId))
   let pullRequests = $derived(cachedTask.pullRequests)
   let commentsByPrId = $derived(cachedTask.commentsByPrId)
@@ -51,13 +52,11 @@
   }
 
 
-  async function refreshAfterAction() {
-    const currentTaskId = taskId
-    await client.refreshTask(currentTaskId)
-    await cache.invalidateAndRefresh(currentTaskId)
+  async function refreshCompletedAction(pr: PullRequestInfo) {
+    await cache.invalidateAndRefresh(pr.ticket_id)
   }
 
-  const orchestration = useMergeOrchestration(client, refreshAfterAction)
+  const orchestration = useMergeOrchestration(client, refreshCompletedAction)
 
   const invalidationSubscriptions = [
     'github-sync-complete',
@@ -65,9 +64,12 @@
     'comment-addressed',
     'ci-status-changed',
     'review-status-changed',
-  ].map((eventName) => api.events.onGlobal(eventName, () => {
+  ].map((eventName) => initialApi.events.onGlobal(eventName, () => {
     const visibleTaskId = taskId
     void cache.invalidateAndRefresh(visibleTaskId).catch(() => undefined)
+  }))
+  invalidationSubscriptions.push(initialApi.events.onGlobal<{ task_id: string }>('task-pull-request-updated', ({ task_id }) => {
+    void cache.invalidateAndRefresh(task_id).catch(() => undefined)
   }))
 
   $effect(() => {

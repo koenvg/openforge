@@ -1584,6 +1584,35 @@ CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
         }
         Ok(())
     }),
+    // Task pull-request enqueue actions use the locally cached GraphQL node id so the
+    // action itself requires only the enqueue mutation request. Legacy repair tests can
+    // omit pull_requests or pre-create the column, so keep this migration idempotent.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if table_exists {
+            let has_github_node_id: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'github_node_id'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !has_github_node_id {
+                tx.execute(
+                    "ALTER TABLE pull_requests ADD COLUMN github_node_id TEXT",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets

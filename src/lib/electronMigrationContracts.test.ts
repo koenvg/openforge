@@ -159,6 +159,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
   it('locks the current app shell event channel names registered by appDesktopEventListeners', () => {
     expect(appShellEventContracts.map(contract => contract.eventName)).toEqual([
       'github-sync-complete',
+      'task-pull-request-updated',
       'openforge-app-events-gap',
       'review-status-changed',
       'action-complete',

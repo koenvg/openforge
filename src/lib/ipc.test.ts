@@ -107,12 +107,15 @@ describe("ipc GitHub pull request commands", () => {
   });
 
   it("sends camelCase payload for enqueuePullRequest", async () => {
-    await enqueuePullRequest("owner", "repo", 42);
+    await enqueuePullRequest("T-42", 1001, "owner", "repo", 42, "head-sha");
 
-    expect(invokeMock).toHaveBeenCalledWith("enqueue_pull_request", {
+    expect(invokeMock).toHaveBeenCalledWith("enqueue_task_pull_request", {
+      taskId: "T-42",
+      prId: 1001,
       owner: "owner",
       repo: "repo",
       prNumber: 42,
+      expectedHeadSha: "head-sha",
     });
   });
 });

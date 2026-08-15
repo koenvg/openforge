@@ -32,6 +32,7 @@ fn test_add_readiness_warning_deduplicates_unresolved_conversations() {
 fn github_readiness_snapshot_keeps_ci_data_scoped_to_source_sha() {
     let pr = make_github_readiness_pr();
     let snapshot = GitHubReadinessSnapshot {
+        github_node_id: None,
         source_head_sha: Some("new-head-sha".to_string()),
         status_check_rollup_sha: Some("new-head-sha".to_string()),
         check_runs: CheckRunsResponse {
@@ -75,6 +76,7 @@ fn github_readiness_snapshot_keeps_ci_data_scoped_to_source_sha() {
 fn github_readiness_snapshot_mismatched_rollup_sha_requires_rest_fallback() {
     let pr = make_github_readiness_pr();
     let snapshot = GitHubReadinessSnapshot {
+        github_node_id: None,
         source_head_sha: Some("new-head-sha".to_string()),
         status_check_rollup_sha: Some("old-head-sha".to_string()),
         check_runs: CheckRunsResponse {
@@ -388,6 +390,7 @@ fn readiness_snapshot_with_policy(
     policy: RepositoryPolicyFacts,
 ) -> GitHubReadinessSnapshot {
     GitHubReadinessSnapshot {
+        github_node_id: None,
         source_head_sha: source_head_sha.map(str::to_string),
         status_check_rollup_sha: status_check_rollup_sha.map(str::to_string),
         check_runs: CheckRunsResponse {

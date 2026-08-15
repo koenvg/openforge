@@ -23,6 +23,7 @@ export async function registerAppDesktopEventListeners(
 
   const eventListenerRegistrations = [
     pullRequestAttentionListeners.githubSyncComplete,
+    pullRequestAttentionListeners.taskPullRequestUpdated,
     appLifecycleListeners.appEventsGap,
     pullRequestAttentionListeners.reviewStatusChanged,
     taskSessionListeners.actionComplete,

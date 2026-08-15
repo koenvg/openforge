@@ -73,6 +73,7 @@ fn make_github_readiness_pr() -> PrRow {
         merge_queue_required: None,
         merge_queue_state: None,
         readiness_updated_at: None,
+        github_node_id: None,
         unaddressed_comment_count: 0,
     }
 }
@@ -107,6 +108,7 @@ fn readiness_snapshot_with_policy(
     policy: crate::github_client::RepositoryPolicyFacts,
 ) -> GitHubReadinessSnapshot {
     GitHubReadinessSnapshot {
+        github_node_id: None,
         source_head_sha: source_head_sha.map(str::to_string),
         status_check_rollup_sha: status_check_rollup_sha.map(str::to_string),
         check_runs: CheckRunsResponse {

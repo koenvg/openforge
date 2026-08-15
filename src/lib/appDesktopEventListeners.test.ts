@@ -147,6 +147,19 @@ describe('registerAppDesktopEventListeners', () => {
     expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
   })
 
+  it('invalidates pull request and Focus surfaces after a local PR action', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('task-pull-request-updated')?.({
+      payload: { task_id: 'T-42', pr_id: 42, action: 'merged' },
+    })
+
+    expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+    expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
+  })
+
   it('reloads pull request counts and attention after a comment is addressed', async () => {
     const { deps, handlers } = createHarness()
 

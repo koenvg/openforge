@@ -16,6 +16,12 @@ export function createPullRequestAttentionEventListeners(deps: PullRequestAttent
       void deps.refreshPrCounts()
     }),
 
+    taskPullRequestUpdated: defineDesktopEventListener('task-pull-request-updated', () => {
+      void deps.loadPullRequests()
+      void deps.loadProjectAttention()
+      void deps.refreshPrCounts()
+    }),
+
     reviewStatusChanged: defineDesktopEventListener('review-status-changed', () => {
       void deps.loadPullRequests()
     }),
