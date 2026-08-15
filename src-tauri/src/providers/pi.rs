@@ -231,6 +231,7 @@ mod tests {
             provider: "pi".to_string(),
             claude_session_id: None,
             pi_session_id: pi_session_id.map(str::to_string),
+            grok_session_id: None,
         }
     }
 

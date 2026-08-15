@@ -101,6 +101,7 @@ export const ipcCommandContracts = [
   { functionName: 'checkOpenCodeInstalled', ipcCommand: 'check_opencode_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkPiInstalled', ipcCommand: 'check_pi_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkCodexInstalled', ipcCommand: 'check_codex_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'checkGrokInstalled', ipcCommand: 'check_grok_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkClaudeInstalled', ipcCommand: 'check_claude_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getConfig', ipcCommand: 'get_config', payloadKeys: ['key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setConfig', ipcCommand: 'set_config', payloadKeys: ['key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },

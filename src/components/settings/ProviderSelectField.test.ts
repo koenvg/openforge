@@ -18,6 +18,9 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     piVersion: null,
     codexInstalled: false,
     codexVersion: null,
+    grokInstalled: false,
+    grokVersion: null,
+    grokAuthenticated: false,
     onChange: vi.fn(),
     onRefreshInstallationStatus: vi.fn(),
     ...overrides,
@@ -34,6 +37,7 @@ describe('ProviderSelectField', () => {
     expect(options).toContain('opencode')
     expect(options).toContain('pi')
     expect(options).toContain('codex')
+    expect(options).toContain('grok')
   })
 
   it('renders Pi installed status', () => {
@@ -98,6 +102,39 @@ describe('ProviderSelectField', () => {
     })
 
     expect(screen.getByText('Codex is not installed')).toBeTruthy()
+  })
+
+  it('renders Grok installed status', () => {
+    render(ProviderSelectField, {
+      props: defaultProps({ grokInstalled: true, grokVersion: 'grok-cli 0.1.0' }),
+    })
+
+    expect(screen.getByText('Grok grok-cli 0.1.0')).toBeTruthy()
+  })
+
+  it('renders Grok not installed status', () => {
+    render(ProviderSelectField, {
+      props: defaultProps({ grokInstalled: false, grokVersion: null }),
+    })
+
+    expect(screen.getByText('Grok not installed')).toBeTruthy()
+  })
+
+  it('renders warning when selected provider is Grok and not installed', () => {
+    render(ProviderSelectField, {
+      props: defaultProps({ aiProvider: 'grok', grokInstalled: false }),
+    })
+
+    expect(screen.getByText('Grok is not installed')).toBeTruthy()
+  })
+
+  it('renders authentication recovery when Grok is installed but not authenticated', () => {
+    render(ProviderSelectField, {
+      props: defaultProps({ aiProvider: 'grok', grokInstalled: true, grokAuthenticated: false }),
+    })
+
+    expect(screen.getByText('Grok needs authentication')).toBeTruthy()
+    expect(screen.getByText(/xai_api_key/i)).toBeTruthy()
   })
 
   it('renders authentication recovery when Claude Code is installed but not authenticated', () => {

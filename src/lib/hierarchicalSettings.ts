@@ -48,6 +48,7 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
       { value: 'opencode', label: 'OpenCode' },
       { value: 'pi', label: 'Pi Coding Agent' },
       { value: 'codex', label: 'Codex' },
+      { value: 'grok', label: 'Grok' },
     ],
   },
   {

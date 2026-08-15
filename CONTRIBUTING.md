@@ -8,7 +8,7 @@ This document covers the repository's developer workflows. Open Forge is source-
 - [Node.js](https://nodejs.org/) 22.12 or newer (the root `package.json` `engines.node` constraint is authoritative)
 - [pnpm](https://pnpm.io/) 10 or newer
 - macOS with Xcode Command Line Tools for Electron packaging and Metal/Whisper support
-- At least one supported coding-agent provider, such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://github.com/opencode-ai/opencode), or Pi
+- At least one supported coding-agent provider, such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://github.com/opencode-ai/opencode), Pi, or [Grok](https://x.ai/cli)
 
 ## Repository setup
 
@@ -108,7 +108,7 @@ Rust-only validation does not require a prebuilt `dist/` renderer bundle. Releas
 - **Renderer:** Svelte 5, TypeScript, Tailwind CSS v4, and daisyUI v5
 - **Desktop shell:** Electron/Chromium main process with a sandboxed preload
 - **Backend:** Rust sidecar and SQLite
-- **Agent integrations:** Claude Code CLI, OpenCode, and Pi
+- **Agent integrations:** Claude Code CLI, OpenCode, Pi, Codex, and Grok
 - **Plugin platform:** OpenForge plugin SDK and built-in plugin workspace
 
 ## OpenForge CLI

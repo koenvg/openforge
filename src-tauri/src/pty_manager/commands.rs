@@ -102,6 +102,51 @@ pub(crate) fn build_codex_args(
     args
 }
 
+pub(crate) fn build_grok_args(
+    prompt: &str,
+    resume_session_id: Option<&str>,
+    continue_session: bool,
+    permission_mode: Option<&str>,
+    model: Option<&str>,
+) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(id) = resume_session_id {
+        args.push("--resume".to_string());
+        args.push(id.to_string());
+    } else if continue_session {
+        args.push("--continue".to_string());
+    }
+    if let Some(mode) = permission_mode.filter(|m| !m.is_empty() && *m != "default") {
+        args.push("--permission-mode".to_string());
+        args.push(mode.to_string());
+    }
+    if let Some(model) = model.filter(|m| !m.is_empty()) {
+        args.push("--model".to_string());
+        args.push(model.to_string());
+    }
+    // The prompt is appended LAST as a bare positional (`grok [OPTIONS] [PROMPT]`).
+    // This must never be emitted right after a bare `--resume` — clap treats
+    // `-r/--resume`'s value as optional, so a bare `--resume` followed by a
+    // positional would swallow the prompt as the session id. We only ever emit
+    // `--resume <id>` (always with a value) or `--continue` (a flag with no
+    // value), so a trailing prompt can never be misparsed as a resume value.
+    //
+    // We also guard the positional itself with a bare `--` immediately before
+    // it, but ONLY when a prompt is actually appended (an empty prompt must
+    // never leave a dangling `--`). Without this, a prompt that happens to
+    // start with a dash (e.g. "-p summarize this") is parsed by grok's clap
+    // as options instead of the positional prompt — `-p` in particular flips
+    // grok into headless single-turn mode instead of the interactive session,
+    // and other leading-dash prompts abort with "unexpected argument". `--`
+    // is clap's standard end-of-options marker, so everything after it is
+    // always treated as the positional prompt.
+    if !prompt.is_empty() {
+        args.push("--".to_string());
+        args.push(prompt.to_string());
+    }
+    args
+}
+
 pub(super) fn resolve_shell_path<'a>(
     shell: Option<&str>,
     candidates: impl IntoIterator<Item = &'a str>,
@@ -224,5 +269,140 @@ mod tests {
     #[test]
     fn codex_args_continue_last_session_without_prompt() {
         assert_eq!(build_codex_args("", None, true), vec!["resume", "--last"]);
+    }
+
+    #[test]
+    fn grok_args_fresh_session_with_permission_mode() {
+        assert_eq!(
+            build_grok_args(
+                "implement the feature",
+                None,
+                false,
+                Some("acceptEdits"),
+                None
+            ),
+            vec![
+                "--permission-mode",
+                "acceptEdits",
+                "--",
+                "implement the feature",
+            ]
+        );
+    }
+
+    #[test]
+    fn grok_args_empty_prompt_is_omitted() {
+        assert_eq!(
+            build_grok_args("", None, false, None, None),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn grok_args_resume_by_id_ignores_default_mode() {
+        assert_eq!(
+            build_grok_args(
+                "continue work",
+                Some("grok-session-1"),
+                false,
+                Some("default"),
+                None
+            ),
+            vec!["--resume", "grok-session-1", "--", "continue work"]
+        );
+    }
+
+    #[test]
+    fn grok_args_resume_prompt_ordering_is_resume_then_double_dash_then_prompt() {
+        // Regression guard for the clap hazard: `-r/--resume` takes an OPTIONAL
+        // value, so a bare `--resume` immediately followed by a positional would
+        // swallow the prompt as the session id. Assert the exact ordering.
+        assert_eq!(
+            build_grok_args("fix the bug", Some("grok-session-9"), false, None, None),
+            vec!["--resume", "grok-session-9", "--", "fix the bug"]
+        );
+    }
+
+    #[test]
+    fn grok_args_continue_without_prompt() {
+        assert_eq!(
+            build_grok_args("", None, true, None, None),
+            vec!["--continue"]
+        );
+    }
+
+    #[test]
+    fn grok_args_continue_with_prompt() {
+        assert_eq!(
+            build_grok_args("keep going", None, true, None, None),
+            vec!["--continue", "--", "keep going"]
+        );
+    }
+
+    #[test]
+    fn grok_args_include_model_when_present() {
+        assert_eq!(
+            build_grok_args("", None, false, None, Some("grok-build")),
+            vec!["--model", "grok-build"]
+        );
+    }
+
+    #[test]
+    fn grok_args_permission_mode_and_model_emitted_before_double_dash_and_prompt() {
+        assert_eq!(
+            build_grok_args(
+                "implement the feature",
+                None,
+                false,
+                Some("acceptEdits"),
+                Some("grok-build")
+            ),
+            vec![
+                "--permission-mode",
+                "acceptEdits",
+                "--model",
+                "grok-build",
+                "--",
+                "implement the feature",
+            ]
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Fix 1 regression guards: a prompt beginning with a dash must never be
+    // parsed by grok's clap as flags/options.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn grok_args_prompt_starting_with_dash_is_guarded_by_double_dash() {
+        assert_eq!(
+            build_grok_args("-p summarize this", None, false, None, None),
+            vec!["--", "-p summarize this"]
+        );
+    }
+
+    #[test]
+    fn grok_args_normal_prompt_is_guarded_by_double_dash() {
+        assert_eq!(
+            build_grok_args("fix the bug", None, false, None, None),
+            vec!["--", "fix the bug"]
+        );
+    }
+
+    #[test]
+    fn grok_args_empty_prompt_emits_no_trailing_double_dash() {
+        let args = build_grok_args("", None, false, None, None);
+        assert!(
+            !args.contains(&"--".to_string()),
+            "empty prompt must not leave a dangling -- guard: {args:?}"
+        );
+    }
+
+    #[test]
+    fn grok_args_resume_with_prompt_is_resume_id_then_double_dash_then_prompt() {
+        assert_eq!(
+            build_grok_args("fix the bug", Some("grok-session-1"), false, None, None),
+            vec!["--resume", "grok-session-1", "--", "fix the bug"]
+        );
     }
 }

@@ -1,14 +1,15 @@
 import type { AgentSession } from './types'
 
-export type AgentResumeCommandProvider = 'opencode' | 'claude-code' | 'pi' | 'codex'
+export type AgentResumeCommandProvider = 'opencode' | 'claude-code' | 'pi' | 'codex' | 'grok'
 
-type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id'
+type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id' | 'grok_session_id'
 
 const RESUME_COMMANDS: Record<AgentResumeCommandProvider, { binary: string, flag: string }> = {
   opencode: { binary: 'opencode', flag: '--session' },
   'claude-code': { binary: 'claude', flag: '--resume' },
   pi: { binary: 'pi', flag: '--session' },
   codex: { binary: 'codex', flag: 'resume' },
+  grok: { binary: 'grok', flag: '--resume' },
 }
 
 export function getAgentResumeCommand(provider: AgentResumeCommandProvider, sessionId: string | null): string | null {
@@ -26,6 +27,7 @@ export function getAgentSessionResumeCommand(session: AgentSession | null): stri
     opencode: 'opencode_session_id',
     'claude-code': 'claude_session_id',
     pi: 'pi_session_id',
+    grok: 'grok_session_id',
   }
   const provider = session.provider as AgentResumeCommandProvider
   const sessionIdKey = providerSessionKeys[provider]

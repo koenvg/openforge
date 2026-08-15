@@ -26,6 +26,8 @@ export function getAgentProviderConfig(provider: string | null): AgentProviderCo
       return { runningText: 'Pi agent running...', supportsCheckpointQuestion: false }
     case 'codex':
       return { runningText: 'Codex agent running...', supportsCheckpointQuestion: false }
+    case 'grok':
+      return { runningText: 'Grok agent running...', supportsCheckpointQuestion: false }
     default:
       return { runningText: 'Agent running...', supportsCheckpointQuestion: true }
   }

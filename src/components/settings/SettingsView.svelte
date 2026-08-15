@@ -93,6 +93,9 @@
   let piVersion = $state<string | null>(null)
   let codexInstalled = $state(false)
   let codexVersion = $state<string | null>(null)
+  let grokInstalled = $state(false)
+  let grokVersion = $state<string | null>(null)
+  let grokAuthenticated = $state(false)
   let installationStatusLoading = $state(false)
   let installationStatusError = $state<string | null>(null)
 
@@ -235,6 +238,9 @@
     piVersion = status.piVersion
     codexInstalled = status.codexInstalled
     codexVersion = status.codexVersion
+    grokInstalled = status.grokInstalled
+    grokVersion = status.grokVersion
+    grokAuthenticated = status.grokAuthenticated
   }
 
   async function refreshInstallationStatus() {
@@ -666,6 +672,9 @@
               {piVersion}
               {codexInstalled}
               {codexVersion}
+              {grokInstalled}
+              {grokVersion}
+              {grokAuthenticated}
               {installationStatusLoading}
               {installationStatusError}
               disabled={!hasProject}

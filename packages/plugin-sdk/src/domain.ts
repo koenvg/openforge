@@ -108,6 +108,7 @@ export interface AgentSession {
   provider: string;
   claude_session_id: string | null;
   pi_session_id: string | null;
+  grok_session_id: string | null;
 }
 
 export interface ClaudeInstallStatus {

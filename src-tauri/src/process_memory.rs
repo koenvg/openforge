@@ -425,6 +425,7 @@ mod tests {
             provider: provider.to_string(),
             claude_session_id: None,
             pi_session_id: None,
+            grok_session_id: None,
         }
     }
 

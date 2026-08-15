@@ -59,6 +59,7 @@ const makeSession = (taskId: string, status: string, checkpoint_data: string | n
   provider: 'opencode',
   claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
 })
 
 const makePr = (taskId: string, unaddressed: number): PullRequestInfo => ({

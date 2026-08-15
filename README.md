@@ -33,7 +33,7 @@ Open Forge is a macOS desktop app for running AI coding agents across one or mor
 | Area | What Open Forge provides |
 |---|---|
 | **Flow board** | Create, prioritize, search, and move tasks from a focused board with an always-visible detail pane and keyboard navigation. |
-| **Agent runs** | Start Claude Code, OpenCode, or Pi-based agents per task. Each run gets an isolated git worktree and branch. |
+| **Agent runs** | Start Claude Code, OpenCode, Pi, Codex, or Grok-based agents per task. Each run gets an isolated git worktree and branch. |
 | **Live terminals** | Watch embedded PTY output, use multiple shell tabs, and keep agent lifecycle state attached to the task. |
 | **Self-review** | Inspect agent changes, leave inline feedback, and send that feedback back into the loop. |
 | **PR review** | Review assigned GitHub pull requests, browse diffs and comments, submit reviews, and track CI/review status. |

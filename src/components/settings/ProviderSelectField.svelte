@@ -8,6 +8,7 @@
     opencode: 'https://opencode.ai',
     pi: 'https://pi.dev/docs/latest/quickstart',
     codex: 'https://github.com/openai/codex',
+    grok: 'https://x.ai/cli',
   }
 
   interface Props {
@@ -21,6 +22,9 @@
     piVersion: string | null
     codexInstalled: boolean
     codexVersion: string | null
+    grokInstalled: boolean
+    grokVersion: string | null
+    grokAuthenticated: boolean
     installationStatusLoading?: boolean
     installationStatusError?: string | null
     disabled?: boolean
@@ -51,6 +55,9 @@
     piVersion,
     codexInstalled,
     codexVersion,
+    grokInstalled,
+    grokVersion,
+    grokAuthenticated,
     installationStatusLoading = false,
     installationStatusError = null,
     disabled = false,
@@ -102,6 +109,17 @@
       installGuidance: 'Install the Codex CLI and make sure the codex command is available on PATH, then refresh install status.',
       authTitle: null,
       authGuidance: null,
+    },
+    {
+      id: 'grok',
+      label: 'Grok',
+      installed: grokInstalled,
+      authenticated: grokAuthenticated,
+      version: grokVersion,
+      installTitle: 'Grok is not installed',
+      installGuidance: 'Install the Grok CLI (curl -fsSL https://x.ai/cli/install.sh | bash) and make sure the grok command is available on PATH, then refresh install status.',
+      authTitle: 'Grok needs authentication',
+      authGuidance: 'Grok signs in via your browser on first run, or set XAI_API_KEY.',
     },
   ])
 
@@ -194,6 +212,16 @@
         <span class="text-error">✗</span>
         <span class="text-base-content/50">Codex not installed</span>
         {@render installLink(PROVIDER_INSTALL_URLS['codex'], 'Codex')}
+      {/if}
+    </div>
+    <div class="flex items-center gap-2">
+      {#if grokInstalled}
+        <span class="text-success">✓</span>
+        <span>Grok {grokVersion || ''}</span>
+      {:else}
+        <span class="text-error">✗</span>
+        <span class="text-base-content/50">Grok not installed</span>
+        {@render installLink(PROVIDER_INSTALL_URLS['grok'], 'Grok')}
       {/if}
     </div>
     {#if installationStatusLoading}

@@ -166,6 +166,7 @@ export function createAgentSession(overrides: Partial<AgentSession> = {}): Agent
     provider,
     claude_session_id: provider === 'claude-code' ? 'claude-sess-abc123' : null,
     pi_session_id: provider === 'pi' ? 'pi-sess-abc123' : null,
+    grok_session_id: provider === 'grok' ? 'grok-sess-abc123' : null,
     ...overrides,
     pty_instance_id: overrides.pty_instance_id ?? null,
   }

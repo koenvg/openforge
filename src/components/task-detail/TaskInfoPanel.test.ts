@@ -157,6 +157,7 @@ describe('TaskInfoPanel', () => {
       provider: 'pi',
       claude_session_id: null,
       pi_session_id: 'pi-sess-abc123',
+      grok_session_id: null,
       ...overrides,
     }
   }

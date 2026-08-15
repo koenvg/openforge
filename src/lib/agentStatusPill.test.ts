@@ -17,6 +17,7 @@ function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
     provider: 'claude-code',
     claude_session_id: 'claude-sess-abc',
     pi_session_id: null,
+    grok_session_id: null,
     ...overrides,
   }
 }
@@ -37,6 +38,12 @@ describe('getAgentProviderConfig', () => {
   it('maps codex', () => {
     const c = getAgentProviderConfig('codex')
     expect(c.runningText).toBe('Codex agent running...')
+    expect(c.supportsCheckpointQuestion).toBe(false)
+  })
+
+  it('maps grok', () => {
+    const c = getAgentProviderConfig('grok')
+    expect(c.runningText).toBe('Grok agent running...')
     expect(c.supportsCheckpointQuestion).toBe(false)
   })
 
@@ -62,6 +69,12 @@ describe('deriveAgentStatusPillView', () => {
   it('uses the codex running status text', () => {
     const view = deriveAgentStatusPillView(makeSession({ provider: 'codex', status: 'running', claude_session_id: null }), 'running')
     expect(view!.statusText).toBe('Codex agent running...')
+  })
+
+  it('uses the grok running status text', () => {
+    const view = deriveAgentStatusPillView(makeSession({ provider: 'grok', status: 'running', claude_session_id: null, grok_session_id: 'grok-sess-1' }), 'running')
+    expect(view!.statusText).toBe('Grok agent running...')
+    expect(view!.checkpointActive).toBe(false)
   })
 
   it('flags an opencode checkpoint question when paused', () => {

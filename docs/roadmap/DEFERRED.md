@@ -41,7 +41,7 @@ reference it when picking these up.
   (README/description/labels), with iterative "refine with feedback".
 - **Decision (important):** do **not** use Groq (the original) and do **not** add a separate
   Anthropic/OpenAI API key. Instead **reuse the project's already-configured agent** —
-  `ai_provider` is one of `claude-code` / `codex` / `opencode` / `pi` (per-project, falling
+  `ai_provider` is one of `claude-code` / `codex` / `opencode` / `pi` / `grok` (per-project, falling
   back to global, default `claude-code`). Call that agent's CLI in **non-interactive / print
   mode** (e.g. `claude -p --output-format json`, `codex exec`, `opencode run`) and parse the
   returned JSON. This reuses the user's existing agent login — no new credential, same LLM

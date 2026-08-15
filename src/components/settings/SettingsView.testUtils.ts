@@ -77,6 +77,7 @@ vi.mock('../../lib/ipc', () => ({
   checkClaudeInstalled: mocks.checkClaudeInstalled,
   checkPiInstalled: mocks.checkPiInstalled,
   checkCodexInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),
+  checkGrokInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null, authenticated: false })),
   getAllWhisperModelStatuses: mocks.getAllWhisperModelStatuses,
   getDeveloperLogSnapshot: mocks.getDeveloperLogSnapshot,
   getDeveloperLogs: vi.fn(() => Promise.resolve([])),

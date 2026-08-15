@@ -53,6 +53,13 @@
     sessionIdKey={null}
     rootTestId="codex-agent-panel"
   />
+{:else if provider === 'grok'}
+  <AgentTerminalShell
+    {taskId}
+    {isStarting}
+    sessionIdKey="grok_session_id"
+    rootTestId="grok-agent-panel"
+  />
 {:else if provider || checkedDb}
   <AgentTerminalShell
     {taskId}

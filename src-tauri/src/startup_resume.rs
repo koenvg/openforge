@@ -301,7 +301,10 @@ pub(crate) async fn resume_task_sessions(
 
                 // Mark provider sessions as interrupted on failure for providers that do not
                 // have an external status source to reconcile against after startup.
-                if matches!(provider_name, "claude-code" | "pi" | "opencode" | "codex") {
+                if matches!(
+                    provider_name,
+                    "claude-code" | "pi" | "opencode" | "codex" | "grok"
+                ) {
                     if let Some(ref session) = latest_session {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         match db.lock() {
@@ -466,6 +469,7 @@ mod tests {
             provider: "opencode".to_string(),
             claude_session_id: None,
             pi_session_id: None,
+            grok_session_id: None,
         }
     }
 
