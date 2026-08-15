@@ -297,7 +297,7 @@ describe('createTaskActionRunner', () => {
     expect(get(error)).toBe('Multiple pull requests are ready to merge. Open the task details to choose the correct PR.')
   })
 
-  it('marks a single ready PR merged locally and then triggers GitHub sync', async () => {
+  it('marks a single ready PR merged locally without forcing GitHub sync', async () => {
     const triggerGithubSync = vi.fn(async () => undefined)
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
@@ -310,13 +310,13 @@ describe('createTaskActionRunner', () => {
 
     await runner.mergeReadyPullRequest(task)
 
-    expect(mergePullRequest).toHaveBeenCalledWith('owner', 'repo', 42)
+    expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, 'owner', 'repo', 42, readyPr.head_sha)
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
-    expect(triggerGithubSync).toHaveBeenCalledOnce()
+    expect(triggerGithubSync).not.toHaveBeenCalled()
   })
 
-  it('marks a single ready-to-enqueue PR queued locally and then triggers GitHub sync', async () => {
+  it('marks a single ready-to-enqueue PR queued locally without forcing GitHub sync', async () => {
     const triggerGithubSync = vi.fn(async () => undefined)
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
@@ -337,13 +337,13 @@ describe('createTaskActionRunner', () => {
 
     await runner.enqueueReadyPullRequest(task)
 
-    expect(enqueuePullRequest).toHaveBeenCalledWith('owner', 'repo', 43)
+    expect(enqueuePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, 'owner', 'repo', 43, readyPr.head_sha)
     expect(get(ticketPrs).get(task.id)?.[0]).toEqual(expect.objectContaining({
       is_queued: true,
       merge_readiness_status: 'queued_pull_request',
       merge_readiness_action: 'wait_for_queue',
     }))
-    expect(triggerGithubSync).toHaveBeenCalledOnce()
+    expect(triggerGithubSync).not.toHaveBeenCalled()
   })
 
   it('does not enqueue a stale ready-to-enqueue PR', async () => {

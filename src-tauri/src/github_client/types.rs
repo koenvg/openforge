@@ -241,6 +241,8 @@ pub(crate) struct MergePrRequest {
     pub commit_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -584,6 +586,7 @@ impl RepositoryPolicyFacts {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct GitHubReadinessSnapshot {
+    pub github_node_id: Option<String>,
     pub source_head_sha: Option<String>,
     pub status_check_rollup_sha: Option<String>,
     pub check_runs: CheckRunsResponse,
@@ -605,6 +608,7 @@ impl GitHubReadinessSnapshot {
     pub fn unknown(reason: impl Into<String>) -> Self {
         let reason = reason.into();
         Self {
+            github_node_id: None,
             source_head_sha: None,
             status_check_rollup_sha: None,
             check_runs: CheckRunsResponse {
@@ -662,6 +666,7 @@ impl GitHubReadinessSnapshot {
                 None => Err("GraphQL response missing pullRequest".to_string()),
             };
         };
+        let github_node_id = string_field(pr, "id");
         let source_head_sha = string_field(pr, "headRefOid");
         let merge_state_status = string_field(pr, "mergeStateStatus");
         let review_decision = string_field(pr, "reviewDecision");
@@ -741,6 +746,7 @@ impl GitHubReadinessSnapshot {
         }
 
         Ok(Self {
+            github_node_id,
             source_head_sha,
             status_check_rollup_sha,
             check_runs,
@@ -1100,12 +1106,14 @@ mod tests {
             commit_title: Some("Merge feature branch".to_string()),
             commit_message: None,
             merge_method: Some("squash".to_string()),
+            sha: Some("expected-head".to_string()),
         };
 
         let json = serde_json::to_string(&request).unwrap();
 
         assert!(json.contains("\"commit_title\":\"Merge feature branch\""));
         assert!(json.contains("\"merge_method\":\"squash\""));
+        assert!(json.contains("\"sha\":\"expected-head\""));
         // Verify None fields are omitted, not serialized as null
         assert!(!json.contains("commit_message"));
         assert!(!json.contains("null"));
@@ -1117,6 +1125,7 @@ mod tests {
             commit_title: None,
             commit_message: None,
             merge_method: Some("squash".to_string()),
+            sha: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -1471,6 +1480,7 @@ mod tests {
             "data": {
                 "repository": {
                     "pullRequest": {
+                        "id": "PR_node_42",
                         "headRefOid": "head-sha-1",
                         "mergeStateStatus": "FUTURE_STATE",
                         "reviewDecision": "AI_REVIEW_PENDING",
@@ -1505,6 +1515,7 @@ mod tests {
         });
 
         let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
+        assert_eq!(snapshot.github_node_id.as_deref(), Some("PR_node_42"));
         assert_eq!(snapshot.source_head_sha, Some("head-sha-1".to_string()));
         assert_eq!(snapshot.merge_state_status.as_deref(), Some("FUTURE_STATE"));
         assert_eq!(

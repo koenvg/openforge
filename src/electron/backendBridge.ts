@@ -123,6 +123,8 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'mark_comment_addressed',
   'merge_pull_request',
   'enqueue_pull_request',
+  'merge_task_pull_request',
+  'enqueue_task_pull_request',
   'get_github_username',
   'fetch_review_prs',
   'get_review_prs',

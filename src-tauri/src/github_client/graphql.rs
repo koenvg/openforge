@@ -8,6 +8,7 @@ const PR_READINESS_QUERY: &str = r#"
 query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
+      id
       headRefOid
       mergeStateStatus
       reviewDecision
@@ -52,6 +53,7 @@ const PR_READINESS_CORE_QUERY: &str = r#"
 query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
+      id
       headRefOid
       mergeStateStatus
       reviewDecision
@@ -137,8 +139,28 @@ impl GitHubClient {
         let pull_request_id = self
             .get_pull_request_node_id(owner, repo, pr_number, token)
             .await?;
+        self.enqueue_pull_request_by_node_id(
+            &pull_request_id,
+            owner,
+            repo,
+            pr_number,
+            token,
+            actor_login,
+        )
+        .await
+    }
+
+    pub async fn enqueue_pull_request_by_node_id(
+        &self,
+        pull_request_id: &str,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        token: &str,
+        actor_login: &str,
+    ) -> Result<(), GitHubError> {
         let body = self
-            .send_enqueue_pull_request_mutation(&pull_request_id, token)
+            .send_enqueue_pull_request_mutation(pull_request_id, token)
             .await?;
 
         classify_enqueue_graphql_errors(&body, actor_login, owner, repo, pr_number).map_err(

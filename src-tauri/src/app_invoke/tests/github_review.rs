@@ -140,6 +140,59 @@ async fn refresh_task_github_status_returns_empty_result_for_task_without_linked
 }
 
 #[tokio::test]
+async fn task_merge_rejects_changed_expected_head_without_pre_action_sync() {
+    let (state, path) = test_state("app_invoke_task_merge_expected_head");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        let task = db
+            .create_task("Merge PR", "doing", None, None, None)
+            .expect("create task");
+        db.insert_pull_request(
+            42, &task.id, "owner", "repo", "PR", "url", "open", 1, 1, false,
+        )
+        .expect("insert PR");
+        db.update_pr_head_sha(42, "current-head").expect("set head");
+        db.update_pr_merge_readiness(
+            42,
+            &crate::db::PrMergeReadinessFacts {
+                status: Some("ready_to_merge".to_string()),
+                action: Some("merge".to_string()),
+                blockers_json: Some("[]".to_string()),
+                warnings_json: Some("[]".to_string()),
+                source_head_sha: Some("current-head".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: Some(true),
+                required_reviews_policy_known: Some(true),
+                merge_queue_required: Some(false),
+                merge_queue_state: None,
+                updated_at: 1,
+            },
+        )
+        .expect("set readiness");
+        task.id
+    };
+
+    let error = invoke(
+        &state,
+        "merge_task_pull_request",
+        json!({
+            "taskId": task_id,
+            "prId": 42,
+            "owner": "owner",
+            "repo": "repo",
+            "prNumber": 42,
+            "expectedHeadSha": "old-head",
+        }),
+    )
+    .await
+    .expect_err("changed head must reject before GitHub access");
+
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    assert_eq!(error.1, "Pull request is no longer ready to merge");
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn refresh_task_github_status_rejects_missing_task() {
     let (state, path) = test_state("app_invoke_refresh_task_github_status_missing_task");
 

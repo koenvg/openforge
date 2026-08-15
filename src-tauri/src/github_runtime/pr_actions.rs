@@ -163,6 +163,161 @@ pub fn link_pull_request(
         .ok_or_else(|| "Failed to read linked pull request after insert".to_string())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskPullRequestAction {
+    Merge,
+    Enqueue,
+}
+
+impl TaskPullRequestAction {
+    fn readiness(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Merge => ("ready_to_merge", "merge"),
+            Self::Enqueue => ("ready_to_enqueue", "enqueue"),
+        }
+    }
+}
+
+fn task_pull_request_action_target(
+    db: &Arc<Mutex<db::Database>>,
+    task_id: &str,
+    pr_id: i64,
+    expected_head_sha: &str,
+    action: TaskPullRequestAction,
+) -> Result<db::PrRow, String> {
+    let db_lock = crate::db::acquire_db(db);
+    let pr = db_lock
+        .get_pull_requests_for_task(task_id)
+        .map_err(|e| format!("Failed to read pull request: {e}"))?
+        .into_iter()
+        .find(|pr| pr.id == pr_id)
+        .ok_or_else(|| "Pull request not found for task".to_string())?;
+    let (required_status, required_action) = action.readiness();
+    if pr.head_sha != expected_head_sha
+        || pr.readiness_source_head_sha.as_deref() != Some(expected_head_sha)
+        || pr.merge_readiness_status.as_deref() != Some(required_status)
+        || pr.merge_readiness_action.as_deref() != Some(required_action)
+    {
+        return Err(format!(
+            "Pull request is no longer ready to {}",
+            required_action
+        ));
+    }
+    Ok(pr)
+}
+
+pub fn persist_successful_task_pull_request_action(
+    db: &db::Database,
+    pr_id: i64,
+    action: TaskPullRequestAction,
+) -> Result<(), String> {
+    match action {
+        TaskPullRequestAction::Merge => db
+            .update_pr_merged(pr_id, current_unix_timestamp())
+            .map_err(|e| format!("Failed to persist merged pull request: {e}")),
+        TaskPullRequestAction::Enqueue => db
+            .update_pr_queued(pr_id)
+            .map_err(|e| format!("Failed to persist queued pull request: {e}")),
+    }
+}
+
+fn current_unix_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+pub async fn merge_task_pull_request(
+    db: &Arc<Mutex<db::Database>>,
+    github_client: &GitHubClient,
+    task_id: &str,
+    pr_id: i64,
+    expected_head_sha: &str,
+) -> Result<db::PrRow, String> {
+    let pr = task_pull_request_action_target(
+        db,
+        task_id,
+        pr_id,
+        expected_head_sha,
+        TaskPullRequestAction::Merge,
+    )?;
+    let token = github_token().await?;
+    let response = github_client
+        .merge_pr(
+            &pr.repo_owner,
+            &pr.repo_name,
+            pr.pr_number,
+            &token,
+            Some(expected_head_sha),
+        )
+        .await
+        .map_err(|e| format!("Failed to merge pull request: {e}"))?;
+    if !response.merged {
+        return Err(format!(
+            "Failed to merge pull request: {}",
+            response.message
+        ));
+    }
+
+    let db_lock = crate::db::acquire_db(db);
+    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Merge)?;
+    db_lock
+        .get_pull_requests_for_task(task_id)
+        .map_err(|e| format!("Failed to read merged pull request: {e}"))?
+        .into_iter()
+        .find(|row| row.id == pr_id)
+        .ok_or_else(|| "Merged pull request disappeared from local state".to_string())
+}
+
+pub async fn enqueue_task_pull_request(
+    db: &Arc<Mutex<db::Database>>,
+    github_client: &GitHubClient,
+    task_id: &str,
+    pr_id: i64,
+    expected_head_sha: &str,
+) -> Result<db::PrRow, String> {
+    let pr = task_pull_request_action_target(
+        db,
+        task_id,
+        pr_id,
+        expected_head_sha,
+        TaskPullRequestAction::Enqueue,
+    )?;
+    let github_node_id = pr.github_node_id.as_deref().ok_or_else(|| {
+        "Pull request enqueue identity is not cached yet; wait for background GitHub Sync"
+            .to_string()
+    })?;
+    let token = github_token().await?;
+    let actor_login = {
+        let db_lock = crate::db::acquire_db(db);
+        db_lock
+            .get_config("github_username")
+            .map_err(|e| format!("Failed to read cached GitHub username: {e}"))?
+            .unwrap_or_else(|| "the authenticated GitHub user".to_string())
+    };
+    github_client
+        .enqueue_pull_request_by_node_id(
+            github_node_id,
+            &pr.repo_owner,
+            &pr.repo_name,
+            pr.pr_number,
+            &token,
+            &actor_login,
+        )
+        .await
+        .map_err(|e| format!("Failed to enqueue pull request: {e}"))?;
+
+    let db_lock = crate::db::acquire_db(db);
+    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Enqueue)?;
+    db_lock
+        .get_pull_requests_for_task(task_id)
+        .map_err(|e| format!("Failed to read queued pull request: {e}"))?
+        .into_iter()
+        .find(|row| row.id == pr_id)
+        .ok_or_else(|| "Queued pull request disappeared from local state".to_string())
+}
+
 pub async fn merge_pull_request(
     github_client: &GitHubClient,
     owner: &str,
@@ -171,7 +326,7 @@ pub async fn merge_pull_request(
 ) -> Result<(), String> {
     let token = github_token().await?;
     let response = github_client
-        .merge_pr(owner, repo, pr_number, &token)
+        .merge_pr(owner, repo, pr_number, &token, None)
         .await
         .map_err(|e| format!("Failed to merge pull request: {e}"))?;
 
@@ -274,6 +429,114 @@ mod tests {
         assert_eq!(pr.ticket_id, new_task.id);
         assert_eq!(pr.title, "Fetched GitHub title");
 
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn successful_task_actions_persist_terminal_local_state() {
+        let (db, path) = make_test_db("task_pr_action_local_state");
+        let merged_task = db
+            .create_task("Merge PR", "doing", None, None, None)
+            .expect("create merge task");
+        let queued_task = db
+            .create_task("Queue PR", "doing", None, None, None)
+            .expect("create queue task");
+        db.insert_pull_request(
+            1,
+            &merged_task.id,
+            "owner",
+            "repo",
+            "Merge",
+            "url",
+            "open",
+            1,
+            1,
+            false,
+        )
+        .expect("insert merge PR");
+        db.insert_pull_request(
+            2,
+            &queued_task.id,
+            "owner",
+            "repo",
+            "Queue",
+            "url",
+            "open",
+            1,
+            1,
+            false,
+        )
+        .expect("insert queue PR");
+
+        super::persist_successful_task_pull_request_action(
+            &db,
+            1,
+            super::TaskPullRequestAction::Merge,
+        )
+        .expect("persist merge");
+        super::persist_successful_task_pull_request_action(
+            &db,
+            2,
+            super::TaskPullRequestAction::Enqueue,
+        )
+        .expect("persist enqueue");
+
+        let prs = db.get_all_pull_requests().expect("read PRs");
+        let merged = prs.iter().find(|pr| pr.id == 1).expect("merged PR");
+        let queued = prs.iter().find(|pr| pr.id == 2).expect("queued PR");
+        assert_eq!(merged.state, "merged");
+        assert!(merged.merged_at.is_some());
+        assert!(queued.is_queued);
+        assert_eq!(
+            queued.merge_readiness_status.as_deref(),
+            Some("queued_pull_request")
+        );
+        assert_eq!(
+            queued.merge_readiness_action.as_deref(),
+            Some("wait_for_queue")
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+    #[test]
+    fn task_merge_target_rejects_a_changed_expected_head() {
+        let (db, path) = make_test_db("task_pr_action_expected_head");
+        let task = db
+            .create_task("Merge PR", "doing", None, None, None)
+            .expect("create task");
+        db.insert_pull_request(
+            1, &task.id, "owner", "repo", "Merge", "url", "open", 1, 1, false,
+        )
+        .expect("insert PR");
+        db.update_pr_head_sha(1, "current-head").expect("set head");
+        db.update_pr_merge_readiness(
+            1,
+            &crate::db::PrMergeReadinessFacts {
+                status: Some("ready_to_merge".to_string()),
+                action: Some("merge".to_string()),
+                blockers_json: Some("[]".to_string()),
+                warnings_json: Some("[]".to_string()),
+                source_head_sha: Some("current-head".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: Some(true),
+                required_reviews_policy_known: Some(true),
+                merge_queue_required: Some(false),
+                merge_queue_state: None,
+                updated_at: 1,
+            },
+        )
+        .expect("set readiness");
+        let db = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        let error = super::task_pull_request_action_target(
+            &db,
+            &task.id,
+            1,
+            "old-head",
+            super::TaskPullRequestAction::Merge,
+        )
+        .expect_err("changed head must reject merge");
+
+        assert_eq!(error, "Pull request is no longer ready to merge");
         let _ = std::fs::remove_file(path);
     }
 }

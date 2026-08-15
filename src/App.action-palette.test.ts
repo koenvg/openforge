@@ -10,7 +10,7 @@ describe('App action palette shortcuts', () => {
       vi.clearAllMocks()
     })
 
-    it('action palette merge-pr merges the selected task PR and refreshes GitHub state', async () => {
+    it('action palette merge-pr updates the selected Task locally without forcing GitHub Sync', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const ipc = await import('./lib/ipc')
@@ -117,8 +117,15 @@ describe('App action palette shortcuts', () => {
 
       await propsCandidate.onExecute('merge-pr')
 
-      expect(ipc.mergePullRequest).toHaveBeenCalledWith('owner', 'repo', 42)
-      expect(ipc.forceGithubSync).toHaveBeenCalled()
+      expect(ipc.mergePullRequest).toHaveBeenCalledWith(
+        selectedTask.id,
+        readyPr.id,
+        'owner',
+        'repo',
+        42,
+        'abc123',
+      )
+      expect(ipc.forceGithubSync).not.toHaveBeenCalled()
 
       const mergedPr = get(stores.ticketPrs).get(selectedTask.id)?.[0]
       expect(mergedPr?.state).toBe('merged')
@@ -240,10 +247,16 @@ describe('App action palette shortcuts', () => {
         expect(get(stores.mergingTaskIds).has(selectedTask.id)).toBe(true)
       })
 
+      const otherTaskId = 'task-selected-later'
+      stores.tasks.set([selectedTask, { ...selectedTask, id: otherTaskId, initial_prompt: 'Selected later' }])
+      stores.selectedTaskId.set(otherTaskId)
+
       resolveMerge()
       await execution
 
       expect(get(stores.mergingTaskIds).has(selectedTask.id)).toBe(false)
+      expect(get(stores.ticketPrs).get(selectedTask.id)?.[0].state).toBe('merged')
+      expect(get(stores.selectedTaskId)).toBe(otherTaskId)
     })
 
     it('action palette merge-pr does not merge when multiple PRs are ready', async () => {

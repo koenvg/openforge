@@ -6,7 +6,7 @@ export interface MergeFeedback {
   message: string
 }
 
-export function useMergeOrchestration(client: GithubTaskClient, onRefresh: () => Promise<void>) {
+export function useMergeOrchestration(client: GithubTaskClient, onActionCompleted: (pr: PullRequestInfo) => Promise<void>) {
   let feedbackByPr = $state<Map<number, MergeFeedback>>(new Map())
   let pendingPrId = $state<number | null>(null)
 
@@ -22,11 +22,12 @@ export function useMergeOrchestration(client: GithubTaskClient, onRefresh: () =>
     pendingPrId = pr.id
     setFeedback(pr.id, null)
 
-    let succeeded = false
+    let actionSucceeded = false
     try {
       if (action === 'merge') await client.mergePullRequest(pr)
       else await client.enqueuePullRequest(pr)
-      succeeded = true
+      actionSucceeded = true
+      await onActionCompleted(pr)
       setFeedback(pr.id, {
         kind: 'success',
         message: action === 'merge'
@@ -34,18 +35,11 @@ export function useMergeOrchestration(client: GithubTaskClient, onRefresh: () =>
           : 'Pull request enqueued successfully.',
       })
     } catch (error) {
-      setFeedback(pr.id, { kind: 'error', message: error instanceof Error ? error.message : String(error) })
+      const message = error instanceof Error ? error.message : String(error)
+      setFeedback(pr.id, actionSucceeded
+        ? { kind: 'warning', message: `Action succeeded, but local refresh failed: ${message}` }
+        : { kind: 'error', message })
     } finally {
-      try {
-        await onRefresh()
-      } catch (error) {
-        if (succeeded) {
-          setFeedback(pr.id, {
-            kind: 'warning',
-            message: `Action succeeded, but refresh failed: ${error instanceof Error ? error.message : String(error)}`,
-          })
-        }
-      }
       pendingPrId = null
     }
   }

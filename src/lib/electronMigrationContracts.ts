@@ -96,8 +96,8 @@ export const ipcCommandContracts = [
   { functionName: 'getDeveloperLogSnapshot', ipcCommand: 'get_developer_log_snapshot', payloadKeys: ['limit'], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'getPrComments', ipcCommand: 'get_pr_comments', payloadKeys: ['prId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'markCommentAddressed', ipcCommand: 'mark_comment_addressed', payloadKeys: ['commentId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
-  { functionName: 'mergePullRequest', ipcCommand: 'merge_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
-  { functionName: 'enqueuePullRequest', ipcCommand: 'enqueue_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'mergePullRequest', ipcCommand: 'merge_task_pull_request', payloadKeys: ['taskId', 'prId', 'owner', 'repo', 'prNumber', 'expectedHeadSha'], targetOwner: 'rust-sidecar', domain: 'github-review' },
+  { functionName: 'enqueuePullRequest', ipcCommand: 'enqueue_task_pull_request', payloadKeys: ['taskId', 'prId', 'owner', 'repo', 'prNumber', 'expectedHeadSha'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'checkOpenCodeInstalled', ipcCommand: 'check_opencode_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkPiInstalled', ipcCommand: 'check_pi_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'checkCodexInstalled', ipcCommand: 'check_codex_installed', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
@@ -196,6 +196,7 @@ export const ipcCommandContracts = [
 
 export const appShellEventContracts = [
   { eventName: 'github-sync-complete', payload: 'PollResult', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
+  { eventName: 'task-pull-request-updated', payload: '{ task_id: string; pr_id: number; action: "merged" | "enqueued" }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'openforge-app-events-gap', payload: '{ requestedAfter: string; oldestAvailable: string; newestAvailable: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'app-shell' },
   { eventName: 'review-status-changed', payload: 'review status payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'action-complete', payload: '{ task_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },

@@ -37,6 +37,7 @@ pub struct PrRow {
     pub merge_queue_required: Option<bool>,
     pub merge_queue_state: Option<String>,
     pub readiness_updated_at: Option<i64>,
+    pub github_node_id: Option<String>,
     pub unaddressed_comment_count: i64,
 }
 
@@ -79,7 +80,8 @@ fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
         merge_queue_required: row.get(27)?,
         merge_queue_state: row.get(28)?,
         readiness_updated_at: row.get(29)?,
-        unaddressed_comment_count: row.get(30)?,
+        github_node_id: row.get(30)?,
+        unaddressed_comment_count: row.get(31)?,
     })
 }
 
@@ -104,7 +106,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
-                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at,
+                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
@@ -129,7 +131,7 @@ impl super::Database {
         };
         let sql = format!(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
-                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at,
+                    merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests{task_filter}
              ORDER BY updated_at DESC"
@@ -290,6 +292,15 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn update_pr_github_node_id(&self, pr_id: i64, github_node_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET github_node_id = ?1 WHERE id = ?2",
+            rusqlite::params![github_node_id, pr_id],
+        )?;
+        Ok(())
+    }
+
     /// Update CI status and check runs for a pull request
     pub fn update_pr_ci_status(
         &self,
@@ -421,6 +432,24 @@ impl super::Database {
         conn.execute(
             "UPDATE pull_requests SET is_queued = ?1 WHERE id = ?2",
             rusqlite::params![is_queued as i32, pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pr_queued(&self, pr_id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET
+                is_queued = 1,
+                merge_readiness_status = 'queued_pull_request',
+                merge_readiness_action = 'wait_for_queue',
+                merge_readiness_blockers = '[]',
+                merge_readiness_warnings = '[]',
+                readiness_source_head_sha = COALESCE(readiness_source_head_sha, head_sha),
+                merge_queue_state = 'QUEUED',
+                readiness_updated_at = ?1
+             WHERE id = ?2",
+            rusqlite::params![current_unix_timestamp(), pr_id],
         )?;
         Ok(())
     }

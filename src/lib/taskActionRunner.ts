@@ -185,14 +185,13 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await mergePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
+        await mergePullRequest(task.id, pr.id, pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id, pr.head_sha)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>
           p.id === pr.id ? { ...p, state: 'merged', merged_at: Math.floor(Date.now() / 1000) } : p,
         ))
         ticketPrs.set(nextMap)
-        await options.triggerGithubSync()
       } catch (e) {
         logError('Failed to merge PR:', e)
         setError(e)
@@ -214,7 +213,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await enqueuePullRequest(pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id)
+        await enqueuePullRequest(task.id, pr.id, pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id, pr.head_sha)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>
@@ -229,7 +228,6 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
             : p,
         ))
         ticketPrs.set(nextMap)
-        await options.triggerGithubSync()
       } catch (e) {
         logError('Failed to enqueue PR:', e)
         setError(e)

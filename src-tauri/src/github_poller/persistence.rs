@@ -338,6 +338,15 @@ pub(super) async fn poll_prs_for_project(
             }
         }
 
+        if let Some(github_node_id) = result.github_node_id.as_deref() {
+            if let Err(e) = db_lock.update_pr_github_node_id(result.pr_id, github_node_id) {
+                error!(
+                    "[GitHub Poller] Failed to update GitHub node id for PR #{}: {}",
+                    result.pr_id, e
+                );
+            }
+        }
+
         if let Err(e) = db_lock.update_pr_is_queued(result.pr_id, result.is_queued) {
             error!(
                 "[GitHub Poller] Failed to update is_queued for PR #{}: {}",
