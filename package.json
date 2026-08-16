@@ -24,7 +24,7 @@
     "electron:install": "bash scripts/install-electron-mac.sh",
     "electron:smoke:packaged": "node scripts/electron-packaged-smoke.mjs",
     "electron:dev": "node scripts/electron-dev.mjs",
-    "build": "pnpm build:plugin-sdk-runtime && vite build",
+    "build": "pnpm build:plugin-sdk-runtime && vite build --configLoader native",
     "lint": "node scripts/check-svelte-unused-imports.mjs && node scripts/check-plugin-import-boundaries.mjs",
     "mobile:contract:generate": "node scripts/generate-companion-dart-client.mjs",
     "mobile:contract:check": "node scripts/check-companion-dart-contract.mjs",
