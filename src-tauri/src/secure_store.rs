@@ -6,13 +6,21 @@ use std::{
     time::Duration,
 };
 
+mod cache;
 #[cfg(target_os = "macos")]
 mod macos_keychain;
+
+use cache::ProcessSecretCache;
 
 const KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5);
 const INTERACTIVE_KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 pub(crate) const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 const SECRET_STORE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+fn process_secret_cache() -> &'static ProcessSecretCache {
+    static PROCESS_SECRET_CACHE: OnceLock<ProcessSecretCache> = OnceLock::new();
+    PROCESS_SECRET_CACHE.get_or_init(ProcessSecretCache::default)
+}
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct SecretStoreCancellation {
@@ -154,7 +162,9 @@ pub async fn delete_secret_async(key: &str) -> Result<(), String> {
 pub fn get_secret(key: &str) -> Result<Option<String>, String> {
     let cancellation = SecretStoreCancellation::default();
     with_serialized_keychain_access(|| {
-        get_secret_unlocked(key, &cancellation, KEYCHAIN_READ_TIMEOUT)
+        process_secret_cache().get_or_read(key, || {
+            get_secret_unlocked(key, &cancellation, KEYCHAIN_READ_TIMEOUT)
+        })
     })
 }
 
@@ -163,7 +173,9 @@ pub(crate) fn get_secret_with_cancellation(
     cancellation: &SecretStoreCancellation,
 ) -> Result<Option<String>, String> {
     with_serialized_keychain_access_cancellable(cancellation, || {
-        get_secret_unlocked(key, cancellation, INTERACTIVE_KEYCHAIN_READ_TIMEOUT)
+        process_secret_cache().get_or_read(key, || {
+            get_secret_unlocked(key, cancellation, INTERACTIVE_KEYCHAIN_READ_TIMEOUT)
+        })
     })
 }
 
@@ -212,7 +224,9 @@ pub fn set_secret(key: &str, value: &str) -> Result<(), String> {
     if value.is_empty() {
         return delete_secret(key);
     }
-    with_serialized_keychain_access(|| set_secret_unlocked(key, value))
+    with_serialized_keychain_access(|| {
+        process_secret_cache().set_if_changed(key, value, || set_secret_unlocked(key, value))
+    })
 }
 
 pub(crate) fn set_companion_host_identity_with_cancellation(
@@ -229,7 +243,9 @@ pub(crate) fn set_companion_host_identity_with_cancellation(
             .map_err(SecretStoreWriteError::NotCommitted);
     }
     with_serialized_keychain_access_cancellable(cancellation, || {
-        set_companion_host_identity_cancellable_unlocked(value, cancellation)
+        process_secret_cache().set_if_changed(COMPANION_HOST_IDENTITY_SECRET, value, || {
+            set_companion_host_identity_cancellable_unlocked(value, cancellation)
+        })
     })
 }
 
@@ -264,18 +280,23 @@ pub(crate) fn run_keychain_write_helper_if_requested() -> Option<i32> {
         macos_keychain::run_write_helper_if_requested()
     }
 }
+
+fn delete_secret_unlocked(key: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new(service_name(), key)
+        .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!(
+            "Failed to delete secret '{}' from keychain: {}",
+            key, e
+        )),
+    }
+}
+
 pub fn delete_secret(key: &str) -> Result<(), String> {
     with_serialized_keychain_access(|| {
-        let entry = keyring::Entry::new(service_name(), key)
-            .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
-        match entry.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!(
-                "Failed to delete secret '{}' from keychain: {}",
-                key, e
-            )),
-        }
+        process_secret_cache().delete_if_present(key, || delete_secret_unlocked(key))
     })
 }
 
