@@ -1,0 +1,99 @@
+<script lang="ts">
+  import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
+  import PluginSlot from '../plugin/PluginSlot.svelte'
+  import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
+  import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
+  import SettingsGeneralCard from './SettingsGeneralCard.svelte'
+  import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
+  import SettingsProviderField from './SettingsProviderField.svelte'
+  import SettingsSectionCard from './SettingsSectionCard.svelte'
+  import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
+  import type { SettingsViewController } from './settingsViewController.svelte'
+
+  interface Props {
+    activeSection: string
+    controller: SettingsViewController
+  }
+
+  let { activeSection, controller }: Props = $props()
+</script>
+
+{#if activeSection === 'general'}
+  <SettingsGeneralCard
+    projectName={controller.projectName}
+    projectPath={controller.projectPath}
+    projectColor={controller.projectColor}
+    runCommand={controller.runCommand}
+    disabled={!controller.hasProject}
+    onProjectNameChange={controller.setProjectName}
+    onProjectPathChange={controller.setProjectPath}
+    onProjectColorChange={controller.handleProjectColorChange}
+    onRunCommandChange={controller.setRunCommand}
+  />
+{:else if activeSection === 'agents'}
+  <HierarchicalSettingsCard
+    mode="project"
+    values={controller.projectHierarchyValues}
+    overrides={controller.projectRawOverrides}
+    excludeKeys={['plugins']}
+    onChange={controller.handleProjectSettingChange}
+    onResetSetting={controller.handleResetProjectSetting}
+    resettingKey={controller.resettingProjectSetting}
+    disabled={!controller.hasProject}
+  >
+    {#snippet providerField()}
+      <SettingsProviderField
+        {controller}
+        providerValue={controller.projectHierarchyValues.ai_provider}
+        scope="project"
+      />
+    {/snippet}
+  </HierarchicalSettingsCard>
+{:else if activeSection === 'labels'}
+  <SettingsTaskLabelsCard projectId={controller.projectId} disabled={!controller.hasProject} />
+{:else if activeSection === 'focus'}
+  <SettingsFocusFilterCard
+    focusStates={controller.focusFilterStates}
+    onFocusStatesChange={controller.setFocusFilterStates}
+    disabled={!controller.hasProject}
+  />
+{:else if activeSection === 'instructions'}
+  <SettingsInstructionsCard
+    agentInstructions={controller.agentInstructions}
+    handoffNotesTemplate={controller.handoffNotesTemplate}
+    disabled={!controller.hasProject}
+    onInstructionsChange={controller.setAgentInstructions}
+    onHandoffNotesTemplateChange={controller.setHandoffNotesTemplate}
+  />
+{:else if activeSection === 'plugins'}
+  <PluginSettingsPanel projectId={controller.projectId || ''} disabled={!controller.hasProject} />
+  {#each controller.pluginSettingsSections as section (section.namespacedId)}
+    <SettingsSectionCard title={section.title}>
+      <PluginSlot
+        slotType="settingsSections"
+        slotId={section.namespacedId}
+        projectId={controller.projectId}
+        projectName={controller.projectName}
+      />
+    </SettingsSectionCard>
+  {/each}
+{:else if activeSection === 'danger' && controller.hasProject}
+  <SettingsSectionCard title="Danger Zone" description="Actions here permanently affect this project." tone="danger">
+    <div class="flex flex-col gap-3">
+      <div class="flex min-h-10 flex-wrap items-center gap-3">
+        {#if controller.confirmingDelete}
+          <span class="text-sm font-medium text-error">Delete “{controller.projectName}”? This cannot be undone.</span>
+          <button class="btn btn-error btn-sm min-h-10" onclick={controller.handleDelete} disabled={controller.isDeleting}>
+            {controller.isDeleting ? 'Deleting…' : 'Yes, delete'}
+          </button>
+          <button class="btn btn-ghost btn-sm min-h-10" onclick={controller.cancelDeleteConfirmation} disabled={controller.isDeleting}>Cancel</button>
+        {:else}
+          <button class="btn btn-error btn-sm min-h-10" onclick={controller.beginDeleteConfirmation}>Delete Project</button>
+        {/if}
+      </div>
+      {#if controller.deleteError}
+        <p class="m-0 break-all font-mono text-sm text-error" role="alert">{controller.deleteError}</p>
+      {/if}
+    </div>
+  </SettingsSectionCard>
+{/if}
