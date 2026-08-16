@@ -412,6 +412,10 @@ impl PairingCoordinator {
         self.trust_policy.revoke(device_id)
     }
 
+    pub(crate) fn remove_revoked(&self, device_id: &str) -> Result<(), String> {
+        self.trust_policy.remove_revoked(device_id)
+    }
+
     pub(crate) fn revoke_all(&self) -> Result<CompanionDeviceRevocationBatch, String> {
         self.trust_policy.revoke_all()
     }

@@ -321,6 +321,11 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
         serde_json::from_value(response_json(revoked).await).expect("error envelope");
     assert_eq!(envelope.error.code.as_str(), "revoked");
 
+    coordinator
+        .remove_revoked(&device_id)
+        .expect("remove revoked device");
+    assert!(coordinator.devices().expect("paired devices").is_empty());
+
     let _ = std::fs::remove_file(path);
 }
 

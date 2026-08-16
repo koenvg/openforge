@@ -7,6 +7,7 @@ import {
   getCompanionPairingStatus,
   listCompanionDevices,
   rejectCompanionPairing,
+  removeCompanionDevice,
   revokeCompanionDevice,
   resetCompanionHostIdentity,
   setCompanionGatewayEnabled,
@@ -30,6 +31,7 @@ vi.mock('../../lib/ipc', () => ({
   rejectCompanionPairing: vi.fn(),
   listCompanionDevices: vi.fn(),
   revokeCompanionDevice: vi.fn(),
+  removeCompanionDevice: vi.fn(),
   resetCompanionHostIdentity: vi.fn(),
 }))
 
@@ -96,6 +98,7 @@ describe('SettingsCompanionCard', () => {
     vi.mocked(approveCompanionPairing).mockResolvedValue()
     vi.mocked(rejectCompanionPairing).mockResolvedValue()
     vi.mocked(revokeCompanionDevice).mockResolvedValue()
+    vi.mocked(removeCompanionDevice).mockResolvedValue()
     vi.mocked(resetCompanionHostIdentity).mockResolvedValue({
       ...runningStatus,
       hostId: 'desktop-host-2',
@@ -251,6 +254,64 @@ describe('SettingsCompanionCard', () => {
     expect(screen.getByText(/Paired devices can Create backlog Tasks.*Start backlog Tasks.*Delete or Complete Tasks.*type into running Agent terminals/i)).toBeTruthy()
     expect(screen.getByText(/Existing paired devices inherit this fixed authority without reapproval/i)).toBeTruthy()
     expect(screen.getByText('never')).toBeTruthy()
+    confirm.mockRestore()
+  })
+
+  it('permanently removes only a revoked device after confirmation while the gateway is disabled', async () => {
+    const activeDevice = {
+      deviceId: 'active-device',
+      deviceName: 'Active Pixel',
+      platform: 'android' as const,
+      pairedAt: '2026-07-30T12:00:00Z',
+      lastSeenAt: null,
+      revokedAt: null,
+    }
+    const revokedDevice = {
+      deviceId: 'revoked-device',
+      deviceName: 'Revoked Pixel',
+      platform: 'android' as const,
+      pairedAt: '2026-07-29T12:00:00Z',
+      lastSeenAt: '2026-07-30T12:30:00Z',
+      revokedAt: '2026-07-30T13:00:00Z',
+    }
+    vi.mocked(listCompanionDevices)
+      .mockResolvedValueOnce([activeDevice, revokedDevice])
+      .mockResolvedValueOnce([activeDevice])
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(SettingsCompanionCard)
+
+    expect(await screen.findByRole('button', { name: 'Remove Revoked Pixel' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Remove Active Pixel' })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove Revoked Pixel' }))
+
+    expect(confirm).toHaveBeenCalledWith(
+      'Remove Revoked Pixel? This permanently deletes its pairing record.',
+    )
+    expect(removeCompanionDevice).toHaveBeenCalledWith('revoked-device')
+    await waitFor(() => expect(screen.queryByText('revoked-device')).toBeNull())
+    expect(screen.getByText('active-device')).toBeTruthy()
+    expect(await screen.findByText('Removed device: Revoked Pixel')).toBeTruthy()
+    confirm.mockRestore()
+  })
+
+  it('keeps a revoked device when permanent removal is declined', async () => {
+    vi.mocked(listCompanionDevices).mockResolvedValue([
+      {
+        deviceId: 'revoked-device',
+        deviceName: 'Revoked Pixel',
+        platform: 'android',
+        pairedAt: '2026-07-29T12:00:00Z',
+        lastSeenAt: null,
+        revokedAt: '2026-07-30T13:00:00Z',
+      },
+    ])
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove Revoked Pixel' }))
+
+    expect(removeCompanionDevice).not.toHaveBeenCalled()
+    expect(screen.getByText('revoked-device')).toBeTruthy()
     confirm.mockRestore()
   })
 

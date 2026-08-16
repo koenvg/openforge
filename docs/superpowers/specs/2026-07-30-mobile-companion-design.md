@@ -187,16 +187,17 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 
 ### Desktop settings behavior
 
-- Companion Settings presents the disabled/enabled state, gateway health, offered endpoints, pairing action, pending approval, paired-device list, revoke action, disable action, and identity-reset action.
+- Companion Settings presents the disabled/enabled state, gateway health, offered endpoints, pairing action, pending approval, paired-device list, revoke and revoked-record removal actions, disable action, and identity-reset action.
 - Pairing QR codes are generated only on explicit request and disappear on expiry, approval, rejection, cancellation, gateway disablement, or application shutdown.
 - Device approval is possible only from the trusted desktop UI. There is no mobile self-approval or approval link.
-- Revocation and identity reset require clear confirmation. Identity reset explains that all mobile devices will need to pair again.
+- Revocation, permanent removal of an already-revoked device record, and identity reset require clear confirmation. Active devices must be revoked before their pairing history can be removed; identity reset explains that all mobile devices will need to pair again.
 - Desktop settings use the existing typed IPC boundary; Svelte does not open sockets, access certificate files, call the sidecar HTTP listener directly, or manage credentials.
 
 ### Persistence
 
 - Existing OpenForge SQLite remains the only authoritative domain database.
 - Companion device records require a small persisted security model containing a stable device ID, display metadata, credential verifier, pairing time, last-seen time, and nullable revocation time.
+- Permanently removing a revoked record deletes its verifier and audit timestamps. A later request using that credential is unauthenticated rather than recognized as revoked, and the mobile client presents the same Re-pair Required recovery.
 - Pairing sessions remain in memory and vanish on restart.
 - Desktop host private-key material uses secure secret storage rather than ordinary config values. Non-secret identity metadata and gateway preferences may use existing configuration storage.
 - No domain schema is added to the mobile application.
@@ -206,7 +207,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - Tests assert externally observable product, protocol, authorization, and lifecycle behavior. They do not assert private map shapes, internal function call ordering, CSS classes, Flutter widget implementation details, Tailwind utilities, socket-library internals, or generated-code formatting.
 - TDD is used for gateway behavior, pairing, authorization, attention projection, and client state transitions. Focused failing tests should precede implementation where practical.
 - The primary and highest-value test seam is the complete Companion Gateway router exercised in process with a temporary SQLite database, the production authorization/pairing policy, and a real in-memory App Event Bus. This seam should cover most requirements without launching Electron, binding a public interface, or starting Flutter.
-- Gateway integration tests cover disabled/enabled behavior, pairing creation and expiry, one-time secret use, pending approval, rejection, approval, credential issuance, credential verification, malformed credentials, revocation, identity reset, and log redaction.
+- Gateway integration tests cover disabled/enabled behavior, pairing creation and expiry, one-time secret use, pending approval, rejection, approval, credential issuance, credential verification, malformed credentials, revocation, permanent removal of revoked records, identity reset, and log redaction.
 - Gateway integration tests prove that all authenticated resources reject missing, invalid, expired/revoked, or wrong-device credentials and that the router has no generic invoke or mutation route.
 - Gateway integration tests cover the connection/status resource, attention snapshot, Task detail, not-found behavior, safe error mapping, protocol-version negotiation, and omission of out-of-scope fields.
 - Attention tests use characterization fixtures based on existing desktop Focus/Needs Attention behavior. They cover `doing` filtering, set-aside filtering, configured Focus states, running-Agent exclusion, needs-input/failed/completed/idle states as applicable, Project grouping, recent-activity ordering, and display-title fallback.
@@ -214,7 +215,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - OpenAPI contract tests verify that the checked-in/generated contract represents every public gateway response and that generated Dart models/client code is current. Rust response fixtures must decode with the generated Dart contract in CI or an equivalent cross-language compatibility harness.
 - Flutter business tests use one fake `CompanionClient` seam at the generated-client boundary. They cover pairing states, desktop approval polling, secure credential persistence calls, endpoint fallback, certificate mismatch, unavailable/retry behavior, revocation, incompatible versions, reconnect backoff, foreground/resume refresh, event invalidation, and no-offline-snapshot behavior.
 - Flutter widget tests cover user-visible business behavior for the attention list, Project grouping, empty state, Task-detail fields, missing Handoff Notes, Agent error summary, semantic labels, and distinct recovery actions. They do not assert visual styling.
-- Desktop settings tests follow existing Svelte settings and Electron bridge test patterns. They cover opt-in enablement, QR lifecycle, pending-device approval/rejection, device listing, revocation confirmation, disablement, identity-reset confirmation, and IPC error presentation.
+- Desktop settings tests follow existing Svelte settings and Electron bridge test patterns. They cover opt-in enablement, QR lifecycle, pending-device approval/rejection, device listing, revocation confirmation, confirmed per-device removal of revoked records, disablement, identity-reset confirmation, and IPC error presentation.
 - Electron/sidecar lifecycle tests verify that the gateway starts only when enabled, remains separate from the loopback bridge, reports health to Settings, closes during coordinated shutdown, and does not delay the established sidecar shutdown budget beyond its contract.
 - A focused process-level security smoke test binds the real TLS gateway and proves successful pinned-certificate connection plus rejection of an unpinned certificate. Certificate-library primitives themselves are not re-tested.
 - Manual acceptance testing is required on at least one physical iOS device and one physical Android device over LAN and Tailscale. It covers QR pairing and approval, endpoint switching and reconnect, every supported Agent provider, concurrent desktop/mobile input and last-writer-wins resizing, orientation and keyboard geometry, accessory keys, paste, high-volume output, final-screen exit behavior, foreground recovery, host lock, gateway disablement, device revocation, authorization loss, unavailable-host recovery, and desktop shutdown/restart.

@@ -3,8 +3,8 @@ use super::stream_termination::CompanionStreamTermination;
 use super::{
     contract::CompanionErrorCode,
     devices::{
-        CompanionDeviceAuthentication, CompanionDeviceRecord, CompanionDeviceRevocationBatch,
-        CompanionDeviceStore, CompanionPairedDevice,
+        CompanionDeviceAuthentication, CompanionDeviceRecord, CompanionDeviceRemoval,
+        CompanionDeviceRevocationBatch, CompanionDeviceStore, CompanionPairedDevice,
     },
     stream_termination::{CompanionStreamAuthorization, CompanionStreamTerminator},
 };
@@ -65,6 +65,16 @@ impl CompanionTrustPolicy {
         }
         self.stream_terminator.device_revoked(device_id);
         Ok(())
+    }
+
+    pub(super) fn remove_revoked(&self, device_id: &str) -> Result<(), String> {
+        match self.devices.remove_revoked(device_id)? {
+            CompanionDeviceRemoval::Removed => Ok(()),
+            CompanionDeviceRemoval::Active => {
+                Err("Only revoked Companion devices can be removed".to_string())
+            }
+            CompanionDeviceRemoval::Missing => Err("Companion device was not found".to_string()),
+        }
     }
 
     pub(super) fn revoke_all(&self) -> Result<CompanionDeviceRevocationBatch, String> {

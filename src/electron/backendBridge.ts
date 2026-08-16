@@ -91,6 +91,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'reject_companion_pairing',
   'list_companion_devices',
   'revoke_companion_device',
+  'remove_companion_device',
   'reset_companion_host_identity',
   'get_task_config',
   'set_task_config',

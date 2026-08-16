@@ -20,6 +20,13 @@ pub(crate) enum CompanionDeviceAuthentication {
     Missing,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompanionDeviceRemoval {
+    Removed,
+    Active,
+    Missing,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CompanionDeviceRevocationBatch {
     device_ids: Vec<String>,
@@ -105,6 +112,7 @@ pub(crate) trait CompanionDeviceStore: Send + Sync {
         seen_at: i64,
     ) -> Result<CompanionDeviceAuthentication, String>;
     fn revoke(&self, device_id: &str, revoked_at: i64) -> Result<bool, String>;
+    fn remove_revoked(&self, device_id: &str) -> Result<CompanionDeviceRemoval, String>;
     fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String>;
     fn rollback_revoke_all(&self, batch: &CompanionDeviceRevocationBatch) -> Result<(), String>;
 }
@@ -210,6 +218,34 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
             )
             .map(|changed| changed > 0)
             .map_err(|error| format!("failed to revoke Companion device: {error}"))
+    }
+
+    fn remove_revoked(&self, device_id: &str) -> Result<CompanionDeviceRemoval, String> {
+        let connection = self.connection()?;
+        let connection = connection
+            .lock()
+            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let removed = connection
+            .execute(
+                "DELETE FROM companion_devices WHERE device_id = ?1 AND revoked_at IS NOT NULL",
+                rusqlite::params![device_id],
+            )
+            .map_err(|error| format!("failed to remove revoked Companion device: {error}"))?;
+        if removed > 0 {
+            return Ok(CompanionDeviceRemoval::Removed);
+        }
+        let exists = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM companion_devices WHERE device_id = ?1)",
+                rusqlite::params![device_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(|error| format!("failed to inspect Companion device: {error}"))?;
+        Ok(if exists {
+            CompanionDeviceRemoval::Active
+        } else {
+            CompanionDeviceRemoval::Missing
+        })
     }
 
     fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String> {
@@ -353,6 +389,24 @@ impl CompanionDeviceStore for InMemoryCompanionDeviceStore {
         };
         record.revoked_at.get_or_insert(revoked_at);
         Ok(true)
+    }
+
+    fn remove_revoked(&self, device_id: &str) -> Result<CompanionDeviceRemoval, String> {
+        let mut records = self
+            .records
+            .lock()
+            .map_err(|_| "test Companion device store lock was poisoned".to_string())?;
+        let Some(index) = records
+            .iter()
+            .position(|record| record.device_id == device_id)
+        else {
+            return Ok(CompanionDeviceRemoval::Missing);
+        };
+        if records[index].revoked_at.is_none() {
+            return Ok(CompanionDeviceRemoval::Active);
+        }
+        records.remove(index);
+        Ok(CompanionDeviceRemoval::Removed)
     }
 
     fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String> {
