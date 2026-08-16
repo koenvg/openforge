@@ -271,7 +271,7 @@
   </div>
 
   {#if selectedProviderRecovery && (selectedProviderNeedsInstall || selectedProviderNeedsAuth)}
-    <div class="alert alert-warning text-xs py-2 flex-col items-start gap-2" role="status">
+    <div class="alert alert-warning flex w-full min-w-0 flex-col items-start gap-2 py-2 text-xs" role="status">
       <div class="flex flex-col gap-1">
         <span class="font-semibold">{selectedProviderNeedsInstall ? selectedProviderRecovery.installTitle : selectedProviderRecovery.authTitle}</span>
         <span>{selectedProviderNeedsInstall ? selectedProviderRecovery.installGuidance : selectedProviderRecovery.authGuidance}</span>
