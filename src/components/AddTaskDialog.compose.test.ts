@@ -24,6 +24,7 @@ vi.mock('../lib/ipc', () => ({
     updated_at: 1000,
   }),
   updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
+  getConfig: vi.fn().mockResolvedValue(null),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   listGitBranches: vi.fn().mockResolvedValue([]),
@@ -43,10 +44,9 @@ const SEED = 'Implement GitHub issue #412: Login redirect drops the query'
 
 const promptTextarea = () => document.querySelector<HTMLTextAreaElement>('textarea')
 
-/** Create-without-starting lives behind the dialog's More menu. */
+/** Creating without starting is the dialog's secondary footer action. */
 async function clickAddToBacklog(): Promise<void> {
-  await fireEvent.click(await screen.findByRole('button', { name: /^more$/i }))
-  await fireEvent.click(await screen.findByText('Add to Backlog'))
+  await fireEvent.click(await screen.findByRole('button', { name: /add to backlog/i }))
 }
 
 beforeEach(() => {

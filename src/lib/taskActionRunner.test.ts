@@ -160,7 +160,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     tasks.set([task])
@@ -179,7 +178,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     tasks.set([task])
@@ -193,7 +191,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     tasks.set([task])

@@ -72,19 +72,20 @@
     lastInitialPrompt = initialPrompt
   })
 
-  // Same seed-on-change pattern as the prompt above: a compose request can
-  // replace the seeds without the dialog unmounting, and comparing against the
-  // last seed keeps the user's own edits from being clobbered on re-render.
-  $effect(() => {
-    if (titleSeed === lastTitleSeed) return
+  // Seeds are applied both here and from initializeDialog, which replaces the
+  // whole draft on mount. Comparing against the last seed means a compose
+  // request can re-seed a dialog that never unmounted, without clobbering edits
+  // the user has since made.
+  function applySeedsToDraft() {
     draft.title = titleSeed ?? ''
+    draft.sourceTicketUrl = sourceTicketUrlSeed ?? ''
     lastTitleSeed = titleSeed
-  })
+    lastSourceTicketSeed = sourceTicketUrlSeed
+  }
 
   $effect(() => {
-    if (sourceTicketUrlSeed === lastSourceTicketSeed) return
-    draft.sourceTicketUrl = sourceTicketUrlSeed ?? ''
-    lastSourceTicketSeed = sourceTicketUrlSeed
+    if (titleSeed === lastTitleSeed && sourceTicketUrlSeed === lastSourceTicketSeed) return
+    applySeedsToDraft()
   })
 
   onMount(() => {
@@ -108,6 +109,7 @@
 
   async function initializeDialog() {
     draft = createTaskDraft()
+    applySeedsToDraft()
     taskDefaultsLoading = mode === 'create'
     worktreeAllowed = true
     branchLoadError = null
