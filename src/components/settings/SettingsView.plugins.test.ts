@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installedPluginEntry, defaultProps, resetSettingsViewTest } from './SettingsView.testUtils'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
@@ -9,6 +9,9 @@ import SettingsView from './SettingsView.svelte'
 describe('SettingsView plugin integration', () => {
   beforeEach(resetSettingsViewTest)
 
+  async function openPluginsCategory() {
+    await fireEvent.click(screen.getByRole('button', { name: /^Plugins/ }))
+  }
 
   it('renders plugin settings sections on the project settings page', async () => {
     installedPlugins.set(new Map([[
@@ -36,6 +39,7 @@ describe('SettingsView plugin integration', () => {
     registerRenderableContributionComponent('settingsSections', 'plugin.settings:advanced', PluginSlotTestView)
 
     render(SettingsView, { props: defaultProps })
+    await openPluginsCategory()
 
     await vi.waitFor(() => {
       expect(screen.getByText('Advanced Plugin Settings')).toBeTruthy()
@@ -69,6 +73,7 @@ describe('SettingsView plugin integration', () => {
     registerRenderableContributionComponent('settingsSections', 'plugin.settings:global-key', PluginSlotTestView)
 
     render(SettingsView, { props: defaultProps })
+    await openPluginsCategory()
 
     // Give the project page a beat; the global-scoped section must never appear here.
     await new Promise((r) => setTimeout(r, 20))
@@ -111,6 +116,7 @@ describe('SettingsView plugin integration', () => {
     }
 
     render(SettingsView, { props: defaultProps })
+    await openPluginsCategory()
 
     await vi.waitFor(() => {
       const renderedSlotIds = Array.from(document.querySelectorAll('[data-slot-type="settingsSections"]'))
@@ -131,6 +137,7 @@ describe('SettingsView plugin integration', () => {
     ]]))
 
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    await openPluginsCategory()
 
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: /install package/i })).toBeTruthy()
@@ -154,6 +161,7 @@ describe('SettingsView plugin integration', () => {
     ]]))
 
     render(SettingsView, { props: defaultProps })
+    await openPluginsCategory()
 
     await vi.waitFor(() => {
       // Rendered by both the shared configuration card and the plugin panel.

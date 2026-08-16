@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import { AudioLines, Blocks, Bot, Code2, Filter, FolderOpen, GitBranch, RotateCcw, Settings2, Smartphone, Sparkles, Tags, TriangleAlert } from '@lucide/svelte'
   import { activeProjectColorId, activeProjectId, projects, codeCleanupTasksEnabled, error } from '../../lib/stores'
   import {
     deleteProject,
@@ -21,7 +22,7 @@
     parseGitHubPollIntervalSeconds,
   } from '../../lib/settingsConfig'
   import type { ProjectSettingsConfig } from '../../lib/settingsConfig'
-  import { mergeUpdatedProject, getProjectIdentity, resetProjectAndReload } from '../../lib/settingsProjectSync'
+  import { mergeUpdatedProject, getProjectIdentity, resetProjectAndReload, resetProjectSettingAndReload } from '../../lib/settingsProjectSync'
   import { saveGlobalSettings, saveProjectSettings } from '../../lib/settingsSaver'
   import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
   import { themeMode, applyTheme } from '../../lib/theme'
@@ -30,6 +31,7 @@
   import type { TaskState } from '../../lib/taskState'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import { loadEnabledForProject } from '../../lib/plugin/pluginRegistry'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import ProviderSelectField from './ProviderSelectField.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
@@ -39,6 +41,8 @@
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
   import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
+  import SettingsCategoryNav from './SettingsCategoryNav.svelte'
+  import type { SettingsCategory } from './SettingsCategoryNav.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
   import SettingsCompanionCard from './SettingsCompanionCard.svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
@@ -69,6 +73,7 @@
   // `ai_provider` and `use_worktrees` live here (via projectHierarchyValues) and are
   // rendered/persisted exclusively through the Configuration card, not local state.
   let projectRawOverrides = $state<Record<string, string | null>>({})
+  let resettingProjectSetting = $state<string | null>(null)
 
   // Global state
   let taskIdPrefix = $state('')
@@ -176,9 +181,24 @@
     const pid = $activeProjectId
     if (!pid) return
     try {
-      await resetProjectAndReload(pid, () => reloadProjectSettings(pid))
+      await resetProjectAndReload(pid, async () => {
+        await Promise.all([reloadProjectSettings(pid), loadEnabledForProject(pid)])
+      })
     } catch (e) {
       $error = getErrorMessage(e)
+    }
+  }
+
+  async function handleResetProjectSetting(key: string) {
+    const pid = $activeProjectId
+    if (!pid || resettingProjectSetting) return
+    resettingProjectSetting = key
+    try {
+      await resetProjectSettingAndReload(pid, key, () => reloadProjectSettings(pid))
+    } catch (e) {
+      $error = getErrorMessage(e)
+    } finally {
+      resettingProjectSetting = null
     }
   }
 
@@ -204,18 +224,31 @@
     delayMs: SAVE_DEBOUNCE_MS,
     save,
   })
-  const getInitialActiveSection = () => mode === 'global' ? 'preferences' : 'general'
+  const projectCategories: SettingsCategory[] = [
+    { id: 'general', label: 'General', description: 'Project identity and inherited defaults', icon: FolderOpen },
+    { id: 'agents', label: 'Agents & tasks', description: 'Provider and task behavior', icon: Bot },
+    { id: 'labels', label: 'Labels', description: 'Task label management', icon: Tags },
+    { id: 'focus', label: 'Focus filter', description: 'Attention and board filters', icon: Filter },
+    { id: 'instructions', label: 'AI instructions', description: 'Agent instructions and Handoff Notes template', icon: Sparkles },
+    { id: 'plugins', label: 'Plugins', description: 'Project Plugin Enablement', icon: Blocks },
+    { id: 'danger', label: 'Danger Zone', description: 'Destructive project actions', icon: TriangleAlert, danger: true },
+  ]
 
-  let activeSection = $state(getInitialActiveSection())
+  const globalCategories: SettingsCategory[] = [
+    { id: 'general', label: 'General', description: 'App-wide defaults and appearance', icon: Settings2 },
+    { id: 'agents', label: 'Agents', description: 'Provider defaults and connection health', icon: Bot },
+    { id: 'github', label: 'GitHub & Credentials', description: 'Credentials and GitHub polling', icon: GitBranch },
+    { id: 'voice', label: 'Voice & Whisper', description: 'Speech model management', icon: AudioLines },
+    { id: 'plugins', label: 'Plugins', description: 'Plugin Installation and global defaults', icon: Blocks },
+    { id: 'companion', label: 'Companion', description: 'Companion gateway and paired devices', icon: Smartphone },
+    { id: 'developer', label: 'Developer logs', description: 'Diagnostics and application logs', icon: Code2 },
+  ]
+
+  let activeSection = $state('general')
+  const settingsCategories = $derived(mode === 'global' ? globalCategories : projectCategories)
   let isDeleting = $state(false)
   let confirmingDelete = $state(false)
   let deleteError = $state<string | null>(null)
-
-  // Scroll spy
-  let scrollContainer = $state<HTMLDivElement | null>(null)
-  let isNavigating = false
-  const projectSections = ['general', 'labels', 'instructions', 'plugins']
-  const globalSections = ['configuration', 'preferences', 'ai', 'credentials', 'plugins', 'developer']
 
   function getErrorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e)
@@ -257,7 +290,7 @@
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
-  const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
+  const activePage = $derived(mode === 'global' ? 'global' : 'project')
   const settingsLoading = $derived(activePage === 'project' ? projectSettingsLoading : !globalSettingsLoaded)
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
@@ -297,6 +330,28 @@
   const projectHierarchyValues = $derived<Record<string, string>>(
     computeEffectiveProjectSettings(globalHierarchyValues, projectRawOverrides),
   )
+  const projectOverrideCount = $derived(
+    Object.values(projectRawOverrides).filter((value) => value != null).length,
+  )
+  const globalGeneralExcludeKeys = ['ai_provider', 'github_poll_interval', 'plugins']
+  const providerOnlyExcludeKeys = [
+    'code_cleanup_tasks_enabled',
+    'task_display_title_metadata_updates_enabled',
+    'handoff_notes_enabled',
+    'use_worktrees',
+    'task_id_prefix',
+    'github_poll_interval',
+    'plugins',
+  ]
+  const githubOnlyExcludeKeys = [
+    'code_cleanup_tasks_enabled',
+    'task_display_title_metadata_updates_enabled',
+    'handoff_notes_enabled',
+    'ai_provider',
+    'use_worktrees',
+    'task_id_prefix',
+    'plugins',
+  ]
 
   // Sync project name/path from project list
   $effect(() => {
@@ -358,14 +413,9 @@
     }
   })
 
-  // Default to correct page based on mode
   $effect(() => {
-    if (mode === 'global' && projectSections.includes(activeSection)) {
-      activeSection = 'preferences'
-    } else if (mode === 'project' && globalSections.includes(activeSection)) {
+    if (!settingsCategories.some((category) => category.id === activeSection)) {
       activeSection = 'general'
-    } else if (!hasProject && projectSections.includes(activeSection)) {
-      activeSection = 'preferences'
     }
   })
 
@@ -403,48 +453,6 @@
     modelStatuses = await whisperStatusesPromise
     await installationStatusPromise
 
-  })
-
-  // Scroll spy: re-observe whenever conditional sections mount/unmount
-  $effect(() => {
-    const container = scrollContainer
-    void hasProject
-    const sections = activePage === 'project' ? projectSections : globalSections
-
-    if (!container || typeof IntersectionObserver === 'undefined') return
-
-    const visible = new Set<string>()
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const id = entry.target.id.replace('section-', '')
-          if (entry.isIntersecting) {
-            visible.add(id)
-          } else {
-            visible.delete(id)
-          }
-        }
-        if (isNavigating) return
-        for (const id of sections) {
-          if (visible.has(id)) {
-            activeSection = id
-            return
-          }
-        }
-      },
-      {
-        root: container,
-        rootMargin: '0px 0px -50% 0px',
-        threshold: 0,
-      }
-    )
-
-    container.querySelectorAll('[id^="section-"]').forEach((s) => {
-      obs.observe(s)
-    })
-
-    return () => obs.disconnect()
   })
 
   function captureCurrentSave(): boolean {
@@ -596,196 +604,222 @@
   }
 </script>
 
-<div class="flex h-full w-full">
-  <div bind:this={scrollContainer} class="flex-1 overflow-y-auto" style="background: linear-gradient(180deg, var(--project-bg-alt, oklch(var(--b2))) 0%, var(--project-bg, oklch(var(--b1))) 100%)">
-    <div class="flex w-full flex-col gap-6 px-6 py-6">
-      <ProjectPageHeader
-        title={activePage === 'project'
-          ? `${projectName || 'Project'} — Project Settings`
-          : 'Global Settings'}
-        subtitle={activePage === 'project'
-          ? 'Configure settings for this project only'
-          : 'Configure app-wide preferences and credentials'}
-      >
-        {#snippet actions()}
-          <div class="flex items-center gap-3">
-            <div class="flex flex-col items-end gap-1 text-xs" aria-live="polite">
-              <span class="text-base-content/60">Autosaves changes</span>
-              {#if projectSettingsLoadError || globalSettingsLoadError}
-                <span class="text-error">Failed to load settings: {projectSettingsLoadError ?? globalSettingsLoadError}</span>
-              {:else if settingsLoading}
-                <span class="text-base-content/50">Loading settings…</span>
-              {:else if saveStatus === 'dirty'}
-                <span class="text-warning">Unsaved changes — autosaving soon…</span>
-              {:else if isSaving || saveStatus === 'saving'}
-                <span class="text-base-content/50">Saving changes…</span>
-              {:else if saved || saveStatus === 'saved'}
-                <span class="text-success">All changes saved</span>
-              {:else if saveStatus === 'error'}
-                <div class="flex items-center gap-2">
-                  <span class="text-error">Autosave failed: {saveError}</span>
-                  <button type="button" class="btn btn-xs btn-error" onclick={runImmediateSave}>Retry autosave</button>
-                </div>
-              {/if}
-            </div>
+<div class="flex h-full w-full flex-col overflow-hidden bg-base-200 lg:flex-row">
+  <SettingsCategoryNav
+    categories={settingsCategories}
+    activeId={activeSection}
+    onSelect={(id) => { activeSection = id }}
+  />
+
+  <main class="min-w-0 flex-1 overflow-y-auto bg-base-200" aria-label={activePage === 'project' ? 'Project settings' : 'Global settings'}>
+    <ProjectPageHeader
+      title={activePage === 'project'
+        ? `${projectName || 'Project'} / Project Settings`
+        : 'Global Settings'}
+      subtitle={activePage === 'project'
+        ? 'Configure settings for this project only. Inherited defaults remain visible.'
+        : 'Configure app-wide defaults, integrations, and credentials.'}
+    >
+      {#snippet actions()}
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <div class="min-w-32 text-right text-xs" aria-live="polite">
+            {#if projectSettingsLoadError || globalSettingsLoadError}
+              <span class="font-medium text-error">Failed to load settings: {projectSettingsLoadError ?? globalSettingsLoadError}</span>
+            {:else if settingsLoading}
+              <span class="inline-flex items-center gap-2 text-base-content/60"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Loading settings…</span>
+            {:else if saveStatus === 'dirty'}
+              <span class="font-medium text-warning">Unsaved changes — autosaving soon…</span>
+            {:else if isSaving || saveStatus === 'saving'}
+              <span class="inline-flex items-center gap-2 text-base-content/60"><span class="loading loading-spinner loading-xs" aria-hidden="true"></span>Saving changes…</span>
+            {:else if saved || saveStatus === 'saved'}
+              <span class="font-medium text-success">All changes saved</span>
+            {:else if saveStatus === 'error'}
+              <span class="inline-flex items-center gap-2 text-error">
+                Autosave failed: {saveError}
+                <button type="button" class="btn btn-xs btn-error" onclick={runImmediateSave}>Retry autosave</button>
+              </span>
+            {:else}
+              <span class="text-base-content/55">Autosaves changes</span>
+            {/if}
+          </div>
+
+          {#if activePage === 'project'}
+            <span class="badge min-h-8 border-warning/35 bg-warning/10 px-3 text-warning">
+              {projectOverrideCount} {projectOverrideCount === 1 ? 'override' : 'overrides'}
+            </span>
             <button
               type="button"
-              class="btn btn-ghost btn-sm"
-              onclick={onClose}
+              class="btn btn-outline btn-sm min-h-10"
+              onclick={handleResetToGlobal}
+              disabled={!hasProject || projectOverrideCount === 0}
             >
-              Back to Board
+              <RotateCcw size={15} aria-hidden="true" />
+              Reset all
             </button>
-          </div>
-        {/snippet}
-      </ProjectPageHeader>
+          {/if}
 
+          <button type="button" class="btn btn-ghost btn-sm min-h-10" onclick={onClose}>Back to Board</button>
+        </div>
+      {/snippet}
+    </ProjectPageHeader>
+
+    {#snippet providerHealthField(providerValue: string, scope: 'global' | 'project')}
+      <ProviderSelectField
+        aiProvider={providerValue}
+        {opencodeInstalled}
+        {opencodeVersion}
+        {claudeInstalled}
+        {claudeVersion}
+        {claudeAuthenticated}
+        {piInstalled}
+        {piVersion}
+        {codexInstalled}
+        {codexVersion}
+        {grokInstalled}
+        {grokVersion}
+        {grokAuthenticated}
+        {installationStatusLoading}
+        {installationStatusError}
+        disabled={scope === 'project' ? !hasProject : !globalSettingsLoaded}
+        onChange={(value) => scope === 'project'
+          ? handleProjectSettingChange('ai_provider', value)
+          : handleGlobalSettingChange('ai_provider', value)}
+        onRefreshInstallationStatus={refreshInstallationStatus}
+      />
+    {/snippet}
+
+    <div class="mx-auto flex w-full max-w-[76rem] flex-col gap-5 p-4 sm:p-6 xl:p-8">
       {#if activePage === 'project'}
-        <SettingsGeneralCard
-          {projectName}
-          {projectPath}
-          {projectColor}
-          {runCommand}
-          disabled={!hasProject}
-          onProjectNameChange={(v) => { projectName = v; scheduleSave() }}
-          onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
-          onProjectColorChange={handleProjectColorChange}
-          onRunCommandChange={(v) => { runCommand = v; scheduleSave() }}
-        />
-
-        <HierarchicalSettingsCard
-          mode="project"
-          values={projectHierarchyValues}
-          excludeKeys={['plugins']}
-          onChange={handleProjectSettingChange}
-          onResetToGlobal={handleResetToGlobal}
-          disabled={!hasProject}
-        >
-          {#snippet providerField()}
-            <ProviderSelectField
-              aiProvider={projectHierarchyValues.ai_provider}
-              {opencodeInstalled}
-              {opencodeVersion}
-              {claudeInstalled}
-              {claudeVersion}
-              {claudeAuthenticated}
-              {piInstalled}
-              {piVersion}
-              {codexInstalled}
-              {codexVersion}
-              {grokInstalled}
-              {grokVersion}
-              {grokAuthenticated}
-              {installationStatusLoading}
-              {installationStatusError}
-              disabled={!hasProject}
-              onChange={(v) => handleProjectSettingChange('ai_provider', v)}
-              onRefreshInstallationStatus={refreshInstallationStatus}
-            />
-          {/snippet}
-        </HierarchicalSettingsCard>
-
-        <SettingsTaskLabelsCard
-          projectId={$activeProjectId}
-          disabled={!hasProject}
-        />
-
-        <SettingsFocusFilterCard
-          focusStates={focusFilterStates}
-          onFocusStatesChange={(states) => { focusFilterStates = states; scheduleSave() }}
-          disabled={!hasProject}
-        />
-
-        <SettingsInstructionsCard
-          {agentInstructions}
-          {handoffNotesTemplate}
-          disabled={!hasProject}
-          onInstructionsChange={(v) => { agentInstructions = v; scheduleSave() }}
-          onHandoffNotesTemplateChange={(v) => { handoffNotesTemplate = v; scheduleSave() }}
-        />
-
-        <PluginSettingsPanel
-          projectId={$activeProjectId || ''}
-          disabled={!hasProject}
-        />
-
-        {#each pluginSettingsSections as section (section.namespacedId)}
-          <SettingsSectionCard title={section.title}>
-            <PluginSlot
-              slotType="settingsSections"
-              slotId={section.namespacedId}
-              projectId={$activeProjectId}
-              projectName={projectName}
-            />
-          </SettingsSectionCard>
-        {/each}
-
-        {#if hasProject}
-          <SettingsSectionCard title="Danger Zone" tone="danger">
+        {#if activeSection === 'general'}
+          <SettingsGeneralCard
+            {projectName}
+            {projectPath}
+            {projectColor}
+            {runCommand}
+            disabled={!hasProject}
+            onProjectNameChange={(value) => { projectName = value; scheduleSave() }}
+            onProjectPathChange={(value) => { projectPath = value; scheduleSave() }}
+            onProjectColorChange={handleProjectColorChange}
+            onRunCommandChange={(value) => { runCommand = value; scheduleSave() }}
+          />
+        {:else if activeSection === 'agents'}
+          <HierarchicalSettingsCard
+            mode="project"
+            values={projectHierarchyValues}
+            overrides={projectRawOverrides}
+            excludeKeys={['plugins']}
+            onChange={handleProjectSettingChange}
+            onResetSetting={handleResetProjectSetting}
+            resettingKey={resettingProjectSetting}
+            disabled={!hasProject}
+          >
+            {#snippet providerField()}{@render providerHealthField(projectHierarchyValues.ai_provider, 'project')}{/snippet}
+          </HierarchicalSettingsCard>
+        {:else if activeSection === 'labels'}
+          <SettingsTaskLabelsCard projectId={$activeProjectId} disabled={!hasProject} />
+        {:else if activeSection === 'focus'}
+          <SettingsFocusFilterCard
+            focusStates={focusFilterStates}
+            onFocusStatesChange={(states) => { focusFilterStates = states; scheduleSave() }}
+            disabled={!hasProject}
+          />
+        {:else if activeSection === 'instructions'}
+          <SettingsInstructionsCard
+            {agentInstructions}
+            {handoffNotesTemplate}
+            disabled={!hasProject}
+            onInstructionsChange={(value) => { agentInstructions = value; scheduleSave() }}
+            onHandoffNotesTemplateChange={(value) => { handoffNotesTemplate = value; scheduleSave() }}
+          />
+        {:else if activeSection === 'plugins'}
+          <PluginSettingsPanel projectId={$activeProjectId || ''} disabled={!hasProject} />
+          {#each pluginSettingsSections as section (section.namespacedId)}
+            <SettingsSectionCard title={section.title}>
+              <PluginSlot
+                slotType="settingsSections"
+                slotId={section.namespacedId}
+                projectId={$activeProjectId}
+                projectName={projectName}
+              />
+            </SettingsSectionCard>
+          {/each}
+        {:else if activeSection === 'danger' && hasProject}
+          <SettingsSectionCard title="Danger Zone" description="Actions here permanently affect this project." tone="danger">
             <div class="flex flex-col gap-3">
-              <div class="flex items-center gap-3">
+              <div class="flex min-h-10 flex-wrap items-center gap-3">
                 {#if confirmingDelete}
-                  <span class="text-sm text-error">Delete "{projectName}"? This cannot be undone.</span>
-                  <button class="btn btn-error btn-sm" onclick={handleDelete} disabled={isDeleting}>
-                    {isDeleting ? 'Deleting...' : 'Yes, delete'}
+                  <span class="text-sm font-medium text-error">Delete “{projectName}”? This cannot be undone.</span>
+                  <button class="btn btn-error btn-sm min-h-10" onclick={handleDelete} disabled={isDeleting}>
+                    {isDeleting ? 'Deleting…' : 'Yes, delete'}
                   </button>
-                  <button class="btn btn-ghost btn-sm" onclick={() => { confirmingDelete = false; deleteError = null }} disabled={isDeleting}>
-                    Cancel
-                  </button>
+                  <button class="btn btn-ghost btn-sm min-h-10" onclick={() => { confirmingDelete = false; deleteError = null }} disabled={isDeleting}>Cancel</button>
                 {:else}
-                  <button class="btn btn-error btn-sm" onclick={() => { confirmingDelete = true; deleteError = null }}>
-                    Delete Project
-                  </button>
+                  <button class="btn btn-error btn-sm min-h-10" onclick={() => { confirmingDelete = true; deleteError = null }}>Delete Project</button>
                 {/if}
               </div>
-              {#if deleteError}
-                <p class="text-sm text-error font-mono break-all">{deleteError}</p>
-              {/if}
+              {#if deleteError}<p class="m-0 break-all font-mono text-sm text-error" role="alert">{deleteError}</p>{/if}
             </div>
           </SettingsSectionCard>
         {/if}
       {:else}
-        <HierarchicalSettingsCard
-          mode="global"
-          values={globalHierarchyValues}
-          excludeKeys={['plugins']}
-          onChange={handleGlobalSettingChange}
-          disabled={!globalSettingsLoaded}
-        />
-
-        <SettingsPreferencesCard
-          {isDarkMode}
-          onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
-        />
-
-        <SettingsAICard
-          {modelStatuses}
-          activeModelSize={modelStatuses.find((m) => m.is_active)?.size ?? null}
-          {downloadingModel}
-          onWhisperModelSelect={handleModelChange}
-          onDownloadModel={handleDownloadModel}
-          onDownloadComplete={refreshModelStatuses}
-          onDownloadError={() => {
-            downloadingModel = null
-          }}
-        />
-
-        <SettingsCredentialsCard
-          {githubToken}
-          onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
-          disabled={!globalSettingsLoaded}
-        />
-
-        <GlobalPluginSettingsPanel
-          activeProjectId={$activeProjectId}
-          pluginDefaults={globalPluginDefaultsById}
-          onToggleDefault={handleGlobalPluginToggle}
-          disabled={!globalSettingsLoaded}
-        />
-
-        <SettingsCompanionCard />
-
-        <SettingsDeveloperLogsCard />
+        {#if activeSection === 'general'}
+          <HierarchicalSettingsCard
+            mode="global"
+            values={globalHierarchyValues}
+            excludeKeys={globalGeneralExcludeKeys}
+            onChange={handleGlobalSettingChange}
+            disabled={!globalSettingsLoaded}
+          />
+          <SettingsPreferencesCard
+            {isDarkMode}
+            onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
+          />
+        {:else if activeSection === 'agents'}
+          <HierarchicalSettingsCard
+            mode="global"
+            values={globalHierarchyValues}
+            excludeKeys={providerOnlyExcludeKeys}
+            onChange={handleGlobalSettingChange}
+            disabled={!globalSettingsLoaded}
+          >
+            {#snippet providerField()}{@render providerHealthField(globalHierarchyValues.ai_provider, 'global')}{/snippet}
+          </HierarchicalSettingsCard>
+        {:else if activeSection === 'github'}
+          <SettingsCredentialsCard
+            {githubToken}
+            onGithubTokenChange={(value: string) => { githubToken = value; scheduleSave() }}
+            disabled={!globalSettingsLoaded}
+          />
+          <HierarchicalSettingsCard
+            mode="global"
+            values={globalHierarchyValues}
+            excludeKeys={githubOnlyExcludeKeys}
+            onChange={handleGlobalSettingChange}
+            disabled={!globalSettingsLoaded}
+          />
+        {:else if activeSection === 'voice'}
+          <SettingsAICard
+            {modelStatuses}
+            activeModelSize={modelStatuses.find((model) => model.is_active)?.size ?? null}
+            {downloadingModel}
+            onWhisperModelSelect={handleModelChange}
+            onDownloadModel={handleDownloadModel}
+            onDownloadComplete={refreshModelStatuses}
+            onDownloadError={() => { downloadingModel = null }}
+          />
+        {:else if activeSection === 'plugins'}
+          <GlobalPluginSettingsPanel
+            activeProjectId={$activeProjectId}
+            pluginDefaults={globalPluginDefaultsById}
+            onToggleDefault={handleGlobalPluginToggle}
+            disabled={!globalSettingsLoaded}
+          />
+        {:else if activeSection === 'companion'}
+          <SettingsCompanionCard />
+        {:else if activeSection === 'developer'}
+          <SettingsDeveloperLogsCard />
+        {/if}
       {/if}
     </div>
-  </div>
+  </main>
 </div>

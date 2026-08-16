@@ -62,6 +62,7 @@ export const ipcCommandContracts = [
   { functionName: 'getProjectConfig', ipcCommand: 'get_project_config', payloadKeys: ['projectId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getResolvedAiProvider', ipcCommand: 'resolve_ai_provider', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setProjectConfig', ipcCommand: 'set_project_config', payloadKeys: ['projectId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'clearProjectConfig', ipcCommand: 'clear_project_config', payloadKeys: ['projectId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getTaskConfig', ipcCommand: 'get_task_config', payloadKeys: ['taskId', 'key'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'setTaskConfig', ipcCommand: 'set_task_config', payloadKeys: ['taskId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'resetProjectSettingsToGlobal', ipcCommand: 'reset_project_settings_to_global', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'config' },

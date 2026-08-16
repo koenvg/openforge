@@ -31,6 +31,7 @@ fn command_domain(command: &str) -> Option<CommandDomain> {
         | "get_project_config"
         | "resolve_ai_provider"
         | "set_project_config"
+        | "clear_project_config"
         | "reset_project_settings_to_global" => Some(CommandDomain::Project),
         "get_task_config"
         | "set_task_config"
@@ -104,6 +105,7 @@ mod tests {
             ("get_project_config", CommandDomain::Project),
             ("resolve_ai_provider", CommandDomain::Project),
             ("set_project_config", CommandDomain::Project),
+            ("clear_project_config", CommandDomain::Project),
             ("reset_project_settings_to_global", CommandDomain::Project),
             ("get_task_config", CommandDomain::Task),
             ("set_task_config", CommandDomain::Task),

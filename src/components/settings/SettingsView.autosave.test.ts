@@ -19,6 +19,14 @@ import SettingsView from './SettingsView.svelte'
 describe('SettingsView auto-save', () => {
   beforeEach(resetSettingsViewTest)
 
+  async function openGithubCategory() {
+    await fireEvent.click(screen.getByRole('button', { name: /GitHub & Credentials/ }))
+  }
+
+  async function openAgentsCategory() {
+    await fireEvent.click(screen.getByRole('button', { name: /Agents & tasks/ }))
+  }
+
   describe('auto-save', () => {
     beforeEach(() => {
       vi.useFakeTimers()
@@ -108,6 +116,7 @@ describe('SettingsView auto-save', () => {
         .mockResolvedValueOnce({ installed: true, path: '/usr/local/bin/pi', version: '2.0.0' })
 
       render(SettingsView, { props: defaultProps })
+      await openAgentsCategory()
 
       await vi.waitFor(() => {
         expect(screen.getByText('Pi Coding Agent is not installed')).toBeTruthy()
@@ -134,6 +143,7 @@ describe('SettingsView auto-save', () => {
       })
 
       render(SettingsView, { props: defaultProps })
+      await openAgentsCategory()
 
       await vi.waitFor(() => {
         expect(screen.getByRole('button', { name: /switch to claude code/i })).toBeTruthy()
@@ -198,21 +208,17 @@ describe('SettingsView auto-save', () => {
 
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-      const prefixInput = requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement)
-      const pollIntervalInput = requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement)
-      const tokenInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
-      const cleanupToggle = requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement)
-      const titleMetadataToggle = requireElement(screen.getByTestId('task_display_title_metadata_updates_enabled'), HTMLInputElement)
-      expect(prefixInput.disabled).toBe(true)
-      expect(pollIntervalInput.disabled).toBe(true)
-      expect(tokenInput.disabled).toBe(true)
-      expect(cleanupToggle.disabled).toBe(true)
-      expect(titleMetadataToggle.disabled).toBe(true)
+      expect(requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement).disabled).toBe(true)
+      expect(requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement).disabled).toBe(true)
+      expect(requireElement(screen.getByTestId('task_display_title_metadata_updates_enabled'), HTMLInputElement).disabled).toBe(true)
+
+      await openGithubCategory()
+      expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(true)
+      expect(requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement).disabled).toBe(true)
 
       await vi.waitFor(() => {
         expect(resolvers.size).toBeGreaterThanOrEqual(8)
       })
-
       resolvers.get('task_id_prefix')?.('OF')
       resolvers.get('github_token')?.('ghp_old')
       resolvers.get('code_cleanup_tasks_enabled')?.('false')
@@ -221,13 +227,14 @@ describe('SettingsView auto-save', () => {
       resolvers.get('handoff_notes_enabled')?.('true')
       resolvers.get('use_worktrees')?.('true')
       resolvers.get('ai_provider')?.('claude-code')
+
       await vi.waitFor(() => {
-        expect(prefixInput.disabled).toBe(false)
-        expect(pollIntervalInput.disabled).toBe(false)
-        expect(tokenInput.disabled).toBe(false)
-        expect(cleanupToggle.disabled).toBe(false)
-        expect(titleMetadataToggle.disabled).toBe(false)
+        expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)
+        expect(requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement).disabled).toBe(false)
       })
+      await fireEvent.click(screen.getByRole('button', { name: /^General/ }))
+      expect(requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement).disabled).toBe(false)
+      expect(requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement).disabled).toBe(false)
     })
 
     it('updates projects store with new name and path after save', async () => {
@@ -329,6 +336,7 @@ describe('SettingsView auto-save', () => {
       activeProjectId.set(null)
       projects.set([])
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+      await openGithubCategory()
 
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(setConfig).mockClear()
@@ -369,6 +377,7 @@ describe('SettingsView auto-save', () => {
     })
     it('does not save active project settings from the global settings page', async () => {
       render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+      await openGithubCategory()
 
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(setConfig).mockClear()
@@ -406,6 +415,7 @@ describe('SettingsView auto-save', () => {
 
     it('persists pending global settings when switching to project settings before debounce fires', async () => {
       const { rerender } = render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+      await openGithubCategory()
 
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(setConfig).mockClear()
@@ -434,6 +444,7 @@ describe('SettingsView auto-save', () => {
       const nameInput = screen.getByPlaceholderText('My Project')
       await fireEvent.input(nameInput, { target: { value: 'Renamed Project' } })
       await rerender({ ...defaultProps, mode: 'global' as const })
+      await openGithubCategory()
 
       const tokenInput = screen.getByPlaceholderText('ghp_...')
       await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
@@ -463,6 +474,7 @@ describe('SettingsView auto-save', () => {
       })
       vi.mocked(setConfig).mockClear()
 
+      await openGithubCategory()
       const tokenInput = screen.getByPlaceholderText('ghp_...')
       await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AlertCircle, Bot, CheckCircle2, RefreshCw } from '@lucide/svelte'
   import { openUrl } from '../../lib/ipc'
 
   // Where to send a user to install each provider when it is not on PATH. Opened
@@ -136,8 +137,45 @@
 </script>
 
 <div class="flex flex-col gap-2">
+  <div class="flex min-h-14 items-center gap-3 rounded-lg border border-base-300 bg-base-200/45 px-3 py-2" role="status" aria-live="polite">
+    {#if installationStatusLoading}
+      <span class="loading loading-spinner loading-sm shrink-0" aria-hidden="true"></span>
+      <div class="min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-base-content">Checking provider health…</p>
+        <p class="m-0 mt-0.5 text-xs text-base-content/60">Detecting installed provider CLIs and authentication.</p>
+      </div>
+    {:else if installationStatusError}
+      <AlertCircle size={18} class="shrink-0 text-error" aria-hidden="true" />
+      <div class="min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-base-content">Provider health unavailable</p>
+        <p class="m-0 mt-0.5 text-xs text-base-content/60">{installationStatusError}</p>
+      </div>
+    {:else if selectedProviderRecovery?.installed && selectedProviderRecovery.authenticated}
+      <CheckCircle2 size={18} class="shrink-0 text-success" aria-hidden="true" />
+      <div class="min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-base-content">{selectedProviderRecovery.label} is ready</p>
+        <p class="m-0 mt-0.5 text-xs text-base-content/60">Installed{selectedProviderRecovery.version ? ` · ${selectedProviderRecovery.version}` : ''} and available for new tasks.</p>
+      </div>
+    {:else}
+      <Bot size={18} class="shrink-0 text-warning" aria-hidden="true" />
+      <div class="min-w-0 flex-1">
+        <p class="m-0 text-sm font-medium text-base-content">Selected provider needs attention</p>
+        <p class="m-0 mt-0.5 text-xs text-base-content/60">Install or authenticate the selected provider before starting tasks.</p>
+      </div>
+    {/if}
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10 shrink-0"
+      aria-label="Refresh provider health"
+      title="Refresh provider health"
+      disabled={disabled || installationStatusLoading}
+      onclick={onRefreshInstallationStatus}
+    ><RefreshCw size={15} aria-hidden="true" /></button>
+  </div>
+
   <select
-    class="select select-bordered select-sm w-full max-w-xs"
+    class="select select-bordered select-sm min-h-10 w-full max-w-xs"
+    aria-label="AI Provider"
     value={aiProvider}
     disabled={disabled}
     onchange={(e) => {

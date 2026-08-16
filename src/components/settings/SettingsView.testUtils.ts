@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
   return {
     getProjectConfig: vi.fn(),
     setProjectConfig: vi.fn(),
+    clearProjectConfig: vi.fn(),
     updateProject: vi.fn(),
     deleteProject: vi.fn(),
     getConfig: vi.fn(),
@@ -66,6 +67,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../lib/ipc', () => ({
   getProjectConfig: mocks.getProjectConfig,
   setProjectConfig: mocks.setProjectConfig,
+  clearProjectConfig: mocks.clearProjectConfig,
   updateProject: mocks.updateProject,
   deleteProject: mocks.deleteProject,
   getConfig: mocks.getConfig,
@@ -145,6 +147,7 @@ export async function resetSettingsViewTest() {
   mocks.getProjectConfig.mockResolvedValue(null)
   mocks.getConfig.mockResolvedValue(null)
   mocks.setProjectConfig.mockResolvedValue(undefined)
+  mocks.clearProjectConfig.mockResolvedValue(undefined)
   mocks.setConfig.mockResolvedValue(undefined)
   mocks.getCompanionGatewayStatus.mockResolvedValue({
     enabled: false,
