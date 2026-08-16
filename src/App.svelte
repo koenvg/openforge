@@ -90,7 +90,6 @@
     getActiveProject: () => activeProject,
     loadTasks: appData.loadTasks,
     loadProjectAttention: appData.loadProjectAttention,
-    triggerGithubSync: appData.triggerGithubSync,
   })
   const actionPalette = useActionPaletteController({
     getSelectedTask: () => selectedTask,
