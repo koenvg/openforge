@@ -1,24 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { ImagePlus } from '@lucide/svelte'
   import type { Task, GitBranchInfo } from '../lib/types'
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
   import { dedupeBranchesForSelector } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
-  import {
-    formatTaskPromptWithImageReferences,
-    getTaskPromptImageReferences,
-    getTaskPromptText,
-  } from '../lib/taskPrompt'
-  import type { TaskPromptImageReference } from '../lib/taskPrompt'
+  import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
-  import VoiceInput from './shared/adapters/VoiceInput.svelte'
   import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
-  import CreateTaskSettings from './create-task/CreateTaskSettings.svelte'
+  import CreateTaskEnvironment from './create-task/CreateTaskEnvironment.svelte'
+  import CreateTaskProgressiveSettings from './create-task/CreateTaskProgressiveSettings.svelte'
+  import CreateTaskPromptAttachments from './create-task/CreateTaskPromptAttachments.svelte'
   import { createTaskDraft, getWorktreeOptions } from './create-task/createTaskDraft'
   import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
 
@@ -32,11 +27,6 @@
     onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
   }
 
-  interface PastedTaskImage extends TaskPromptImageReference {
-    id: number
-  }
-
-  const MAX_PASTED_IMAGE_BYTES = 5 * 1024 * 1024
   // Provider choices come from the shared settings registry so the task-level
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
@@ -57,14 +47,9 @@
   let lastInitialPrompt = $state<string | null>(null)
   let isSaving = $state(false)
   let submissionIntent = $state<'backlog' | 'start' | null>(null)
-  let pastedImages = $state<PastedTaskImage[]>([])
-  let previewImage = $state<PastedTaskImage | null>(null)
-  let imagePasteError = $state<string | null>(null)
-  let imagePastePending = $state(false)
+  let promptAttachments = $state<CreateTaskPromptAttachments>()
   let imageMarkerInsertRequest = $state<{ id: number, marker: string } | null>(null)
   let injectableInsertRequest = $state<{ id: number, text: string } | null>(null)
-  let loadedPromptSourceKey = $state<string | null>(null)
-  let nextPastedImageId = 1
   let nextImageMarkerInsertRequestId = 1
   let nextInjectableInsertRequestId = 1
   let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
@@ -73,11 +58,6 @@
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
   const createReady = $derived((mode !== 'create' || !taskDefaultsLoading) && !isSaving)
-  let pastedImageSummary = $derived(
-    pastedImages.length === 0
-      ? ''
-      : `${pastedImages.length} image${pastedImages.length === 1 ? '' : 's'} ready`
-  )
 
   $effect(() => {
     if (initialPrompt === lastInitialPrompt) return
@@ -164,145 +144,12 @@
     await handleCreateOrUpdate(promptDraft)
   }
 
-  function markerId(marker: string): number {
-    return Number(marker.match(/\[image#(\d+)\]/)?.[1] ?? '0')
-  }
-
-  function taskPromptSourceKey(): string {
-    if (mode !== 'edit' || !task) return 'create'
-    return `${task.id}\u0000${task.prompt ?? ''}\u0000${task.initial_prompt ?? ''}`
-  }
-
-  function imageFromReference(reference: TaskPromptImageReference): PastedTaskImage {
-    return {
-      ...reference,
-      id: markerId(reference.marker),
+  function handleImageMarkerInsert(marker: string) {
+    imageMarkerInsertRequest = {
+      id: nextImageMarkerInsertRequestId,
+      marker,
     }
-  }
-
-  $effect(() => {
-    const sourceKey = taskPromptSourceKey()
-    if (sourceKey === loadedPromptSourceKey) return
-
-    loadedPromptSourceKey = sourceKey
-    previewImage = null
-    imagePasteError = null
-    imageMarkerInsertRequest = null
-
-    if (mode === 'edit' && task) {
-      const promptText = getTaskPromptText(task)
-      const restoredImages = getTaskPromptImageReferences(task)
-        .filter((image) => promptText.includes(image.marker))
-        .map(imageFromReference)
-      pastedImages = restoredImages
-      nextPastedImageId = Math.max(0, ...restoredImages.map((image) => image.id)) + 1
-      return
-    }
-
-    pastedImages = []
-    nextPastedImageId = 1
-  })
-
-  function formatBytes(size: number): string {
-    if (size < 1024) return `${size} B`
-    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  function readBlobAsDataUrl(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read image'))
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result)
-        } else {
-          reject(new Error('Failed to read image'))
-        }
-      }
-      reader.readAsDataURL(blob)
-    })
-  }
-
-  async function attachPastedImage(blob: Blob): Promise<string | null> {
-    imagePasteError = null
-    imagePastePending = true
-    const mimeType = blob.type || 'image/png'
-    if (!mimeType.startsWith('image/')) {
-      imagePasteError = 'Clipboard item is not an image.'
-      imagePastePending = false
-      return null
-    }
-    if (blob.size > MAX_PASTED_IMAGE_BYTES) {
-      imagePasteError = `Pasted image is too large. Keep images under ${formatBytes(MAX_PASTED_IMAGE_BYTES)}.`
-      imagePastePending = false
-      return null
-    }
-
-    try {
-      const dataUrl = await readBlobAsDataUrl(blob)
-      const id = nextPastedImageId
-      nextPastedImageId += 1
-      const marker = `[image#${id}]`
-      pastedImages = [...pastedImages, { id, marker, dataUrl, mimeType, size: blob.size }]
-      return marker
-    } catch {
-      imagePasteError = 'Could not read the pasted image.'
-      return null
-    } finally {
-      imagePastePending = false
-    }
-  }
-
-  async function pasteImageFromClipboard() {
-    imagePasteError = null
-    imagePastePending = true
-
-    try {
-      if (!navigator.clipboard?.read) {
-        imagePasteError = 'Clipboard image paste is unavailable here.'
-        return
-      }
-
-      const items = await navigator.clipboard.read()
-      for (const item of items) {
-        const imageType = item.types.find((type) => type.startsWith('image/'))
-        if (imageType) {
-          const marker = await attachPastedImage(await item.getType(imageType))
-          if (marker) {
-            imageMarkerInsertRequest = {
-              id: nextImageMarkerInsertRequestId,
-              marker,
-            }
-            nextImageMarkerInsertRequestId += 1
-          }
-          return
-        }
-      }
-      imagePasteError = 'Clipboard does not contain an image.'
-    } catch {
-      imagePasteError = 'Could not read an image from the clipboard.'
-    } finally {
-      imagePastePending = false
-    }
-  }
-
-  function openImagePreview(marker: string) {
-    previewImage = pastedImages.find((image) => image.marker === marker) ?? null
-  }
-
-  function syncPastedImagesWithPrompt(prompt: string) {
-    const retainedImages = pastedImages.filter((image) => prompt.includes(image.marker))
-    if (retainedImages.length === pastedImages.length) return
-
-    pastedImages = retainedImages
-    if (previewImage && !retainedImages.some((image) => image.marker === previewImage?.marker)) {
-      previewImage = null
-    }
-  }
-
-  function promptWithPastedImageReferences(prompt: string): string {
-    return formatTaskPromptWithImageReferences(prompt, pastedImages)
+    nextImageMarkerInsertRequestId += 1
   }
 
   async function handleCreateOrUpdate(prompt: string, autoStart: boolean = false) {
@@ -314,8 +161,9 @@
       error = 'Task defaults are still loading.'
       return
     }
-    if (imagePastePending) {
-      error = 'Wait for the pasted image to finish processing.'
+    const attachmentError = promptAttachments?.getSubmissionError()
+    if (attachmentError) {
+      error = attachmentError
       return
     }
     if (isSaving) return
@@ -328,7 +176,7 @@
     isSaving = true
     try {
       let savedTask: Task
-      const taskPrompt = promptWithPastedImageReferences(normalizedPrompt)
+      const taskPrompt = promptAttachments?.formatPrompt(normalizedPrompt) ?? normalizedPrompt
 
       if (mode === 'edit' && task) {
         await updateTaskInitialPrompt(task.id, taskPrompt)
@@ -419,9 +267,9 @@
         placeholder="Describe the outcome you want…"
         autofocus={false}
         commandTrigger={draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
-        onTextChange={syncPastedImagesWithPrompt}
-        onPasteImage={attachPastedImage}
-        onImageMarkerClick={openImagePreview}
+        onTextChange={(prompt) => promptAttachments?.syncWithPrompt(prompt)}
+        onPasteImage={(blob) => promptAttachments?.attachImage(blob) ?? Promise.resolve(null)}
+        onImageMarkerClick={(marker) => promptAttachments?.openPreview(marker)}
         imageMarkerInsertRequest={imageMarkerInsertRequest}
         injectableInsertRequest={injectableInsertRequest}
         onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, true) : handleCreateOrUpdate(prompt)}
@@ -432,52 +280,24 @@
     </div>
     <p class="mt-2 text-xs text-base-content/55">Be specific about the goal, constraints, and relevant context.</p>
 
-    <div class="flex items-center gap-3 py-4">
-      <button
-        type="button"
-        class="btn btn-outline h-10 min-h-10 px-4"
-        onclick={pasteImageFromClipboard}
-        disabled={imagePastePending}
-      >
-        <ImagePlus size={16} aria-hidden="true" />
-        Attach image
-      </button>
-      <VoiceInput
-        onTranscription={(text) => promptEditor?.insertText(text)}
-        listenToHotkey
-        showLabel
-        appearance="outline"
-        size="md"
-      />
-      {#if pastedImages.length > 0}
-        <span class="truncate text-xs text-base-content/60" aria-live="polite">{pastedImageSummary}</span>
-      {/if}
-    </div>
-
     <div class="flex flex-col gap-2 pb-4">
-      {#if pastedImages.length > 0}
-        <div class="flex flex-wrap items-center gap-1" aria-label="Pasted image markers">
-          {#each pastedImages as image (image.id)}
-            <button
-              type="button"
-              class="btn btn-outline btn-xs"
-              aria-label="Preview {image.marker}"
-              onclick={() => { previewImage = image }}
-            >{image.marker}</button>
-          {/each}
-        </div>
-      {/if}
-      {#if imagePasteError}
-        <p class="m-0 text-xs text-error" role="status" aria-live="polite">{imagePasteError}</p>
-      {/if}
+      <CreateTaskPromptAttachments
+        bind:this={promptAttachments}
+        {mode}
+        {task}
+        onMarkerInsert={handleImageMarkerInsert}
+        onMarkerInsertReset={() => { imageMarkerInsertRequest = null }}
+        onTranscription={(text) => promptEditor?.insertText(text)}
+      />
       {#if mode === 'create'}
-        <CreateTaskSettings
+        <CreateTaskEnvironment
           bind:draft
           {worktreeAllowed}
           {gitBranches}
           {branchLoadError}
           {aiProviderOptions}
         />
+        <CreateTaskProgressiveSettings bind:draft />
       {/if}
     </div>
   </div>
@@ -525,20 +345,3 @@
     </div>
   </footer>
 </Modal>
-
-{#if previewImage}
-  <Modal onClose={() => { previewImage = null }} maxWidth="720px" ariaLabel="Pasted image {previewImage.marker}" initialFocus={null}>
-    {#snippet header()}
-      <h3 class="text-[0.95rem] font-semibold text-base-content m-0">Pasted image {previewImage.marker}</h3>
-    {/snippet}
-
-    <div class="p-4 flex flex-col gap-3">
-      <img
-        src={previewImage.dataUrl}
-        alt="Pasted image {previewImage.marker}"
-        class="max-h-[70vh] w-full object-contain rounded border border-base-300 bg-base-200"
-      />
-      <p class="m-0 text-xs text-base-content/60">{previewImage.mimeType} · {formatBytes(previewImage.size)}</p>
-    </div>
-  </Modal>
-{/if}
