@@ -45,6 +45,20 @@ describe('FocusBoard header', () => {
     expect(onNewTask).toHaveBeenCalledOnce()
   })
 
+  it('shows the New task shortcut only while Command is held', async () => {
+    renderHeader()
+
+    expect(screen.queryByText('⌘N')).toBeNull()
+
+    commandHeld.set(true)
+
+    expect(await screen.findByText('⌘N')).toBeTruthy()
+
+    commandHeld.set(false)
+
+    await vi.waitFor(() => expect(screen.queryByText('⌘N')).toBeNull())
+  })
+
   it('marks Focus as the default active filter', async () => {
     renderHeader()
 
