@@ -214,6 +214,7 @@ describe("ipc spawnShellPty", () => {
 			repoPath: "/tmp/worktree",
 			divergenceResolution: null,
 			terminalImageProtocol: "iterm2",
+			promptPrefix: null,
 		});
 	});
 

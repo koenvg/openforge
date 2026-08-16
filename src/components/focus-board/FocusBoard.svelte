@@ -34,7 +34,7 @@
     onProjectAttentionChanged?: () => void | Promise<void>
     onNewTask?: () => void
     onOpenCommandSearch?: () => void
-    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null; promptPrefix?: string | null }) => void
   }
 
   let {
@@ -536,7 +536,7 @@
     y={contextMenu.y}
     taskId={contextMenu.taskId}
     onClose={() => contextMenu = { ...contextMenu, visible: false }}
-    onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
+    onStart={(taskId, promptPrefix) => onRunAction({ taskId, actionPrompt: '', agent: null, promptPrefix })}
     onEdit={onEditTask}
     onDelete={() => contextMenu = { ...contextMenu, visible: false }}
     {outOfFocusTaskIds}

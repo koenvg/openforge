@@ -65,6 +65,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     navigationRequests: [],
     notify: [],
     taskCreations: [],
+    taskComposes: [],
     startPromptContributionConfigurations: [],
     taskImplementationStarts: [],
     taskFollowUps: [],

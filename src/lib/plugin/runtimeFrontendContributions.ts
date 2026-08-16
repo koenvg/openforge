@@ -6,6 +6,7 @@ import type {
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
+  TaskStartPrefixProviderRegistration,
 } from '@openforge-app/plugin-sdk/frontend'
 import type { Disposable, InjectionPointLocation } from '@openforge-app/plugin-sdk'
 import {
@@ -19,13 +20,14 @@ import type {
   RuntimeInjectionPointContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
+  RuntimeTaskStartPrefixProviderContribution,
   RuntimeTaskUISectionContribution,
   RuntimeViewContribution,
 } from './runtimeContributionTypes'
 
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'backend'
+  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
 >
 
 export class RuntimeFrontendContributionRegistry {
@@ -34,6 +36,7 @@ export class RuntimeFrontendContributionRegistry {
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
   private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
   private readonly injectionPoints = new Map<string, RuntimeInjectionPointContribution>()
+  private readonly taskStartPrefixProviders = new Map<string, RuntimeTaskStartPrefixProviderContribution>()
   private api: FrontendContributionApi | null = null
 
   constructor(
@@ -80,6 +83,9 @@ export class RuntimeFrontendContributionRegistry {
       injectionPoints: {
         register: (registration) => this.registerInjectionPoint(registration),
       },
+      taskStart: {
+        registerPrefixProvider: (registration) => this.registerTaskStartPrefixProvider(registration),
+      },
       backend: {
         get state() {
           return registry.services.host.getBackendState ? registry.services.host.getBackendState() : 'ready'
@@ -107,6 +113,7 @@ export class RuntimeFrontendContributionRegistry {
     taskUISections: RuntimeTaskUISectionContribution[]
     settingsSections: RuntimeSettingsSectionContribution[]
     injectionPoints: RuntimeInjectionPointContribution[]
+    taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
   } {
     return {
       views: Array.from(this.views.values()),
@@ -114,11 +121,18 @@ export class RuntimeFrontendContributionRegistry {
       taskUISections: Array.from(this.taskUISections.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
+      taskStartPrefixProviders: this.listTaskStartPrefixProviders(),
     }
   }
 
   listInjectionPoints(location: InjectionPointLocation): RuntimeInjectionPointContribution[] {
     return Array.from(this.injectionPoints.values()).filter((contribution) => contribution.location === location)
+  }
+
+  listTaskStartPrefixProviders(): RuntimeTaskStartPrefixProviderContribution[] {
+    return Array.from(this.taskStartPrefixProviders.values()).sort(
+      (left, right) => left.order - right.order || left.qualifiedId.localeCompare(right.qualifiedId),
+    )
   }
 
   private registerView(registration: PluginViewRegistration): Disposable {
@@ -227,6 +241,33 @@ export class RuntimeFrontendContributionRegistry {
     return this.services.trackDisposable(createDisposable(() => {
       this.injectionPoints.delete(qualifiedId)
       this.services.claims.release('injectionPoints', qualifiedId)
+    }))
+  }
+
+  private registerTaskStartPrefixProvider(
+    registration: TaskStartPrefixProviderRegistration,
+  ): Disposable {
+    const qualifiedId = this.services.qualifiedId('taskStart', registration?.id)
+    assertTitle('taskStart', registration?.title)
+    if (typeof registration?.provide !== 'function') {
+      throw new Error('taskStart prefix provider requires a provide function')
+    }
+    this.services.claims.claim('taskStart', qualifiedId)
+
+    const contribution: RuntimeTaskStartPrefixProviderContribution = {
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+      title: registration.title.trim(),
+      order: typeof registration.order === 'number' && Number.isFinite(registration.order) ? registration.order : 0,
+      provide: (context) => registration.provide(context),
+    }
+    this.taskStartPrefixProviders.set(qualifiedId, contribution)
+
+    return this.services.trackDisposable(createDisposable(() => {
+      this.taskStartPrefixProviders.delete(qualifiedId)
+      this.services.claims.release('taskStart', qualifiedId)
     }))
   }
 }

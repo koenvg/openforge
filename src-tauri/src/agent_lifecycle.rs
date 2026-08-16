@@ -468,6 +468,7 @@ pub fn build_task_prompt(
     additional_instructions: Option<&str>,
     code_cleanup_enabled: bool,
     start_prompt_contributions: &[StartPromptContribution],
+    prompt_prefix: Option<&str>,
 ) -> String {
     let mut prompt = String::new();
 
@@ -501,6 +502,17 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
     if let Some(instructions) = additional_instructions {
         if !instructions.is_empty() {
             prompt.push_str(instructions);
+            prompt.push_str("\n\n");
+        }
+    }
+
+    // A one-off prefix chosen at start time. It sits next to the task's own text
+    // rather than at the top because it speaks about this ticket, not about how
+    // the agent should behave generally. Never persisted to the task.
+    if let Some(prefix) = prompt_prefix {
+        let trimmed = prefix.trim();
+        if !trimmed.is_empty() {
+            prompt.push_str(trimmed);
             prompt.push_str("\n\n");
         }
     }
@@ -655,7 +667,7 @@ mod tests {
     fn test_build_task_prompt_contains_management_and_prompt() {
         let task = sample_task("T-123", "Test Task", None);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
@@ -686,7 +698,7 @@ mod tests {
         let mut task = sample_task("T-200", "Opted out of handoff notes", None);
         task.handoff_notes_enabled = false;
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         // The task body is still present, but the entire handoff-notes block is gone.
         assert!(prompt.contains("Opted out of handoff notes"));
@@ -702,7 +714,7 @@ mod tests {
         let task = sample_task("T-203", "Project has not enabled workflow", None);
         assert!(task.handoff_notes_enabled);
 
-        let prompt = build_task_prompt(&task, None, false, &[]);
+        let prompt = build_task_prompt(&task, None, false, &[], None);
 
         assert!(prompt.contains("Project has not enabled workflow"));
         assert!(!prompt.contains("<openforge_task_management>"));
@@ -715,7 +727,7 @@ mod tests {
         let task = sample_task("T-201", "Keeps handoff notes", None);
         assert!(task.handoff_notes_enabled);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge task update --task-id \"T-201\" --summary \"...\""));
@@ -726,7 +738,7 @@ mod tests {
         let mut task = sample_task("T-202", "No handoff, yes cleanup", None);
         task.handoff_notes_enabled = false;
 
-        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None), None);
 
         assert!(!prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("<openforge_code_cleanup>"));
@@ -736,7 +748,7 @@ mod tests {
     fn test_build_task_prompt_never_requests_initial_prompt_update() {
         let task = sample_task("T-124", "Immutable prompt", None);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
         assert!(prompt.contains("Write concise initial Handoff Notes"));
@@ -752,7 +764,7 @@ mod tests {
     fn test_build_task_prompt_never_requests_task_display_title_generation() {
         let task = sample_task("T-300", "Prompt that needs a better title", None);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(!prompt.contains("Task Display Title"));
         assert!(!prompt.contains("update_task_title"));
@@ -770,6 +782,7 @@ mod tests {
             &handoff_contributions(Some(
                 "## Custom review brief\n- Inspect project-specific risk",
             )),
+            None,
         );
 
         assert!(prompt.contains("## Custom review brief"));
@@ -781,7 +794,13 @@ mod tests {
     fn test_build_task_prompt_uses_default_handoff_notes_template_when_project_template_blank() {
         let task = sample_task("T-126", "Blank handoff", None);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(Some("   ")));
+        let prompt = build_task_prompt(
+            &task,
+            None,
+            false,
+            &handoff_contributions(Some("   ")),
+            None,
+        );
 
         assert!(prompt.contains("## Summary"));
         assert!(prompt.contains("## Follow-up tasks"));
@@ -795,10 +814,65 @@ mod tests {
             Some("Specific implementation prompt"),
         );
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(prompt.contains("Specific implementation prompt"));
         assert!(!prompt.contains("\nInitial title\n"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_places_prefix_directly_before_task_prompt() {
+        let task = sample_task("T-300", "Fix the login redirect", None);
+
+        let prompt = build_task_prompt(
+            &task,
+            None,
+            false,
+            &handoff_contributions(None),
+            Some("Verify this is still relevant before doing it."),
+        );
+
+        let prefix_at = prompt
+            .find("Verify this is still relevant before doing it.")
+            .expect("prefix present");
+        let task_at = prompt
+            .find("Fix the login redirect")
+            .expect("task prompt present");
+        let handoff_at = prompt
+            .find("<openforge_task_management>")
+            .expect("handoff block present");
+
+        assert!(prefix_at < task_at, "prefix must precede the task prompt");
+        assert!(
+            handoff_at < prefix_at,
+            "standing scaffolding must precede the prefix"
+        );
+    }
+
+    #[test]
+    fn test_build_task_prompt_without_prefix_is_unchanged() {
+        let task = sample_task("T-301", "Fix the login redirect", None);
+
+        let without = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
+        let blank = build_task_prompt(
+            &task,
+            None,
+            false,
+            &handoff_contributions(None),
+            Some("   \n  "),
+        );
+
+        assert_eq!(without, blank, "a blank prefix must not alter the prompt");
+        assert!(without.ends_with("Fix the login redirect\n"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_separates_prefix_from_task_prompt() {
+        let task = sample_task("T-302", "Fix the login redirect", None);
+
+        let prompt = build_task_prompt(&task, None, false, &[], Some("Check relevance."));
+
+        assert!(prompt.contains("Check relevance.\n\nFix the login redirect"));
     }
 
     #[test]
@@ -810,6 +884,7 @@ mod tests {
             Some("Project rules here"),
             false,
             &handoff_contributions(None),
+            None,
         );
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
@@ -1354,7 +1429,7 @@ mod tests {
     fn test_build_task_prompt_without_code_cleanup() {
         let task = sample_task("T-800", "No cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, false, &handoff_contributions(None), None);
 
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
@@ -1366,7 +1441,7 @@ mod tests {
     fn test_build_task_prompt_with_code_cleanup_enabled() {
         let task = sample_task("T-801", "With cleanup", None);
 
-        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None), None);
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
@@ -1384,7 +1459,7 @@ mod tests {
     fn test_build_task_prompt_code_cleanup_ordering() {
         let task = sample_task("T-802", "Cleanup ordering", None);
 
-        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None));
+        let prompt = build_task_prompt(&task, None, true, &handoff_contributions(None), None);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();

@@ -780,6 +780,7 @@ describe('pluginRegistry', () => {
         },
       ],
       injectionPoints: [],
+      taskStartPrefixProviders: [],
     } satisfies RuntimeContributionSnapshot
 
     await expect(applyRuntimeSnapshotContributions('test-plugin', snapshot)).rejects.toThrow('service failed')

@@ -109,6 +109,10 @@ pub(crate) struct TaskStartRequest<'a> {
     divergence_resolution: DivergenceResolution,
     refresh_branch_state: bool,
     terminal_image_protocol: Option<TerminalImageProtocol>,
+    /// A one-off prefix for this start only, never persisted to the Task. The
+    /// stored prompt still comes from Task and Project state; this is an extra
+    /// instruction the user attached at the moment of starting.
+    prompt_prefix: Option<&'a str>,
 }
 
 impl<'a> TaskStartRequest<'a> {
@@ -120,6 +124,7 @@ impl<'a> TaskStartRequest<'a> {
             divergence_resolution: DivergenceResolution::Auto,
             refresh_branch_state: false,
             terminal_image_protocol: None,
+            prompt_prefix: None,
         }
     }
 
@@ -130,12 +135,14 @@ impl<'a> TaskStartRequest<'a> {
         task_id: &'a str,
         divergence_resolution: DivergenceResolution,
         terminal_image_protocol: Option<TerminalImageProtocol>,
+        prompt_prefix: Option<&'a str>,
     ) -> Self {
         Self {
             task_id,
             divergence_resolution,
             refresh_branch_state: true,
             terminal_image_protocol,
+            prompt_prefix,
         }
     }
 }
@@ -278,7 +285,7 @@ impl TaskStartService {
             .provider_launcher
             .as_ref()
             .ok_or(TaskStartError::RuntimeUnavailable)?;
-        let prompt = self.materialize_prompt(&context)?;
+        let prompt = self.materialize_prompt(&context, request.prompt_prefix)?;
         let workspace = self
             .prepare_workspace(&context, request.divergence_resolution)
             .await?;
@@ -475,12 +482,17 @@ impl TaskStartService {
         Ok(plan.relation == ExistingBranchRelation::Diverged)
     }
 
-    fn materialize_prompt(&self, context: &StartContext) -> Result<String, TaskStartError> {
+    fn materialize_prompt(
+        &self,
+        context: &StartContext,
+        prompt_prefix: Option<&str>,
+    ) -> Result<String, TaskStartError> {
         let prompt = agent_lifecycle::build_task_prompt(
             &context.task,
             context.additional_instructions.as_deref(),
             context.code_cleanup_enabled,
             &context.start_prompt_contributions,
+            prompt_prefix,
         );
         let image_attachment_root = self
             .app

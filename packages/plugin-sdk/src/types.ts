@@ -50,6 +50,7 @@ export type OpenForgePluginCapability =
   | 'events'
   | 'views'
   | 'taskPane'
+  | 'taskStart'
   | 'settings'
   | 'background'
   | 'backend'
@@ -367,6 +368,30 @@ export interface PluginInjectionPointRegistration {
     | PluginComponent<PluginInjectionPointProps>
 }
 
+export interface TaskStartPrefixContext {
+  /** The task being started, or null when the caller is authoring a new one. */
+  taskId: string | null
+  projectId: string | null
+}
+
+export interface TaskStartPrefixProviderRegistration {
+  id: string
+  /** Menu label shown on the surface offering this provider. */
+  title: string
+  /** Lower sorts first. Defaults to 0. */
+  order?: number
+  /**
+   * Asks the user for a prefix. Returning null means they cancelled, and the
+   * task is not started. The host — not the provider — starts the task, so the
+   * diverged-branch gate, starting spinner and terminal handling all still run.
+   */
+  provide(context: TaskStartPrefixContext): MaybePromise<string | null>
+}
+
+export interface FrontendTaskStartRegistry {
+  registerPrefixProvider(registration: TaskStartPrefixProviderRegistration): Disposable
+}
+
 export interface FrontendInjectionPointRegistry {
   register(registration: PluginInjectionPointRegistration): Disposable
 }
@@ -465,6 +490,20 @@ export interface CreateTaskRequest {
   labelNames?: string[]
 }
 
+export interface ComposeTaskRequest {
+  projectId: string
+  /** Seeds the dialog's prompt field; the user edits it before saving. */
+  initialPrompt: string
+  sourceTicketUrl?: string | null
+  title?: string | null
+}
+
+export interface ComposeTaskResult {
+  task: Task
+  /** True when the user chose Start Task rather than plain Create. */
+  started: boolean
+}
+
 export interface StartPromptContribution {
   id: string
   enabled: boolean
@@ -529,6 +568,13 @@ export interface TasksAPI {
   list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   get(taskId: string): Promise<Task | null>
   create(request: CreateTaskRequest): Promise<Task>
+  /**
+   * Opens the host's create-task dialog pre-filled, letting the user edit the
+   * prompt — including anything contributed at that injection point —
+   * before the task exists.
+   * Resolves null if they dismiss it.
+   */
+  compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
   updateSummary(taskId: string, summary: string): Promise<void>
   updateStatus(taskId: string, status: WritableBoardStatus): Promise<void>
   listStartPromptContributions(projectId: string): Promise<StartPromptContribution[]>
@@ -596,6 +642,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   settings: FrontendSettingsRegistry
   backend: FrontendBackendBridge
   injectionPoints: FrontendInjectionPointRegistry
+  taskStart: FrontendTaskStartRegistry
 }
 
 export interface BackendOpenForgeAPI extends OpenForgeCommonAPI {

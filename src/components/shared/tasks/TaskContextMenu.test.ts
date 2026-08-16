@@ -1,5 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readable } from 'svelte/store'
 import TaskContextMenu from './TaskContextMenu.svelte'
 import type { Task, BoardStatus } from '../../../lib/types'
 import { completingTasks, tasks, error } from '../../../lib/stores'
@@ -9,6 +10,20 @@ vi.mock('../../../lib/ipc', () => ({
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn(),
 }))
+
+vi.mock('../../../lib/plugin/pluginRegistry', () => ({
+  listTaskStartPrefixProvidersAcrossPlugins: vi.fn(() => []),
+  requestTaskStartPrefix: vi.fn(async () => null),
+}))
+
+vi.mock('../../../lib/plugin/pluginStore', () => ({
+  enabledPluginIds: readable(new Set<string>()),
+}))
+
+import {
+  listTaskStartPrefixProvidersAcrossPlugins,
+  requestTaskStartPrefix,
+} from '../../../lib/plugin/pluginRegistry'
 
 const makeTask = (id: string, status: BoardStatus): Task => ({
   id,
@@ -36,6 +51,8 @@ beforeEach(() => {
   tasks.set([])
   completingTasks.set(new Set())
   error.set(null)
+  vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([])
+  vi.mocked(requestTaskStartPrefix).mockResolvedValue(null)
 })
 
 describe('TaskContextMenu', () => {
@@ -328,4 +345,71 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Doing')).toBeNull()
   })
 
+})
+
+describe('TaskContextMenu prefix providers', () => {
+  const provider = {
+    id: 'snippet',
+    qualifiedId: 'com.example.prefixer.snippet',
+    pluginId: 'com.example.prefixer',
+    projectId: null,
+    title: 'Start with snippet…',
+    order: 0,
+    provide: vi.fn(),
+  }
+
+  const renderMenu = (status: BoardStatus, onStart = vi.fn()) => {
+    tasks.set([makeTask('T-1', status)])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onStart } })
+    return onStart
+  }
+
+  it('renders one item per provider for backlog tasks', () => {
+    vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([provider] as never)
+
+    renderMenu('backlog')
+
+    expect(screen.getByText('Start with snippet…')).toBeTruthy()
+  })
+
+  it('does not render provider items for doing tasks', () => {
+    vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([provider] as never)
+
+    renderMenu('doing')
+
+    expect(screen.queryByText('Start with snippet…')).toBeNull()
+  })
+
+  it('leaves the menu unchanged when no provider is installed', () => {
+    renderMenu('backlog')
+
+    expect(screen.getByText('Start Task')).toBeTruthy()
+    expect(screen.queryByText('Start with snippet…')).toBeNull()
+  })
+
+  it('starts the task with the prefix the provider returned', async () => {
+    vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([provider] as never)
+    vi.mocked(requestTaskStartPrefix).mockResolvedValue('Verify relevance.')
+
+    const onStart = renderMenu('backlog')
+    await fireEvent.click(screen.getByText('Start with snippet…'))
+
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith('T-1', 'Verify relevance.'))
+    expect(requestTaskStartPrefix).toHaveBeenCalledWith(
+      'com.example.prefixer',
+      'snippet',
+      { taskId: 'T-1', projectId: null },
+    )
+  })
+
+  it('starts nothing when the provider is cancelled', async () => {
+    vi.mocked(listTaskStartPrefixProvidersAcrossPlugins).mockReturnValue([provider] as never)
+    vi.mocked(requestTaskStartPrefix).mockResolvedValue(null)
+
+    const onStart = renderMenu('backlog')
+    await fireEvent.click(screen.getByText('Start with snippet…'))
+
+    await waitFor(() => expect(requestTaskStartPrefix).toHaveBeenCalled())
+    expect(onStart).not.toHaveBeenCalled()
+  })
 })

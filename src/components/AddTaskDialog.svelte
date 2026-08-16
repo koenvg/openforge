@@ -22,8 +22,12 @@
     task?: Task | null
     projectPath?: string | null
     projectName?: string | null
+    /** Seeds the prompt in create mode — used when a plugin composes a task. */
+    promptSeed?: string
+    sourceTicketUrlSeed?: string | null
+    titleSeed?: string | null
     onClose?: () => void
-    onTaskSaved?: (task?: Task) => void | Promise<void>
+    onTaskSaved?: (task?: Task, options?: { started: boolean }) => void | Promise<void>
     onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
   }
 
@@ -31,7 +35,7 @@
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
-  let { mode = 'create', task = null, projectPath = null, projectName = null, onClose, onTaskSaved, onRunAction }: Props = $props()
+  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, onClose, onTaskSaved, onRunAction }: Props = $props()
   const dialogTitle = $derived(mode === 'create' ? 'Create task' : 'Edit task')
 
   let draft = $state(createTaskDraft())
@@ -54,9 +58,11 @@
   let nextImageMarkerInsertRequestId = 1
   let nextInjectableInsertRequestId = 1
   let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
+  let lastTitleSeed = $state<string | null>(null)
+  let lastSourceTicketSeed = $state<string | null>(null)
   let taskDefaultsLoading = $state(true)
 
-  const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
+  const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : promptSeed)
   const promptReady = $derived(promptDraft.trim().length > 0)
   const createReady = $derived((mode !== 'create' || (!taskDefaultsLoading && !taskDefaultsError)) && !isSaving)
 
@@ -66,13 +72,44 @@
     lastInitialPrompt = initialPrompt
   })
 
+  // Seeds are applied both here and from initializeDialog, which replaces the
+  // whole draft on mount. Comparing against the last seed means a compose
+  // request can re-seed a dialog that never unmounted, without clobbering edits
+  // the user has since made.
+  function applySeedsToDraft() {
+    draft.title = titleSeed ?? ''
+    draft.sourceTicketUrl = sourceTicketUrlSeed ?? ''
+    lastTitleSeed = titleSeed
+    lastSourceTicketSeed = sourceTicketUrlSeed
+  }
+
+  $effect(() => {
+    if (titleSeed === lastTitleSeed && sourceTicketUrlSeed === lastSourceTicketSeed) return
+    applySeedsToDraft()
+  })
 
   onMount(() => {
     void initializeDialog()
+    placeCaretAfterSeededPrompt()
   })
+
+  /**
+   * The modal focuses the textarea with the caret at position 0. A seeded prompt
+   * is context the user writes *after*, so move the caret to the end.
+   */
+  function placeCaretAfterSeededPrompt(): void {
+    if (mode !== 'create' || promptSeed.length === 0) return
+    queueMicrotask(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    })
+  }
 
   async function initializeDialog() {
     draft = createTaskDraft()
+    applySeedsToDraft()
     taskDefaultsLoading = mode === 'create'
     worktreeAllowed = true
     branchLoadError = null
@@ -210,11 +247,14 @@
         )
 
         if (autoStart && onRunAction) {
+          // Report before navigating away: a compose request settles on this
+          // callback, and onRunAction hands control to the board.
+          await onTaskSaved?.(savedTask, { started: true })
           onClose?.()
           await onRunAction(savedTask.id, '', null)
           return
         } else {
-          await onTaskSaved?.(savedTask)
+          await onTaskSaved?.(savedTask, { started: false })
         }
       }
       onClose?.()

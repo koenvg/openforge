@@ -27,6 +27,12 @@ export interface RunActionData {
   taskId: string
   actionPrompt: string
   agent: string | null
+  /**
+   * A one-off prefix for this start only — never written back to the task.
+   * Ignored when a PTY is already live, since that path writes to a running
+   * agent rather than composing a fresh prompt.
+   */
+  promptPrefix?: string | null
 }
 
 interface TaskActionRunnerOptions {
@@ -54,7 +60,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       return
     }
 
-    const { taskId, actionPrompt } = data
+    const { taskId, actionPrompt, promptPrefix = null } = data
 
     if (isPtyActive(taskId)) {
       try {
@@ -101,9 +107,13 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       } catch (terminalError) {
         console.warn('[session] Inline terminal images unavailable; starting with text fallbacks:', terminalError)
       }
-      const result = terminalImageProtocol
-        ? await startImplementation(taskId, activeProject.path, resolution ?? null, terminalImageProtocol)
-        : await startImplementation(taskId, activeProject.path, resolution ?? null)
+      const result = await startImplementation(
+        taskId,
+        activeProject.path,
+        resolution ?? null,
+        terminalImageProtocol,
+        promptPrefix,
+      )
       releaseTerminalOnStartFailure = false
       const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
       updatedRuntimeInfo.set(taskId, {

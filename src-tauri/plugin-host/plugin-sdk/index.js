@@ -94,6 +94,7 @@ var openforgePackageMetadataSchema_default = {
 				"views",
 				"injectionPoints",
 				"taskPane",
+				"taskStart",
 				"settings",
 				"background",
 				"backend",
@@ -323,6 +324,7 @@ function createTestingCalls() {
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
+		taskComposes: [],
 		startPromptContributionConfigurations: [],
 		taskImplementationStarts: [],
 		taskFollowUps: [],
@@ -599,7 +601,7 @@ var TestingCommonApiFake = class {
 		this.services = services;
 	}
 	createApi() {
-		return {
+		const api = {
 			commands: {
 				register: (registration) => this.registerCommand(registration),
 				invoke: async (id, payload) => this.invokeCommand(id, payload),
@@ -651,6 +653,16 @@ var TestingCommonApiFake = class {
 						project_id: request.projectId,
 						created_at: 0,
 						updated_at: 0
+					};
+				},
+				compose: async (request) => {
+					this.services.calls.taskComposes.push(request);
+					return {
+						task: await api.tasks.create({
+							projectId: request.projectId,
+							initialPrompt: request.initialPrompt
+						}),
+						started: false
 					};
 				},
 				updateSummary: async (taskId, summary) => {
@@ -764,6 +776,7 @@ var TestingCommonApiFake = class {
 				}
 			}
 		};
+		return api;
 	}
 	getSnapshot() {
 		return {
@@ -1160,6 +1173,7 @@ var TestingFrontendContributionFake = class {
 	taskUISections = /* @__PURE__ */ new Map();
 	settingsSections = /* @__PURE__ */ new Map();
 	injectionPoints = /* @__PURE__ */ new Map();
+	taskStartPrefixProviders = /* @__PURE__ */ new Map();
 	browserSurfaces;
 	taskLinkHandler = null;
 	api = null;
@@ -1211,7 +1225,8 @@ var TestingFrontendContributionFake = class {
 				},
 				invoke: async (method, payload) => this.invokeBackendMethod(method, payload)
 			},
-			injectionPoints: { register: (registration) => this.registerInjectionPoint(registration) }
+			injectionPoints: { register: (registration) => this.registerInjectionPoint(registration) },
+			taskStart: { registerPrefixProvider: (registration) => this.registerTaskStartPrefixProvider(registration) }
 		};
 		this.api = api;
 		return api;
@@ -1225,7 +1240,8 @@ var TestingFrontendContributionFake = class {
 			taskPaneTabs: Array.from(this.taskPaneTabs.values()),
 			taskUISections: Array.from(this.taskUISections.values()),
 			settingsSections: Array.from(this.settingsSections.values()),
-			injectionPoints: Array.from(this.injectionPoints.values())
+			injectionPoints: Array.from(this.injectionPoints.values()),
+			taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
 		};
 	}
 	registerView(registration) {
@@ -1300,6 +1316,17 @@ var TestingFrontendContributionFake = class {
 		return createDisposable(() => {
 			this.settingsSections.delete(qualifiedId);
 			this.services.claims.release("settings", qualifiedId);
+		});
+	}
+	registerTaskStartPrefixProvider(registration) {
+		this.taskStartPrefixProviders.set(registration.id, {
+			id: registration.id,
+			title: registration.title,
+			order: registration.order ?? 0,
+			provide: (context) => registration.provide(context)
+		});
+		return createDisposable(() => {
+			this.taskStartPrefixProviders.delete(registration.id);
 		});
 	}
 	registerInjectionPoint(registration) {

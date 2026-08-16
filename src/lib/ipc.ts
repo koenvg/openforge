@@ -179,12 +179,14 @@ export async function startImplementation(
   repoPath: string,
   divergenceResolution: DivergenceResolution | null = null,
   terminalImageProtocol: TerminalImageProtocol | null = null,
+  promptPrefix: string | null = null,
 ): Promise<ImplementationStatus> {
   return invoke<ImplementationStatus>("start_implementation", {
     taskId,
     repoPath,
     divergenceResolution,
     terminalImageProtocol,
+    promptPrefix,
   });
 }
 

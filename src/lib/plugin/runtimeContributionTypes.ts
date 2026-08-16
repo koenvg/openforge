@@ -19,6 +19,8 @@ import type {
   BackendReadyState,
   CommandInfo,
   CommandShortcutMetadata,
+  ComposeTaskRequest,
+  ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   FileContent,
@@ -39,13 +41,14 @@ import type {
   StartTaskImplementationRequest,
   TaskFollowUpReceipt,
   Task,
+  TaskStartPrefixContext,
   TaskWorkspaceInfo,
   WritableBoardStatus,
   Disposable,
 } from '@openforge-app/plugin-sdk'
 
 export type MaybePromise<T> = T | Promise<T>
-export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints'
+export type RuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'background' | 'backend' | 'injectionPoints' | 'taskStart'
 export type RuntimeScope = 'global' | 'project' | 'task'
 export type RuntimeHandler = (
   payload?: unknown,
@@ -59,6 +62,7 @@ export type RuntimeHostBridge = {
   listTasks?(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
   getTask?(taskId: string): Promise<Task>
   createTask?(request: CreateTaskRequest): Promise<Task>
+  composeTask?(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
   updateTaskSummary?(taskId: string, summary: string): Promise<void>
   updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>
   listStartPromptContributions?(projectId: string): Promise<StartPromptContribution[]>
@@ -139,6 +143,12 @@ export type RuntimeInjectionPointContribution = RuntimeContributionBase & {
   component: PluginInjectionPointRegistration['component']
 }
 
+export type RuntimeTaskStartPrefixProviderContribution = RuntimeContributionBase & {
+  title: string
+  order: number
+  provide(context: TaskStartPrefixContext): MaybePromise<string | null>
+}
+
 export type RuntimeBackgroundServiceContribution = RuntimeContributionBase & BackgroundServiceRegistration & {
   started: boolean
 }
@@ -155,6 +165,7 @@ export type RuntimeContributionSnapshot = {
   taskUISections: RuntimeTaskUISectionContribution[]
   settingsSections: RuntimeSettingsSectionContribution[]
   injectionPoints: RuntimeInjectionPointContribution[]
+  taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
   commands: RuntimeCommandContribution[]
   eventListeners: RuntimeEventListenerContribution[]
   backendMethods: RuntimeBackendMethodContribution[]
