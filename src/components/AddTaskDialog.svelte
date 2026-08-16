@@ -42,6 +42,7 @@
   let gitBranches = $state<GitBranchInfo[]>([])
   let branchLoadError = $state<string | null>(null)
   let error = $state<string | null>(null)
+  let taskDefaultsError = $state<string | null>(null)
   let promptDraft = $state('')
   let promptEditor = $state<{ insertText: (text: string) => void } | null>(null)
   let lastInitialPrompt = $state<string | null>(null)
@@ -57,7 +58,7 @@
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
-  const createReady = $derived((mode !== 'create' || !taskDefaultsLoading) && !isSaving)
+  const createReady = $derived((mode !== 'create' || (!taskDefaultsLoading && !taskDefaultsError)) && !isSaving)
 
   $effect(() => {
     if (initialPrompt === lastInitialPrompt) return
@@ -75,6 +76,8 @@
     taskDefaultsLoading = mode === 'create'
     worktreeAllowed = true
     branchLoadError = null
+    taskDefaultsError = null
+    error = null
 
     try {
       if (!$activeProjectId) {
@@ -122,7 +125,9 @@
         gitBranches = []
         draft.existingBranch = ''
       }
-    } catch {
+    } catch (defaultsError) {
+      console.error('Failed to load task defaults:', defaultsError)
+      taskDefaultsError = 'Could not load task defaults. Retry before creating this task.'
       draft.aiProvider = null
       gitBranches = []
       draft.existingBranch = ''
@@ -159,6 +164,10 @@
     error = null
     if (mode === 'create' && taskDefaultsLoading) {
       error = 'Task defaults are still loading.'
+      return
+    }
+    if (mode === 'create' && taskDefaultsError) {
+      error = taskDefaultsError
       return
     }
     const attachmentError = promptAttachments?.getSubmissionError()
@@ -239,7 +248,14 @@
   {/snippet}
 
   <div class="max-h-[calc(90vh-4rem)] overflow-y-auto p-6">
-    {#if error}
+    {#if taskDefaultsError}
+      <div class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-sm text-error" role="alert">
+        <span>{taskDefaultsError}</span>
+        <button class="btn btn-sm btn-error btn-outline shrink-0" type="button" onclick={() => void initializeDialog()}>
+          Retry loading defaults
+        </button>
+      </div>
+    {:else if error}
       <div class="mb-4 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-sm text-error" role="alert">{error}</div>
     {/if}
 
