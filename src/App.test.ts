@@ -205,8 +205,15 @@ describe('App startup data loading', () => {
 
       render(App)
 
-      const createTaskButton = await screen.findByRole('button', { name: 'Create new task' })
-      await fireEvent.click(createTaskButton)
+      if (initialView === 'board') {
+        const focusBoardModule = await import('./components/focus-board/FocusBoard.svelte')
+        await vi.waitFor(() => expect(focusBoardModule.default).toHaveBeenCalled())
+        const boardProps = getLatestComponentProps<{ onNewTask: () => void }>(vi.mocked(focusBoardModule.default), 'onNewTask')
+        boardProps.onNewTask()
+      } else {
+        const createTaskButton = await screen.findByRole('button', { name: 'Create new task' })
+        await fireEvent.click(createTaskButton)
+      }
 
       await vi.waitFor(() => {
         expect(addTaskDialogModule.default).toHaveBeenCalled()

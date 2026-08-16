@@ -393,8 +393,9 @@ describe('TaskDetailView', () => {
     })
   })
 
-  it('has TaskInfoPanel child with Initial Prompt section', () => {
+  it('uses the shared task inspector with the Initial Prompt section', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByTestId('task-inspector-panel')).toBeTruthy()
     expect(screen.getByText('Initial Prompt')).toBeTruthy()
   })
 

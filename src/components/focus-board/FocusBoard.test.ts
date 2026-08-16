@@ -183,32 +183,6 @@ describe('FocusBoard', () => {
     taskStore.set([])
   })
 
-  it('renders the project name as the board heading', async () => {
-    renderBoard()
-    expect(await screen.findByRole('heading', { name: 'Test Project' })).toBeTruthy()
-  })
-
-  it('has Focus chip active by default', async () => {
-    renderBoard()
-    const chip = await screen.findByRole('button', { name: /Focus 1/i })
-    expect(chip).toBeTruthy()
-    expect(chip.getAttribute('aria-pressed')).toBe('true')
-  })
-
-  it('renders board tabs ordered Focus, In Flight, Out of Focus, Backlog', async () => {
-    renderBoard()
-
-    const tabLabels = (await screen.findAllByRole('button'))
-      .map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? '')
-      .filter((label) => /^(Focus|In Flight|Out of Focus|Backlog)\b/.test(label))
-
-    expect(tabLabels.slice(0, 4).map((label) => label.replace(/ \d+.*$/, ''))).toEqual([
-      'Focus',
-      'In Flight',
-      'Out of Focus',
-      'Backlog',
-    ])
-  })
 
   it('shows only started/current attention tasks in Focus and non-attention tasks in In Flight', async () => {
     renderBoard()

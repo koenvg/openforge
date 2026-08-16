@@ -20,11 +20,12 @@
     allTasksOverride?: Task[]
     dependencyReferenceTasksOverride?: Task[]
     surface?: 'default' | 'transparent'
+    density?: 'default' | 'inspector'
     onEditPrompt?: () => void
     onOpenDependentTask?: (taskId: string) => void
   }
 
-  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
+  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', density = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -35,7 +36,9 @@
   let dependencies = $derived(getTaskDependencySummaries(task, dependencyTaskList))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, dependencyTaskList))
   let dependents = $derived(getTaskDependentSummaries(task, activeTaskList, dependencyTaskList))
-  let surfaceClass = $derived(surface === 'transparent' ? 'bg-transparent' : 'bg-base-200')
+  let panelClass = $derived(density === 'inspector'
+    ? 'gap-0 p-0 bg-base-100'
+    : `gap-3 p-3 ${surface === 'transparent' ? 'bg-transparent' : 'bg-base-200'}`)
   let resumeCommand = $derived(getAgentSessionResumeCommand($activeSessions.get(task.id) || null))
 
   function labelSignature(nextLabels: TaskLabel[]): string {
@@ -85,7 +88,7 @@
 
 </script>
 
-<div data-testid="task-info-panel" data-scroll-owner="false" class="flex flex-col gap-3 p-3 {surfaceClass} min-h-max">
+<div data-testid="task-info-panel" data-scroll-owner="false" data-density={density} class="flex min-h-max flex-col {panelClass}">
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
   <PluginSlot

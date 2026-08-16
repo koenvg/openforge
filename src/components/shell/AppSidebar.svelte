@@ -131,7 +131,7 @@
   ]
 </script>
 
-<div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-200 border-r border-base-300/50 flex flex-col transition-all duration-200">
+<div class="{collapsed ? 'w-16' : 'w-[17rem]'} shrink-0 h-full bg-base-100 border-r border-base-300 flex flex-col transition-all duration-200">
   {#if appMode === 'dev'}
     <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
        <span class="text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
@@ -168,21 +168,21 @@
          matches the target icon in the dialog's own header. -->
     <button
       type="button"
-      class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors text-base-content/50 hover:text-base-content"
+      class="w-full flex min-h-11 items-center {collapsed ? 'justify-center px-0' : 'px-4'} gap-3 py-2.5 cursor-pointer transition-colors text-base-content/55 hover:bg-base-200 hover:text-base-content"
       title={collapsed ? 'Attention' : undefined}
       aria-label="Attention"
       onclick={onOpenAttentionOverview}
     >
       <LocateFixed size={18} class="shrink-0" />
       {#if !collapsed}
-        <span class="text-xs font-medium">Attention</span>
+        <span class="text-sm font-medium">Attention</span>
       {/if}
     </button>
   </div>
 
-   <div class="h-10 px-3 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
+   <div class="h-12 px-4 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
      {#if !collapsed}
-       <span class="text-[10px] text-secondary font-bold">PROJECTS</span>
+       <span class="text-xs text-secondary font-semibold uppercase tracking-[0.12em]">PROJECTS</span>
      {/if}
     <button type="button" class="btn btn-ghost btn-xs btn-square" aria-label="Add project" onclick={() => onNewProject?.()}>
       <Plus size={14} />
@@ -226,14 +226,14 @@
           </div>
         </button>
       {:else}
-        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-content/10 active:bg-base-content/20'}">
+        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-base-200 active:bg-base-300'}">
           <button
             type="button"
-            class="flex-1 px-3 py-2 text-left"
+            class="flex-1 px-4 py-3 text-left"
             aria-current={isActive ? 'true' : undefined}
             onclick={() => selectProject(project.id)}
           >
-             <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
+             <div class="text-sm {isActive ? 'font-semibold text-primary' : 'font-medium text-base-content'}">{project.name}</div>
              {#if reviewCount > 0 || attentionCount > 0}
                <div class="mt-1 flex items-center gap-2">
                  {#if reviewCount > 0}
@@ -342,7 +342,7 @@
       {@const isActive = currentView === viewKey}
       <button
         type="button"
-        class="relative w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
+        class="relative mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {isActive ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
         title={collapsed ? title : undefined}
         aria-label={title}
         aria-current={isActive ? 'page' : undefined}
@@ -356,7 +356,7 @@
           {/if}
         </span>
         {#if !collapsed}
-          <span class="text-xs font-medium">{title}</span>
+          <span class="text-sm font-medium">{title}</span>
           {#if viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
             <span class="ml-auto flex items-center gap-1 shrink-0">
               <span class="badge badge-error badge-xs text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
@@ -369,7 +369,7 @@
       {@const isActive = currentView === view}
       <button
         type="button"
-        class="w-full flex items-center {collapsed ? 'justify-center px-0' : 'px-3'} gap-2 py-2 cursor-pointer transition-colors {isActive ? 'text-primary' : 'text-base-content/50 hover:text-base-content'}"
+        class="mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {isActive ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
         title={collapsed ? label : undefined}
         aria-label={label}
         aria-current={isActive ? 'page' : undefined}
@@ -377,7 +377,7 @@
       >
          <Icon size={18} class="shrink-0" />
          {#if !collapsed}
-           <span class="text-xs font-medium">{label}</span>
+           <span class="text-sm font-medium">{label}</span>
          {/if}
       </button>
     {/each}

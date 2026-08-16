@@ -305,13 +305,6 @@
     const color = getProjectColor($activeProjectColorId)
     return $themeMode === 'dark' ? color.darkAlt : color.lightAlt
   })
-  let iconRailBg = $derived.by(() => {
-    const color = getProjectColor($activeProjectColorId)
-    if ($themeMode === 'dark') {
-      return color.darkAlt
-    }
-    return color.lightAlt
-  })
 
   async function handleProjectCreated(project: Project) {
     showProjectSetup = false
@@ -571,7 +564,7 @@
     reviewRequestCount={$reviewRequestCount}
   />
   {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -611,6 +604,11 @@
                 onEditTask={openEditTask}
                 onTaskUpdated={async () => { await appData.loadTasks() }}
                 onProjectAttentionChanged={appData.loadProjectAttention}
+                onOpenCommandSearch={() => { showCommandPalette = true }}
+                onNewTask={() => {
+                  editingTask = null
+                  showAddDialog = true
+                }}
                 onRunAction={handleRunAction}
               />
             {/if}
@@ -622,6 +620,7 @@
             mode={editingTask ? 'edit' : 'create'}
             task={editingTask}
             projectPath={activeProject?.path ?? null}
+            projectName={activeProject?.name ?? null}
             onClose={() => { showAddDialog = false; editingTask = null }}
             onTaskSaved={async () => { await appData.loadTasks() }}
             onRunAction={async (taskId, actionPrompt, agent) => {
@@ -639,7 +638,7 @@
       </div>
     </main>
 
-    {#if $activeProjectId && $currentView !== 'global_settings' && !selectedTask}
+    {#if $activeProjectId && $currentView !== 'board' && $currentView !== 'global_settings' && !selectedTask}
       <button
         type="button"
         class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"

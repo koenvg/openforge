@@ -1,15 +1,19 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
   import type { AutocompleteItem } from '../../lib/types'
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
-  import VoiceInput from '../shared/adapters/VoiceInput.svelte'
-  import ModelDownloadProgress from '../shared/adapters/ModelDownloadProgress.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
 
   interface Props {
     value?: string
     placeholder?: string
+    ariaLabel?: string
+    textareaId?: string
+    rows?: number
+    textareaClass?: string
+    textareaStyle?: string
+    containerClass?: string
+    maxLength?: number
     projectId: string
     onSubmit: (prompt: string) => void
     onValueChange?: (value: string) => void
@@ -20,15 +24,19 @@
     injectableInsertRequest?: { id: number, text: string } | null
     onCancel: () => void
     autofocus?: boolean
-    extras?: Snippet
-    footerHelp?: Snippet
-    controls?: Snippet
     commandTrigger?: CommandTrigger
   }
 
   let {
     value = '',
     placeholder = 'Describe what you want to implement...',
+    ariaLabel,
+    textareaId,
+    rows = 2,
+    textareaClass = 'p-3 text-sm',
+    textareaStyle = 'max-height: 15rem; overflow-y: auto;',
+    containerClass = '',
+    maxLength,
     projectId,
     onSubmit,
     onValueChange,
@@ -39,10 +47,7 @@
     injectableInsertRequest = null,
     onCancel,
     autofocus = false,
-    extras,
-    footerHelp,
-    controls,
-    commandTrigger = 'slash'
+    commandTrigger = 'slash',
   }: Props = $props()
 
   const getInitialTextValue = () => value
@@ -50,10 +55,8 @@
 
   // ── Local state ──────────────────────────────────────────────────────────────
   let textValue = $state(getInitialTextValue())
-  let showModelDownload = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
-  const promptReady = $derived(textValue.trim().length > 0)
   let lastImageMarkerInsertRequestId = 0
   let lastInjectableInsertRequestId = 0
 
@@ -81,8 +84,7 @@
     }
   })
 
-  // ── Transcription ────────────────────────────────────────────────────────────
-  function insertTextAtCursor(text: string) {
+  export function insertText(text: string) {
     if (!textareaEl) return
     const cursorPos = textareaEl.selectionStart ?? textValue.length
     const before = textValue.slice(0, cursorPos)
@@ -96,11 +98,6 @@
       autoGrow()
     }, 0)
   }
-
-  function handleTranscription(text: string) {
-    insertTextAtCursor(text)
-  }
-
   function imageMarkerInsertionText(marker: string, before: string, after: string): string {
     const prefix = before.length > 0 && !/\s$/.test(before) ? ' ' : ''
     const suffix = after.length === 0 || !/^\s/.test(after) ? ' ' : ''
@@ -152,7 +149,7 @@
     if (!request || request.id === lastInjectableInsertRequestId || !textareaEl) return
 
     lastInjectableInsertRequestId = request.id
-    insertTextAtCursor(request.text)
+    insertText(request.text)
   })
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────
@@ -260,6 +257,7 @@
 
     if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       onCancel()
     }
   }
@@ -272,8 +270,7 @@
   }
 </script>
 
-<div class="bg-base-100">
-  <div class="relative">
+<div class="relative {containerClass}">
   <PaletteListbox
     bind:this={paletteListbox}
     items={ac.autocompleteItems}
@@ -293,10 +290,13 @@
       <textarea
         bind:this={textareaEl}
         bind:value={textValue}
-        class="w-full resize-none bg-transparent border-none outline-none p-3 text-sm"
-        rows={2}
+        class="w-full resize-none bg-transparent border-none outline-none focus-visible:outline-none focus-visible:outline-offset-0 {textareaClass}"
+        {rows}
+        aria-label={ariaLabel}
+        id={textareaId}
         {placeholder}
-        style="max-height: 15rem; overflow-y: auto;"
+        maxlength={maxLength}
+        style={textareaStyle}
         role={ac.popoverVisible ? 'combobox' : undefined}
         aria-autocomplete={ac.popoverVisible ? 'list' : undefined}
         aria-controls={ac.popoverVisible && ac.autocompleteItems.length > 0 ? listboxId : undefined}
@@ -319,42 +319,4 @@
       {/if}
     {/snippet}
   </PaletteListbox>
-  </div>
-
-  {#if extras}
-    <div class="px-3 pb-1">
-      {@render extras()}
-    </div>
-  {/if}
-
-  <div class="flex items-center justify-between gap-3 px-3 pb-2">
-    <div class="flex min-w-0 items-center gap-2">
-      <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-      {#if footerHelp}
-        {@render footerHelp()}
-      {/if}
-    </div>
-    <div class="flex shrink-0 items-center gap-2">
-      {#if controls}
-        {@render controls()}
-      {:else}
-        <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
-        <button
-          class="btn btn-primary btn-sm"
-          type="button"
-          disabled={!promptReady}
-          onclick={handleSubmit}
-        >Submit</button>
-      {/if}
-    </div>
-  </div>
-
-  {#if showModelDownload}
-    <div class="px-3 pb-2">
-      <ModelDownloadProgress
-        onComplete={() => { showModelDownload = false }}
-        onError={() => { showModelDownload = false }}
-      />
-    </div>
-  {/if}
 </div>

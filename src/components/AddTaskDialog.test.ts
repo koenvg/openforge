@@ -78,12 +78,11 @@ async function findPromptTextbox(): Promise<HTMLTextAreaElement> {
 }
 
 async function clickAddToBacklogFromMore() {
-  await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
-  await fireEvent.click(await screen.findByRole('menuitem', { name: 'Add to Backlog' }))
+  await fireEvent.click(await screen.findByRole('button', { name: 'Add to backlog' }))
 }
 
 async function expandEnvironment() {
-  await fireEvent.click(await screen.findByRole('button', { name: /Environment:/ }))
+  await fireEvent.click(await screen.findByRole('button', { name: 'Edit environment' }))
 }
 
 function setClipboardRead(read: () => Promise<Array<{ types: string[], getType: (type: string) => Promise<Blob> }>>) {
@@ -128,18 +127,6 @@ describe('AddTaskDialog', () => {
     vi.mocked(listOpenCodeCommands).mockResolvedValue([])
   })
 
-  it('renders create mode with a single primary Start Task action before text entry', async () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    expect(screen.getByRole('dialog', { name: 'Create Task' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
-    const textbox = await findPromptTextbox()
-    expect(textbox.value).toBe('')
-    expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
-    expect(await screen.findByText('Press ⌘↵ to start, or use More to add to the backlog.')).toBeTruthy()
-    expect(screen.queryByText('Add to Backlog', { exact: false })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
-  })
 
   it('closes before awaiting the async start flow', async () => {
     let resolveRunAction = () => {}
@@ -180,69 +167,25 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('collapses environment controls behind a summary by default', async () => {
-    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
-
-    await findPromptTextbox()
-
-    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · default permissions/ })).toBeTruthy()
-    expect(screen.queryByLabelText('Worktree')).toBeNull()
-    expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
-    expect(screen.queryByRole('combobox')).toBeNull()
-  })
-
-  it('opens More as a semantic menu, focuses its first item, and contains Escape', async () => {
+  it('shows an explicit loading state and disables both creation actions while saving', async () => {
+    let resolveCreate!: (task: Task) => void
+    vi.mocked(createTask).mockImplementationOnce(() => new Promise<Task>((resolve) => {
+      resolveCreate = resolve
+    }))
     render(AddTaskDialog, { props: { mode: 'create' } })
-    const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: 'Accessible menu task' } })
 
-    const trigger = await screen.findByRole('button', { name: 'More' })
-    await fireEvent.click(trigger)
+    await fireEvent.input(await findPromptTextbox(), { target: { value: 'Save once' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
 
-    expect(screen.getByRole('menu')).toBeTruthy()
-    const firstItem = screen.getByRole('menuitem', { name: 'Add to Backlog' })
-    await waitFor(() => expect(document.activeElement).toBe(firstItem))
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Adding…' }) as HTMLButtonElement).disabled).toBe(true)
+      expect((screen.getByRole('button', { name: /Start Task/ }) as HTMLButtonElement).disabled).toBe(true)
+    })
 
-    const onDocumentKeydown = vi.fn()
-    document.addEventListener('keydown', onDocumentKeydown)
-    await fireEvent.keyDown(firstItem, { key: 'Escape' })
-    document.removeEventListener('keydown', onDocumentKeydown)
-
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
-    expect(onDocumentKeydown).not.toHaveBeenCalled()
+    resolveCreate({ ...mockTask, id: 'T-1', status: 'backlog' })
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Add to backlog' }) as HTMLButtonElement).disabled).toBe(false))
   })
 
-  it('closes More on an outside pointer and restores focus to its trigger', async () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: 'Outside pointer task' } })
-
-    const trigger = await screen.findByRole('button', { name: 'More' })
-    await fireEvent.click(trigger)
-    expect(screen.getByRole('menu')).toBeTruthy()
-
-    await fireEvent.pointerDown(document.body)
-
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
-  })
-
-  it('dismisses the More menu when expanding Environment', async () => {
-    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
-
-    const textbox = await findPromptTextbox()
-    await fireEvent.input(textbox, { target: { value: 'Task with environment changes' } })
-    await fireEvent.click(await screen.findByRole('button', { name: 'More' }))
-    expect(screen.getByRole('menuitem', { name: 'Add to Backlog' })).toBeTruthy()
-
-    const environmentButton = await screen.findByRole('button', { name: /Environment:/ })
-    await fireEvent.pointerDown(environmentButton)
-    await fireEvent.click(environmentButton)
-
-    expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
-    expect(await screen.findByLabelText('Worktree')).toBeTruthy()
-  })
 
   it('uses new branch from latest main as the default worktree task source', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
@@ -310,7 +253,8 @@ describe('AddTaskDialog', () => {
     await expandEnvironment()
     const worktreeToggle = await screen.findByLabelText('Worktree') as HTMLInputElement
     expect(worktreeToggle.checked).toBe(false)
-    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
+    expect(screen.getAllByText('Project directory').length).toBeGreaterThan(0)
+    expect(screen.getByText('default permissions')).toBeTruthy()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Default project-directory task' } })
@@ -368,7 +312,8 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(screen.getByLabelText('Existing branch'))
     await fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
     await fireEvent.click(await screen.findByRole('option', { name: /^feature\/open-pr/ }))
-    expect(screen.getByRole('button', { name: /Environment: Worktree · feature\/open-pr · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Environment summary: Worktree, feature/open-pr, default permissions' })).toBeTruthy()
+    expect(screen.getByText('default permissions')).toBeTruthy()
 
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Continue PR work' } })
@@ -401,7 +346,8 @@ describe('AddTaskDialog', () => {
 
     await expandEnvironment()
     await fireEvent.click(await screen.findByLabelText('Worktree'))
-    expect(screen.getByRole('button', { name: /Environment: Project directory · default permissions/ })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Environment summary: Project directory, latest main, default permissions' })).toBeTruthy()
+    expect(screen.getByText('default permissions')).toBeTruthy()
     expect(screen.queryByLabelText('New branch from latest main')).toBeNull()
     expect(screen.queryByLabelText('Existing branch')).toBeNull()
 
@@ -434,7 +380,7 @@ describe('AddTaskDialog', () => {
     const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Build the screenshot state' } })
     textbox.setSelectionRange('Build'.length, 'Build'.length)
-    await fireEvent.click(await screen.findByRole('button', { name: 'Paste image' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Attach image' }))
 
     await waitFor(() => {
       expect(textbox.value).toBe('Build [image#1] the screenshot state')
@@ -620,7 +566,7 @@ describe('AddTaskDialog', () => {
     const handoffToggle = await screen.findByLabelText('Handoff notes') as HTMLInputElement
     expect(handoffToggle.checked).toBe(true)
     await fireEvent.click(handoffToggle)
-    expect(screen.getByRole('button', { name: /Environment:.*no handoff notes/ })).toBeTruthy()
+    expect(handoffToggle.checked).toBe(false)
 
     await fireEvent.input(textbox, { target: { value: 'No handoff task' } })
     await clickAddToBacklogFromMore()
@@ -662,7 +608,7 @@ describe('AddTaskDialog', () => {
 
   it('pre-fills fields in edit mode', async () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
-    expect(screen.getByRole('heading', { name: 'Edit Task' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Edit task' })).toBeTruthy()
     
     const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('Existing Task')
@@ -711,7 +657,7 @@ describe('AddTaskDialog', () => {
 
     expect(screen.getByText('1 image ready')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Preview [image#1]' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Paste image' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Attach image' })).toBeTruthy()
   })
 
   it('pastes an additional image marker while editing a persisted image prompt', async () => {
@@ -887,7 +833,7 @@ describe('AddTaskDialog', () => {
     const select = await screen.findByRole('combobox', { name: 'Mode' }) as HTMLSelectElement
 
     await fireEvent.change(select, { target: { value: 'auto' } })
-    expect(screen.getByRole('button', { name: /Environment: Worktree · latest main · autorun/ })).toBeTruthy()
+    expect(screen.getByText('autorun')).toBeTruthy()
     await fireEvent.input(textbox, { target: { value: 'Task with autorun' } })
     await clickAddToBacklogFromMore()
 
