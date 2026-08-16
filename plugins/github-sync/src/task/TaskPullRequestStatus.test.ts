@@ -101,11 +101,19 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('owner/other')).toBeTruthy()
   })
 
-  it('renders cached pull requests and comments immediately when returning to a task', async () => {
+  it('renders cached pull requests immediately while revalidating them when returning to a task', async () => {
+    let resolveTaskARefresh!: (pullRequests: PullRequestInfo[]) => void
+    const taskARefresh = new Promise<PullRequestInfo[]>((resolve) => { resolveTaskARefresh = resolve })
     const taskAPr = createPullRequest({ title: 'Task A PR' })
+    const refreshedTaskAPr = createPullRequest({ title: 'Refreshed Task A PR', updated_at: 3000 })
+    let taskALoads = 0
     const taskBPr = createPullRequest({ id: 43, pr_number: 43, ticket_id: 'T-43', title: 'Task B PR' })
     const invoke = vi.fn(async (method: string, payload?: { taskId?: string; prId?: number }) => {
-      if (method === 'listTaskPullRequests') return payload?.taskId === 'T-43' ? [taskBPr] : [taskAPr]
+      if (method === 'listTaskPullRequests') {
+        if (payload?.taskId === 'T-43') return [taskBPr]
+        taskALoads += 1
+        return taskALoads === 1 ? [taskAPr] : taskARefresh
+      }
       if (method === 'getTaskPrComments') return payload?.prId === taskAPr.id ? [baseComment] : []
       return emptyPollResult
     })
@@ -131,8 +139,12 @@ describe('GitHub Sync Task pull request section', () => {
 
     expect(screen.getByText('Task A PR')).toBeTruthy()
     expect(screen.getByText(baseComment.body)).toBeTruthy()
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(1)
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload.prId === taskAPr.id)).toHaveLength(1)
+    await waitFor(() => {
+      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
+    })
+    resolveTaskARefresh([refreshedTaskAPr])
+    expect(await screen.findByText('Refreshed Task A PR')).toBeTruthy()
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'getTaskPrComments' && payload.prId === taskAPr.id)).toHaveLength(2)
   })
 
   it('coalesces concurrent task loads and never renders a stale response over the selected task', async () => {
@@ -161,10 +173,10 @@ describe('GitHub Sync Task pull request section', () => {
 
     await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' }, taskId: 'T-42', projectId: 'P-1' })
     expect(screen.getByText('Delayed Task A PR')).toBeTruthy()
-    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(1)
+    expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
   })
 
-  it('refreshes only the visible Task from local data after GitHub Sync invalidation while keeping cached content rendered', async () => {
+  it('refreshes visible data after a pushed GitHub Sync event and revalidates cached tasks when revisited', async () => {
     let resolveTaskBRefresh!: (pullRequests: PullRequestInfo[]) => void
     const taskBRefresh = new Promise<PullRequestInfo[]>((resolve) => { resolveTaskBRefresh = resolve })
     const taskAPr = createPullRequest({ title: 'Hidden Task A PR' })
@@ -194,7 +206,7 @@ describe('GitHub Sync Task pull request section', () => {
     expect(await screen.findByText('Cached Task B PR')).toBeTruthy()
     expect(await screen.findByText('Cached Task B comment')).toBeTruthy()
 
-    await api.events.emitGlobal('github-sync-complete', emptyPollResult)
+    await api.events.emitGlobal('openforge.github-sync-complete', emptyPollResult)
     await waitFor(() => expect(taskBLoads).toBe(2))
     expect(screen.getByText('Cached Task B PR')).toBeTruthy()
     expect(screen.getByText('Cached Task B comment')).toBeTruthy()
@@ -204,6 +216,11 @@ describe('GitHub Sync Task pull request section', () => {
     resolveTaskBRefresh([taskBNew])
     expect(await screen.findByText('Refreshed Task B PR')).toBeTruthy()
     expect(await screen.findByText('Refreshed Task B comment')).toBeTruthy()
+
+    await rerender({ api, context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-42' }, taskId: 'T-42', projectId: 'P-1' })
+    await waitFor(() => {
+      expect(invoke.mock.calls.filter(([method, payload]) => method === 'listTaskPullRequests' && payload.taskId === 'T-42')).toHaveLength(2)
+    })
   })
 
   it('does not flash a loading message while switching quickly to another task', async () => {
