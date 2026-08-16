@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, CheckCircle2, FolderOpen, MessageSquare } from '@lucide/svelte'
-  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+  import { AlertTriangle, FolderOpen } from '@lucide/svelte'
   import { onMount, onDestroy, tick } from 'svelte'
   import { mergeVisiblePendingSelfReviewComments, selfReviewStateByTask, setPendingSelfReviewComments } from '../../lib/taskScopedSelfReviewState'
   import { getTaskFileContents, getTaskBatchFileContents, getCommitFileContents, getCommitBatchFileContents, openUrl } from '../../lib/ipc'
@@ -27,14 +26,9 @@
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
-  import FileTree from '../review/shared/FileTree.svelte'
-  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'
   import DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
-  import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'
-  import SendToAgentPanel from './SendToAgentPanel.svelte'
-  import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
-  import { buildPrCommentUrl } from '../../lib/prCommentLinks'
+  import SelfReviewChangedFilesPanel from './SelfReviewChangedFilesPanel.svelte'
+  import SelfReviewFeedbackPanel from './SelfReviewFeedbackPanel.svelte'
 
   interface Props {
     task: Task
@@ -46,11 +40,10 @@
   const router = useAppRouter()
 
   let diffViewer = $state<DiffViewer>()
-  let fileTree = $state<FileTree>()
+  let changedFilesPanel = $state<SelfReviewChangedFilesPanel>()
   let fileTreeVisible = $state(true)
   let includeCommitted = $state(true)
   let includeUncommitted = $state(true)
-  let showAddressed = $state(false)
   // Non-application files (tests, fixtures, snapshots, docs, generated scaffolding) are
   // shown by default; the reviewer deselects the file-tree toggle to hide them and focus
   // on the source changes. Not persisted — each review opens with everything shown.
@@ -64,6 +57,7 @@
 
   let sidebarVisible = $state(true)
   let sidebarTab = $state<'pr' | 'notes'>('pr')
+  let showAddressed = $state(false)
   let reviewedFileShas = $state<Map<string, string>>(new Map())
   let reviewedFileSnapshots = $state<Map<string, ReviewedFileSnapshot>>(new Map())
   type ReviewedFileComparison = { file: PrFileDiff; contents: FileContents }
@@ -101,7 +95,6 @@
   let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
   let visibleInlineReviewComments = $derived(inlineReviewComments.filter((comment) => !reviewedComparisonByFilename.has(comment.path)))
   let visiblePendingInlineComments = $derived(pendingInlineComments.filter((comment) => !reviewedComparisonByFilename.has(comment.path)))
-  let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
   let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(diffLoader.linkedPr))
 
   let hasAutoOpened = false
@@ -230,6 +223,18 @@
     return map
   }
 
+  function handleIncludeCommittedChange(value: boolean) {
+    includeCommitted = value
+    restoreAllChangesView()
+    void diffLoader.refresh()
+  }
+
+  function handleIncludeUncommittedChange(value: boolean) {
+    includeUncommitted = value
+    restoreAllChangesView()
+    void diffLoader.refresh()
+  }
+
   async function handleCommitSelect(sha: string | null) {
     restoreAllChangesView()
     await diffLoader.selectCommit(sha)
@@ -338,105 +343,29 @@
 <div class="flex h-full w-full flex-col overflow-hidden" style="background: var(--of-review-canvas)">
   <div class="flex flex-1 overflow-hidden">
     {#if fileTreeVisible}
-      <ResizablePanel storageKey="self-review-file-tree" defaultWidth={320} minWidth={240} maxWidth={520} side="left" label="Changed files">
-        <section class="flex h-full flex-col border-r border-base-300 bg-base-100" aria-label="Changed files panel">
-          <div class="flex-1 overflow-hidden">
-            <FileTree
-              bind:this={fileTree}
-              files={treeFiles}
-              onSelectFile={handleFileSelect}
-              onCollapse={() => { fileTreeVisible = false }}
-              onRequestFocusDiff={() => diffViewer?.focusDiff()}
-              {reviewedFileShas}
-              getFileReviewIdentity={getVisibleFileReviewIdentity}
-              onToggleFileReviewed={handleToggleFileReviewed}
-              {includeNonApplicationFiles}
-              {nonApplicationFileCount}
-              onToggleNonApplicationFiles={(value) => { includeNonApplicationFiles = value }}
-            />
-          </div>
-          <ResizableBottomPanel
-            storageKey="self-review-commit-history"
-            defaultHeight={220}
-            minHeight={180}
-            maxHeight={400}
-            fillParent={false}
-            panelTestId="self-review-commit-history-panel"
-            handleTestId="self-review-commit-history-handle"
-          >
-            <div class="h-full flex flex-col border-t border-base-300 bg-base-200/70">
-              <div class="flex min-h-10 items-center justify-between border-b border-base-300 bg-base-100 px-3 text-[13px] font-semibold text-base-content">
-                <span>Scope</span>
-                <span class="font-mono font-normal text-primary">merge-base...HEAD</span>
-              </div>
-              <div class="px-2 py-1.5 border-b border-base-300 bg-base-100/50">
-                {#if diffLoader.selectedCommitSha === null}
-                  <div class="flex flex-col gap-1">
-                    <label
-                      class="flex min-h-10 items-center gap-2 {committedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
-                      data-tip={committedLocked ? lockedScopeTooltip : null}
-                    >
-                      <Checkbox
-                        aria-label="Include committed changes"
-                        checked={includeCommitted}
-                        disabled={committedLocked}
-                        onchange={(e) => {
-                          includeCommitted = e.currentTarget.checked
-                          restoreAllChangesView()
-                          diffLoader.refresh()
-                        }}
-                      />
-                      <span class="text-[13px] text-base-content/75">Committed</span>
-                    </label>
-                    <label
-                      class="flex min-h-10 items-center gap-2 {uncommittedLocked ? 'cursor-not-allowed tooltip tooltip-right' : 'cursor-pointer'}"
-                      data-tip={uncommittedLocked ? lockedScopeTooltip : null}
-                    >
-                      <Checkbox
-                        aria-label="Include uncommitted changes"
-                        checked={includeUncommitted}
-                        disabled={uncommittedLocked}
-                        onchange={(e) => {
-                          includeUncommitted = e.currentTarget.checked
-                          restoreAllChangesView()
-                          diffLoader.refresh()
-                        }}
-                      />
-                      <span class="text-[13px] text-base-content/75">Uncommitted</span>
-                    </label>
-                  </div>
-                {:else}
-                  <button
-                    class="btn btn-ghost btn-sm h-10 min-h-10 justify-start px-2 text-[13px]"
-                    onclick={() => handleCommitSelect(null)}
-                  >
-                    Show all changes
-                  </button>
-                {/if}
-              </div>
-              <div class="flex-1 overflow-y-auto py-1">
-                <button
-                  class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === null ? 'bg-primary/5 text-primary' : 'text-base-content'}"
-                  onclick={() => handleCommitSelect(null)}
-                >
-                  <div class="text-[13px] font-semibold leading-snug">All changes</div>
-                  <div class="font-mono text-[13px] opacity-60">merge-base...HEAD</div>
-                </button>
-                {#each diffLoader.commits as commit (commit.sha)}
-                  <button
-                    class="flex flex-col w-full text-left px-3 py-2.5 gap-1 border-b border-base-200 last:border-b-0 hover:bg-base-300/50 transition-colors {diffLoader.selectedCommitSha === commit.sha ? 'bg-primary/5 text-primary' : 'text-base-content'}"
-                    onclick={() => handleCommitSelect(commit.sha)}
-                    title={commit.message}
-                  >
-                    <div class="font-mono text-[13px] font-medium opacity-70">{commit.short_sha}</div>
-                    <div class="w-full truncate text-[13px] font-medium leading-snug">{commit.message}</div>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          </ResizableBottomPanel>
-        </section>
-      </ResizablePanel>
+      <SelfReviewChangedFilesPanel
+        bind:this={changedFilesPanel}
+        files={treeFiles}
+        {reviewedFileShas}
+        getFileReviewIdentity={getVisibleFileReviewIdentity}
+        onToggleFileReviewed={handleToggleFileReviewed}
+        {includeNonApplicationFiles}
+        {nonApplicationFileCount}
+        onToggleNonApplicationFiles={(value) => { includeNonApplicationFiles = value }}
+        commits={diffLoader.commits}
+        selectedCommitSha={diffLoader.selectedCommitSha}
+        {includeCommitted}
+        {includeUncommitted}
+        {committedLocked}
+        {uncommittedLocked}
+        {lockedScopeTooltip}
+        onIncludeCommittedChange={handleIncludeCommittedChange}
+        onIncludeUncommittedChange={handleIncludeUncommittedChange}
+        onSelectCommit={handleCommitSelect}
+        onSelectFile={handleFileSelect}
+        onCollapse={() => { fileTreeVisible = false }}
+        onRequestFocusDiff={() => diffViewer?.focusDiff()}
+      />
     {/if}
     <section class="flex min-w-0 flex-1 flex-col overflow-hidden bg-base-100" aria-label="Code diff panel">
       {#if diffLoader.isLoading}
@@ -497,7 +426,7 @@
               inlineDraftScopeId={task.id}
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
-              onRequestFocusFileTree={() => fileTree?.focusTree()}
+              onRequestFocusFileTree={() => changedFilesPanel?.focusTree()}
               fetchFileContents={fetchTaskFileContents}
               batchFetchFileContents={batchFetchTaskFileContents}
               {resolveRepositoryImage}
@@ -542,111 +471,32 @@
           {/if}
     </section>
     {#if sidebarVisible}
-      <ResizablePanel storageKey="self-review-comments" defaultWidth={380} minWidth={300} maxWidth={620} side="right" label="Feedback">
-            <section class="flex h-full flex-col overflow-hidden border-l border-base-300 bg-base-100" aria-label="Feedback panel">
-              <div class="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-base-300 bg-base-100 px-2">
-                <div class="flex min-w-0 items-baseline gap-2">
-                  <h2 class="m-0 text-sm font-semibold text-base-content">Feedback</h2>
-                  <p class="m-0 whitespace-nowrap text-xs text-base-content/60">{commentSelection.unaddressedCount + selfReviewGeneralComments.length + pendingInlineComments.length} comments</p>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 text-base-content/60"
-                  aria-label="Collapse Feedback panel"
-                  title="Collapse Feedback"
-                  onclick={() => { sidebarVisible = false }}
-                ><span aria-hidden="true">››</span></button>
-              </div>
-              <div class="flex items-center border-b border-base-300 bg-base-200 shrink-0">
-                <button class="min-h-10 flex-1 px-3 py-2 text-center text-[13px] font-semibold transition-colors {sidebarTab === 'pr' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'}"
-                  onclick={() => { sidebarTab = 'pr' }}>
-                  PR Comments
-                  {#if commentSelection.unaddressedCount > 0}<span class="badge badge-error badge-xs ml-1">{commentSelection.unaddressedCount}</span>{/if}
-                </button>
-                <button class="min-h-10 flex-1 px-3 py-2 text-center text-[13px] font-semibold transition-colors {sidebarTab === 'notes' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'}"
-                  onclick={() => { sidebarTab = 'notes' }}>
-                  General feedback
-                  {#if selfReviewGeneralComments.length > 0}<span class="badge badge-ghost badge-xs ml-1">{selfReviewGeneralComments.length}</span>{/if}
-                </button>
-              </div>
-              <div class="flex-1 overflow-hidden flex flex-col" class:hidden={sidebarTab !== 'pr'}>
-                {#if diffLoader.linkedPr}
-                  <div class="flex items-center gap-2 px-3 py-2 bg-base-200/50 border-b border-base-300 shrink-0">
-                    {#if commentSelection.selectedCount > 0}
-                      <span class="text-[13px] font-semibold text-primary">{commentSelection.selectedCount} selected</span>
-                      <button class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60 hover:text-base-content" onclick={commentSelection.deselectAll}>Clear</button>
-                    {:else if commentSelection.unaddressedCount > 0}
-                      <button class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60 hover:text-primary" onclick={commentSelection.selectAll}>Select all</button>
-                    {/if}
-                    <span class="flex-1"></span>
-                    {#if commentSelection.addressedCount > 0}
-                      <button
-                        class="btn btn-ghost btn-sm h-10 min-h-10 text-[13px] text-base-content/60"
-                        onclick={() => { showAddressed = !showAddressed }}
-                      >
-                        {showAddressed ? 'Hide addressed' : `Show ${commentSelection.addressedCount} addressed`}
-                      </button>
-                    {/if}
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-sm h-10 min-h-10 px-2 text-[13px] text-primary"
-                      onclick={() => openUrl(diffLoader.linkedPr!.url)}
-                    >GitHub ↗</button>
-                  </div>
-                  {#if diffLoader.prComments.length === 0}
-                    <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
-                      <MessageSquare size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
-                      <p class="m-0 text-[13px] text-base-content/60">No review comments on this PR yet</p>
-                    </div>
-                  {:else if visibleComments.length === 0 && commentSelection.addressedCount > 0}
-                    <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
-                      <CheckCircle2 size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
-                      <p class="m-0 text-[13px] text-base-content/60">All comments addressed</p>
-                    </div>
-                  {:else}
-                    <div class="flex-1 overflow-y-auto p-3">
-                      <PrCommentsList
-                        comments={visibleComments}
-                        imageBaseUrlForComment={() => markdownImageBaseUrl}
-                        showLocation={true}
-                        showMarkAddressed={true}
-                        onMarkAddressed={commentSelection.markAddressed}
-                        isAddressing={commentSelection.isAddressing}
-                        addressErrorFor={commentSelection.addressErrorFor}
-                        density="detail"
-                        selectable={true}
-                        selectedIds={commentSelection.selectedPrCommentIds}
-                        onToggleSelect={commentSelection.toggleSelected}
-                        commentUrl={(c) => buildPrCommentUrl(c, diffLoader.linkedPr?.url ?? '')}
-                        onCommentClick={(c) => { if (c.file_path && c.line_number != null) diffViewer?.scrollToComment(c.file_path, c.line_number) }}
-                        showAuthorFilter={true}
-                        showTimestamp={true}
-                      />
-                    </div>
-                  {/if}
-                {:else}
-                  <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
-                    <p class="m-0 text-[13px] text-base-content/60">No linked PR found</p>
-                  </div>
-                {/if}
-              </div>
-
-              <div class="flex-1 overflow-hidden" class:hidden={sidebarTab !== 'notes'}>
-                <GeneralCommentsSidebar taskId={task.id} />
-              </div>
-              <SendToAgentPanel
-                layout="sidebar"
-                taskId={task.id}
-                {agentStatus}
-                {onSendToAgent}
-                onRefresh={diffLoader.refresh}
-                selectedPrComments={commentSelection.selectedPrComments}
-                pendingInlineComments={pendingInlineComments}
-                onPendingInlineCommentsChange={handlePendingInlineCommentsChange}
-                onSendComplete={() => { commentSelection.deselectAll() }}
-              />
-            </section>
-        </ResizablePanel>
+      <SelfReviewFeedbackPanel
+        taskId={task.id}
+        {agentStatus}
+        {onSendToAgent}
+        onRefresh={diffLoader.refresh}
+        linkedPr={diffLoader.linkedPr}
+        prComments={diffLoader.prComments}
+        {commentSelection}
+        generalCommentCount={selfReviewGeneralComments.length}
+        {pendingInlineComments}
+        {markdownImageBaseUrl}
+        onPendingInlineCommentsChange={handlePendingInlineCommentsChange}
+        onCommentClick={(comment) => {
+          if (comment.file_path && comment.line_number != null) {
+            diffViewer?.scrollToComment(comment.file_path, comment.line_number)
+          }
+        }}
+        onOpenLinkedPr={() => {
+          if (diffLoader.linkedPr) openUrl(diffLoader.linkedPr.url)
+        }}
+        onCollapse={() => { sidebarVisible = false }}
+        activeTab={sidebarTab}
+        onActiveTabChange={(tab) => { sidebarTab = tab }}
+        {showAddressed}
+        onShowAddressedChange={(value) => { showAddressed = value }}
+      />
     {/if}
   </div>
 
