@@ -405,7 +405,6 @@
     <div class="flex min-w-0 flex-wrap items-center gap-4 xl:flex-nowrap">
       <div class="w-60 shrink-0">
         <h1 class="truncate text-base font-semibold leading-5 tracking-[-0.01em] text-base-content">{projectName}</h1>
-        <p class="text-[11px] leading-4 text-base-content/55">Focus on what needs attention first.</p>
       </div>
 
       <button
