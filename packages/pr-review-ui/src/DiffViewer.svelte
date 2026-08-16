@@ -462,7 +462,7 @@
   tabindex="-1"
   onkeydown={search.handleRootKeydown}
 >
-  <div class="flex min-h-14 shrink-0 items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-2">
+  <div class="diff-viewer-toolbar flex min-h-10 shrink-0 items-center gap-1 border-b border-base-300 bg-base-200 px-2 py-1">
     {#if onToggleFileTree}
       <button
         class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
@@ -628,3 +628,11 @@
     {@render footer?.()}
   </div>
 </div>
+
+<style>
+  .diff-viewer-toolbar > :global(.btn),
+  .diff-viewer-toolbar > :global(.input) {
+    height: 2rem;
+    min-height: 2rem;
+  }
+</style>
