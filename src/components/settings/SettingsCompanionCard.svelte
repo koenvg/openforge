@@ -108,10 +108,17 @@
     feedback = null
     try {
       await removeCompanionDevice(device.deviceId)
-      feedback = `Removed device: ${device.deviceName}`
-      await refreshDevices()
     } catch (error) {
       requestError = errorMessage(error)
+      updating = false
+      return
+    }
+
+    try {
+      await refreshDevices()
+      feedback = `Removed device: ${device.deviceName}`
+    } catch (error) {
+      requestError = `Device was removed, but paired devices could not be refreshed: ${errorMessage(error)}`
     } finally {
       updating = false
     }

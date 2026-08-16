@@ -294,6 +294,32 @@ describe('SettingsCompanionCard', () => {
     confirm.mockRestore()
   })
 
+  it('reports a completed removal when the authoritative device refresh fails', async () => {
+    vi.mocked(listCompanionDevices)
+      .mockResolvedValueOnce([
+        {
+          deviceId: 'revoked-device',
+          deviceName: 'Revoked Pixel',
+          platform: 'android',
+          pairedAt: '2026-07-29T12:00:00Z',
+          lastSeenAt: null,
+          revokedAt: '2026-07-30T13:00:00Z',
+        },
+      ])
+      .mockRejectedValueOnce(new Error('device list unavailable'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(SettingsCompanionCard)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Remove Revoked Pixel' }))
+
+    expect(removeCompanionDevice).toHaveBeenCalledWith('revoked-device')
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /device was removed.*paired devices could not be refreshed.*device list unavailable/i,
+    )
+    expect(screen.queryByText('Removed device: Revoked Pixel')).toBeNull()
+    confirm.mockRestore()
+  })
+
   it('keeps a revoked device when permanent removal is declined', async () => {
     vi.mocked(listCompanionDevices).mockResolvedValue([
       {
