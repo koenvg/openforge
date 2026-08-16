@@ -1,7 +1,10 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdtemp, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import { describe, expect, it, vi } from 'vitest'
+import { buildBackendPluginHostRuntime } from '../../scripts/electron-build.mjs'
 import { createPluginHostRuntime } from './index'
 
 async function writeBackendModule(source: string): Promise<string> {
@@ -50,6 +53,136 @@ describe('plugin-host backend runtime', () => {
 
     expect(result).toEqual({ pluginId: 'github', projectId: 'P-1', activated: 1 })
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
+  })
+
+  it('does not let a long-running backend handler block another plugin from becoming ready', async () => {
+    const blockingBackendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('block', {
+            async handler() {
+              globalThis.__markBlockingHandlerStarted()
+              await new Promise(resolve => { globalThis.__releaseBlockingHandler = resolve })
+              return 'released'
+            }
+          }))
+        }
+      }
+    `)
+    const readyBackendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('ping', { handler() { return 'pong' } }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+    const globals = globalThis as typeof globalThis & {
+      __markBlockingHandlerStarted?: () => void
+      __releaseBlockingHandler?: () => void
+    }
+    let markStarted: () => void = () => undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    globals.__markBlockingHandlerStarted = markStarted
+
+    const blockingCall = runtime.invokeBackend({
+      pluginId: 'blocking',
+      backendPath: blockingBackendPath,
+      command: 'block',
+    })
+    await started
+
+    const readiness = runtime.whenBackendReady({ pluginId: 'ready', backendPath: readyBackendPath })
+    let readinessOutcome: 'ready' | 'blocked'
+    let blockedTimer: ReturnType<typeof setTimeout> | undefined
+    try {
+      readinessOutcome = await Promise.race([
+        readiness.then(() => 'ready' as const),
+        new Promise<'blocked'>((resolve) => {
+          blockedTimer = setTimeout(() => resolve('blocked'), 1_000)
+        }),
+      ])
+    } finally {
+      if (blockedTimer) clearTimeout(blockedTimer)
+      globals.__releaseBlockingHandler?.()
+      await blockingCall
+      await readiness
+      delete globals.__markBlockingHandlerStarted
+      delete globals.__releaseBlockingHandler
+    }
+
+    expect(readinessOutcome).toBe('ready')
+  })
+
+  it('services independent stdio requests concurrently', async () => {
+    const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-'))
+    const builtHostPath = await buildBackendPluginHostRuntime(process.cwd(), hostOutDir)
+    const hostPath = await realpath(builtHostPath)
+    const blockingBackendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('block', {
+            async handler() {
+              await new Promise(resolve => setTimeout(resolve, 200))
+              return 'released'
+            }
+          }))
+        }
+      }
+    `)
+    const readyBackendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('ping', { handler() { return 'pong' } }))
+        }
+      }
+    `)
+    const child = spawn(process.execPath, [hostPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const lines = createInterface({ input: child.stdout })
+    const stderr: string[] = []
+    child.stderr.on('data', chunk => stderr.push(String(chunk)))
+
+    const responseIds = new Promise<number[]>((resolve, reject) => {
+      const ids: number[] = []
+      const responseTimeout = setTimeout(() => {
+        reject(new Error(`Timed out waiting for plugin-host responses: ${stderr.join('')}`))
+      }, 2_000)
+      lines.on('line', (line) => {
+        const response = JSON.parse(line) as { id?: number }
+        if (response.id !== 1 && response.id !== 2) return
+        ids.push(response.id)
+        if (ids.length === 2) {
+          clearTimeout(responseTimeout)
+          resolve(ids)
+        }
+      })
+      child.once('exit', (code) => {
+        if (ids.length < 2) {
+          clearTimeout(responseTimeout)
+          reject(new Error(`Plugin host exited with code ${code}: ${stderr.join('')}`))
+        }
+      })
+    })
+
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'blocking.block',
+      params: { pluginId: 'blocking', backendPath: blockingBackendPath, command: 'block' },
+    })}\n`)
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'plugin.backend.whenReady',
+      params: { pluginId: 'ready', backendPath: readyBackendPath },
+    })}\n`)
+
+    try {
+      await expect(responseIds).resolves.toEqual([2, 1])
+    } finally {
+      lines.close()
+      child.kill()
+    }
   })
 
   it('routes backend task APIs through host callbacks and normalizes implementation runs', async () => {
