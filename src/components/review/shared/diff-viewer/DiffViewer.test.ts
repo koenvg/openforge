@@ -611,7 +611,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment…')
     await fireEvent.input(textarea, { target: { value: 'draft before add comment' } })
 
     expect(getSelfReviewInlineCommentDraft('task-1', 'src/test.ts', 2, 'RIGHT')).toBe('draft before add comment')
@@ -640,7 +640,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment…')
     await fireEvent.input(textarea, { target: { value: 'task one draft' } })
     firstRender.unmount()
 
@@ -652,7 +652,7 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const taskTwoTextarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
+    const taskTwoTextarea = await screen.findByPlaceholderText('Leave a comment…')
     expect(taskTwoTextarea).toBeInstanceOf(HTMLTextAreaElement)
     expect((taskTwoTextarea as HTMLTextAreaElement).value).toBe('')
   })
@@ -669,9 +669,9 @@ describe('DiffViewer inline textarea drafts', () => {
       },
     })
 
-    const textarea = await screen.findByPlaceholderText('Leave a comment… (Cmd/Ctrl+Enter to submit)')
+    const textarea = await screen.findByPlaceholderText('Leave a comment…')
     await fireEvent.input(textarea, { target: { value: 'pending comment body' } })
-    await fireEvent.click(screen.getByRole('button', { name: 'Add Comment' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
 
     expect(onPendingCommentsChange).toHaveBeenCalledWith([
       { path: 'src/test.ts', line: 2, side: 'RIGHT', body: 'pending comment body' },
