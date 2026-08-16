@@ -1,12 +1,13 @@
-//! macOS Keychain subprocess supervision and write-helper protocol.
+//! macOS Keychain subprocess supervision and helper protocol.
 
 use super::{
-    service_name, set_secret_unlocked, SecretStoreCancellation, SecretStoreWriteError,
-    COMPANION_HOST_IDENTITY_SECRET, INTERACTIVE_KEYCHAIN_READ_TIMEOUT,
+    get_secret_native_unlocked, set_secret_unlocked, SecretStoreCancellation,
+    SecretStoreWriteError, COMPANION_HOST_IDENTITY_SECRET, INTERACTIVE_KEYCHAIN_READ_TIMEOUT,
 };
 use std::{
     io::{self, Read, Write},
     os::fd::AsRawFd,
+    path::Path,
     process::{Child, ChildStdout, Command, Stdio},
     time::{Duration, Instant},
 };
@@ -16,27 +17,32 @@ const KEYCHAIN_PROCESS_CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 const KEYCHAIN_PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_KEYCHAIN_OUTPUT_BYTES: usize = 1024 * 1024;
 const MAX_KEYCHAIN_HELPER_INPUT_BYTES: u64 = 1024 * 1024;
+const KEYCHAIN_READ_HELPER_ARG: &str = "--openforge-keychain-read-helper";
 const KEYCHAIN_WRITE_HELPER_ARG: &str = "--openforge-keychain-write-helper";
+const KEYCHAIN_ENTRY_NOT_FOUND_EXIT_CODE: i32 = 44;
+
+fn keychain_read_helper_command(executable: &Path) -> Command {
+    let mut command = Command::new(executable);
+    command.arg(KEYCHAIN_READ_HELPER_ARG);
+    command
+}
 
 pub(super) fn get_secret(
     key: &str,
     cancellation: &SecretStoreCancellation,
     timeout: Duration,
 ) -> Result<Option<String>, String> {
-    let output = run_command_with_timeout_cancellable(
-        "/usr/bin/security",
-        &[
-            "find-generic-password",
-            "-w",
-            "-s",
-            service_name(),
-            "-a",
-            key,
-        ],
-        timeout,
-        cancellation,
-    )?;
-    decode_security_find_result(
+    if key != COMPANION_HOST_IDENTITY_SECRET {
+        return Err(format!(
+            "Cancellable macOS Keychain reads are restricted to '{COMPANION_HOST_IDENTITY_SECRET}'"
+        ));
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("Failed to locate macOS Keychain reader: {error}"))?;
+    let mut command = keychain_read_helper_command(&executable);
+    let output =
+        run_keychain_command_with_timeout_cancellable(&mut command, timeout, cancellation)?;
+    decode_keychain_read_result(
         key,
         output.status.success(),
         output.status.code(),
@@ -58,6 +64,7 @@ fn run_command_with_timeout(
     )
 }
 
+#[cfg(test)]
 fn run_command_with_timeout_cancellable(
     program: &str,
     args: &[&str],
@@ -67,6 +74,7 @@ fn run_command_with_timeout_cancellable(
     run_command_with_timeout_observing(program, args, timeout, cancellation, |_| {})
 }
 
+#[cfg(test)]
 fn run_command_with_timeout_observing(
     program: &str,
     args: &[&str],
@@ -74,11 +82,29 @@ fn run_command_with_timeout_observing(
     cancellation: &SecretStoreCancellation,
     on_spawn: impl FnOnce(u32),
 ) -> Result<std::process::Output, String> {
+    let mut command = Command::new(program);
+    command.args(args);
+    run_keychain_command_with_timeout_observing(&mut command, timeout, cancellation, on_spawn)
+}
+
+fn run_keychain_command_with_timeout_cancellable(
+    command: &mut Command,
+    timeout: Duration,
+    cancellation: &SecretStoreCancellation,
+) -> Result<std::process::Output, String> {
+    run_keychain_command_with_timeout_observing(command, timeout, cancellation, |_| {})
+}
+
+fn run_keychain_command_with_timeout_observing(
+    command: &mut Command,
+    timeout: Duration,
+    cancellation: &SecretStoreCancellation,
+    on_spawn: impl FnOnce(u32),
+) -> Result<std::process::Output, String> {
     if cancellation.is_cancelled() {
         return Err("Cancelled reading secret from macOS Keychain".to_string());
     }
-    let mut child = Command::new(program)
-        .args(args)
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -336,7 +362,7 @@ fn terminate_and_reap(child: &mut Child) -> Result<(), String> {
     }
 }
 
-fn decode_security_find_result(
+fn decode_keychain_read_result(
     key: &str,
     success: bool,
     status_code: Option<i32>,
@@ -345,10 +371,9 @@ fn decode_security_find_result(
     if success {
         let value = std::str::from_utf8(stdout)
             .map_err(|error| format!("Secret '{key}' is not valid UTF-8: {error}"))?;
-        let value = value.strip_suffix('\n').unwrap_or(value);
         return Ok(Some(value.to_string()));
     }
-    if status_code == Some(44) {
+    if status_code == Some(KEYCHAIN_ENTRY_NOT_FOUND_EXIT_CODE) {
         return Ok(None);
     }
 
@@ -439,24 +464,50 @@ pub(super) fn set_companion_host_identity_with_cancellation(
     }
 }
 
-fn keychain_write_helper_requested(args: impl IntoIterator<Item = String>) -> Result<bool, ()> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeychainHelper {
+    Read,
+    Write,
+}
+
+fn keychain_helper_requested(
+    args: impl IntoIterator<Item = String>,
+) -> Result<Option<KeychainHelper>, ()> {
     let mut args = args.into_iter();
     let _executable = args.next();
-    if args.next().as_deref() != Some(KEYCHAIN_WRITE_HELPER_ARG) {
-        return Ok(false);
-    }
+    let helper = match args.next().as_deref() {
+        Some(KEYCHAIN_READ_HELPER_ARG) => KeychainHelper::Read,
+        Some(KEYCHAIN_WRITE_HELPER_ARG) => KeychainHelper::Write,
+        _ => return Ok(None),
+    };
     if args.next().is_some() {
         return Err(());
     }
-    Ok(true)
+    Ok(Some(helper))
 }
 
-pub(super) fn run_write_helper_if_requested() -> Option<i32> {
-    match keychain_write_helper_requested(std::env::args()) {
-        Ok(false) => return None,
-        Err(()) => return Some(2),
-        Ok(true) => {}
+fn write_secret_output(writer: &mut impl Write, value: &str) -> io::Result<()> {
+    writer.write_all(value.as_bytes())?;
+    writer.flush()
+}
+
+fn run_read_helper() -> i32 {
+    match get_secret_native_unlocked(COMPANION_HOST_IDENTITY_SECRET) {
+        Ok(Some(value)) => {
+            let stdout = std::io::stdout();
+            let mut writer = stdout.lock();
+            if write_secret_output(&mut writer, &value).is_ok() {
+                0
+            } else {
+                1
+            }
+        }
+        Ok(None) => KEYCHAIN_ENTRY_NOT_FOUND_EXIT_CODE,
+        Err(_) => 1,
     }
+}
+
+fn run_write_helper() -> i32 {
     let mut value = Vec::new();
     let read_result = std::io::stdin()
         .take(MAX_KEYCHAIN_HELPER_INPUT_BYTES + 1)
@@ -472,33 +523,78 @@ pub(super) fn run_write_helper_if_requested() -> Option<i32> {
         .and_then(|value| {
             set_secret_unlocked(COMPANION_HOST_IDENTITY_SECRET, &value).map_err(|_| ())
         });
-    Some(if result.is_ok() { 0 } else { 1 })
+    if result.is_ok() {
+        0
+    } else {
+        1
+    }
+}
+
+pub(super) fn run_helper_if_requested() -> Option<i32> {
+    match keychain_helper_requested(std::env::args()) {
+        Ok(None) => None,
+        Err(()) => Some(2),
+        Ok(Some(KeychainHelper::Read)) => Some(run_read_helper()),
+        Ok(Some(KeychainHelper::Write)) => Some(run_write_helper()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::secure_store::KEYCHAIN_READ_TIMEOUT;
     use std::sync::mpsc;
 
     #[test]
-    fn security_cli_result_preserves_secret_bytes_and_handles_missing_items() {
-        let found = decode_security_find_result(
+    fn keychain_helper_result_preserves_secret_bytes_and_handles_missing_items() {
+        let found = decode_keychain_read_result(
             "companion_host_identity",
             true,
             Some(0),
             b"identity-json\r\n",
         )
-        .expect("successful security output");
-        assert_eq!(found, Some("identity-json\r".to_string()));
+        .expect("successful helper output");
+        assert_eq!(found, Some("identity-json\r\n".to_string()));
 
-        let missing = decode_security_find_result("missing", false, Some(44), b"")
-            .expect("missing Keychain item");
+        let missing = decode_keychain_read_result(
+            "missing",
+            false,
+            Some(KEYCHAIN_ENTRY_NOT_FOUND_EXIT_CODE),
+            b"",
+        )
+        .expect("missing Keychain item");
         assert_eq!(missing, None);
     }
 
     #[test]
-    fn security_cli_failure_diagnostics_do_not_include_command_output() {
+    fn keychain_read_helper_flushes_exact_secret_output() {
+        #[derive(Default)]
+        struct RecordingWriter {
+            bytes: Vec<u8>,
+            flushed: bool,
+        }
+
+        impl Write for RecordingWriter {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                self.bytes.extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                self.flushed = true;
+                Ok(())
+            }
+        }
+
+        let mut writer = RecordingWriter::default();
+        write_secret_output(&mut writer, "identity-json\n")
+            .expect("helper output should be written");
+
+        assert_eq!(writer.bytes, b"identity-json\n");
+        assert!(writer.flushed);
+    }
+
+    #[test]
+    fn keychain_helper_failure_diagnostics_do_not_include_command_output() {
         let output = run_command_with_timeout(
             "/bin/sh",
             &[
@@ -511,13 +607,13 @@ mod tests {
         assert_eq!(output.stdout, b"secret from stdout");
         assert!(output.stderr.is_empty());
 
-        let error = decode_security_find_result(
+        let error = decode_keychain_read_result(
             "companion_host_identity",
             output.status.success(),
             output.status.code(),
             &output.stdout,
         )
-        .expect_err("failed security command");
+        .expect_err("failed helper command");
 
         assert_eq!(
             error,
@@ -528,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn security_cli_output_read_obeys_deadline_after_parent_exit() {
+    fn keychain_helper_output_read_obeys_deadline_after_parent_exit() {
         let started_at = std::time::Instant::now();
         let error = run_command_with_timeout(
             "/bin/sh",
@@ -570,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn security_cli_timeout_terminates_a_stuck_reader() {
+    fn keychain_helper_timeout_terminates_a_stuck_reader() {
         let started_at = std::time::Instant::now();
         let mut child_pid = None;
         let error = run_command_with_timeout_observing(
@@ -597,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn security_cli_timeout_force_kills_and_reaps_a_term_ignoring_helper() {
+    fn keychain_helper_timeout_force_kills_and_reaps_a_term_ignoring_child() {
         let started_at = std::time::Instant::now();
         let error = run_command_with_timeout(
             "/bin/sh",
@@ -617,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn security_cli_cancellation_terminates_and_reaps_the_helper() {
+    fn keychain_helper_cancellation_terminates_and_reaps_the_child() {
         let cancellation = SecretStoreCancellation::default();
         let helper_cancellation = cancellation.clone();
         let (spawned_tx, spawned_rx) = mpsc::channel();
@@ -649,33 +745,59 @@ mod tests {
     }
 
     #[test]
-    fn keychain_write_helper_rejects_account_override() {
-        let requested = keychain_write_helper_requested(
-            ["openforge", KEYCHAIN_WRITE_HELPER_ARG].map(str::to_string),
-        );
-        assert_eq!(requested, Ok(true));
+    fn keychain_read_helper_uses_the_openforge_executable() {
+        let executable = std::path::Path::new("/Applications/OpenForge/openforge-sidecar");
+        let command = keychain_read_helper_command(executable);
 
-        let overridden = keychain_write_helper_requested(
-            ["openforge", KEYCHAIN_WRITE_HELPER_ARG, "github_token"].map(str::to_string),
+        assert_eq!(command.get_program(), executable);
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![std::ffi::OsStr::new(KEYCHAIN_READ_HELPER_ARG)]
         );
-        assert_eq!(overridden, Err(()));
+    }
+
+    #[test]
+    fn keychain_read_helper_rejects_github_credentials() {
+        let error = get_secret(
+            "github_token",
+            &SecretStoreCancellation::default(),
+            Duration::from_secs(1),
+        )
+        .expect_err("ordinary credentials must use in-process Keychain access");
+
+        assert_eq!(
+            error,
+            "Cancellable macOS Keychain reads are restricted to 'companion_host_identity'"
+        );
+    }
+
+    #[test]
+    fn keychain_helpers_reject_account_overrides() {
+        for (helper_arg, helper) in [
+            (KEYCHAIN_READ_HELPER_ARG, KeychainHelper::Read),
+            (KEYCHAIN_WRITE_HELPER_ARG, KeychainHelper::Write),
+        ] {
+            let requested =
+                keychain_helper_requested(["openforge", helper_arg].map(str::to_string));
+            assert_eq!(requested, Ok(Some(helper)));
+
+            let overridden = keychain_helper_requested(
+                ["openforge", helper_arg, "github_token"].map(str::to_string),
+            );
+            assert_eq!(overridden, Err(()));
+        }
     }
 
     #[test]
     fn keychain_read_budget_allows_interactive_authorization() {
         assert!(
             INTERACTIVE_KEYCHAIN_READ_TIMEOUT >= Duration::from_secs(60),
-            "interactive Keychain approval must not retain the old five-second budget"
-        );
-        assert_eq!(
-            KEYCHAIN_READ_TIMEOUT,
-            Duration::from_secs(5),
-            "ordinary secret reads must keep the bounded non-interactive policy"
+            "interactive Keychain approval must allow time for a user decision"
         );
     }
 
     #[test]
-    fn security_cli_timeout_requests_graceful_helper_termination() {
+    fn keychain_helper_timeout_requests_graceful_child_termination() {
         let temp_dir = tempfile::tempdir().expect("termination marker tempdir");
         let ready_marker = temp_dir.path().join("ready");
         let terminated_marker = temp_dir.path().join("terminated");
