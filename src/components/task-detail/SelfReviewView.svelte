@@ -544,10 +544,10 @@
     {#if sidebarVisible}
       <ResizablePanel storageKey="self-review-comments" defaultWidth={380} minWidth={300} maxWidth={620} side="right" label="Feedback">
             <section class="flex h-full flex-col overflow-hidden border-l border-base-300 bg-base-100" aria-label="Feedback panel">
-              <div class="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-base-300 bg-base-100 px-3">
-                <div>
+              <div class="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-base-300 bg-base-100 px-2">
+                <div class="flex min-w-0 items-baseline gap-2">
                   <h2 class="m-0 text-sm font-semibold text-base-content">Feedback</h2>
-                  <p class="m-0 mt-0.5 text-[13px] text-base-content/60">{commentSelection.unaddressedCount + selfReviewGeneralComments.length + pendingInlineComments.length} comments</p>
+                  <p class="m-0 whitespace-nowrap text-xs text-base-content/60">{commentSelection.unaddressedCount + selfReviewGeneralComments.length + pendingInlineComments.length} comments</p>
                 </div>
                 <button
                   type="button"
