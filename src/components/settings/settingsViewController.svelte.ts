@@ -353,7 +353,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       }, 2000)
     } catch (value) {
       if (globalPayload) {
-        pendingGlobalSettingsSave = { ...globalPayload, ...pendingGlobalSettingsSave }
+        pendingGlobalSettingsSave = { ...globalPayload, ...(pendingGlobalSettingsSave ?? {}) }
       }
       console.error('Failed to save settings:', value)
       saveError = getErrorMessage(value)
