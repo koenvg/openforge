@@ -10,14 +10,14 @@
   let { title, subtitle, actions }: Props = $props()
 </script>
 
-<div class="flex items-center justify-between px-6 py-3 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
-  <div>
-      <h2 class="text-[22px] font-semibold text-base-content tracking-tight m-0">{title}</h2>
-      <p class="text-[13px] text-secondary mt-0.5 m-0">{subtitle}</p>
+<header class="flex shrink-0 flex-col gap-3 border-b border-base-300 bg-base-100 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+  <div class="min-w-0">
+    <h1 class="m-0 text-xl font-semibold tracking-tight text-base-content sm:text-[1.4rem]">{title}</h1>
+    <p class="m-0 mt-1 text-sm leading-5 text-base-content/60">{subtitle}</p>
   </div>
   {#if actions}
     <div class="shrink-0">
       {@render actions()}
     </div>
   {/if}
-</div>
+</header>

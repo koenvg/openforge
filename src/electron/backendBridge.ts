@@ -77,6 +77,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_project_config',
   'resolve_ai_provider',
   'set_project_config',
+  'clear_project_config',
   'reset_project_settings_to_global',
   'get_config',
   'set_config',

@@ -128,6 +128,10 @@ export async function setProjectConfig(projectId: string, key: string, value: st
   return invoke("set_project_config", { projectId, key, value });
 }
 
+export async function clearProjectConfig(projectId: string, key: string): Promise<void> {
+  return invoke("clear_project_config", { projectId, key });
+}
+
 export async function getTaskConfig(taskId: string, key: string): Promise<string | null> {
   return invoke<string | null>("get_task_config", { taskId, key });
 }

@@ -86,6 +86,20 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             }
             Ok(serde_json::Value::Null)
         }
+        "clear_project_config" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let key = payload_string(&request.payload, "key")?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.clear_project_config(&project_id, &key).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to clear project config: {e}"),
+                    )
+                })?;
+            }
+            Ok(serde_json::Value::Null)
+        }
         "reset_project_settings_to_global" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             {

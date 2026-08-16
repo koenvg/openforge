@@ -209,6 +209,16 @@ impl super::Database {
         Ok(())
     }
 
+    /// Clear an explicit project config value so callers inherit its global default.
+    pub fn clear_project_config(&self, project_id: &str, key: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM project_config WHERE project_id = ?1 AND key = ?2",
+            [project_id, key],
+        )?;
+        Ok(())
+    }
+
     /// Get all config values for a project
     pub fn get_all_project_config(
         &self,
@@ -503,6 +513,28 @@ mod tests {
             .get_project_config(&project.id, "nonexistent")
             .expect("Failed to query nonexistent");
         assert_eq!(nonexistent, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_clear_project_config_restores_inheritance() {
+        let (db, path) = make_test_db("clear_project_config");
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project");
+
+        db.set_project_config(&project.id, "ai_provider", "codex")
+            .expect("set project override");
+        db.clear_project_config(&project.id, "ai_provider")
+            .expect("clear project override");
+
+        assert_eq!(
+            db.get_project_config(&project.id, "ai_provider")
+                .expect("read project override"),
+            None
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);

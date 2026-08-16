@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
@@ -10,6 +8,10 @@ import SettingsView from './SettingsView.svelte'
 
 describe('SettingsView rendering and navigation', () => {
   beforeEach(resetSettingsViewTest)
+
+  async function openCategory(name: RegExp) {
+    await fireEvent.click(screen.getByRole('button', { name }))
+  }
 
   it('renders General section', () => {
     render(SettingsView, { props: defaultProps })
@@ -43,7 +45,8 @@ describe('SettingsView rendering and navigation', () => {
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-    expect(await screen.findByText('Companion')).toBeTruthy()
+    await openCategory(/Companion/)
+    expect(screen.getByRole('main', { name: 'Global settings' }).textContent).toContain('Companion')
     expect(screen.getByRole('button', { name: 'Enable Companion Gateway' })).toBeTruthy()
   })
 
@@ -85,6 +88,7 @@ describe('SettingsView rendering and navigation', () => {
 
     const { unmount } = render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
+    await openCategory(/Developer logs/)
     try {
       await vi.waitFor(() => {
         expect(screen.getByText('Developer')).toBeTruthy()
@@ -124,28 +128,50 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryAllByText(/instructions/i).length).toBeGreaterThan(0)
   })
 
-  it('implements single-column architecture: does not render in-page sidebar navigation in any mode', () => {
-    const { unmount } = render(SettingsView, { props: defaultProps })
-    let links = screen.queryAllByRole('link')
-    expect(links.length).toBe(0)
-    unmount()
+  it('keeps project configuration in Agents & tasks instead of duplicating it in General', async () => {
+    render(SettingsView, { props: defaultProps })
 
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    links = screen.queryAllByRole('link')
-    expect(links.length).toBe(0)
+    expect(screen.queryByText('Project configuration')).toBeNull()
+    expect(screen.queryByTestId('task_id_prefix')).toBeNull()
+
+    await openCategory(/Agents & tasks/)
+
+    expect(screen.getByText('Project configuration')).toBeTruthy()
+    expect(screen.getByTestId('task_id_prefix')).toBeTruthy()
   })
 
-  it('ensures SettingsSidebar component has been removed as part of the single-column architecture', () => {
-    const sidebarPath = path.join(process.cwd(), 'src/components/settings/SettingsSidebar.svelte')
-    expect(fs.existsSync(sidebarPath)).toBe(false)
+  it('navigates project settings categories without search controls or a long page', async () => {
+    render(SettingsView, { props: defaultProps })
+
+    const navigation = screen.getByRole('navigation', { name: 'Settings categories' })
+    expect(navigation).toBeTruthy()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    expect(screen.getByRole('button', { name: /^General/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /AI instructions/i })).toBeTruthy()
+    expect(screen.getByPlaceholderText('My Project')).toBeTruthy()
+    expect(screen.queryByPlaceholderText(/Optional instructions prepended/)).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /AI instructions/i }))
+    expect(screen.getByPlaceholderText(/Optional instructions prepended/)).toBeTruthy()
+    expect(screen.queryByPlaceholderText('My Project')).toBeNull()
+  })
+
+  it('moves category focus with arrow keys', async () => {
+    render(SettingsView, { props: defaultProps })
+    const general = screen.getByRole('button', { name: /^General/ })
+    const agents = screen.getByRole('button', { name: /Agents & tasks/ })
+
+    general.focus()
+    await fireEvent.keyDown(general, { key: 'ArrowDown' })
+
+    expect(document.activeElement).toBe(agents)
   })
 
   it('renders Task Labels management on the project settings page', async () => {
     vi.mocked(getProjectTaskLabels).mockResolvedValue([{ id: 1, project_id: 'test-project-id', name: 'bug' }])
     render(SettingsView, { props: defaultProps })
 
+    await openCategory(/Labels/)
     expect(await screen.findByText('Task Labels')).toBeTruthy()
     expect(screen.getByText('bug')).toBeTruthy()
     expect(getProjectTaskLabels).toHaveBeenCalledWith('test-project-id')
@@ -165,8 +191,9 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryByPlaceholderText('owner/repo')).toBeNull()
   })
 
-  it('renders AI instructions textarea', () => {
+  it('renders AI instructions textarea', async () => {
     render(SettingsView, { props: defaultProps })
+    await openCategory(/AI instructions/)
     expect(
       screen.getByPlaceholderText(
         'Optional instructions prepended to the first prompt when starting a new task...'
@@ -174,23 +201,25 @@ describe('SettingsView rendering and navigation', () => {
     ).toBeTruthy()
   })
 
-  it('renders the project handoff notes template textarea', () => {
+  it('renders the project handoff notes template textarea', async () => {
     render(SettingsView, { props: defaultProps })
+    await openCategory(/AI instructions/)
     expect(screen.getByText('Handoff Notes Template')).toBeTruthy()
     expect(screen.getByPlaceholderText(/## Summary/i)).toBeTruthy()
   })
 
-  it('renders GitHub PAT field on global page', () => {
+  it('renders GitHub PAT field on global page', async () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    await openCategory(/GitHub & Credentials/)
     expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
   })
 
   it('shows Project Settings header when project is active', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.getByText('Test Project — Project Settings')).toBeTruthy()
-    expect(screen.getByText('Configure settings for this project only')).toBeTruthy()
+    expect(screen.getByText('Test Project / Project Settings')).toBeTruthy()
+    expect(screen.getByText(/Configure settings for this project only/)).toBeTruthy()
   })
 
   it('shows Global Settings header when no project is active', () => {
@@ -198,7 +227,7 @@ describe('SettingsView rendering and navigation', () => {
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryAllByText(/global settings/i).length).toBeGreaterThan(0)
-    expect(screen.getByText('Configure app-wide preferences and credentials')).toBeTruthy()
+    expect(screen.getByText('Configure app-wide defaults, integrations, and credentials.')).toBeTruthy()
   })
 
   it('renders a visible Board return control on project settings', async () => {
@@ -242,10 +271,11 @@ describe('SettingsView rendering and navigation', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryByRole('button', { name: /save settings/i })).toBeNull()
   })
-  it('GitHub PAT field has type=password on global page', () => {
+  it('GitHub PAT field has type=password on global page', async () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    await openCategory(/GitHub & Credentials/)
     const patInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
     expect(patInput.type).toBe('password')
   })
@@ -269,13 +299,15 @@ describe('SettingsView rendering and navigation', () => {
 
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
+    await openCategory(/Voice & Whisper/)
     await vi.waitFor(() => {
       expect(screen.queryAllByText(/tiny/i).length).toBeGreaterThan(0)
     })
   })
 
-  it('renders a Delete Project button in the danger zone', () => {
+  it('renders a Delete Project button in the danger zone', async () => {
     render(SettingsView, { props: defaultProps })
+    await openCategory(/Danger Zone/)
     expect(screen.getByRole('button', { name: /delete project/i })).toBeTruthy()
   })
 
@@ -286,7 +318,8 @@ describe('SettingsView rendering and navigation', () => {
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
-    expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
+    expect(screen.getByRole('main', { name: 'Global settings' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /GitHub & Credentials/ })).toBeTruthy()
   })
   describe('Board layout setting', () => {
     it('does not render a board layout select, as Flow Board is the only layout', async () => {

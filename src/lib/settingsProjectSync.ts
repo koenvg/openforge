@@ -1,4 +1,4 @@
-import { resetProjectSettingsToGlobal } from './ipc'
+import { clearProjectConfig, resetProjectSettingsToGlobal } from './ipc'
 import type { Project } from './types'
 
 export interface ProjectIdentity {
@@ -46,5 +46,14 @@ export async function resetProjectAndReload(
   reload: () => Promise<void>,
 ): Promise<void> {
   await resetProjectSettingsToGlobal(projectId)
+  await reload()
+}
+
+export async function resetProjectSettingAndReload(
+  projectId: string,
+  key: string,
+  reload: () => Promise<void>,
+): Promise<void> {
+  await clearProjectConfig(projectId, key)
   await reload()
 }

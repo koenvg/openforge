@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { createRawSnippet } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
 import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
@@ -45,6 +45,28 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
 
     expect(screen.getByText(/inherited from your global defaults/i)).toBeTruthy()
     expect(screen.getByText(/override it for this project only/i)).toBeTruthy()
+  })
+
+  it('identifies inherited and overridden rows and resets one override', async () => {
+    const onResetSetting = vi.fn()
+    render(HierarchicalSettingsCard, {
+      props: {
+        mode: 'project',
+        values: baseValues,
+        overrides: {
+          code_cleanup_tasks_enabled: null,
+          ai_provider: 'claude-code',
+        },
+        onChange: vi.fn(),
+        onResetSetting,
+      },
+    })
+
+    expect(screen.getByTestId('status-code_cleanup_tasks_enabled').textContent).toContain('Inherited')
+    expect(screen.getByTestId('status-ai_provider').textContent).toContain('Overridden')
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset AI Provider to global default' }))
+    expect(onResetSetting).toHaveBeenCalledWith('ai_provider')
   })
 
   it('renders a supplied provider field snippet in place of the default ai_provider select', () => {

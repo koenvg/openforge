@@ -1,183 +1,206 @@
 <script lang="ts">
-	import { SlidersHorizontal } from '@lucide/svelte'
-	import type { Snippet } from 'svelte'
-	import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
-	import type { SettingLevel } from '../../lib/hierarchicalSettings'
+  import { RotateCcw, SlidersHorizontal } from '@lucide/svelte'
+  import type { Snippet } from 'svelte'
+  import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
+  import type { HierarchicalSettingDef, SettingLevel } from '../../lib/hierarchicalSettings'
 
-	interface Props {
-		mode: 'global' | 'project'
-		values: Record<string, string>
-		pluginRows?: { id: string; name: string; enabled: boolean }[]
-		onChange: (key: string, value: string) => void
-		onPluginToggle?: (pluginId: string, enabled: boolean) => void
-		onResetToGlobal?: () => void
-		// Setting keys to hide in this card (e.g. keys owned by a dedicated control).
-		excludeKeys?: string[]
-		// Optional replacement for the default ai_provider select. When supplied the
-		// card renders this snippet in place of the plain registry select so callers
-		// (the project page) can surface the rich provider install/recovery UX while
-		// the plain select stays the default (the global page).
-		providerField?: Snippet
-		disabled?: boolean
-	}
+  interface Props {
+    mode: 'global' | 'project'
+    values: Record<string, string>
+    overrides?: Record<string, string | null>
+    pluginRows?: { id: string; name: string; enabled: boolean }[]
+    onChange: (key: string, value: string) => void
+    onPluginToggle?: (pluginId: string, enabled: boolean) => void
+    onResetToGlobal?: () => void
+    onResetSetting?: (key: string) => void
+    excludeKeys?: string[]
+    providerField?: Snippet
+    disabled?: boolean
+    resettingKey?: string | null
+  }
 
-	const {
-		mode,
-		values,
-		pluginRows = [],
-		onChange,
-		onPluginToggle,
-		onResetToGlobal,
-		excludeKeys = [],
-		providerField,
-		disabled = false,
-	}: Props = $props()
+  let {
+    mode,
+    values,
+    overrides = {},
+    pluginRows = [],
+    onChange,
+    onPluginToggle,
+    onResetToGlobal,
+    onResetSetting,
+    excludeKeys = [],
+    providerField,
+    disabled = false,
+    resettingKey = null,
+  }: Props = $props()
 
-	const visibleSettings = $derived(
-		HIERARCHICAL_SETTINGS.filter(
-			(setting) =>
-				setting.levels.includes(mode as SettingLevel) && !excludeKeys.includes(setting.key),
-		),
-	)
+  const visibleSettings = $derived(
+    HIERARCHICAL_SETTINGS.filter(
+      (setting) =>
+        setting.levels.includes(mode as SettingLevel) && !excludeKeys.includes(setting.key),
+    ),
+  )
 
-	// Explain what this card controls so users don't have to guess. On the global
-	// page these values are the defaults every project inherits until it overrides
-	// one; once a project overrides a setting, later changes here no longer reach it.
-	const helperText = $derived(
-		mode === 'global'
-			? 'Default settings for every project. Projects use these automatically until you change a setting on a specific project — after that, the project keeps its own value and changes here no longer affect it.'
-			: 'Settings inherited from your global defaults. Change one to override it for this project only — use ‘Default to global settings’ to go back to inheriting.',
-	)
+  const helperText = $derived(
+    mode === 'global'
+      ? 'These defaults apply app-wide. A project can override individual settings without changing other projects.'
+      : 'Settings inherited from your global defaults. Change one to override it for this project only; reset it to resume inheriting.',
+  )
 
-	function currentValue(key: string): string {
-		return values[key] ?? ''
-	}
+  function currentValue(key: string): string {
+    return values[key] ?? ''
+  }
+
+  function isOverridden(key: string): boolean {
+    return mode === 'project' && overrides[key] != null
+  }
+
+  function settingStatus(setting: HierarchicalSettingDef): string {
+    return isOverridden(setting.key) ? 'Overridden' : 'Inherited'
+  }
 </script>
 
-<div id="section-configuration" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
-	<div class="flex items-center justify-between gap-2 px-5 py-3 border-b border-base-300">
-		<div class="flex items-center gap-2">
-			<SlidersHorizontal size={16} />
-			<h3 class="text-sm font-semibold text-base-content m-0">Configuration</h3>
-		</div>
-		{#if mode === 'project' && onResetToGlobal}
-			<button
-				type="button"
-				class="btn btn-sm btn-ghost"
-				disabled={disabled}
-				onclick={onResetToGlobal}
-				data-testid="reset-to-global"
-			>
-				Default to global settings
-			</button>
-		{/if}
-	</div>
+<section
+  id="section-configuration"
+  aria-labelledby="configuration-heading"
+  class="overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-sm"
+>
+  <div class="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-base-300 px-5 py-3">
+    <div class="flex min-w-0 items-center gap-3">
+      <div class="grid size-9 shrink-0 place-items-center rounded-lg border border-primary/15 bg-primary/8 text-primary" aria-hidden="true">
+        <SlidersHorizontal size={18} />
+      </div>
+      <div class="min-w-0">
+        <h2 id="configuration-heading" class="m-0 text-sm font-semibold text-base-content">
+          {mode === 'global' ? 'Global defaults' : 'Project configuration'}
+        </h2>
+        <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/60">{helperText}</p>
+      </div>
+    </div>
 
-	<div class="p-5">
-		{#if helperText}
-			<p class="text-xs text-base-content/60 m-0 mb-4">{helperText}</p>
-		{/if}
-		<div class="flex flex-col gap-4">
-			{#each visibleSettings as setting (setting.key)}
-				{#if setting.control === 'toggle'}
-					<label class="flex items-center justify-between cursor-pointer">
-						<div class="flex flex-col gap-0.5">
-							<span class="text-sm text-base-content">{setting.label}</span>
-							<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-						</div>
-						<input
-							type="checkbox"
-							class="toggle toggle-primary toggle-sm"
-							checked={currentValue(setting.key) === 'true'}
-							disabled={disabled}
-							onchange={(e) => onChange(setting.key, e.currentTarget.checked ? 'true' : 'false')}
-							data-testid={setting.key}
-						/>
-					</label>
-				{:else if setting.control === 'select'}
-					{#if setting.key === 'ai_provider' && providerField}
-						<div class="flex flex-col gap-2">
-							<div class="flex flex-col gap-0.5">
-								<span class="text-sm text-base-content">{setting.label}</span>
-								<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-							</div>
-							{@render providerField()}
-						</div>
-					{:else}
-						<label class="flex items-center justify-between gap-4">
-							<div class="flex flex-col gap-0.5">
-								<span class="text-sm text-base-content">{setting.label}</span>
-								<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-							</div>
-							<select
-								class="select select-bordered select-sm"
-								value={currentValue(setting.key)}
-								disabled={disabled}
-								onchange={(e) => onChange(setting.key, e.currentTarget.value)}
-								data-testid={setting.key}
-							>
-								{#each setting.options ?? [] as option (option.value)}
-									<option value={option.value}>{option.label}</option>
-								{/each}
-							</select>
-						</label>
-					{/if}
-				{:else if setting.control === 'text'}
-					<label class="flex flex-col gap-1">
-						<span class="text-sm text-base-content">{setting.label}</span>
-						<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-						<input
-							type="text"
-							class="input input-bordered input-sm w-full"
-							value={currentValue(setting.key)}
-							disabled={disabled}
-							oninput={(e) => onChange(setting.key, e.currentTarget.value)}
-							data-testid={setting.key}
-						/>
-					</label>
-				{:else if setting.control === 'number'}
-					<label class="flex flex-col gap-1">
-						<span class="text-sm text-base-content">{setting.label}</span>
-						<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-						<input
-							type="number"
-							class="input input-bordered input-sm w-full"
-							value={currentValue(setting.key)}
-							disabled={disabled}
-							oninput={(e) => onChange(setting.key, e.currentTarget.value)}
-							data-testid={setting.key}
-						/>
-					</label>
-				{:else if setting.control === 'plugins'}
-					<div class="flex flex-col gap-2">
-						<div class="flex flex-col gap-0.5">
-							<span class="text-sm text-base-content">{setting.label}</span>
-							<span class="text-[0.7rem] text-base-content/50">{setting.description}</span>
-						</div>
-						{#if pluginRows.length === 0}
-							<div class="text-[0.7rem] text-base-content/50">No plugins installed</div>
-						{:else}
-							<div class="flex flex-col gap-2 pl-1">
-								{#each pluginRows as plugin (plugin.id)}
-									<label class="flex items-center justify-between cursor-pointer">
-										<span class="text-sm text-base-content">{plugin.name}</span>
-										<input
-											type="checkbox"
-											class="toggle toggle-primary toggle-sm"
-											role="switch"
-											aria-label="Toggle plugin default: {plugin.name}"
-											checked={plugin.enabled}
-											disabled={disabled}
-											onchange={(e) => onPluginToggle?.(plugin.id, e.currentTarget.checked)}
-											data-testid="plugin-default-{plugin.id}"
-										/>
-									</label>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				{/if}
-			{/each}
-		</div>
-	</div>
-</div>
+    {#if mode === 'project' && onResetToGlobal}
+      <button
+        type="button"
+        class="btn btn-outline btn-sm min-h-10"
+        disabled={disabled}
+        onclick={onResetToGlobal}
+        data-testid="reset-to-global"
+      >
+        <RotateCcw size={15} aria-hidden="true" />
+        Reset all overrides
+      </button>
+    {/if}
+  </div>
+
+  <div class="divide-y divide-base-300/80">
+    {#each visibleSettings as setting (setting.key)}
+      <div class="grid min-h-16 gap-3 px-5 py-3 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.85fr)] md:items-center">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-medium text-base-content">{setting.label}</span>
+            {#if mode === 'project' && setting.control !== 'plugins'}
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-medium {isOverridden(setting.key) ? 'border-warning/35 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}"
+                data-testid="status-{setting.key}"
+              >
+                <span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
+                {settingStatus(setting)}
+              </span>
+            {/if}
+          </div>
+          <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/55">{setting.description}</p>
+        </div>
+
+        <div class="flex min-w-0 items-center justify-between gap-3 md:justify-end">
+          {#if setting.control === 'toggle'}
+            <label class="flex min-h-10 cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                role="switch"
+                class="toggle toggle-primary toggle-sm"
+                aria-label={setting.label}
+                checked={currentValue(setting.key) === 'true'}
+                disabled={disabled}
+                onchange={(event) => onChange(setting.key, event.currentTarget.checked ? 'true' : 'false')}
+                data-testid={setting.key}
+              />
+              <span class="min-w-6 text-xs text-base-content/65">{currentValue(setting.key) === 'true' ? 'On' : 'Off'}</span>
+            </label>
+          {:else if setting.control === 'select'}
+            {#if setting.key === 'ai_provider' && providerField}
+              <div class="min-w-0 flex-1 md:max-w-md">{@render providerField()}</div>
+            {:else}
+              <select
+                class="select select-bordered select-sm min-h-10 w-full md:max-w-64"
+                aria-label={setting.label}
+                value={currentValue(setting.key)}
+                disabled={disabled}
+                onchange={(event) => onChange(setting.key, event.currentTarget.value)}
+                data-testid={setting.key}
+              >
+                {#each setting.options ?? [] as option (option.value)}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+            {/if}
+          {:else if setting.control === 'text'}
+            <input
+              type="text"
+              class="input input-bordered input-sm min-h-10 w-full md:max-w-64"
+              aria-label={setting.label}
+              value={currentValue(setting.key)}
+              disabled={disabled}
+              oninput={(event) => onChange(setting.key, event.currentTarget.value)}
+              data-testid={setting.key}
+            />
+          {:else if setting.control === 'number'}
+            <input
+              type="number"
+              class="input input-bordered input-sm min-h-10 w-full md:max-w-64"
+              aria-label={setting.label}
+              value={currentValue(setting.key)}
+              disabled={disabled}
+              oninput={(event) => onChange(setting.key, event.currentTarget.value)}
+              data-testid={setting.key}
+            />
+          {:else if setting.control === 'plugins'}
+            <div class="flex w-full flex-col gap-2">
+              {#if pluginRows.length === 0}
+                <span class="text-xs text-base-content/55">No plugins installed</span>
+              {:else}
+                {#each pluginRows as plugin (plugin.id)}
+                  <label class="flex min-h-10 cursor-pointer items-center justify-between gap-4">
+                    <span class="text-sm text-base-content">{plugin.name}</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      class="toggle toggle-primary toggle-sm"
+                      aria-label="Toggle plugin default: {plugin.name}"
+                      checked={plugin.enabled}
+                      disabled={disabled}
+                      onchange={(event) => onPluginToggle?.(plugin.id, event.currentTarget.checked)}
+                      data-testid="plugin-default-{plugin.id}"
+                    />
+                  </label>
+                {/each}
+              {/if}
+            </div>
+          {/if}
+
+          {#if mode === 'project' && setting.control !== 'plugins' && isOverridden(setting.key)}
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm min-h-10 shrink-0"
+              aria-label="Reset {setting.label} to global default"
+              disabled={disabled || resettingKey === setting.key}
+              onclick={() => onResetSetting?.(setting.key)}
+            >
+              <RotateCcw size={14} aria-hidden="true" />
+              {resettingKey === setting.key ? 'Resetting…' : 'Reset'}
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/each}
+  </div>
+</section>
