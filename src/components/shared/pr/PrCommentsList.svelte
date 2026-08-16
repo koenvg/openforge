@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { PrComment } from '../../../lib/types'
   import { createCommentAddressing } from '../../../lib/commentAddressing.svelte'
   import { uniqueAuthors, filterByAuthor } from '../../../lib/prCommentLinks'
@@ -105,9 +106,9 @@
   {@const commentHref = commentUrl?.(comment) ?? null}
   {@const isSelected = selectedIds?.has(comment.id) ?? false}
   {#if selectable && comment.addressed === 0}
-    <input
-      type="checkbox"
-      class="checkbox checkbox-xs checkbox-primary mt-0.5 shrink-0"
+    <Checkbox
+      size="xs"
+      class="mt-0.5 shrink-0"
       checked={isSelected}
       onclick={(e) => e.stopPropagation()}
       onchange={() => onToggleSelect?.(comment.id)}

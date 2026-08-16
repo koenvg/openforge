@@ -15,6 +15,7 @@ describe('plugin-sdk public UI exports', () => {
   it('defines the complete stable Svelte UI surface in one canonical manifest', () => {
     expect(OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ componentName }) => componentName)).toEqual([
       'Button',
+      'Checkbox',
       'MarkdownContent',
       'ResizablePanel',
       'Modal',

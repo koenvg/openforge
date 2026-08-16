@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { SchedulePreset, TaskScheduleMode } from '../lib/types'
 
   type Draft = {
@@ -127,7 +128,7 @@
     {/if}
 
     <label class="flex min-h-11 items-center gap-3 rounded-box bg-base-200/60 px-3 text-sm">
-      <input class="checkbox checkbox-primary checkbox-sm" type="checkbox" checked={draft.advancedCron} onchange={(event) => { onDraftChange({ ...draft, advancedCron: event.currentTarget.checked }); onFieldErrorsChange({ cron: null }) }} />
+      <Checkbox checked={draft.advancedCron} onchange={(event) => { onDraftChange({ ...draft, advancedCron: event.currentTarget.checked }); onFieldErrorsChange({ cron: null }) }} />
       <span>Advanced: use a cron expression</span>
     </label>
 

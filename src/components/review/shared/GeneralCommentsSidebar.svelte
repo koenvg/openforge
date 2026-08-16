@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AlertTriangle, NotebookPen, Trash2 } from '@lucide/svelte'
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { taskDraftNotes } from '../../../lib/stores'
@@ -162,17 +163,17 @@
         onclick={toggleArchived}
       >
         <span class="text-xs text-base-content/50 w-2.5 shrink-0">{archivedExpanded ? '▾' : '▸'}</span>
-        <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Previous Round ({archivedCount})</span>
+        <span class="text-[13px] font-semibold uppercase tracking-wider text-base-content/60">Previous Round ({archivedCount})</span>
       </button>
       {#if archivedExpanded}
         <div class="flex flex-col px-3 pb-3 max-h-[220px] overflow-y-auto">
           {#each selfReviewArchivedComments as comment (comment.id)}
             <div class="flex flex-col gap-1.5 px-1 py-2 border-b border-base-300 opacity-50 last:border-b-0">
               <div class="flex items-center gap-2">
-                <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
-                <span class="text-[0.7rem] text-base-content/50 ml-auto">{relativeTimeWithFallback(comment.created_at)}</span>
+                <span class="text-[13px] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
+                <span class="ml-auto text-[13px] text-base-content/60">{relativeTimeWithFallback(comment.created_at)}</span>
               </div>
-              <div class="text-xs text-base-content/50 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
+              <div class="text-[13px] leading-relaxed text-base-content/60 [&_.markdown-body]:text-[13px] [&_.markdown-body_code]:text-[12px] [&_.markdown-body_p]:m-0 [&_.markdown-body_pre]:text-[12px]">
                 <MarkdownContent content={comment.body} />
               </div>
             </div>
@@ -184,31 +185,36 @@
 
   <div class="flex-1 overflow-y-auto flex flex-col p-3 min-h-0">
     {#if loadError}
-      <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
-        <span class="shrink-0">⚠</span>
+      <div class="mb-2 flex items-center gap-2 rounded-md border border-error/30 bg-error/10 px-2.5 py-2 text-[13px] text-error" role="alert">
+        <AlertTriangle size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{loadError}</span>
       </div>
     {:else if selfReviewGeneralComments.length === 0}
       <div class="flex flex-col items-center justify-center gap-2.5 flex-1 px-4 py-8 text-center">
-        <span class="text-2xl opacity-40">📝</span>
-        <p class="m-0 text-xs text-base-content/50 leading-relaxed">No comments yet. Add notes from manual testing.</p>
+        <NotebookPen size={28} strokeWidth={1.5} class="opacity-40" aria-hidden="true" />
+        <p class="m-0 text-[13px] leading-relaxed text-base-content/60">No comments yet. Add notes from manual testing.</p>
       </div>
     {:else}
       {#each selfReviewGeneralComments as comment, i (comment.id)}
         <div class="flex flex-col gap-1.5 px-3 py-2.5 bg-base-100 border border-base-300 rounded-lg mb-2 last:mb-0">
           <div class="flex items-center gap-2">
-            <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{i + 1}</span>
-            <span class="flex-1 text-right text-[0.7rem] text-base-content/50">{relativeTimeWithFallback(comment.created_at)}</span>
+            <span class="text-[13px] font-semibold text-primary/70 tabular-nums">#{i + 1}</span>
+            <span class="flex-1 text-right text-[13px] text-base-content/60">{relativeTimeWithFallback(comment.created_at)}</span>
             <button
-              class="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-error hover:bg-error/10"
+              class="btn btn-ghost btn-sm h-10 min-h-10 w-10 shrink-0 p-0 text-base-content/50 hover:bg-error/10 hover:text-error"
               onclick={() => handleDelete(comment.id)}
               disabled={isDeleting === comment.id}
+              aria-label="Delete feedback comment"
               title="Delete comment"
             >
-              {isDeleting === comment.id ? '…' : '✕'}
+              {#if isDeleting === comment.id}
+                <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+              {:else}
+                <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
+              {/if}
             </button>
           </div>
-          <div class="text-xs text-base-content leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
+          <div class="text-[13px] leading-relaxed text-base-content [&_.markdown-body]:text-[13px] [&_.markdown-body_code]:text-[12px] [&_.markdown-body_p]:m-0 [&_.markdown-body_pre]:text-[12px]">
             <MarkdownContent content={comment.body} />
           </div>
         </div>
@@ -218,14 +224,16 @@
 
   <div class="shrink-0 p-3 border-t border-base-300 flex flex-col gap-2">
     {#if addError}
-      <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
-        <span class="shrink-0">⚠</span>
+      <div class="mb-2 flex items-center gap-2 rounded-md border border-error/30 bg-error/10 px-2.5 py-2 text-[13px] text-error" role="alert">
+        <AlertTriangle size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{addError}</span>
       </div>
     {/if}
+    <label for="general-feedback-body" class="text-[13px] font-semibold text-base-content">Add feedback</label>
     <textarea
+      id="general-feedback-body"
       bind:this={textareaEl}
-      class="textarea textarea-bordered w-full text-xs leading-relaxed resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+      class="textarea textarea-bordered w-full resize-y text-[13px] leading-relaxed disabled:cursor-not-allowed disabled:opacity-50"
       placeholder="Add a testing note… (⇧Enter to submit)"
       rows={3}
       bind:value={newCommentBody}
@@ -235,7 +243,7 @@
     <div class="flex items-center justify-between">
       <VoiceInput onTranscription={handleTranscription} disabled={isAdding} listenToHotkey />
       <button
-        class="btn btn-primary btn-sm"
+        class="btn btn-primary btn-sm h-10 min-h-10 px-4 text-[13px]"
         onclick={handleAdd}
         disabled={!canAdd}
       >

@@ -356,6 +356,59 @@ describe("SelfReviewView uncommitted toggle", () => {
 	});
 });
 
+describe('SelfReviewView review workspace', () => {
+	beforeEach(() => {
+		clearTaskReviewPaneState();
+		selfReviewStateByTask.set(new Map());
+		pendingManualComments.set([]);
+		ticketPrs.set(new Map());
+		vi.clearAllMocks();
+	});
+
+	it('presents Changed files, Code diff, and Feedback as the primary review regions', async () => {
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		expect(await screen.findByRole('region', { name: 'Changed files panel' })).toBeTruthy();
+		expect(screen.getByRole('region', { name: 'Code diff panel' })).toBeTruthy();
+		expect(screen.getByRole('region', { name: 'Feedback panel' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Collapse Changed files panel' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Collapse Feedback panel' })).toBeTruthy();
+	});
+
+	it('moves keyboard focus between the Review File Tree and diff with Tab and Shift+Tab', async () => {
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		const tree = await screen.findByRole('tree', { name: 'Changed files' });
+		const diff = await screen.findByRole('region', { name: 'Diff scroll area' });
+		tree.focus();
+		await fireEvent.keyDown(tree, { key: 'Tab' });
+		expect(document.activeElement).toBe(diff);
+
+		await fireEvent.keyDown(diff, { key: 'Tab', shiftKey: true });
+		expect(document.activeElement).toBe(tree);
+	});
+
+	it('keeps mark-reviewed controls on diff file sections without a duplicate selected-file bar', async () => {
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		expect(await screen.findByLabelText('Mark src/main.rs reviewed')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Mark selected file reviewed' })).toBeNull();
+	});
+});
+
+
 describe("SelfReviewView integration — performance fixes", () => {
 	beforeEach(() => {
 		clearTaskReviewPaneState();
@@ -382,8 +435,8 @@ describe("SelfReviewView integration — performance fixes", () => {
 
 		// Crucially, the File and Commit history panes should STILL be visible!
 		// (This will fail currently because the whole view is gated on isLoading)
-		expect(screen.getByText("Commit history")).toBeTruthy();
-		expect(screen.getByText("Files")).toBeTruthy();
+		expect(screen.getByText("Scope")).toBeTruthy();
+		expect(screen.getByText("Changed files")).toBeTruthy();
 
 		// Let it finish to clean up
 		resolveTaskDiff([baseDiff]);
@@ -491,8 +544,8 @@ describe("SelfReviewView integration — performance fixes", () => {
 		await fireEvent.click(screen.getByTitle(firstCommit.message));
 		await fireEvent.click(screen.getByTitle(secondCommit.message));
 
-		expect(screen.getByText("Commit history")).toBeTruthy();
-		expect(screen.getByText("Files")).toBeTruthy();
+		expect(screen.getByText("Scope")).toBeTruthy();
+		expect(screen.getByText("Changed files")).toBeTruthy();
 		expect(screen.getByText("Loading diff...")).toBeTruthy();
 
 		resolveSecondCommit(secondCommitDiff);
@@ -508,7 +561,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 		});
 
 		expect(screen.queryByText("first.ts")).toBeNull();
-		expect(screen.getByText("Commit history")).toBeTruthy();
+		expect(screen.getByText("Scope")).toBeTruthy();
 
 		const mockCreateVirtualizer = vi.mocked(createVirtualizer);
 		const virtualizer = mockCreateVirtualizer.mock.results.at(-1)?.value;
@@ -881,8 +934,8 @@ describe("SelfReviewView pane restoration", () => {
 		await fireEvent.click(screen.getByTitle("Show file tree"));
 
 		await waitFor(() => {
-			expect(screen.getByText("Files")).toBeTruthy();
-			expect(screen.getByText("Commit history")).toBeTruthy();
+			expect(screen.getByText("Changed files")).toBeTruthy();
+			expect(screen.getByText("Scope")).toBeTruthy();
 		});
 	});
 });
@@ -1097,15 +1150,10 @@ describe("SelfReviewView — hide addressed comments", () => {
 			},
 		});
 
-		// Sidebar doesn't auto-open when all comments are addressed (unaddressedCount === 0)
-		// So we need to manually click the Comments button
+		// Feedback stays visible in the normal review flow even when every comment is addressed.
 		await waitFor(() => {
-			const commentsButton = screen.getByText("Comments");
-			expect(commentsButton).toBeTruthy();
+			expect(screen.getByRole('region', { name: 'Feedback panel' })).toBeTruthy();
 		});
-
-		const commentsButton = screen.getByText("Comments");
-		commentsButton.click();
 
 		await waitFor(() => {
 			// Should show "All comments addressed" empty state
@@ -1115,7 +1163,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		});
 	});
 
-	it("comments sidebar renders inside ResizablePanel at 360px default width", async () => {
+	it("feedback panel renders inside a resizable 380px panel", async () => {
 		const comments = [
 			makeComment(1, 0), // unaddressed — triggers auto-open
 		];
@@ -1142,6 +1190,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 			HTMLElement,
 		);
 		expect(resizablePanel).toBeTruthy();
+		expect(resizablePanel.style.width).toBe('380px');
 	});
 });
 

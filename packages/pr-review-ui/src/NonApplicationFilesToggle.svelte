@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   // Toolbar control for the diff/review views. Non-application files (tests, fixtures,
   // snapshots, docs, generated scaffolding) are hidden by default so the reviewer sees
   // meaningful source changes first; checking this reveals them. See applicationFiles.ts
@@ -13,19 +14,16 @@
 </script>
 
 <label
-  class="flex items-center gap-1.5 cursor-pointer"
+  class="flex min-h-10 cursor-pointer items-center gap-2"
   title="Non-application files are tests, fixtures, snapshots, docs, and generated files. Deselect this to hide them and focus on the source changes."
 >
-  <input
-    type="checkbox"
-    class="checkbox checkbox-xs shrink-0"
+  <Checkbox
     {checked}
-    onchange={(e: Event) => {
-      if (!(e.currentTarget instanceof HTMLInputElement)) return
+    onchange={(e) => {
       onToggle(e.currentTarget.checked)
     }}
   />
-  <span class="text-base-content/70 text-[0.7rem] leading-snug">
+  <span class="text-[13px] leading-snug text-base-content/70">
     Also include non-application files
     {#if !checked && hiddenCount > 0}
       <span class="text-base-content/40">({hiddenCount} hidden)</span>

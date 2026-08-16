@@ -2,6 +2,7 @@ const PLUGIN_SDK_PACKAGE_NAME = '@openforge-app/plugin-sdk'
 
 const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'Button',
+  'Checkbox',
   'MarkdownContent',
   'ResizablePanel',
   'Modal',

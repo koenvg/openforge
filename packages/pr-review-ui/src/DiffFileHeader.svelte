@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+  import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { Snippet } from 'svelte'
   import { getFileStatusColor, getFileStatusIcon, getFileStatusLabel } from './fileStatus'
 
@@ -39,7 +40,7 @@
     <span class="font-bold text-sm" style="color: {getFileStatusColor(file.status)}">
       {getFileStatusIcon(file.status)}
     </span>
-    <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-base-content" title={file.filename}>
+    <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[13px] text-base-content" title={file.filename}>
       {#if file.previous_filename}
         <span class="text-base-content/50 line-through">{file.previous_filename}</span>
         <span class="text-primary mx-1">→</span>
@@ -53,7 +54,7 @@
   {#if richDiffSupported}
     <div class="join flex-shrink-0" role="group" aria-label="Diff presentation for {file.filename}">
       <button
-        class="btn btn-ghost btn-xs join-item {richDiffActive ? 'text-base-content/50' : 'text-primary bg-primary/10 border border-primary'}"
+        class="btn btn-ghost btn-sm join-item h-10 min-h-10 px-3 text-[13px] {richDiffActive ? 'text-base-content/60' : 'text-primary bg-primary/10 border border-primary'}"
         aria-label="Show source diff for {file.filename}"
         aria-pressed={!richDiffActive}
         onclick={() => onSetRichDiffActive(false)}
@@ -61,7 +62,7 @@
         Source
       </button>
       <button
-        class="btn btn-ghost btn-xs join-item {richDiffActive ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+        class="btn btn-ghost btn-sm join-item h-10 min-h-10 px-3 text-[13px] {richDiffActive ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
         aria-label="Show rich diff for {file.filename}"
         aria-pressed={richDiffActive}
         onclick={() => onSetRichDiffActive(true)}
@@ -71,22 +72,19 @@
     </div>
   {/if}
   {#if onReviewedChange}
-    <label class="flex items-center gap-1.5 text-xs text-base-content/70 cursor-pointer flex-shrink-0">
-      <input
-        type="checkbox"
-        class="checkbox checkbox-xs"
+    <label class="flex min-h-10 flex-shrink-0 cursor-pointer items-center gap-2 text-[13px] text-base-content/70">
+      <Checkbox
         aria-label="Mark {file.filename} reviewed"
         checked={reviewed}
         onchange={(event) => {
-          if (!(event.currentTarget instanceof HTMLInputElement)) return
           onReviewedChange(event.currentTarget.checked)
         }}
       />
       <span>Reviewed</span>
     </label>
   {/if}
-  <span class="text-xs font-semibold uppercase tracking-wider flex-shrink-0" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
-  <span class="flex gap-2 text-xs flex-shrink-0">
+  <span class="flex-shrink-0 text-[13px] font-semibold uppercase tracking-wider" style="color: {getFileStatusColor(file.status)}">{getFileStatusLabel(file.status)}</span>
+  <span class="flex flex-shrink-0 gap-2 text-[13px] tabular-nums">
     {#if file.additions > 0}<span class="text-success">+{file.additions}</span>{/if}
     {#if file.deletions > 0}<span class="text-error">−{file.deletions}</span>{/if}
   </span>

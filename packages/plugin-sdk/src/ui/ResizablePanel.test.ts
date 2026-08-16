@@ -248,4 +248,15 @@ describe('ResizablePanel', () => {
     expect(panel.style.width).toBe('250px')
     expect(localStorage.getItem('resizable-panel:test-space-reset')).toBeNull()
   })
+
+  it('labels the keyboard-resizable separator with its current width', () => {
+    const { getByRole } = render(ResizablePanel, {
+      props: { storageKey: 'test-labelled', defaultWidth: 320, minWidth: 240, maxWidth: 520, label: 'Changed files' },
+    })
+
+    const separator = getByRole('separator', { name: 'Resize Changed files panel' })
+    expect(separator.getAttribute('aria-valuemin')).toBe('240')
+    expect(separator.getAttribute('aria-valuemax')).toBe('520')
+    expect(separator.getAttribute('aria-valuenow')).toBe('320')
+  })
 })

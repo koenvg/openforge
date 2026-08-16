@@ -5,6 +5,8 @@
   interface Props {
     files?: PrFileDiff[]
     onSelectFile: (filename: string) => void
+    onCollapse?: () => void
+    onRequestFocusDiff?: () => void
     reviewedFileShas?: Map<string, string>
     getFileReviewIdentity?: (file: PrFileDiff) => string | null
     onToggleFileReviewed?: (file: PrFileDiff, reviewed: boolean) => void
@@ -16,6 +18,8 @@
   let {
     files = [],
     onSelectFile,
+    onCollapse,
+    onRequestFocusDiff,
     reviewedFileShas = new Map(),
     getFileReviewIdentity,
     onToggleFileReviewed,
@@ -23,11 +27,20 @@
     nonApplicationFileCount = 0,
     onToggleNonApplicationFiles,
   }: Props = $props()
+
+  let sharedFileTree = $state<SharedFileTree>()
+
+  export function focusTree() {
+    sharedFileTree?.focusTree()
+  }
 </script>
 
 <SharedFileTree
+  bind:this={sharedFileTree}
   {files}
   {onSelectFile}
+  {onCollapse}
+  {onRequestFocusDiff}
   {reviewedFileShas}
   {getFileReviewIdentity}
   {onToggleFileReviewed}

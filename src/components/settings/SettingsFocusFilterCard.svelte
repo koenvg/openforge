@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ListFilter } from '@lucide/svelte';
+	import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte';
 	import type { TaskState } from '../../lib/taskState';
 	import { TASK_STATE_LABELS } from '../../lib/taskStatePresentation';
 	import { DEFAULT_FOCUS_STATES, FOCUS_FILTER_STATES } from '../../lib/boardFilters';
@@ -36,12 +37,10 @@
 		<div class="flex flex-col gap-1">
 			{#each FOCUS_FILTER_STATES as state}
 				<label class="flex items-center gap-2 cursor-pointer">
-					<input
-						type="checkbox"
+					<Checkbox
 						checked={focusStates.includes(state)}
 						disabled={disabled}
 						onchange={(e) => toggleState(state, e.currentTarget.checked)}
-						class="checkbox checkbox-sm"
 					/>
 					<span class="text-sm text-base-content">{TASK_STATE_LABELS[state]}</span>
 				</label>
