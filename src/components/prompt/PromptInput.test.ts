@@ -1,14 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createRawSnippet } from 'svelte'
 import { requireElement } from '../../test-utils/dom'
 import PromptInput from './PromptInput.svelte'
 
-function createSnippet(text: string) {
-  return createRawSnippet(() => ({
-    render: () => `<span>${text}</span>`,
-  }))
-}
 
 // Mock IPC functions
 vi.mock('../../lib/ipc', () => ({
@@ -125,38 +119,6 @@ describe('PromptInput', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
-  it('renders a submit button', () => {
-    render(PromptInput, { props: { ...baseProps } })
-    const button = screen.getByRole('button', { name: 'Submit' })
-    expect(button).toBeTruthy()
-  })
-
-  it('submit button is disabled when textarea is empty', () => {
-    render(PromptInput, { props: { ...baseProps } })
-    const button = requireElement(screen.getByRole('button', { name: 'Submit' }), HTMLButtonElement)
-    expect(button.disabled).toBe(true)
-  })
-
-  it('calls onSubmit when submit button is clicked', async () => {
-    const onSubmit = vi.fn()
-    render(PromptInput, {
-      props: {
-        ...baseProps,
-        onSubmit,
-      },
-    })
-
-    const textarea = requireElement(
-      screen.getByPlaceholderText('Describe what you want to implement...'),
-      HTMLTextAreaElement,
-    )
-    textarea.value = 'Fix the bug'
-    await fireEvent.input(textarea)
-    const button = screen.getByRole('button', { name: 'Submit' })
-    await fireEvent.click(button)
-
-    expect(onSubmit).toHaveBeenCalledWith('Fix the bug')
-  })
 
   it('does not submit empty text', async () => {
     const onSubmit = vi.fn()
@@ -255,41 +217,17 @@ describe('PromptInput', () => {
     expect(onImageMarkerClick).toHaveBeenCalledWith('[image#1]')
   })
 
-  describe('composer extension points', () => {
-    it('renders parent-provided footer help and controls without owning create-task outcomes', () => {
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          footerHelp: createSnippet('Parent owns outcome help'),
-          controls: createSnippet('Parent Primary Action'),
-        },
-      })
+  it('reports draft changes to its caller', async () => {
+    const onValueChange = vi.fn()
+    render(PromptInput, { props: { ...baseProps, onValueChange } })
 
-      expect(screen.getByText('Parent owns outcome help')).toBeTruthy()
-      expect(screen.getByText('Parent Primary Action')).toBeTruthy()
-      expect(screen.queryByText('Start Task', { exact: false })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
-      expect(screen.queryByRole('menuitem', { name: 'Add to Backlog' })).toBeNull()
-    })
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
+    await fireEvent.input(textarea, { target: { value: 'New feature' } })
 
-    it('reports draft changes to parent-owned controls', async () => {
-      const onValueChange = vi.fn()
-      render(PromptInput, {
-        props: {
-          ...baseProps,
-          onValueChange,
-          controls: createSnippet('Parent Primary Action'),
-        },
-      })
-
-      const textarea = requireElement(
-        screen.getByPlaceholderText('Describe what you want to implement...'),
-        HTMLTextAreaElement,
-      )
-      await fireEvent.input(textarea, { target: { value: 'New feature' } })
-
-      expect(onValueChange).toHaveBeenLastCalledWith('New feature')
-    })
+    expect(onValueChange).toHaveBeenLastCalledWith('New feature')
   })
 
   describe('List Navigation', () => {

@@ -27,7 +27,7 @@
   import type { Task } from '../../lib/types'
   import AgentPanel from './AgentPanel.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
-  import TaskInfoPanel from './TaskInfoPanel.svelte'
+  import TaskInspectorPanel from './TaskInspectorPanel.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
@@ -395,13 +395,13 @@
               <div
                 data-testid="task-info-scroll-container"
                 data-scroll-owner="task-info-panel"
-                class="h-full min-h-0 overflow-y-auto bg-base-200 border-l border-base-300"
+                class="h-full min-h-0"
               >
-                <TaskInfoPanel
-                  task={task}
+                <TaskInspectorPanel
+                  {task}
                   {workspacePath}
-                  onEditPrompt={onEdit ? () => onEdit?.(task.id) : undefined}
-                  onOpenDependentTask={onOpenTask}
+                  onEditTask={onEdit}
+                  onOpenLinkedTask={onOpenTask}
                 />
               </div>
             </ResizablePanel>

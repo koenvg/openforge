@@ -11,7 +11,6 @@
     onNavigate: (view: AppView) => void
     pluginNavItems?: IconRailPluginNavItem[]
     modalsOpen?: boolean
-    railBg?: string
     activeRepoReviewRequestCount?: number
     activeProjectAttentionCount?: number
   }
@@ -21,7 +20,6 @@
     onNavigate,
     pluginNavItems = [],
     modalsOpen = false,
-    railBg = 'oklch(var(--b2))',
     activeRepoReviewRequestCount = 0,
     activeProjectAttentionCount = 0,
   }: Props = $props()
@@ -29,11 +27,11 @@
   let navItems = $derived(getIconRailNavItems(pluginNavItems))
 </script>
 
-<div class="w-16 h-full border-r border-base-300/50 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
+<nav class="of-icon-rail flex h-full w-[4.5rem] flex-col items-center gap-2 border-r border-base-300 bg-base-100 py-4" aria-label="Project tools">
   {#each navItems as { view, icon, shortcut, label }}
     <button
       type="button"
-      class="relative cursor-pointer transition-colors {currentView === view ? 'text-primary' : 'text-base-content/35 hover:text-base-content'}"
+      class="relative grid h-11 w-11 cursor-pointer place-items-center rounded-lg transition-colors {currentView === view ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
       title={label}
       aria-label={label}
       aria-current={currentView === view ? 'page' : undefined}
@@ -45,14 +43,14 @@
            active project. Only shown when there are tasks in focus. -->
       {#if view === 'board' && activeProjectAttentionCount > 0}
         <span
-          class="badge badge-success badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4"
+          class="badge badge-success badge-xs absolute -right-1 -top-1 h-4 min-w-4 text-[0.6rem] font-bold"
           title="{activeProjectAttentionCount} task{activeProjectAttentionCount === 1 ? '' : 's'} in focus"
         >{activeProjectAttentionCount}</span>
       {/if}
       <!-- Per-repo unopened review requests for the active project's repo. Uses the
            same error/red as the "All Pull Requests" sidebar badge for consistency. -->
       {#if view === GITHUB_SYNC_VIEW_KEY && activeRepoReviewRequestCount > 0}
-        <span class="badge badge-error badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{activeRepoReviewRequestCount}</span>
+        <span class="badge badge-error badge-xs absolute -right-1 -top-1 h-4 min-w-4 text-[0.6rem] font-bold">{activeRepoReviewRequestCount}</span>
       {/if}
       {#if shortcut && $commandHeld && !modalsOpen}
         <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
@@ -60,4 +58,4 @@
     </button>
   {/each}
 
-</div>
+</nav>

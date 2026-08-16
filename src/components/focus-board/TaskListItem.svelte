@@ -1,4 +1,9 @@
 <script lang="ts">
+  import CircleAlert from '@lucide/svelte/icons/circle-alert'
+  import CircleCheck from '@lucide/svelte/icons/circle-check'
+  import CircleDot from '@lucide/svelte/icons/circle-dot'
+  import Layers3 from '@lucide/svelte/icons/layers-3'
+  import MoreHorizontal from '@lucide/svelte/icons/more-horizontal'
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request'
   import Link from '@lucide/svelte/icons/link'
   import Pencil from '@lucide/svelte/icons/pencil'
@@ -48,8 +53,16 @@
     return `${count} ${count === 1 ? singular : plural}`
   }
 
+  function statusIcon(taskState: TaskState) {
+    if (taskState === 'done' || taskState === 'agent-done' || taskState === 'pr-merged') return CircleCheck
+    if (['failed', 'interrupted', 'ci-failed', 'changes-requested', 'merge-conflict'].includes(taskState)) return CircleAlert
+    if (taskState === 'backlog') return Layers3
+    return CircleDot
+  }
+
   let title = $derived(truncate(getTaskTitle(task), 80))
   let badgeClass = $derived(getTaskStateBadgeClass(state))
+  let StatusIcon = $derived(statusIcon(state))
   let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))
   let labels = $derived(getTaskLabels(task))
@@ -67,9 +80,9 @@
   aria-current={isFocused ? 'true' : undefined}
   class:vim-focus={isFocused}
   class:just-viewed-pop={justViewed}
-  class="relative flex w-full cursor-pointer flex-col gap-3 overflow-hidden rounded-2xl border bg-base-100 p-4 text-left shadow-sm transition-[background-color,border-color,box-shadow] duration-200 {isSelected
-    ? 'border-primary/30 bg-base-100 shadow-sm'
-    : 'border-base-200 hover:border-base-300'}"
+  class="relative flex w-full cursor-pointer flex-col gap-4 overflow-hidden rounded-xl border bg-base-100 p-5 text-left transition-[background-color,border-color,box-shadow] duration-200 {isSelected
+    ? 'border-accent ring-1 ring-accent/20'
+    : 'border-base-300 hover:border-base-content/25 hover:bg-base-200/30'}"
   onclick={onSelect}
   oncontextmenu={onContextMenu}
   onkeydown={(e: KeyboardEvent) => {
@@ -79,25 +92,24 @@
     }
   }}
 >
-  {#if isSelected}
-    <span class="absolute inset-x-0 top-0 h-1.5 bg-primary/25" aria-hidden="true"></span>
-  {/if}
 
   <div class="flex items-start gap-3 pt-0.5">
 
     <div class="min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="font-mono text-xs font-semibold text-primary">{task.id}</span>
-        <span class="badge badge-xs {badgeClass}">
+        <span class="font-mono text-sm font-semibold text-primary">{task.id}</span>
+        <span class="badge badge-sm gap-1 {badgeClass}">
           {#if isMerging}
             <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+          {:else}
+            <StatusIcon size={14} aria-hidden="true" />
           {/if}
           {presentation.stateLabel}
         </span>
       </div>
     </div>
 
-    <div class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 text-xs text-base-content/60">
+    <div class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-3 text-sm text-base-content/55">
       {#if dependencyCount > 0}
         <span class="inline-flex items-center gap-1" aria-label={pluralize(dependencyCount, 'dependency', 'dependencies')}>
           <Link size={14} aria-hidden="true" />
@@ -116,7 +128,7 @@
           <span>{pluralize(pullRequests.length, 'PR')}</span>
         </span>
       {/if}
-      <span class="font-mono text-xs text-base-content/50">{timeAgoFromSeconds(task.updated_at)}</span>
+      <span class="font-mono text-sm text-base-content/50">{timeAgoFromSeconds(task.updated_at)}</span>
     </div>
   </div>
 
@@ -133,15 +145,21 @@
         use:focusAndSelect
       />
     {:else}
-      <div class="min-w-0 flex-1 text-base font-semibold leading-snug text-base-content">
+      <div class="min-w-0 flex-1 text-lg font-semibold leading-snug text-base-content">
         {title}
       </div>
       <button
         type="button"
-        class="btn btn-ghost btn-xs btn-square shrink-0 text-base-content/40 hover:text-base-content"
+        class="btn btn-ghost btn-sm btn-square shrink-0 text-base-content/40 hover:text-base-content"
         aria-label="Rename task"
         onclick={(e) => { e.stopPropagation(); titleRename.start() }}
       ><Pencil size={15} aria-hidden="true" /></button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-square shrink-0 text-base-content/45 hover:text-base-content"
+        aria-label="More actions for {task.id}"
+        onclick={(e) => { e.stopPropagation(); onContextMenu(e) }}
+      ><MoreHorizontal size={16} aria-hidden="true" /></button>
     {/if}
   </div>
   {#if showLabels && labels.length > 0}
@@ -156,7 +174,7 @@
     </div>
   {/if}
 
-  <div class="-mx-4 -mb-4 flex items-center gap-2 border-t border-base-200/80 bg-base-200/40 px-4 py-3 text-xs text-base-content/60">
+  <div class="-mx-5 -mb-5 flex min-h-12 items-center gap-3 border-t border-base-300 px-5 py-3.5 text-sm text-base-content/60">
     <span class="min-w-0 flex-1 truncate">
       {#if presentation.reasonText}
         {presentation.reasonText}

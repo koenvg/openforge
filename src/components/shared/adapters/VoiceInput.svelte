@@ -9,9 +9,12 @@
     onTranscription: (text: string) => void
     disabled?: boolean
     listenToHotkey?: boolean
+    showLabel?: boolean
+    appearance?: 'ghost' | 'outline'
+    size?: 'sm' | 'md'
   }
 
-  let { onTranscription, disabled = false, listenToHotkey = false }: Props = $props()
+  let { onTranscription, disabled = false, listenToHotkey = false, showLabel = false, appearance = 'ghost', size = 'sm' }: Props = $props()
 
   // ── State ────────────────────────────────────────────────────────────────────
   let voiceState = $state<VoiceInputState>('idle')
@@ -144,7 +147,7 @@
 <div class="flex flex-col items-center gap-1">
   <button
     type="button"
-    class={voiceState === 'recording' ? 'btn btn-sm btn-error' : 'btn btn-sm btn-ghost'}
+    class="btn {size === 'md' ? 'h-10 min-h-10 px-4' : 'btn-sm'} {voiceState === 'recording' ? 'btn-error' : appearance === 'outline' ? 'btn-outline' : 'btn-ghost'}"
     onclick={handleClick}
     disabled={disabled || voiceState === 'transcribing'}
     aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice input'}
@@ -173,7 +176,8 @@
         <line x1="12" y1="19" x2="12" y2="22" />
         <line x1="8" y1="22" x2="16" y2="22" />
       </svg>
-      <span class="text-[0.6rem] opacity-50">⌘D</span>
+      {#if showLabel}<span>Voice input</span>{/if}
+      <span class="text-[0.65rem] opacity-50">⌘D</span>
     {/if}
   </button>
 

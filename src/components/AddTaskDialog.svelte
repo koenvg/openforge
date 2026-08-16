@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { ImagePlus } from '@lucide/svelte'
-  import type { Task, PermissionMode, GitBranchInfo, WorktreeSource } from '../lib/types'
+  import type { Task, GitBranchInfo } from '../lib/types'
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
-  import { dedupeBranchesForSelector, type BranchLocation } from '../lib/branchSelector'
+  import { dedupeBranchesForSelector } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import {
     formatTaskPromptWithImageReferences,
@@ -15,17 +15,18 @@
   import type { TaskPromptImageReference } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
-  import SearchableSelect from './shared/ui/SearchableSelect.svelte'
-  import AnchoredMenu from './shared/ui/AnchoredMenu.svelte'
-  import ContextMenuItem from './shared/ui/ContextMenuItem.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
+  import VoiceInput from './shared/adapters/VoiceInput.svelte'
   import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
+  import CreateTaskSettings from './create-task/CreateTaskSettings.svelte'
+  import { createTaskDraft, getWorktreeOptions } from './create-task/createTaskDraft'
   import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
 
   interface Props {
     mode?: 'create' | 'edit'
     task?: Task | null
     projectPath?: string | null
+    projectName?: string | null
     onClose?: () => void
     onTaskSaved?: (task?: Task) => void | Promise<void>
     onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
@@ -40,33 +41,22 @@
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
-  let { mode = 'create', task = null, projectPath = null, onClose, onTaskSaved, onRunAction }: Props = $props()
-  const dialogTitle = $derived(mode === 'create' ? 'Create Task' : 'Edit Task')
+  let { mode = 'create', task = null, projectPath = null, projectName = null, onClose, onTaskSaved, onRunAction }: Props = $props()
+  const dialogTitle = $derived(mode === 'create' ? 'Create task' : 'Edit task')
 
-  let selectedPermissionMode = $state<PermissionMode>('default')
-  let selectedWorktreeSource = $state<WorktreeSource>('newBranchFromMain')
-  let selectedExistingBranch = $state('')
-  let useWorktree = $state(true)
+  let draft = $state(createTaskDraft())
   // False when the selected repo has no commits yet (unborn HEAD): a worktree
   // cannot branch from a repo with no base commit, so the toggle is disabled and
   // the task falls back to running in the project directory.
   let worktreeAllowed = $state(true)
   let gitBranches = $state<GitBranchInfo[]>([])
-  const branchSelectorOptions = $derived(dedupeBranchesForSelector(gitBranches))
-  // Badge shown per branch so the three states are unambiguous in the selector.
-  const branchLocationBadge: Record<BranchLocation, { text: string; class: string }> = {
-    local: { text: 'local', class: 'badge-ghost' },
-    remote: { text: 'remote', class: 'badge-info' },
-    both: { text: 'local+remote', class: 'badge-success' },
-  }
   let branchLoadError = $state<string | null>(null)
-  let aiProvider = $state<string | null>(null)
   let error = $state<string | null>(null)
-  let environmentExpanded = $state(false)
   let promptDraft = $state('')
+  let promptEditor = $state<{ insertText: (text: string) => void } | null>(null)
   let lastInitialPrompt = $state<string | null>(null)
-  let showMoreMenu = $state(false)
-  let moreMenuTrigger = $state<HTMLButtonElement | null>(null)
+  let isSaving = $state(false)
+  let submissionIntent = $state<'backlog' | 'start' | null>(null)
   let pastedImages = $state<PastedTaskImage[]>([])
   let previewImage = $state<PastedTaskImage | null>(null)
   let imagePasteError = $state<string | null>(null)
@@ -78,22 +68,11 @@
   let nextImageMarkerInsertRequestId = 1
   let nextInjectableInsertRequestId = 1
   let injectionLocation = $derived<InjectionPointLocation>(mode === 'create' ? 'createTaskPrompt' : 'backlogPrompt')
-
-  let taskTitle = $state('')
-  let sourceTicketDraft = $state('')
-  let handoffNotesEnabled = $state(true)
-  let codeCleanupEnabled = $state(false)
-  let taskDisplayTitleUpdatesEnabled = $state(false)
   let taskDefaultsLoading = $state(true)
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : '')
   const promptReady = $derived(promptDraft.trim().length > 0)
-  const createReady = $derived(mode !== 'create' || !taskDefaultsLoading)
-  const permissionModeSummary = $derived(getPermissionModeSummary(selectedPermissionMode))
-  const workspaceSummary = $derived(getWorkspaceSummary())
-  const environmentSummary = $derived(
-    `${workspaceSummary} · ${permissionModeSummary}${handoffNotesEnabled ? '' : ' · no handoff notes'}`
-  )
+  const createReady = $derived((mode !== 'create' || !taskDefaultsLoading) && !isSaving)
   let pastedImageSummary = $derived(
     pastedImages.length === 0
       ? ''
@@ -106,110 +85,67 @@
     lastInitialPrompt = initialPrompt
   })
 
-  function getPermissionModeSummary(mode: PermissionMode): string {
-    switch (mode) {
-      case 'auto':
-        return 'autorun'
-      case 'acceptEdits':
-        return 'accept edits'
-      case 'plan':
-        return 'plan only'
-      case 'bypassPermissions':
-        return 'bypass permissions'
-      case 'dontAsk':
-        return "don't ask"
-      default:
-        return 'default permissions'
-    }
-  }
-
-  function getWorkspaceSummary(): string {
-    if (!useWorktree) return 'Project directory'
-    if (selectedWorktreeSource === 'existingBranch') {
-      return `Worktree · ${selectedExistingBranch.trim() || 'existing branch'}`
-    }
-    return 'Worktree · latest main'
-  }
-
-  function buildWorktreeOptions(): { worktreeSource: WorktreeSource; worktreeBranch: string | null } {
-    if (!useWorktree) {
-      return { worktreeSource: 'disabled', worktreeBranch: null }
-    }
-
-    if (selectedWorktreeSource === 'existingBranch') {
-      return { worktreeSource: selectedWorktreeSource, worktreeBranch: selectedExistingBranch.trim() }
-    }
-
-    return { worktreeSource: 'newBranchFromMain', worktreeBranch: null }
-  }
 
   onMount(() => {
     void initializeDialog()
   })
 
   async function initializeDialog() {
-    selectedPermissionMode = 'default'
+    draft = createTaskDraft()
     taskDefaultsLoading = mode === 'create'
-    useWorktree = true
     worktreeAllowed = true
+    branchLoadError = null
+
     try {
-      if ($activeProjectId) {
-        const defaults = await loadTaskLevelDefaults($activeProjectId)
-        codeCleanupEnabled = defaults.codeCleanupEnabled
-        taskDisplayTitleUpdatesEnabled = defaults.taskDisplayTitleUpdatesEnabled
-        handoffNotesEnabled = defaults.handoffNotesEnabled
-        aiProvider = defaults.aiProvider
-        const projectDefaultUseWorktree = defaults.useWorktrees
-        useWorktree = projectDefaultUseWorktree
-
-        if (projectPath) {
-          // A repo with no commits can't back a worktree; force the toggle off
-          // and disabled so the task runs in the project directory instead of
-          // failing later during worktree creation. Never block on a transient
-          // check failure — assume commits exist and let the backend guard.
-          let hasCommits = true
-          try {
-            hasCommits = await repoHasCommits(projectPath)
-          } catch (e) {
-            console.error('Failed to check whether repo has commits:', e)
-            hasCommits = true
-          }
-          const availability = resolveWorktreeAvailability(hasCommits, projectDefaultUseWorktree)
-          worktreeAllowed = availability.worktreeAllowed
-          useWorktree = availability.useWorktree
-
-          try {
-            gitBranches = await listGitBranches(projectPath)
-            const options = dedupeBranchesForSelector(gitBranches)
-            const currentNames = new Set(
-              gitBranches.filter((branch) => branch.is_current).map((branch) => branch.name),
-            )
-            // Prefer the first branch that is not the currently checked-out one so
-            // the default is a sensible "other" branch, falling back to the first.
-            const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
-            selectedExistingBranch = preferred?.value ?? ''
-          } catch (e) {
-            console.error('Failed to list git branches:', e)
-            branchLoadError = String(e)
-            gitBranches = []
-            selectedExistingBranch = ''
-          }
-        } else {
-          gitBranches = []
-          selectedExistingBranch = ''
-        }
-      } else {
-        aiProvider = 'claude-code'
-        codeCleanupEnabled = false
-        taskDisplayTitleUpdatesEnabled = false
-        handoffNotesEnabled = true
+      if (!$activeProjectId) {
+        draft.aiProvider = 'claude-code'
         gitBranches = []
-        selectedExistingBranch = ''
+        return
+      }
+
+      const defaults = await loadTaskLevelDefaults($activeProjectId)
+      Object.assign(draft, {
+        codeCleanupEnabled: defaults.codeCleanupEnabled,
+        taskDisplayTitleUpdatesEnabled: defaults.taskDisplayTitleUpdatesEnabled,
+        handoffNotesEnabled: defaults.handoffNotesEnabled,
+        aiProvider: defaults.aiProvider,
+        useWorktree: defaults.useWorktrees,
+      })
+
+      if (!projectPath) {
+        gitBranches = []
+        return
+      }
+
+      let hasCommits = true
+      try {
+        hasCommits = await repoHasCommits(projectPath)
+      } catch (lookupError) {
+        console.error('Failed to check whether repo has commits:', lookupError)
+      }
+
+      const availability = resolveWorktreeAvailability(hasCommits, defaults.useWorktrees)
+      worktreeAllowed = availability.worktreeAllowed
+      draft.useWorktree = availability.useWorktree
+
+      try {
+        gitBranches = await listGitBranches(projectPath)
+        const options = dedupeBranchesForSelector(gitBranches)
+        const currentNames = new Set(
+          gitBranches.filter((branch) => branch.is_current).map((branch) => branch.name),
+        )
+        const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
+        draft.existingBranch = preferred?.value ?? ''
+      } catch (branchError) {
+        console.error('Failed to list git branches:', branchError)
+        branchLoadError = String(branchError)
+        gitBranches = []
+        draft.existingBranch = ''
       }
     } catch {
-      aiProvider = null
+      draft.aiProvider = null
       gitBranches = []
-      selectedExistingBranch = ''
+      draft.existingBranch = ''
       worktreeAllowed = true
     } finally {
       taskDefaultsLoading = false
@@ -218,12 +154,6 @@
 
   function handlePromptDraftChange(value: string) {
     promptDraft = value
-    if (value.trim().length === 0) showMoreMenu = false
-  }
-
-  function toggleMoreMenu() {
-    if (!promptReady || !createReady) return
-    showMoreMenu = !showMoreMenu
   }
 
   async function handleStartTaskFromDraft() {
@@ -231,7 +161,6 @@
   }
 
   async function handleAddToBacklogFromDraft() {
-    showMoreMenu = false
     await handleCreateOrUpdate(promptDraft)
   }
 
@@ -389,7 +318,14 @@
       error = 'Wait for the pasted image to finish processing.'
       return
     }
+    if (isSaving) return
+    if (mode === 'create' && draft.useWorktree && draft.worktreeSource === 'existingBranch' && draft.existingBranch.trim() === '') {
+      error = 'Select an existing branch before creating the task.'
+      return
+    }
 
+    submissionIntent = mode === 'create' ? (autoStart ? 'start' : 'backlog') : null
+    isSaving = true
     try {
       let savedTask: Task
       const taskPrompt = promptWithPastedImageReferences(normalizedPrompt)
@@ -399,24 +335,20 @@
         savedTask = task
         await onTaskSaved?.()
       } else {
-        if (useWorktree && selectedWorktreeSource === 'existingBranch' && selectedExistingBranch.trim() === '') {
-          error = 'Select an existing branch'
-          return
-        }
 
         savedTask = await createTask(
           taskPrompt,
           'backlog',
           $activeProjectId,
-          selectedPermissionMode,
+          draft.permissionMode,
           {
-            ...buildWorktreeOptions(),
-            title: taskTitle.trim() || null,
-            handoffNotesEnabled,
-            sourceTicketUrl: sourceTicketDraft.trim() || null,
-            codeCleanupEnabled,
-            taskDisplayTitleUpdatesEnabled,
-            aiProvider,
+            ...getWorktreeOptions(draft),
+            title: draft.title.trim() || null,
+            handoffNotesEnabled: draft.handoffNotesEnabled,
+            sourceTicketUrl: draft.sourceTicketUrl.trim() || null,
+            codeCleanupEnabled: draft.codeCleanupEnabled,
+            taskDisplayTitleUpdatesEnabled: draft.taskDisplayTitleUpdatesEnabled,
+            aiProvider: draft.aiProvider,
           }
         )
 
@@ -432,36 +364,37 @@
     } catch (e) {
       console.error('Failed to save task:', e)
       error = String(e)
+    } finally {
+      isSaving = false
+      submissionIntent = null
     }
   }
 </script>
 
-<Modal onClose={onClose} maxWidth="640px" overflowVisible initialFocus="textarea" ariaLabel={dialogTitle}>
+<Modal
+  onClose={onClose}
+  maxWidth="720px"
+  overflowVisible
+  initialFocus="textarea"
+  ariaLabel={dialogTitle}
+  boxClass="rounded-xl border border-base-300"
+>
   {#snippet header()}
-    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{dialogTitle}</h2>
+    <div class="flex min-w-0 flex-1 items-center justify-between gap-4 pr-3">
+      <h2 class="m-0 text-2xl font-semibold tracking-[-0.02em] text-base-content">{dialogTitle}</h2>
+      {#if mode === 'create'}
+        <div class="min-w-0 text-right">
+          <span class="block max-w-56 truncate text-sm font-medium text-base-content">{projectName ?? 'Current project'}</span>
+        </div>
+      {/if}
+    </div>
   {/snippet}
 
-  <div class="p-4 overflow-visible">
+  <div class="max-h-[calc(90vh-4rem)] overflow-y-auto p-6">
     {#if error}
-      <div class="text-error text-sm mb-4">{error}</div>
+      <div class="mb-4 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-sm text-error" role="alert">{error}</div>
     {/if}
-    {#if mode === 'create'}
-      <input
-        type="text"
-        class="input input-bordered input-sm mb-3 w-full"
-        placeholder="Title (optional)"
-        aria-label="Task title"
-        bind:value={taskTitle}
-      />
-      <input
-        type="text"
-        inputmode="url"
-        class="input input-bordered input-sm mb-3 w-full"
-        placeholder="Source ticket link (optional, e.g. GitHub issue or Jira URL)"
-        aria-label="Source ticket link"
-        bind:value={sourceTicketDraft}
-      />
-    {/if}
+
     <InjectionPointSlot
       location={injectionLocation}
       projectId={$activeProjectId}
@@ -471,298 +404,126 @@
         nextInjectableInsertRequestId += 1
       }}
     />
-    <PromptInput
-      projectId={$activeProjectId || ''}
-      value={initialPrompt}
-      autofocus={false}
-      commandTrigger={aiProvider === 'codex' ? 'dollar' : 'slash'}
-      onTextChange={syncPastedImagesWithPrompt}
-      onPasteImage={attachPastedImage}
-      onImageMarkerClick={openImagePreview}
-      imageMarkerInsertRequest={imageMarkerInsertRequest}
-      injectableInsertRequest={injectableInsertRequest}
-      onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, true) : handleCreateOrUpdate(prompt)}
-      onValueChange={handlePromptDraftChange}
-      onCancel={() => onClose?.()}
-    >
-      {#snippet footerHelp()}
-        {#if mode === 'create'}
-          {#if taskDefaultsLoading}
-            <span class="truncate text-xs text-base-content/60">Loading task defaults…</span>
-          {:else}
-            <span class="truncate text-xs text-base-content/60">Press ⌘↵ to start, or use More to add to the backlog.</span>
-          {/if}
-        {/if}
-      {/snippet}
+    <label class="mb-2 block text-sm font-semibold text-base-content" for="create-task-prompt">What should the agent do?</label>
+    <div class="relative overflow-visible rounded-xl border border-base-300 bg-base-100 transition-colors focus-within:border-primary">
+      <PromptInput
+        bind:this={promptEditor}
+        projectId={$activeProjectId || ''}
+        value={initialPrompt}
+        textareaId="create-task-prompt"
+        ariaLabel="What should the agent do?"
+        rows={8}
+        textareaClass="p-4 pb-9 text-sm leading-relaxed"
+        textareaStyle="height: 12rem; max-height: 12rem; overflow-y: auto; outline: none;"
+        maxLength={10000}
+        placeholder="Describe the outcome you want…"
+        autofocus={false}
+        commandTrigger={draft.aiProvider === 'codex' ? 'dollar' : 'slash'}
+        onTextChange={syncPastedImagesWithPrompt}
+        onPasteImage={attachPastedImage}
+        onImageMarkerClick={openImagePreview}
+        imageMarkerInsertRequest={imageMarkerInsertRequest}
+        injectableInsertRequest={injectableInsertRequest}
+        onSubmit={(prompt) => mode === 'create' ? handleCreateOrUpdate(prompt, true) : handleCreateOrUpdate(prompt)}
+        onValueChange={handlePromptDraftChange}
+        onCancel={() => onClose?.()}
+      />
+      <span class="pointer-events-none absolute bottom-3 right-4 text-xs tabular-nums text-base-content/45">{promptDraft.length.toLocaleString()} / 10,000</span>
+    </div>
+    <p class="mt-2 text-xs text-base-content/55">Be specific about the goal, constraints, and relevant context.</p>
 
-      {#snippet controls()}
-        {#if mode === 'create'}
-          {#if promptReady && createReady}
-            <div class="relative">
-              <button
-                bind:this={moreMenuTrigger}
-                class="btn btn-ghost btn-sm"
-                type="button"
-                onclick={toggleMoreMenu}
-                aria-expanded={showMoreMenu}
-                aria-haspopup="menu"
-                aria-controls="create-task-more-actions"
-              >More</button>
+    <div class="flex items-center gap-3 py-4">
+      <button
+        type="button"
+        class="btn btn-outline h-10 min-h-10 px-4"
+        onclick={pasteImageFromClipboard}
+        disabled={imagePastePending}
+      >
+        <ImagePlus size={16} aria-hidden="true" />
+        Attach image
+      </button>
+      <VoiceInput
+        onTranscription={(text) => promptEditor?.insertText(text)}
+        listenToHotkey
+        showLabel
+        appearance="outline"
+        size="md"
+      />
+      {#if pastedImages.length > 0}
+        <span class="truncate text-xs text-base-content/60" aria-live="polite">{pastedImageSummary}</span>
+      {/if}
+    </div>
 
-              <AnchoredMenu
-                id="create-task-more-actions"
-                visible={showMoreMenu}
-                trigger={moreMenuTrigger}
-                onClose={() => { showMoreMenu = false }}
-                placementClass="bottom-[calc(100%+0.5rem)] right-0 min-w-48"
-              >
-                <ContextMenuItem label="Add to Backlog" onclick={handleAddToBacklogFromDraft} />
-              </AnchoredMenu>
-            </div>
-          {/if}
-          <button
-            class="btn btn-primary btn-sm"
-            type="button"
-            disabled={!promptReady || !createReady}
-            onclick={handleStartTaskFromDraft}
-            title="⌘Enter"
-          >Start Task <kbd class="kbd kbd-xs ml-1 bg-primary-content text-primary border-primary-content/30">⌘↵</kbd></button>
-        {:else}
-          <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
-          <button
-            class="btn btn-primary btn-sm"
-            type="button"
-            disabled={!promptReady || !createReady}
-            onclick={() => handleCreateOrUpdate(promptDraft)}
-          >Submit</button>
-        {/if}
-      {/snippet}
-
-      {#snippet extras()}
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
+    <div class="flex flex-col gap-2 pb-4">
+      {#if pastedImages.length > 0}
+        <div class="flex flex-wrap items-center gap-1" aria-label="Pasted image markers">
+          {#each pastedImages as image (image.id)}
             <button
               type="button"
-              class="btn btn-ghost btn-xs min-h-8"
-              onclick={pasteImageFromClipboard}
-              disabled={imagePastePending}
-            >
-              <ImagePlus size={14} aria-hidden="true" />
-              Paste image
-            </button>
-            {#if pastedImages.length > 0}
-              <span class="text-xs text-base-content/60 truncate" aria-live="polite">{pastedImageSummary}</span>
-            {/if}
-          </div>
-          {#if pastedImages.length > 0}
-            <div class="flex flex-wrap items-center gap-1" aria-label="Pasted image markers">
-              {#each pastedImages as image (image.id)}
-                <button
-                  type="button"
-                  class="btn btn-outline btn-xs"
-                  aria-label="Preview {image.marker}"
-                  onclick={() => { previewImage = image }}
-                >{image.marker}</button>
-              {/each}
-            </div>
-          {/if}
-          {#if imagePasteError}
-            <p class="m-0 text-xs text-error" role="status" aria-live="polite">{imagePasteError}</p>
-          {/if}
-          {#if mode === 'create'}
-            <div class="space-y-2">
-              <button
-                type="button"
-                class="btn btn-outline btn-sm h-auto min-h-8 justify-start gap-2 text-left font-normal"
-                aria-expanded={environmentExpanded}
-                aria-controls="create-task-environment"
-                onclick={() => { environmentExpanded = !environmentExpanded }}
-              >
-                <span class="text-base-content/50">Environment:</span>
-                <span>{environmentSummary}</span>
-                <span class="text-base-content/50">{environmentExpanded ? '⌃' : '⌄'}</span>
-              </button>
-
-              {#if environmentExpanded}
-                <div id="create-task-environment" class="space-y-3 rounded-lg border border-base-300 bg-base-200/50 p-3">
-                  <div class="flex items-center gap-2">
-                    <label for="create-task-ai-provider" class="text-xs font-medium text-base-content/50 shrink-0">Provider</label>
-                    <select
-                      id="create-task-ai-provider"
-                      class="select select-bordered select-sm flex-1"
-                      value={aiProvider ?? 'claude-code'}
-                      onchange={(e) => { aiProvider = e.currentTarget.value }}
-                    >
-                      {#each aiProviderOptions as option (option.value)}
-                        <option value={option.value}>{option.label}</option>
-                      {/each}
-                    </select>
-                  </div>
-
-                  {#if aiProvider === 'claude-code' || aiProvider === 'grok'}
-                    <div class="flex items-center gap-2">
-                      <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
-                      <select
-                        id="create-task-permission-mode"
-                        class="select select-bordered select-xs flex-1"
-                        bind:value={selectedPermissionMode}
-                      >
-                        <option value="default">Default</option>
-                        <option value="auto">Autorun</option>
-                        <option value="acceptEdits">Accept Edits</option>
-                        <option value="plan">Plan</option>
-                        <option value="bypassPermissions">Bypass Permissions</option>
-                        <option value="dontAsk">Don't Ask (dangerous)</option>
-                      </select>
-                    </div>
-                  {/if}
-
-                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
-                    <span class="pt-1.5 text-xs font-medium text-base-content/50">Workspace</span>
-
-                    <div class="min-w-0 space-y-2">
-                      <div class="flex min-h-7 items-center justify-between gap-3">
-                        <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                          <input
-                            type="checkbox"
-                            class="toggle toggle-primary toggle-xs"
-                            aria-label="Worktree"
-                            bind:checked={useWorktree}
-                            disabled={!worktreeAllowed}
-                          />
-                          <span>Worktree</span>
-                        </label>
-
-                        {#if !useWorktree}
-                          <span class="badge badge-ghost badge-xs shrink-0">Project directory</span>
-                        {/if}
-                      </div>
-
-                      {#if !worktreeAllowed}
-                        <p class="text-xs text-base-content/50">
-                          No commits yet — worktrees need an initial commit. This task will run in the project directory.
-                        </p>
-                      {/if}
-
-                      {#if useWorktree}
-                        <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                          <span class="text-xs font-medium text-base-content/50">Base</span>
-                          <div
-                            role="radiogroup"
-                            aria-label="Worktree source"
-                            class="join grid min-w-0 grid-cols-2"
-                          >
-                            <label
-                              class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                              class:btn-primary={selectedWorktreeSource === 'newBranchFromMain'}
-                              class:btn-ghost={selectedWorktreeSource !== 'newBranchFromMain'}
-                              class:border-base-300={selectedWorktreeSource !== 'newBranchFromMain'}
-                              class:bg-base-100={selectedWorktreeSource !== 'newBranchFromMain'}
-                            >
-                              <input
-                                type="radio"
-                                class="sr-only"
-                                aria-label="New branch from latest main"
-                                bind:group={selectedWorktreeSource}
-                                value="newBranchFromMain"
-                              />
-                              <span>Latest main</span>
-                            </label>
-                            <label
-                              class="btn join-item btn-xs h-8 min-h-8 flex-1 text-xs focus-within:ring-2 focus-within:ring-primary"
-                              class:btn-primary={selectedWorktreeSource === 'existingBranch'}
-                              class:btn-ghost={selectedWorktreeSource !== 'existingBranch'}
-                              class:border-base-300={selectedWorktreeSource !== 'existingBranch'}
-                              class:bg-base-100={selectedWorktreeSource !== 'existingBranch'}
-                            >
-                              <input
-                                type="radio"
-                                class="sr-only"
-                                aria-label="Existing branch"
-                                bind:group={selectedWorktreeSource}
-                                value="existingBranch"
-                              />
-                              <span>Existing branch</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        {#if selectedWorktreeSource === 'existingBranch'}
-                          <div class="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2">
-                            <span class="text-xs font-medium text-base-content/50">Branch</span>
-                            {#if branchSelectorOptions.length === 0}
-                              <div
-                                class="select select-bordered select-xs flex min-w-0 flex-1 items-center text-base-content/40"
-                                aria-label="Branch"
-                              >
-                                No branches available
-                              </div>
-                            {:else}
-                              <div class="min-w-0">
-                                <SearchableSelect
-                                  ariaLabel="Branch"
-                                  size="xs"
-                                  placeholder="Search branches…"
-                                  options={branchSelectorOptions.map((option) => ({
-                                    value: option.value,
-                                    label: option.label,
-                                    badge: branchLocationBadge[option.location].text,
-                                    badgeClass: branchLocationBadge[option.location].class,
-                                  }))}
-                                  value={selectedExistingBranch}
-                                  onSelect={(value) => { selectedExistingBranch = value }}
-                                />
-                              </div>
-                            {/if}
-                          </div>
-                          {#if branchLoadError}
-                            <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
-                          {/if}
-                        {/if}
-                      {/if}
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2">
-                    <span class="pt-0.5 text-xs font-medium text-base-content/50">Handoff</span>
-                    <div class="flex min-w-0 flex-col gap-2">
-                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                        <input
-                          type="checkbox"
-                          class="toggle toggle-primary toggle-xs"
-                          aria-label="Handoff notes"
-                          bind:checked={handoffNotesEnabled}
-                        />
-                        <span>Include handoff notes</span>
-                      </label>
-                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                        <input
-                          type="checkbox"
-                          class="toggle toggle-primary toggle-xs"
-                          aria-label="Code cleanup tasks"
-                          bind:checked={codeCleanupEnabled}
-                        />
-                        <span>Create code cleanup tasks</span>
-                      </label>
-                      <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-                        <input
-                          type="checkbox"
-                          class="toggle toggle-primary toggle-xs"
-                          aria-label="Task display title updates"
-                          bind:checked={taskDisplayTitleUpdatesEnabled}
-                        />
-                        <span>Auto-update task display title</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
+              class="btn btn-outline btn-xs"
+              aria-label="Preview {image.marker}"
+              onclick={() => { previewImage = image }}
+            >{image.marker}</button>
+          {/each}
         </div>
-      {/snippet}
-    </PromptInput>
+      {/if}
+      {#if imagePasteError}
+        <p class="m-0 text-xs text-error" role="status" aria-live="polite">{imagePasteError}</p>
+      {/if}
+      {#if mode === 'create'}
+        <CreateTaskSettings
+          bind:draft
+          {worktreeAllowed}
+          {gitBranches}
+          {branchLoadError}
+          {aiProviderOptions}
+        />
+      {/if}
+    </div>
   </div>
+
+  <footer class="flex items-center justify-between gap-4 border-t border-base-300 bg-base-100 px-6 py-4">
+    <div class="flex min-w-0 items-center gap-3">
+      <button type="button" class="btn btn-ghost h-10 min-h-10 gap-2 px-0 hover:bg-transparent" aria-label="Close" onclick={() => onClose?.()}>
+        <kbd class="kbd kbd-sm border-base-300 bg-base-100">Esc</kbd>
+        Close
+      </button>
+      {#if mode === 'create' && taskDefaultsLoading}
+        <span class="truncate text-xs text-base-content/55">Loading task defaults…</span>
+      {/if}
+    </div>
+
+    <div class="flex shrink-0 items-center gap-2">
+      {#if mode === 'create'}
+        <button
+          class="btn btn-outline h-10 min-h-10 px-4"
+          type="button"
+          disabled={!promptReady || !createReady}
+          onclick={handleAddToBacklogFromDraft}
+        >{submissionIntent === 'backlog' ? 'Adding…' : 'Add to backlog'}</button>
+        <button
+          class="btn btn-primary h-10 min-h-10 min-w-36 px-5"
+          type="button"
+          disabled={!promptReady || !createReady}
+          onclick={handleStartTaskFromDraft}
+          title="Command+Enter"
+        >
+          {submissionIntent === 'start' ? 'Starting…' : 'Start Task'}
+          {#if submissionIntent !== 'start'}
+            <kbd class="kbd kbd-xs ml-1 border-primary-content/30 bg-primary-content text-primary">⌘↵</kbd>
+          {/if}
+        </button>
+      {:else}
+        <span class="text-xs text-base-content opacity-70">⌘Enter to submit</span>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          disabled={!promptReady || !createReady}
+          onclick={() => handleCreateOrUpdate(promptDraft)}
+        >{isSaving ? 'Saving…' : 'Submit'}</button>
+      {/if}
+    </div>
+  </footer>
 </Modal>
 
 {#if previewImage}

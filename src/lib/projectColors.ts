@@ -17,9 +17,9 @@ export const DEFAULT_PROJECT_COLOR: ProjectColor = {
   id: 'default',
   label: 'Default Gray',
   swatch: '#9ca3af',
-  light: '#FAF8F5',
+  light: '#FFFFFF',
   dark: '#1C1A1F',
-  lightAlt: '#F0EDE6',
+  lightAlt: '#F7F7FA',
   darkAlt: '#16141A',
 }
 
@@ -29,7 +29,7 @@ export const PROJECT_COLORS: ProjectColor[] = [
   { id: 'amber',    label: 'Amber',    swatch: '#fbbf24', light: '#FEFCE8', dark: '#1F1D18', lightAlt: '#FEF9C3', darkAlt: '#1A1914' },
   { id: 'emerald',  label: 'Emerald',  swatch: '#4CAF50', light: '#F0FDF4', dark: '#1A1F1C', lightAlt: '#DCFCE7', darkAlt: '#161A18' },
   { id: 'sky',      label: 'Sky',      swatch: '#38bdf8', light: '#F0F9FF', dark: '#1A1D22', lightAlt: '#E0F2FE', darkAlt: '#16191E' },
-  { id: 'violet',   label: 'Violet',   swatch: '#6C63C9', light: '#F5F3FF', dark: '#1E1A24', lightAlt: '#EDE9FE', darkAlt: '#1A161E' },
+  { id: 'violet',   label: 'Violet',   swatch: '#6D61F0', light: '#F5F3FF', dark: '#1E1A24', lightAlt: '#EDE9FE', darkAlt: '#1A161E' },
   { id: 'pink',     label: 'Pink',     swatch: '#f472b6', light: '#FDF2F8', dark: '#1F1A1E', lightAlt: '#FCE7F3', darkAlt: '#1A161A' },
   { id: 'teal',     label: 'Teal',     swatch: '#2dd4bf', light: '#F0FDFA', dark: '#1A1F1F', lightAlt: '#CCFBF1', darkAlt: '#161A1A' },
   { id: 'orange',   label: 'Orange',   swatch: '#fb923c', light: '#FFF7ED', dark: '#1F1C18', lightAlt: '#FFEDD5', darkAlt: '#1A1814' },

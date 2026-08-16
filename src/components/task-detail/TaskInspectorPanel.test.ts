@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import type { Task, TaskLabel } from '../../lib/types'
-import TaskDetailPane from './TaskDetailPane.svelte'
+import TaskInspectorPanel from './TaskInspectorPanel.svelte'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -58,7 +58,7 @@ const baseTask: Task = {
   updated_at: 1700000000,
 } as Task & { labels?: TaskLabel[] }
 
-describe('TaskDetailPane', () => {
+describe('TaskInspectorPanel', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     const stores = await import('../../lib/stores')
@@ -69,7 +69,7 @@ describe('TaskDetailPane', () => {
   })
 
   it('renders a calm empty state when no task is selected', () => {
-    render(TaskDetailPane, {
+    render(TaskInspectorPanel, {
       props: {
         task: null,
         allTasks: [],
@@ -82,7 +82,7 @@ describe('TaskDetailPane', () => {
 
   it('shows an Edit prompt pencil for backlog tasks when onEditTask is provided', async () => {
     const onEditTask = vi.fn()
-    render(TaskDetailPane, {
+    render(TaskInspectorPanel, {
       props: {
         task: { ...baseTask, status: 'backlog' },
         allTasks: [],
@@ -96,7 +96,7 @@ describe('TaskDetailPane', () => {
   })
 
   it('does not show an Edit prompt pencil for non-backlog tasks', () => {
-    render(TaskDetailPane, {
+    render(TaskInspectorPanel, {
       props: { task: baseTask, allTasks: [], pullRequests: [], onEditTask: vi.fn() },
     })
     expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
@@ -105,7 +105,7 @@ describe('TaskDetailPane', () => {
   it('exposes a full-view action for the selected focus-board task', async () => {
     const onOpenFullView = vi.fn()
 
-    render(TaskDetailPane, {
+    render(TaskInspectorPanel, {
       props: {
         task: baseTask,
         allTasks: [baseTask],
@@ -127,7 +127,7 @@ describe('TaskDetailPane', () => {
       depends_on: [baseTask.id],
     }
 
-    render(TaskDetailPane, {
+    render(TaskInspectorPanel, {
       props: {
         task: baseTask,
         allTasks: [baseTask, dependentTask],
