@@ -346,7 +346,37 @@ describe('SettingsView auto-save', () => {
 
       await vi.advanceTimersByTimeAsync(600)
 
-      expect(vi.mocked(setConfig)).toHaveBeenCalled()
+      expect(vi.mocked(setConfig)).toHaveBeenCalledOnce()
+      expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_new')
+    })
+
+    it('retries only the failed global setting after an autosave error', async () => {
+      activeProjectId.set(null)
+      projects.set([])
+      vi.mocked(setConfig)
+        .mockRejectedValueOnce(new Error('disk full'))
+        .mockResolvedValue(undefined)
+      render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+      await openGithubCategory()
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setConfig).mockClear()
+
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
+      await vi.advanceTimersByTimeAsync(600)
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Autosave failed: disk full')).toBeTruthy()
+      })
+      await fireEvent.click(screen.getByRole('button', { name: /retry autosave/i }))
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('All changes saved')).toBeTruthy()
+      })
+      expect(vi.mocked(setConfig)).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(setConfig)).toHaveBeenNthCalledWith(1, 'github_token', 'ghp_new')
+      expect(vi.mocked(setConfig)).toHaveBeenNthCalledWith(2, 'github_token', 'ghp_new')
     })
 
     it('hydrates and saves the Task Display Title metadata updates experiment toggle', async () => {
