@@ -386,6 +386,10 @@ export async function revokeCompanionDevice(deviceId: string): Promise<void> {
   return invoke('revoke_companion_device', { deviceId })
 }
 
+export async function removeCompanionDevice(deviceId: string): Promise<void> {
+  return invoke('remove_companion_device', { deviceId })
+}
+
 export async function resetCompanionHostIdentity(): Promise<CompanionGatewayStatus> {
   return invoke<CompanionGatewayStatus>('reset_companion_host_identity')
 }

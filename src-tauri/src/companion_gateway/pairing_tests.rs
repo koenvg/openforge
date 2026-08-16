@@ -303,6 +303,7 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
         Err(super::contract::CompanionErrorCode::TemporarilyUnavailable)
     ));
     let revoked = router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/companion/v1/status")
@@ -320,6 +321,29 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
     let envelope: CompanionErrorEnvelope =
         serde_json::from_value(response_json(revoked).await).expect("error envelope");
     assert_eq!(envelope.error.code.as_str(), "revoked");
+
+    coordinator
+        .remove_revoked(&device_id)
+        .expect("remove revoked device");
+    assert!(coordinator.devices().expect("paired devices").is_empty());
+    let removed = router
+        .oneshot(
+            Request::builder()
+                .uri("/companion/v1/status")
+                .header(
+                    super::contract::PROTOCOL_VERSION_HEADER,
+                    super::contract::PROTOCOL_VERSION.to_string(),
+                )
+                .header(AUTHORIZATION, format!("Bearer {credential}"))
+                .body(Body::empty())
+                .expect("removed-device status request"),
+        )
+        .await
+        .expect("router response");
+    assert_eq!(removed.status(), StatusCode::UNAUTHORIZED);
+    let envelope: CompanionErrorEnvelope =
+        serde_json::from_value(response_json(removed).await).expect("error envelope");
+    assert_eq!(envelope.error.code.as_str(), "unauthenticated");
 
     let _ = std::fs::remove_file(path);
 }

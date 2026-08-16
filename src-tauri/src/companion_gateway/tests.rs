@@ -1342,6 +1342,61 @@ async fn revocation_signal_targets_only_the_selected_device() {
 }
 
 #[tokio::test]
+async fn only_revoked_devices_can_be_removed() {
+    let device_store = Arc::new(InMemoryCompanionDeviceStore::default());
+    for (device_id, revoked_at) in [
+        ("active-device", None),
+        ("revoked-device", Some(1_722_340_900)),
+    ] {
+        device_store
+            .save(&CompanionDeviceRecord {
+                device_id: device_id.to_string(),
+                device_name: device_id.to_string(),
+                platform: "android".to_string(),
+                credential_verifier: [device_id.len() as u8; 32],
+                paired_at: 1_722_340_800,
+                last_seen_at: None,
+                revoked_at,
+            })
+            .expect("seed paired device");
+    }
+    let manager_device_store: Arc<dyn CompanionDeviceStore> = device_store.clone();
+    let manager = CompanionGatewayManager::new(
+        Arc::new(InMemoryIdentityStore::default()),
+        manager_device_store,
+        Arc::new(FixedEndpointProvider::new(vec![(
+            CompanionEndpointKind::Lan,
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        )])),
+        Arc::new(NoopCompanionAdvertiser),
+        0,
+    );
+
+    manager
+        .remove_revoked_device("revoked-device")
+        .await
+        .expect("remove revoked device");
+
+    assert_eq!(
+        manager
+            .remove_revoked_device("active-device")
+            .await
+            .expect_err("active device cannot be removed"),
+        "Only revoked Companion devices can be removed"
+    );
+    assert_eq!(
+        manager
+            .remove_revoked_device("missing-device")
+            .await
+            .expect_err("missing device cannot be removed"),
+        "Companion device was not found"
+    );
+    let devices = device_store.list().expect("paired devices");
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_id, "active-device");
+}
+
+#[tokio::test]
 async fn incompatible_protocol_is_reported_only_after_device_authentication() {
     let incompatible = create_router(
         CompanionHostStatus::new("host-1".to_string()),

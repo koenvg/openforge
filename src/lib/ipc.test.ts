@@ -31,6 +31,7 @@ import {
   getPtyBuffer,
   getResolvedAiProvider,
   listCompanionDevices,
+  removeCompanionDevice,
   listGitBranches,
   registerBuiltinPlugin,
   installPluginFromGit,
@@ -86,6 +87,7 @@ describe('ipc Companion pairing commands', () => {
     await rejectCompanionPairing('request-2')
     await listCompanionDevices()
     await revokeCompanionDevice('device-1')
+    await removeCompanionDevice('device-1')
 
     expect(invokeMock.mock.calls).toEqual([
       ['start_companion_pairing'],
@@ -96,6 +98,7 @@ describe('ipc Companion pairing commands', () => {
       ['reject_companion_pairing', { requestId: 'request-2' }],
       ['list_companion_devices'],
       ['revoke_companion_device', { deviceId: 'device-1' }],
+      ['remove_companion_device', { deviceId: 'device-1' }],
     ])
   })
 })

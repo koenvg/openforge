@@ -116,6 +116,7 @@ export const ipcCommandContracts = [
   { functionName: 'rejectCompanionPairing', ipcCommand: 'reject_companion_pairing', payloadKeys: ['requestId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'listCompanionDevices', ipcCommand: 'list_companion_devices', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'revokeCompanionDevice', ipcCommand: 'revoke_companion_device', payloadKeys: ['deviceId'], targetOwner: 'rust-sidecar', domain: 'config' },
+  { functionName: 'removeCompanionDevice', ipcCommand: 'remove_companion_device', payloadKeys: ['deviceId'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'resetCompanionHostIdentity', ipcCommand: 'reset_companion_host_identity', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getTaskDetail', ipcCommand: 'get_task_detail', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getLatestSession', ipcCommand: 'get_latest_session', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },

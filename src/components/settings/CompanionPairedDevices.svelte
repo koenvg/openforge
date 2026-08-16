@@ -5,9 +5,10 @@
     devices: CompanionPairedDevice[]
     updating: boolean
     onrevoke: (device: CompanionPairedDevice) => void
+    onremove: (device: CompanionPairedDevice) => void
   }
 
-  let { devices, updating, onrevoke }: Props = $props()
+  let { devices, updating, onrevoke, onremove }: Props = $props()
 
   function platformLabel(platform: 'ios' | 'android'): string {
     return platform === 'ios' ? 'iOS' : 'Android'
@@ -52,7 +53,16 @@
             </dl>
           </div>
           {#if device.revokedAt}
-            <span class="badge badge-error badge-outline">Revoked</span>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-error badge-outline">Revoked</span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm text-error"
+                disabled={updating}
+                aria-label={`Remove ${device.deviceName}`}
+                onclick={() => onremove(device)}
+              >Remove</button>
+            </div>
           {:else}
             <button
               type="button"

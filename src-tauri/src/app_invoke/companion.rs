@@ -1,6 +1,6 @@
 use super::*;
 
-const COMPANION_COMMANDS: [&str; 11] = [
+const COMPANION_COMMANDS: [&str; 12] = [
     "get_companion_gateway_status",
     "set_companion_gateway_enabled",
     "set_companion_tailscale_hostname",
@@ -11,6 +11,7 @@ const COMPANION_COMMANDS: [&str; 11] = [
     "reject_companion_pairing",
     "list_companion_devices",
     "revoke_companion_device",
+    "remove_companion_device",
     "reset_companion_host_identity",
 ];
 
@@ -115,6 +116,14 @@ pub(super) async fn handle_app_companion_command(
             let device_id = payload_string(&request.payload, "deviceId")?;
             manager
                 .revoke_device(&device_id)
+                .await
+                .map_err(companion_operation_error)?;
+            serde_json::Value::Null
+        }
+        "remove_companion_device" => {
+            let device_id = payload_string(&request.payload, "deviceId")?;
+            manager
+                .remove_revoked_device(&device_id)
                 .await
                 .map_err(companion_operation_error)?;
             serde_json::Value::Null

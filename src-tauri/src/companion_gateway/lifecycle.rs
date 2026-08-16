@@ -723,6 +723,13 @@ impl CompanionGatewayManager {
         Ok(())
     }
 
+    pub(crate) async fn remove_revoked_device(&self, device_id: &str) -> Result<(), String> {
+        let _operation = self.operation_lock.lock().await;
+        self.pairing.remove_revoked(device_id)?;
+        log::info!("[companion_gateway] revoked device removed device_id={device_id}");
+        Ok(())
+    }
+
     pub(crate) async fn reset_host_identity(&self) -> Result<CompanionGatewayStatus, String> {
         let manager = self.clone();
         tokio::spawn(async move { manager.reset_host_identity_owned().await })

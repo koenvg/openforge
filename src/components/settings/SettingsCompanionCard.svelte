@@ -3,6 +3,7 @@
   import {
     getCompanionGatewayStatus,
     listCompanionDevices,
+    removeCompanionDevice,
     revokeCompanionDevice,
     resetCompanionHostIdentity,
     setCompanionGatewayEnabled,
@@ -96,6 +97,33 @@
     }
   }
 
+  async function removeDevice(device: CompanionPairedDevice) {
+    if (updating || !device.revokedAt) return
+    const confirmed = window.confirm(
+      `Remove ${device.deviceName}? This permanently deletes its pairing record.`,
+    )
+    if (!confirmed) return
+    updating = true
+    requestError = null
+    feedback = null
+    try {
+      await removeCompanionDevice(device.deviceId)
+    } catch (error) {
+      requestError = errorMessage(error)
+      updating = false
+      return
+    }
+
+    try {
+      await refreshDevices()
+      feedback = `Removed device: ${device.deviceName}`
+    } catch (error) {
+      requestError = `Device was removed, but paired devices could not be refreshed: ${errorMessage(error)}`
+    } finally {
+      updating = false
+    }
+  }
+
   async function resetIdentity() {
     if (updating) return
     const confirmed = window.confirm(
@@ -168,7 +196,12 @@
         ondeviceschanged={refreshDevices}
       />
 
-      <CompanionPairedDevices {devices} {updating} onrevoke={revokeDevice} />
+      <CompanionPairedDevices
+        {devices}
+        {updating}
+        onrevoke={revokeDevice}
+        onremove={removeDevice}
+      />
 
       <section class="flex flex-col gap-2 border-t border-base-300 pt-4" aria-labelledby="companion-identity-reset-heading">
         <div>
