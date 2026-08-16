@@ -222,35 +222,6 @@ pub(super) async fn handle_app_github_review_command(
             publish_task_pull_request_updated(state, &task_id, pr_id, "enqueued");
             to_app_value(pr)?
         }
-        "merge_pull_request" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            crate::github_runtime::merge_pull_request(
-                &state.github_client,
-                &owner,
-                &repo,
-                pr_number,
-            )
-            .await
-            .map_err(runtime_error)?;
-            serde_json::Value::Null
-        }
-        "enqueue_pull_request" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            crate::github_runtime::enqueue_pull_request(
-                &state.db,
-                &state.github_client,
-                &owner,
-                &repo,
-                pr_number,
-            )
-            .await
-            .map_err(runtime_error)?;
-            serde_json::Value::Null
-        }
         "get_github_username" => to_app_value(
             crate::github_runtime::github_username(&state.db, &state.github_client)
                 .await

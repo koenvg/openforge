@@ -28,17 +28,11 @@ export function createGithubTaskClient(api: FrontendOpenForgeAPI): GithubTaskCli
     mergePullRequest: (pr) => invoke('mergeTaskPullRequest', {
       taskId: pr.ticket_id,
       prId: pr.id,
-      owner: pr.repo_owner,
-      repo: pr.repo_name,
-      prNumber: pr.pr_number ?? pr.id,
       expectedHeadSha: pr.head_sha,
     }),
     enqueuePullRequest: (pr) => invoke('enqueueTaskPullRequest', {
       taskId: pr.ticket_id,
       prId: pr.id,
-      owner: pr.repo_owner,
-      repo: pr.repo_name,
-      prNumber: pr.pr_number ?? pr.id,
       expectedHeadSha: pr.head_sha,
     }),
   }

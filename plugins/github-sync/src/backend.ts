@@ -15,9 +15,6 @@ import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest
 type TaskPullRequestActionRequest = {
   taskId: string
   prId: number
-  owner: string
-  repo: string
-  prNumber: number
   expectedHeadSha: string
 }
 import { randomUUID } from 'node:crypto'

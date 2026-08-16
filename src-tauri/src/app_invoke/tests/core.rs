@@ -134,6 +134,24 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 }
 
 #[tokio::test]
+async fn rejects_legacy_coordinate_only_pull_request_commands() {
+    let (state, path) = test_state("app_invoke_legacy_pull_request_commands");
+
+    for command in ["merge_pull_request", "enqueue_pull_request"] {
+        let error = invoke(
+            &state,
+            command,
+            json!({ "owner": "openforge", "repo": "openforge", "prNumber": 42 }),
+        )
+        .await
+        .expect_err("legacy pull request command should be rejected");
+        assert_eq!(error.0, StatusCode::NOT_IMPLEMENTED);
+    }
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn delete_project_conflicts_with_an_in_progress_task_start() {
     let (state, path) = test_state("app_invoke_delete_project_claim");
     let project = invoke_ok(

@@ -1,7 +1,7 @@
 use crate::{db, github_client::GitHubClient};
 use std::sync::{Arc, Mutex};
 
-use super::auth::{github_token, github_username};
+use super::auth::github_token;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GitHubPrLink {
@@ -316,42 +316,6 @@ pub async fn enqueue_task_pull_request(
         .into_iter()
         .find(|row| row.id == pr_id)
         .ok_or_else(|| "Queued pull request disappeared from local state".to_string())
-}
-
-pub async fn merge_pull_request(
-    github_client: &GitHubClient,
-    owner: &str,
-    repo: &str,
-    pr_number: i64,
-) -> Result<(), String> {
-    let token = github_token().await?;
-    let response = github_client
-        .merge_pr(owner, repo, pr_number, &token, None)
-        .await
-        .map_err(|e| format!("Failed to merge pull request: {e}"))?;
-
-    if !response.merged {
-        return Err(format!(
-            "Failed to merge pull request: {}",
-            response.message
-        ));
-    }
-
-    Ok(())
-}
-pub async fn enqueue_pull_request(
-    db: &Arc<Mutex<db::Database>>,
-    github_client: &GitHubClient,
-    owner: &str,
-    repo: &str,
-    pr_number: i64,
-) -> Result<(), String> {
-    let token = github_token().await?;
-    let actor_login = github_username(db, github_client).await?;
-    github_client
-        .enqueue_pull_request(owner, repo, pr_number, &token, &actor_login)
-        .await
-        .map_err(|e| format!("Failed to enqueue pull request: {e}"))
 }
 
 #[cfg(test)]

@@ -82,14 +82,6 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
 }
 "#;
 
-const PR_NODE_ID_QUERY: &str = r#"
-query OpenForgePullRequestNodeId($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $number) { id }
-  }
-}
-"#;
-
 const ENQUEUE_PULL_REQUEST_MUTATION: &str = r#"
 mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!) {
   enqueuePullRequest(input: { pullRequestId: $pullRequestId }) {
@@ -128,28 +120,6 @@ impl GitHubClient {
 
         GitHubReadinessSnapshot::from_graphql_response(&body).map_err(GitHubError::ParseError)
     }
-    pub async fn enqueue_pull_request(
-        &self,
-        owner: &str,
-        repo: &str,
-        pr_number: i64,
-        token: &str,
-        actor_login: &str,
-    ) -> Result<(), GitHubError> {
-        let pull_request_id = self
-            .get_pull_request_node_id(owner, repo, pr_number, token)
-            .await?;
-        self.enqueue_pull_request_by_node_id(
-            &pull_request_id,
-            owner,
-            repo,
-            pr_number,
-            token,
-            actor_login,
-        )
-        .await
-    }
-
     pub async fn enqueue_pull_request_by_node_id(
         &self,
         pull_request_id: &str,
@@ -173,34 +143,6 @@ impl GitHubClient {
             status: 422,
             message,
         })
-    }
-
-    async fn get_pull_request_node_id(
-        &self,
-        owner: &str,
-        repo: &str,
-        pr_number: i64,
-        token: &str,
-    ) -> Result<String, GitHubError> {
-        let payload = json!({
-            "query": PR_NODE_ID_QUERY,
-            "variables": {
-                "owner": owner,
-                "repo": repo,
-                "number": pr_number,
-            },
-        });
-        let body = self.send_graphql_payload(payload, token).await?;
-        let id = body
-            .pointer("/data/repository/pullRequest/id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| GitHubError::ApiError {
-                status: 404,
-                message: format!(
-                    "Could not find pull request {owner}/{repo}#{pr_number} before enqueueing"
-                ),
-            })?;
-        Ok(id.to_string())
     }
 
     async fn send_enqueue_pull_request_mutation(
