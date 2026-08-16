@@ -204,6 +204,53 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('surfaces task-default loading failures and keeps Task Creation blocked', async () => {
+    vi.mocked(getProjectConfig).mockRejectedValue(new Error('settings unavailable'))
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await fireEvent.input(await findPromptTextbox(), { target: { value: 'Create safely' } })
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not load task defaults. Retry before creating this task.',
+    )
+    expect((screen.getByRole('button', { name: 'Add to backlog' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /Start Task/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
+    expect(createTask).not.toHaveBeenCalled()
+  })
+
+  it('retries task-default loading and restores Task Creation after recovery', async () => {
+    let loadShouldFail = true
+    vi.mocked(getProjectConfig).mockImplementation(() =>
+      loadShouldFail ? Promise.reject(new Error('settings unavailable')) : Promise.resolve(null),
+    )
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await fireEvent.input(await findPromptTextbox(), { target: { value: 'Create after retry' } })
+    await screen.findByRole('alert')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
+
+    loadShouldFail = false
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry loading defaults' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect((screen.getByRole('button', { name: 'Add to backlog' }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to backlog' }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Create after retry',
+        'backlog',
+        'test-project-id',
+        'default',
+        DEFAULT_WORKTREE_OPTIONS,
+      )
+    })
+  })
+
   it('gates task creation until the project workspace default has loaded', async () => {
     let resolveProjectConfig: (value: string | null) => void = () => {}
     // Only gate on the worktree default; other hierarchy keys resolve immediately so
