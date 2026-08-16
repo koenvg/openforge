@@ -422,6 +422,9 @@
       <button type="button" class="btn btn-primary h-9 min-h-9 shrink-0 px-3.5 text-xs" onclick={() => onNewTask?.()}>
         <Plus size={16} aria-hidden="true" />
         New task
+        {#if $commandHeld}
+          <kbd aria-hidden="true" class="kbd kbd-xs border-primary-content/25 bg-primary-content/10 text-primary-content/75">⌘N</kbd>
+        {/if}
       </button>
 
       <div class="ml-auto flex shrink-0 items-center" role="group" aria-label="Board filters">
