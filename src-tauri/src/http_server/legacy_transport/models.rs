@@ -155,6 +155,23 @@ pub struct ClaudeHookQuery {
     pub session_id: Option<String>,
 }
 
+/// Query params carried by Grok's guarded hook curl commands (see
+/// `grok_hooks::lifecycle_hook_command`). Unlike Claude's hooks, Grok's own
+/// hook stdin JSON shape isn't an OpenForge-controlled contract, so task/PTY/
+/// session identity travels exclusively via the URL query string here.
+///
+/// `pty_instance_id` is intentionally a raw `String` rather than `u64`: Grok
+/// has no payload fallback for identity, so an empty or non-numeric query
+/// value (e.g. `pty_instance_id=` when `$OPENFORGE_PTY_INSTANCE_ID` is unset)
+/// must not fail query-string deserialization and drop the whole request.
+/// `handle_grok_hook` parses it leniently instead.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct GrokHookQuery {
+    pub task_id: Option<String>,
+    pub pty_instance_id: Option<String>,
+    pub session_id: Option<String>,
+}
+
 /// Payload from the OpenForge Pi extension when a PTY-backed Pi agent starts or finishes a run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PiAgentLifecyclePayload {

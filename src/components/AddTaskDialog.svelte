@@ -599,7 +599,7 @@
                     </select>
                   </div>
 
-                  {#if aiProvider === 'claude-code'}
+                  {#if aiProvider === 'claude-code' || aiProvider === 'grok'}
                     <div class="flex items-center gap-2">
                       <label for="create-task-permission-mode" class="text-xs font-medium text-base-content/50 shrink-0">Mode</label>
                       <select

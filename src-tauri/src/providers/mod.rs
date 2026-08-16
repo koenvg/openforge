@@ -1,5 +1,6 @@
 pub mod claude_code;
 pub mod codex;
+pub mod grok;
 pub mod opencode;
 pub mod pi;
 
@@ -10,6 +11,7 @@ use std::path::Path;
 use crate::db::AgentSessionRow;
 use claude_code::ClaudeCodeProvider;
 use codex::CodexProvider;
+use grok::GrokProvider;
 use opencode::OpenCodeProvider;
 use pi::PiProvider;
 
@@ -98,6 +100,7 @@ pub enum Provider {
     ClaudeCode(ClaudeCodeProvider),
     OpenCode(OpenCodeProvider),
     Pi(PiProvider),
+    Grok(GrokProvider),
 }
 
 impl Provider {
@@ -110,6 +113,7 @@ impl Provider {
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
             "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(pty_mgr))),
             "pi" => Ok(Provider::Pi(PiProvider::new(pty_mgr))),
+            "grok" => Ok(Provider::Grok(GrokProvider::new(pty_mgr))),
             other => Err(format!("Unknown provider: {}", other)),
         }
     }
@@ -173,6 +177,18 @@ impl Provider {
                 .await
             }
             Provider::Pi(p) => {
+                p.start(
+                    task_id,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    start_context,
+                )
+                .await
+            }
+            Provider::Grok(p) => {
                 p.start(
                     task_id,
                     worktree_path,
@@ -253,6 +269,19 @@ impl Provider {
                 )
                 .await
             }
+            Provider::Grok(p) => {
+                p.resume(
+                    task_id,
+                    session,
+                    worktree_path,
+                    prompt,
+                    agent,
+                    permission_mode,
+                    model,
+                    start_context,
+                )
+                .await
+            }
         }
     }
 
@@ -263,6 +292,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.abort(task_id, session).await,
             Provider::OpenCode(p) => p.abort(task_id, session).await,
             Provider::Pi(p) => p.abort(task_id, session).await,
+            Provider::Grok(p) => p.abort(task_id, session).await,
         }
     }
 
@@ -273,6 +303,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.cleanup(task_id).await,
             Provider::OpenCode(p) => p.cleanup(task_id).await,
             Provider::Pi(p) => p.cleanup(task_id).await,
+            Provider::Grok(p) => p.cleanup(task_id).await,
         }
     }
 
@@ -283,6 +314,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.provider_name(),
             Provider::OpenCode(p) => p.provider_name(),
             Provider::Pi(p) => p.provider_name(),
+            Provider::Grok(p) => p.provider_name(),
         }
     }
 
@@ -293,6 +325,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.provider_session_id(session),
             Provider::OpenCode(p) => p.provider_session_id(session),
             Provider::Pi(p) => p.provider_session_id(session),
+            Provider::Grok(p) => p.provider_session_id(session),
         }
     }
 
@@ -306,6 +339,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.list_commands(project_path),
             Provider::OpenCode(p) => p.list_commands(project_path),
             Provider::Pi(p) => p.list_commands(project_path),
+            Provider::Grok(p) => p.list_commands(project_path),
         }
     }
 
@@ -319,6 +353,7 @@ impl Provider {
             Provider::ClaudeCode(p) => p.list_agents(project_path),
             Provider::OpenCode(p) => p.list_agents(project_path),
             Provider::Pi(p) => p.list_agents(project_path),
+            Provider::Grok(p) => p.list_agents(project_path),
         }
     }
 }
@@ -334,6 +369,10 @@ mod tests {
     use crate::providers::codex::CodexProvider;
     use crate::providers::pi::PiProvider;
 
+    /// Builds a session row for provider tests. `grok_session_id` is not a
+    /// parameter here (mirroring how the other provider-specific session ids
+    /// are threaded through); tests that need it set it directly on the
+    /// returned row, same as they would for any other field under test.
     fn make_session(
         claude_session_id: Option<&str>,
         opencode_session_id: Option<&str>,
@@ -354,6 +393,7 @@ mod tests {
             provider: provider.to_string(),
             claude_session_id: claude_session_id.map(str::to_string),
             pi_session_id: pi_session_id.map(str::to_string),
+            grok_session_id: None,
         }
     }
 
@@ -444,6 +484,29 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // GrokProvider tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_grok_provider_name() {
+        let provider =
+            crate::providers::grok::GrokProvider::new(crate::pty_manager::PtyManager::new());
+        assert_eq!(provider.provider_name(), "grok");
+    }
+
+    #[test]
+    fn test_grok_provider_session_id_some() {
+        let provider =
+            crate::providers::grok::GrokProvider::new(crate::pty_manager::PtyManager::new());
+        let mut session = make_session(None, None, None, "grok");
+        session.grok_session_id = Some("grok-abc".to_string());
+        assert_eq!(
+            provider.provider_session_id(&session),
+            Some("grok-abc".to_string())
+        );
+    }
+
+    // ------------------------------------------------------------------
     // CodexProvider tests
     // ------------------------------------------------------------------
 
@@ -524,6 +587,23 @@ mod tests {
     }
 
     #[test]
+    fn test_provider_enum_grok_name() {
+        let p = Provider::Grok(GrokProvider::new(crate::pty_manager::PtyManager::new()));
+        assert_eq!(p.provider_name(), "grok");
+    }
+
+    #[test]
+    fn test_provider_enum_grok_session_id() {
+        let p = Provider::Grok(GrokProvider::new(crate::pty_manager::PtyManager::new()));
+        let mut session = make_session(None, None, None, "grok");
+        session.grok_session_id = Some("grok-abc".to_string());
+        assert_eq!(
+            p.provider_session_id(&session),
+            Some("grok-abc".to_string())
+        );
+    }
+
+    #[test]
     fn test_from_name_claude_code() {
         let result = Provider::from_name("claude-code", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
@@ -549,6 +629,13 @@ mod tests {
         let result = Provider::from_name("codex", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "codex");
+    }
+
+    #[test]
+    fn test_from_name_grok() {
+        let result = Provider::from_name("grok", crate::pty_manager::PtyManager::new());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().provider_name(), "grok");
     }
 
     #[test]

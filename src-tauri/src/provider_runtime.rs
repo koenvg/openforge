@@ -59,6 +59,10 @@ pub(crate) fn provider_commands(
             OpenCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
         ),
+        // v1: no `.grok` command discovery yet (mirrors GrokProvider::list_commands's
+        // own comment). Deferred follow-up — no need to spin up a PtyManager just
+        // to call a method that unconditionally returns an empty vec.
+        "grok" => Some(Vec::new()),
         _ => None,
     }
 }
@@ -81,6 +85,10 @@ pub(crate) fn provider_agents(
         "opencode" => Some(
             OpenCodeProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path),
         ),
+        // v1: no `.grok` agent discovery yet (mirrors GrokProvider::list_agents's
+        // own comment). Deferred follow-up — no need to spin up a PtyManager just
+        // to call a method that unconditionally returns an empty vec.
+        "grok" => Some(Vec::new()),
         _ => None,
     }
 }
@@ -103,10 +111,7 @@ pub(crate) async fn search_runtime_files(
     query: &str,
 ) -> Result<Vec<String>, String> {
     let _ = project_id;
-    if matches!(
-        context.provider.as_str(),
-        "claude-code" | "pi" | "opencode" | "codex"
-    ) {
+    if provider_supports_runtime_file_search(&context.provider) {
         return Ok(context
             .project_path
             .as_deref()
@@ -115,6 +120,17 @@ pub(crate) async fn search_runtime_files(
     }
 
     Ok(Vec::new())
+}
+
+/// Providers whose worktrees support the @-file mention search gate in
+/// `search_runtime_files`. Kept as its own predicate so the gate membership
+/// (e.g. "is grok included?") is directly unit-testable without needing a
+/// real git repository fixture.
+fn provider_supports_runtime_file_search(provider: &str) -> bool {
+    matches!(
+        provider,
+        "claude-code" | "pi" | "opencode" | "codex" | "grok"
+    )
 }
 
 pub(crate) async fn list_runtime_agents(
@@ -214,7 +230,10 @@ pub(crate) fn get_task_workspace(
 
 pub(crate) fn app_invoke_abort_session_policy(provider: &str) -> AbortSessionPolicy {
     AbortSessionPolicy {
-        session_status: if matches!(provider, "claude-code" | "pi" | "opencode" | "codex") {
+        session_status: if matches!(
+            provider,
+            "claude-code" | "pi" | "opencode" | "codex" | "grok"
+        ) {
             "interrupted"
         } else {
             "failed"
@@ -242,6 +261,41 @@ pub(crate) fn tauri_abort_session_policy(provider: &str) -> AbortSessionPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_commands_returns_empty_for_grok() {
+        let commands = provider_commands("grok", None).expect("grok should be a known provider");
+        assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn provider_agents_returns_empty_for_grok() {
+        let agents = provider_agents("grok", None).expect("grok should be a known provider");
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn provider_supports_runtime_file_search_accepts_grok() {
+        // Fix 10 regression guard: grok must be accepted by the @-file search
+        // gate, not silently fall through to the unknown-provider empty result.
+        assert!(provider_supports_runtime_file_search("grok"));
+    }
+
+    #[test]
+    fn provider_supports_runtime_file_search_accepts_all_known_providers() {
+        for provider in ["claude-code", "pi", "opencode", "codex", "grok"] {
+            assert!(
+                provider_supports_runtime_file_search(provider),
+                "{provider} should be accepted by the search_runtime_files gate"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_supports_runtime_file_search_rejects_unknown_provider() {
+        assert!(!provider_supports_runtime_file_search("unknown-provider"));
+    }
+
     fn task_workspace(branch_name: Option<&str>) -> db::TaskWorkspaceRow {
         db::TaskWorkspaceRow {
             id: 1,
@@ -276,6 +330,19 @@ mod tests {
     fn app_invoke_abort_policy_preserves_pi_interrupted_status_and_workspace_updates() {
         assert_eq!(
             app_invoke_abort_session_policy("pi"),
+            AbortSessionPolicy {
+                session_status: "interrupted",
+                update_worktree_status: true,
+                update_task_workspace_status: true,
+                ignore_unknown_provider: true,
+            }
+        );
+    }
+
+    #[test]
+    fn app_invoke_abort_policy_preserves_grok_interrupted_status_and_workspace_updates() {
+        assert_eq!(
+            app_invoke_abort_session_policy("grok"),
             AbortSessionPolicy {
                 session_status: "interrupted",
                 update_worktree_status: true,

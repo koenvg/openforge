@@ -2,6 +2,7 @@ import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
   checkCodexInstalled,
+  checkGrokInstalled,
   checkOpenCodeInstalled,
   checkPiInstalled,
   getAllWhisperModelStatuses,
@@ -53,6 +54,9 @@ export interface InstallationStatus {
   piVersion: string | null
   codexInstalled: boolean
   codexVersion: string | null
+  grokInstalled: boolean
+  grokVersion: string | null
+  grokAuthenticated: boolean
 }
 
 export const DEFAULT_GITHUB_POLL_INTERVAL_SECONDS = 60
@@ -170,7 +174,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
 }
 
 export async function loadInstallationStatus(): Promise<InstallationStatus> {
-  const [opencodeResult, claudeResult, piResult, codexResult] = await Promise.all([
+  const [opencodeResult, claudeResult, piResult, codexResult, grokResult] = await Promise.all([
     checkOpenCodeInstalled().catch<OpenCodeInstallStatus>(() => ({
       installed: false,
       path: null,
@@ -192,6 +196,12 @@ export async function loadInstallationStatus(): Promise<InstallationStatus> {
       path: null,
       version: null,
     })),
+    checkGrokInstalled().catch(() => ({
+      installed: false,
+      path: null,
+      version: null,
+      authenticated: false,
+    })),
   ])
 
   return {
@@ -204,6 +214,9 @@ export async function loadInstallationStatus(): Promise<InstallationStatus> {
     piVersion: piResult.version,
     codexInstalled: codexResult.installed,
     codexVersion: codexResult.version,
+    grokInstalled: grokResult.installed,
+    grokVersion: grokResult.version,
+    grokAuthenticated: grokResult.authenticated,
   }
 }
 

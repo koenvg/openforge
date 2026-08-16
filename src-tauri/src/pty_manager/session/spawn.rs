@@ -23,8 +23,8 @@ use super::super::{
 use super::invalid_workspace_cwd;
 use super::lifecycle::{PtySession, PtySessionKind, NEXT_INSTANCE_ID};
 use super::provider_adapter::{
-    AgentPtyProviderAdapter, ClaudeCodePtyAdapter, CodexPtyAdapter, OpenCodePtyAdapter,
-    PiPtyAdapter,
+    AgentPtyProviderAdapter, ClaudeCodePtyAdapter, CodexPtyAdapter, GrokPtyAdapter,
+    OpenCodePtyAdapter, PiPtyAdapter,
 };
 
 struct PendingShellSpawn {
@@ -233,6 +233,64 @@ impl PtyManager {
                 app_event_tx,
             },
             terminal_image_protocol,
+        )
+        .await
+    }
+
+    /// Spawns a Grok CLI process in a PTY for the given task_id.
+    /// Runs `grok [--resume <id>|--continue] [...] [-- prompt]`: the prompt is
+    /// passed as a trailing positional argument, matching `grok [OPTIONS] [PROMPT]`.
+    /// Installs the OpenForge lifecycle hook into the user's Grok home so status updates
+    /// are reported back to OpenForge's local HTTP server.
+    ///
+    /// # Arguments
+    /// * `task_id` - Unique identifier for the task (used for events and PID tracking)
+    /// * `cwd` - Working directory for the Grok process (task's worktree path)
+    /// * `prompt` - The prompt to send to Grok (empty string to skip)
+    /// * `resume_session_id` - If Some, resumes an existing Grok session with `--resume <id>`
+    /// * `continue_session` - If true and no resume_session_id, uses `--continue`
+    /// * `permission_mode` - If Some, passes `--permission-mode <mode>` to the Grok CLI
+    /// * `model` - If Some, passes `--model <model>` to the Grok CLI
+    /// * `cols` - Terminal width in columns
+    /// * `rows` - Terminal height in rows
+    /// * `app_handle` - Tauri app handle for emitting PTY output events
+    ///
+    /// # Returns
+    /// The unique instance ID for this PTY session
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_grok_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        permission_mode: Option<&str>,
+        model: Option<&str>,
+        cols: u16,
+        rows: u16,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
+    ) -> Result<u64, PtyError> {
+        self.spawn_agent_pty(
+            GrokPtyAdapter::new(
+                prompt,
+                resume_session_id,
+                continue_session,
+                permission_mode,
+                model,
+            ),
+            PtySpawnContext {
+                task_id,
+                cwd,
+                cols,
+                rows,
+                app_handle,
+                app_event_tx,
+            },
+            // Grok has no inline-image renderer, so it gets the same `None` as
+            // Claude/Codex/OpenCode; only Pi threads a terminal image protocol.
+            None,
         )
         .await
     }

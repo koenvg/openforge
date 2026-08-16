@@ -6,6 +6,7 @@ vi.mock('./ipc', () => ({
   checkOpenCodeInstalled: vi.fn(),
   checkClaudeInstalled: vi.fn(),
   checkCodexInstalled: vi.fn(),
+  checkGrokInstalled: vi.fn(),
   checkPiInstalled: vi.fn(),
   getAllWhisperModelStatuses: vi.fn(),
 }))
@@ -18,6 +19,7 @@ import { loadFocusFilterStates } from './boardFilters'
 import {
   checkClaudeInstalled,
   checkCodexInstalled,
+  checkGrokInstalled,
   checkOpenCodeInstalled,
   checkPiInstalled,
   getAllWhisperModelStatuses,
@@ -57,6 +59,12 @@ describe('settingsConfig', () => {
       installed: false,
       path: null,
       version: null,
+    })
+    vi.mocked(checkGrokInstalled).mockResolvedValue({
+      installed: false,
+      path: null,
+      version: null,
+      authenticated: false,
     })
     vi.mocked(getAllWhisperModelStatuses).mockResolvedValue([])
   })
@@ -263,6 +271,12 @@ describe('settingsConfig', () => {
         path: '/usr/local/bin/codex',
         version: 'codex-cli 0.137.0',
       })
+      vi.mocked(checkGrokInstalled).mockResolvedValue({
+        installed: true,
+        path: '/usr/local/bin/grok',
+        version: 'grok-cli 0.1.0',
+        authenticated: true,
+      })
 
       const result = await loadInstallationStatus()
 
@@ -276,6 +290,9 @@ describe('settingsConfig', () => {
         piVersion: null,
         codexInstalled: true,
         codexVersion: 'codex-cli 0.137.0',
+        grokInstalled: true,
+        grokVersion: 'grok-cli 0.1.0',
+        grokAuthenticated: true,
       })
     })
 
@@ -283,6 +300,7 @@ describe('settingsConfig', () => {
       vi.mocked(checkOpenCodeInstalled).mockRejectedValue(new Error('missing'))
       vi.mocked(checkClaudeInstalled).mockRejectedValue(new Error('missing'))
       vi.mocked(checkCodexInstalled).mockRejectedValue(new Error('missing'))
+      vi.mocked(checkGrokInstalled).mockRejectedValue(new Error('missing'))
 
       const result = await loadInstallationStatus()
 
@@ -296,6 +314,9 @@ describe('settingsConfig', () => {
         piVersion: null,
         codexInstalled: false,
         codexVersion: null,
+        grokInstalled: false,
+        grokVersion: null,
+        grokAuthenticated: false,
       })
     })
   })

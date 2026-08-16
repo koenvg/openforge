@@ -349,3 +349,115 @@ pub async fn hook_notification_permission_handler(
     )
     .await
 }
+
+/// Shared handler for Grok's lifecycle hooks (installed by `grok_hooks`).
+///
+/// Mirrors `handle_hook`'s Claude flow: identity travels via query params
+/// (`task_id`, `pty_instance_id`, `session_id`), the raw event type is mapped
+/// to an `AgentLifecycleEventKind` via `grok_hooks::grok_lifecycle_kind_from_event`,
+/// and the resulting notification is dispatched through the same
+/// `handle_agent_lifecycle_notification` seam every other provider uses. That
+/// seam (`apply_agent_lifecycle_notification`) is what persists the Grok
+/// session id whenever `provider_session_id` is present — the same place
+/// Claude's session id gets persisted, since Claude has no dedicated
+/// session-start hook either.
+async fn handle_grok_hook(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+    event_type: &str,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let task_id = non_empty_string(query.task_id.clone());
+    let provider_session_id = non_empty_string(query.session_id.clone());
+    let pty_instance_id = query.pty_instance_id.as_deref().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        match trimmed.parse::<u64>() {
+            Ok(value) => Some(value),
+            Err(_) => {
+                warn!(
+                    "[http_server] Warning: Grok hook event '{}' received unparseable pty_instance_id '{}'",
+                    event_type, raw
+                );
+                None
+            }
+        }
+    });
+
+    if let Some(task_id) = task_id {
+        if let Some(kind) = crate::grok_hooks::grok_lifecycle_kind_from_event(event_type) {
+            let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+                provider: "grok".to_string(),
+                task_id,
+                pty_instance_id,
+                provider_session_id,
+                kind,
+                raw_event_type: Some(event_type.to_string()),
+                raw_status_type: None,
+            };
+            return handle_agent_lifecycle_notification(state, notification, None, None).await;
+        } else {
+            warn!(
+                "[http_server] Warning: Grok hook received unmapped event type '{}'",
+                event_type
+            );
+        }
+    } else {
+        warn!(
+            "[http_server] Warning: Grok hook event '{}' received without task_id",
+            event_type
+        );
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+pub async fn grok_hook_session_start_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "session-start").await
+}
+
+pub async fn grok_hook_user_prompt_submit_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "user-prompt-submit").await
+}
+
+pub async fn grok_hook_pre_tool_use_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "pre-tool-use").await
+}
+
+pub async fn grok_hook_post_tool_use_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "post-tool-use").await
+}
+
+pub async fn grok_hook_stop_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "stop").await
+}
+
+pub async fn grok_hook_session_end_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "session-end").await
+}
+
+pub async fn grok_hook_notification_permission_handler(
+    State(state): State<AppState>,
+    Query(query): Query<GrokHookQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_grok_hook(State(state), Query(query), "notification-permission").await
+}

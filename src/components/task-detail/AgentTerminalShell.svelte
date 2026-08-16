@@ -11,7 +11,7 @@
   } from '../../lib/agentTerminalPanel'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
-  type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id'
+  type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id' | 'grok_session_id'
 
   interface Props {
     taskId: string

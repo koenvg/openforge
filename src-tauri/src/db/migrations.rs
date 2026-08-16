@@ -1613,6 +1613,41 @@ CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
         }
         Ok(())
     }),
+    // Adds the grok_session_id column for the Grok provider. Appended last so it
+    // takes the highest user_version. Guarded/idempotent (checks table + column
+    // existence) so it heals partially-migrated databases, matching the sibling
+    // provider-session-id column migrations.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            return Ok(());
+        }
+
+        let has_grok_session_id: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = 'grok_session_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_grok_session_id {
+            tx.execute(
+                "ALTER TABLE agent_sessions ADD COLUMN grok_session_id TEXT",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2566,6 +2601,36 @@ mod tests {
         assert!(
             has_pi_session_id,
             "agent_sessions must include pi_session_id column"
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_grok_session_column_exists() {
+        let path = std::env::temp_dir().join(format!(
+            "test_grok_session_column_exists_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let has_grok_session_id: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = 'grok_session_id'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check grok_session_id column");
+
+        assert!(
+            has_grok_session_id,
+            "agent_sessions must include grok_session_id column"
         );
 
         drop(conn);

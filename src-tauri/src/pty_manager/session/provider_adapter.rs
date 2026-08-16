@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::super::commands::{
-    build_claude_args, build_codex_args, build_opencode_tui_args, build_pi_args,
+    build_claude_args, build_codex_args, build_grok_args, build_opencode_tui_args, build_pi_args,
 };
 use super::super::PtyError;
 use super::invalid_workspace_cwd;
@@ -292,6 +292,78 @@ impl AgentPtyProviderAdapter for PiPtyAdapter {
     }
 }
 
+pub(super) struct GrokPtyAdapter {
+    prompt: String,
+    resume_session_id: Option<String>,
+    continue_session: bool,
+    permission_mode: Option<String>,
+    model: Option<String>,
+}
+
+impl GrokPtyAdapter {
+    pub(super) fn new(
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        permission_mode: Option<&str>,
+        model: Option<&str>,
+    ) -> Self {
+        Self {
+            prompt: prompt.to_string(),
+            resume_session_id: resume_session_id.map(str::to_string),
+            continue_session,
+            permission_mode: permission_mode.map(str::to_string),
+            model: model.map(str::to_string),
+        }
+    }
+}
+
+impl AgentPtyProviderAdapter for GrokPtyAdapter {
+    fn label(&self) -> &'static str {
+        "Grok"
+    }
+
+    fn command_name(&self) -> &'static str {
+        "grok"
+    }
+
+    fn command_args(&self) -> Vec<String> {
+        build_grok_args(
+            &self.prompt,
+            self.resume_session_id.as_deref(),
+            self.continue_session,
+            self.permission_mode.as_deref(),
+            self.model.as_deref(),
+        )
+    }
+
+    fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+        // Non-fatal, mirroring ClaudeCodePtyAdapter::prepare: the hook is only
+        // status telemetry (reports agent lifecycle back to OpenForge), so an
+        // unwritable ~/.grok (root-owned, read-only mount, non-writable
+        // GROK_HOME, ...) must not block the Grok task from launching at all.
+        // Consequence of a failure here: status reporting for this task
+        // degrades (OpenForge won't see busy/idle/permission-request events),
+        // but the `grok` agent itself still runs normally.
+        if let Err(e) = crate::grok_hooks::install_openforge_hook() {
+            info!("[PTY] Warning: Failed to install Grok hook: {}", e);
+        }
+        Ok(())
+    }
+
+    fn extra_env(&self, task_id: &str, instance_id: u64) -> HashMap<String, String> {
+        openforge_agent_env(task_id, instance_id)
+    }
+
+    fn pid_file_name(&self, task_id: &str) -> String {
+        format!("{}-pty.pid", task_id)
+    }
+
+    fn track_last_output(&self) -> bool {
+        true
+    }
+}
+
 fn openforge_agent_env(task_id: &str, instance_id: u64) -> HashMap<String, String> {
     HashMap::from([
         ("OPENFORGE_TASK_ID".to_string(), task_id.to_string()),
@@ -357,6 +429,55 @@ fn run_pi_node_cwd_preflight(cwd: &Path, env: &HashMap<String, String>) -> Resul
 mod tests {
     use super::*;
     use std::sync::atomic::Ordering;
+
+    #[test]
+    fn grok_adapter_label_and_command_name() {
+        let a = GrokPtyAdapter::new("", None, false, Some("acceptEdits"), None);
+        assert_eq!(a.label(), "Grok");
+        assert_eq!(a.command_name(), "grok");
+    }
+
+    #[test]
+    fn grok_adapter_command_args_appends_double_dash_and_prompt_last() {
+        let a = GrokPtyAdapter::new(
+            "fix the bug",
+            Some("grok-session"),
+            false,
+            Some("acceptEdits"),
+            Some("grok-build"),
+        );
+        assert_eq!(
+            a.command_args(),
+            vec![
+                "--resume",
+                "grok-session",
+                "--permission-mode",
+                "acceptEdits",
+                "--model",
+                "grok-build",
+                "--",
+                "fix the bug",
+            ]
+        );
+    }
+
+    #[test]
+    fn grok_adapter_extra_env_sets_openforge_task_id() {
+        let a = GrokPtyAdapter::new("", None, false, None, None);
+        let env = a.extra_env("T-1", 7);
+        assert_eq!(env.get("OPENFORGE_TASK_ID").unwrap(), "T-1");
+        assert_eq!(env.get("OPENFORGE_PTY_INSTANCE_ID").unwrap(), "7");
+    }
+
+    #[test]
+    fn grok_adapter_prepare_is_non_fatal() {
+        // Fix 2 regression guard: prepare() must always return Ok(()), even
+        // when the Grok hook install fails (unwritable ~/.grok, read-only
+        // mount, non-writable GROK_HOME, ...), because the hook is only
+        // status telemetry — grok itself still runs fine without it.
+        let mut a = GrokPtyAdapter::new("", None, false, None, None);
+        assert!(a.prepare(Path::new("/tmp")).is_ok());
+    }
 
     #[test]
     fn claude_adapter_owns_provider_specific_spawn_details() {

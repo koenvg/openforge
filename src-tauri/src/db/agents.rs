@@ -1,7 +1,7 @@
 use rusqlite::Result;
 use serde::Serialize;
 
-const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id";
+const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id, grok_session_id";
 
 /// Agent session row from database
 #[derive(Debug, Clone, Serialize)]
@@ -19,6 +19,7 @@ pub struct AgentSessionRow {
     pub provider: String,
     pub claude_session_id: Option<String>,
     pub pi_session_id: Option<String>,
+    pub grok_session_id: Option<String>,
 }
 
 fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
@@ -38,6 +39,7 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
         provider: row.get(10)?,
         claude_session_id: row.get(11)?,
         pi_session_id: row.get(12)?,
+        grok_session_id: row.get(13)?,
     })
 }
 
@@ -130,6 +132,15 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn set_agent_session_grok_id(&self, id: &str, grok_session_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE agent_sessions SET grok_session_id = ?1 WHERE id = ?2",
+            [grok_session_id, id],
+        )?;
+        Ok(())
+    }
+
     pub fn set_agent_session_pty_instance_id(&self, id: &str, pty_instance_id: u64) -> Result<()> {
         let pty_instance_id = i64::try_from(pty_instance_id)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -151,6 +162,7 @@ impl super::Database {
             "opencode" => self.set_agent_session_opencode_id(id, provider_session_id),
             "claude-code" => self.set_agent_session_claude_id(id, provider_session_id),
             "pi" => self.set_agent_session_pi_id(id, provider_session_id),
+            "grok" => self.set_agent_session_grok_id(id, provider_session_id),
             _ => Ok(()),
         }
     }

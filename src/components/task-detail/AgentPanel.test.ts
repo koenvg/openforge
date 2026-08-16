@@ -145,6 +145,7 @@ describe('AgentPanel (router)', () => {
       provider: 'opencode',
       claude_session_id: null,
       pi_session_id: null,
+      grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -170,6 +171,7 @@ describe('AgentPanel (router)', () => {
       provider: 'pi',
       claude_session_id: null,
       pi_session_id: 'pi-sess-1',
+      grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -195,6 +197,7 @@ describe('AgentPanel (router)', () => {
       provider: 'codex',
       claude_session_id: null,
       pi_session_id: null,
+      grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -203,6 +206,32 @@ describe('AgentPanel (router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByTestId('codex-agent-panel')).toBeTruthy()
+  })
+
+  it('resolves the grok session key for grok provider sessions', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      pty_instance_id: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'grok',
+      claude_session_id: null,
+      pi_session_id: null,
+      grok_session_id: 'grok-sess-1',
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByTestId('grok-agent-panel')).toBeTruthy()
   })
 
 })
@@ -251,6 +280,7 @@ describe('AgentPanel starting animation', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -291,6 +321,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -319,6 +350,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
       pi_session_id: null,
+      grok_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -346,6 +378,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -371,6 +404,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -396,6 +430,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
       pi_session_id: null,
+      grok_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -419,6 +454,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -458,6 +494,7 @@ describe('OpenCode shared shell (via router)', () => {
       provider: 'opencode',
       claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()

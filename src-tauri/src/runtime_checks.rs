@@ -25,6 +25,14 @@ pub struct CodexInstallStatus {
     pub version: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct GrokInstallStatus {
+    pub installed: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    pub authenticated: bool,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct PiInstallStatus {
     pub installed: bool,
@@ -70,6 +78,20 @@ impl From<VersionedExecutableInstallStatus> for CodexInstallStatus {
 }
 
 impl ClaudeInstallStatus {
+    fn from_versioned_install(
+        status: VersionedExecutableInstallStatus,
+        authenticated: bool,
+    ) -> Self {
+        Self {
+            installed: status.installed,
+            path: status.path,
+            version: status.version,
+            authenticated,
+        }
+    }
+}
+
+impl GrokInstallStatus {
     fn from_versioned_install(
         status: VersionedExecutableInstallStatus,
         authenticated: bool,
@@ -172,12 +194,103 @@ fn check_codex_installed_with_path(path: &str) -> CodexInstallStatus {
     check_versioned_executable_installed("codex", path).into()
 }
 
+pub async fn check_grok_installed() -> Result<GrokInstallStatus, String> {
+    Ok(check_grok_installed_with_path(&user_tool_path()))
+}
+
+fn check_grok_installed_with_path(path: &str) -> GrokInstallStatus {
+    let install_status = check_versioned_executable_installed("grok", path);
+    let authenticated = install_status
+        .path
+        .as_deref()
+        .and_then(|_| crate::grok_hooks::grok_home())
+        .map(|grok_home| grok_is_authenticated_for_home(&grok_home))
+        .unwrap_or(false);
+
+    GrokInstallStatus::from_versioned_install(install_status, authenticated)
+}
+
+/// Grok has no documented `auth status` subcommand, so authentication is
+/// checked offline instead of spawning a process: Grok is considered
+/// authenticated when either the `XAI_API_KEY` env var is set and
+/// non-empty, or `<grok_home>/auth.json` exists with non-zero size.
+///
+/// This is a best-effort heuristic, not a guarantee: a stale or invalid
+/// `auth.json` (e.g. an expired token) still reads as "authenticated" here,
+/// since we never validate its contents or talk to Grok's backend.
+fn grok_is_authenticated_for_home(grok_home: &Path) -> bool {
+    let has_api_key = std::env::var("XAI_API_KEY")
+        .map(|value| !value.is_empty())
+        .unwrap_or(false);
+    if has_api_key {
+        return true;
+    }
+
+    grok_home
+        .join("auth.json")
+        .metadata()
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::{OsStr, OsString};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::ExitStatusExt;
     use std::process::Output;
+    use std::sync::{LazyLock, Mutex, MutexGuard};
+
+    // `XAI_API_KEY` and `GROK_HOME` are process-global env vars, so tests
+    // that mutate them must not run concurrently with each other (Rust runs
+    // tests on multiple threads within one process by default). Each env
+    // var gets its own lock rather than sharing one, so a test guarding both
+    // at once (e.g. pinning GROK_HOME to a tempdir while clearing
+    // XAI_API_KEY) doesn't deadlock on a non-reentrant Mutex.
+    static XAI_API_KEY_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    static GROK_HOME_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<OsString>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl EnvVarGuard {
+        fn set_to(lock: &'static Mutex<()>, key: &'static str, value: impl AsRef<OsStr>) -> Self {
+            let guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let original = std::env::var_os(key);
+            std::env::set_var(key, value);
+
+            Self {
+                key,
+                original,
+                _lock: guard,
+            }
+        }
+
+        fn remove(lock: &'static Mutex<()>, key: &'static str) -> Self {
+            let guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let original = std::env::var_os(key);
+            std::env::remove_var(key);
+
+            Self {
+                key,
+                original,
+                _lock: guard,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
 
     fn success_output(stdout: &[u8]) -> Output {
         Output {
@@ -218,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_statuses_map_shared_install_fields_and_preserve_claude_authentication() {
+    fn provider_statuses_map_shared_install_fields_and_preserve_claude_and_grok_authentication() {
         let shared_status = VersionedExecutableInstallStatus {
             installed: true,
             path: Some("/usr/local/bin/tool".to_string()),
@@ -240,11 +353,18 @@ mod tests {
         assert_eq!(codex_status.path.as_deref(), Some("/usr/local/bin/tool"));
         assert_eq!(codex_status.version.as_deref(), Some("tool 1.2.3"));
 
-        let claude_status = ClaudeInstallStatus::from_versioned_install(shared_status, true);
+        let claude_status =
+            ClaudeInstallStatus::from_versioned_install(shared_status.clone(), true);
         assert!(claude_status.installed);
         assert_eq!(claude_status.path.as_deref(), Some("/usr/local/bin/tool"));
         assert_eq!(claude_status.version.as_deref(), Some("tool 1.2.3"));
         assert!(claude_status.authenticated);
+
+        let grok_status = GrokInstallStatus::from_versioned_install(shared_status, true);
+        assert!(grok_status.installed);
+        assert_eq!(grok_status.path.as_deref(), Some("/usr/local/bin/tool"));
+        assert_eq!(grok_status.version.as_deref(), Some("tool 1.2.3"));
+        assert!(grok_status.authenticated);
     }
 
     #[test]
@@ -363,5 +483,119 @@ mod tests {
         assert!(!status.installed);
         assert_eq!(status.path, None);
         assert_eq!(status.version, None);
+    }
+
+    #[test]
+    fn check_grok_installed_with_path_finds_tool_outside_process_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("grok");
+        write_executable(&executable, "#!/bin/sh\nprintf 'grok-cli 0.4.1\\n'\n");
+
+        let status = check_grok_installed_with_path(&temp_dir.path().to_string_lossy());
+
+        assert!(status.installed);
+        assert_eq!(
+            status.path.as_deref(),
+            Some(executable.to_string_lossy().as_ref())
+        );
+        assert_eq!(status.version.as_deref(), Some("grok-cli 0.4.1"));
+    }
+
+    #[test]
+    fn check_grok_installed_with_path_reports_missing_when_not_on_effective_path() {
+        let status = check_grok_installed_with_path("/definitely/missing");
+
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert_eq!(status.version, None);
+        assert!(!status.authenticated);
+    }
+
+    #[test]
+    fn check_grok_installed_with_path_reports_authenticated_when_auth_json_present() {
+        let temp_bin_dir = tempfile::tempdir().expect("temp bin dir");
+        write_executable(
+            &temp_bin_dir.path().join("grok"),
+            "#!/bin/sh\nprintf 'grok-cli 0.4.1\\n'\n",
+        );
+
+        let temp_grok_home = tempfile::tempdir().expect("temp grok home");
+        std::fs::write(
+            temp_grok_home.path().join("auth.json"),
+            "{\"token\":\"abc\"}",
+        )
+        .expect("write auth.json");
+
+        let _xai_guard = EnvVarGuard::remove(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY");
+        let _home_guard =
+            EnvVarGuard::set_to(&GROK_HOME_ENV_LOCK, "GROK_HOME", temp_grok_home.path());
+
+        let status = check_grok_installed_with_path(&temp_bin_dir.path().to_string_lossy());
+
+        assert!(status.installed);
+        assert!(status.authenticated);
+    }
+
+    #[test]
+    fn check_grok_installed_with_path_reports_not_authenticated_when_auth_json_missing() {
+        let temp_bin_dir = tempfile::tempdir().expect("temp bin dir");
+        write_executable(
+            &temp_bin_dir.path().join("grok"),
+            "#!/bin/sh\nprintf 'grok-cli 0.4.1\\n'\n",
+        );
+
+        let temp_grok_home = tempfile::tempdir().expect("temp grok home");
+
+        let _xai_guard = EnvVarGuard::remove(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY");
+        let _home_guard =
+            EnvVarGuard::set_to(&GROK_HOME_ENV_LOCK, "GROK_HOME", temp_grok_home.path());
+
+        let status = check_grok_installed_with_path(&temp_bin_dir.path().to_string_lossy());
+
+        assert!(status.installed);
+        assert!(!status.authenticated);
+    }
+
+    #[test]
+    fn grok_is_authenticated_for_home_true_when_auth_json_present_and_non_empty() {
+        let _guard = EnvVarGuard::remove(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(temp_dir.path().join("auth.json"), "{\"token\":\"abc\"}")
+            .expect("write auth.json");
+
+        assert!(grok_is_authenticated_for_home(temp_dir.path()));
+    }
+
+    #[test]
+    fn grok_is_authenticated_for_home_false_when_auth_json_absent() {
+        let _guard = EnvVarGuard::remove(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+
+        assert!(!grok_is_authenticated_for_home(temp_dir.path()));
+    }
+
+    #[test]
+    fn grok_is_authenticated_for_home_false_when_auth_json_is_zero_bytes() {
+        let _guard = EnvVarGuard::remove(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(temp_dir.path().join("auth.json"), "").expect("write empty auth.json");
+
+        assert!(!grok_is_authenticated_for_home(temp_dir.path()));
+    }
+
+    #[test]
+    fn grok_is_authenticated_for_home_true_when_xai_api_key_env_set() {
+        let _guard = EnvVarGuard::set_to(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY", "sk-test-key");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+
+        assert!(grok_is_authenticated_for_home(temp_dir.path()));
+    }
+
+    #[test]
+    fn grok_is_authenticated_for_home_false_when_xai_api_key_env_is_empty() {
+        let _guard = EnvVarGuard::set_to(&XAI_API_KEY_ENV_LOCK, "XAI_API_KEY", "");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+
+        assert!(!grok_is_authenticated_for_home(temp_dir.path()));
     }
 }

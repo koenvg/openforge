@@ -47,6 +47,7 @@ function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
     opencode_session_id: 'provider-session-1',
     claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
     status: 'running',
     stage: 'running',
     checkpoint_data: null,

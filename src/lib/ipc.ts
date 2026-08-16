@@ -324,6 +324,10 @@ export async function checkCodexInstalled(): Promise<{ installed: boolean; path:
   return invoke("check_codex_installed");
 }
 
+export async function checkGrokInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }> {
+  return invoke<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }>("check_grok_installed");
+}
+
 export async function checkClaudeInstalled(): Promise<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }> {
   return invoke<{ installed: boolean; path: string | null; version: string | null; authenticated: boolean }>("check_claude_installed");
 }

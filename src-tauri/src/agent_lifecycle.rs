@@ -288,7 +288,10 @@ pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: 
 }
 
 pub fn provider_requires_pty_instance(provider: &str) -> bool {
-    matches!(provider, "claude-code" | "pi" | "opencode" | "codex")
+    matches!(
+        provider,
+        "claude-code" | "pi" | "opencode" | "codex" | "grok"
+    )
 }
 
 pub(crate) fn lifecycle_status_transition(
@@ -323,6 +326,7 @@ fn session_provider_id<'a>(session: &'a AgentSessionRow, provider: &str) -> Opti
         "opencode" => session.opencode_session_id.as_deref(),
         "claude-code" => session.claude_session_id.as_deref(),
         "pi" => session.pi_session_id.as_deref(),
+        "grok" => session.grok_session_id.as_deref(),
         _ => None,
     }
 }
@@ -1215,6 +1219,114 @@ mod tests {
             Some("claude-shared")
         );
         assert_eq!(second_session.claude_session_id, None);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn provider_requires_pty_instance_includes_grok() {
+        assert!(provider_requires_pty_instance("grok"));
+    }
+
+    #[test]
+    fn session_provider_id_returns_grok_session_id() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("session_provider_id_returns_grok_session_id");
+        let task = db
+            .create_task("Grok task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-grok-provider-id",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "grok",
+        )
+        .expect("create session");
+        db.set_agent_session_grok_id("ses-grok-provider-id", "grok-abc")
+            .expect("store grok session id");
+
+        let session = db
+            .get_agent_session("ses-grok-provider-id")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session_provider_id(&session, "grok"), Some("grok-abc"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn grok_lifecycle_requires_matching_pty_instance() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("grok_lifecycle_requires_pty_instance");
+        let task = db
+            .create_task("Grok task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-grok-pty",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "grok",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("ses-grok-pty", 61)
+            .expect("store pty instance");
+
+        let stale = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "grok".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(99),
+                provider_session_id: Some("grok-stale".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("stale lifecycle should not error");
+        assert!(stale.is_none());
+
+        let missing_identity = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "grok".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: None,
+                provider_session_id: Some("grok-no-pty".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("missing pty identity should not error");
+        assert!(missing_identity.is_none());
+
+        let applied = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "grok".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(61),
+                provider_session_id: Some("grok-current".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("current lifecycle should apply")
+        .expect("status should change");
+        assert_eq!(applied.status, "running");
+
+        let session = db
+            .get_agent_session("ses-grok-pty")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+        assert_eq!(session.grok_session_id, Some("grok-current".to_string()));
 
         let _ = std::fs::remove_file(path);
     }

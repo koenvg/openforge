@@ -51,6 +51,7 @@ function makeSession(taskId: string, status: string): AgentSession {
     provider: 'claude-code',
     claude_session_id: null,
     pi_session_id: null,
+    grok_session_id: null,
   }
 }
 

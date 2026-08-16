@@ -21,6 +21,7 @@ mod git_worktree;
 mod github_client;
 mod github_poller;
 mod github_runtime;
+mod grok_hooks;
 mod http_bridge_port_contract;
 mod http_server;
 mod migration;

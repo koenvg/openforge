@@ -10,15 +10,18 @@ use axum::{
 };
 
 pub use hook_routes::{
-    agent_lifecycle_handler, hook_notification_handler, hook_notification_permission_handler,
-    hook_post_tool_use_handler, hook_pre_tool_use_handler, hook_session_end_handler,
-    hook_stop_handler, hook_user_prompt_submit_handler, opencode_event_handler,
-    pi_agent_end_handler, pi_agent_start_handler,
+    agent_lifecycle_handler, grok_hook_notification_permission_handler,
+    grok_hook_post_tool_use_handler, grok_hook_pre_tool_use_handler, grok_hook_session_end_handler,
+    grok_hook_session_start_handler, grok_hook_stop_handler, grok_hook_user_prompt_submit_handler,
+    hook_notification_handler, hook_notification_permission_handler, hook_post_tool_use_handler,
+    hook_pre_tool_use_handler, hook_session_end_handler, hook_stop_handler,
+    hook_user_prompt_submit_handler, opencode_event_handler, pi_agent_end_handler,
+    pi_agent_start_handler,
 };
 pub use models::{
     AddTaskDependencyRequest, AddTaskLabelRequest, AddTaskLabelResponse,
     AgentLifecycleNotificationPayload, ClaudeHookPayload, ClaudeHookQuery, CreateTaskRequest,
-    CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse, GetTaskInfoResponse,
+    CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse, GetTaskInfoResponse, GrokHookQuery,
     LinkTaskChainRequest, LinkTaskChainResponse, OpenCodePluginEventPayload,
     PiAgentLifecyclePayload, RemoveTaskLabelRequest, SetTaskDependenciesRequest, StartTaskRequest,
     TaskDependencyLink, TaskLabelsResponse, TaskListRow, TasksQuery, UpdateTaskRequest,
@@ -80,5 +83,30 @@ pub(super) fn router() -> Router<AppState> {
         .route(
             "/hooks/notification-permission",
             post(hook_notification_permission_handler),
+        )
+        .route(
+            "/hooks/grok-session-start",
+            post(grok_hook_session_start_handler),
+        )
+        .route(
+            "/hooks/grok-user-prompt-submit",
+            post(grok_hook_user_prompt_submit_handler),
+        )
+        .route(
+            "/hooks/grok-pre-tool-use",
+            post(grok_hook_pre_tool_use_handler),
+        )
+        .route(
+            "/hooks/grok-post-tool-use",
+            post(grok_hook_post_tool_use_handler),
+        )
+        .route("/hooks/grok-stop", post(grok_hook_stop_handler))
+        .route(
+            "/hooks/grok-session-end",
+            post(grok_hook_session_end_handler),
+        )
+        .route(
+            "/hooks/grok-notification-permission",
+            post(grok_hook_notification_permission_handler),
         )
 }
