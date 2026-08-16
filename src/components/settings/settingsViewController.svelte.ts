@@ -283,7 +283,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     }
   }
 
-  function captureCurrentSave(): boolean {
+  function captureCurrentSave(globalChanges?: GlobalSettingsSavePayload): boolean {
     if (mode === 'project' && hasProject && projectId) {
       pendingProjectSettingsSave = {
         projectId,
@@ -298,17 +298,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       return true
     }
 
-    if (mode === 'global' && globalSettingsLoaded) {
-      pendingGlobalSettingsSave = {
-        taskIdPrefix,
-        githubToken,
-        codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
-        taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
-        githubPollInterval,
-        handoffNotesEnabled: globalHandoffNotesEnabled,
-        useWorktrees: globalUseWorktrees,
-        aiProvider: globalAiProvider,
-      }
+    if (mode === 'global' && globalSettingsLoaded && globalChanges) {
+      pendingGlobalSettingsSave = { ...pendingGlobalSettingsSave, ...globalChanges }
       return true
     }
 
@@ -361,6 +352,9 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
         savedStatusTimer = null
       }, 2000)
     } catch (value) {
+      if (globalPayload) {
+        pendingGlobalSettingsSave = { ...globalPayload, ...pendingGlobalSettingsSave }
+      }
       console.error('Failed to save settings:', value)
       saveError = getErrorMessage(value)
       saveStatus = 'error'
@@ -371,8 +365,8 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     }
   }
 
-  function scheduleSave(): void {
-    if (!captureCurrentSave()) return
+  function scheduleSave(globalChanges?: GlobalSettingsSavePayload): void {
+    if (!captureCurrentSave(globalChanges)) return
     clearSavedStatusTimer()
     saved = false
     saveError = null
@@ -385,7 +379,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   }
 
   function runImmediateSave(): Promise<void> {
-    if (!captureCurrentSave()) return Promise.resolve()
+    if (!pendingProjectSettingsSave && !pendingGlobalSettingsSave && !captureCurrentSave()) return Promise.resolve()
     return saveController.runImmediately()
   }
 
@@ -420,7 +414,18 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
         githubPollInterval = parseGitHubPollIntervalSeconds(value)
         break
     }
-    scheduleSave()
+    const changesByConfigKey: Record<string, GlobalSettingsSavePayload> = {
+      code_cleanup_tasks_enabled: { codeCleanupTasksEnabled: isCodeCleanupTasksEnabled },
+      task_display_title_metadata_updates_enabled: {
+        taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
+      },
+      handoff_notes_enabled: { handoffNotesEnabled: globalHandoffNotesEnabled },
+      ai_provider: { aiProvider: globalAiProvider },
+      use_worktrees: { useWorktrees: globalUseWorktrees },
+      task_id_prefix: { taskIdPrefix },
+      github_poll_interval: { githubPollInterval },
+    }
+    scheduleSave(changesByConfigKey[key])
   }
 
   async function handleGlobalPluginToggle(pluginId: string, enabled: boolean): Promise<void> {
@@ -587,7 +592,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     setAgentInstructions(value: string) { agentInstructions = value; scheduleSave() },
     setHandoffNotesTemplate(value: string) { handoffNotesTemplate = value; scheduleSave() },
     setFocusFilterStates(value: TaskState[]) { focusFilterStates = value; scheduleSave() },
-    setGithubToken(value: string) { githubToken = value; scheduleSave() },
+    setGithubToken(value: string) { githubToken = value; scheduleSave({ githubToken: value }) },
     clearDownloadError() { downloadingModel = null },
     beginDeleteConfirmation() { confirmingDelete = true; deleteError = null },
     cancelDeleteConfirmation() { confirmingDelete = false; deleteError = null },

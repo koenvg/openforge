@@ -16,14 +16,14 @@ export interface ProjectSettingsSavePayload {
 }
 
 export interface GlobalSettingsSavePayload {
-  taskIdPrefix: string
-  githubToken: string
-  codeCleanupTasksEnabled: boolean
-  taskDisplayTitleMetadataUpdatesEnabled: boolean
-  githubPollInterval: number
-  handoffNotesEnabled: boolean
-  useWorktrees: boolean
-  aiProvider: string
+  taskIdPrefix?: string
+  githubToken?: string
+  codeCleanupTasksEnabled?: boolean
+  taskDisplayTitleMetadataUpdatesEnabled?: boolean
+  githubPollInterval?: number
+  handoffNotesEnabled?: boolean
+  useWorktrees?: boolean
+  aiProvider?: string
 }
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
@@ -40,12 +40,20 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
 }
 
 export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Promise<void> {
-  await setConfig('task_id_prefix', payload.taskIdPrefix)
-  await setConfig('github_token', payload.githubToken)
-  await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
-  await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
-  await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
-  await setConfig('handoff_notes_enabled', payload.handoffNotesEnabled ? 'true' : 'false')
-  await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
-  await setConfig('ai_provider', payload.aiProvider)
+  if (payload.taskIdPrefix !== undefined) await setConfig('task_id_prefix', payload.taskIdPrefix)
+  if (payload.githubToken !== undefined) await setConfig('github_token', payload.githubToken)
+  if (payload.codeCleanupTasksEnabled !== undefined) {
+    await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
+  }
+  if (payload.taskDisplayTitleMetadataUpdatesEnabled !== undefined) {
+    await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
+  }
+  if (payload.githubPollInterval !== undefined) {
+    await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
+  }
+  if (payload.handoffNotesEnabled !== undefined) {
+    await setConfig('handoff_notes_enabled', payload.handoffNotesEnabled ? 'true' : 'false')
+  }
+  if (payload.useWorktrees !== undefined) await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
+  if (payload.aiProvider !== undefined) await setConfig('ai_provider', payload.aiProvider)
 }

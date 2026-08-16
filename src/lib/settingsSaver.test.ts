@@ -82,6 +82,13 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')
   })
 
+  it('persists only supplied global settings', async () => {
+    await saveGlobalSettings({ githubToken: 'gh-new' })
+
+    expect(setConfig).toHaveBeenCalledOnce()
+    expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-new')
+  })
+
   it('clamps persisted global GitHub poll interval of 0 seconds to the minimum supported value', async () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
