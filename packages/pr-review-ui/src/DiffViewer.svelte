@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ChevronDown, ChevronUp, PanelLeftOpen, Search, X } from '@lucide/svelte'
   import { DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
@@ -461,21 +462,21 @@
   tabindex="-1"
   onkeydown={search.handleRootKeydown}
 >
-  <div class="flex items-center gap-1 px-3 py-2 bg-base-200 border-b border-base-300 shrink-0">
+  <div class="flex min-h-14 shrink-0 items-center gap-2 border-b border-base-300 bg-base-200 px-3 py-2">
     {#if onToggleFileTree}
       <button
-        class="btn btn-ghost btn-xs {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
         title={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
         aria-label={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
         aria-expanded={fileTreeVisible}
         onclick={() => onToggleFileTree!()}
       >
-        <span aria-hidden="true">{fileTreeVisible ? '◧' : '☰'}</span>
+        <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" />
       </button>
       <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
     <button
-      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
       aria-label="Split diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Split}
       onclick={() => (diffViewMode = DiffModeEnum.Split)}
@@ -483,7 +484,7 @@
       Split
     </button>
     <button
-      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
       aria-label="Unified diff view"
       aria-pressed={diffViewMode === DiffModeEnum.Unified}
       onclick={() => (diffViewMode = DiffModeEnum.Unified)}
@@ -492,7 +493,7 @@
     </button>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     <button
-      class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      class="btn btn-ghost btn-sm h-10 min-h-10 px-4 text-[13px] {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
       onclick={() => { diffViewWrap = !diffViewWrap; saveDiffViewWrap(diffViewWrap) }}
       title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
       aria-label={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
@@ -502,15 +503,15 @@
     </button>
     <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     <button
-      class="btn btn-ghost btn-xs text-base-content/50"
+      class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0 text-base-content/60"
       onclick={search.open}
       title="Search (⌘F)"
       aria-label="Search diff"
-    ><span aria-hidden="true">🔍</span></button>
+    ><Search size={18} strokeWidth={1.8} aria-hidden="true" /></button>
     {#if search.visible}
       <input
         type="text"
-        class="input input-xs input-bordered w-40"
+        class="input input-bordered h-10 min-h-10 w-48 bg-base-100 text-[13px]"
         aria-label="Search diff text"
         placeholder="Search diff..."
         value={search.query}
@@ -521,7 +522,7 @@
         bind:this={search.inputEl}
         onkeydown={search.handleKeydown}
       />
-      <span class="text-xs text-base-content/50 tabular-nums">
+      <span class="text-[13px] text-base-content/60 tabular-nums">
         {#if search.query && search.matchCount === 0}
           0 results
         {:else if search.matchCount > 0}
@@ -529,25 +530,25 @@
         {/if}
       </span>
       <button
-        class="btn btn-ghost btn-xs"
+        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
         onclick={search.goToPrev}
         disabled={search.matchCount === 0}
         title="Previous match (Shift+Enter)"
         aria-label="Previous search match"
-      ><span aria-hidden="true">▲</span></button>
+      ><ChevronUp size={17} strokeWidth={1.8} aria-hidden="true" /></button>
       <button
-        class="btn btn-ghost btn-xs"
+        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
         onclick={search.goToNext}
         disabled={search.matchCount === 0}
         title="Next match (Enter)"
         aria-label="Next search match"
-      ><span aria-hidden="true">▼</span></button>
+      ><ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" /></button>
       <button
-        class="btn btn-ghost btn-xs"
+        class="btn btn-ghost btn-sm h-10 min-h-10 w-10 p-0"
         onclick={search.close}
         title="Close search (Escape)"
         aria-label="Close diff search"
-      ><span aria-hidden="true">✕</span></button>
+      ><X size={17} strokeWidth={1.8} aria-hidden="true" /></button>
     {/if}
     {#if toolbarExtra}
       <div class="ml-auto"></div>

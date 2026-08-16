@@ -60,6 +60,7 @@
       "default": "./dist/fileIcons.js"
     },
     "./ui/Button.svelte": "./dist/ui/Button.svelte",
+    "./ui/Checkbox.svelte": "./dist/ui/Checkbox.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",

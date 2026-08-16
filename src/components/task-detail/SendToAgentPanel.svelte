@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AlertTriangle, CheckCircle2, RefreshCw, Send, Zap } from '@lucide/svelte'
   import {
     selfReviewStateByTask,
     setSelfReviewArchivedComments,
@@ -11,6 +12,7 @@
 
   interface Props {
     taskId: string
+    layout?: 'bar' | 'sidebar'
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
     onRefresh: () => void
@@ -20,7 +22,7 @@
     onSendComplete?: () => void
   }
 
-  let { taskId, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
+  let { taskId, layout = 'bar', agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
 
   let isSending = $state(false)
   let error = $state<string | null>(null)
@@ -114,30 +116,30 @@
 </script>
 
 {#if isAgentBusy}
-  <div class="flex items-center gap-2 px-6 py-2 bg-warning/10 border-t border-warning/30 border-b border-b-warning/20 text-warning text-[0.78rem] font-medium">
-    <span class="text-[0.9rem] shrink-0">⚡</span>
+  <div class="flex items-center gap-2 border-y border-warning/30 bg-warning/10 px-4 py-2 text-[13px] font-medium text-warning">
+    <Zap size={17} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
     <span>Agent is working — diff may be stale. Refresh when ready.</span>
   </div>
 {/if}
 
-<div class="flex items-center justify-between gap-4 px-6 py-3 bg-base-200 border-t border-base-300 min-h-14">
+<div class="{layout === 'sidebar' ? 'flex flex-col gap-3 border-t border-base-300 bg-base-100 p-3' : 'flex min-h-14 items-center justify-between gap-4 border-t border-base-300 bg-base-200 px-6 py-3'}">
   <div class="flex items-center gap-2 flex-1 min-w-0">
     {#if hasComments}
       <div class="flex items-center gap-2 flex-wrap">
         {#if inlineCount > 0}
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[0.72rem] font-semibold whitespace-nowrap text-primary bg-primary/12 border border-primary/25">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-primary/25 bg-primary/12 px-2.5 py-1 text-[13px] font-semibold text-primary">
             <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
             {inlineCount} inline {inlineCount === 1 ? 'comment' : 'comments'}
           </span>
         {/if}
         {#if generalCount > 0}
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[0.72rem] font-semibold whitespace-nowrap text-warning bg-warning/12 border border-warning/25">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-warning/25 bg-warning/12 px-2.5 py-1 text-[13px] font-semibold text-warning">
             <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
             {generalCount} general {generalCount === 1 ? 'comment' : 'comments'}
           </span>
         {/if}
         {#if prCommentCount > 0}
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[0.72rem] font-semibold whitespace-nowrap text-error bg-error/12 border border-error/25">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-error/25 bg-error/12 px-2.5 py-1 text-[13px] font-semibold text-error">
             <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
             {prCommentCount} PR {prCommentCount === 1 ? 'comment' : 'comments'}
           </span>
@@ -148,36 +150,43 @@
     {/if}
   </div>
 
-  <div class="flex items-center gap-2.5 shrink-0">
+  <div class="flex shrink-0 items-center gap-2.5 {layout === 'sidebar' ? 'w-full' : ''}">
     {#if error}
-      <span class="inline-flex items-center gap-1.5 text-xs text-error max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap">
-        <span>⚠</span>
+      <span class="inline-flex max-w-[280px] items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-error" role="alert">
+        <AlertTriangle size={16} strokeWidth={1.8} aria-hidden="true" />
         {error}
       </span>
     {/if}
     {#if successMessage}
-      <span class="inline-flex items-center gap-1.5 text-xs text-success whitespace-nowrap">
-        <span>✓</span>
+      <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-success" aria-live="polite">
+        <CheckCircle2 size={16} strokeWidth={1.8} aria-hidden="true" />
         {successMessage}
       </span>
     {/if}
 
     <button
-      class="btn btn-soft btn-sm shadow-sm hover:shadow-md transition-shadow"
+      class="btn btn-soft btn-sm h-10 min-h-10 shadow-sm transition-shadow hover:shadow-md {layout === 'sidebar' ? 'flex-1' : ''}"
       onclick={onRefresh}
       disabled={isSending}
       title="Refresh diff"
     >
-      ↻ Refresh Diff
+      <RefreshCw size={17} strokeWidth={1.8} aria-hidden="true" />
+      Refresh diff
     </button>
 
     <button
-      class="btn btn-primary btn-sm font-semibold tracking-wide shadow-sm hover:shadow-md transition-shadow"
+      class="btn btn-primary btn-sm h-10 min-h-10 font-semibold tracking-wide shadow-sm transition-shadow hover:shadow-md {layout === 'sidebar' ? 'flex-[1.35]' : ''}"
       onclick={openPromptDialog}
       disabled={!canSend}
       title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Review and send feedback to agent'}
     >
-      {isSending ? 'Preparing…' : '→ Send to Agent'}
+      {#if isSending}
+        <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+        Preparing…
+      {:else}
+        <Send size={17} strokeWidth={1.8} aria-hidden="true" />
+        Send to agent
+      {/if}
     </button>
   </div>
 </div>
@@ -193,12 +202,12 @@
       <h2 class="text-base font-semibold m-0">Review prompt before sending</h2>
     {/snippet}
     <div class="flex flex-col gap-3 px-5 py-4">
-      <p class="m-0 text-xs text-base-content/60">
+      <p class="m-0 text-[13px] text-base-content/60">
         Edit the prompt below if you like — the agent receives exactly this text.
         Switching mode regenerates it.
       </p>
       <textarea
-        class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed min-h-80"
+        class="textarea textarea-bordered min-h-80 w-full font-mono text-[13px] leading-relaxed"
         bind:value={promptDraft}
         aria-label="Prompt sent to the agent"
       ></textarea>
@@ -224,7 +233,8 @@
           onclick={confirmSend}
           disabled={!promptDraft.trim()}
         >
-          → Send to Agent
+          <Send size={17} strokeWidth={1.8} aria-hidden="true" />
+          Send to agent
         </button>
       </div>
     </div>

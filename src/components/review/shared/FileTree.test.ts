@@ -69,76 +69,28 @@ describe('FileTree', () => {
     expect(screen.getByText('README.md')).toBeTruthy()
   })
 
-  it('shows status icon for modified files', () => {
-    const onSelectFile = () => {}
-    const modifiedFile: PrFileDiff = {
-      sha: 'a1',
-      filename: 'test.ts',
-      status: 'modified',
-      additions: 1,
-      deletions: 1,
-      changes: 2,
+  it.each([
+    ['modified', 'M'],
+    ['added', 'A'],
+    ['removed', 'D'],
+    ['renamed', 'R'],
+  ] as const)('shows a status badge for %s files', (status, badge) => {
+    const file: PrFileDiff = {
+      sha: `sha-${status}`,
+      filename: `${status}.ts`,
+      status,
+      additions: status === 'added' ? 1 : 0,
+      deletions: status === 'removed' ? 1 : 0,
+      changes: 1,
       patch: '@@ -1,1 +1,1 @@',
-      previous_filename: null,
-    is_truncated: false,
-    patch_line_count: null,
-    }
-    render(FileTree, { props: { files: [modifiedFile], onSelectFile } })
-    expect(screen.getByText('±')).toBeTruthy()
-  })
-
-  it('shows status icon for added files', () => {
-    const onSelectFile = () => {}
-    const addedFile: PrFileDiff = {
-      sha: 'a2',
-      filename: 'new.ts',
-      status: 'added',
-      additions: 10,
-      deletions: 0,
-      changes: 10,
-      patch: '@@ -0,0 +1,10 @@',
-      previous_filename: null,
-    is_truncated: false,
-    patch_line_count: null,
-    }
-    render(FileTree, { props: { files: [addedFile], onSelectFile } })
-    expect(screen.getByText('+')).toBeTruthy()
-  })
-
-  it('shows status icon for removed files', () => {
-    const onSelectFile = () => {}
-    const removedFile: PrFileDiff = {
-      sha: 'a3',
-      filename: 'old.ts',
-      status: 'removed',
-      additions: 0,
-      deletions: 10,
-      changes: 10,
-      patch: '@@ -1,10 +0,0 @@',
-      previous_filename: null,
-    is_truncated: false,
-    patch_line_count: null,
-    }
-    render(FileTree, { props: { files: [removedFile], onSelectFile } })
-    expect(screen.getByText('−')).toBeTruthy()
-  })
-
-  it('shows status icon for renamed files', () => {
-    const onSelectFile = () => {}
-    const renamedFile: PrFileDiff = {
-      sha: 'a4',
-      filename: 'newname.ts',
-      status: 'renamed',
-      additions: 0,
-      deletions: 0,
-      changes: 0,
-      patch: null,
-      previous_filename: 'oldname.ts',
+      previous_filename: status === 'renamed' ? 'old.ts' : null,
       is_truncated: false,
       patch_line_count: null,
     }
-    render(FileTree, { props: { files: [renamedFile], onSelectFile } })
-    expect(screen.getByText('→')).toBeTruthy()
+
+    render(FileTree, { props: { files: [file], onSelectFile: () => {} } })
+
+    expect(screen.getByText(badge)).toBeTruthy()
   })
 
   it('calls onSelectFile when a file is clicked', async () => {
@@ -164,7 +116,7 @@ describe('FileTree', () => {
     expect(selectedFilename).toBe('test.ts')
   })
 
-  it('compacts single-child directory chains into one node', () => {
+  it('groups files under their full immediate parent path', () => {
     const onSelectFile = () => {}
     const nestedFiles: PrFileDiff[] = [
       {
@@ -176,16 +128,16 @@ describe('FileTree', () => {
         changes: 7,
         patch: '@@ -1,3 +1,5 @@',
         previous_filename: null,
-    is_truncated: false,
-    patch_line_count: null,
+        is_truncated: false,
+        patch_line_count: null,
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    // src/ and components/ each have a single child, so they collapse into one node.
-    expect(screen.getByText('src/components/')).toBeTruthy()
+
+    expect(screen.getByText('src/components')).toBeTruthy()
     expect(screen.getByText('Button.svelte')).toBeTruthy()
-    expect(screen.queryByText('src/')).toBeNull()
-    expect(screen.queryByText('components/')).toBeNull()
+    expect(screen.queryByText('src')).toBeNull()
+    expect(screen.queryByText('components')).toBeNull()
   })
 
   it('directories are collapsed when clicked', async () => {
@@ -205,8 +157,7 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    // src/lib/ is a compacted single-child chain; collapsing it hides its file leaf.
-    const dir = screen.getByText('src/lib/')
+    const dir = screen.getByText('src/lib')
     expect(screen.getByText('test.ts')).toBeTruthy()
     await fireEvent.click(dir)
     expect(screen.queryByText('test.ts')).toBeNull()
@@ -229,7 +180,7 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    const dir = screen.getByText('src/lib/')
+    const dir = screen.getByText('src/lib')
     await fireEvent.click(dir)
     expect(screen.queryByText('test.ts')).toBeNull()
     await fireEvent.click(dir)

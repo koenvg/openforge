@@ -19,26 +19,19 @@ function makeFile(filename: string, overrides: Partial<PrFileDiff> = {}): PrFile
   }
 }
 
-describe('FileTree compact folders', () => {
-  it('collapses a chain of single-child directories into one node (VSCode-style)', () => {
+describe('FileTree shallow path groups', () => {
+  it('groups a deeply nested file under its full parent path', () => {
     const filename = 'libs/bound-shared/forge/src/widgets/ai-generated/AssetsByStatus.tsx'
     render(FileTree, { props: { files: [makeFile(filename)], onSelectFile: vi.fn() } })
 
-    // The whole single-child directory chain renders as a single directory node.
-    const dir = screen.getByRole('treeitem', {
+    expect(screen.getByRole('treeitem', {
       name: 'Collapse libs/bound-shared/forge/src/widgets/ai-generated',
-    })
-    expect(dir).toBeTruthy()
-
-    // No intermediate directory node is rendered on its own.
+    })).toBeTruthy()
     expect(screen.queryByRole('treeitem', { name: 'Collapse libs' })).toBeNull()
-    expect(screen.queryByRole('treeitem', { name: 'Collapse libs/bound-shared' })).toBeNull()
-
-    // The file itself is still present as a leaf.
     expect(screen.getByRole('treeitem', { name: `Select file ${filename}` })).toBeTruthy()
   })
 
-  it('stops compacting at a branch point and resumes below it', () => {
+  it('renders sibling parent paths as separate shallow groups', () => {
     render(FileTree, {
       props: {
         files: [makeFile('src/deep/one/x.ts'), makeFile('src/deep/two/y.ts')],
@@ -46,15 +39,12 @@ describe('FileTree compact folders', () => {
       },
     })
 
-    // src/ has a single child (deep/), so they compact together...
-    expect(screen.getByRole('treeitem', { name: 'Collapse src/deep' })).toBeTruthy()
-    // ...but deep/ branches into one/ and two/, which stay as separate nodes.
     expect(screen.getByRole('treeitem', { name: 'Collapse src/deep/one' })).toBeTruthy()
     expect(screen.getByRole('treeitem', { name: 'Collapse src/deep/two' })).toBeTruthy()
-    expect(screen.queryByRole('treeitem', { name: 'Collapse src' })).toBeNull()
+    expect(screen.queryByRole('treeitem', { name: 'Collapse src/deep' })).toBeNull()
   })
 
-  it('does not compact directories that contain files alongside a single subdirectory', () => {
+  it('keeps parent and nested parent paths as separate groups', () => {
     render(FileTree, {
       props: {
         files: [makeFile('pkg/readme.md'), makeFile('pkg/sub/deep.ts')],
@@ -62,12 +52,11 @@ describe('FileTree compact folders', () => {
       },
     })
 
-    // pkg/ holds a file and a directory, so it is not folded into sub/.
     expect(screen.getByRole('treeitem', { name: 'Collapse pkg' })).toBeTruthy()
     expect(screen.getByRole('treeitem', { name: 'Collapse pkg/sub' })).toBeTruthy()
   })
 
-  it('selects the correct file when clicking a leaf inside a compacted chain', async () => {
+  it('selects the correct file within a shallow group', async () => {
     const onSelectFile = vi.fn()
     const filename = 'a/b/c/d/File.svelte'
     render(FileTree, { props: { files: [makeFile(filename)], onSelectFile } })
@@ -76,33 +65,27 @@ describe('FileTree compact folders', () => {
     expect(onSelectFile).toHaveBeenCalledWith(filename)
   })
 
-  it('toggles the compacted directory as a single expand/collapse unit', async () => {
-    const filename = 'a/b/c/File.svelte'
-    render(FileTree, { props: { files: [makeFile(filename)], onSelectFile: vi.fn() } })
+  it('collapses one path group without hiding sibling groups', async () => {
+    const first = 'a/b/c/File.svelte'
+    const second = 'a/b/d/Other.svelte'
+    render(FileTree, { props: { files: [makeFile(first), makeFile(second)], onSelectFile: vi.fn() } })
 
-    const dir = screen.getByRole('treeitem', { name: 'Collapse a/b/c' })
-    expect(dir.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('treeitem', { name: `Select file ${filename}` })).toBeTruthy()
+    await fireEvent.click(screen.getByRole('treeitem', { name: 'Collapse a/b/c' }))
 
-    await fireEvent.click(dir)
-
-    const collapsed = screen.getByRole('treeitem', { name: 'Expand a/b/c' })
-    expect(collapsed.getAttribute('aria-expanded')).toBe('false')
-    // Collapsing the compacted node hides its file leaf.
-    expect(screen.queryByRole('treeitem', { name: `Select file ${filename}` })).toBeNull()
+    expect(screen.queryByRole('treeitem', { name: `Select file ${first}` })).toBeNull()
+    expect(screen.getByRole('treeitem', { name: `Select file ${second}` })).toBeTruthy()
   })
 })
 
-describe('FileTree file-type icons', () => {
-  it('renders a file-type icon for each file', () => {
+describe('FileTree visual metadata', () => {
+  it('renders a compact file-status badge', () => {
     render(FileTree, { props: { files: [makeFile('src/foo.ts')], onSelectFile: vi.fn() } })
-    expect(document.querySelector('[data-icon="typescript"]')).not.toBeNull()
+    expect(screen.getByLabelText('Modified').textContent).toBe('M')
   })
 
-  it('renders a folder icon for directories', () => {
+  it('renders a folder icon for path groups', () => {
     render(FileTree, { props: { files: [makeFile('src/deep/foo.ts')], onSelectFile: vi.fn() } })
-    // Directories default to expanded, so they render the open folder icon.
-    expect(document.querySelector('[data-icon="folder-open"]')).not.toBeNull()
+    expect(screen.getByTestId('file-tree-folder-icon')).toBeTruthy()
   })
 })
 
@@ -161,5 +144,28 @@ describe('FileTree non-application files toggle', () => {
     })
 
     expect(screen.queryByRole('checkbox', { name: /Also include non-application files/i })).toBeNull()
+  })
+})
+
+describe('FileTree review filtering', () => {
+  it('filters changed files by path while keeping matching file statistics visible', async () => {
+    render(FileTree, {
+      props: {
+        files: [
+          makeFile('src/components/ReviewPanel.svelte', { additions: 12, deletions: 4 }),
+          makeFile('src/lib/taskState.ts', { additions: 3, deletions: 1 }),
+        ],
+        onSelectFile: vi.fn(),
+      },
+    })
+
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Filter changed files' }), {
+      target: { value: 'reviewpanel' },
+    })
+
+    expect(screen.getByRole('treeitem', { name: 'Select file src/components/ReviewPanel.svelte' })).toBeTruthy()
+    expect(screen.queryByRole('treeitem', { name: 'Select file src/lib/taskState.ts' })).toBeNull()
+    expect(screen.getByText('+12')).toBeTruthy()
+    expect(screen.getByText('−4')).toBeTruthy()
   })
 })

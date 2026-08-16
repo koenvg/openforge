@@ -32,7 +32,7 @@ describe('SendToAgentPanel', () => {
     })
 
     expect(screen.getByText('1 inline comment')).toBeTruthy()
-    expect(screen.getByText('→ Send to Agent').closest('button')?.disabled).toBe(false)
+    expect(screen.getByText('Send to agent').closest('button')?.disabled).toBe(false)
   })
 
   it('archives inline comments when opening the prompt dialog, then sends on confirm', async () => {
@@ -51,7 +51,7 @@ describe('SendToAgentPanel', () => {
 
     // Clicking the panel button archives (current timing) and opens the dialog,
     // but does NOT dispatch to the agent yet.
-    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    await fireEvent.click(screen.getByText('Send to agent'))
     await waitFor(() => {
       expect(onPendingInlineCommentsChange).toHaveBeenCalledWith([])
     })
@@ -81,7 +81,7 @@ describe('SendToAgentPanel', () => {
       },
     })
 
-    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    await fireEvent.click(screen.getByText('Send to agent'))
     const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
 
     // Default is Address.
@@ -110,7 +110,7 @@ describe('SendToAgentPanel', () => {
       },
     })
 
-    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    await fireEvent.click(screen.getByText('Send to agent'))
     const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
     await fireEvent.input(textarea, { target: { value: 'my edited prompt' } })
     await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
@@ -130,7 +130,7 @@ describe('SendToAgentPanel', () => {
       },
     })
 
-    await fireEvent.click(screen.getByText('→ Send to Agent'))
+    await fireEvent.click(screen.getByText('Send to agent'))
     await screen.findByRole('textbox')
     await fireEvent.click(screen.getByText('Cancel'))
 

@@ -16,6 +16,7 @@
     headSha?: string
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
+    onRequestFocusFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
@@ -48,6 +49,7 @@
     headSha = '',
     fileTreeVisible = true,
     onToggleFileTree,
+    onRequestFocusFileTree,
     fetchFileContents,
     batchFetchFileContents,
     resolveRepositoryImage,
@@ -73,6 +75,7 @@
     scrollToComment: (filename: string, lineNumber: number) => Promise<void>
     getScrollTop: () => number
     setScrollTop: (scrollTop: number) => void
+    focusDiff: () => void
   }
 
   let sharedViewer = $state<SharedDiffViewerHandle | null>(null)
@@ -101,6 +104,10 @@
   export function setScrollTop(scrollTop: number) {
     sharedViewer?.setScrollTop(scrollTop)
   }
+
+  export function focusDiff() {
+    sharedViewer?.focusDiff()
+  }
 </script>
 
 <SharedDiffViewer
@@ -112,6 +119,7 @@
   {headSha}
   {fileTreeVisible}
   {onToggleFileTree}
+  {onRequestFocusFileTree}
   {fetchFileContents}
   {batchFetchFileContents}
   {resolveRepositoryImage}

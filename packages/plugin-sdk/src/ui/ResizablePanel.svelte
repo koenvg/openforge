@@ -8,6 +8,7 @@
     minWidth?: number
     maxWidth?: number
     side?: 'left' | 'right'
+    label?: string
     children?: Snippet
   }
 
@@ -17,6 +18,7 @@
     minWidth = 120,
     maxWidth = 600,
     side = 'left',
+    label = side === 'left' ? 'left' : 'right',
     children,
   }: Props = $props()
 
@@ -119,6 +121,10 @@
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
+      aria-label="Resize {label} panel"
+      aria-valuemin={minWidth}
+      aria-valuemax={maxWidth}
+      aria-valuenow={width}
       tabindex="0"
       onmousedown={onMouseDown}
       ondblclick={onDblClick}
@@ -137,6 +143,10 @@
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
+      aria-label="Resize {label} panel"
+      aria-valuemin={minWidth}
+      aria-valuemax={maxWidth}
+      aria-valuenow={width}
       tabindex="0"
       onmousedown={onMouseDown}
       ondblclick={onDblClick}

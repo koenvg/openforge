@@ -102,4 +102,20 @@ describe('DiffViewer accessibility', () => {
 
     expect(screen.getByRole('button', { name: 'Expand diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('false')
   })
+
+  it('announces large change sets and auto-collapses oversized files', () => {
+    const largeFiles = Array.from({ length: 12 }, (_, index) => ({
+      ...files[0],
+      sha: `sha-${index}`,
+      filename: `src/large-${index}.ts`,
+      additions: 500,
+      deletions: 1,
+      changes: 501,
+    }))
+
+    render(DiffViewer, { props: { files: largeFiles } })
+
+    expect(screen.getByText(/Large diff — 12 files, 6012 total changes\. 12 files auto-collapsed/)).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /Expand diff for src\/large-/ })).toHaveLength(12)
+  })
 })
