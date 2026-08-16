@@ -131,7 +131,6 @@ describe('createTaskActionRunner', () => {
 
   it('starts a task, stores runtime/session state, reloads tasks, and clears starting state', async () => {
     const loadTasks = vi.fn(async () => undefined)
-    const triggerGithubSync = vi.fn(async () => undefined)
     vi.mocked(startImplementation).mockResolvedValue({ session_id: 'session-1', workspace_path: '/workspace/T-42', task_id: task.id, port: 0 } as any)
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: task.id, status: 'running' } as any)
     vi.mocked(getTerminalImageProtocol).mockReturnValue('iterm2')
@@ -139,7 +138,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks,
-      triggerGithubSync,
     })
 
     tasks.set([task])
@@ -162,7 +160,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
@@ -176,7 +173,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
@@ -210,7 +206,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
@@ -232,7 +227,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     const started = runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
@@ -253,7 +247,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     const started = runner.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
@@ -270,7 +263,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.handleRunAction({ taskId: task.id, actionPrompt: 'continue', agent: null })
@@ -284,7 +276,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync: vi.fn(async () => undefined),
     })
     const firstReadyPr = createPullRequest({ id: 1, title: 'First ready PR', head_sha: 'abc' })
     const secondReadyPr = createPullRequest({ id: 2, title: 'Second ready PR', head_sha: 'def' })
@@ -297,12 +288,10 @@ describe('createTaskActionRunner', () => {
     expect(get(error)).toBe('Multiple pull requests are ready to merge. Open the task details to choose the correct PR.')
   })
 
-  it('marks a single ready PR merged locally without forcing GitHub sync', async () => {
-    const triggerGithubSync = vi.fn(async () => undefined)
+  it('marks a single ready PR merged locally', async () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync,
     })
     const readyPr = createPullRequest({ id: 9001, pr_number: 42 })
     ticketPrs.set(new Map([[task.id, [readyPr]]]))
@@ -313,15 +302,12 @@ describe('createTaskActionRunner', () => {
     expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha)
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
-    expect(triggerGithubSync).not.toHaveBeenCalled()
   })
 
-  it('marks a single ready-to-enqueue PR queued locally without forcing GitHub sync', async () => {
-    const triggerGithubSync = vi.fn(async () => undefined)
+  it('marks a single ready-to-enqueue PR queued locally', async () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync,
     })
     const readyPr = createPullRequest({
       id: 9002,
@@ -343,15 +329,12 @@ describe('createTaskActionRunner', () => {
       merge_readiness_status: 'queued_pull_request',
       merge_readiness_action: 'wait_for_queue',
     }))
-    expect(triggerGithubSync).not.toHaveBeenCalled()
   })
 
   it('does not enqueue a stale ready-to-enqueue PR', async () => {
-    const triggerGithubSync = vi.fn(async () => undefined)
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync,
     })
     const stalePr = createPullRequest({
       head_sha: 'new-head',
@@ -367,7 +350,6 @@ describe('createTaskActionRunner', () => {
     await runner.enqueueReadyPullRequest(task)
 
     expect(enqueuePullRequest).not.toHaveBeenCalled()
-    expect(triggerGithubSync).not.toHaveBeenCalled()
     expect(get(ticketPrs).get(task.id)).toEqual([stalePr])
   })
 
@@ -377,7 +359,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks,
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.deleteTaskAndReload(task.id)
@@ -393,7 +374,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks,
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.deleteTaskAndReload(task.id)
@@ -409,7 +389,6 @@ describe('createTaskActionRunner', () => {
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks,
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.deleteTaskAndReload(task.id)
@@ -425,7 +404,6 @@ describe('createTaskActionRunner', () => {
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
       loadProjectAttention,
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.setTaskOutOfFocus(task.id, true)
@@ -443,7 +421,6 @@ describe('createTaskActionRunner', () => {
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
       loadProjectAttention,
-      triggerGithubSync: vi.fn(async () => undefined),
     })
 
     await runner.setTaskOutOfFocus(task.id, false)
@@ -460,11 +437,9 @@ describe('createTaskActionRunner', () => {
     ['unknown mergeability', { mergeable: null, mergeable_state: 'unknown', ci_status: 'success' }],
     ['null mergeability', { mergeable: null, mergeable_state: null, ci_status: 'success' }],
   ] satisfies Array<[string, Partial<PullRequestInfo>]>)('does not merge a PR with %s', async (_label, overrides) => {
-    const triggerGithubSync = vi.fn(async () => undefined)
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
-      triggerGithubSync,
     })
     const blockedPr = createPullRequest(overrides)
     ticketPrs.set(new Map([[task.id, [blockedPr]]]))
@@ -472,7 +447,6 @@ describe('createTaskActionRunner', () => {
     await runner.mergeReadyPullRequest(task)
 
     expect(mergePullRequest).not.toHaveBeenCalled()
-    expect(triggerGithubSync).not.toHaveBeenCalled()
     expect(get(ticketPrs).get(task.id)).toEqual([blockedPr])
   })
 })

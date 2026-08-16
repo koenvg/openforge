@@ -33,7 +33,6 @@ interface TaskActionRunnerOptions {
   getActiveProject(): Project | null
   loadTasks(): Promise<void>
   loadProjectAttention?: () => Promise<void>
-  triggerGithubSync(): Promise<void>
   logError?: (message: string, error: unknown) => void
 }
 
