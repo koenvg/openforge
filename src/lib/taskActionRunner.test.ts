@@ -310,7 +310,7 @@ describe('createTaskActionRunner', () => {
 
     await runner.mergeReadyPullRequest(task)
 
-    expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, 'owner', 'repo', 42, readyPr.head_sha)
+    expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha)
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
     expect(triggerGithubSync).not.toHaveBeenCalled()
@@ -337,7 +337,7 @@ describe('createTaskActionRunner', () => {
 
     await runner.enqueueReadyPullRequest(task)
 
-    expect(enqueuePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, 'owner', 'repo', 43, readyPr.head_sha)
+    expect(enqueuePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha)
     expect(get(ticketPrs).get(task.id)?.[0]).toEqual(expect.objectContaining({
       is_queued: true,
       merge_readiness_status: 'queued_pull_request',

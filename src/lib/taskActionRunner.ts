@@ -185,7 +185,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await mergePullRequest(task.id, pr.id, pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id, pr.head_sha)
+        await mergePullRequest(task.id, pr.id, pr.head_sha)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>
@@ -213,7 +213,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await enqueuePullRequest(task.id, pr.id, pr.repo_owner, pr.repo_name, pr.pr_number ?? pr.id, pr.head_sha)
+        await enqueuePullRequest(task.id, pr.id, pr.head_sha)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>

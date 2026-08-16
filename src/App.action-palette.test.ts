@@ -120,9 +120,6 @@ describe('App action palette shortcuts', () => {
       expect(ipc.mergePullRequest).toHaveBeenCalledWith(
         selectedTask.id,
         readyPr.id,
-        'owner',
-        'repo',
-        42,
         'abc123',
       )
       expect(ipc.forceGithubSync).not.toHaveBeenCalled()

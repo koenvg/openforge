@@ -303,6 +303,11 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Merging…' }))
     expect(invoke.mock.calls.filter(([method]) => method === 'mergeTaskPullRequest')).toHaveLength(1)
+    expect(invoke).toHaveBeenCalledWith('mergeTaskPullRequest', {
+      taskId: 'T-42',
+      prId: 42,
+      expectedHeadSha: 'abc123',
+    })
 
     resolveMerge()
     await waitFor(() => expect(screen.getByText('Pull request merged successfully.')).toBeTruthy())
