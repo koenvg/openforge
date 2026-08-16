@@ -64,11 +64,12 @@
     'comment-addressed',
     'ci-status-changed',
     'review-status-changed',
-  ].map((eventName) => initialApi.events.onGlobal(eventName, () => {
+  ].map((eventName) => initialApi.events.onGlobal(`openforge.${eventName}`, () => {
+    cache.invalidateAll()
     const visibleTaskId = taskId
     void cache.invalidateAndRefresh(visibleTaskId).catch(() => undefined)
   }))
-  invalidationSubscriptions.push(initialApi.events.onGlobal<{ task_id: string }>('task-pull-request-updated', ({ task_id }) => {
+  invalidationSubscriptions.push(initialApi.events.onGlobal<{ task_id: string }>('openforge.task-pull-request-updated', ({ task_id }) => {
     void cache.invalidateAndRefresh(task_id).catch(() => undefined)
   }))
 
@@ -81,7 +82,7 @@
     showLoading = false
     clearLoadingIndicatorTimer()
 
-    const request = cache.load(currentTaskId)
+    const request = cache.revalidate(currentTaskId)
     if (!cache.forTask(currentTaskId).loaded) {
       loadingIndicatorTimer = setTimeout(() => {
         const current = cache.forTask(currentTaskId)

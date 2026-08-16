@@ -14,7 +14,8 @@ export interface TaskPullRequestCacheEntry {
 
 export interface TaskPullRequestCache {
   forTask(taskId: string): TaskPullRequestCacheEntry
-  load(taskId: string): Promise<void>
+  revalidate(taskId: string): Promise<void>
+  invalidateAll(): void
   invalidateAndRefresh(taskId: string): Promise<void>
 }
 
@@ -98,6 +99,26 @@ export function createTaskPullRequestCache(client: GithubTaskClient): TaskPullRe
     return request
   }
 
+  async function revalidate(taskId: string): Promise<void> {
+    if (!forTask(taskId).loaded) {
+      await load(taskId)
+      if (!forTask(taskId).stale) return
+    }
+    await invalidateAndRefresh(taskId)
+  }
+
+  function invalidateAll(): void {
+    const next = new Map(entries)
+    for (const [taskId, current] of next) {
+      next.set(taskId, {
+        ...current,
+        stale: true,
+        revision: current.revision + 1,
+      })
+    }
+    entries = next
+  }
+
   async function invalidateAndRefresh(taskId: string): Promise<void> {
     update(taskId, (current) => ({
       ...current,
@@ -110,7 +131,7 @@ export function createTaskPullRequestCache(client: GithubTaskClient): TaskPullRe
     } while (forTask(taskId).stale)
   }
 
-  return { forTask, load, invalidateAndRefresh }
+  return { forTask, revalidate, invalidateAll, invalidateAndRefresh }
 }
 
 const cachesByApi = new WeakMap<FrontendOpenForgeAPI, TaskPullRequestCache>()
