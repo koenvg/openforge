@@ -117,9 +117,9 @@ describe('AppSidebar', () => {
     reviewCountByProject.set(new Map())
   })
 
-  it('renders the >_ logo', () => {
+  it('does not render the decorative >_ logo', () => {
     renderSidebar()
-    expect(screen.getByText('>_')).toBeTruthy()
+    expect(screen.queryByText('>_')).toBeNull()
   })
 
   it('shows "PROJECTS" label when expanded (collapsed=false)', () => {

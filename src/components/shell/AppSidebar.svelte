@@ -141,12 +141,7 @@
      </div>
   {/if}
 
-  <div class="h-12 px-2 flex items-center border-b border-base-300/50">
-    <div class="flex items-center gap-2 min-w-0 flex-1 {collapsed ? 'justify-center' : ''}">
-      <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
-         <span class="text-black font-bold text-xs">&gt;_</span>
-       </div>
-    </div>
+  <div class="h-12 px-2 flex items-center justify-end border-b border-base-300/50">
     <button
       type="button"
       class="btn btn-ghost btn-xs text-base-content/30 hover:text-base-content/60"
