@@ -12,7 +12,6 @@ mod macos_keychain;
 
 use cache::ProcessSecretCache;
 
-const KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5);
 const INTERACTIVE_KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 pub(crate) const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 const SECRET_STORE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -159,12 +158,10 @@ pub async fn delete_secret_async(key: &str) -> Result<(), String> {
     let key = key.to_string();
     spawn_blocking_secret_store_operation("Secret deletion", move || delete_secret(&key)).await
 }
+
 pub fn get_secret(key: &str) -> Result<Option<String>, String> {
-    let cancellation = SecretStoreCancellation::default();
     with_serialized_keychain_access(|| {
-        process_secret_cache().get_or_read(key, || {
-            get_secret_unlocked(key, &cancellation, KEYCHAIN_READ_TIMEOUT)
-        })
+        process_secret_cache().get_or_read(key, || get_secret_native_unlocked(key))
     })
 }
 
@@ -173,43 +170,45 @@ pub(crate) fn get_secret_with_cancellation(
     cancellation: &SecretStoreCancellation,
 ) -> Result<Option<String>, String> {
     with_serialized_keychain_access_cancellable(cancellation, || {
-        process_secret_cache().get_or_read(key, || {
-            get_secret_unlocked(key, cancellation, INTERACTIVE_KEYCHAIN_READ_TIMEOUT)
-        })
+        process_secret_cache()
+            .get_or_read(key, || get_secret_cancellable_unlocked(key, cancellation))
     })
 }
 
 #[cfg(target_os = "macos")]
-fn get_secret_unlocked(
+fn get_secret_cancellable_unlocked(
     key: &str,
     cancellation: &SecretStoreCancellation,
-    timeout: Duration,
 ) -> Result<Option<String>, String> {
-    macos_keychain::get_secret(key, cancellation, timeout)
+    macos_keychain::get_secret(key, cancellation, INTERACTIVE_KEYCHAIN_READ_TIMEOUT)
 }
+
 #[cfg(not(target_os = "macos"))]
-fn get_secret_unlocked(
+fn get_secret_cancellable_unlocked(
     key: &str,
     cancellation: &SecretStoreCancellation,
-    _timeout: Duration,
 ) -> Result<Option<String>, String> {
     if cancellation.is_cancelled() {
         return Err("Secret read was cancelled".to_string());
     }
+    let result = get_secret_native_unlocked(key);
+    if cancellation.is_cancelled() {
+        return Err("Secret read was cancelled".to_string());
+    }
+    result
+}
+
+fn get_secret_native_unlocked(key: &str) -> Result<Option<String>, String> {
     let entry = keyring::Entry::new(service_name(), key)
         .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
-    let result = match entry.get_password() {
+    match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(format!(
             "Failed to get secret '{}' from keychain: {}",
             key, e
         )),
-    };
-    if cancellation.is_cancelled() {
-        return Err("Secret read was cancelled".to_string());
     }
-    result
 }
 
 fn set_secret_unlocked(key: &str, value: &str) -> Result<(), String> {
@@ -270,14 +269,14 @@ fn set_companion_host_identity_cancellable_unlocked(
         .map_err(SecretStoreWriteError::NotCommitted)
 }
 
-pub(crate) fn run_keychain_write_helper_if_requested() -> Option<i32> {
+pub(crate) fn run_keychain_helper_if_requested() -> Option<i32> {
     #[cfg(not(target_os = "macos"))]
     {
         None
     }
     #[cfg(target_os = "macos")]
     {
-        macos_keychain::run_write_helper_if_requested()
+        macos_keychain::run_helper_if_requested()
     }
 }
 

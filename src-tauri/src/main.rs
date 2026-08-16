@@ -243,7 +243,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    if let Some(exit_code) = secure_store::run_keychain_write_helper_if_requested() {
+    if let Some(exit_code) = secure_store::run_keychain_helper_if_requested() {
         std::process::exit(exit_code);
     }
     if let Err(error) = sidecar_logger::initialize_electron_sidecar_logger() {
