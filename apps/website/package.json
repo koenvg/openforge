@@ -10,7 +10,7 @@
     "check": "astro check"
   },
   "dependencies": {
-    "astro": "^7.1.6",
+    "astro": "^7.2.1",
     "gsap": "^3.15.0"
   },
   "devDependencies": {
