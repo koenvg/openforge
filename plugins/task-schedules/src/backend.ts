@@ -9,6 +9,7 @@ export const LIST_SCHEDULES_METHOD = 'listSchedules'
 export const SAVE_SCHEDULE_METHOD = 'saveSchedule'
 export const DELETE_SCHEDULE_METHOD = 'deleteSchedule'
 export const RUN_NOW_METHOD = 'runNow'
+export const CANCEL_RUN_NOW_METHOD = 'cancelRunNow'
 
 const BACKGROUND_POLL_MS = 60_000
 const HISTORY_LIMIT = 5
@@ -19,6 +20,7 @@ type ScheduleIdRequest = ProjectRequest & { scheduleId: string }
 
 export default defineBackendPlugin({
   activate(openforge, context) {
+    const manualRunner = createManualScheduleRunner(openforge)
     context.subscriptions.add(openforge.backend.registerMethod(LIST_SCHEDULES_METHOD, {
       handler: (input: unknown) => listTaskSchedules(openforge, requireProjectRequest(input)),
     }))
@@ -36,7 +38,11 @@ export default defineBackendPlugin({
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod(RUN_NOW_METHOD, {
-      handler: (input: unknown) => runScheduleNow(openforge, requireScheduleIdRequest(input)),
+      handler: (input: unknown) => manualRunner.run(requireScheduleIdRequest(input)),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod(CANCEL_RUN_NOW_METHOD, {
+      handler: (input: unknown) => manualRunner.cancel(requireScheduleIdRequest(input)),
     }))
 
     context.subscriptions.add(openforge.background.register(createScheduledFiresService(openforge)))
@@ -101,14 +107,54 @@ export async function deleteTaskSchedule(openforge: BackendOpenForgeAPI, request
   await writeSchedules(openforge, request.projectId, schedules.filter((schedule) => schedule.id !== request.scheduleId))
 }
 
-export async function runScheduleNow(openforge: BackendOpenForgeAPI, request: ScheduleIdRequest, now = Date.now()): Promise<ScheduledFireOutcome> {
+export type ManualScheduleRunner = {
+  run: (request: ScheduleIdRequest, now?: number) => Promise<ScheduledFireOutcome>
+  cancel: (request: ScheduleIdRequest) => { cancelled: boolean }
+}
+
+export function createManualScheduleRunner(openforge: BackendOpenForgeAPI): ManualScheduleRunner {
+  const activeRuns = new Map<string, { cancelRequested: boolean }>()
+  const keyFor = (request: ScheduleIdRequest) => `${request.projectId}:${request.scheduleId}`
+
+  return {
+    async run(request, now = Date.now()) {
+      const key = keyFor(request)
+      if (activeRuns.has(key)) throw new Error('This Task Schedule is already running')
+      const activeRun = { cancelRequested: false }
+      activeRuns.set(key, activeRun)
+      try {
+        return await runScheduleNow(openforge, request, now, () => activeRun.cancelRequested)
+      } finally {
+        activeRuns.delete(key)
+      }
+    },
+    cancel(request) {
+      const activeRun = activeRuns.get(keyFor(request))
+      if (!activeRun) return { cancelled: false }
+      activeRun.cancelRequested = true
+      return { cancelled: true }
+    },
+  }
+}
+
+export async function runScheduleNow(
+  openforge: BackendOpenForgeAPI,
+  request: ScheduleIdRequest,
+  now = Date.now(),
+  isCancellationRequested: () => boolean = () => false,
+): Promise<ScheduledFireOutcome> {
   const schedules = await readSchedules(openforge, request.projectId)
   const schedule = schedules.find((candidate) => candidate.id === request.scheduleId)
-  if (!schedule) {
-    throw new Error('Task Schedule not found')
-  }
+  if (!schedule) throw new Error('Task Schedule not found')
 
-  const { updatedSchedule, outcome } = await performScheduledFire(openforge, request.projectId, schedule, 'manual', now)
+  const { updatedSchedule, outcome } = await performScheduledFire(
+    openforge,
+    request.projectId,
+    schedule,
+    'manual',
+    now,
+    isCancellationRequested,
+  )
   await writeSchedules(openforge, request.projectId, schedules.map((candidate) => candidate.id === schedule.id ? updatedSchedule : candidate))
   return outcome
 }
@@ -156,9 +202,10 @@ async function performScheduledFire(
   projectId: string,
   schedule: TaskSchedule,
   trigger: ScheduledFireOutcome['trigger'],
-  now: number
+  now: number,
+  isCancellationRequested: () => boolean = () => false,
 ): Promise<{ updatedSchedule: TaskSchedule; outcome: ScheduledFireOutcome }> {
-  const outcome = await computeFireOutcome(openforge, projectId, schedule, trigger, now)
+  const outcome = await computeFireOutcome(openforge, projectId, schedule, trigger, now, isCancellationRequested)
   return { updatedSchedule: withOutcome(schedule, outcome), outcome }
 }
 
@@ -167,16 +214,23 @@ async function computeFireOutcome(
   projectId: string,
   schedule: TaskSchedule,
   trigger: ScheduledFireOutcome['trigger'],
-  now: number
+  now: number,
+  isCancellationRequested: () => boolean,
 ): Promise<ScheduledFireOutcome> {
+  if (isCancellationRequested()) return createOutcome(now, trigger, 'cancelled', 'Run cancelled before creating a Task')
   const block = await getPreviousTaskBlock(openforge, schedule)
   if (block) return createOutcome(now, trigger, 'skipped', block.message, block.taskId)
+  if (isCancellationRequested()) return createOutcome(now, trigger, 'cancelled', 'Run cancelled before creating a Task')
 
   let task: Task
   try {
     task = await openforge.tasks.create({ initialPrompt: schedule.prompt, projectId, labelNames: ['scheduled'] })
   } catch (error) {
     return createOutcome(now, trigger, 'failed', errorMessage(error))
+  }
+
+  if (isCancellationRequested()) {
+    return createOutcome(now, trigger, 'cancelled', `Created scheduled Task ${task.id} but cancelled before starting implementation`, task.id)
   }
 
   if (schedule.mode === 'create-only') {

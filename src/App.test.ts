@@ -176,6 +176,16 @@ describe('App startup data loading', () => {
     expect(mockRouterNavigate).toHaveBeenCalledWith('settings')
   }, 15000)
 
+  it('does not show the unrelated floating Create Task action on Task Schedules', async () => {
+    const App = (await import('./App.svelte')).default
+    const stores = await import('./lib/stores')
+    mockCurrentViewStore.set('plugin:com.openforge.task-schedules:schedules')
+
+    render(App)
+    await vi.waitFor(() => expect(get(stores.activeProjectId)).toBe('proj-1'))
+
+    expect(screen.queryByRole('button', { name: 'Create new task' })).toBeNull()
+  })
   describe('new task creation dialog navigation', () => {
     const createdTask: Task = {
       id: 'T-new',
