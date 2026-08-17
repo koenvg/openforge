@@ -30,6 +30,7 @@
     "mobile:contract:check": "node scripts/check-companion-dart-contract.mjs",
     "packages:build": "pnpm --filter @openforge-app/plugin-sdk build",
     "packages:test": "pnpm --filter @openforge-app/plugin-sdk test",
+    "packages:contract:check": "pnpm --filter @openforge-app/plugin-sdk check:contract",
     "packages:metadata:check": "node scripts/check-workspace-package-metadata.mjs",
     "packages:pack:dry-run": "pnpm packages:metadata:check && node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",

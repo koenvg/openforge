@@ -21,6 +21,8 @@ The host validates, attaches, reloads, and removes these package-relative styles
 
 This MIT license applies to the SDK package only. The OpenForge desktop application is licensed separately under the repository root `LICENSE` and is source-available/proprietary; the app may not be commercially resold or redistributed without permission.
 
-## Release metadata note
+## Current contract
 
-The next npm publish of `@openforge-app/plugin-sdk` should expose `license: "MIT"` in the package metadata. If the current npm registry entry shows missing or proprietary license metadata, publish a patch release with this package metadata to correct what npm consumers see.
+Version `0.2.1` publishes the API-v1 contract used by the OpenForge host, including agent-facing Plugin Command metadata, `PluginCommandInvocationContext`, and the `@openforge-app/plugin-sdk/testing` helpers. Legacy handoff-summary declarations (`Task.summary` and `tasks.updateSummary`) are no longer part of the contract.
+
+Desktop releases publish the SDK in the same workflow using the desktop git tag's semver; the manual publish workflow uses the checked-in package version. Both paths run `pnpm check:contract`, which packs the package, verifies all exported files, and compiles the current authoring contract against the tarball before publication.

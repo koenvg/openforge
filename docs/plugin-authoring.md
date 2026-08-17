@@ -28,7 +28,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
   "name": "@acme/openforge-notes",
   "version": "1.0.0",
   "dependencies": {
-    "@openforge-app/plugin-sdk": "^0.1.0"
+    "@openforge-app/plugin-sdk": "^0.2.1"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -56,6 +56,14 @@ Metadata rules:
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.
 
+## SDK package and host API versions
+
+The current authoring package is `@openforge-app/plugin-sdk@0.2.1`. The npm package version and `openforge.apiVersion` have different jobs: package semver versions the TypeScript helpers and declarations, while `openforge.apiVersion` gates host runtime compatibility and remains `1` for the current API-v1 runtime contract.
+
+Version `0.2.1` matches the current host contract. It includes agent command metadata, `PluginCommandInvocationContext`, and the corresponding `@openforge-app/plugin-sdk/testing` command registration types. It does not include the removed `Task.summary` field or `tasks.updateSummary(...)` method. Plugin packages should upgrade from `0.1.0` rather than casting command registrations around those stale declarations.
+
+The desktop release workflow publishes the SDK in the same flow and assigns the desktop git tag's semver to the package artifact. The checked-in SDK version is used by the manual publish workflow between desktop releases. CI and both publish paths pack the package, verify every declared export target, and compile a plugin-authoring fixture against the tarball before publication.
+
 ## SDK import surface
 
 Use the public package exports only:
@@ -69,15 +77,21 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/vite` | SDK build helper(s) for plugin packages |
 | `@openforge-app/plugin-sdk/package-metadata-schema.json` | JSON schema for validating `package.json#openforge` metadata |
 | `@openforge-app/plugin-sdk/domain` | Shared OpenForge domain types |
+| `@openforge-app/plugin-sdk/fileIcons` | File-type icon lookup helpers |
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers |
 | `@openforge-app/plugin-sdk/numberParsing` | Numeric parsing helpers |
 | `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers |
 | `@openforge-app/plugin-sdk/projectFileTree` | Project file tree helpers |
 | `@openforge-app/plugin-sdk/prStatusPresentation` | Pull request status presentation helpers |
 | `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
+| `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button component |
+| `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox component |
+| `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Shared file-type icon component |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
-| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 | `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, and close-disabled behavior |
+| `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Shared plugin page heading and description component |
+| `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Shared loading, empty, and error state component |
+| `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
 Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge UI component layer boundaries](./ui-component-boundaries.md).
 

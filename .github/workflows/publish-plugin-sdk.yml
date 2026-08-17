@@ -3,10 +3,6 @@ name: Publish Plugin SDK
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Plugin SDK version to publish (for example, 0.1.1)"
-        required: true
-        type: string
       npm_tag:
         description: "npm dist-tag to publish"
         required: true
@@ -23,7 +19,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: publish-plugin-sdk-${{ inputs.version }}
+  group: publish-plugin-sdk
   cancel-in-progress: false
 
 jobs:
@@ -48,21 +44,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Set SDK package version
-        run: |
-          VERSION="${{ inputs.version }}"
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
-            echo "Invalid semver version: $VERSION" >&2
-            exit 1
-          fi
-          jq --arg v "$VERSION" '.version = $v' packages/plugin-sdk/package.json > packages/plugin-sdk/package.json.tmp
-          mv packages/plugin-sdk/package.json.tmp packages/plugin-sdk/package.json
-
       - name: Build plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk build
 
       - name: Test plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk test
+
+      - name: Check packed Plugin SDK authoring contract
+        run: pnpm packages:contract:check
 
       - name: Check published SDK version
         id: published-sdk

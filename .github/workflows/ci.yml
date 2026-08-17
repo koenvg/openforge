@@ -138,6 +138,13 @@ jobs:
           pnpm packages:test 2>&1 | tee /tmp/npm-package-tests.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
+      - name: Check packed Plugin SDK authoring contract
+        id: package_contract
+        run: |
+          set +e -o pipefail
+          pnpm packages:contract:check 2>&1 | tee /tmp/npm-package-contract.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
       - name: Pack publishable packages dry-run
         id: package_pack
         run: |
@@ -153,6 +160,7 @@ jobs:
           path: |
             /tmp/npm-package-build.log
             /tmp/npm-package-tests.log
+            /tmp/npm-package-contract.log
             /tmp/npm-package-pack.log
           retention-days: 1
           if-no-files-found: ignore
@@ -163,6 +171,7 @@ jobs:
           mkdir -p /tmp/ci-results
           echo "${{ steps.package_build.outputs.exit_code }}" > /tmp/ci-results/package-build-exit-code
           echo "${{ steps.package_tests.outputs.exit_code }}" > /tmp/ci-results/package-tests-exit-code
+          echo "${{ steps.package_contract.outputs.exit_code }}" > /tmp/ci-results/package-contract-exit-code
           echo "${{ steps.package_pack.outputs.exit_code }}" > /tmp/ci-results/package-pack-exit-code
 
       - name: Upload results
@@ -174,7 +183,7 @@ jobs:
           retention-days: 1
 
       - name: Fail if package checks failed
-        if: steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
+        if: steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_contract.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
         run: exit 1
 
   mobile-checks:

@@ -1,6 +1,6 @@
 {
   "name": "@openforge-app/plugin-sdk",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -80,8 +80,10 @@
     "clean": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
     "build": "pnpm run clean && tsc && pnpm run build:assets",
     "build:assets": "node ./scripts/copy-package-assets.mjs",
+    "check:contract": "node ./scripts/check-published-contract.mjs",
     "icons:generate": "node ./scripts/generate-file-type-icons.mjs",
     "prepack": "pnpm run build",
+    "prepublishOnly": "pnpm run check:contract",
     "test": "vitest run"
   },
   "dependencies": {

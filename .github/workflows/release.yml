@@ -144,6 +144,9 @@ jobs:
       - name: Test plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk test
 
+      - name: Check packed Plugin SDK authoring contract
+        run: pnpm packages:contract:check
+
       - name: Check published SDK version
         id: published-sdk
         run: |
