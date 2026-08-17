@@ -1,0 +1,260 @@
+import { pathToFileURL } from 'node:url'
+import type { PluginStorage } from '@openforge-app/plugin-sdk'
+import type { BackendOpenForgeAPI, BackendPlugin, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
+import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
+import type { ContributionRegistry } from './contribution-registry'
+import { createDefaultPackageMetadata, createInitialPluginState, RuntimeSubscriptionSink } from './runtime-state'
+import { createHostStorage, createMemoryStorage } from './storage'
+import type {
+  ActivateBackendInput,
+  BackendStateSnapshot,
+  HostCallbackHandler,
+  ReadyBackendInput,
+  RuntimePluginState,
+} from './runtime-types'
+import { assertLocalId, isNonEmptyString } from './validation'
+
+const DEFAULT_CRASH_LOOP_LIMIT = 3
+const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
+
+function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | null {
+  const candidate = module.default ?? module
+  if (typeof candidate === 'object' && candidate !== null && typeof (candidate as BackendPlugin).activate === 'function') {
+    return candidate as BackendPlugin
+  }
+  return null
+}
+
+async function loadBackendModule(backendPath: string, importGeneration: number): Promise<Record<string, unknown>> {
+  const moduleUrl = pathToFileURL(backendPath)
+  moduleUrl.searchParams.set('openforgeReload', String(importGeneration))
+  return await import(moduleUrl.href) as Record<string, unknown>
+}
+
+export type BackendLifecycleOptions = {
+  crashLoopLimit?: number
+  crashLoopWindowMs?: number
+  hostCallbacks: HostCallbackHandler | null
+  contributions: ContributionRegistry
+  createBackendApi(state: RuntimePluginState): BackendOpenForgeAPI
+}
+
+export class BackendLifecycle {
+  private readonly plugins = new Map<string, RuntimePluginState>()
+  private readonly crashLoopLimit: number
+  private readonly crashLoopWindowMs: number
+
+  constructor(private readonly options: BackendLifecycleOptions) {
+    this.crashLoopLimit = options.crashLoopLimit ?? DEFAULT_CRASH_LOOP_LIMIT
+    this.crashLoopWindowMs = options.crashLoopWindowMs ?? DEFAULT_CRASH_LOOP_WINDOW_MS
+  }
+
+  async activate(input: ActivateBackendInput): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', input.pluginId)
+    if (!isNonEmptyString(input.backendPath)) {
+      throw new Error('backend activation requires a backendPath')
+    }
+
+    const state = this.getState(input.pluginId)
+    if (state.crashLoopGuardTripped) {
+      throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
+    }
+
+    if (
+      state.state === 'ready'
+      && state.backendPath === input.backendPath
+      && state.projectId === (input.projectId ?? null)
+    ) {
+      return this.snapshot(input.pluginId)
+    }
+
+    if (state.state === 'starting' && state.activationPromise) {
+      await state.activationPromise
+      return this.snapshot(input.pluginId)
+    }
+
+    if (state.state === 'ready' || state.state === 'error') {
+      await this.cleanup(state)
+    }
+
+    state.backendPath = input.backendPath
+    state.projectId = input.projectId ?? null
+    state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
+    state.state = 'starting'
+    state.error = null
+
+    state.activationPromise = this.activateState(state)
+    await state.activationPromise
+    return this.snapshot(input.pluginId)
+  }
+
+  async deactivate(pluginId: string): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', pluginId)
+    const state = this.getState(pluginId)
+    await this.cleanup(state)
+    state.state = 'missing'
+    state.error = null
+    state.backendPath = null
+    state.projectId = null
+    state.module = null
+    state.activationPromise = null
+    return this.snapshot(pluginId)
+  }
+
+  async whenReady(input: ReadyBackendInput): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', input.pluginId)
+    const state = this.getState(input.pluginId)
+
+    if (
+      state.state === 'ready'
+      && (!input.backendPath || (
+        state.backendPath === input.backendPath
+        && state.projectId === (input.projectId ?? null)
+      ))
+    ) {
+      return this.snapshot(input.pluginId)
+    }
+
+    if (state.state === 'ready' && input.backendPath) {
+      return await this.activate({
+        pluginId: input.pluginId,
+        backendPath: input.backendPath,
+        projectId: input.projectId,
+        packageMetadata: input.packageMetadata,
+      })
+    }
+
+    if (state.state === 'starting' && state.activationPromise) {
+      await state.activationPromise
+      return this.snapshot(input.pluginId)
+    }
+
+    if (input.backendPath) {
+      return await this.activate({
+        pluginId: input.pluginId,
+        backendPath: input.backendPath,
+        projectId: input.projectId,
+        packageMetadata: input.packageMetadata,
+      })
+    }
+
+    if (state.state === 'error') {
+      throw new Error(state.error?.message ?? `Plugin ${input.pluginId} backend is in error state`)
+    }
+
+    throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+  }
+
+  snapshot(pluginId: string): BackendStateSnapshot {
+    assertLocalId('backend', pluginId)
+    const state = this.getState(pluginId)
+    return {
+      pluginId,
+      state: state.state,
+      ready: state.state === 'ready',
+      error: state.error?.message ?? null,
+      methods: Array.from(state.methods.values()).map(method => method.qualifiedId),
+      backgroundServices: Array.from(state.backgroundServices.values()).map(service => service.qualifiedId),
+      crashLoopGuardTripped: state.crashLoopGuardTripped,
+    }
+  }
+
+  getState(pluginId: string): RuntimePluginState {
+    let state = this.plugins.get(pluginId)
+    if (!state) {
+      const storage = this.createStorage(pluginId)
+      state = createInitialPluginState(pluginId, storage)
+      this.plugins.set(pluginId, state)
+    }
+    return state
+  }
+
+  private createStorage(pluginId: string): PluginStorage {
+    return this.options.hostCallbacks
+      ? createHostStorage(pluginId, this.options.hostCallbacks)
+      : createMemoryStorage()
+  }
+
+  private async activateState(state: RuntimePluginState): Promise<void> {
+    try {
+      state.importGeneration += 1
+      state.module = await loadBackendModule(state.backendPath ?? '', state.importGeneration)
+      const plugin = extractBackendPlugin(state.module)
+
+      if (!plugin) {
+        throw new Error(`Backend entry for ${state.pluginId} does not export a defineBackendPlugin-compatible activate() function`)
+      }
+
+      await withPluginConsole(state.pluginId, async () => {
+        await plugin.activate(this.options.createBackendApi(state), this.createBackendContext(state))
+        await this.startBackgroundServices(state)
+      })
+
+      state.state = 'ready'
+      state.error = null
+    } catch (error) {
+      const pluginError = toError(error)
+      state.error = pluginError
+      await this.cleanup(state)
+      this.recordActivationCrash(state, pluginError)
+      state.state = 'error'
+      logPluginHostError(state.pluginId, `activation error: ${pluginError.message}`)
+      throw pluginError
+    } finally {
+      state.activationPromise = null
+    }
+  }
+
+  private recordActivationCrash(state: RuntimePluginState, error: Error): void {
+    const now = Date.now()
+    state.crashTimestamps = state.crashTimestamps.filter(timestamp => now - timestamp <= this.crashLoopWindowMs)
+    state.crashTimestamps.push(now)
+    if (state.crashTimestamps.length >= this.crashLoopLimit) {
+      state.crashLoopGuardTripped = true
+      state.error = new Error(`Plugin ${state.pluginId} activation blocked by crash-loop guard after ${state.crashTimestamps.length} crashes: ${error.message}`)
+    }
+  }
+
+  private async cleanup(state: RuntimePluginState): Promise<void> {
+    await state.subscriptions.disposeAll()
+
+    const services = Array.from(state.backgroundServices.values()).reverse()
+    for (const service of services) {
+      if (!service.started) continue
+      try {
+        await withPluginConsole(state.pluginId, async () => await service.stop?.())
+      } catch (error) {
+        const pluginError = toError(error)
+        logPluginHostError(state.pluginId, `background service stop error in ${service.qualifiedId}: ${pluginError.message}`)
+      } finally {
+        service.started = false
+      }
+    }
+
+    this.options.contributions.removeStateContributions(state)
+    state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
+  }
+
+  private async startBackgroundServices(state: RuntimePluginState): Promise<void> {
+    for (const service of state.backgroundServices.values()) {
+      if (service.started) continue
+      try {
+        await service.start()
+        service.started = true
+      } catch (error) {
+        const pluginError = toError(error)
+        logPluginHostError(state.pluginId, `background service start error in ${service.qualifiedId}: ${pluginError.message}`)
+        throw pluginError
+      }
+    }
+  }
+
+  private createBackendContext(state: RuntimePluginState): BackendPluginContext {
+    return {
+      pluginId: state.pluginId,
+      apiVersion: 1,
+      packageMetadata: state.packageMetadata,
+      subscriptions: state.subscriptions,
+    }
+  }
+}

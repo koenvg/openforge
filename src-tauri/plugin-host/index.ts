@@ -1,647 +1,54 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
-import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
-import type { AgentCommandDescriptor, AgentCommandMetadata, AgentSession, BoardStatus, CommandDescriptor, CommandRegistration, ConfigureStartPromptContributionRequest, CreateTaskRequest, FileContent, FileEntry, ImplementationRun, JsonValue, OpenForgePackageMetadata, PluginCommandInvocationContext, PluginStorage, Project, ProjectAttention, StartPromptContribution, StartTaskImplementationRequest, SubscriptionSink, Task, TaskWorkspaceInfo } from '@openforge-app/plugin-sdk'
-import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
-
-type JsonRpcId = number | null | undefined
-
-type JsonRpcRequest = {
-  jsonrpc?: string
-  id?: JsonRpcId
-  method?: string
-  params?: {
-    pluginId?: string
-    command?: string
-    backendPath?: string
-    projectId?: string | null
-    packageMetadata?: OpenForgePackageMetadata
-    payload?: unknown
-    [key: string]: unknown
-  }
-}
-
-type JsonRpcResponse = {
-  jsonrpc: '2.0'
-  id: JsonRpcId
-  result?: unknown
-  error?: {
-    code: number
-    message: string
-    data?: unknown
-  }
-}
-
-type BackendReadyState = 'missing' | 'starting' | 'ready' | 'error'
-
-type BackendStateSnapshot = {
-  pluginId: string
-  state: BackendReadyState
-  ready: boolean
-  error: string | null
-  methods: string[]
-  backgroundServices: string[]
-  crashLoopGuardTripped: boolean
-}
-
-type HostCallbackRequest = {
-  method: string
-  params: Record<string, unknown>
-}
-
-type HostCallbackHandler = (request: HostCallbackRequest) => Promise<unknown> | unknown
-
-type RuntimeOptions = {
-  crashLoopLimit?: number
-  crashLoopWindowMs?: number
-  hostCallbacks?: HostCallbackHandler
-}
-
-type ActivateBackendInput = {
-  pluginId: string
-  backendPath: string
-  projectId?: string | null
-  packageMetadata?: OpenForgePackageMetadata
-}
-
-type InvokeBackendInput = {
-  pluginId: string
-  command: string
-  backendPath?: string
-  projectId?: string | null
-  packageMetadata?: OpenForgePackageMetadata
-  payload?: unknown
-}
-
-type InvokeAgentCommandInput = ActivateBackendInput & {
-  commandId: string
-  input?: unknown
-  context: PluginCommandInvocationContext
-}
-
-type RuntimeBackendService = BackgroundServiceRegistration & {
-  localId: string
-  qualifiedId: string
-  started: boolean
-}
-
-type RuntimeBackendMethod = BackendMethodRegistration & {
-  localId: string
-  qualifiedId: string
-}
-
-type RuntimeBackendCommand = CommandRegistration & {
-  localId: string
-  qualifiedId: string
-  pluginId: string
-  projectId: string | null
-}
-
-type RuntimeEventHandler = (payload: unknown) => void
-
-type RuntimePluginState = {
-  pluginId: string
-  backendPath: string | null
-  projectId: string | null
-  packageMetadata: OpenForgePackageMetadata
-  state: BackendReadyState
-  error: Error | null
-  activationPromise: Promise<void> | null
-  importGeneration: number
-  module: Record<string, unknown> | null
-  methods: Map<string, RuntimeBackendMethod>
-  commands: Map<string, RuntimeBackendCommand>
-  eventHandlers: Map<string, Set<RuntimeEventHandler>>
-  backgroundServices: Map<string, RuntimeBackendService>
-  storage: PluginStorage
-  subscriptions: RuntimeSubscriptionSink
-  crashTimestamps: number[]
-  crashLoopGuardTripped: boolean
-}
-
-const DEFAULT_CRASH_LOOP_LIMIT = 3
-const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
-
-const globalCommands = new Map<string, RuntimeBackendCommand>()
-const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
-
-function commandDescriptor(command: RuntimeBackendCommand): CommandDescriptor {
-  return {
-    id: command.localId,
-    qualifiedId: command.qualifiedId,
-    pluginId: command.pluginId,
-    projectId: command.projectId,
-    title: command.title,
-    icon: command.icon,
-    shortcut: command.shortcut,
-    discoverable: command.discoverable ?? true,
-    input: command.input,
-    output: command.output,
-  }
-}
-
-function agentCommandDescriptor(command: RuntimeBackendCommand): AgentCommandDescriptor | null {
-  if (!command.agent) return null
-  return {
-    qualifiedId: command.qualifiedId,
-    pluginId: command.pluginId,
-    runtime: 'backend',
-    description: command.agent.description,
-    examples: command.agent.examples ?? [],
-    discoverable: command.agent.discoverable ?? true,
-    input: command.input,
-    output: command.output,
-  }
-}
-
-function isJsonValue(value: unknown, seen = new Set<object>()): value is JsonValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (typeof value !== 'object') return false
-  if (seen.has(value)) return false
-  seen.add(value)
-  const valid = Array.isArray(value)
-    ? value.every(entry => isJsonValue(entry, seen))
-    : Object.values(value).every(entry => isJsonValue(entry, seen))
-  seen.delete(value)
-  return valid
-}
-
-function normalizeAgentMetadata(metadata: unknown): AgentCommandMetadata | undefined {
-  if (metadata === undefined) return undefined
-  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
-    throw new RuntimeValidationError('commands', 'agent metadata must be an object')
-  }
-  const candidate = metadata as Partial<AgentCommandMetadata>
-  if (!isNonEmptyString(candidate.description)) {
-    throw new RuntimeValidationError('commands', 'agent metadata requires a non-empty description')
-  }
-  if (candidate.examples !== undefined && (!Array.isArray(candidate.examples) || !candidate.examples.every(example => isJsonValue(example)))) {
-    throw new RuntimeValidationError('commands', 'agent metadata examples must contain only JSON values')
-  }
-  if (candidate.discoverable !== undefined && typeof candidate.discoverable !== 'boolean') {
-    throw new RuntimeValidationError('commands', 'agent metadata discoverable must be a boolean')
-  }
-  return {
-    description: candidate.description.trim(),
-    examples: candidate.examples ? [...candidate.examples] : [],
-    discoverable: candidate.discoverable ?? true,
-  }
-}
-
-class RuntimeValidationError extends Error {
-  constructor(kind: 'backend' | 'background' | 'commands' | 'events', message: string) {
-    super(`${kind} registration ${message}`)
-    this.name = 'RuntimeValidationError'
-  }
-}
-
-class RuntimeSubscriptionSink implements SubscriptionSink {
-  readonly subscriptions: Disposable[] = []
-
-  constructor(private readonly pluginId: string) {}
-
-  add(subscription: Disposable | (() => void)): void {
-    if (typeof subscription === 'function') {
-      this.subscriptions.push(createDisposable(subscription))
-      return
-    }
-
-    if (!subscription || typeof subscription.dispose !== 'function') {
-      throw new Error('context.subscriptions.add requires a disposable or cleanup function')
-    }
-
-    this.subscriptions.push(subscription)
-  }
-
-  async disposeAll(): Promise<void> {
-    const subscriptions = this.subscriptions.splice(0).reverse()
-    for (const subscription of subscriptions) {
-      try {
-        await subscription.dispose()
-      } catch (error) {
-        logPluginHostError(this.pluginId, `subscription dispose error: ${toError(error).message}`)
-      }
-    }
-  }
-}
-
-function createDisposable(dispose: () => void | Promise<void>): Disposable {
-  let disposed = false
-  return {
-    async dispose() {
-      if (disposed) return
-      disposed = true
-      await dispose()
-    },
-  }
-}
-
-function createMemoryStorageScope() {
-  const values = new Map<string, unknown>()
-  return {
-    async get<T>(key: string): Promise<T | null> {
-      return values.has(key) ? values.get(key) as T : null
-    },
-    async set<T>(key: string, value: T): Promise<void> {
-      values.set(key, value)
-    },
-    async delete(key: string): Promise<void> {
-      values.delete(key)
-    },
-  }
-}
-
-function createMemoryStorage(): PluginStorage {
-  const global = createMemoryStorageScope()
-  const projects = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
-  const tasks = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
-
-  return {
-    global,
-    project(projectId: string) {
-      let scope = projects.get(projectId)
-      if (!scope) {
-        scope = createMemoryStorageScope()
-        projects.set(projectId, scope)
-      }
-      return scope
-    },
-    task(taskId: string) {
-      let scope = tasks.get(taskId)
-      if (!scope) {
-        scope = createMemoryStorageScope()
-        tasks.set(taskId, scope)
-      }
-      return scope
-    },
-  }
-}
-
-function createHostStorageScope(pluginId: string, scope: 'global' | 'project' | 'task', scopeId: string | null, hostCallbacks: HostCallbackHandler) {
-  const params = (key: string, value?: unknown, includeValue = false): Record<string, unknown> => {
-    const payload: Record<string, unknown> = { pluginId, scope, scopeId, key }
-    if (includeValue) payload.value = value
-    return payload
-  }
-
-  return {
-    async get<T>(key: string): Promise<T | null> {
-      return await hostCallbacks({ method: 'openforge.storage.get', params: params(key) }) as T | null
-    },
-    async set<T>(key: string, value: T): Promise<void> {
-      await hostCallbacks({ method: 'openforge.storage.set', params: params(key, value, true) })
-    },
-    async delete(key: string): Promise<void> {
-      await hostCallbacks({ method: 'openforge.storage.delete', params: params(key) })
-    },
-  }
-}
-
-function createHostStorage(pluginId: string, hostCallbacks: HostCallbackHandler): PluginStorage {
-  return {
-    global: createHostStorageScope(pluginId, 'global', null, hostCallbacks),
-    project: (projectId: string) => createHostStorageScope(pluginId, 'project', projectId, hostCallbacks),
-    task: (taskId: string) => createHostStorageScope(pluginId, 'task', taskId, hostCallbacks),
-  }
-}
-
-class StdioHostCallbackBridge {
-  private nextId = 1
-  private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>()
-
-  request: HostCallbackHandler = ({ method, params }) => {
-    const id = this.nextId++
-    const message = { jsonrpc: '2.0', id, method, params }
-    process.stdout.write(`${JSON.stringify(message)}\n`)
-    return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-    })
-  }
-
-  handleResponse(response: JsonRpcResponse): boolean {
-    if (typeof response.id !== 'number') return false
-    const pending = this.pending.get(response.id)
-    if (!pending) return false
-    this.pending.delete(response.id)
-    if (response.error) {
-      pending.reject(new Error(response.error.message))
-      return true
-    }
-    pending.resolve(response.result)
-    return true
-  }
-}
-
-function isJsonRpcResponse(value: JsonRpcRequest | JsonRpcResponse): value is JsonRpcResponse {
-  return 'result' in value || 'error' in value
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-function requireAgentInvocationContext(value: unknown, projectId: string | null | undefined): PluginCommandInvocationContext {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new RuntimeValidationError('commands', 'agent invocation context must be an object')
-  }
-  const context = value as Partial<PluginCommandInvocationContext>
-  if (context.taskId !== null && !isNonEmptyString(context.taskId)) {
-    throw new RuntimeValidationError('commands', 'agent invocation context taskId must be a non-empty string or null')
-  }
-  if (!isNonEmptyString(context.projectId)) {
-    throw new RuntimeValidationError('commands', 'agent invocation context requires a non-empty projectId')
-  }
-  if (context.source !== 'agent-cli') {
-    throw new RuntimeValidationError('commands', 'agent invocation context source must be agent-cli')
-  }
-  if (projectId !== context.projectId) {
-    throw new RuntimeValidationError('commands', `agent invocation context Project ${context.projectId} does not match activated Project ${projectId ?? 'none'}`)
-  }
-  return {
-    taskId: context.taskId,
-    projectId: context.projectId,
-    source: context.source,
-  }
-}
-
-function assertLocalId(kind: 'backend' | 'background' | 'commands' | 'events', id: unknown): asserts id is string {
-  if (!isNonEmptyString(id)) {
-    throw new RuntimeValidationError(kind, 'requires a non-empty id')
-  }
-
-  const trimmed = id.trim()
-  if (trimmed.startsWith('openforge.')) {
-    throw new RuntimeValidationError(kind, 'cannot use openforge.* reserved namespace')
-  }
-
-  if (trimmed.includes(':') || trimmed.startsWith('.') || trimmed.endsWith('.') || trimmed.includes('..')) {
-    throw new RuntimeValidationError(kind, `has invalid id "${trimmed}"`)
-  }
-}
-
-function assertScope(scope: unknown): asserts scope is BackgroundServiceRegistration['scope'] {
-  if (scope !== 'global' && scope !== 'project' && scope !== 'task') {
-    throw new RuntimeValidationError('background', 'requires scope to be global, project, or task')
-  }
-}
-
-function assertFunction(kind: 'backend' | 'background' | 'commands' | 'events', label: string, value: unknown): asserts value is (...args: never[]) => unknown {
-  if (typeof value !== 'function') {
-    throw new RuntimeValidationError(kind, `requires a ${label} function`)
-  }
-}
-
-function formatPluginValue(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value instanceof Error) return value.stack ?? value.message
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
-}
-
-const pluginConsoleContext = new AsyncLocalStorage<string>()
-let pluginConsoleUsers = 0
-let originalPluginConsole: Pick<Console, 'debug' | 'error' | 'info' | 'log' | 'warn'> | null = null
-
-function writePluginConsole(method: keyof NonNullable<typeof originalPluginConsole>, values: unknown[]): void {
-  const pluginId = pluginConsoleContext.getStore()
-  const original = originalPluginConsole?.[method]
-  if (!pluginId) {
-    original?.(...values)
-    return
-  }
-  process.stderr.write(`[plugin:${pluginId}] ${values.map(formatPluginValue).join(' ')}\n`)
-}
-
-function acquirePluginConsole(): void {
-  pluginConsoleUsers += 1
-  if (pluginConsoleUsers !== 1) return
-
-  originalPluginConsole = {
-    debug: console.debug,
-    error: console.error,
-    info: console.info,
-    log: console.log,
-    warn: console.warn,
-  }
-  console.debug = (...values: unknown[]) => writePluginConsole('debug', values)
-  console.error = (...values: unknown[]) => writePluginConsole('error', values)
-  console.info = (...values: unknown[]) => writePluginConsole('info', values)
-  console.log = (...values: unknown[]) => writePluginConsole('log', values)
-  console.warn = (...values: unknown[]) => writePluginConsole('warn', values)
-}
-
-function releasePluginConsole(): void {
-  pluginConsoleUsers -= 1
-  if (pluginConsoleUsers !== 0 || !originalPluginConsole) return
-
-  console.debug = originalPluginConsole.debug
-  console.error = originalPluginConsole.error
-  console.info = originalPluginConsole.info
-  console.log = originalPluginConsole.log
-  console.warn = originalPluginConsole.warn
-  originalPluginConsole = null
-}
-
-async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T> | T): Promise<T> {
-  acquirePluginConsole()
-  try {
-    return await pluginConsoleContext.run(pluginId, operation)
-  } finally {
-    releasePluginConsole()
-  }
-}
-
-function logPluginHostError(pluginId: string, message: string): void {
-  process.stderr.write(`[plugin:${pluginId}] ${message}\n`)
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
-}
-
-function requireImplementationRunString(value: unknown, fieldName: string): string {
-  if (typeof value === 'string' && value.length > 0) return value
-  throw new Error(`Host callback returned invalid implementation run field: ${fieldName}`)
-}
-
-function normalizeImplementationRun(value: unknown): ImplementationRun {
-  if (value === null || typeof value !== 'object') {
-    throw new Error('Host callback returned invalid implementation run')
-  }
-
-  const record = value as Record<string, unknown>
-  return {
-    taskId: requireImplementationRunString(record.taskId ?? record.task_id, 'taskId'),
-    sessionId: requireImplementationRunString(record.sessionId ?? record.session_id, 'sessionId'),
-    workspacePath: requireImplementationRunString(record.workspacePath ?? record.workspace_path, 'workspacePath'),
-  }
-}
-
-function taskListCallbackParams(request?: { projectId?: string | null }): Record<string, unknown> {
-  if (!request || request.projectId === undefined) return {}
-  return { projectId: request.projectId ?? null }
-}
-
-function objectCallbackParams(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
-}
-
-function createDefaultPackageMetadata(pluginId: string): OpenForgePackageMetadata {
-  return {
-    id: pluginId,
-    apiVersion: 1,
-    displayName: pluginId,
-    description: '',
-  }
-}
-
-function createInitialPluginState(pluginId: string, storage: PluginStorage): RuntimePluginState {
-  return {
-    pluginId,
-    backendPath: null,
-    projectId: null,
-    packageMetadata: createDefaultPackageMetadata(pluginId),
-    state: 'missing',
-    error: null,
-    activationPromise: null,
-    importGeneration: 0,
-    module: null,
-    methods: new Map(),
-    commands: new Map(),
-    eventHandlers: new Map(),
-    backgroundServices: new Map(),
-    storage,
-    subscriptions: new RuntimeSubscriptionSink(pluginId),
-    crashTimestamps: [],
-    crashLoopGuardTripped: false,
-  }
-}
-
-function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | null {
-  const candidate = module.default ?? module
-  if (typeof candidate === 'object' && candidate !== null && typeof (candidate as BackendPlugin).activate === 'function') {
-    return candidate as BackendPlugin
-  }
-  return null
-}
-
-async function loadBackendModule(backendPath: string, importGeneration: number): Promise<Record<string, unknown>> {
-  const moduleUrl = pathToFileURL(backendPath)
-  moduleUrl.searchParams.set('openforgeReload', String(importGeneration))
-  return await import(moduleUrl.href) as Record<string, unknown>
-}
+import type { AgentCommandDescriptor, CommandDescriptor, PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
+import { createBackendApi } from './backend-api'
+import { BackendLifecycle } from './backend-lifecycle'
+import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
+import { globalContributionRegistry } from './contribution-registry'
+import type {
+  ActivateBackendInput,
+  BackendStateSnapshot,
+  HostCallbackHandler,
+  InvokeAgentCommandInput,
+  InvokeBackendInput,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  ReadyBackendInput,
+  RuntimeOptions,
+} from './runtime-types'
+import { StdioHostCallbackBridge, startStdioServer, writeJsonRpcResponse } from './stdio-transport'
+import { assertLocalId, isNonEmptyString, requireAgentInvocationContext, RuntimeValidationError } from './validation'
 
 export class PluginHostRuntime {
-  private readonly plugins = new Map<string, RuntimePluginState>()
-  private readonly crashLoopLimit: number
-  private readonly crashLoopWindowMs: number
+  private readonly lifecycle: BackendLifecycle
   private readonly hostCallbacks: HostCallbackHandler | null
 
   constructor(options: RuntimeOptions = {}) {
-    this.crashLoopLimit = options.crashLoopLimit ?? DEFAULT_CRASH_LOOP_LIMIT
-    this.crashLoopWindowMs = options.crashLoopWindowMs ?? DEFAULT_CRASH_LOOP_WINDOW_MS
     this.hostCallbacks = options.hostCallbacks ?? null
+    this.lifecycle = new BackendLifecycle({
+      crashLoopLimit: options.crashLoopLimit,
+      crashLoopWindowMs: options.crashLoopWindowMs,
+      hostCallbacks: this.hostCallbacks,
+      contributions: globalContributionRegistry,
+      createBackendApi: state => createBackendApi(state, {
+        hostCallbacks: this.hostCallbacks,
+        invokeCommand: input => this.invokeCommand(input),
+        invokeGlobalCommand: (qualifiedId, payload, callerPluginId) => this.invokeGlobalCommand(qualifiedId, payload, callerPluginId),
+        listCommands: () => this.listCommands(),
+      }, globalContributionRegistry),
+    })
   }
 
   async activateBackend(input: ActivateBackendInput): Promise<BackendStateSnapshot> {
-    assertLocalId('backend', input.pluginId)
-    if (!isNonEmptyString(input.backendPath)) {
-      throw new Error('backend activation requires a backendPath')
-    }
-
-    const state = this.getOrCreateState(input.pluginId)
-    if (state.crashLoopGuardTripped) {
-      throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
-    }
-
-    if (
-      state.state === 'ready'
-      && state.backendPath === input.backendPath
-      && state.projectId === (input.projectId ?? null)
-    ) {
-      return this.getBackendState(input.pluginId)
-    }
-
-    if (state.state === 'starting' && state.activationPromise) {
-      await state.activationPromise
-      return this.getBackendState(input.pluginId)
-    }
-
-    if (state.state === 'ready' || state.state === 'error') {
-      await this.cleanupPluginState(state)
-    }
-
-    state.backendPath = input.backendPath
-    state.projectId = input.projectId ?? null
-    state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
-    state.state = 'starting'
-    state.error = null
-
-    state.activationPromise = this.activatePluginState(state)
-    await state.activationPromise
-    return this.getBackendState(input.pluginId)
+    return await this.lifecycle.activate(input)
   }
 
   async deactivateBackend(pluginId: string): Promise<BackendStateSnapshot> {
-    assertLocalId('backend', pluginId)
-    const state = this.getOrCreateState(pluginId)
-    await this.cleanupPluginState(state)
-    state.state = 'missing'
-    state.error = null
-    state.backendPath = null
-    state.projectId = null
-    state.module = null
-    state.activationPromise = null
-    return this.getBackendState(pluginId)
+    return await this.lifecycle.deactivate(pluginId)
   }
 
-  async whenBackendReady(input: { pluginId: string; backendPath?: string; projectId?: string | null; packageMetadata?: OpenForgePackageMetadata }): Promise<BackendStateSnapshot> {
-    assertLocalId('backend', input.pluginId)
-    const state = this.getOrCreateState(input.pluginId)
-
-    if (
-      state.state === 'ready'
-      && (!input.backendPath || (
-        state.backendPath === input.backendPath
-        && state.projectId === (input.projectId ?? null)
-      ))
-    ) {
-      return this.getBackendState(input.pluginId)
-    }
-
-    if (state.state === 'ready' && input.backendPath) {
-      return await this.activateBackend({
-        pluginId: input.pluginId,
-        backendPath: input.backendPath,
-        projectId: input.projectId,
-        packageMetadata: input.packageMetadata,
-      })
-    }
-
-    if (state.state === 'starting' && state.activationPromise) {
-      await state.activationPromise
-      return this.getBackendState(input.pluginId)
-    }
-
-    if (input.backendPath) {
-      return await this.activateBackend({
-        pluginId: input.pluginId,
-        backendPath: input.backendPath,
-        projectId: input.projectId,
-        packageMetadata: input.packageMetadata,
-      })
-    }
-
-    if (state.state === 'error') {
-      throw new Error(state.error?.message ?? `Plugin ${input.pluginId} backend is in error state`)
-    }
-
-    throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+  async whenBackendReady(input: ReadyBackendInput): Promise<BackendStateSnapshot> {
+    return await this.lifecycle.whenReady(input)
   }
 
   async invokeBackend(input: InvokeBackendInput): Promise<unknown> {
@@ -649,7 +56,7 @@ export class PluginHostRuntime {
     assertLocalId('backend', input.command)
     await this.whenBackendReady(input)
 
-    const state = this.getOrCreateState(input.pluginId)
+    const state = this.lifecycle.getState(input.pluginId)
     if (state.state !== 'ready') {
       throw new Error(`Plugin ${input.pluginId} backend is not ready`)
     }
@@ -682,7 +89,7 @@ export class PluginHostRuntime {
     }
     await this.whenBackendReady(input)
 
-    const state = this.getOrCreateState(input.pluginId)
+    const state = this.lifecycle.getState(input.pluginId)
     if (state.state !== 'ready') {
       throw new Error(`Plugin ${input.pluginId} backend is not ready`)
     }
@@ -706,16 +113,23 @@ export class PluginHostRuntime {
   }
 
   async invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown> {
-    const command = globalCommands.get(qualifiedId)
+    const command = globalContributionRegistry.getCommand(qualifiedId)
     if (!command) {
       if (qualifiedId.startsWith('openforge.') && this.hostCallbacks) {
-        return await this.hostCallbacks({ method: 'openforge.commands.invokeGlobal', params: { qualifiedId, payload: payload ?? null, callerPluginId: callerPluginId ?? null } })
+        return await this.hostCallbacks({
+          method: 'openforge.commands.invokeGlobal',
+          params: { qualifiedId, payload: payload ?? null, callerPluginId: callerPluginId ?? null },
+        })
       }
       throw new Error(`Command not found: ${qualifiedId}`)
     }
     validateSchemaValue(command.input, payload, `${qualifiedId} input`)
     try {
-      const invocationContext: PluginCommandInvocationContext = { taskId: null, projectId: command.projectId, source: 'plugin' }
+      const invocationContext: PluginCommandInvocationContext = {
+        taskId: null,
+        projectId: command.projectId,
+        source: 'plugin',
+      }
       const result = await withPluginConsole(command.pluginId, async () => await command.handler(payload as never, invocationContext))
       validateSchemaValue(command.output, result, `${qualifiedId} output`)
       return result
@@ -727,29 +141,16 @@ export class PluginHostRuntime {
   }
 
   async listCommands(): Promise<CommandDescriptor[]> {
-    return Array.from(globalCommands.values()).map(commandDescriptor)
+    return globalContributionRegistry.listCommands()
   }
 
   async listAgentCommands(input: ActivateBackendInput): Promise<AgentCommandDescriptor[]> {
     await this.whenBackendReady(input)
-    const state = this.getOrCreateState(input.pluginId)
-    return Array.from(state.commands.values())
-      .map(agentCommandDescriptor)
-      .filter((descriptor): descriptor is AgentCommandDescriptor => descriptor !== null)
+    return globalContributionRegistry.listAgentCommands(this.lifecycle.getState(input.pluginId))
   }
 
   async getBackendState(pluginId: string): Promise<BackendStateSnapshot> {
-    assertLocalId('backend', pluginId)
-    const state = this.getOrCreateState(pluginId)
-    return {
-      pluginId,
-      state: state.state,
-      ready: state.state === 'ready',
-      error: state.error?.message ?? null,
-      methods: Array.from(state.methods.values()).map(method => method.qualifiedId),
-      backgroundServices: Array.from(state.backgroundServices.values()).map(service => service.qualifiedId),
-      crashLoopGuardTripped: state.crashLoopGuardTripped,
-    }
+    return this.lifecycle.snapshot(pluginId)
   }
 
   async handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
@@ -779,336 +180,23 @@ export class PluginHostRuntime {
           return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
       }
     } catch (error) {
-      const pluginError = toError(error)
-      return { jsonrpc: '2.0', id: request.id, error: { code: this.errorCodeFor(error), message: pluginError.message } }
-    }
-  }
-
-  private async activatePluginState(state: RuntimePluginState): Promise<void> {
-    try {
-      state.importGeneration += 1
-      state.module = await loadBackendModule(state.backendPath ?? '', state.importGeneration)
-      const plugin = extractBackendPlugin(state.module)
-
-      if (!plugin) {
-        throw new Error(`Backend entry for ${state.pluginId} does not export a defineBackendPlugin-compatible activate() function`)
-      }
-
-      await withPluginConsole(state.pluginId, async () => {
-        await plugin.activate(this.createBackendApi(state), this.createBackendContext(state))
-        await this.startBackgroundServices(state)
-      })
-
-      state.state = 'ready'
-      state.error = null
-    } catch (error) {
-      const pluginError = toError(error)
-      state.error = pluginError
-      await this.cleanupPluginState(state)
-      this.recordActivationCrash(state, pluginError)
-      state.state = 'error'
-      logPluginHostError(state.pluginId, `activation error: ${pluginError.message}`)
-      throw pluginError
-    } finally {
-      state.activationPromise = null
-    }
-  }
-
-  private recordActivationCrash(state: RuntimePluginState, error: Error): void {
-    const now = Date.now()
-    state.crashTimestamps = state.crashTimestamps.filter(timestamp => now - timestamp <= this.crashLoopWindowMs)
-    state.crashTimestamps.push(now)
-    if (state.crashTimestamps.length >= this.crashLoopLimit) {
-      state.crashLoopGuardTripped = true
-      state.error = new Error(`Plugin ${state.pluginId} activation blocked by crash-loop guard after ${state.crashTimestamps.length} crashes: ${error.message}`)
-    }
-  }
-
-  private async cleanupPluginState(state: RuntimePluginState): Promise<void> {
-    await state.subscriptions.disposeAll()
-
-    const services = Array.from(state.backgroundServices.values()).reverse()
-    for (const service of services) {
-      if (!service.started) continue
-      try {
-        await withPluginConsole(state.pluginId, async () => await service.stop?.())
-      } catch (error) {
-        const pluginError = toError(error)
-        logPluginHostError(state.pluginId, `background service stop error in ${service.qualifiedId}: ${pluginError.message}`)
-      } finally {
-        service.started = false
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: this.errorCodeFor(error), message: toError(error).message },
       }
     }
-
-    for (const command of state.commands.values()) {
-      globalCommands.delete(command.qualifiedId)
-    }
-    for (const [event, handlers] of state.eventHandlers.entries()) {
-      const globalHandlers = globalEventHandlers.get(event)
-      if (!globalHandlers) continue
-      for (const handler of handlers) {
-        globalHandlers.delete(handler)
-      }
-      if (globalHandlers.size === 0) {
-        globalEventHandlers.delete(event)
-      }
-    }
-
-    state.methods.clear()
-    state.commands.clear()
-    state.eventHandlers.clear()
-    state.backgroundServices.clear()
-    state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
-  }
-
-  private async startBackgroundServices(state: RuntimePluginState): Promise<void> {
-    for (const service of state.backgroundServices.values()) {
-      if (service.started) continue
-      try {
-        await service.start()
-        service.started = true
-      } catch (error) {
-        const pluginError = toError(error)
-        logPluginHostError(state.pluginId, `background service start error in ${service.qualifiedId}: ${pluginError.message}`)
-        throw pluginError
-      }
-    }
-  }
-
-  private createBackendContext(state: RuntimePluginState): BackendPluginContext {
-    return {
-      pluginId: state.pluginId,
-      apiVersion: 1,
-      packageMetadata: state.packageMetadata,
-      subscriptions: state.subscriptions,
-    }
-  }
-
-  private createBackendApi(state: RuntimePluginState): BackendOpenForgeAPI {
-    const contextSnapshot: OpenForgeContextSnapshot = {
-      pluginId: state.pluginId,
-      projectId: state.projectId,
-    }
-    const storage = state.storage
-    const hostCallback = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
-      if (!this.hostCallbacks) {
-        throw new Error(`OpenForge host capability is unavailable: ${method}`)
-      }
-      return await this.hostCallbacks({ method, params }) as T
-    }
-
-    return {
-      commands: {
-        register: (registration) => this.registerCommand(state, registration),
-        invoke: async (command, payload) => this.invokeCommand({ pluginId: state.pluginId, command, payload }),
-        invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload, state.pluginId),
-        list: async () => this.listCommands(),
-      },
-      events: {
-        on: (event, handler) => this.registerEventListener(state, event, handler as RuntimeEventHandler, false),
-        onGlobal: (event, handler) => this.registerEventListener(state, event, handler as RuntimeEventHandler, true),
-        emit: async (event, payload) => this.emitEvent(`${state.pluginId}.${event}`, payload),
-        emitGlobal: async (event, payload) => this.emitEvent(event, payload),
-      },
-      storage,
-      context: {
-        getSnapshot: () => ({ ...contextSnapshot }),
-      },
-      tasks: {
-        list: async (request) => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),
-        get: async (taskId) => await hostCallback<Task | null>('openforge.tasks.get', { taskId }),
-        create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
-        updateSummary: async (taskId: string, summary: string) => { await hostCallback<void>('openforge.tasks.updateSummary', { taskId, summary }) },
-        updateStatus: async (taskId: string, status: BoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
-        listStartPromptContributions: async (projectId: string) => await hostCallback<StartPromptContribution[]>('openforge.tasks.listStartPromptContributions', { projectId }),
-        configureStartPromptContribution: async (request: ConfigureStartPromptContributionRequest) => await hostCallback<StartPromptContribution[]>('openforge.tasks.configureStartPromptContribution', objectCallbackParams(request)),
-        startImplementation: async (request: StartTaskImplementationRequest) => normalizeImplementationRun(await hostCallback<unknown>('openforge.tasks.startImplementation', objectCallbackParams(request))),
-        getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
-        getLatestSession: async (taskId: string) => await hostCallback<AgentSession | null>('openforge.tasks.getLatestSession', { taskId }),
-      },
-      projects: {
-        list: async () => await hostCallback<Project[]>('openforge.projects.list'),
-        get: async (projectId) => await hostCallback<Project | null>('openforge.projects.get', { projectId }),
-      },
-      fs: {
-        readDir: async (request) => await hostCallback<FileEntry[]>('openforge.fs.readDir', request as unknown as Record<string, unknown>),
-        readFile: async (request) => await hostCallback<FileContent>('openforge.fs.readFile', request as unknown as Record<string, unknown>),
-        writeFile: async (request) => { await hostCallback<void>('openforge.fs.writeFile', request as unknown as Record<string, unknown>) },
-        searchFiles: async (request) => await hostCallback<string[]>('openforge.fs.searchFiles', request as unknown as Record<string, unknown>),
-      },
-      shell: {
-        spawn: async (request) => await hostCallback<number>('openforge.shell.spawn', request as unknown as Record<string, unknown>),
-        write: async (request) => { await hostCallback<void>('openforge.shell.write', request as unknown as Record<string, unknown>) },
-        resize: async (request) => { await hostCallback<void>('openforge.shell.resize', request as unknown as Record<string, unknown>) },
-        kill: async (request) => { await hostCallback<void>('openforge.shell.kill', request as unknown as Record<string, unknown>) },
-        getBuffer: async (request) => await hostCallback<string | null>('openforge.shell.getBuffer', request as unknown as Record<string, unknown>),
-      },
-      notifications: {
-        notify: async (request) => { await hostCallback<void>('openforge.notifications.notify', request as unknown as Record<string, unknown>) },
-      },
-      attention: {
-        listProjects: async () => await hostCallback<ProjectAttention[]>('openforge.attention.listProjects'),
-      },
-      system: {
-        openUrl: async (url) => { await hostCallback<void>('openforge.system.openUrl', { url }) },
-      },
-      config: {
-        get: async (key, projectId) => await hostCallback<JsonValue | null>('openforge.config.get', { key, projectId: projectId ?? null }),
-        set: async (key, value, projectId) => { await hostCallback<void>('openforge.config.set', { key, value, projectId: projectId ?? null }) },
-      },
-      projectConfig: {
-        get: async (key, projectId = state.projectId ?? null) => await hostCallback<JsonValue | null>('openforge.projectConfig.get', { key, projectId }),
-        set: async (key, value, projectId = state.projectId ?? null) => { await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId }) },
-      },
-      backend: {
-        registerMethod: (method, registration) => this.registerBackendMethod(state, method, registration),
-      },
-      background: {
-        register: (registration) => this.registerBackgroundService(state, registration),
-      },
-    }
-  }
-
-  private registerCommand(state: RuntimePluginState, registration: CommandRegistration): Disposable {
-    assertLocalId('commands', registration?.id)
-    assertFunction('commands', 'handler', registration?.handler)
-    if (!isNonEmptyString(registration.title)) {
-      throw new RuntimeValidationError('commands', 'requires a non-empty title')
-    }
-    const agent = normalizeAgentMetadata(registration.agent)
-    if (agent && registration.input !== undefined && !isJsonValue(registration.input)) {
-      throw new RuntimeValidationError('commands', 'agent-facing input schema must be a JSON value')
-    }
-    if (agent && registration.output !== undefined && !isJsonValue(registration.output)) {
-      throw new RuntimeValidationError('commands', 'agent-facing output schema must be a JSON value')
-    }
-    const localId = registration.id.trim()
-    const qualifiedId = `${state.pluginId}.${localId}`
-    if (state.commands.has(localId)) {
-      throw new Error(`Duplicate command id: ${qualifiedId}`)
-    }
-
-    const runtimeCommand: RuntimeBackendCommand = {
-      ...registration,
-      agent,
-      localId,
-      qualifiedId,
-      pluginId: state.pluginId,
-      projectId: state.projectId,
-      title: registration.title.trim(),
-    }
-    state.commands.set(localId, runtimeCommand)
-    globalCommands.set(qualifiedId, runtimeCommand)
-
-    return createDisposable(() => {
-      state.commands.delete(localId)
-      globalCommands.delete(qualifiedId)
-    })
-  }
-
-  private registerEventListener(state: RuntimePluginState, event: string, handler: RuntimeEventHandler, global: boolean): Disposable {
-    const qualifiedId = global ? event : `${state.pluginId}.${event}`
-    if (!isNonEmptyString(qualifiedId)) {
-      throw new RuntimeValidationError('events', 'requires a non-empty id')
-    }
-    if (!global) {
-      assertLocalId('events', event)
-    }
-    assertFunction('events', 'handler', handler)
-
-    const handlers = globalEventHandlers.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
-    handlers.add(handler)
-    globalEventHandlers.set(qualifiedId, handlers)
-
-    const tracked = state.eventHandlers.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
-    tracked.add(handler)
-    state.eventHandlers.set(qualifiedId, tracked)
-
-    return createDisposable(() => {
-      handlers.delete(handler)
-      if (handlers.size === 0) globalEventHandlers.delete(qualifiedId)
-      tracked.delete(handler)
-      if (tracked.size === 0) state.eventHandlers.delete(qualifiedId)
-    })
-  }
-
-  private async emitEvent(qualifiedId: string, payload: unknown): Promise<void> {
-    const handlers = Array.from(globalEventHandlers.get(qualifiedId) ?? [])
-    for (const handler of handlers) {
-      handler(payload)
-    }
-  }
-
-  private registerBackendMethod(state: RuntimePluginState, method: string, registration: BackendMethodRegistration): Disposable {
-    assertLocalId('backend', method)
-    assertFunction('backend', 'handler', registration?.handler)
-    const localId = method.trim()
-    if (state.methods.has(localId)) {
-      throw new Error(`Duplicate backend method id: ${state.pluginId}.${localId}`)
-    }
-
-    const runtimeMethod: RuntimeBackendMethod = {
-      ...registration,
-      localId,
-      qualifiedId: `${state.pluginId}.${localId}`,
-    }
-    state.methods.set(localId, runtimeMethod)
-
-    return createDisposable(() => {
-      state.methods.delete(localId)
-    })
-  }
-
-  private registerBackgroundService(state: RuntimePluginState, registration: BackgroundServiceRegistration): Disposable {
-    assertLocalId('background', registration?.id)
-    assertScope(registration?.scope)
-    assertFunction('background', 'start', registration?.start)
-    const localId = registration.id.trim()
-    if (state.backgroundServices.has(localId)) {
-      throw new Error(`Duplicate background service id: ${state.pluginId}.${localId}`)
-    }
-
-    const service: RuntimeBackendService = {
-      ...registration,
-      localId,
-      id: localId,
-      qualifiedId: `${state.pluginId}.${localId}`,
-      started: false,
-    }
-    state.backgroundServices.set(localId, service)
-
-    return createDisposable(async () => {
-      state.backgroundServices.delete(localId)
-      if (service.started) {
-        await service.stop?.()
-        service.started = false
-      }
-    })
-  }
-
-  private getOrCreateState(pluginId: string): RuntimePluginState {
-    let state = this.plugins.get(pluginId)
-    if (!state) {
-      const storage = this.hostCallbacks ? createHostStorage(pluginId, this.hostCallbacks) : createMemoryStorage()
-      state = createInitialPluginState(pluginId, storage)
-      this.plugins.set(pluginId, state)
-    }
-    return state
   }
 
   private requirePluginId(params: JsonRpcRequest['params']): string {
     const pluginId = params?.pluginId
-    if (!isNonEmptyString(pluginId)) {
-      throw new Error('Missing pluginId')
-    }
+    if (!isNonEmptyString(pluginId)) throw new Error('Missing pluginId')
     return pluginId
   }
 
   private requireActivationParams(params: JsonRpcRequest['params']): ActivateBackendInput {
     const pluginId = this.requirePluginId(params)
-    if (!isNonEmptyString(params?.backendPath)) {
-      throw new Error('Missing backendPath')
-    }
+    if (!isNonEmptyString(params?.backendPath)) throw new Error('Missing backendPath')
     return {
       pluginId,
       backendPath: params.backendPath,
@@ -1117,7 +205,7 @@ export class PluginHostRuntime {
     }
   }
 
-  private requireReadyParams(params: JsonRpcRequest['params']): { pluginId: string; backendPath?: string; projectId?: string | null; packageMetadata?: OpenForgePackageMetadata } {
+  private requireReadyParams(params: JsonRpcRequest['params']): ReadyBackendInput {
     return {
       pluginId: this.requirePluginId(params),
       backendPath: params?.backendPath,
@@ -1128,9 +216,7 @@ export class PluginHostRuntime {
 
   private requireAgentCommandParams(params: JsonRpcRequest['params']): InvokeAgentCommandInput {
     const commandId = params?.commandId
-    if (!isNonEmptyString(commandId)) {
-      throw new Error('Missing qualified agent Plugin Command commandId')
-    }
+    if (!isNonEmptyString(commandId)) throw new Error('Missing qualified agent Plugin Command commandId')
     return {
       pluginId: this.requirePluginId(params),
       backendPath: params?.backendPath,
@@ -1147,10 +233,7 @@ export class PluginHostRuntime {
     const command = isNonEmptyString(params?.command)
       ? params.command
       : this.commandFromRpcMethod(pluginId, rpcMethod)
-
-    if (!isNonEmptyString(command)) {
-      throw new Error('Missing backend command')
-    }
+    if (!isNonEmptyString(command)) throw new Error('Missing backend command')
 
     return {
       pluginId,
@@ -1183,57 +266,13 @@ export function createPluginHostRuntime(options?: RuntimeOptions): PluginHostRun
 const defaultStdioHostCallbackBridge = new StdioHostCallbackBridge()
 const defaultRuntime = createPluginHostRuntime({ hostCallbacks: defaultStdioHostCallbackBridge.request })
 
-function respond(id: JsonRpcId, body: Omit<JsonRpcResponse, 'jsonrpc' | 'id'>): void {
-  process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, ...body })}\n`)
-}
-
 export async function handleRequest(request: JsonRpcRequest): Promise<void> {
-  const response = await defaultRuntime.handleJsonRpcRequest(request)
-  if (response.error) {
-    respond(response.id, { error: response.error })
-    return
-  }
-  // A void/undefined handler result would be dropped by JSON.stringify, producing
-  // a response with no `result` field that the sidecar can't match to its pending
-  // request. Emit an explicit null so every success response carries a `result`.
-  respond(response.id, { result: response.result ?? null })
-}
-
-function startStdioServer(): void {
-  const input = createInterface({
-    input: process.stdin,
-    crlfDelay: Infinity,
-  })
-
-  input.on('line', (line) => {
-    if (!line.trim()) {
-      return
-    }
-
-    let message: JsonRpcRequest | JsonRpcResponse
-    try {
-      message = JSON.parse(line) as JsonRpcRequest | JsonRpcResponse
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message } })}\n`)
-      return
-    }
-
-    if (isJsonRpcResponse(message) && defaultStdioHostCallbackBridge.handleResponse(message)) {
-      return
-    }
-
-    void handleRequest(message as JsonRpcRequest).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      process.stderr.write(`[plugin_host] request handling error: ${message}\n`)
-    })
-  })
-
-  input.on('close', () => {
-    process.exit(0)
-  })
+  writeJsonRpcResponse(await defaultRuntime.handleJsonRpcRequest(request))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  startStdioServer()
+  startStdioServer({
+    callbackBridge: defaultStdioHostCallbackBridge,
+    handleRequest,
+  })
 }
