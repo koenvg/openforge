@@ -167,6 +167,9 @@ export class TestingCommonApiFake {
         openUrl: async (url) => {
           this.services.calls.openUrl.push(url)
         },
+        writeClipboardText: async (text) => {
+          this.services.calls.clipboardWrites.push(text)
+        },
       },
       navigation: {
         get: () => this.services.getNavigationSnapshot(),

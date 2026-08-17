@@ -177,6 +177,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
       'authored-prs-updated',
       'github-rate-limited',
       'plugin-frontend-command-request',
+      'openforge.write-clipboard-text',
       'plugin-installation-changed',
       'project-plugin-enablement-changed',
       'plugin-reload-requested',

@@ -157,6 +157,7 @@ export class RuntimeCommonApiRegistry {
       },
       system: {
         openUrl: async (url) => this.services.host.openUrl ? this.services.host.openUrl(url) : unavailableCapability('system.openUrl'),
+        writeClipboardText: async (text) => this.services.host.writeClipboardText ? this.services.host.writeClipboardText(text) : unavailableCapability('system.writeClipboardText'),
       },
       navigation: {
         get: () => this.services.host.getNavigation ? this.services.host.getNavigation() : unavailableCapability('navigation.get'),

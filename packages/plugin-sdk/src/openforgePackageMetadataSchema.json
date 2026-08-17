@@ -97,6 +97,7 @@
           "notifications",
           "attention",
           "system.openUrl",
+          "system.writeClipboardText",
           "config",
           "projectConfig",
           "browserSurfaces",

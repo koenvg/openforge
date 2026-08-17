@@ -53,6 +53,7 @@ These capabilities are exposed through `OpenForgeCommonAPI`, so plugin code can 
 | `notifications` | `openforge.notifications` | Ask OpenForge to show user-facing notifications. |
 | `attention` | `openforge.attention` | Read project attention signals. |
 | `system.openUrl` | `openforge.system.openUrl` | Open external URLs through the host instead of directly calling browser/Electron APIs. |
+| `system.writeClipboardText` | `openforge.system.writeClipboardText` | Write text to the operating-system clipboard through the host. Use it only for an explicit user-triggered copy action. |
 | `config` | `openforge.config` | Read/write global plugin JSON configuration. |
 | `projectConfig` | `openforge.projectConfig` | Read/write project-scoped plugin JSON configuration. |
 
@@ -100,7 +101,7 @@ The SDK boundary is intentionally smaller than OpenForge internals. Treat anythi
 
 Unavailable or non-goal APIs include:
 
-- Direct Electron, preload, IPC, browser-window, clipboard, menu, or shell APIs.
+- Direct Electron, preload, IPC, browser-window, clipboard, menu, or shell APIs. Use `openforge.system.writeClipboardText(text)` for host-mediated text copies instead of importing a clipboard API.
 - Direct Rust sidecar commands, HTTP sidecar endpoints, SQLite/database access, or migration hooks.
 - Direct imports from OpenForge source internals, Svelte stores, renderer components, Electron main files, or `@openforge-app/plugin-runtime`.
 - Manifest `contributes` arrays. Register commands, views, task-pane tabs, settings sections, backend methods, events, and background services at runtime in `activate()` instead.

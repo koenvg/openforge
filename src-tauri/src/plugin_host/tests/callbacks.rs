@@ -270,12 +270,54 @@ async fn host_core_callbacks_route_to_app_services() {
     );
     assert_eq!(
         host.handle_host_callback(
+            "openforge.system.writeClipboardText",
+            &json!({ "text": "Reviewer brief" })
+        )
+        .await
+        .expect("write clipboard text callback"),
+        Value::Null
+    );
+    assert_eq!(
+        host.handle_host_callback(
             "openforge.notifications.notify",
             &json!({ "title": "Done" })
         )
         .await
         .expect("notification callback"),
         Value::Null
+    );
+}
+
+#[tokio::test]
+async fn clipboard_callback_emits_the_host_clipboard_event() {
+    let app = AppHandle::new();
+    let bus = crate::app_events::AppEventBus::new(16, 8);
+    let sender = bus.sender();
+    let mut events = bus.subscribe(None).expect("subscribe to app events");
+    app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
+        bus,
+    )));
+    let host = PluginHost::with_app_event_sender(app, Some(sender));
+
+    host.handle_host_callback(
+        "openforge.system.writeClipboardText",
+        &json!({ "text": "Reviewer brief" }),
+    )
+    .await
+    .expect("write clipboard text callback");
+
+    let crate::app_events::AppEventFrame::Event(event) =
+        events.recv().await.expect("clipboard event")
+    else {
+        panic!("expected clipboard event");
+    };
+    assert_eq!(event.event_name, "openforge.write-clipboard-text");
+    assert_eq!(event.payload, json!({ "text": "Reviewer brief" }));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(10), events.recv())
+            .await
+            .is_err(),
+        "clipboard event must be emitted exactly once"
     );
 }
 

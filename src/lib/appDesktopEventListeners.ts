@@ -3,6 +3,7 @@ import type { DesktopUnlistenFn } from './desktopIpc'
 import { createAppLifecycleEventListeners } from './appDesktopEventListeners/appLifecycleEventListeners'
 import { createFrontendHostRequestEventListener } from './appDesktopEventListeners/frontendHostRequestEventListener'
 import { createPluginEventListeners } from './appDesktopEventListeners/pluginEventListeners'
+import { createPluginSystemEventListeners } from './appDesktopEventListeners/pluginSystemEventListeners'
 import { createPullRequestAttentionEventListeners } from './appDesktopEventListeners/pullRequestAttentionEventListeners'
 import { createTaskSessionEventListeners } from './appDesktopEventListeners/taskSessionEventListeners'
 import type { AppDesktopEventDeps } from './appDesktopEventListeners/types'
@@ -22,6 +23,7 @@ export async function registerAppDesktopEventListeners(
   const pullRequestAttentionListeners = createPullRequestAttentionEventListeners(deps)
   const taskSessionListeners = createTaskSessionEventListeners(deps)
   const pluginListeners = createPluginEventListeners(deps)
+  const pluginSystemListeners = createPluginSystemEventListeners()
 
   const eventListenerRegistrations = [
     pullRequestAttentionListeners.githubSyncComplete,
@@ -43,6 +45,7 @@ export async function registerAppDesktopEventListeners(
     pullRequestAttentionListeners.authoredPrsUpdated,
     pullRequestAttentionListeners.githubRateLimited,
     frontendHostRequestListener,
+    pluginSystemListeners.writeClipboardText,
     pluginListeners.pluginInstallationChanged,
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,

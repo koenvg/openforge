@@ -19,6 +19,7 @@ import {
   killPty,
   listOpenCodeCommands,
   openUrl,
+  writeClipboardText,
   pluginBackendDeactivate,
   pluginBackendWhenReady,
   pluginInvoke,
@@ -300,6 +301,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     getAttention: () => getProjectAttention(),
     openUrl: (url: string) => openUrl(url),
+    writeClipboardText: (text: string) => writeClipboardText(text),
     openTaskLink: (request: TaskLinkOpenRequest) => taskLinkRouter.open(request),
     registerTaskLinkHandler: (qualifiedPluginId: string, handler: TaskLinkHandler) => {
       if (qualifiedPluginId !== pluginId) throw new Error('Task link handler plugin identity mismatch')

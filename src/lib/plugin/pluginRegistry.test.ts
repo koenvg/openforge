@@ -21,6 +21,7 @@ const {
   deletePluginStorageMock,
   spawnShellPtyMock,
   openUrlMock,
+  writeClipboardTextMock,
   fsReadDirMock,
   fsReadFileMock,
   fsSearchFilesMock,
@@ -46,6 +47,7 @@ const {
   deletePluginStorageMock: vi.fn(),
   spawnShellPtyMock: vi.fn(),
   openUrlMock: vi.fn(),
+  writeClipboardTextMock: vi.fn(),
   fsReadDirMock: vi.fn(),
   fsReadFileMock: vi.fn(),
   fsSearchFilesMock: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock('../ipc', () => ({
   deletePluginStorage: deletePluginStorageMock,
   spawnShellPty: spawnShellPtyMock,
   openUrl: openUrlMock,
+  writeClipboardText: writeClipboardTextMock,
   fsReadDir: fsReadDirMock,
   fsReadFile: fsReadFileMock,
   fsSearchFiles: fsSearchFilesMock,
@@ -537,6 +540,7 @@ describe('pluginRegistry', () => {
     fsReadFileMock.mockResolvedValueOnce(readmeContent)
     await expect(firstProps.api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual(readmeContent)
     await firstProps.api.system.openUrl('https://example.com/plugin')
+    await firstProps.api.system.writeClipboardText('Reviewer brief')
     await firstProps.api.config.set('theme', { mode: 'dark' })
     await firstProps.api.projectConfig.set('repo', { owner: 'acme', name: 'app' }, 'P-1')
     await firstProps.api.backend.whenReady()
@@ -546,6 +550,7 @@ describe('pluginRegistry', () => {
     expect(capturedApis[0].backend.state).toBe('ready')
     expect(fsReadFileMock).toHaveBeenCalledWith('P-1', 'README.md')
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
+    expect(writeClipboardTextMock).toHaveBeenCalledWith('Reviewer brief')
     expect(setConfigMock).toHaveBeenCalledWith('theme', '{"mode":"dark"}')
     expect(setProjectConfigMock).toHaveBeenCalledWith('P-1', 'repo', '{"owner":"acme","name":"app"}')
     expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('runtime-plugin')
@@ -566,6 +571,9 @@ describe('pluginRegistry', () => {
     )
     await expect(props.api.notifications.notify({ title: 'Ready' })).rejects.toThrow(
       'OpenForge frontend runtime API is unavailable for plugin missing-plugin: notifications.notify'
+    )
+    await expect(props.api.system.writeClipboardText('Reviewer brief')).rejects.toThrow(
+      'OpenForge frontend runtime API is unavailable for plugin missing-plugin: system.writeClipboardText'
     )
     await props.api.system.openUrl('https://example.com/plugin')
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')

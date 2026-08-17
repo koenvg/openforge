@@ -216,6 +216,7 @@ export const appShellEventContracts = [
   { eventName: 'authored-prs-updated', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'github-rate-limited', payload: 'GitHub rate limit payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'plugin-frontend-command-request', payload: 'transient correlated frontend host request (Plugin Command or Task compose)', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'app-shell' },
+  { eventName: 'openforge.write-clipboard-text', payload: '{ text: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-installation-changed', payload: '{ plugin_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'project-plugin-enablement-changed', payload: '{ plugin_id: string; project_id: string; enabled: boolean }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-reload-requested', payload: '{ plugin_id: string; project_id?: string | null }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },

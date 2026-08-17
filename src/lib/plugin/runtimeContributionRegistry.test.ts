@@ -362,6 +362,7 @@ describe('runtime contribution registry', () => {
       sendTaskFollowUp: vi.fn(async () => ({ taskId: 'T-2', sessionId: 'S-1', disposition: 'queued' as const })),
       readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
       openUrl: vi.fn(async () => undefined),
+      writeClipboardText: vi.fn(async () => undefined),
       getNavigation: vi.fn(() => ({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })),
       navigate: vi.fn(async () => ({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })),
       getConfig: vi.fn(async () => 'dark'),
@@ -401,6 +402,7 @@ describe('runtime contribution registry', () => {
     await expect(api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toBe('buffered')
     await api.shell.kill({ taskId: 'T-1', terminalIndex: 2 })
     await api.system.openUrl('https://example.com')
+    await api.system.writeClipboardText('Reviewer brief')
     expect(api.navigation.get()).toEqual({ activeProjectId: 'P-1', currentView: 'board', selectedTaskId: null })
     await expect(api.navigation.navigate({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })).resolves.toEqual({ activeProjectId: 'P-1', currentView: 'plugin:github:prs', selectedTaskId: 'T-1' })
     await expect(api.config.get('theme')).resolves.toBe('dark')
@@ -420,6 +422,7 @@ describe('runtime contribution registry', () => {
     expect(host.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'README.md' })
     expect(host.sendTaskFollowUp).toHaveBeenCalledWith({ taskId: 'T-2', message: 'Review visual feedback' })
     expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
+    expect(host.writeClipboardText).toHaveBeenCalledWith('Reviewer brief')
     expect(host.navigate).toHaveBeenCalledWith({ viewId: 'plugin:github:prs', projectId: 'P-1', taskId: 'T-1' })
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
     expect(host.writeShell).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
@@ -504,6 +507,9 @@ describe('runtime contribution registry', () => {
     )
     await expect(api.commands.listCatalog()).rejects.toThrow(
       'OpenForge host capability is unavailable: commands.listCatalog'
+    )
+    await expect(api.system.writeClipboardText('Reviewer brief')).rejects.toThrow(
+      'OpenForge host capability is unavailable: system.writeClipboardText'
     )
   })
 

@@ -81,9 +81,11 @@ it('records simple host calls with a standalone frontend API mock', async () => 
   const api = createMockOpenForgeApi({ pluginId: 'demo', projectId: 'P-1' })
 
   await api.system.openUrl('https://example.com')
+  await api.system.writeClipboardText('Reviewer brief')
   await api.notifications.notify({ title: 'Ready' })
 
   expect(api.__testing.calls.openUrl).toEqual(['https://example.com'])
+  expect(api.__testing.calls.clipboardWrites).toEqual(['Reviewer brief'])
   expect(api.__testing.calls.notify).toEqual([{ title: 'Ready' }])
 })
 
