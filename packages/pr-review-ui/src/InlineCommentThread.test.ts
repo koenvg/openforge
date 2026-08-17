@@ -52,6 +52,48 @@ function makeProps(overrides: Partial<InlineCommentThreadProps> = {}) {
 }
 
 describe('InlineCommentThread', () => {
+  it('keeps icon-only actions named while hiding their icons from assistive technology', () => {
+    const agentComment = makeAgentComment()
+    const data: CommentDisplayData = {
+      comments: [
+        { body: agentComment.body, type: 'agent', commentId: agentComment.id, status: 'pending' },
+        { body: 'Pending suggestion', type: 'pending', index: 0 },
+      ],
+    }
+    const setup = makeProps({
+      data,
+      agentComments: [agentComment],
+      pendingComments: [{ path: 'src/example.ts', line: 12, side: 'RIGHT', body: 'Pending suggestion' }],
+    })
+    render(InlineCommentThread, { props: setup.props })
+
+    const actionNames = [
+      'Approve AI review comment and add to pending comments',
+      'Dismiss AI review comment',
+      'Remove pending comment',
+    ]
+    for (const name of actionNames) {
+      const button = screen.getByRole('button', { name })
+      expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    }
+  })
+
+  it('labels replies with text while hiding the decorative reply icon', () => {
+    const data: CommentDisplayData = {
+      comments: [{
+        body: 'Existing reply',
+        type: 'existing',
+        author: 'reviewer',
+        isReply: true,
+      }],
+    }
+    const setup = makeProps({ data })
+    render(InlineCommentThread, { props: setup.props })
+
+    const replyLabel = screen.getByText('reply')
+    expect(replyLabel.textContent?.trim()).toBe('reply')
+    expect(replyLabel.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+  })
   it('removes the selected pending comment by its source-array index', async () => {
     const pendingComments: ReviewSubmissionComment[] = [
       { path: 'src/first.ts', line: 4, side: 'RIGHT', body: 'First pending comment' },

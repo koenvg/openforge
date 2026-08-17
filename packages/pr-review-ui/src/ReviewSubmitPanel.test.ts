@@ -130,7 +130,10 @@ describe('ReviewSubmitPanel', () => {
     await fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('Review submitted successfully (Approved)')
+      const status = screen.getByRole('status')
+      expect(status.getAttribute('aria-live')).toBe('polite')
+      expect(status.textContent?.trim()).toBe('Review submitted successfully (Approved)')
+      expect(status.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
     })
 
     success.unmount()
@@ -139,7 +142,10 @@ describe('ReviewSubmitPanel', () => {
     await fireEvent.click(screen.getByText('Approve'))
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain('Failed to submit review. Please try again.')
+      const alert = screen.getByRole('alert')
+      expect(alert.getAttribute('aria-live')).toBe('assertive')
+      expect(alert.textContent?.trim()).toBe('Failed to submit review. Please try again.')
+      expect(alert.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
     })
   })
 
