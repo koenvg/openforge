@@ -1,6 +1,6 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
-import { createOpenForgePluginSdkSourceAliasRecord } from './src/vite'
+import { createOpenForgePluginSdkSourceAliasRecord } from './src/vite.ts'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
