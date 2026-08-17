@@ -41,6 +41,7 @@ impl PluginHost {
             "start_implementation" => {
                 crate::app_invoke::handle_start_implementation_command(&state, &request).await
             }
+            "send_agent_follow_up" => crate::app_invoke::handle_pty_command(&state, &request).await,
             _ => {
                 return Err(format!(
                     "unsupported plugin host app task command: {command}"
@@ -57,11 +58,17 @@ impl PluginHost {
 
     pub(super) fn list_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
         let project_id = optional_param_string(params, "projectId")?;
+        let include_done = optional_param_bool(params, "includeDone")?.unwrap_or(false);
         let db_state = self.database_state_for_host()?;
         let db = crate::db::acquire_db(db_state.as_ref());
         let tasks = if let Some(project_id) = project_id {
-            db.get_tasks_for_project(&project_id)
-                .map_err(|error| format!("failed to list project tasks: {error}"))?
+            if include_done {
+                db.get_tasks_for_project(&project_id)
+                    .map_err(|error| format!("failed to list project tasks: {error}"))?
+            } else {
+                db.get_tasks_for_project_excluding_state(&project_id, "done")
+                    .map_err(|error| format!("failed to list project tasks: {error}"))?
+            }
         } else {
             db.get_all_tasks()
                 .map_err(|error| format!("failed to list tasks: {error}"))?
@@ -123,6 +130,13 @@ impl PluginHost {
 
         self.publish_task_changed_for_host("created", &task.id, task.project_id.as_deref())?;
         serde_json::to_value(task).map_err(|error| format!("failed to serialize task: {error}"))
+    }
+
+    pub(super) async fn compose_task_for_host(&self, params: &Value) -> Result<Value, String> {
+        self.frontend_plugin_commands
+            .compose_task(params.clone())
+            .await
+            .map_err(|error| format!("plugin host task compose callback failed: {error}"))
     }
 
     pub(super) fn update_task_summary_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -250,6 +264,19 @@ impl PluginHost {
         .await
     }
 
+    pub(super) async fn send_task_follow_up_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let message = required_param_text(params, "message")?;
+        self.invoke_app_task_command_for_host(
+            "send_agent_follow_up",
+            json!({ "taskId": task_id, "message": message }),
+        )
+        .await
+    }
+
     pub(super) fn get_task_workspace_for_host(&self, params: &Value) -> Result<Value, String> {
         let task_id = required_param_string(params, "taskId")?;
         let db_state = self.database_state_for_host()?;
@@ -278,6 +305,16 @@ fn required_param_text(params: &Value, key: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .ok_or_else(|| format!("plugin host callback missing string param: {key}"))
+}
+
+fn optional_param_bool(params: &Value, key: &str) -> Result<Option<bool>, String> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Bool(value)) => Ok(Some(*value)),
+        Some(_) => Err(format!(
+            "plugin host callback param must be a boolean or null: {key}"
+        )),
+    }
 }
 
 fn optional_param_string_vec(params: &Value, key: &str) -> Result<Option<Vec<String>>, String> {

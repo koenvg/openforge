@@ -25,6 +25,10 @@ enum FrontendPluginCommandRequest {
         plugin_id: String,
         project_id: String,
     },
+    ComposeTask {
+        correlation_id: String,
+        request: Value,
+    },
     Invoke {
         correlation_id: String,
         plugin_id: String,
@@ -105,9 +109,18 @@ impl FrontendPluginCommandTransport {
             .unwrap_or(0)
     }
 
+    pub async fn compose_task(&self, request: Value) -> Result<Value, String> {
+        self.request(FrontendPluginCommandRequest::ComposeTask {
+            correlation_id: uuid::Uuid::new_v4().to_string(),
+            request,
+        })
+        .await
+    }
+
     async fn request(&self, request: FrontendPluginCommandRequest) -> Result<Value, String> {
         let correlation_id = match &request {
             FrontendPluginCommandRequest::List { correlation_id, .. }
+            | FrontendPluginCommandRequest::ComposeTask { correlation_id, .. }
             | FrontendPluginCommandRequest::Invoke { correlation_id, .. } => correlation_id.clone(),
         };
         let payload = serde_json::to_value(request).map_err(|error| {

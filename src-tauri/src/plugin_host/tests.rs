@@ -375,6 +375,20 @@ async fn host_core_callbacks_route_to_app_services() {
         .expect("get project callback");
     assert_eq!(project_value["name"], "Plugin Host");
 
+    let command_catalog = host
+        .handle_host_callback(
+            "openforge.commands.listCatalog",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("command catalog callback");
+    assert!(command_catalog.is_array());
+    assert_eq!(
+        host.handle_host_callback("openforge.commands.listCatalog", &json!({}))
+            .await
+            .expect("project-independent command catalog callback"),
+        json!([])
+    );
     let dir = host
         .handle_host_callback(
             "openforge.fs.readDir",
@@ -583,6 +597,92 @@ async fn plugin_host_create_task_uses_project_worktree_default() {
 }
 
 #[tokio::test]
+async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
+    let (database, _path) =
+        crate::db::test_helpers::make_test_db("plugin_host_task_follow_up_callback");
+    let project = database
+        .create_project("Plugin Tasks", "/tmp/plugin-tasks")
+        .expect("project fixture");
+    let task = database
+        .create_task("Follow up", "doing", Some(&project.id), None, None)
+        .expect("Task fixture");
+    database
+        .create_agent_session("session-1", &task.id, None, "implementing", "running", "pi")
+        .expect("Agent Session fixture");
+
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    app.manage(crate::pty_manager::PtyManager::new());
+    let host = PluginHost::new(app);
+
+    let error = host
+        .handle_host_callback(
+            "openforge.tasks.sendFollowUp",
+            &json!({ "taskId": task.id, "message": "Review the feedback" }),
+        )
+        .await
+        .expect_err("missing Agent PTY should report a delivery failure");
+    assert!(error.contains("AGENT_FOLLOW_UP_DELIVERY_FAILED"));
+}
+
+#[tokio::test]
+async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
+    let (database, _path) =
+        crate::db::test_helpers::make_test_db("plugin_host_task_compose_callback");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let (event_sender, mut events) = tokio::sync::broadcast::channel(4);
+    let host = PluginHost::with_app_event_sender(app, Some(event_sender));
+    let callback_host = host.clone();
+    let callback = tokio::spawn(async move {
+        callback_host
+            .handle_host_callback(
+                "openforge.tasks.compose",
+                &json!({
+                    "projectId": "P-1",
+                    "initialPrompt": "Review issue 42",
+                    "sourceTicketUrl": "https://example.com/issues/42"
+                }),
+            )
+            .await
+    });
+
+    let event = tokio::time::timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("compose request event timeout")
+        .expect("compose request event");
+    assert_eq!(
+        event.event_name,
+        crate::frontend_plugin_command_transport::FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT
+    );
+    assert_eq!(event.payload["operation"], "composeTask");
+    assert_eq!(event.payload["request"]["projectId"], "P-1");
+    let correlation_id = event.payload["correlationId"]
+        .as_str()
+        .expect("compose request correlation id");
+    let state = host
+        .app_state_for_host_callback()
+        .expect("plugin host app state");
+    assert!(state.frontend_plugin_commands.acknowledge(
+        crate::frontend_plugin_command_transport::FrontendPluginCommandAcknowledgement {
+            correlation_id: correlation_id.to_string(),
+            outcome:
+                crate::frontend_plugin_command_transport::FrontendPluginCommandOutcome::Success {
+                    output: json!({ "task": { "id": "T-composed" }, "started": false }),
+                },
+        }
+    ));
+
+    assert_eq!(
+        callback
+            .await
+            .expect("compose callback join")
+            .expect("compose callback"),
+        json!({ "task": { "id": "T-composed" }, "started": false })
+    );
+}
+
+#[tokio::test]
 async fn plugin_host_task_callbacks_create_start_and_read_state() {
     let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_task_callbacks");
     let project_dir = tempfile::tempdir().expect("project dir");
@@ -625,11 +725,22 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .handle_host_callback("openforge.tasks.list", &json!({ "projectId": project.id }))
         .await
         .expect("task list callback");
-    assert!(project_tasks
+    let project_tasks = project_tasks.as_array().expect("project tasks");
+    assert!(project_tasks.iter().any(|task| task["id"] == task_id));
+    assert!(!project_tasks.iter().any(|task| task["id"] == dependency.id));
+
+    let project_tasks_with_done = host
+        .handle_host_callback(
+            "openforge.tasks.list",
+            &json!({ "projectId": project.id, "includeDone": true }),
+        )
+        .await
+        .expect("task list including done callback");
+    assert!(project_tasks_with_done
         .as_array()
-        .expect("project tasks")
+        .expect("project tasks including done")
         .iter()
-        .any(|task| task["id"] == task_id));
+        .any(|task| task["id"] == dependency.id));
 
     let fetched = host
         .handle_host_callback("openforge.tasks.get", &json!({ "taskId": task_id }))

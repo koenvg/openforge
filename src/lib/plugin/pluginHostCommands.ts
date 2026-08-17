@@ -69,6 +69,17 @@ function createTaskFromPluginRequest(request: CreateTaskRequest) {
   )
 }
 
+export async function composeTaskFromPluginRequest(request: ComposeTaskRequest) {
+  const projectId = request?.projectId
+  if (!projectId) throw new Error('composeTask requires a projectId')
+  // The dialog creates against whichever project is active, so move there
+  // first rather than silently writing the task to the wrong project.
+  if (get(activeProjectId) !== projectId) {
+    activeProjectId.set(projectId)
+  }
+  return requestTaskCompose(request)
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
@@ -254,16 +265,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     listTasks: (request?: { projectId?: string | null; includeDone?: boolean }) => request?.projectId ? getTasksForProject(request.projectId, request.includeDone) : getAllTasks(),
     getTask: (taskId: string) => getTaskDetail(taskId),
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
-    composeTask: async (request: ComposeTaskRequest) => {
-      const projectId = request?.projectId
-      if (!projectId) throw new Error('composeTask requires a projectId')
-      // The dialog creates against whichever project is active, so move there
-      // first rather than silently writing the task to the wrong project.
-      if (get(activeProjectId) !== projectId) {
-        activeProjectId.set(projectId)
-      }
-      return requestTaskCompose(request)
-    },
+    composeTask: composeTaskFromPluginRequest,
     updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
     listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),

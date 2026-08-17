@@ -252,22 +252,20 @@ async fn start_http_server_with_app_state(
         task_claims.clone(),
     );
     let poll_context = crate::github_poller::PollContext::new();
-    let plugin_host = Some(PluginHost::with_app_event_sender_and_task_claims(
+    let plugin_host = PluginHost::with_app_event_sender_and_task_claims(
         app.clone().unwrap_or_default(),
         Some(app_event_tx.clone()),
         task_claims.clone(),
-    ));
+    );
+    let frontend_plugin_commands = plugin_host.frontend_plugin_commands();
     let state = AppState {
         app,
         db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
         github_client: github_client.clone(),
-        frontend_plugin_commands:
-            crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
-                Some(app_event_tx.clone()),
-            ),
-        plugin_host,
+        frontend_plugin_commands,
+        plugin_host: Some(plugin_host),
         plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
         app_event_tx: Some(app_event_tx.clone()),
         app_event_bus: Some(app_event_bus),

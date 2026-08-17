@@ -28,6 +28,7 @@ describe('frontend Plugin Command renderer requests', () => {
       list: vi.fn(async () => []),
       invoke: vi.fn(async (_pluginId, _projectId, _commandId, input) =>
         (input as { url: string }).url.endsWith('/first') ? first.promise : second.promise),
+      compose: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -50,6 +51,7 @@ describe('frontend Plugin Command renderer requests', () => {
     const handler = new FrontendPluginCommandRequestHandler({
       list: vi.fn(async () => []),
       invoke: vi.fn(async () => invocation.promise),
+      compose: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -70,6 +72,7 @@ describe('frontend Plugin Command renderer requests', () => {
     const handler = new FrontendPluginCommandRequestHandler({
       list: vi.fn(async () => []),
       invoke: vi.fn(async () => { throw new Error('Unknown agent-facing Plugin Command: browser.missing') }),
+      compose: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -83,6 +86,60 @@ describe('frontend Plugin Command renderer requests', () => {
     expect(acknowledge).toHaveBeenNthCalledWith(2, {
       correlationId: 'malformed',
       outcome: { status: 'error', error: 'invalid frontend Plugin Command request' },
+    })
+  })
+
+  it('routes correlated task compose requests to the host dialog', async () => {
+    const result = {
+      task: {
+        id: 'T-composed',
+        initial_prompt: 'Review issue 42',
+        status: 'backlog' as const,
+        prompt: null,
+        title: null,
+        title_source: null,
+        title_generated_at: null,
+        summary: null,
+        agent: null,
+        permission_mode: null,
+        worktree_source: null,
+        worktree_branch: null,
+        handoff_notes_enabled: true,
+        source_ticket_url: 'https://example.com/issues/42',
+        depends_on: [],
+        project_id: 'P-1',
+        created_at: 1,
+        updated_at: 1,
+      },
+      started: false,
+    }
+    const compose = vi.fn(async () => result)
+    const acknowledge = vi.fn(async () => true)
+    const handler = new FrontendPluginCommandRequestHandler({
+      list: vi.fn(async () => []),
+      invoke: vi.fn(async () => null),
+      compose,
+      acknowledge,
+    })
+
+    await handler.handle({
+      operation: 'composeTask',
+      correlationId: 'compose-1',
+      request: {
+        projectId: 'P-1',
+        initialPrompt: 'Review issue 42',
+        sourceTicketUrl: 'https://example.com/issues/42',
+      },
+    })
+
+    expect(compose).toHaveBeenCalledWith({
+      projectId: 'P-1',
+      initialPrompt: 'Review issue 42',
+      sourceTicketUrl: 'https://example.com/issues/42',
+    })
+    expect(acknowledge).toHaveBeenCalledWith({
+      correlationId: 'compose-1',
+      outcome: { status: 'success', output: result },
     })
   })
 })

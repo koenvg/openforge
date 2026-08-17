@@ -77,12 +77,14 @@ impl PluginHost {
     ) -> Result<Value, String> {
         match method {
             "openforge.commands.invokeGlobal" => self.invoke_global_command_for_host(params).await,
+            "openforge.commands.listCatalog" => self.list_command_catalog_for_host(params).await,
             "openforge.storage.get" => self.get_plugin_storage_for_host(params),
             "openforge.storage.set" => self.set_plugin_storage_for_host(params),
             "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
             "openforge.tasks.list" => self.list_tasks_for_host(params),
             "openforge.tasks.get" => self.get_task_for_host(params),
             "openforge.tasks.create" => self.create_task_for_host(params),
+            "openforge.tasks.compose" => self.compose_task_for_host(params).await,
             "openforge.tasks.updateSummary" => self.update_task_summary_for_host(params),
             "openforge.tasks.updateStatus" => self.update_task_status_for_host(params).await,
             "openforge.tasks.listStartPromptContributions" => {
@@ -94,6 +96,7 @@ impl PluginHost {
             "openforge.tasks.startImplementation" => {
                 self.start_task_implementation_for_host(params).await
             }
+            "openforge.tasks.sendFollowUp" => self.send_task_follow_up_for_host(params).await,
             "openforge.tasks.getWorkspace" => self.get_task_workspace_for_host(params),
             "openforge.tasks.getLatestSession" => self.get_latest_session_for_host(params),
             "openforge.projects.list" => self.list_projects_for_host(),
@@ -118,6 +121,23 @@ impl PluginHost {
             "openforge.projectConfig.set" => self.set_project_config_for_host(params),
             _ => Err(format!("unsupported plugin host callback method: {method}")),
         }
+    }
+
+    async fn list_command_catalog_for_host(&self, params: &Value) -> Result<Value, String> {
+        let Some(project_id) = optional_param_string(params, "projectId")? else {
+            return Ok(Value::Array(Vec::new()));
+        };
+        let state = self.app_state_for_host_callback()?;
+        let request = crate::http_server::AppInvokeRequest {
+            command: "list_opencode_commands".to_string(),
+            payload: serde_json::json!({ "projectId": project_id }),
+        };
+        crate::app_invoke::handle_runtime_command(&state, &request)
+            .await
+            .map_err(|(status, message)| {
+                format!("plugin host command catalog callback failed ({status}): {message}")
+            })?
+            .ok_or_else(|| "plugin host command catalog callback returned no value".to_string())
     }
 
     async fn invoke_global_command_for_host(&self, params: &Value) -> Result<Value, String> {

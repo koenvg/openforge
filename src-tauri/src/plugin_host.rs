@@ -22,6 +22,8 @@ pub struct PluginHost {
     state_change: Arc<Notify>,
     app_handle: AppHandle,
     app_event_tx: Option<AppEventSender>,
+    frontend_plugin_commands:
+        crate::frontend_plugin_command_transport::FrontendPluginCommandTransport,
     task_claims: TaskClaims,
 }
 
@@ -39,6 +41,7 @@ impl Clone for PluginHost {
             state_change: Arc::clone(&self.state_change),
             app_handle: self.app_handle.clone(),
             app_event_tx: self.app_event_tx.clone(),
+            frontend_plugin_commands: self.frontend_plugin_commands.clone(),
             task_claims: self.task_claims.clone(),
         }
     }
@@ -52,6 +55,10 @@ impl PluginHost {
             state_change: Arc::new(Notify::new()),
             app_handle,
             app_event_tx: None,
+            frontend_plugin_commands:
+                crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+                    None,
+                ),
             task_claims: TaskClaims::new(),
         }
     }
@@ -70,6 +77,10 @@ impl PluginHost {
         task_claims: TaskClaims,
     ) -> Self {
         let mut host = Self::new(app_handle);
+        host.frontend_plugin_commands =
+            crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+                app_event_tx.clone(),
+            );
         host.app_event_tx = app_event_tx;
         host.task_claims = task_claims;
         host
@@ -104,10 +115,7 @@ impl PluginHost {
             backend_token: None,
             pty_manager,
             github_client,
-            frontend_plugin_commands:
-                crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
-                    self.app_event_tx.clone(),
-                ),
+            frontend_plugin_commands: self.frontend_plugin_commands.clone(),
             plugin_host: Some(self.clone()),
             plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: self.app_event_tx.clone(),
@@ -118,6 +126,12 @@ impl PluginHost {
             task_claims: self.task_claims.clone(),
             poll_context: crate::github_poller::PollContext::new(),
         })
+    }
+
+    pub(crate) fn frontend_plugin_commands(
+        &self,
+    ) -> crate::frontend_plugin_command_transport::FrontendPluginCommandTransport {
+        self.frontend_plugin_commands.clone()
     }
 
     pub(in crate::plugin_host) fn runtime_lock(
