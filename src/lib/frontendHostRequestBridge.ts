@@ -1,4 +1,4 @@
-import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../shared/frontendHostRequestProtocol'
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../electron/frontendHostRequestProtocol'
 import { invokeDesktopCommand } from './desktopIpc'
 import { FrontendHostRequestHandler, type FrontendPluginCommandOperations } from './frontendHostRequests'
 import { composeTaskFromPluginRequest } from './plugin/pluginHostCommands'

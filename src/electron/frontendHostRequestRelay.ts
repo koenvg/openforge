@@ -3,7 +3,7 @@ import {
   frontendHostRequestCorrelationId,
   parseFrontendHostRequestAcknowledgement,
   type FrontendHostRequestAcknowledgement,
-} from '../shared/frontendHostRequestProtocol.js'
+} from './frontendHostRequestProtocol.js'
 import { OPENFORGE_EVENT_CHANNEL } from './preloadApi.js'
 import type { OpenForgeEventEnvelope } from './eventForwarder.js'
 

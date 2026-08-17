@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
-import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../shared/frontendHostRequestProtocol.js'
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import { handleElectronInvoke } from './backendBridge.js'
 import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'

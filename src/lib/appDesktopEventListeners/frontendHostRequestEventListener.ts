@@ -1,4 +1,4 @@
-import { FRONTEND_HOST_REQUEST_EVENT } from '../../shared/frontendHostRequestProtocol'
+import { FRONTEND_HOST_REQUEST_EVENT } from '../../electron/frontendHostRequestProtocol'
 import { handleFrontendHostRequest } from '../frontendHostRequestBridge'
 import {
   invokeFrontendAgentCommand,

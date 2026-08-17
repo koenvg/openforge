@@ -1,4 +1,4 @@
-import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../shared/frontendHostRequestProtocol.js'
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import { developerLogStore } from './developerLogs.js'
 import { openExternalUrl, openPathInEditor } from './shellCommands.js'
 import type { DeveloperLogEntry, DeveloperLogSnapshot } from './developerLogs.js'

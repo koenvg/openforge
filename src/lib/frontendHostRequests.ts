@@ -8,7 +8,7 @@ import {
   frontendHostRequestCorrelationId,
   type FrontendHostRequestAcknowledgement,
   type FrontendHostRequestOutcome,
-} from '../shared/frontendHostRequestProtocol'
+} from '../electron/frontendHostRequestProtocol'
 
 type FrontendPluginCommandRequest =
   | {
