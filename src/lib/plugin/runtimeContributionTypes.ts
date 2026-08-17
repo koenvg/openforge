@@ -83,6 +83,7 @@ export type RuntimeHostBridge = {
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>
+  writeClipboardText?(text: string): Promise<void>
   openTaskLink?(request: TaskLinkOpenRequest): Promise<void>
   registerTaskLinkHandler?(pluginId: string, handler: TaskLinkHandler): Disposable
   getNavigation?(): OpenForgeNavigationSnapshot

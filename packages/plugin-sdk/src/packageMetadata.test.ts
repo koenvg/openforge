@@ -38,6 +38,13 @@ describe('package.json#openforge metadata contract', () => {
     expect(validateOpenForgePackageMetadata(validMetadata())).toEqual([])
     expect(isOpenForgePackageMetadata(validMetadata())).toBe(true)
   })
+
+  it('accepts clipboard writing as a declared trusted-plugin capability', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      requires: ['system.writeClipboardText'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('system.writeClipboardText')
+  })
   it('accepts browserSurfaces only as a declared frontend capability', () => {
     expect(validateOpenForgePackageMetadata(validMetadata({
       requires: ['browserSurfaces'],

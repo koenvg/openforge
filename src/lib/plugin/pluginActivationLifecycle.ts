@@ -371,7 +371,10 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     shell: { spawn: unavailable('shell.spawn'), write: unavailable('shell.write'), resize: unavailable('shell.resize'), kill: unavailable('shell.kill'), getBuffer: unavailable('shell.getBuffer') },
     notifications: { notify: unavailable('notifications.notify') },
     attention: { listProjects: unavailable('attention.listProjects') },
-    system: { openUrl: async (url: string) => openUrl(url) },
+    system: {
+      openUrl: async (url: string) => openUrl(url),
+      writeClipboardText: unavailable('system.writeClipboardText'),
+    },
     navigation: {
       get: () => ({ activeProjectId: get(activeProjectId), currentView: 'board', selectedTaskId: null }),
       navigate: unavailable('navigation.navigate'),

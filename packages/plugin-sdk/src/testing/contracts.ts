@@ -57,6 +57,7 @@ export interface TestingOpenForgeApiCalls {
   emittedEvents: Array<{ event: string; qualifiedEvent: string; payload: unknown }>
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
+  clipboardWrites: string[]
   taskLinkOpenRequests: TaskLinkOpenRequest[]
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]

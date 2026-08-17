@@ -108,6 +108,7 @@ var openforgePackageMetadataSchema_default = {
 				"notifications",
 				"attention",
 				"system.openUrl",
+				"system.writeClipboardText",
 				"config",
 				"projectConfig",
 				"browserSurfaces",
@@ -320,6 +321,7 @@ function createTestingCalls() {
 		emittedEvents: [],
 		emittedGlobalEvents: [],
 		openUrl: [],
+		clipboardWrites: [],
 		taskLinkOpenRequests: [],
 		navigationRequests: [],
 		notify: [],
@@ -734,9 +736,14 @@ var TestingCommonApiFake = class {
 				this.services.calls.notify.push(request);
 			} },
 			attention: { listProjects: async () => [] },
-			system: { openUrl: async (url) => {
-				this.services.calls.openUrl.push(url);
-			} },
+			system: {
+				openUrl: async (url) => {
+					this.services.calls.openUrl.push(url);
+				},
+				writeClipboardText: async (text) => {
+					this.services.calls.clipboardWrites.push(text);
+				}
+			},
 			navigation: {
 				get: () => this.services.getNavigationSnapshot(),
 				navigate: async (request) => {

@@ -134,6 +134,7 @@ export function createBackendApi(
     },
     system: {
       openUrl: async url => { await hostCallback<void>('openforge.system.openUrl', { url }) },
+      writeClipboardText: async text => { await hostCallback<void>('openforge.system.writeClipboardText', { text }) },
     },
     config: {
       async get<T extends JsonValue = JsonValue>(key: string, projectId?: string): Promise<T | null> {

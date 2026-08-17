@@ -64,6 +64,7 @@ export type OpenForgePluginCapability =
   | 'notifications'
   | 'attention'
   | 'system.openUrl'
+  | 'system.writeClipboardText'
   | 'config'
   | 'projectConfig'
   | 'browserSurfaces'
@@ -602,6 +603,7 @@ export interface AttentionAPI {
 
 export interface SystemAPI {
   openUrl(url: string): Promise<void>
+  writeClipboardText(text: string): Promise<void>
 }
 
 export interface KeyValueConfigAPI {

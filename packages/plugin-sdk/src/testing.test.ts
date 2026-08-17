@@ -133,6 +133,7 @@ describe('plugin SDK testing utilities', () => {
     const backendApi = createMockBackendOpenForgeApi({ pluginId: 'demo' })
 
     await api.system.openUrl('https://example.com')
+    await api.system.writeClipboardText('Reviewer brief')
     await api.notifications.notify({ title: 'Ready' })
     const task = await api.tasks.create({ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] })
     const run = await api.tasks.startImplementation({ taskId: task.id })
@@ -148,6 +149,7 @@ describe('plugin SDK testing utilities', () => {
     expect(run).toMatchObject({ taskId: task.id, workspacePath: '/mock-workspace', sessionId: 'mock-session' })
     expect(followUp).toEqual({ taskId: task.id, sessionId: 'mock-session', disposition: 'delivered' })
     expect(api.__testing.calls.openUrl).toEqual(['https://example.com'])
+    expect(api.__testing.calls.clipboardWrites).toEqual(['Reviewer brief'])
     expect(api.__testing.calls.notify).toEqual([{ title: 'Ready' }])
     expect(api.__testing.calls.taskCreations).toEqual([{ initialPrompt: 'Scheduled prompt', projectId: 'P-1', labelNames: ['scheduled'] }])
     expect(api.__testing.calls.taskImplementationStarts).toEqual([{ taskId: task.id }])

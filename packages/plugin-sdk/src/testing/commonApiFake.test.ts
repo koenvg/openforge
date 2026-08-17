@@ -21,9 +21,11 @@ describe('TestingCommonApiFake', () => {
     })
     await api.events.emit('sync.finished', { count: 1 })
     await api.system.openUrl('https://openforge.dev')
+    await api.system.writeClipboardText('Reviewer brief')
 
     expect(listener).toHaveBeenCalledWith({ count: 1 })
     expect(services.calls.openUrl).toEqual(['https://openforge.dev'])
+    expect(services.calls.clipboardWrites).toEqual(['Reviewer brief'])
     expect(fake.getSnapshot()).toMatchObject({
       commands: [{ qualifiedId: 'github.sync' }],
       eventListeners: [{ qualifiedId: 'github.sync.finished' }],

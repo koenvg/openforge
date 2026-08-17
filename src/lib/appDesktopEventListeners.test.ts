@@ -32,11 +32,12 @@ vi.mock('./ipc', async (importOriginal) => {
     getLatestSession: vi.fn(),
     finalizeAgentSession: vi.fn(),
     getTaskDetail: vi.fn(),
+    writeClipboardText: vi.fn(async () => undefined),
   }
 })
 
 import { getShellLifecycleState, release, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
-import { finalizeAgentSession, getLatestSession } from './ipc'
+import { finalizeAgentSession, getLatestSession, writeClipboardText } from './ipc'
 import { loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForProject } from './plugin/pluginRegistry'
 
 function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
@@ -352,6 +353,15 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true, 42)
     vi.useRealTimers()
+  })
+
+  it('writes backend Trusted Plugin clipboard requests through the host IPC adapter', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('openforge.write-clipboard-text')?.({ payload: { text: 'Reviewer brief' } })
+
+    expect(writeClipboardText).toHaveBeenCalledWith('Reviewer brief')
   })
 
   it('uses the plugin registry defaults for sidecar plugin management events', async () => {

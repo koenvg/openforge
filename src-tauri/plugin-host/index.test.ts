@@ -333,6 +333,7 @@ describe('plugin-host backend runtime', () => {
               await openforge.notifications.notify({ title: 'Done', body: context.pluginId })
               const attention = await openforge.attention.listProjects()
               await openforge.system.openUrl('https://example.com')
+              await openforge.system.writeClipboardText('Reviewer brief')
               const configBefore = await openforge.config.get('theme')
               await openforge.config.set('theme', 'dark')
               const projectConfigBefore = await openforge.projectConfig.get('github_default_repo', 'P-1')
@@ -362,6 +363,7 @@ describe('plugin-host backend runtime', () => {
         case 'openforge.notifications.notify': return null
         case 'openforge.attention.listProjects': return [{ project_id: 'P-1', needs_input: 1 }]
         case 'openforge.system.openUrl': return null
+        case 'openforge.system.writeClipboardText': return null
         case 'openforge.config.get': return 'light'
         case 'openforge.config.set': return null
         case 'openforge.projectConfig.get': return null
@@ -404,6 +406,7 @@ describe('plugin-host backend runtime', () => {
       'openforge.notifications.notify',
       'openforge.attention.listProjects',
       'openforge.system.openUrl',
+      'openforge.system.writeClipboardText',
       'openforge.config.get',
       'openforge.config.set',
       'openforge.projectConfig.get',

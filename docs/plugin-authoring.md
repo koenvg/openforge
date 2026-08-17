@@ -260,14 +260,14 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 | Capability group | Frontend runtime | Backend runtime |
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
-| `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
+| `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
 | `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces`, `taskLinks` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
 Current declared capability names are:
 
-`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`.
+`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`.
 
 ## Task links
 
@@ -419,6 +419,7 @@ Behavior and limits:
 - Use `openforge.shell` for task terminal sessions keyed by `{ taskId, terminalIndex }`.
 - Use `openforge.notifications.notify(...)` for host-mediated user notifications.
 - Use `openforge.system.openUrl(url)` for links that must always open externally.
+- Use `openforge.system.writeClipboardText(text)` only for an explicit user-triggered copy action; do not import browser, Electron, preload, or IPC clipboard APIs.
 - Use `openforge.taskLinks.open({ taskId, url })` for HTTP(S) links that should use the active in-app Task link handler when available and otherwise fall back externally.
 
 ## What is not available

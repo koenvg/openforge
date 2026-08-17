@@ -1,5 +1,5 @@
 use super::PluginHost;
-use crate::app_events::publish_app_event;
+use crate::app_events::{publish_app_event, publish_app_event_to_runtime};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
@@ -114,6 +114,15 @@ impl PluginHost {
             }
             "openforge.attention.listProjects" => self.list_project_attention_for_host(),
             "openforge.system.openUrl" => self.emit_host_app_event("openforge.open-url", params),
+            "openforge.system.writeClipboardText" => {
+                publish_app_event_to_runtime(
+                    Some(&self.app_handle),
+                    &self.app_event_tx,
+                    "openforge.write-clipboard-text",
+                    params,
+                );
+                Ok(Value::Null)
+            }
             "openforge.config.get" => self.get_config_for_host(params).await,
             "openforge.config.set" => self.set_config_for_host(params).await,
             "openforge.projectConfig.get" => self.get_project_config_for_host(params),

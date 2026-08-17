@@ -140,9 +140,11 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 | `shell` | `ShellAPI` | Spawn, write, resize, kill, and read task shell buffers. |
 | `notifications` | `NotificationsAPI` | Request user-facing notifications. |
 | `attention` | `AttentionAPI` | List project attention signals. |
-| `system` | `SystemAPI` | Open external URLs through the host. |
+| `system` | `SystemAPI` | Open external URLs and write text to the operating-system clipboard through host-owned adapters. |
 | `config` | `KeyValueConfigAPI` | Read/write global JSON configuration values. |
 | `projectConfig` | `KeyValueConfigAPI` | Read/write project-scoped JSON configuration values. |
+
+`SystemAPI` exposes `openUrl(url)` and `writeClipboardText(text)`. Clipboard writes are available to frontend and backend Trusted Plugin runtimes through host-owned bridges. Call `writeClipboardText` only in response to an explicit user copy action; plugin code must not import browser, Electron, preload, or IPC clipboard internals.
 
 All storage/config values are `JsonValue` (`string`, `number`, `boolean`, `null`, arrays, or objects). File APIs use the exported domain file types such as `FileEntry` and `FileContent`.
 
@@ -200,6 +202,7 @@ Supported `requires` capabilities are:
 'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'background' |
 'backend' | 'storage' | 'context' | 'navigation' | 'tasks' | 'projects' |
 'fs' | 'shell' | 'notifications' | 'attention' | 'system.openUrl' |
+'system.writeClipboardText' |
 'config' | 'projectConfig'
 ```
 
