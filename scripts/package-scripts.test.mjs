@@ -67,4 +67,25 @@ describe('package build scripts', () => {
     expect(ciWorkflow).toContain("steps.package_app.outputs.exit_code != '0' || steps.smoke.outputs.exit_code != '0'")
     expect(releaseWorkflow).not.toContain('electron:smoke:packaged')
   })
+
+  it('checks the packed Plugin SDK contract and versions it with desktop releases', async () => {
+    const rootPackage = await readJson('package.json')
+    const sdkPackage = await readJson('packages/plugin-sdk/package.json')
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+    const publishWorkflow = await readFile(join(repoRoot, '.github/workflows/publish-plugin-sdk.yml'), 'utf8')
+    const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
+
+    expect(sdkPackage.version).toBe('0.2.1')
+    expect(sdkPackage.scripts['check:contract']).toBe('node ./scripts/check-published-contract.mjs')
+    expect(sdkPackage.scripts.prepublishOnly).toBe('pnpm run check:contract')
+    expect(rootPackage.scripts['packages:contract:check']).toBe('pnpm --filter @openforge-app/plugin-sdk check:contract')
+
+    for (const workflow of [ciWorkflow, publishWorkflow, releaseWorkflow]) {
+      expect(workflow).toContain('pnpm packages:contract:check')
+    }
+    expect(publishWorkflow).not.toContain('inputs.version')
+    expect(publishWorkflow).not.toContain('Set SDK package version')
+    expect(releaseWorkflow).toContain('Set SDK package version from git tag')
+    expect(releaseWorkflow).toContain('VERSION="${GITHUB_REF_NAME#v}"')
+  })
 })
