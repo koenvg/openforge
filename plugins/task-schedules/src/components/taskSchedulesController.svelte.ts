@@ -77,6 +77,10 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
 
   function resetWorkspace(): void {
     schedules = []
+    loading = false
+    saving = false
+    updatingScheduleId = null
+    deleting = false
     selectedScheduleId = null
     panelMode = null
     draft = emptyScheduleDraft()
@@ -90,8 +94,12 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
     afterDiscard = null
   }
 
+  function isCurrentProject(activeProjectId: string): boolean {
+    return projectId === activeProjectId
+  }
+
   function isCurrentLoad(activeProjectId: string, requestId: number): boolean {
-    return projectId === activeProjectId && requestId === loadRequestId
+    return isCurrentProject(activeProjectId) && requestId === loadRequestId
   }
 
   async function loadSchedules(activeProjectId: string): Promise<void> {
@@ -205,14 +213,16 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   }
 
   async function saveSchedule(): Promise<void> {
-    if (!projectId) return
+    const activeProjectId = projectId
+    if (!activeProjectId) return
     error = null
     fieldErrors = { cron: null }
     if (!validateDraft(true)) return
 
     saving = true
     try {
-      const saved = await ipc.save(projectId, draftToPayload(draft))
+      const saved = await ipc.save(activeProjectId, draftToPayload(draft))
+      if (!isCurrentProject(activeProjectId)) return
       schedules = schedules.some((schedule) => schedule.id === saved.id)
         ? schedules.map((schedule) => schedule.id === saved.id ? saved : schedule)
         : [...schedules, saved]
@@ -222,9 +232,10 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
       draftDirty = false
       announcement = `${saved.title} saved`
     } catch (cause) {
+      if (!isCurrentProject(activeProjectId)) return
       handleSaveError(cause)
     } finally {
-      saving = false
+      if (isCurrentProject(activeProjectId)) saving = false
     }
   }
 
@@ -239,20 +250,23 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   }
 
   async function toggleSchedule(schedule: TaskSchedule): Promise<void> {
-    if (!projectId || updatingScheduleId) return
+    const activeProjectId = projectId
+    if (!activeProjectId || updatingScheduleId) return
     updatingScheduleId = schedule.id
     error = null
     try {
-      const saved = await ipc.save(projectId, {
+      const saved = await ipc.save(activeProjectId, {
         ...draftToPayload(draftFromSchedule(schedule)),
         enabled: !schedule.enabled,
       })
+      if (!isCurrentProject(activeProjectId)) return
       schedules = schedules.map((candidate) => candidate.id === saved.id ? saved : candidate)
       announcement = `${saved.title} ${saved.enabled ? 'enabled' : 'paused'}`
     } catch (cause) {
+      if (!isCurrentProject(activeProjectId)) return
       error = messageForAsyncError(cause)
     } finally {
-      updatingScheduleId = null
+      if (isCurrentProject(activeProjectId)) updatingScheduleId = null
     }
   }
 
@@ -265,12 +279,14 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   }
 
   async function deleteSchedule(): Promise<void> {
-    if (!projectId || !schedulePendingDelete || deleting) return
+    const activeProjectId = projectId
+    if (!activeProjectId || !schedulePendingDelete || deleting) return
     const deletingSchedule = schedulePendingDelete
     deleting = true
     error = null
     try {
-      await ipc.delete(projectId, deletingSchedule.id)
+      await ipc.delete(activeProjectId, deletingSchedule.id)
+      if (!isCurrentProject(activeProjectId)) return
       schedules = schedules.filter((schedule) => schedule.id !== deletingSchedule.id)
       if (selectedScheduleId === deletingSchedule.id) {
         selectedScheduleId = null
@@ -279,20 +295,24 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
       schedulePendingDelete = null
       announcement = `${deletingSchedule.title} deleted`
     } catch (cause) {
+      if (!isCurrentProject(activeProjectId)) return
       error = messageForAsyncError(cause)
     } finally {
-      deleting = false
+      if (isCurrentProject(activeProjectId)) deleting = false
     }
   }
 
   async function runNow(scheduleId: string): Promise<void> {
-    if (!projectId || runState?.phase === 'running' || runState?.phase === 'cancelling') return
+    const activeProjectId = projectId
+    if (!activeProjectId || runState?.phase === 'running' || runState?.phase === 'cancelling') return
     runState = { scheduleId, phase: 'running', message: 'Creating the scheduled task…' }
     try {
-      const outcome = await ipc.runNow(projectId, scheduleId)
+      const outcome = await ipc.runNow(activeProjectId, scheduleId)
+      if (!isCurrentProject(activeProjectId)) return
       runState = runStateFromOutcome(scheduleId, outcome)
-      await loadSchedules(projectId)
+      await loadSchedules(activeProjectId)
     } catch (cause) {
+      if (!isCurrentProject(activeProjectId)) return
       const message = messageForAsyncError(cause)
       runState = {
         scheduleId,
@@ -303,20 +323,26 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   }
 
   async function cancelRun(scheduleId: string): Promise<void> {
-    if (!projectId || runState?.scheduleId !== scheduleId || runState.phase !== 'running') return
+    const activeProjectId = projectId
+    if (!activeProjectId || runState?.scheduleId !== scheduleId || runState.phase !== 'running') return
     runState = { scheduleId, phase: 'cancelling', message: 'Waiting for the current safe cancellation point…' }
     try {
-      const result = await ipc.cancelRunNow(projectId, scheduleId)
+      const result = await ipc.cancelRunNow(activeProjectId, scheduleId)
+      if (!isCurrentProject(activeProjectId)) return
       if (!result.cancelled) {
         runState = { scheduleId, phase: 'warning', message: 'The run finished before it could be cancelled.' }
       }
     } catch (cause) {
+      if (!isCurrentProject(activeProjectId)) return
       runState = { scheduleId, phase: 'failure', message: messageForAsyncError(cause) }
     }
   }
 
   function openTask(taskId: string): void {
-    void api.navigation.navigate({ projectId, taskId }).catch((cause) => {
+    const activeProjectId = projectId
+    if (!activeProjectId) return
+    void api.navigation.navigate({ projectId: activeProjectId, taskId }).catch((cause) => {
+      if (!isCurrentProject(activeProjectId)) return
       error = `Could not open ${taskId}: ${messageForAsyncError(cause)}`
     })
   }
