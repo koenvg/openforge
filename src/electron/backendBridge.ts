@@ -1,3 +1,4 @@
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import { developerLogStore } from './developerLogs.js'
 import { openExternalUrl, openPathInEditor } from './shellCommands.js'
 import type { DeveloperLogEntry, DeveloperLogSnapshot } from './developerLogs.js'
@@ -182,7 +183,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_plugin_storage',
   'set_plugin_storage',
   'delete_plugin_storage',
-  'plugin_frontend_command_acknowledge',
+  FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND,
   'plugin_invoke',
   'plugin_backend_deactivate',
   'plugin_backend_when_ready',

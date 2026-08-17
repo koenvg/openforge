@@ -1,6 +1,7 @@
 import { listenDesktopEvent } from './desktopIpc'
 import type { DesktopUnlistenFn } from './desktopIpc'
 import { createAppLifecycleEventListeners } from './appDesktopEventListeners/appLifecycleEventListeners'
+import { createFrontendHostRequestEventListener } from './appDesktopEventListeners/frontendHostRequestEventListener'
 import { createPluginEventListeners } from './appDesktopEventListeners/pluginEventListeners'
 import { createPullRequestAttentionEventListeners } from './appDesktopEventListeners/pullRequestAttentionEventListeners'
 import { createTaskSessionEventListeners } from './appDesktopEventListeners/taskSessionEventListeners'
@@ -17,6 +18,7 @@ export async function registerAppDesktopEventListeners(
 ): Promise<DesktopUnlistenFn[]> {
   const listen = deps.listen ?? listenDesktopEvent
   const appLifecycleListeners = createAppLifecycleEventListeners(deps)
+  const frontendHostRequestListener = createFrontendHostRequestEventListener()
   const pullRequestAttentionListeners = createPullRequestAttentionEventListeners(deps)
   const taskSessionListeners = createTaskSessionEventListeners(deps)
   const pluginListeners = createPluginEventListeners(deps)
@@ -40,7 +42,7 @@ export async function registerAppDesktopEventListeners(
     pullRequestAttentionListeners.reviewPrCountChanged,
     pullRequestAttentionListeners.authoredPrsUpdated,
     pullRequestAttentionListeners.githubRateLimited,
-    pluginListeners.frontendPluginCommandRequest,
+    frontendHostRequestListener,
     pluginListeners.pluginInstallationChanged,
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,

@@ -13,7 +13,7 @@ import { clearLoadedPlugin, loadPluginFrontend, deactivatePlugin as deactivatePl
 import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
 import type { RuntimeContributionRegistryInstance } from './runtimeContributionRegistry'
 import { createIpcPluginStorage } from './pluginStorage'
-import { failPendingFrontendPluginCommands } from './frontendPluginCommandBridge'
+import { failPendingFrontendPluginCommands } from '../frontendHostRequestBridge'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
 import {

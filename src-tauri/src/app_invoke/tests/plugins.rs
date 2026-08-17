@@ -403,7 +403,7 @@ async fn scans_a_plugin_folder_for_installable_plugin_packages() {
 
 #[tokio::test]
 async fn acknowledges_frontend_plugin_commands_exactly_once() {
-    use crate::frontend_plugin_command_transport::FrontendPluginCommandTransport;
+    use crate::frontend_host_request_transport::FrontendHostRequestTransport;
     use crate::plugin_command_broker::{
         FrontendAgentCommandCatalog, PluginCommandInvocationContext, PluginCommandInvocationSource,
     };
@@ -411,9 +411,9 @@ async fn acknowledges_frontend_plugin_commands_exactly_once() {
 
     let (mut state, path) = test_state("app_invoke_frontend_plugin_command_ack");
     let (event_sender, mut event_receiver) = tokio::sync::broadcast::channel(4);
-    state.frontend_plugin_commands =
-        FrontendPluginCommandTransport::new(Some(event_sender), Duration::from_secs(1));
-    let request_transport = state.frontend_plugin_commands.clone();
+    state.frontend_host_requests =
+        FrontendHostRequestTransport::new(Some(event_sender), Duration::from_secs(1));
+    let request_transport = state.frontend_host_requests.clone();
     let invocation = tokio::spawn(async move {
         request_transport
             .invoke_frontend_agent_command(

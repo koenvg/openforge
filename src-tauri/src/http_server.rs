@@ -93,8 +93,8 @@ pub struct AppState {
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
     pub github_client: GitHubClient,
-    pub frontend_plugin_commands:
-        crate::frontend_plugin_command_transport::FrontendPluginCommandTransport,
+    pub frontend_host_requests:
+        crate::frontend_host_request_transport::FrontendHostRequestTransport,
     pub plugin_host: Option<PluginHost>,
     pub plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks,
     pub app_event_tx: Option<AppEventSender>,

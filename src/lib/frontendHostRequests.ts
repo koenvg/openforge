@@ -4,15 +4,11 @@ import type {
   ComposeTaskResult,
   PluginCommandInvocationContext,
 } from '@openforge-app/plugin-sdk'
-
-export type FrontendPluginCommandOutcome =
-  | { status: 'success'; output: unknown }
-  | { status: 'error'; error: string }
-
-export type FrontendPluginCommandAcknowledgement = {
-  correlationId: string
-  outcome: FrontendPluginCommandOutcome
-}
+import {
+  frontendHostRequestCorrelationId,
+  type FrontendHostRequestAcknowledgement,
+  type FrontendHostRequestOutcome,
+} from '../electron/frontendHostRequestProtocol'
 
 type FrontendPluginCommandRequest =
   | {
@@ -20,11 +16,6 @@ type FrontendPluginCommandRequest =
       correlationId: string
       pluginId: string
       projectId: string
-    }
-  | {
-      operation: 'composeTask'
-      correlationId: string
-      request: ComposeTaskRequest
     }
   | {
       operation: 'invoke'
@@ -36,7 +27,15 @@ type FrontendPluginCommandRequest =
       context: PluginCommandInvocationContext
     }
 
-export type FrontendPluginCommandRequestDeps = {
+type FrontendTaskComposeRequest = {
+  operation: 'composeTask'
+  correlationId: string
+  request: ComposeTaskRequest
+}
+
+type FrontendHostRequest = FrontendPluginCommandRequest | FrontendTaskComposeRequest
+
+export type FrontendPluginCommandOperations = {
   list(pluginId: string, projectId: string): Promise<AgentCommandDescriptor[]>
   invoke(
     pluginId: string,
@@ -45,8 +44,12 @@ export type FrontendPluginCommandRequestDeps = {
     input: unknown,
     context: PluginCommandInvocationContext,
   ): Promise<unknown>
-  compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
-  acknowledge(acknowledgement: FrontendPluginCommandAcknowledgement): Promise<unknown>
+}
+
+export type FrontendHostRequestDeps = {
+  pluginCommands: FrontendPluginCommandOperations
+  composeTask(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
+  acknowledge(acknowledgement: FrontendHostRequestAcknowledgement): Promise<unknown>
 }
 
 type PendingRequest = {
@@ -79,26 +82,16 @@ function parseComposeTaskRequest(value: unknown): ComposeTaskRequest | null {
   }
 }
 
-function parseRequest(value: unknown): FrontendPluginCommandRequest | null {
-  if (typeof value !== 'object' || value === null) return null
-  const request = value as Record<string, unknown>
-  if (!nonEmptyString(request.correlationId)) return null
-
-  const composeRequest = parseComposeTaskRequest(request.request)
-  if (request.operation === 'composeTask' && composeRequest) {
-    return {
-      operation: 'composeTask',
-      correlationId: request.correlationId,
-      request: composeRequest,
-    }
-  }
-
+function parsePluginCommandRequest(
+  request: Record<string, unknown>,
+  correlationId: string,
+): FrontendPluginCommandRequest | null {
   if (!nonEmptyString(request.pluginId) || !nonEmptyString(request.projectId)) return null
 
   if (request.operation === 'list') {
     return {
       operation: 'list',
-      correlationId: request.correlationId,
+      correlationId,
       pluginId: request.pluginId,
       projectId: request.projectId,
     }
@@ -108,7 +101,7 @@ function parseRequest(value: unknown): FrontendPluginCommandRequest | null {
     && invocationContext(request.context, request.projectId)) {
     return {
       operation: 'invoke',
-      correlationId: request.correlationId,
+      correlationId,
       pluginId: request.pluginId,
       projectId: request.projectId,
       commandId: request.commandId,
@@ -119,27 +112,38 @@ function parseRequest(value: unknown): FrontendPluginCommandRequest | null {
   return null
 }
 
+function parseRequest(value: unknown): FrontendHostRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const request = value as Record<string, unknown>
+  const correlationId = frontendHostRequestCorrelationId(request)
+  if (!correlationId) return null
+
+  if (request.operation === 'composeTask') {
+    const composeRequest = parseComposeTaskRequest(request.request)
+    return composeRequest
+      ? { operation: 'composeTask', correlationId, request: composeRequest }
+      : null
+  }
+  return parsePluginCommandRequest(request, correlationId)
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export class FrontendPluginCommandRequestHandler {
+export class FrontendHostRequestHandler {
   private readonly pending = new Map<string, PendingRequest>()
 
-  constructor(private readonly deps: FrontendPluginCommandRequestDeps) {}
+  constructor(private readonly deps: FrontendHostRequestDeps) {}
 
   async handle(value: unknown): Promise<void> {
-    const correlationId = typeof value === 'object'
-      && value !== null
-      && nonEmptyString((value as Record<string, unknown>).correlationId)
-      ? (value as Record<string, string>).correlationId
-      : null
+    const correlationId = frontendHostRequestCorrelationId(value)
     const request = parseRequest(value)
     if (!request) {
       if (correlationId) {
         await this.deps.acknowledge({
           correlationId,
-          outcome: { status: 'error', error: 'invalid frontend Plugin Command request' },
+          outcome: { status: 'error', error: 'invalid frontend host request' },
         })
       }
       return
@@ -151,12 +155,12 @@ export class FrontendPluginCommandRequestHandler {
     })
     try {
       let output: unknown
-      if (request.operation === 'list') {
-        output = await this.deps.list(request.pluginId, request.projectId)
-      } else if (request.operation === 'composeTask') {
-        output = await this.deps.compose(request.request)
+      if (request.operation === 'composeTask') {
+        output = await this.deps.composeTask(request.request)
+      } else if (request.operation === 'list') {
+        output = await this.deps.pluginCommands.list(request.pluginId, request.projectId)
       } else {
-        output = await this.deps.invoke(
+        output = await this.deps.pluginCommands.invoke(
           request.pluginId,
           request.projectId,
           request.commandId,
@@ -183,7 +187,7 @@ export class FrontendPluginCommandRequestHandler {
       this.complete(correlationId, { status: 'error', error: reason })))
   }
 
-  private async complete(correlationId: string, outcome: FrontendPluginCommandOutcome): Promise<void> {
+  private async complete(correlationId: string, outcome: FrontendHostRequestOutcome): Promise<void> {
     if (!this.pending.delete(correlationId)) return
     await this.deps.acknowledge({ correlationId, outcome })
   }

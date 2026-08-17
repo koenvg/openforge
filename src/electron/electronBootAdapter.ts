@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import { handleElectronInvoke } from './backendBridge.js'
 import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
@@ -23,7 +24,7 @@ import { handleTaskBrowserSurfaceLifecycleEvent } from './taskBrowserSurfaceLife
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
-import { FrontendPluginCommandRelay } from './frontendPluginCommandRelay.js'
+import { FrontendHostRequestRelay } from './frontendHostRequestRelay.js'
 import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
 import { developerLogSink, developerLogStore } from './developerLogs.js'
 import { createAppEventForwarder } from './eventForwarder.js'
@@ -105,11 +106,11 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     }
   }
 
-  const frontendPluginCommandRelay = new FrontendPluginCommandRelay({
+  const frontendHostRequestRelay = new FrontendHostRequestRelay({
     acknowledgeSidecar: async acknowledgement => {
       if (!backendInvokeContext) return false
       return handleElectronInvoke(
-        { command: 'plugin_frontend_command_acknowledge', payload: acknowledgement },
+        { command: FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND, payload: acknowledgement },
         createInvokeDeps(backendInvokeContext),
       )
     },
@@ -210,14 +211,14 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     window.on('closed', () => {
       taskBrowserSurfaceManager.unregisterWindow(window.id)
       if (mainRendererWindow === window) mainRendererWindow = null
-      void frontendPluginCommandRelay.rendererLost(mainWebContentsId)
+      void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
 
     const rendererUrl = rendererTrustAdapter.trustedRendererUrlFromEnv(options.env)
     const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)
     const mainWebContentsId = window.webContents.id
     window.webContents.on('render-process-gone', () => {
-      void frontendPluginCommandRelay.rendererLost(mainWebContentsId)
+      void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
     window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
       callback(rendererTrustAdapter.shouldGrantMediaPermission({
@@ -247,8 +248,8 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       backendInvokeContext = context
       ipcMain.handle('openforge:invoke', async (event, request: unknown) => {
         const typedRequest = request as { command?: unknown; payload?: unknown }
-        if (typedRequest.command === 'plugin_frontend_command_acknowledge') {
-          return frontendPluginCommandRelay.acknowledge(event.sender.id, typedRequest.payload)
+        if (typedRequest.command === FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND) {
+          return frontendHostRequestRelay.acknowledge(event.sender.id, typedRequest.payload)
         }
         if (typeof typedRequest.command === 'string' && isTaskBrowserSurfaceCommand(typedRequest.command)) {
           const owningWindow = BrowserWindow.fromWebContents(event.sender)
@@ -273,7 +274,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
       app.on('before-quit', event => {
-        void frontendPluginCommandRelay.shutdown()
+        void frontendHostRequestRelay.shutdown()
         taskBrowserSurfaceManager.destroyAll()
         handler(event)
       })
@@ -326,7 +327,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
                       mainRendererWindow?.webContents.send(channel, payload),
                   }
                 : null
-              if (frontendPluginCommandRelay.forward(envelope, renderer)) return false
+              if (frontendHostRequestRelay.forward(envelope, renderer)) return false
               handleTaskBrowserSurfaceLifecycleEvent(taskBrowserSurfaceManager, envelope)
               eventListener?.(envelope)
               if (shouldDrainTaskBrowserSessionPurges(envelope)) {

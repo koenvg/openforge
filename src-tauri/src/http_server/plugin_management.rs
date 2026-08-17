@@ -145,7 +145,7 @@ async fn list_plugin_commands_handler(
     let broker = PluginCommandBroker::with_frontend(
         Arc::clone(&state.db),
         &platform,
-        &state.frontend_plugin_commands,
+        &state.frontend_host_requests,
     );
     broker
         .list(&context)
@@ -162,7 +162,7 @@ async fn describe_plugin_command_handler(
     let broker = PluginCommandBroker::with_frontend(
         Arc::clone(&state.db),
         &platform,
-        &state.frontend_plugin_commands,
+        &state.frontend_host_requests,
     );
     let context = PluginCommandDiscoveryContext {
         task_id: request.task_id,
@@ -183,7 +183,7 @@ async fn invoke_plugin_command_handler(
     let broker = PluginCommandBroker::with_frontend(
         Arc::clone(&state.db),
         &platform,
-        &state.frontend_plugin_commands,
+        &state.frontend_host_requests,
     );
     let context = PluginCommandDiscoveryContext {
         task_id: request.task_id,

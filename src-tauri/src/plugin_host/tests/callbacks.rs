@@ -427,7 +427,7 @@ async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
         .expect("compose request event");
     assert_eq!(
         event.event_name,
-        crate::frontend_plugin_command_transport::FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT
+        crate::frontend_host_request_transport::FRONTEND_HOST_REQUEST_EVENT
     );
     assert_eq!(event.payload["operation"], "composeTask");
     assert_eq!(event.payload["request"]["projectId"], "P-1");
@@ -437,13 +437,12 @@ async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
     let state = host
         .app_state_for_host_callback()
         .expect("plugin host app state");
-    assert!(state.frontend_plugin_commands.acknowledge(
-        crate::frontend_plugin_command_transport::FrontendPluginCommandAcknowledgement {
+    assert!(state.frontend_host_requests.acknowledge(
+        crate::frontend_host_request_transport::FrontendHostRequestAcknowledgement {
             correlation_id: correlation_id.to_string(),
-            outcome:
-                crate::frontend_plugin_command_transport::FrontendPluginCommandOutcome::Success {
-                    output: json!({ "task": { "id": "T-composed" }, "started": false }),
-                },
+            outcome: crate::frontend_host_request_transport::FrontendHostRequestOutcome::Success {
+                output: json!({ "task": { "id": "T-composed" }, "started": false }),
+            },
         }
     ));
 

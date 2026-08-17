@@ -1,16 +1,11 @@
+import {
+  FRONTEND_HOST_REQUEST_EVENT,
+  frontendHostRequestCorrelationId,
+  parseFrontendHostRequestAcknowledgement,
+  type FrontendHostRequestAcknowledgement,
+} from './frontendHostRequestProtocol.js'
 import { OPENFORGE_EVENT_CHANNEL } from './preloadApi.js'
 import type { OpenForgeEventEnvelope } from './eventForwarder.js'
-
-const FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT = 'plugin-frontend-command-request'
-
-type FrontendPluginCommandOutcome =
-  | { status: 'success'; output: unknown }
-  | { status: 'error'; error: string }
-
-export type FrontendPluginCommandAcknowledgement = {
-  correlationId: string
-  outcome: FrontendPluginCommandOutcome
-}
 
 export type TrustedRendererTarget = {
   id: number
@@ -21,48 +16,19 @@ type PendingRelay = {
   rendererId: number
 }
 
-type FrontendPluginCommandRelayDeps = {
-  acknowledgeSidecar(acknowledgement: FrontendPluginCommandAcknowledgement): Promise<unknown>
-}
-
-function nonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
+type FrontendHostRequestRelayDeps = {
+  acknowledgeSidecar(acknowledgement: FrontendHostRequestAcknowledgement): Promise<unknown>
 }
 
 function correlationId(envelope: OpenForgeEventEnvelope): string | null {
-  if (envelope.eventName !== FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT
-    || typeof envelope.payload !== 'object'
-    || envelope.payload === null) return null
-  const value = (envelope.payload as Record<string, unknown>).correlationId
-  return nonEmptyString(value) ? value : null
+  if (envelope.eventName !== FRONTEND_HOST_REQUEST_EVENT) return null
+  return frontendHostRequestCorrelationId(envelope.payload)
 }
 
-function acknowledgement(value: unknown): FrontendPluginCommandAcknowledgement | null {
-  if (typeof value !== 'object' || value === null) return null
-  const candidate = value as Record<string, unknown>
-  if (!nonEmptyString(candidate.correlationId)
-    || typeof candidate.outcome !== 'object'
-    || candidate.outcome === null) return null
-  const outcome = candidate.outcome as Record<string, unknown>
-  if (outcome.status === 'success' && 'output' in outcome) {
-    return {
-      correlationId: candidate.correlationId,
-      outcome: { status: 'success', output: outcome.output },
-    }
-  }
-  if (outcome.status === 'error' && nonEmptyString(outcome.error)) {
-    return {
-      correlationId: candidate.correlationId,
-      outcome: { status: 'error', error: outcome.error },
-    }
-  }
-  return null
-}
-
-export class FrontendPluginCommandRelay {
+export class FrontendHostRequestRelay {
   private readonly pending = new Map<string, PendingRelay>()
 
-  constructor(private readonly deps: FrontendPluginCommandRelayDeps) {}
+  constructor(private readonly deps: FrontendHostRequestRelayDeps) {}
 
   get pendingCount(): number {
     return this.pending.size
@@ -94,12 +60,12 @@ export class FrontendPluginCommandRelay {
   }
 
   async acknowledge(rendererId: number, value: unknown): Promise<boolean> {
-    const parsed = acknowledgement(value)
-    if (!parsed) throw new Error('invalid frontend Plugin Command acknowledgement')
+    const parsed = parseFrontendHostRequestAcknowledgement(value)
+    if (!parsed) throw new Error('invalid frontend host request acknowledgement')
     const pending = this.pending.get(parsed.correlationId)
     if (!pending) return false
     if (pending.rendererId !== rendererId) {
-      throw new Error(`renderer ${rendererId} does not own frontend Plugin Command request ${parsed.correlationId}`)
+      throw new Error(`renderer ${rendererId} does not own frontend host request ${parsed.correlationId}`)
     }
 
     this.pending.delete(parsed.correlationId)
@@ -109,14 +75,14 @@ export class FrontendPluginCommandRelay {
   rendererLost(rendererId: number): Promise<void> {
     return this.failMatching(
       ([, pending]) => pending.rendererId === rendererId,
-      'OpenForge trusted renderer was lost before the command completed',
+      'OpenForge trusted renderer was lost before the request completed',
     )
   }
 
   shutdown(): Promise<void> {
     return this.failMatching(
       () => true,
-      'OpenForge is shutting down before the frontend Plugin Command completed',
+      'OpenForge is shutting down before the frontend host request completed',
     )
   }
 
