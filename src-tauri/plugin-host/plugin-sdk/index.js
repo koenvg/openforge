@@ -1772,8 +1772,10 @@ function getMergeReadiness(pr, options = {}) {
 	if (mergeableState === "unstable" && !hasFailedChecks && !hasPendingChecks) blockers.push(hasNoPublishedChecksForUnstableMergeability(pr) ? mergeReadinessDetail("checks_pending", "Required checks are still running.") : mergeReadinessDetail("checks_failed", "GitHub reports failing or unstable required checks."));
 	if (mergeableState === "dirty" || mergeableState === "conflicting") blockers.push(mergeReadinessDetail("merge_conflict", "Pull request has merge conflicts."));
 	else if (mergeableState === "blocked") blockers.push(mergeReadinessDetail("mergeability_blocked", "GitHub reports that mergeability is blocked."));
-	else if (mergeableState === "behind") if (options.requireBranchUpToDate === true) blockers.push(mergeReadinessDetail("branch_out_of_date", "Branch must be updated before merging."));
-	else warnings.push(mergeReadinessDetail("branch_behind", "Branch is behind the base branch."));
+	else if (mergeableState === "behind") {
+		if (options.requireBranchUpToDate === true) blockers.push(mergeReadinessDetail("branch_out_of_date", "Branch must be updated before merging."));
+		else warnings.push(mergeReadinessDetail("branch_behind", "Branch is behind the base branch."));
+	}
 	if (unaddressedCommentCount > 0) {
 		const detail = mergeReadinessDetail("unresolved_conversations", "Pull request has unresolved conversations.");
 		if (options.requireConversationResolution === true) blockers.push(detail);
