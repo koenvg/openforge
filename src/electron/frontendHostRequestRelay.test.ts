@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_EVENT_CHANNEL } from './preloadApi'
-import { FrontendPluginCommandRelay } from './frontendPluginCommandRelay'
+import { FrontendHostRequestRelay } from './frontendHostRequestRelay'
 
 function request(correlationId: string) {
   return {
@@ -17,11 +17,11 @@ function request(correlationId: string) {
   }
 }
 
-describe('Electron frontend Plugin Command relay', () => {
+describe('Electron frontend host request relay', () => {
   it('routes correlated renderer acknowledgements once and rejects cross-renderer consumption', async () => {
     const acknowledgeSidecar = vi.fn(async () => true)
     const send = vi.fn()
-    const relay = new FrontendPluginCommandRelay({ acknowledgeSidecar })
+    const relay = new FrontendHostRequestRelay({ acknowledgeSidecar })
 
     expect(relay.forward(request('one'), { id: 7, send })).toBe(true)
     expect(relay.forward(request('two'), { id: 7, send })).toBe(true)
@@ -52,7 +52,7 @@ describe('Electron frontend Plugin Command relay', () => {
 
   it('fails requests immediately without a renderer and cleans requests when its renderer is lost', async () => {
     const acknowledgeSidecar = vi.fn(async () => true)
-    const relay = new FrontendPluginCommandRelay({ acknowledgeSidecar })
+    const relay = new FrontendHostRequestRelay({ acknowledgeSidecar })
     const send = vi.fn()
 
     expect(relay.forward(request('missing'), null)).toBe(true)
@@ -65,13 +65,13 @@ describe('Electron frontend Plugin Command relay', () => {
     })
     expect(acknowledgeSidecar).toHaveBeenNthCalledWith(2, {
       correlationId: 'lost',
-      outcome: { status: 'error', error: 'OpenForge trusted renderer was lost before the command completed' },
+      outcome: { status: 'error', error: 'OpenForge trusted renderer was lost before the request completed' },
     })
     expect(relay.pendingCount).toBe(0)
   })
 
   it('ignores unrelated and malformed sidecar events', () => {
-    const relay = new FrontendPluginCommandRelay({ acknowledgeSidecar: vi.fn(async () => true) })
+    const relay = new FrontendHostRequestRelay({ acknowledgeSidecar: vi.fn(async () => true) })
     expect(relay.forward({ eventName: 'task-changed', payload: {} }, null)).toBe(false)
     expect(relay.forward({ eventName: 'plugin-frontend-command-request', payload: {} }, null)).toBe(false)
   })

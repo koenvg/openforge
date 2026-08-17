@@ -133,7 +133,7 @@ impl PluginHost {
     }
 
     pub(super) async fn compose_task_for_host(&self, params: &Value) -> Result<Value, String> {
-        self.frontend_plugin_commands
+        self.frontend_host_requests
             .compose_task(params.clone())
             .await
             .map_err(|error| format!("plugin host task compose callback failed: {error}"))

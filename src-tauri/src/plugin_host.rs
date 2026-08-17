@@ -24,8 +24,7 @@ pub struct PluginHost {
     state_change: Arc<Notify>,
     app_handle: AppHandle,
     app_event_tx: Option<AppEventSender>,
-    frontend_plugin_commands:
-        crate::frontend_plugin_command_transport::FrontendPluginCommandTransport,
+    frontend_host_requests: crate::frontend_host_request_transport::FrontendHostRequestTransport,
     task_claims: TaskClaims,
 }
 
@@ -43,7 +42,7 @@ impl Clone for PluginHost {
             state_change: Arc::clone(&self.state_change),
             app_handle: self.app_handle.clone(),
             app_event_tx: self.app_event_tx.clone(),
-            frontend_plugin_commands: self.frontend_plugin_commands.clone(),
+            frontend_host_requests: self.frontend_host_requests.clone(),
             task_claims: self.task_claims.clone(),
         }
     }
@@ -57,8 +56,8 @@ impl PluginHost {
             state_change: Arc::new(Notify::new()),
             app_handle,
             app_event_tx: None,
-            frontend_plugin_commands:
-                crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+            frontend_host_requests:
+                crate::frontend_host_request_transport::FrontendHostRequestTransport::production(
                     None,
                 ),
             task_claims: TaskClaims::new(),
@@ -79,8 +78,8 @@ impl PluginHost {
         task_claims: TaskClaims,
     ) -> Self {
         let mut host = Self::new(app_handle);
-        host.frontend_plugin_commands =
-            crate::frontend_plugin_command_transport::FrontendPluginCommandTransport::production(
+        host.frontend_host_requests =
+            crate::frontend_host_request_transport::FrontendHostRequestTransport::production(
                 app_event_tx.clone(),
             );
         host.app_event_tx = app_event_tx;
@@ -117,7 +116,7 @@ impl PluginHost {
             backend_token: None,
             pty_manager,
             github_client,
-            frontend_plugin_commands: self.frontend_plugin_commands.clone(),
+            frontend_host_requests: self.frontend_host_requests.clone(),
             plugin_host: Some(self.clone()),
             plugin_lifecycle_locks: crate::plugin_platform::PluginLifecycleLocks::new(),
             app_event_tx: self.app_event_tx.clone(),
@@ -130,10 +129,10 @@ impl PluginHost {
         })
     }
 
-    pub(crate) fn frontend_plugin_commands(
+    pub(crate) fn frontend_host_requests(
         &self,
-    ) -> crate::frontend_plugin_command_transport::FrontendPluginCommandTransport {
-        self.frontend_plugin_commands.clone()
+    ) -> crate::frontend_host_request_transport::FrontendHostRequestTransport {
+        self.frontend_host_requests.clone()
     }
 
     pub(in crate::plugin_host) fn runtime_lock(

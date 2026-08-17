@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::oneshot;
 
-pub const FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT: &str = "plugin-frontend-command-request";
-const DEFAULT_FRONTEND_PLUGIN_COMMAND_TIMEOUT: Duration = Duration::from_secs(15);
+pub const FRONTEND_HOST_REQUEST_EVENT: &str = "plugin-frontend-command-request";
+const DEFAULT_FRONTEND_HOST_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(
@@ -19,8 +19,9 @@ const DEFAULT_FRONTEND_PLUGIN_COMMAND_TIMEOUT: Duration = Duration::from_secs(15
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-enum FrontendPluginCommandRequest {
-    List {
+enum FrontendHostRequest {
+    #[serde(rename = "list")]
+    ListPluginCommands {
         correlation_id: String,
         plugin_id: String,
         project_id: String,
@@ -29,7 +30,8 @@ enum FrontendPluginCommandRequest {
         correlation_id: String,
         request: Value,
     },
-    Invoke {
+    #[serde(rename = "invoke")]
+    InvokePluginCommand {
         correlation_id: String,
         plugin_id: String,
         project_id: String,
@@ -41,30 +43,30 @@ enum FrontendPluginCommandRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "status", rename_all = "camelCase")]
-pub enum FrontendPluginCommandOutcome {
+pub enum FrontendHostRequestOutcome {
     Success { output: Value },
     Error { error: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct FrontendPluginCommandAcknowledgement {
+pub struct FrontendHostRequestAcknowledgement {
     pub correlation_id: String,
-    pub outcome: FrontendPluginCommandOutcome,
+    pub outcome: FrontendHostRequestOutcome,
 }
 
-type PendingSender = oneshot::Sender<FrontendPluginCommandOutcome>;
+type PendingSender = oneshot::Sender<FrontendHostRequestOutcome>;
 
 #[derive(Clone)]
-pub struct FrontendPluginCommandTransport {
+pub struct FrontendHostRequestTransport {
     event_sender: Option<AppEventSender>,
     timeout: Duration,
     pending: Arc<Mutex<HashMap<String, PendingSender>>>,
 }
 
-impl FrontendPluginCommandTransport {
+impl FrontendHostRequestTransport {
     pub fn production(event_sender: Option<AppEventSender>) -> Self {
-        Self::new(event_sender, DEFAULT_FRONTEND_PLUGIN_COMMAND_TIMEOUT)
+        Self::new(event_sender, DEFAULT_FRONTEND_HOST_REQUEST_TIMEOUT)
     }
     pub fn new(event_sender: Option<AppEventSender>, timeout: Duration) -> Self {
         Self {
@@ -74,7 +76,7 @@ impl FrontendPluginCommandTransport {
         }
     }
 
-    pub fn acknowledge(&self, acknowledgement: FrontendPluginCommandAcknowledgement) -> bool {
+    pub fn acknowledge(&self, acknowledgement: FrontendHostRequestAcknowledgement) -> bool {
         let sender = self
             .pending
             .lock()
@@ -95,7 +97,7 @@ impl FrontendPluginCommandTransport {
             })
             .unwrap_or_default();
         for sender in senders {
-            let _ = sender.send(FrontendPluginCommandOutcome::Error {
+            let _ = sender.send(FrontendHostRequestOutcome::Error {
                 error: reason.to_string(),
             });
         }
@@ -110,33 +112,34 @@ impl FrontendPluginCommandTransport {
     }
 
     pub async fn compose_task(&self, request: Value) -> Result<Value, String> {
-        self.request(FrontendPluginCommandRequest::ComposeTask {
+        self.request(FrontendHostRequest::ComposeTask {
             correlation_id: uuid::Uuid::new_v4().to_string(),
             request,
         })
         .await
     }
 
-    async fn request(&self, request: FrontendPluginCommandRequest) -> Result<Value, String> {
+    async fn request(&self, request: FrontendHostRequest) -> Result<Value, String> {
         let correlation_id = match &request {
-            FrontendPluginCommandRequest::List { correlation_id, .. }
-            | FrontendPluginCommandRequest::ComposeTask { correlation_id, .. }
-            | FrontendPluginCommandRequest::Invoke { correlation_id, .. } => correlation_id.clone(),
+            FrontendHostRequest::ListPluginCommands { correlation_id, .. }
+            | FrontendHostRequest::ComposeTask { correlation_id, .. }
+            | FrontendHostRequest::InvokePluginCommand { correlation_id, .. } => {
+                correlation_id.clone()
+            }
         };
-        let payload = serde_json::to_value(request).map_err(|error| {
-            format!("failed to serialize frontend Plugin Command request: {error}")
-        })?;
+        let payload = serde_json::to_value(request)
+            .map_err(|error| format!("failed to serialize frontend host request: {error}"))?;
         let (sender, receiver) = oneshot::channel();
         self.pending
             .lock()
-            .map_err(|_| "frontend Plugin Command pending request lock poisoned".to_string())?
+            .map_err(|_| "frontend host pending request lock poisoned".to_string())?
             .insert(correlation_id.clone(), sender);
 
         let delivered = self.event_sender.as_ref().is_some_and(|event_sender| {
             event_sender
                 .send(AppEventEnvelope {
                     id: None,
-                    event_name: FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT.to_string(),
+                    event_name: FRONTEND_HOST_REQUEST_EVENT.to_string(),
                     payload,
                     meta: None,
                 })
@@ -147,7 +150,7 @@ impl FrontendPluginCommandTransport {
                 pending.remove(&correlation_id);
             }
             return Err(
-                "no active OpenForge desktop renderer is available for frontend Plugin Commands"
+                "no active OpenForge desktop renderer is available for frontend host requests"
                     .to_string(),
             );
         }
@@ -158,29 +161,27 @@ impl FrontendPluginCommandTransport {
                 if let Ok(mut pending) = self.pending.lock() {
                     pending.remove(&correlation_id);
                 }
-                return Err(
-                    "frontend Plugin Command request ended before acknowledgement".to_string(),
-                );
+                return Err("frontend host request ended before acknowledgement".to_string());
             }
             Err(_) => {
                 if let Ok(mut pending) = self.pending.lock() {
                     pending.remove(&correlation_id);
                 }
                 return Err(format!(
-                    "frontend Plugin Command request timed out after {} ms",
+                    "frontend host request timed out after {} ms",
                     self.timeout.as_millis()
                 ));
             }
         };
 
         match outcome {
-            FrontendPluginCommandOutcome::Success { output } => Ok(output),
-            FrontendPluginCommandOutcome::Error { error } => Err(error),
+            FrontendHostRequestOutcome::Success { output } => Ok(output),
+            FrontendHostRequestOutcome::Error { error } => Err(error),
         }
     }
 }
 
-impl FrontendAgentCommandCatalog for FrontendPluginCommandTransport {
+impl FrontendAgentCommandCatalog for FrontendHostRequestTransport {
     fn list_frontend_agent_commands<'a>(
         &'a self,
         plugin_id: &'a str,
@@ -188,7 +189,7 @@ impl FrontendAgentCommandCatalog for FrontendPluginCommandTransport {
     ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>> {
         Box::pin(async move {
             let output = self
-                .request(FrontendPluginCommandRequest::List {
+                .request(FrontendHostRequest::ListPluginCommands {
                     correlation_id: uuid::Uuid::new_v4().to_string(),
                     plugin_id: plugin_id.to_string(),
                     project_id: project_id.to_string(),
@@ -211,7 +212,7 @@ impl FrontendAgentCommandCatalog for FrontendPluginCommandTransport {
         context: PluginCommandInvocationContext,
     ) -> BoxFuture<'a, Result<Value, String>> {
         Box::pin(async move {
-            self.request(FrontendPluginCommandRequest::Invoke {
+            self.request(FrontendHostRequest::InvokePluginCommand {
                 correlation_id: uuid::Uuid::new_v4().to_string(),
                 plugin_id: plugin_id.to_string(),
                 project_id: project_id.to_string(),
@@ -244,7 +245,7 @@ mod tests {
     #[tokio::test]
     async fn correlates_concurrent_frontend_invocations_and_serializes_host_context() {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(8);
-        let transport = FrontendPluginCommandTransport::new(Some(sender), Duration::from_secs(1));
+        let transport = FrontendHostRequestTransport::new(Some(sender), Duration::from_secs(1));
 
         let first_transport = transport.clone();
         let first = tokio::spawn(async move {
@@ -273,10 +274,7 @@ mod tests {
 
         let first_request = receiver.recv().await.expect("first request");
         let second_request = receiver.recv().await.expect("second request");
-        assert_eq!(
-            first_request.event_name,
-            FRONTEND_PLUGIN_COMMAND_REQUEST_EVENT
-        );
+        assert_eq!(first_request.event_name, FRONTEND_HOST_REQUEST_EVENT);
         assert_eq!(
             first_request.id, None,
             "transient requests must not be replayable"
@@ -291,15 +289,15 @@ mod tests {
             .expect("second correlation id");
         assert_ne!(first_id, second_id);
 
-        assert!(transport.acknowledge(FrontendPluginCommandAcknowledgement {
+        assert!(transport.acknowledge(FrontendHostRequestAcknowledgement {
             correlation_id: second_id.to_string(),
-            outcome: FrontendPluginCommandOutcome::Success {
+            outcome: FrontendHostRequestOutcome::Success {
                 output: json!({ "request": "second" }),
             },
         }));
-        assert!(transport.acknowledge(FrontendPluginCommandAcknowledgement {
+        assert!(transport.acknowledge(FrontendHostRequestAcknowledgement {
             correlation_id: first_id.to_string(),
-            outcome: FrontendPluginCommandOutcome::Success {
+            outcome: FrontendHostRequestOutcome::Success {
                 output: json!({ "request": "first" }),
             },
         }));
@@ -318,8 +316,7 @@ mod tests {
     #[tokio::test]
     async fn times_out_cleans_pending_state_and_ignores_late_acknowledgements() {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(4);
-        let transport =
-            FrontendPluginCommandTransport::new(Some(sender), Duration::from_millis(20));
+        let transport = FrontendHostRequestTransport::new(Some(sender), Duration::from_millis(20));
         let request_transport = transport.clone();
         let request = tokio::spawn(async move {
             request_transport
@@ -335,19 +332,17 @@ mod tests {
         let error = request.await.expect("join").expect_err("timeout");
         assert!(error.contains("timed out"), "{error}");
         assert_eq!(transport.pending_count(), 0);
-        assert!(
-            !transport.acknowledge(FrontendPluginCommandAcknowledgement {
-                correlation_id,
-                outcome: FrontendPluginCommandOutcome::Success { output: json!([]) },
-            })
-        );
+        assert!(!transport.acknowledge(FrontendHostRequestAcknowledgement {
+            correlation_id,
+            outcome: FrontendHostRequestOutcome::Success { output: json!([]) },
+        }));
     }
 
     #[tokio::test]
     async fn fails_immediately_without_an_active_electron_event_subscriber() {
         let (sender, receiver) = tokio::sync::broadcast::channel(1);
         drop(receiver);
-        let transport = FrontendPluginCommandTransport::new(Some(sender), Duration::from_secs(1));
+        let transport = FrontendHostRequestTransport::new(Some(sender), Duration::from_secs(1));
 
         let error = transport
             .list_frontend_agent_commands("com.example.browser", "P-1")

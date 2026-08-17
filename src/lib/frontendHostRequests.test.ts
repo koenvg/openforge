@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { FrontendPluginCommandRequestHandler } from './frontendPluginCommandRequests'
+import { FrontendHostRequestHandler } from './frontendHostRequests'
 
 function invokeRequest(correlationId: string, pluginId = 'browser') {
   return {
@@ -19,16 +19,18 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-describe('frontend Plugin Command renderer requests', () => {
+describe('frontend host renderer requests', () => {
   it('acknowledges concurrent invocations only with their correlated registry output', async () => {
     const first = deferred<unknown>()
     const second = deferred<unknown>()
     const acknowledge = vi.fn(async () => true)
-    const handler = new FrontendPluginCommandRequestHandler({
-      list: vi.fn(async () => []),
-      invoke: vi.fn(async (_pluginId, _projectId, _commandId, input) =>
-        (input as { url: string }).url.endsWith('/first') ? first.promise : second.promise),
-      compose: vi.fn(async () => null),
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async (_pluginId, _projectId, _commandId, input) =>
+          (input as { url: string }).url.endsWith('/first') ? first.promise : second.promise),
+      },
+      composeTask: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -48,10 +50,12 @@ describe('frontend Plugin Command renderer requests', () => {
   it('ends pending requests on plugin deactivation and ignores late handler completion', async () => {
     const invocation = deferred<unknown>()
     const acknowledge = vi.fn(async () => true)
-    const handler = new FrontendPluginCommandRequestHandler({
-      list: vi.fn(async () => []),
-      invoke: vi.fn(async () => invocation.promise),
-      compose: vi.fn(async () => null),
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async () => invocation.promise),
+      },
+      composeTask: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -69,10 +73,12 @@ describe('frontend Plugin Command renderer requests', () => {
 
   it('returns stable errors for malformed requests and unavailable exact commands', async () => {
     const acknowledge = vi.fn(async () => true)
-    const handler = new FrontendPluginCommandRequestHandler({
-      list: vi.fn(async () => []),
-      invoke: vi.fn(async () => { throw new Error('Unknown agent-facing Plugin Command: browser.missing') }),
-      compose: vi.fn(async () => null),
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async () => { throw new Error('Unknown agent-facing Plugin Command: browser.missing') }),
+      },
+      composeTask: vi.fn(async () => null),
       acknowledge,
     })
 
@@ -85,7 +91,7 @@ describe('frontend Plugin Command renderer requests', () => {
     })
     expect(acknowledge).toHaveBeenNthCalledWith(2, {
       correlationId: 'malformed',
-      outcome: { status: 'error', error: 'invalid frontend Plugin Command request' },
+      outcome: { status: 'error', error: 'invalid frontend host request' },
     })
   })
 
@@ -113,10 +119,12 @@ describe('frontend Plugin Command renderer requests', () => {
     }
     const compose = vi.fn(async () => result)
     const acknowledge = vi.fn(async () => true)
-    const handler = new FrontendPluginCommandRequestHandler({
-      list: vi.fn(async () => []),
-      invoke: vi.fn(async () => null),
-      compose,
+    const handler = new FrontendHostRequestHandler({
+      pluginCommands: {
+        list: vi.fn(async () => []),
+        invoke: vi.fn(async () => null),
+      },
+      composeTask: compose,
       acknowledge,
     })
 

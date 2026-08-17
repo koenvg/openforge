@@ -265,15 +265,15 @@ pub(super) async fn handle_app_plugin_command(
         }
         "plugin_frontend_command_acknowledge" => {
             let acknowledgement = serde_json::from_value::<
-                crate::frontend_plugin_command_transport::FrontendPluginCommandAcknowledgement,
+                crate::frontend_host_request_transport::FrontendHostRequestAcknowledgement,
             >(request.payload.clone())
             .map_err(|error| {
                 (
                     StatusCode::BAD_REQUEST,
-                    format!("invalid frontend Plugin Command acknowledgement: {error}"),
+                    format!("invalid frontend host request acknowledgement: {error}"),
                 )
             })?;
-            serde_json::Value::Bool(state.frontend_plugin_commands.acknowledge(acknowledgement))
+            serde_json::Value::Bool(state.frontend_host_requests.acknowledge(acknowledgement))
         }
         "plugin_invoke" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
