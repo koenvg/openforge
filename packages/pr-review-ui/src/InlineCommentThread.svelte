@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Check, Reply, X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { CommentDisplayData } from './diffComments'
@@ -72,7 +73,10 @@
             <span class="text-base-content/50 text-[0.7rem]">{timeAgo(new Date(comment.createdAt).getTime())}</span>
           {/if}
           {#if comment.isReply}
-            <span class="text-base-content/30 text-[0.65rem]">↩ reply</span>
+            <span class="inline-flex items-center gap-1 text-base-content/30 text-[0.65rem]">
+              <Reply size={12} strokeWidth={1.8} aria-hidden="true" />
+              reply
+            </span>
           {/if}
         {:else if comment.type === 'agent'}
           <span class="badge badge-success badge-sm">AI Review</span>
@@ -86,14 +90,18 @@
                 title="Approve — add to pending comments"
                 aria-label="Approve AI review comment and add to pending comments"
                 onclick={() => approveAgentComment(comment)}
-              >✓</button>
+              >
+                <Check size={14} strokeWidth={2} aria-hidden="true" />
+              </button>
             {/if}
             <button
               class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
               title="Dismiss"
               aria-label="Dismiss AI review comment"
               onclick={() => dismissAgentComment(comment)}
-            >✕</button>
+            >
+              <X size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
           </div>
         {:else}
           <span class="badge badge-warning badge-sm">Pending</span>
@@ -101,7 +109,9 @@
             class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
             aria-label="Remove pending comment"
             onclick={() => onPendingCommentsChange(pendingComments.filter((_, index) => index !== comment.index))}
-          >✕</button>
+          >
+            <X size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
         {/if}
       </div>
       <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">

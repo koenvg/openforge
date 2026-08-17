@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CircleCheck, TriangleAlert } from '@lucide/svelte'
   import type { ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
 
@@ -124,14 +125,14 @@
 
     {#if error}
       <div class="flex items-center gap-2 px-3 py-2.5 bg-error/10 border border-error/30 rounded-md text-error text-[0.8rem]" role="alert" aria-live="assertive">
-        <span aria-hidden="true">⚠</span>
+        <TriangleAlert size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{error}</span>
       </div>
     {/if}
 
     {#if successMessage}
       <div class="flex items-center gap-2 px-3 py-2.5 bg-success/10 border border-success/30 rounded-md text-success text-[0.8rem]" role="status" aria-live="polite">
-        <span aria-hidden="true">✓</span>
+        <CircleCheck size={16} strokeWidth={1.8} class="shrink-0" aria-hidden="true" />
         <span>{successMessage}</span>
       </div>
     {/if}
