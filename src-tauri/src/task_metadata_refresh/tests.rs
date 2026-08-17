@@ -190,6 +190,44 @@ fn build_task_display_title_prompt_uses_snapshot_without_cleanup_blocks() {
 }
 
 #[test]
+fn build_task_display_title_prompt_excludes_start_prompt_contribution_envelopes() {
+    let (db, path) = make_test_db("metadata_title_prompt_contributions");
+    let task = db
+        .create_task(
+            "Implement title sanitization\n\n<openforge_start_prompt_contribution id=\"task-guidance\">\ntask guidance must not influence title\n</openforge_start_prompt_contribution>\n\nKeep task details",
+            "doing",
+            None,
+            None,
+            None,
+        )
+        .expect("create task");
+    let snapshot = MetadataJobSnapshot {
+        transcript_path: None,
+        transcript_excerpt: Some(
+            "Transcript details\n<openforge_start_prompt_contribution id=\"transcript-guidance\">\ntranscript guidance must not influence title\n</openforge_start_prompt_contribution>\nTranscript result"
+                .to_string(),
+        ),
+        activity_excerpt: Some(
+            "Activity details\n<openforge_start_prompt_contribution id=\"activity-guidance\">\nactivity guidance must not influence title\n</openforge_start_prompt_contribution>\nActivity result"
+                .to_string(),
+        ),
+    };
+
+    let prompt = build_task_display_title_prompt(&task, Some(&snapshot));
+
+    assert!(prompt.contains("Implement title sanitization"));
+    assert!(prompt.contains("Keep task details"));
+    assert!(prompt.contains("Transcript details"));
+    assert!(prompt.contains("Transcript result"));
+    assert!(prompt.contains("Activity details"));
+    assert!(prompt.contains("Activity result"));
+    assert!(!prompt.contains("openforge_start_prompt_contribution"));
+    assert!(!prompt.contains("guidance must not influence title"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn parse_task_display_title_output_reads_json_title() {
     assert_eq!(
         parse_task_display_title_output(r#"{"title":"OAuth Refresh Race"}"#)

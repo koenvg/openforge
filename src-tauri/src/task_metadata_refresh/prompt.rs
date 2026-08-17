@@ -110,10 +110,15 @@ fn strip_between(mut text: String, start: &str, end: &str) -> String {
 }
 
 fn sanitize_metadata_text(text: &str) -> String {
-    strip_between(
+    let text = strip_between(
         text.to_string(),
         "<openforge_code_cleanup>",
         "</openforge_code_cleanup>",
+    );
+    strip_between(
+        text,
+        "<openforge_start_prompt_contribution",
+        "</openforge_start_prompt_contribution>",
     )
     .trim()
     .to_string()
