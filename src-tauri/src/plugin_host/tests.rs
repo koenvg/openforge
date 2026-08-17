@@ -1,6 +1,7 @@
 use super::lifecycle::{
-    packaged_electron_node_runtime, resolve_entrypoint, resolve_sidecar_runtime, BUN_PATH_ENV,
-    ELECTRON_RUN_AS_NODE_ENV, ENTRYPOINT_ENV, SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
+    format_sidecar_stderr_diagnostic, packaged_electron_node_runtime, resolve_entrypoint,
+    resolve_sidecar_runtime, BUN_PATH_ENV, ELECTRON_RUN_AS_NODE_ENV, ENTRYPOINT_ENV,
+    SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
 };
 use super::*;
 use serde_json::{json, Value};
@@ -52,6 +53,78 @@ async fn lock_plugin_host_env() -> tokio::sync::MutexGuard<'static, ()> {
 
 fn build_plugin_host() -> PluginHost {
     PluginHost::new(AppHandle::new())
+}
+
+#[test]
+fn plugin_tagged_stderr_diagnostics_preserve_activation_and_handler_context() {
+    assert_eq!(
+        format_sidecar_stderr_diagnostic(
+            "[plugin:acme.sync] activation error: duplicate background service id"
+        ),
+        "[plugin_host] sidecar stderr line [plugin:acme.sync] activation error: duplicate background service id"
+    );
+    assert_eq!(
+        format_sidecar_stderr_diagnostic(
+            "[plugin:acme.sync] backend handler error in acme.sync.refresh: upstream unavailable"
+        ),
+        "[plugin_host] sidecar stderr line [plugin:acme.sync] backend handler error in acme.sync.refresh: upstream unavailable"
+    );
+}
+
+#[test]
+fn plugin_tagged_stderr_diagnostics_redact_sensitive_values() {
+    let diagnostic = format_sidecar_stderr_diagnostic(
+        "[plugin:acme.sync] activation error: token=ghp_secret path=/Users/alice/private/plugin.js url=https://api.example.test/private",
+    );
+
+    assert!(diagnostic.contains("[plugin:acme.sync] activation error:"));
+    assert!(diagnostic.matches("<redacted>").count() >= 3);
+    assert!(!diagnostic.contains("ghp_secret"));
+    assert!(!diagnostic.contains("/Users/alice"));
+    assert!(!diagnostic.contains("api.example.test"));
+}
+
+#[test]
+fn untagged_stderr_diagnostics_suppress_content() {
+    assert_eq!(
+        format_sidecar_stderr_diagnostic("host runtime secret"),
+        "[plugin_host] sidecar stderr line suppressed bytes=19"
+    );
+}
+
+#[test]
+fn malformed_plugin_tags_do_not_opt_into_stderr_content_logging() {
+    for line in [
+        "[plugin:] activation error: secret",
+        "[plugin:ACME.sync] activation error: secret",
+        "[plugin:acme sync] activation error: secret",
+    ] {
+        let diagnostic = format_sidecar_stderr_diagnostic(line);
+        assert!(diagnostic.contains("stderr line suppressed bytes="));
+        assert!(!diagnostic.contains("secret"));
+    }
+}
+
+#[test]
+fn plugin_tagged_stderr_diagnostics_are_character_bounded() {
+    let line = format!("[plugin:acme.sync] activation error: {}", "é".repeat(2_500));
+    let diagnostic = format_sidecar_stderr_diagnostic(&line);
+    let content = diagnostic
+        .strip_prefix("[plugin_host] sidecar stderr line ")
+        .expect("diagnostic prefix");
+
+    assert_eq!(content.chars().count(), 2_013);
+    assert!(content.ends_with("… [truncated]"));
+}
+
+#[test]
+fn plugin_tagged_stderr_diagnostics_escape_control_characters() {
+    let diagnostic = format_sidecar_stderr_diagnostic(
+        "[plugin:acme.sync] activation error: reset\u{1b}[2Jterminal",
+    );
+
+    assert!(diagnostic.contains("reset\\u{1b}[2Jterminal"));
+    assert!(!diagnostic.contains('\u{1b}'));
 }
 
 #[tokio::test]

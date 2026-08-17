@@ -27,6 +27,68 @@ pub(super) const BUN_PATH_ENV: &str = "OPENFORGE_BUN_PATH";
 pub(super) const ELECTRON_RUN_AS_NODE_ENV: &str = "ELECTRON_RUN_AS_NODE";
 pub(super) const ENTRYPOINT_ENV: &str = "OPENFORGE_PLUGIN_HOST_ENTRYPOINT";
 
+fn is_diagnostic_plugin_id(plugin_id: &str) -> bool {
+    let mut characters = plugin_id.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    if !first.is_ascii_lowercase() {
+        return false;
+    }
+
+    let mut previous_was_separator = false;
+    for character in characters {
+        if character.is_ascii_lowercase() || character.is_ascii_digit() {
+            previous_was_separator = false;
+        } else if matches!(character, '.' | '_' | '-') && !previous_was_separator {
+            previous_was_separator = true;
+        } else {
+            return false;
+        }
+    }
+    !previous_was_separator
+}
+
+/// Formats plugin-host stderr for desktop diagnostics under a content-minimizing policy.
+/// Only canonical `[plugin:<id>] <message>` lines retain context. Retained context uses the
+/// shared log redactor, escapes control characters, and is character-bounded; all other
+/// stderr content is suppressed and represented only by its byte count.
+pub(super) fn format_sidecar_stderr_diagnostic(line: &str) -> String {
+    let is_plugin_tagged = line
+        .strip_prefix("[plugin:")
+        .and_then(|rest| rest.split_once("] "))
+        .is_some_and(|(plugin_id, message)| {
+            is_diagnostic_plugin_id(plugin_id) && !message.is_empty()
+        });
+    if !is_plugin_tagged {
+        return format!(
+            "[plugin_host] sidecar stderr line suppressed bytes={}",
+            line.len()
+        );
+    }
+
+    const MAX_CONTEXT_CHARS: usize = 2_000;
+    const TRUNCATION_MARKER: &str = "… [truncated]";
+
+    let sanitized = crate::sidecar_logger::sanitize_log_message(line);
+    let mut normalized = String::with_capacity(sanitized.len());
+    for character in sanitized.chars() {
+        if character.is_control() {
+            normalized.extend(character.escape_default());
+        } else {
+            normalized.push(character);
+        }
+    }
+    let mut chars = normalized.chars();
+    let bounded: String = chars.by_ref().take(MAX_CONTEXT_CHARS).collect();
+    let bounded = if chars.next().is_some() {
+        format!("{bounded}{TRUNCATION_MARKER}")
+    } else {
+        bounded
+    };
+    format!("[plugin_host] sidecar stderr line {bounded}")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SidecarState {
     Starting,
@@ -265,10 +327,7 @@ impl PluginHost {
         tokio::spawn(async move {
             let mut stderr_lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = stderr_lines.next_line().await {
-                warn!(
-                    "[plugin_host] sidecar stderr line received bytes={}",
-                    line.len()
-                );
+                warn!("{}", format_sidecar_stderr_diagnostic(&line));
             }
         });
 
