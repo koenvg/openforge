@@ -1,4 +1,5 @@
 import { invokeDesktopCommand } from '../desktopIpc'
+import { composeTaskFromPluginRequest } from './pluginHostCommands'
 import {
   FrontendPluginCommandRequestHandler,
   type FrontendPluginCommandRequestDeps,
@@ -17,6 +18,7 @@ const requestHandler = new FrontendPluginCommandRequestHandler({
     if (!runtimeDeps) throw new Error('OpenForge frontend Plugin Command runtime is unavailable')
     return runtimeDeps.invoke(...args)
   },
+  compose: composeTaskFromPluginRequest,
   acknowledge: acknowledgement =>
     invokeDesktopCommand('plugin_frontend_command_acknowledge', acknowledgement),
 })

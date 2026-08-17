@@ -216,7 +216,7 @@ export const appShellEventContracts = [
   { eventName: 'review-pr-count-changed', payload: 'number', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'authored-prs-updated', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'github-rate-limited', payload: 'GitHub rate limit payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
-  { eventName: 'plugin-frontend-command-request', payload: 'transient correlated frontend Plugin Command request', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
+  { eventName: 'plugin-frontend-command-request', payload: 'transient correlated frontend Plugin Command or Task compose request', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-installation-changed', payload: '{ plugin_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'project-plugin-enablement-changed', payload: '{ plugin_id: string; project_id: string; enabled: boolean }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-reload-requested', payload: '{ plugin_id: string; project_id?: string | null }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },

@@ -1,6 +1,7 @@
 import type {
   AgentSession,
-  BoardStatus,
+  CommandInfo,
+  ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   FileContent,
@@ -12,7 +13,9 @@ import type {
   StartPromptContribution,
   StartTaskImplementationRequest,
   Task,
+  TaskFollowUpReceipt,
   TaskWorkspaceInfo,
+  WritableBoardStatus,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
 import type { ContributionRegistry } from './contribution-registry'
@@ -36,28 +39,16 @@ function normalizeImplementationRun(value: unknown): ImplementationRun {
   }
 }
 
-function taskListCallbackParams(request?: { projectId?: string | null }): Record<string, unknown> {
-  if (!request || request.projectId === undefined) return {}
-  return { projectId: request.projectId ?? null }
+function taskListCallbackParams(request?: { projectId?: string | null; includeDone?: boolean }): Record<string, unknown> {
+  if (!request) return {}
+  const params: Record<string, unknown> = {}
+  if (request.projectId !== undefined) params.projectId = request.projectId ?? null
+  if (request.includeDone !== undefined) params.includeDone = request.includeDone
+  return params
 }
 
 function objectCallbackParams(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
-}
-
-// The durable callback bridge currently supports the capability set that pre-dates
-// commands.listCatalog, tasks.compose, and tasks.sendFollowUp. Model that exact
-// runtime surface here so this refactor does not advertise unsupported behavior.
-type ExistingKeyValueConfigApi = {
-  get<T extends JsonValue = JsonValue>(key: string, projectId?: string | null): Promise<T | null>
-  set<T extends JsonValue = JsonValue>(key: string, value: T, projectId?: string | null): Promise<void>
-}
-
-type ExistingBackendOpenForgeApi = Omit<BackendOpenForgeAPI, 'commands' | 'tasks' | 'config' | 'projectConfig'> & {
-  commands: Omit<BackendOpenForgeAPI['commands'], 'listCatalog'>
-  tasks: Omit<BackendOpenForgeAPI['tasks'], 'compose' | 'sendFollowUp'>
-  config: ExistingKeyValueConfigApi
-  projectConfig: ExistingKeyValueConfigApi
 }
 
 export type BackendApiRuntime = {
@@ -83,7 +74,7 @@ export function createBackendApi(
     return await runtime.hostCallbacks({ method, params }) as T
   }
 
-  const api: ExistingBackendOpenForgeApi = {
+  const api: BackendOpenForgeAPI = {
     commands: {
       register: registration => contributions.registerCommand(state, registration),
       async invoke<TOutput = unknown>(command: string, payload?: unknown): Promise<TOutput> {
@@ -93,6 +84,7 @@ export function createBackendApi(
         return await runtime.invokeGlobalCommand(qualifiedId, payload, state.pluginId) as TOutput
       },
       list: async () => runtime.listCommands(),
+      listCatalog: async request => await hostCallback<CommandInfo[]>('openforge.commands.listCatalog', objectCallbackParams(request)),
     },
     events: {
       on: (event, handler) => contributions.registerEventListener(state, event, handler as RuntimeEventHandler, false),
@@ -108,11 +100,13 @@ export function createBackendApi(
       list: async request => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),
       get: async taskId => await hostCallback<Task | null>('openforge.tasks.get', { taskId }),
       create: async (request: CreateTaskRequest) => await hostCallback<Task>('openforge.tasks.create', objectCallbackParams(request)),
+      compose: async request => await hostCallback<ComposeTaskResult | null>('openforge.tasks.compose', objectCallbackParams(request)),
       updateSummary: async (taskId: string, summary: string) => { await hostCallback<void>('openforge.tasks.updateSummary', { taskId, summary }) },
-      updateStatus: async (taskId: string, status: BoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
+      updateStatus: async (taskId: string, status: WritableBoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
       listStartPromptContributions: async (projectId: string) => await hostCallback<StartPromptContribution[]>('openforge.tasks.listStartPromptContributions', { projectId }),
       configureStartPromptContribution: async (request: ConfigureStartPromptContributionRequest) => await hostCallback<StartPromptContribution[]>('openforge.tasks.configureStartPromptContribution', objectCallbackParams(request)),
       startImplementation: async (request: StartTaskImplementationRequest) => normalizeImplementationRun(await hostCallback<unknown>('openforge.tasks.startImplementation', objectCallbackParams(request))),
+      sendFollowUp: async request => await hostCallback<TaskFollowUpReceipt>('openforge.tasks.sendFollowUp', objectCallbackParams(request)),
       getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
       getLatestSession: async (taskId: string) => await hostCallback<AgentSession | null>('openforge.tasks.getLatestSession', { taskId }),
     },
@@ -121,20 +115,20 @@ export function createBackendApi(
       get: async projectId => await hostCallback<Project | null>('openforge.projects.get', { projectId }),
     },
     fs: {
-      readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.readDir', request as unknown as Record<string, unknown>),
-      readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', request as unknown as Record<string, unknown>),
-      writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', request as unknown as Record<string, unknown>) },
-      searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', request as unknown as Record<string, unknown>),
+      readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.readDir', objectCallbackParams(request)),
+      readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', objectCallbackParams(request)),
+      writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', objectCallbackParams(request)) },
+      searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', objectCallbackParams(request)),
     },
     shell: {
-      spawn: async request => await hostCallback<number>('openforge.shell.spawn', request as unknown as Record<string, unknown>),
-      write: async request => { await hostCallback<void>('openforge.shell.write', request as unknown as Record<string, unknown>) },
-      resize: async request => { await hostCallback<void>('openforge.shell.resize', request as unknown as Record<string, unknown>) },
-      kill: async request => { await hostCallback<void>('openforge.shell.kill', request as unknown as Record<string, unknown>) },
-      getBuffer: async request => await hostCallback<string | null>('openforge.shell.getBuffer', request as unknown as Record<string, unknown>),
+      spawn: async request => await hostCallback<number>('openforge.shell.spawn', objectCallbackParams(request)),
+      write: async request => { await hostCallback<void>('openforge.shell.write', objectCallbackParams(request)) },
+      resize: async request => { await hostCallback<void>('openforge.shell.resize', objectCallbackParams(request)) },
+      kill: async request => { await hostCallback<void>('openforge.shell.kill', objectCallbackParams(request)) },
+      getBuffer: async request => await hostCallback<string | null>('openforge.shell.getBuffer', objectCallbackParams(request)),
     },
     notifications: {
-      notify: async request => { await hostCallback<void>('openforge.notifications.notify', request as unknown as Record<string, unknown>) },
+      notify: async request => { await hostCallback<void>('openforge.notifications.notify', objectCallbackParams(request)) },
     },
     attention: {
       listProjects: async () => await hostCallback<ProjectAttention[]>('openforge.attention.listProjects'),
@@ -143,19 +137,19 @@ export function createBackendApi(
       openUrl: async url => { await hostCallback<void>('openforge.system.openUrl', { url }) },
     },
     config: {
-      async get<T extends JsonValue = JsonValue>(key: string, projectId?: string | null): Promise<T | null> {
+      async get<T extends JsonValue = JsonValue>(key: string, projectId?: string): Promise<T | null> {
         return await hostCallback<T | null>('openforge.config.get', { key, projectId: projectId ?? null })
       },
-      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId?: string | null): Promise<void> {
+      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId?: string): Promise<void> {
         await hostCallback<void>('openforge.config.set', { key, value, projectId: projectId ?? null })
       },
     },
     projectConfig: {
-      async get<T extends JsonValue = JsonValue>(key: string, projectId: string | null = state.projectId ?? null): Promise<T | null> {
-        return await hostCallback<T | null>('openforge.projectConfig.get', { key, projectId })
+      async get<T extends JsonValue = JsonValue>(key: string, projectId: string | undefined = state.projectId): Promise<T | null> {
+        return await hostCallback<T | null>('openforge.projectConfig.get', { key, projectId: projectId ?? null })
       },
-      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId: string | null = state.projectId ?? null): Promise<void> {
-        await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId })
+      async set<T extends JsonValue = JsonValue>(key: string, value: T, projectId: string | undefined = state.projectId): Promise<void> {
+        await hostCallback<void>('openforge.projectConfig.set', { key, value, projectId: projectId ?? null })
       },
     },
     backend: {
@@ -165,5 +159,5 @@ export function createBackendApi(
       register: registration => contributions.registerBackgroundService(state, registration),
     },
   }
-  return api as unknown as BackendOpenForgeAPI
+  return api
 }

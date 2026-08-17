@@ -1,5 +1,7 @@
 import type {
   AgentCommandDescriptor,
+  ComposeTaskRequest,
+  ComposeTaskResult,
   PluginCommandInvocationContext,
 } from '@openforge-app/plugin-sdk'
 
@@ -20,6 +22,11 @@ type FrontendPluginCommandRequest =
       projectId: string
     }
   | {
+      operation: 'composeTask'
+      correlationId: string
+      request: ComposeTaskRequest
+    }
+  | {
       operation: 'invoke'
       correlationId: string
       pluginId: string
@@ -38,11 +45,12 @@ export type FrontendPluginCommandRequestDeps = {
     input: unknown,
     context: PluginCommandInvocationContext,
   ): Promise<unknown>
+  compose(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
   acknowledge(acknowledgement: FrontendPluginCommandAcknowledgement): Promise<unknown>
 }
 
 type PendingRequest = {
-  pluginId: string
+  pluginId: string | null
 }
 
 function nonEmptyString(value: unknown): value is string {
@@ -57,12 +65,35 @@ function invocationContext(value: unknown, projectId: string): value is PluginCo
     && context.source === 'agent-cli'
 }
 
+function parseComposeTaskRequest(value: unknown): ComposeTaskRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const request = value as Record<string, unknown>
+  if (!nonEmptyString(request.projectId) || typeof request.initialPrompt !== 'string') return null
+  if (request.sourceTicketUrl !== undefined && request.sourceTicketUrl !== null && typeof request.sourceTicketUrl !== 'string') return null
+  if (request.title !== undefined && request.title !== null && typeof request.title !== 'string') return null
+  return {
+    projectId: request.projectId,
+    initialPrompt: request.initialPrompt,
+    ...(request.sourceTicketUrl !== undefined ? { sourceTicketUrl: request.sourceTicketUrl as string | null } : {}),
+    ...(request.title !== undefined ? { title: request.title as string | null } : {}),
+  }
+}
+
 function parseRequest(value: unknown): FrontendPluginCommandRequest | null {
   if (typeof value !== 'object' || value === null) return null
   const request = value as Record<string, unknown>
-  if (!nonEmptyString(request.correlationId)
-    || !nonEmptyString(request.pluginId)
-    || !nonEmptyString(request.projectId)) return null
+  if (!nonEmptyString(request.correlationId)) return null
+
+  const composeRequest = parseComposeTaskRequest(request.request)
+  if (request.operation === 'composeTask' && composeRequest) {
+    return {
+      operation: 'composeTask',
+      correlationId: request.correlationId,
+      request: composeRequest,
+    }
+  }
+
+  if (!nonEmptyString(request.pluginId) || !nonEmptyString(request.projectId)) return null
 
   if (request.operation === 'list') {
     return {
@@ -115,17 +146,24 @@ export class FrontendPluginCommandRequestHandler {
     }
     if (this.pending.has(request.correlationId)) return
 
-    this.pending.set(request.correlationId, { pluginId: request.pluginId })
+    this.pending.set(request.correlationId, {
+      pluginId: request.operation === 'composeTask' ? null : request.pluginId,
+    })
     try {
-      const output = request.operation === 'list'
-        ? await this.deps.list(request.pluginId, request.projectId)
-        : await this.deps.invoke(
-            request.pluginId,
-            request.projectId,
-            request.commandId,
-            request.input,
-            request.context,
-          )
+      let output: unknown
+      if (request.operation === 'list') {
+        output = await this.deps.list(request.pluginId, request.projectId)
+      } else if (request.operation === 'composeTask') {
+        output = await this.deps.compose(request.request)
+      } else {
+        output = await this.deps.invoke(
+          request.pluginId,
+          request.projectId,
+          request.commandId,
+          request.input,
+          request.context,
+        )
+      }
       await this.complete(request.correlationId, { status: 'success', output })
     } catch (error) {
       await this.complete(request.correlationId, { status: 'error', error: errorMessage(error) })
