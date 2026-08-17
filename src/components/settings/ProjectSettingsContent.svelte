@@ -60,10 +60,8 @@
 {:else if activeSection === 'instructions'}
   <SettingsInstructionsCard
     agentInstructions={controller.agentInstructions}
-    handoffNotesTemplate={controller.handoffNotesTemplate}
     disabled={!controller.hasProject}
     onInstructionsChange={controller.setAgentInstructions}
-    onHandoffNotesTemplateChange={controller.setHandoffNotesTemplate}
   />
 {:else if activeSection === 'plugins'}
   <PluginSettingsPanel projectId={controller.projectId || ''} disabled={!controller.hasProject} />

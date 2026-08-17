@@ -45,7 +45,6 @@ describe('loadTaskLevelDefaults', () => {
 
     expect(defaults.codeCleanupEnabled).toBe(false)
     expect(defaults.taskDisplayTitleUpdatesEnabled).toBe(false)
-    expect(defaults.handoffNotesEnabled).toBe(true)
     expect(defaults.useWorktrees).toBe(true)
     expect(defaults.aiProvider).toBe('claude-code')
   })
@@ -65,7 +64,6 @@ describe('loadTaskLevelDefaults', () => {
     expect(getProjectConfig).not.toHaveBeenCalled()
     expect(getResolvedAiProvider).not.toHaveBeenCalled()
     expect(defaults.aiProvider).toBe('claude-code')
-    expect(defaults.handoffNotesEnabled).toBe(true)
     expect(defaults.useWorktrees).toBe(true)
   })
 })

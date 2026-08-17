@@ -17,7 +17,6 @@ import 'package:openforge_companion/src/task_detail/task_detail_screen.dart';
 TaskDetail _detail({
   String title = 'Mobile Task detail',
   String initialPrompt = 'Investigate the mobile Task detail.',
-  String? handoffNotes = 'Ready for review.',
   String boardStatus = 'doing',
   String agentState = 'running',
   bool agentTerminalAvailable = false,
@@ -32,7 +31,6 @@ TaskDetail _detail({
   projectId: 'P-1',
   projectName: 'OpenForge',
   boardStatus: boardStatus,
-  handoffNotes: handoffNotes,
   agentState: agentState,
   agentTerminalAvailable: agentTerminalAvailable,
   agentErrorSummary: agentErrorSummary,
@@ -80,7 +78,6 @@ void main() {
       200,
     );
     expect(find.text('Investigate the mobile Task detail.'), findsOneWidget);
-    expect(find.text('Ready for review.'), findsOneWidget);
     expect(find.text('Failed'), findsOneWidget);
     expect(
       find.text('Agent failed. Review details on the desktop.'),
@@ -97,8 +94,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.bySemanticsLabel('Initial Prompt'), findsOneWidget);
-    expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
-    expect(find.bySemanticsLabel('Ready for review.'), findsOneWidget);
     expect(find.text('Labels'), findsNothing);
     expect(find.text('Dependencies'), findsNothing);
     expect(find.text('Dependent tasks'), findsNothing);
@@ -169,7 +164,7 @@ void main() {
     },
   );
 
-  testWidgets('Handoff Notes render with Markdown formatting', (tester) async {
+  testWidgets('Initial Prompt renders Markdown formatting', (tester) async {
     const markdown = '''
 ## Summary
 
@@ -189,7 +184,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     await tester.pumpWidget(
       MaterialApp(
         home: TaskDetailView(
-          state: TaskDetailLoaded(_detail(handoffNotes: markdown)),
+          state: TaskDetailLoaded(_detail(initialPrompt: markdown)),
           onRefresh: () async {},
         ),
       ),
@@ -223,7 +218,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
     expect(find.text('[Image: Local diagram]'), findsOneWidget);
     expect(find.text('[Image: Embedded diagram]'), findsOneWidget);
     expect(find.text('[Image: Bundled diagram]'), findsOneWidget);
-    expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
+    expect(find.bySemanticsLabel('Initial Prompt'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp(r'^Summary\s+Ready for review\.')),
       findsOneWidget,
@@ -269,9 +264,6 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
   ) async {
     final prompt = <String>[
       '# Initial mobile request',
-      '<openforge_task_management>',
-      'Visible workflow instruction.',
-      '</openforge_task_management>',
       '**Render this formatting** for the paired device.',
       '- Preserve lists',
       '- Preserve `inline code`',
@@ -293,9 +285,6 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
 
     expect(find.bySemanticsLabel('Initial Prompt'), findsOneWidget);
     expect(find.text('Initial mobile request'), findsOneWidget);
-    expect(find.text('<openforge_task_management>'), findsOneWidget);
-    expect(find.text('Visible workflow instruction.'), findsOneWidget);
-    expect(find.text('</openforge_task_management>'), findsOneWidget);
     expect(
       find.text(
         'Render this formatting for the paired device.',
@@ -313,7 +302,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
   });
 
   testWidgets(
-    'Task detail accepts prompt-derived title and calmly shows no Handoff Notes',
+    'Task detail accepts prompt-derived title and blocked Agent state',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -321,7 +310,6 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
             state: TaskDetailLoaded(
               _detail(
                 title: 'Prompt-derived fallback title',
-                handoffNotes: null,
                 agentState: 'blocked',
               ),
             ),
@@ -331,10 +319,7 @@ Read the [**important** mobile guide](https://docs.openforge.dev/mobile).
       );
 
       expect(find.text('Prompt-derived fallback title'), findsOneWidget);
-      expect(find.text('No Handoff Notes yet.'), findsOneWidget);
       expect(find.text('Needs input'), findsOneWidget);
-      expect(find.bySemanticsLabel('Handoff Notes'), findsOneWidget);
-      expect(find.bySemanticsLabel('No Handoff Notes yet.'), findsOneWidget);
     },
   );
 

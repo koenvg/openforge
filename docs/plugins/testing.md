@@ -239,7 +239,7 @@ it('keeps global, project, and task storage separate', async () => {
 Use the task API fake to test plugin-owned task automation without shelling out to the OpenForge CLI. The fake records calls and returns deterministic placeholder data.
 
 ```ts
-it('records task creation, summary updates, status updates, and implementation starts', async () => {
+it('records task creation, status updates, and implementation starts', async () => {
   const api = createMockOpenForgeApi({ pluginId: 'triage', projectId: 'P-1' })
 
   const task = await api.tasks.create({
@@ -248,7 +248,6 @@ it('records task creation, summary updates, status updates, and implementation s
     dependsOn: ['KVG-1'],
     labelNames: ['testing'],
   })
-  await api.tasks.updateSummary(task.id, 'Ready for review')
   await api.tasks.updateStatus(task.id, 'active')
   const run = await api.tasks.startImplementation({ taskId: task.id })
 
@@ -271,9 +270,6 @@ it('records task creation, summary updates, status updates, and implementation s
       dependsOn: ['KVG-1'],
       labelNames: ['testing'],
     },
-  ])
-  expect(api.__testing.calls.taskSummaryUpdates).toEqual([
-    { taskId: 'mock-task-1', summary: 'Ready for review' },
   ])
   expect(api.__testing.calls.taskStatusUpdates).toEqual([
     { taskId: 'mock-task-1', status: 'active' },

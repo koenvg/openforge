@@ -6,7 +6,7 @@ Status: selected for implementation.
 
 OpenForge Companion has a complete, functional Flutter surface for secure pairing, the Mobile Project Board, prompt-only Task creation, Task detail, plugin Task sections, and the interactive Agent terminal, but its presentation still relies primarily on Flutter's default seeded Material theme and screen-local composition choices. The result communicates function without expressing a deliberate OpenForge mobile identity, and future screens can drift because there is no durable design-system contract for color, typography, spacing, shape, elevation, status treatment, or responsive composition.
 
-Users need the Companion app to make dense developer workflows feel calm, legible, and trustworthy on a phone. They must be able to scan Project and Task state quickly, distinguish informational, attention, success, and destructive actions without relying on color alone, enter prompts without visual noise, read Handoff Notes comfortably, and interact with a terminal that still feels integrated with the rest of the app. The design must remain recognizably OpenForge while preserving the existing security, authority, lifecycle, accessibility, and platform-adaptive behavior established by the accepted Companion specifications and ADRs.
+Users need the Companion app to make dense developer workflows feel calm, legible, and trustworthy on a phone. They must be able to scan Project and Task state quickly, distinguish informational, attention, success, and destructive actions without relying on color alone, enter prompts without visual noise, read task prompts comfortably, and interact with a terminal that still feels integrated with the rest of the app. The design must remain recognizably OpenForge while preserving the existing security, authority, lifecycle, accessibility, and platform-adaptive behavior established by the accepted Companion specifications and ADRs.
 
 ## Solution
 
@@ -55,8 +55,6 @@ The selected concept board is the visual reference for intent, information hiera
 33. As a user creating a Task, I want the Selected Project and Backlog destination stated clearly, so that I understand where the Task will be created.
 34. As a user creating a Task, I want pending, failure, uncertain-outcome, and success feedback to retain the same action hierarchy, so that I do not submit duplicate Tasks.
 35. As a Task-detail user, I want the Task title, Task ID, Board Status, Project, Agent state, and update time to form a clear summary, so that I can understand current state at a glance.
-36. As a Task-detail user, I want Handoff Notes to use editorial typography and comfortable line length, so that longer summaries remain readable on a phone.
-37. As a Task-detail user, I want missing Handoff Notes and safe Agent errors to have purposeful contained states, so that absent or failed data does not look broken.
 38. As a Task-detail user, I want dependencies and related Tasks to remain visibly interactive, so that I can navigate without confusing metadata for plain text.
 39. As a Task-detail user, I want Details and Terminal tabs to preserve state when switching, so that the visual redesign does not disrupt my workflow.
 40. As a Task-detail user, I want Start, Delete, and Complete to retain their existing availability, confirmation, and pending semantics, so that a visual change cannot alter lifecycle safety.
@@ -106,7 +104,7 @@ The selected concept board is the visual reference for intent, information hiera
 ### Typography
 
 - Use a friendly, modern humanist sans for display, title, body, label, and action text. Prefer a bundled or platform-reliable family with predictable Android and iOS metrics; do not depend on a network font request.
-- Use one clean monospace family for Task IDs, terminal content, numeric counters where alignment matters, and developer-specific identifiers. Body copy, button labels, tabs, status labels, and Handoff Notes remain sans-serif.
+- Use one clean monospace family for Task IDs, terminal content, numeric counters where alignment matters, and developer-specific identifiers. Body copy, button labels, tabs, and status labels remain sans-serif.
 - The base mobile body size is 16 logical pixels with approximately 1.5 line height. Supporting labels use 12–14 logical pixels only when contrast and scaling remain sufficient. Major screen titles use a restrained 22–28 logical pixel range rather than oversized marketing typography.
 - Type hierarchy is reinforced by size, weight, spacing, and placement rather than color alone. Headings use 600–700 weight, action and label text use medium weight, and body text uses regular weight.
 - Dynamic text scaling must preserve full Task titles, recovery messages, button labels, and destructive confirmation copy through wrapping or reflow. Fixed-height text containers must not clip scaled text.
@@ -158,7 +156,6 @@ The selected concept board is the visual reference for intent, information hiera
 ### Task detail and actions
 
 - Task detail starts with the full Task title, monospace Task ID, and Board Status. Project, Agent state, and updated time form a compact key-value overview with icons or labels.
-- Handoff Notes use editorial reading treatment: strong section title, comfortable line height, clear Markdown hierarchy, visible safe links, and readable line length. Missing notes use an intentional empty state.
 - Dependencies and related Tasks remain clearly interactive rows with visible navigation affordance. Agent errors use a contained semantic error treatment with safe copy.
 - Plugin Task sections are visually separated but not elevated above native Task identity or lifecycle actions.
 - Start is the primary Backlog action. Delete remains a destructive secondary Backlog action. Complete remains the single terminal lifecycle action for active Tasks and retains explicit confirmation. Pending actions preserve labels, announce progress, and prevent duplicate taps.
@@ -212,7 +209,7 @@ The selected concept board is the visual reference for intent, information hiera
 - Plugin host tests continue to prove theme propagation, text scaling, reduced-motion propagation, native Task-detail survival, and contained failure states without asserting plugin CSS utility names or private WebView structure.
 - Automated screenshot/golden tests are not the primary acceptance seam because platform font rasterization and device dimensions make them brittle, and project standards keep visual styling out of unit tests. A small stable golden may be added only if the implementation team can make it deterministic across CI, but it is not required by this specification.
 - Manual visual acceptance is required on at least one physical iOS device and one physical Android device. Capture Pairing, Board, Task creation, Task Details, and Terminal in system light mode and compare hierarchy, tone, density, and component language against the selected Quiet Paper concept.
-- Manual acceptance also covers system dark mode, small and large phone sizes, portrait and landscape, software keyboard open/closed, maximum supported text scaling, screen-reader traversal, reduced motion, long Task titles, long Handoff Notes, empty/error/reconnecting states, confirmation dialogs, and terminal accessory controls.
+- Manual acceptance also covers system dark mode, small and large phone sizes, portrait and landscape, software keyboard open/closed, maximum supported text scaling, screen-reader traversal, reduced motion, long Task titles, long Task prompts, empty/error/reconnecting states, confirmation dialogs, and terminal accessory controls.
 - Contrast must be checked for every semantic foreground/background pair in both themes. Normal text targets at least 4.5:1, large text and non-text UI targets at least 3:1, and focus/error/success states must remain distinguishable without color alone.
 - The full mobile Companion check remains the release regression command after implementation; physical-device LAN and Tailscale acceptance remains governed by the existing Companion acceptance matrix because this design system does not alter networking or authority.
 

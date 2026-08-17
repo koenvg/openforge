@@ -25,7 +25,6 @@ export const PROJECT_HIERARCHY_KEYS: string[] = HIERARCHICAL_SETTINGS
 
 export interface ProjectSettingsConfig {
   agentInstructions: string
-  handoffNotesTemplate: string
   aiProvider: string
   projectColor: string
   useWorktrees: boolean
@@ -39,7 +38,6 @@ export interface GlobalSettingsConfig {
   codeCleanupTasksEnabled: boolean
   taskDisplayTitleMetadataUpdatesEnabled: boolean
   githubPollInterval: number
-  handoffNotesEnabled: boolean
   useWorktrees: boolean
   aiProvider: string
 }
@@ -94,7 +92,6 @@ interface OpenCodeInstallStatus {
 
 const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'focusFilterStates'> = {
   agentInstructions: '',
-  handoffNotesTemplate: '',
   aiProvider: 'claude-code',
   projectColor: '',
   useWorktrees: true,
@@ -107,15 +104,13 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   codeCleanupTasksEnabled: false,
   taskDisplayTitleMetadataUpdatesEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
-  handoffNotesEnabled: true,
   useWorktrees: true,
   aiProvider: 'claude-code',
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [instructions, handoffTemplate, provider, color, useWorktrees, runCommand, focusFilterStates] = await Promise.all([
+  const [instructions, provider, color, useWorktrees, runCommand, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
-    getProjectConfig(projectId, 'handoff_notes_template'),
     getProjectConfig(projectId, 'ai_provider'),
     getProjectConfig(projectId, 'project_color'),
     getProjectConfig(projectId, 'use_worktrees'),
@@ -125,7 +120,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
 
   return {
     agentInstructions: instructions ?? DEFAULT_PROJECT_SETTINGS.agentInstructions,
-    handoffNotesTemplate: handoffTemplate ?? DEFAULT_PROJECT_SETTINGS.handoffNotesTemplate,
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,
     projectColor: color ?? DEFAULT_PROJECT_SETTINGS.projectColor,
     useWorktrees: useWorktrees == null ? DEFAULT_PROJECT_SETTINGS.useWorktrees : useWorktrees === 'true',
@@ -150,13 +144,12 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, handoffNotesEnabled, useWorktrees, aiProvider] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
     getConfig('task_display_title_metadata_updates_enabled'),
     getConfig('github_poll_interval'),
-    getConfig('handoff_notes_enabled'),
     getConfig('use_worktrees'),
     getConfig('ai_provider'),
   ])
@@ -167,7 +160,6 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
     taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
-    handoffNotesEnabled: handoffNotesEnabled == null ? DEFAULT_GLOBAL_SETTINGS.handoffNotesEnabled : handoffNotesEnabled === 'true',
     useWorktrees: useWorktrees == null ? DEFAULT_GLOBAL_SETTINGS.useWorktrees : useWorktrees === 'true',
     aiProvider: aiProvider ?? DEFAULT_GLOBAL_SETTINGS.aiProvider,
   }

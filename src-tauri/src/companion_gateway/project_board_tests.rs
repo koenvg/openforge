@@ -311,7 +311,6 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
         "/secret/openforge",
         "c2VjcmV0",
         "initialPrompt",
-        "handoffNotes",
         "provider",
         "sessionId",
         completed.id.as_str(),

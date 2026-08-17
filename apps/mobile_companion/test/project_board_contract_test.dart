@@ -92,7 +92,6 @@ void main() {
       for (final sensitive in <String>[
         'filesystemPath',
         'initialPrompt',
-        'handoffNotes',
         'provider',
         'sessionId',
       ]) {

@@ -342,9 +342,6 @@ async fn authenticated_delete_is_backlog_only_bodyless_and_permanent() {
         let backlog = database
             .create_task("Delete me", "backlog", Some(&project.id), None, None)
             .expect("create backlog Task");
-        database
-            .update_task_summary(&backlog.id, "Reference notes")
-            .expect("save reference notes");
         let doing = database
             .create_task("Do not delete", "doing", Some(&project.id), None, None)
             .expect("create doing Task");

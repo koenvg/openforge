@@ -291,7 +291,6 @@ async fn task_detail_handler(
         project_id: detail.project_id,
         project_name: detail.project_name,
         board_status: detail.board_status,
-        handoff_notes: detail.handoff_notes,
         agent_state: detail.agent_state,
         agent_terminal_available,
         agent_error_summary: detail.agent_error_summary,

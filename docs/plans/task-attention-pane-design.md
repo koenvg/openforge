@@ -38,14 +38,12 @@ Selected direction. Polished command-center treatment with neutral cards, semant
 - Priority order:
   1. Attention summary / next action.
   2. Pull Request, review, CI, merge, and comment signals.
-  3. Handoff Notes preview.
-  4. Initial Prompt collapsed or tightly previewed.
-  5. Secondary metadata such as dependencies, dependents, labels, and workspace.
+  3. Initial Prompt collapsed or tightly previewed.
+  4. Secondary metadata such as dependencies, dependents, labels, and workspace.
 - Multiple Pull Requests are first-class and should be represented equally; do not select one primary or driving PR.
 - Pull Requests should render as a vertical compact card stack.
 - Unaddressed Pull Request comments should render as full text inline under the relevant Pull Request card.
 - Visual treatment should stay calm by default: neutral cards and semantic chips, with severe blockers using subtle semantic accent borders rather than loud alert panels.
-- Handoff Notes should use a short preview by default with explicit expand behavior.
 - Initial Prompt should be collapsed or limited to two or three lines by default with explicit expand behavior.
 
 ## Recommended implementation shape
@@ -65,10 +63,9 @@ Selected direction. Polished command-center treatment with neutral cards, semant
 
 Add focused tests for business/product behavior rather than visual styling:
 
-- The Task Attention Pane renders attention/PR/comment signals before Handoff Notes and Initial Prompt.
+- The Task Attention Pane renders attention/PR/comment signals before the Initial Prompt.
 - Multiple Pull Requests render with equal structure/weight in source order or the existing task PR order; no primary PR is selected.
 - Unaddressed comments render full text inline under the related Pull Request.
-- Handoff Notes are previewed by default and can be expanded.
 - Initial Prompt is collapsed or tightly previewed by default and can be expanded.
 - Empty states remain calm when no Pull Requests or no comments exist.
 

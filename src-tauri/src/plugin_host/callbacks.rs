@@ -85,7 +85,6 @@ impl PluginHost {
             "openforge.tasks.get" => self.get_task_for_host(params),
             "openforge.tasks.create" => self.create_task_for_host(params),
             "openforge.tasks.compose" => self.compose_task_for_host(params).await,
-            "openforge.tasks.updateSummary" => self.update_task_summary_for_host(params),
             "openforge.tasks.updateStatus" => self.update_task_status_for_host(params).await,
             "openforge.tasks.listStartPromptContributions" => {
                 self.list_start_prompt_contributions_for_host(params)

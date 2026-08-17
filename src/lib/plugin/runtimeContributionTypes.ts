@@ -63,7 +63,6 @@ export type RuntimeHostBridge = {
   getTask?(taskId: string): Promise<Task>
   createTask?(request: CreateTaskRequest): Promise<Task>
   composeTask?(request: ComposeTaskRequest): Promise<ComposeTaskResult | null>
-  updateTaskSummary?(taskId: string, summary: string): Promise<void>
   updateTaskStatus?(taskId: string, status: WritableBoardStatus): Promise<void>
   listStartPromptContributions?(projectId: string): Promise<StartPromptContribution[]>
   configureStartPromptContribution?(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]>

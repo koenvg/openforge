@@ -9,7 +9,6 @@ export interface ProjectSettingsSavePayload {
   projectName: string
   projectPath: string
   agentInstructions: string
-  handoffNotesTemplate: string
   projectColor: string
   runCommand: string
   focusFilterStates: TaskState[]
@@ -21,7 +20,6 @@ export interface GlobalSettingsSavePayload {
   codeCleanupTasksEnabled?: boolean
   taskDisplayTitleMetadataUpdatesEnabled?: boolean
   githubPollInterval?: number
-  handoffNotesEnabled?: boolean
   useWorktrees?: boolean
   aiProvider?: string
 }
@@ -33,7 +31,6 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
   // written here so exactly one path persists them, avoiding a debounced-vs-immediate race.
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
-  await setProjectConfig(payload.projectId, 'handoff_notes_template', payload.handoffNotesTemplate)
   await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)
   await setProjectConfig(payload.projectId, RUN_COMMAND_CONFIG_KEY, payload.runCommand)
   await saveFocusFilterStates(payload.projectId, payload.focusFilterStates)
@@ -50,9 +47,6 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   }
   if (payload.githubPollInterval !== undefined) {
     await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))
-  }
-  if (payload.handoffNotesEnabled !== undefined) {
-    await setConfig('handoff_notes_enabled', payload.handoffNotesEnabled ? 'true' : 'false')
   }
   if (payload.useWorktrees !== undefined) await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
   if (payload.aiProvider !== undefined) await setConfig('ai_provider', payload.aiProvider)

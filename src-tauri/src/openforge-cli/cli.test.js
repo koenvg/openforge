@@ -177,7 +177,6 @@ const COMPACT_TASK_KEYS = ['depends_on', 'id', 'labels', 'prompt_preview', 'stat
 const VERBOSE_TASK_KEYS = [
   'initial_prompt',
   'prompt',
-  'summary',
   'worktree',
   'branch',
   'project_id',
@@ -234,7 +233,6 @@ describe('OpenForge CLI', () => {
     expect(skill).not.toContain('reverse dependents');
     expect(skill).not.toContain('repoint each dependent');
     expect(skill).not.toContain('Correct task prompt');
-    expect(skill).toContain("When an LLM picks up a task, OpenForge passes only the task's initial prompt; the task summary/Handoff Notes are not included.");
   });
 
   it('prints launcher-based help without the MCP command', async () => {
@@ -311,7 +309,7 @@ describe('OpenForge CLI', () => {
 
     for (const command of [
       'openforge task create --initial-prompt <text>',
-      'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
+      'openforge task update --task-id <id> --initial-prompt <text>',
       'openforge task start --task-id <id>',
       'openforge task list --project-id <id>',
       'openforge task get --task-id <id>',
@@ -426,12 +424,12 @@ describe('OpenForge CLI', () => {
   it('documents guarded initial-prompt updates and replacement guidance', async () => {
     const { stdout } = await runCli(['--help']);
 
-    expect(stdout).toContain('openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)');
+    expect(stdout).toContain('openforge task update --task-id <id> --initial-prompt <text>');
     expect(stdout).toContain('updates initial_prompt and prompt together only while the task has never started');
     expect(stdout).toContain('create a replacement task instead');
   });
 
-  it('requires exactly one task update field before contacting the HTTP bridge', async () => {
+  it('requires the initial prompt and rejects the removed summary flag before contacting the HTTP bridge', async () => {
     let requestCount = 0;
     const server = createServer((_req, res) => {
       requestCount += 1;
@@ -446,14 +444,14 @@ describe('OpenForge CLI', () => {
           OPENFORGE_HTTP_PORT: String(port),
         }),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining('requires exactly one of --summary or --initial-prompt'),
+        stderr: expect.stringContaining('missing required flag --initial-prompt'),
       });
       await expect(
-        runCli([
-          'task', 'update', '--task-id', 'T-1', '--summary', 'Summary', '--initial-prompt', 'Prompt',
-        ], { OPENFORGE_HTTP_PORT: String(port) }),
+        runCli(['task', 'update', '--task-id', 'T-1', '--summary', 'Summary'], {
+          OPENFORGE_HTTP_PORT: String(port),
+        }),
       ).rejects.toMatchObject({
-        stderr: expect.stringContaining('requires exactly one of --summary or --initial-prompt'),
+        stderr: expect.stringContaining('task update does not support --summary'),
       });
       expect(requestCount).toBe(0);
     } finally {
@@ -581,24 +579,6 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it('updates task summaries through the nested task update command', async () => {
-    const result = await runCliAgainstJsonBridge([
-      'task',
-      'update',
-      '--task-id',
-      'T-1',
-      '--summary',
-      'Nested summary',
-    ], {
-      method: 'POST',
-      url: '/update_task',
-      expectedBody: { task_id: 'T-1', summary: 'Nested summary' },
-      response: { task_id: 'T-1', status: 'updated' },
-    });
-
-    expect(result).toEqual({ task_id: 'T-1', status: 'updated' });
-  });
-
   it('updates never-started task prompts through the nested task update command', async () => {
     const result = await runCliAgainstJsonBridge([
       'task',
@@ -622,7 +602,6 @@ describe('OpenForge CLI', () => {
       id: 'T-1',
       initial_prompt: 'Nested get',
       prompt: 'Nested get full prompt',
-      summary: 'Nested handoff',
       status: 'backlog',
       labels: [],
       depends_on: [],
@@ -1127,7 +1106,6 @@ describe('OpenForge CLI', () => {
       id: 'T-1',
       initial_prompt: 'Completed prompt',
       prompt: 'Full prompt kept for agents',
-      summary: '## Handoff Notes\nKeep this reference',
       status: 'done',
       depends_on: [],
       labels: [],
@@ -1230,7 +1208,7 @@ describe('OpenForge CLI', () => {
     }
   });
 
-  it('updates task summaries without sending initial_prompt', async () => {
+  it('updates initial prompts without sending removed task fields', async () => {
     let seenBody = null;
     const server = createServer((req, res) => {
       if (req.url !== '/update_task' || req.method !== 'POST') {
@@ -1252,12 +1230,12 @@ describe('OpenForge CLI', () => {
     const port = await listen(server);
 
     try {
-      const { stdout } = await runCli(['task', 'update', '--task-id', 'T-1', '--summary', 'Done'], {
+      const { stdout } = await runCli(['task', 'update', '--task-id', 'T-1', '--initial-prompt', 'Done'], {
         OPENFORGE_HTTP_PORT: String(port),
       });
 
       expect(JSON.parse(stdout)).toEqual({ task_id: 'T-1', status: 'updated' });
-      expect(seenBody).toEqual({ task_id: 'T-1', summary: 'Done' });
+      expect(seenBody).toEqual({ task_id: 'T-1', initial_prompt: 'Done' });
     } finally {
       await close(server);
     }
@@ -1315,7 +1293,6 @@ describe('OpenForge CLI', () => {
         status: 'backlog',
         initial_prompt: 'Open task',
         prompt: 'Open task\nwith details',
-        summary: '## Current summary\nDetailed handoff notes',
         worktree: '/tmp/openforge/T-1',
         branch: 'task/T-1',
         labels: [{ id: 1, name: 'cleanup' }],
@@ -1392,7 +1369,6 @@ describe('OpenForge CLI', () => {
         status: 'done',
         initial_prompt: 'Done task',
         prompt: 'Done task full prompt',
-        summary: 'Done handoff notes',
         worktree: '/tmp/openforge/T-3',
         branch: 'task/T-3',
         labels: [{ id: 3, name: 'done-label' }],

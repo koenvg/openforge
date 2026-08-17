@@ -68,7 +68,6 @@ describe('plugin host commands', () => {
       initial_prompt: 'Scheduled work',
       status: 'backlog',
       prompt: null,
-      summary: null,
       agent: null,
       permission_mode: null,
       worktree_source: null,
@@ -99,7 +98,6 @@ describe('plugin host commands', () => {
       worktreeSource: null,
       worktreeBranch: null,
       title: null,
-      handoffNotesEnabled: true,
       sourceTicketUrl: null,
       codeCleanupEnabled: undefined,
       taskDisplayTitleUpdatesEnabled: undefined,
@@ -173,17 +171,17 @@ describe('plugin host commands', () => {
 
     await expect(invokePluginHostCommand('configureStartPromptContribution', {
       projectId: 'P-1',
-      id: 'handoff-notes-workflow',
+      id: 'review-guidance',
       enabled: true,
-      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      content: 'Review Task {{taskId}} before editing',
       order: 5,
       provider: 'codex',
       agent: 'ignored',
       permissionMode: 'trusted',
     })).resolves.toEqual([{
-      id: 'handoff-notes-workflow',
+      id: 'review-guidance',
       enabled: true,
-      content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+      content: 'Review Task {{taskId}} before editing',
       order: 5,
     }])
     expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
@@ -194,9 +192,9 @@ describe('plugin host commands', () => {
       projectId: 'P-1',
       key: 'start_prompt_contributions',
       value: JSON.stringify([{
-        id: 'handoff-notes-workflow',
+        id: 'review-guidance',
         enabled: true,
-        content: '<openforge_task_management>Task {{taskId}}</openforge_task_management>',
+        content: 'Review Task {{taskId}} before editing',
         order: 5,
       }]),
     })

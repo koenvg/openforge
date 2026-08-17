@@ -52,7 +52,6 @@ const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plu
 const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'code_cleanup_tasks_enabled',
   'task_display_title_metadata_updates_enabled',
-  'handoff_notes_enabled',
   'use_worktrees',
   'task_id_prefix',
   'github_poll_interval',
@@ -61,7 +60,6 @@ const PROVIDER_ONLY_EXCLUDE_KEYS = [
 const GITHUB_ONLY_EXCLUDE_KEYS = [
   'code_cleanup_tasks_enabled',
   'task_display_title_metadata_updates_enabled',
-  'handoff_notes_enabled',
   'ai_provider',
   'use_worktrees',
   'task_id_prefix',
@@ -84,7 +82,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let projectName = $state('')
   let projectPath = $state('')
   let agentInstructions = $state('')
-  let handoffNotesTemplate = $state('')
   let projectColor = $state('')
   let runCommand = $state('')
   let projectRawOverrides = $state<Record<string, string | null>>({})
@@ -93,7 +90,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let taskIdPrefix = $state('')
   let githubToken = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
-  let globalHandoffNotesEnabled = $state(true)
   let globalUseWorktrees = $state(true)
   let globalAiProvider = $state('claude-code')
   let globalPluginDefaults = $state<Map<string, boolean>>(new Map())
@@ -146,7 +142,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   const globalHierarchyValues = $derived<Record<string, string>>({
     code_cleanup_tasks_enabled: isCodeCleanupTasksEnabled ? 'true' : 'false',
     task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
-    handoff_notes_enabled: globalHandoffNotesEnabled ? 'true' : 'false',
     ai_provider: globalAiProvider,
     use_worktrees: globalUseWorktrees ? 'true' : 'false',
     task_id_prefix: taskIdPrefix,
@@ -201,7 +196,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     projectSettingsLoadError = null
     projectSettingsLoading = false
     agentInstructions = ''
-    handoffNotesTemplate = ''
     projectColor = ''
     runCommand = ''
     focusFilterStates = [...DEFAULT_FOCUS_STATES]
@@ -221,7 +215,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       codeCleanupTasksEnabled.set(isCodeCleanupTasksEnabled)
       isTaskDisplayTitleMetadataUpdatesEnabled = globalSettings.taskDisplayTitleMetadataUpdatesEnabled
       githubPollInterval = globalSettings.githubPollInterval
-      globalHandoffNotesEnabled = globalSettings.handoffNotesEnabled
       globalUseWorktrees = globalSettings.useWorktrees
       globalAiProvider = globalSettings.aiProvider
       globalSettingsLoaded = true
@@ -254,7 +247,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
 
   function applyProjectSettings(settings: ProjectSettingsConfig): void {
     agentInstructions = settings.agentInstructions
-    handoffNotesTemplate = settings.handoffNotesTemplate
     projectColor = settings.projectColor
     runCommand = settings.runCommand
     focusFilterStates = settings.focusFilterStates
@@ -290,7 +282,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
         projectName,
         projectPath,
         agentInstructions,
-        handoffNotesTemplate,
         projectColor,
         runCommand,
         focusFilterStates,
@@ -398,9 +389,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       case 'task_display_title_metadata_updates_enabled':
         isTaskDisplayTitleMetadataUpdatesEnabled = value === 'true'
         break
-      case 'handoff_notes_enabled':
-        globalHandoffNotesEnabled = value === 'true'
-        break
       case 'ai_provider':
         globalAiProvider = value
         break
@@ -419,7 +407,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       task_display_title_metadata_updates_enabled: {
         taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled,
       },
-      handoff_notes_enabled: { handoffNotesEnabled: globalHandoffNotesEnabled },
       ai_provider: { aiProvider: globalAiProvider },
       use_worktrees: { useWorktrees: globalUseWorktrees },
       task_id_prefix: { taskIdPrefix },
@@ -545,7 +532,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get projectColor() { return projectColor },
     get runCommand() { return runCommand },
     get agentInstructions() { return agentInstructions },
-    get handoffNotesTemplate() { return handoffNotesTemplate },
     get focusFilterStates() { return focusFilterStates },
     get projectRawOverrides() { return projectRawOverrides },
     get projectHierarchyValues() { return projectHierarchyValues },
@@ -590,7 +576,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     setProjectPath(value: string) { projectPath = value; scheduleSave() },
     setRunCommand(value: string) { runCommand = value; scheduleSave() },
     setAgentInstructions(value: string) { agentInstructions = value; scheduleSave() },
-    setHandoffNotesTemplate(value: string) { handoffNotesTemplate = value; scheduleSave() },
     setFocusFilterStates(value: TaskState[]) { focusFilterStates = value; scheduleSave() },
     setGithubToken(value: string) { githubToken = value; scheduleSave({ githubToken: value }) },
     clearDownloadError() { downloadingModel = null },

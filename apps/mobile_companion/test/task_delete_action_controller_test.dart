@@ -51,7 +51,6 @@ final _backlogDetail = TaskDetail(
   projectId: 'P-1',
   projectName: 'OpenForge',
   boardStatus: 'backlog',
-  handoffNotes: null,
   agentState: 'waiting',
   agentErrorSummary: null,
   createdAt: DateTime.utc(2026, 1, 1),

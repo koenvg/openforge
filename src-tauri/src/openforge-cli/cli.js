@@ -297,15 +297,10 @@ async function createTask(flags) {
 }
 
 async function updateTask(flags) {
-  const taskId = requireFlag(flags, 'taskId');
-  const summary = optionalString(flags, 'summary');
-  const initialPrompt = optionalString(flags, 'initialPrompt');
-  if ((summary === undefined) === (initialPrompt === undefined)) {
-    throw new Error('task update requires exactly one of --summary or --initial-prompt');
-  }
-  const payload = { task_id: taskId };
-  if (summary !== undefined) payload.summary = summary;
-  if (initialPrompt !== undefined) payload.initial_prompt = initialPrompt;
+  const payload = {
+    task_id: requireFlag(flags, 'taskId'),
+    initial_prompt: requireFlag(flags, 'initialPrompt'),
+  };
   printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
 }
 
@@ -522,8 +517,8 @@ const COMMAND_SPECS = [
   },
   {
     path: ['task', 'update'],
-    flags: ['taskId', 'summary', 'initialPrompt'],
-    usage: 'openforge task update --task-id <id> (--summary <text> | --initial-prompt <text>)',
+    flags: ['taskId', 'initialPrompt'],
+    usage: 'openforge task update --task-id <id> --initial-prompt <text>',
     handler: updateTask,
   },
   {
@@ -736,7 +731,6 @@ Plugin Installation is local-only for now:
 
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
-  task update --summary updates only the task summary/Handoff Notes.
   task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.
   Started or completed tasks reject prompt updates; create a replacement task instead.
 
@@ -785,7 +779,6 @@ Usage:
 ${planJsonHelp}${startHelp}
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
-  task update --summary updates only the task summary/Handoff Notes.
   task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.
   Started or completed tasks reject prompt updates; create a replacement task instead.
 

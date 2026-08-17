@@ -96,7 +96,7 @@ impl Database {
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
         migrations::ensure_tasks_columns(&conn)?;
-        migrations::ensure_handoff_notes_workflow_backfill(&conn)?;
+        migrations::ensure_handoff_notes_removed(&conn)?;
         migrations::ensure_pr_number_column(&conn)?;
         migrations::ensure_mergeability_columns(&conn)?;
         migrations::ensure_is_queued_columns(&conn)?;
@@ -149,8 +149,8 @@ pub mod test_helpers {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params!["T-100", "Test task", "backlog", None::<String>, 1000, 1000, "Test task", None::<String>, None::<String>, None::<String>],
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params!["T-100", "Test task", "backlog", None::<String>, 1000, 1000, "Test task", None::<String>, None::<String>],
         ).expect("Failed to insert test task");
     }
 }

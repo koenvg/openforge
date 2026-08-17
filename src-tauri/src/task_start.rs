@@ -420,11 +420,7 @@ impl TaskStartService {
             .get_project_config(&project_id, "additional_instructions")
             .ok()
             .flatten();
-        let handoff_notes_template = db
-            .get_project_config(&project_id, "handoff_notes_template")
-            .ok()
-            .flatten();
-        let mut start_prompt_contributions: Vec<StartPromptContribution> = db
+        let start_prompt_contributions: Vec<StartPromptContribution> = db
             .get_project_config(
                 &project_id,
                 agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
@@ -433,10 +429,6 @@ impl TaskStartService {
             .flatten()
             .and_then(|value| serde_json::from_str(&value).ok())
             .unwrap_or_default();
-        agent_lifecycle::apply_project_handoff_notes_template(
-            &mut start_prompt_contributions,
-            handoff_notes_template.as_deref(),
-        );
 
         Ok(StartContext {
             code_cleanup_enabled: db.resolve_task_bool(

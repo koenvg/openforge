@@ -37,11 +37,11 @@ describe('infoPanelSectionState', () => {
   })
 
   it('persists collapsed sections to localStorage', () => {
-    setInfoPanelSectionCollapsed('handoff-notes', true)
+    setInfoPanelSectionCollapsed('initial-prompt', true)
 
     const raw = localStorage.getItem(STORAGE_KEY)
     expect(raw).not.toBeNull()
-    expect(JSON.parse(raw as string)['handoff-notes']).toBe(true)
+    expect(JSON.parse(raw as string)['initial-prompt']).toBe(true)
   })
 
   it('stores a single global map (not scoped per task or project)', () => {

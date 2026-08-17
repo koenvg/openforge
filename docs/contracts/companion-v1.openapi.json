@@ -775,7 +775,7 @@
       "get": {
         "operationId": "streamCompanionEvents",
         "summary": "Stream coarse Task and attention resource invalidations while foregrounded",
-        "description": "Authenticated SSE stream backed by the OpenForge App Event Bus. Event data never contains internal event payloads, Handoff Notes, credentials, provider identifiers, or Agent-session identifiers. Clients refetch the named resources. Last-Event-ID resumes from the App Event Bus replay cursor when available; stream-gap requires discarding in-memory domain views and fetching fresh snapshots.",
+        "description": "Authenticated SSE stream backed by the OpenForge App Event Bus. Event data never contains internal event payloads, credentials, provider identifiers, or Agent-session identifiers. Clients refetch the named resources. Last-Event-ID resumes from the App Event Bus replay cursor when available; stream-gap requires discarding in-memory domain views and fetching fresh snapshots.",
         "security": [{ "companionDeviceBearer": [] }],
         "parameters": [
           { "$ref": "#/components/parameters/CompanionProtocolVersion" },
@@ -1165,7 +1165,6 @@
           "projectId",
           "projectName",
           "boardStatus",
-          "handoffNotes",
           "agentState",
           "agentTerminalAvailable",
           "agentErrorSummary",
@@ -1186,7 +1185,6 @@
             "type": "string",
             "enum": ["backlog", "doing", "done"]
           },
-          "handoffNotes": { "type": ["string", "null"] },
           "agentState": {
             "type": "string",
             "enum": ["waiting", "running", "blocked", "failed", "complete"]

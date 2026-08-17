@@ -73,7 +73,6 @@ describe('settingsConfig', () => {
     it('loads project settings with defaults and related collections', async () => {
       vi.mocked(getProjectConfig)
         .mockResolvedValueOnce('Be careful')
-        .mockResolvedValueOnce('## Current summary\nCustom handoff format')
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('amber')
         .mockResolvedValueOnce('false')
@@ -83,13 +82,12 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(6)
+      expect(getProjectConfig).toHaveBeenCalledTimes(5)
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees')
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'run_command')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
         agentInstructions: 'Be careful',
-        handoffNotesTemplate: '## Current summary\nCustom handoff format',
         aiProvider: 'opencode',
         projectColor: 'amber',
         useWorktrees: false,
@@ -103,7 +101,6 @@ describe('settingsConfig', () => {
 
       expect(result).toEqual({
         agentInstructions: '',
-        handoffNotesTemplate: '',
         aiProvider: 'claude-code',
         projectColor: '',
         useWorktrees: true,
@@ -121,20 +118,18 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('45')
-        .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('opencode')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(8)
+      expect(getConfig).toHaveBeenCalledTimes(7)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
         codeCleanupTasksEnabled: true,
         taskDisplayTitleMetadataUpdatesEnabled: true,
         githubPollInterval: 45,
-        handoffNotesEnabled: true,
         useWorktrees: false,
         aiProvider: 'opencode',
       })
@@ -156,7 +151,6 @@ describe('settingsConfig', () => {
         codeCleanupTasksEnabled: false,
         taskDisplayTitleMetadataUpdatesEnabled: false,
         githubPollInterval: 60,
-        handoffNotesEnabled: true,
         useWorktrees: true,
         aiProvider: 'claude-code',
       })
@@ -229,10 +223,9 @@ describe('settingsConfig', () => {
   })
 
   describe('loadGlobalSettings hierarchy keys', () => {
-    it('loads handoff + worktrees globals with correct defaults', async () => {
+    it('loads the worktree global override', async () => {
       vi.mocked(getConfig).mockImplementation(async (key: string) => {
         const map: Record<string, string> = {
-          handoff_notes_enabled: 'true',
           use_worktrees: 'false',
         }
         return map[key] ?? null
@@ -240,14 +233,12 @@ describe('settingsConfig', () => {
 
       const result = await loadGlobalSettings()
 
-      expect(result.handoffNotesEnabled).toBe(true)
       expect(result.useWorktrees).toBe(false)
     })
 
-    it('defaults handoff + worktrees to enabled and provider to claude-code when unset', async () => {
+    it('defaults worktrees to enabled and provider to claude-code when unset', async () => {
       const result = await loadGlobalSettings()
 
-      expect(result.handoffNotesEnabled).toBe(true)
       expect(result.useWorktrees).toBe(true)
       expect(result.aiProvider).toBe('claude-code')
     })

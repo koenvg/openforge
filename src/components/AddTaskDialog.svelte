@@ -127,7 +127,6 @@
       Object.assign(draft, {
         codeCleanupEnabled: defaults.codeCleanupEnabled,
         taskDisplayTitleUpdatesEnabled: defaults.taskDisplayTitleUpdatesEnabled,
-        handoffNotesEnabled: defaults.handoffNotesEnabled,
         aiProvider: defaults.aiProvider,
         useWorktree: defaults.useWorktrees,
       })
@@ -238,7 +237,6 @@
           {
             ...getWorktreeOptions(draft),
             title: draft.title.trim() || null,
-            handoffNotesEnabled: draft.handoffNotesEnabled,
             sourceTicketUrl: draft.sourceTicketUrl.trim() || null,
             codeCleanupEnabled: draft.codeCleanupEnabled,
             taskDisplayTitleUpdatesEnabled: draft.taskDisplayTitleUpdatesEnabled,

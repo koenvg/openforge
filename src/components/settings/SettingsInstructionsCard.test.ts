@@ -1,86 +1,37 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
-import { DEFAULT_HANDOFF_NOTES_TEMPLATE } from '../../lib/handoffNotes'
 
 describe('SettingsInstructionsCard', () => {
-  it('renders separate controls for agent instructions and the handoff notes template', () => {
-    render(SettingsInstructionsCard, {
-      props: {
-        agentInstructions: 'Use TDD',
-        handoffNotesTemplate: '## Current summary\nCustom template',
-        disabled: false,
-        onInstructionsChange: vi.fn(),
-        onHandoffNotesTemplateChange: vi.fn(),
-      },
-    })
-
-    expect(screen.getByDisplayValue('Use TDD')).toBeTruthy()
-    const label = screen.getByText('Handoff Notes Template').closest('label')
-    const textarea = label?.querySelector('textarea')
-    expect(textarea?.value).toBe('## Current summary\nCustom template')
-    expect(screen.getByText('Handoff Notes Template')).toBeTruthy()
-  })
-
-  it('shows the default handoff template as the placeholder when no project override is set', () => {
-    render(SettingsInstructionsCard, {
-      props: {
-        agentInstructions: '',
-        handoffNotesTemplate: '',
-        disabled: false,
-        onInstructionsChange: vi.fn(),
-        onHandoffNotesTemplateChange: vi.fn(),
-      },
-    })
-
-    const label = screen.getByText('Handoff Notes Template').closest('label')
-    const textarea = label?.querySelector('textarea')
-    expect(textarea?.placeholder).toBe(DEFAULT_HANDOFF_NOTES_TEMPLATE)
-  })
-
-  it('clears the project template when reset to default is clicked', async () => {
-    const onHandoffNotesTemplateChange = vi.fn()
-    render(SettingsInstructionsCard, {
-      props: {
-        agentInstructions: '',
-        handoffNotesTemplate: '## Current summary\nCustom template',
-        disabled: false,
-        onInstructionsChange: vi.fn(),
-        onHandoffNotesTemplateChange,
-      },
-    })
-
-    await fireEvent.click(screen.getByRole('button', { name: /reset to default template/i }))
-
-    expect(onHandoffNotesTemplateChange).toHaveBeenCalledWith('')
-  })
-
-  it('uses native disabled semantics for editable controls when disabled', async () => {
+  it('edits project agent instructions', async () => {
     const onInstructionsChange = vi.fn()
-    const onHandoffNotesTemplateChange = vi.fn()
     render(SettingsInstructionsCard, {
       props: {
         agentInstructions: 'Use TDD',
-        handoffNotesTemplate: '## Current summary\nCustom template',
+        disabled: false,
+        onInstructionsChange,
+      },
+    })
+
+    const instructions = screen.getByLabelText('Instructions')
+    expect((instructions as HTMLTextAreaElement).value).toBe('Use TDD')
+    await fireEvent.input(instructions, { target: { value: 'Use integration tests' } })
+    expect(onInstructionsChange).toHaveBeenCalledWith('Use integration tests')
+  })
+
+  it('uses native disabled semantics when project settings are unavailable', async () => {
+    const onInstructionsChange = vi.fn()
+    render(SettingsInstructionsCard, {
+      props: {
+        agentInstructions: 'Use TDD',
         disabled: true,
         onInstructionsChange,
-        onHandoffNotesTemplateChange,
       },
     })
 
     const instructions = screen.getByLabelText('Instructions') as HTMLTextAreaElement
-    const handoffTemplate = screen.getByLabelText('Handoff Notes Template') as HTMLTextAreaElement
-    const resetButton = screen.getByRole('button', { name: /reset to default template/i }) as HTMLButtonElement
-
     expect(instructions.disabled).toBe(true)
-    expect(handoffTemplate.disabled).toBe(true)
-    expect(resetButton.disabled).toBe(true)
-
     await fireEvent.input(instructions, { target: { value: 'Changed' } })
-    await fireEvent.input(handoffTemplate, { target: { value: 'Changed template' } })
-    await fireEvent.click(resetButton)
-
     expect(onInstructionsChange).not.toHaveBeenCalled()
-    expect(onHandoffNotesTemplateChange).not.toHaveBeenCalled()
   })
 })

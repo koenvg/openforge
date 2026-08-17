@@ -9,7 +9,7 @@ Allow a paired OpenForge Mobile Companion device to capture a new Task while awa
 - Creation is scoped to the currently selected, visible Project.
 - The only user-supplied field is the Task initial prompt.
 - Submission creates a Backlog Task. Starting it remains a separate explicit action from Task detail.
-- Provider, permission mode, worktree behavior, Handoff Notes, code-cleanup behavior, and other runtime settings resolve from desktop-saved Project defaults.
+- Provider, permission mode, worktree behavior, code-cleanup behavior, and other runtime settings resolve from desktop-saved Project defaults.
 - Labels, dependencies, title, source ticket, attachments, prompt editing, and Project selection inside the composer remain out of scope.
 - Existing and newly approved paired devices inherit creation authority without re-pairing, consistent with ADR 0016.
 

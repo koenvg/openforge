@@ -32,7 +32,6 @@ final _detail = TaskDetail(
   projectId: 'P-1',
   projectName: 'OpenForge',
   boardStatus: 'doing',
-  handoffNotes: null,
   agentState: 'running',
   agentErrorSummary: null,
   createdAt: DateTime.utc(2026, 7, 31, 10),

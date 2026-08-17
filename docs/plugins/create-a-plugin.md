@@ -121,7 +121,7 @@ Svelte components receive `api` and `context` props from OpenForge:
 
     const task = await api.tasks.create({
       projectId: context.projectId,
-      initialPrompt: 'Review the latest project notes and prepare Handoff Notes.',
+      initialPrompt: 'Review the latest project notes and flag unresolved decisions.',
       labelNames: ['notes']
     })
 
@@ -193,7 +193,7 @@ The exact bundler setup is up to the plugin package, but the output contract is 
 3. Use Project Plugin Enablement to enable the Trusted Plugin for a Project.
 4. Open the plugin's Notes view.
 5. Click **Create Task and start Implementation Run**.
-6. Confirm OpenForge creates a Task, starts an Implementation Run, and the prompt asks for Handoff Notes.
+6. Confirm OpenForge creates a Task, starts an Implementation Run, and passes the requested review prompt.
 
 ## Stay inside the SDK boundary
 

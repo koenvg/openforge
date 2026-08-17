@@ -11,13 +11,13 @@ import SiteHeader from './SiteHeader.astro';
     <div class="hero-copy">
       <h1 id="hero-title" data-animate-item>Ship with agents. Review like a human.</h1>
       <p id="hero-description" class="lede" data-animate-item>
-        OpenForge turns parallel AI coding work into clear tasks, handoffs, and approvals.
+        OpenForge turns parallel AI coding work into clear tasks, visible changes, and approvals.
       </p>
 
       <LandingActions links={HERO_CTA_LINKS} ariaLabel="Primary actions" class="hero-actions" animateItem />
     </div>
 
-    <div class="bento-stage" aria-label="Task, agent, handoff, and review workflow">
+    <div class="bento-stage" aria-label="Task, agent, changes, and review workflow">
       <article class="bento-card bento-card-task">
         <span class="bento-label">Task</span>
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -45,8 +45,8 @@ import SiteHeader from './SiteHeader.astro';
         <p>Run parallel agents.</p>
       </article>
 
-      <article class="bento-card bento-card-handoff">
-        <span class="bento-label">Handoff</span>
+      <article class="bento-card bento-card-changes">
+        <span class="bento-label">Changes</span>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m7 8-4 4 4 4" />
           <path d="m17 8 4 4-4 4" />
@@ -69,11 +69,11 @@ import SiteHeader from './SiteHeader.astro';
         <span class="flow-line"></span>
         <span class="flow-dot">→</span>
       </span>
-      <span class="flow-arrow flow-arrow-agent-handoff" aria-hidden="true">
+      <span class="flow-arrow flow-arrow-agent-changes" aria-hidden="true">
         <span class="flow-line"></span>
         <span class="flow-dot">↓</span>
       </span>
-      <span class="flow-arrow flow-arrow-handoff-review" aria-hidden="true">
+      <span class="flow-arrow flow-arrow-changes-review" aria-hidden="true">
         <span class="flow-line"></span>
         <span class="flow-dot">←</span>
       </span>

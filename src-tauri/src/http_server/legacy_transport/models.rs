@@ -26,13 +26,12 @@ pub struct StartTaskRequest {
     pub task_id: String,
 }
 
-/// Request to update exactly one task field. Summary remains the Handoff Notes
-/// channel; initial_prompt invokes the guarded never-started prompt replacement.
+/// Request to replace the initial prompt of a task that has never started.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateTaskRequest {
     pub task_id: String,
-    pub initial_prompt: Option<String>,
-    pub summary: Option<String>,
+    pub initial_prompt: String,
 }
 
 /// Response containing the updated task ID
@@ -88,7 +87,6 @@ pub struct GetTaskInfoResponse {
     pub id: String,
     pub initial_prompt: String,
     pub prompt: Option<String>,
-    pub summary: Option<String>,
     pub status: String,
     pub depends_on: Vec<String>,
     pub labels: Vec<db::TaskLabelRow>,

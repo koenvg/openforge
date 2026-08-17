@@ -810,7 +810,7 @@ Ask the user to run `pnpm electron:dev` (never run it yourself) and confirm:
    full diff and all pending comments, with Comment / Approve / Request Changes.
 3. Submit from the final step; the review posts and pending comments clear in both tabs.
 
-- [ ] **Step 3: Handoff notes**
+- [ ] **Step 3: Completion summary**
 
 Summarize the change, the commands run and their results, and anything deferred
 (e.g. reviewed-file state in the walkthrough — intentionally out of scope).

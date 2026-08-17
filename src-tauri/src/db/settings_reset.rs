@@ -5,7 +5,6 @@ use rusqlite::Result;
 pub const HIERARCHY_PROJECT_CONFIG_KEYS: &[&str] = &[
     "code_cleanup_tasks_enabled",
     "task_display_title_metadata_updates_enabled",
-    "handoff_notes_enabled",
     "ai_provider",
     "use_worktrees",
     "task_id_prefix",

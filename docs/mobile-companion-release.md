@@ -12,7 +12,7 @@ Signing ownership stays outside this repository:
 - The Android release owner controls the upload keystore and passwords used for both APK and AAB builds. Keep the same key for future updates.
 - `.p12`, `.mobileprovision`, `.jks`, `.keystore`, generated signing configuration, and local key-property files are ignored. Never commit or paste them into build logs.
 
-The iOS and Android signing owners should each have at least two trusted maintainers with a documented recovery path. Do not share credentials through Task prompts, Handoff Notes, chat, or repository files.
+The iOS and Android signing owners should each have at least two trusted maintainers with a documented recovery path. Do not share credentials through Task prompts, chat, or repository files.
 
 ## Versioning
 

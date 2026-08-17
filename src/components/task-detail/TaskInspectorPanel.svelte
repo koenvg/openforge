@@ -19,7 +19,7 @@
 {#if task === null}
   <aside data-testid="task-inspector-panel" class="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto border-l border-base-300 bg-base-100 p-6" aria-label="Task inspector">
     <p class="text-sm font-medium text-base-content/60">Select a task to see details</p>
-    <p class="max-w-52 text-center text-xs text-base-content/45">Ticket, pull requests, handoff notes, prompt, and labels stay visible here.</p>
+    <p class="max-w-52 text-center text-xs text-base-content/45">Ticket, pull requests, prompt, and labels stay visible here.</p>
   </aside>
 {:else}
   <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Task inspector for {task.id}">

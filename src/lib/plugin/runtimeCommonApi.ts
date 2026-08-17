@@ -121,7 +121,6 @@ export class RuntimeCommonApiRegistry {
         list: async (request) => this.services.host.listTasks ? this.services.host.listTasks(request) : unavailableCapability('tasks.list'),
         get: async (taskId) => this.services.host.getTask ? this.services.host.getTask(taskId) : unavailableCapability('tasks.get'),
         create: async (request) => this.services.host.createTask ? this.services.host.createTask(request) : unavailableCapability('tasks.create'),
-        updateSummary: async (taskId, summary) => this.services.host.updateTaskSummary ? this.services.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
         updateStatus: async (taskId, status) => this.services.host.updateTaskStatus ? this.services.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
         compose: async (request) => this.services.host.composeTask
           ? this.services.host.composeTask(request)

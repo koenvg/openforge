@@ -5,11 +5,9 @@ description: Manage OpenForge tasks from AI providers using the installed OpenFo
 
 # OpenForge task management
 
-Use this skill when you need to create follow-up work, inspect task context, update Handoff Notes, or correct a task prompt before execution starts.
+Use this skill when you need to create follow-up work, inspect task context, or correct a task prompt before execution starts.
 
-`openforge task update --summary` updates only the task `summary` field (Handoff Notes). `openforge task update --initial-prompt` atomically replaces both `initial_prompt` and the effective `prompt`, but only while the task has never started. Started or completed tasks require a replacement task.
-
-When an LLM picks up a task, OpenForge passes only the task's initial prompt; the task summary/Handoff Notes are not included.
+`openforge task update --initial-prompt` atomically replaces both `initial_prompt` and the effective `prompt`, but only while the task has never started. Started or completed tasks require a replacement task.
 
 Use the installed `openforge` launcher directly. If `openforge` is not available on PATH in a non-interactive shell, call the launcher with its explicit fallback path:
 
@@ -45,14 +43,13 @@ Before creating follow-up Tasks, run the project label discovery command when yo
 
 When creating multiple related Tasks, decide whether any Task must be done before another can start. For non-linear multi-Task follow-up work, use `openforge task plan apply --file <plan.json>` as the preferred workflow for non-linear multi-Task follow-up work so local dependency keys, labels, prompts, and generated task IDs are resolved in one operation. Use `dependsOn` for current or prerequisite task IDs and local keys. For simple linear follow-ups, link prerequisites immediately with `--depends-on` during creation when the predecessor ID is known, or use `openforge task dependencies link --chain "T-1 -> T-2 -> T-3"` after all Task IDs exist. When the planning LLM creates dependent follow-up Tasks from the Task it is currently handling, include the current Task ID in those Tasks’ existing `dependsOn` native prerequisites unless the user explicitly waives the dependency.
 
-If labels or dependency order are unclear, mention that uncertainty in Handoff Notes or open questions instead of guessing.
+If labels or dependency order are unclear, report that uncertainty instead of guessing.
 
 ## Common commands
 
 ```bash
 openforge task plan apply --file follow-up-plan.json
 openforge task create --initial-prompt "Describe the follow-up work" --worktree "$PWD" --depends-on T-122 --label cleanup
-openforge task update --task-id T-123 --summary "What changed and what needs attention"
 openforge task update --task-id T-124 --initial-prompt "Corrected backlog prompt"
 openforge task get --task-id T-123
 openforge task start --task-id T-123
@@ -97,9 +94,7 @@ openforge task update --help
 ## Guidance
 
 - Create follow-up tasks for real cleanup or missing work; do not create tasks for trivial preferences.
-- Update the active task with concise Handoff Notes before finishing; this writes the task summary only.
 - Use `task delete` only when the user explicitly wants an OpenForge task removed; it returns JSON status output from the backend deletion bridge.
 - Use dependencies to record prerequisite ordering. `task start` enforces that every dependency is done before launching the configured implementation flow.
 - Use labels to record task categories or triage context when useful. Run `project labels list` before creating follow-up tasks when a project id is available; reuse useful existing labels and avoid noisy one-off labels.
-- Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.
 - The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.

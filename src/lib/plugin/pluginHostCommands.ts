@@ -29,7 +29,6 @@ import {
   sendAgentFollowUp,
   startImplementation,
   updateTaskStatus,
-  updateTaskSummary,
   writePty,
 } from '../ipc'
 import { activeProjectId, currentView, selectedTaskId, taskActiveView } from '../stores'
@@ -266,7 +265,6 @@ export function createPluginRuntimeHost(pluginId: string) {
     getTask: (taskId: string) => getTaskDetail(taskId),
     createTask: (request: CreateTaskRequest) => createTaskFromPluginRequest(request),
     composeTask: composeTaskFromPluginRequest,
-    updateTaskSummary: (taskId: string, summary: string) => updateTaskSummary(taskId, summary),
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
     listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),
     configureStartPromptContribution: (request: ConfigureStartPromptContributionRequest) => configureStartPromptContributionForProject(request),

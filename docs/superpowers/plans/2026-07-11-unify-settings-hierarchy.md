@@ -4,7 +4,6 @@
 
 **Goal:** Give OpenForge one consistent global → project → task settings cascade so a user sets defaults once and overrides them per project and per task.
 
-**Architecture:** `effective = task ?? project ?? global ?? hardcoded default` (null = inherit). Global defaults live in the `config` KV table; project overrides in `project_config`; task-level values are snapshotted onto the task at creation (existing columns for handoff/worktree, a new `task_config` KV table for cleanup/title-update/provider). Plugin enablement gains a global-default layer (`global_plugins` table). One shared `HierarchicalSettingsCard`, driven by a settings registry, renders the grouped settings identically on the global and project pages.
 
 **Tech Stack:** Rust sidecar (`rusqlite` + `rusqlite_migration`), Svelte 5 (runes) + TypeScript renderer, Vitest, SQLite. IPC via typed wrappers in `src/lib/ipc.ts` over the HTTP bridge to the sidecar.
 
@@ -26,7 +25,6 @@
 Config / project_config / task_config **keys** (strings):
 - `code_cleanup_tasks_enabled` — cleanup (bool)
 - `task_display_title_metadata_updates_enabled` — title auto-update (bool)
-- `handoff_notes_enabled` — handoff enablement (bool)
 - `ai_provider` — provider (string)
 - `use_worktrees` — default-to-worktrees (bool)
 - `task_id_prefix` — task ID prefix (string; project + global only)
@@ -202,7 +200,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                handoff_notes_enabled: true,
             })
             .unwrap();
 
@@ -406,7 +403,6 @@ fn test_resolve_task_bool_precedence() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            handoff_notes_enabled: true,
         })
         .unwrap();
     let key = "code_cleanup_tasks_enabled";
@@ -441,7 +437,6 @@ fn test_resolve_ai_provider_for_task_precedence() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            handoff_notes_enabled: true,
         })
         .unwrap();
 
@@ -558,7 +553,6 @@ fn test_create_task_snapshots_task_config_when_provided() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            handoff_notes_enabled: true,
             code_cleanup_enabled: Some(true),
             task_display_title_updates_enabled: Some(false),
             ai_provider: Some("opencode"),
@@ -602,7 +596,6 @@ pub struct NewTaskOptions<'a> {
     pub worktree_source: Option<&'a str>,
     pub worktree_branch: Option<&'a str>,
     pub title: Option<&'a str>,
-    pub handoff_notes_enabled: bool,
     pub code_cleanup_enabled: Option<bool>,
     pub task_display_title_updates_enabled: Option<bool>,
     pub ai_provider: Option<&'a str>,
@@ -681,14 +674,12 @@ In `src/lib/ipc.ts`, extend `CreateTaskOptions` (`:9`) and the `createTask` dest
     worktreeSource = null,
     worktreeBranch = null,
     title = null,
-    handoffNotesEnabled = true,
     codeCleanupEnabled,
     taskDisplayTitleUpdatesEnabled,
     aiProvider = null,
   } = options
   const task = await invoke<RawTask>("create_task", {
     initialPrompt, status, projectId, permissionMode, dependsOn, labelNames,
-    worktreeSource, worktreeBranch, title, handoffNotesEnabled,
     codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, aiProvider,
   });
 ```
@@ -735,7 +726,6 @@ fn test_task_id_prefix_prefers_project_override() {
             worktree_source: None,
             worktree_branch: None,
             title: None,
-            handoff_notes_enabled: true,
             code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
@@ -819,7 +809,6 @@ use rusqlite::Result;
 pub const HIERARCHY_PROJECT_CONFIG_KEYS: &[&str] = &[
     "code_cleanup_tasks_enabled",
     "task_display_title_metadata_updates_enabled",
-    "handoff_notes_enabled",
     "ai_provider",
     "use_worktrees",
     "task_id_prefix",
@@ -1159,9 +1148,6 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
     default: 'false',
   },
   {
-    key: 'handoff_notes_enabled',
-    label: 'Handoff Notes',
-    description: 'Ask the agent to maintain reviewer handoff notes',
     control: 'toggle',
     levels: ['global', 'project', 'task'],
     default: 'true',
@@ -1305,7 +1291,6 @@ git commit -m "feat(settings): shared HierarchicalSettingsCard component"
 
 **Interfaces:**
 - Consumes: `getConfig`/`setConfig` (existing), `getGlobalPluginDefaults`/`setGlobalPluginDefault` (1.7).
-- Produces: `GlobalSettingsConfig` gains `handoffNotesEnabled: boolean` and `useWorktrees: boolean` (provider/prefix/poll already present or added). Booleans still serialize as `'true'`/`'false'`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1319,16 +1304,13 @@ import { loadGlobalSettings } from './settingsConfig'
 describe('loadGlobalSettings hierarchy keys', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('loads handoff + worktrees globals with correct defaults', async () => {
     vi.spyOn(ipc, 'getConfig').mockImplementation(async (key: string) => {
       const map: Record<string, string> = {
-        handoff_notes_enabled: 'true',
         use_worktrees: 'false',
       }
       return map[key] ?? null
     })
     const s = await loadGlobalSettings()
-    expect(s.handoffNotesEnabled).toBe(true)
     expect(s.useWorktrees).toBe(false)
   })
 })
@@ -1341,9 +1323,7 @@ Expected: FAIL — fields absent.
 
 - [ ] **Step 3: Extend config load/save**
 
-In `settingsConfig.ts`: add `handoffNotesEnabled: boolean` and `useWorktrees: boolean` to `GlobalSettingsConfig`; add defaults (`handoffNotesEnabled: true`, `useWorktrees: true`) to `DEFAULT_GLOBAL_SETTINGS`; add `getConfig('handoff_notes_enabled')` and `getConfig('use_worktrees')` to the `Promise.all` in `loadGlobalSettings` and map them (`=== 'true'`, but handoff defaults true when null: `handoffNotesEnabled: v == null ? true : v === 'true'`).
 
-In `settingsSaver.ts`: add both to `GlobalSettingsSavePayload` and `setConfig('handoff_notes_enabled', ...)` / `setConfig('use_worktrees', ...)` in `saveGlobalSettings`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1361,7 +1341,6 @@ Expected: PASS.
 
 ```bash
 git add src/lib/settingsConfig.ts src/lib/settingsSaver.ts src/lib/settingsConfig.test.ts src/components/settings/SettingsView.svelte
-git commit -m "feat(settings): global defaults for handoff/worktrees + grouped card"
 ```
 
 ---
@@ -1408,7 +1387,6 @@ In the project branch of `SettingsView.svelte`:
 - `const effective = computeEffectiveProjectSettings(globalStrings, projectRawStrings)`.
 - Render `<HierarchicalSettingsCard mode="project" values={effective} pluginRows={projectPluginRows} onChange={handleProjectSettingChange} onPluginToggle={handleProjectPluginToggle} onResetToGlobal={handleResetToGlobal} />`.
 - `handleProjectSettingChange(key, value)` calls `setProjectConfig(projectId, key, value)` (writes an explicit override) and updates local state so the toggle reflects immediately. `handleProjectPluginToggle` uses the existing `setPluginEnabled`.
-- Extend `loadProjectSettings`/`saveProjectSettings` for `code_cleanup_tasks_enabled`, `task_display_title_metadata_updates_enabled`, `handoff_notes_enabled`, `github_poll_interval` (provider, worktrees, prefix already partially present — align them).
 
 - [ ] **Step 4: Verify + commit**
 
@@ -1489,16 +1467,13 @@ git commit -m "feat(settings): default-to-global reset for project overrides"
 ### Task 4.3: New-task dialog — task-level toggles seeded from project effective
 
 **Files:**
-- Modify: `src/components/AddTaskDialog.svelte` (`initializeDialog` seeding ~`:137`; the create call ~`:413`; add the grouped task-level controls near the existing handoff/worktree toggles ~`:709`)
 - Test: `src/components/AddTaskDialog.*.test.ts` if one exists, else a small logic helper test
 
 **Interfaces:**
 - Consumes: `getProjectConfig`/`getConfig` (or a shared `loadTaskDefaults(projectId)` helper) to seed each task-level setting from the project's effective value; `createTask` new options (1.5).
-- Produces: on create, passes `codeCleanupEnabled`, `taskDisplayTitleUpdatesEnabled`, `aiProvider`, plus existing `handoffNotesEnabled` and worktree source.
 
 - [ ] **Step 1: Write the failing test (seeding logic)**
 
-Extract the seeding into a testable helper `loadTaskLevelDefaults(projectId)` in `src/lib/taskDefaults.ts` returning `{ codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, handoffNotesEnabled, aiProvider, useWorktrees }`, each resolved as project ?? global ?? default. Test it with mocked ipc:
 
 ```ts
 import { vi, it, expect, beforeEach } from 'vitest'
@@ -1524,7 +1499,6 @@ Expected: FAIL — helper missing.
 
 - [ ] **Step 3: Implement helper + wire dialog**
 
-Create `src/lib/taskDefaults.ts` resolving each task-level key `project ?? global ?? default` (reuse `computeEffectiveProjectSettings` where convenient; for provider use `getResolvedAiProvider`). In `AddTaskDialog.svelte`, call it in `initializeDialog`, store `$state` for each toggle (cleanup, title-update, handoff already exists, provider already exists), render the grouped toggles beside the existing handoff/worktree toggles reusing the same daisyUI toggle markup, and include the values in the `createTask(...)` options object.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1545,8 +1519,6 @@ git commit -m "feat(tasks): new-task dialog seeds task-level settings from proje
 - [ ] **Full backend suite:** `cargo test` from `src-tauri/` — all pass.
 - [ ] **Frontend:** `pnpm exec tsc --noEmit` and `pnpm test` — all pass. Fix any migration/contract snapshot tests that assert on command lists or schema (expected to need updates for the new commands/tables).
 - [ ] **Manual smoke (verify skill):** set a global default → open a project, confirm the grouped card shows it, override it, confirm "Default to global settings" clears the override → create a task, confirm the dialog seeds from the project and the override persists (check `task_config`) and drives the start prompt.
-- [ ] **Post-implementation review** (Babysitter review effect / `superpowers:requesting-code-review`): resolve blocking findings before handoff.
-- [ ] **Update OpenForge handoff notes** (`openforge task update --task-id AVIV-68 --summary ...`) with final status.
 
 ## Self-review notes (coverage against spec)
 

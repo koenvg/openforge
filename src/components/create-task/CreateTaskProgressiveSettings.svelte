@@ -33,10 +33,6 @@
   </summary>
   <div class="grid gap-3 border-t border-base-300 p-4 sm:grid-cols-2">
     <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-      <input type="checkbox" class="toggle toggle-primary toggle-sm" aria-label="Handoff notes" bind:checked={draft.handoffNotesEnabled} />
-      <span>Include handoff notes</span>
-    </label>
-    <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
       <input type="checkbox" class="toggle toggle-primary toggle-sm" aria-label="Code cleanup tasks" bind:checked={draft.codeCleanupEnabled} />
       <span>Create code cleanup tasks</span>
     </label>

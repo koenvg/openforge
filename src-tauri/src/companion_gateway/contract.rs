@@ -226,7 +226,6 @@ pub(crate) struct CompanionTaskDetailResponse {
     pub(crate) project_id: String,
     pub(crate) project_name: String,
     pub(crate) board_status: String,
-    pub(crate) handoff_notes: Option<String>,
     pub(crate) agent_state: String,
     pub(crate) agent_terminal_available: bool,
     pub(crate) agent_error_summary: Option<String>,

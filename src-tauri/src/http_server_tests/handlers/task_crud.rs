@@ -55,9 +55,7 @@ async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
                 None,
             )
             .expect("create open task");
-        db.update_task_summary(&open_task.id, "Open task handoff notes")
-            .expect("seed open summary");
-        let done_task = db
+        let _done_task = db
             .create_task(
                 "Done task full prompt",
                 "done",
@@ -66,8 +64,6 @@ async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
                 None,
             )
             .expect("create done task");
-        db.update_task_summary(&done_task.id, "Done task handoff notes")
-            .expect("seed done summary");
         open_task.id
     };
 
@@ -239,64 +235,7 @@ async fn test_get_tasks_handler_rejects_invalid_state() {
 }
 
 #[tokio::test]
-async fn test_update_task_handler_updates_summary_without_changing_initial_prompt() {
-    let (state, path) = test_state("http_update_task_summary_only");
-    let (task_id, project_id) = {
-        let db = state.db.lock().expect("lock db");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
-        let task = db
-            .create_task("Original prompt", "backlog", Some(&project.id), None, None)
-            .expect("create task");
-        (task.id, project.id)
-    };
-    let mut events = state
-        .app_event_tx
-        .as_ref()
-        .expect("app event sender")
-        .subscribe();
-
-    let router = create_router(state.clone());
-    let response = router
-        .oneshot(
-            Request::builder()
-                .uri("/update_task")
-                .method("POST")
-                .header("content-type", "application/json")
-                .body(Body::from(format!(
-                    r#"{{"task_id":"{}","summary":"New Summary"}}"#,
-                    task_id
-                )))
-                .expect("build request"),
-        )
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let json = response_body_json(response).await;
-    assert_eq!(json["task_id"], task_id);
-    assert_eq!(json["status"], "updated");
-    let event = events.try_recv().expect("Task invalidation");
-    assert_eq!(event.event_name, "task-changed");
-    assert_eq!(event.payload["task_id"], task_id);
-    assert_eq!(event.payload["project_id"], project_id);
-
-    let task = state
-        .db
-        .lock()
-        .expect("lock db")
-        .get_task(&task_id)
-        .expect("get task")
-        .expect("task exists");
-    assert_eq!(task.initial_prompt, "Original prompt");
-    assert_eq!(task.summary, Some("New Summary".to_string()));
-
-    let _ = std::fs::remove_file(path);
-}
-
-#[tokio::test]
-async fn test_update_task_handler_updates_never_started_initial_prompt_and_preserves_summary() {
+async fn test_update_task_handler_updates_never_started_initial_prompt() {
     let (state, path) = test_state("http_update_task_initial_prompt");
     let task_id = {
         let db = state.db.lock().expect("lock db");
@@ -306,8 +245,6 @@ async fn test_update_task_handler_updates_never_started_initial_prompt_and_prese
         let task = db
             .create_task("Original prompt", "backlog", Some(&project.id), None, None)
             .expect("create task");
-        db.update_task_summary(&task.id, "Existing Summary")
-            .expect("seed summary");
         task.id
     };
 
@@ -337,7 +274,6 @@ async fn test_update_task_handler_updates_never_started_initial_prompt_and_prese
         .expect("task exists");
     assert_eq!(task.initial_prompt, "New prompt");
     assert_eq!(task.prompt.as_deref(), Some("New prompt"));
-    assert_eq!(task.summary.as_deref(), Some("Existing Summary"));
 
     let _ = std::fs::remove_file(path);
 }

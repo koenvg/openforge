@@ -83,7 +83,7 @@ These actions use explicit, Task-scoped Companion routes backed by shared Rust l
 57. As an OpenForge user, I want new pairing and paired-device copy to disclose terminal and Task-action authority accurately, so that the credential is never described as read-only.
 58. As a mobile user away from the Mac, I want Companion Task Authority to remain usable while macOS is locked, so that the companion fulfills its remote purpose.
 59. As an OpenForge user, I want gateway disablement, device revocation, and host reset to immediately remove Task-action authority, so that existing trust controls remain effective.
-60. As a privacy-conscious user, I want action logs to omit prompts, Handoff Notes, terminal content, credentials, and provider secrets, so that diagnostics do not become another data store.
+60. As a privacy-conscious user, I want action logs to omit prompts, terminal content, credentials, and provider secrets, so that diagnostics do not become another data store.
 61. As a mobile user using assistive technology, I want the Project switcher, tabs, counts, Task rows, pending states, confirmations, and outcomes to have meaningful semantic labels, so that the workflow is operable with VoiceOver or TalkBack.
 62. As a mobile user, I want loading, empty, unavailable, authorization, invalid-state, desktop-action-required, and operation-failed states distinguished by text as well as color, so that recovery is understandable.
 63. As a developer, I want the Project catalog, Board snapshot, actions, and new invalidation resources represented in the checked-in Companion contract, so that Rust and Dart cannot drift.
@@ -117,7 +117,7 @@ These actions use explicit, Task-scoped Companion routes backed by shared Rust l
 - The projection reuses the existing backend Task-attention classifier for Focus and the same Project configuration used by desktop for Focus states and Out of Focus membership. It extends that authority across In Flight, Out of Focus, and Backlog rather than letting the Companion infer lane membership from raw rows.
 - Every active Task belongs to exactly one lane. Backlog status maps to Backlog. Doing Tasks explicitly configured Out of Focus map there. Remaining doing Tasks map to Focus when the authoritative attention projection includes them and otherwise to In Flight. Completed/legacy done Tasks are excluded.
 - Focus order remains the authoritative attention order. Other lanes use the desktop session/activity ordering. Counts are derived from the same partition returned in the snapshot.
-- Board rows expose only the fields needed for mobile triage: Task identifier, display title, lane, normalized state, safe reason, and relevant activity time. The Project identity/name and snapshot time belong to the snapshot. Raw prompts, Handoff Notes, repository data, terminal data, internal session identifiers, provider configuration, and Pull Request payloads are omitted.
+- Board rows expose only the fields needed for mobile triage: Task identifier, display title, lane, normalized state, safe reason, and relevant activity time. The Project identity/name and snapshot time belong to the snapshot. Raw prompts, repository data, terminal data, internal session identifiers, provider configuration, and Pull Request payloads are omitted.
 - The existing cross-Project attention resource may remain during the pre-release migration, but the new mobile home no longer depends on it. It must not become the source for non-Focus lanes.
 
 ### Companion API and live events
@@ -170,7 +170,7 @@ These actions use explicit, Task-scoped Companion routes backed by shared Rust l
 - Device revocation, gateway disablement, host identity reset, credential failure, and certificate-pin failure immediately remove Task-action access through the existing authorization boundary.
 - Action routes use the same pinned TLS identity, bearer credential verification, request limits, and safe error envelope as existing authenticated Companion resources.
 - The gateway resolves Task ownership from the database. A caller cannot supply a repository path or use a Task identifier to operate on a different or hidden Project outside the catalog policy.
-- Logs may include safe action metadata such as request identifier, device identifier, Task identifier, action, outcome class, and timing. They must omit bearer credentials, prompts, Handoff Notes, terminal data, provider options, workspace paths, repository contents, and error bodies that may contain those values.
+- Logs may include safe action metadata such as request identifier, device identifier, Task identifier, action, outcome class, and timing. They must omit bearer credentials, prompts, terminal data, provider options, workspace paths, repository contents, and error bodies that may contain those values.
 
 ### Persistence and compatibility
 

@@ -127,14 +127,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sensitive Task'));
       await tester.pumpAndSettle();
-      expect(find.text('Private Handoff Notes'), findsOneWidget);
+      expect(find.text('Handle this sensitive Task.'), findsOneWidget);
 
       pairing.liveUnavailable();
       await tester.pumpAndSettle();
 
       expect(find.text('Desktop unavailable'), findsOneWidget);
       expect(find.text('Sensitive Task'), findsNothing);
-      expect(find.text('Private Handoff Notes'), findsNothing);
+      expect(find.text('Handle this sensitive Task.'), findsNothing);
     },
   );
 }

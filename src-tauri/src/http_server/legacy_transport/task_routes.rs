@@ -126,56 +126,33 @@ pub async fn update_task_handler(
     State(state): State<AppState>,
     Json(request): Json<UpdateTaskRequest>,
 ) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
-    match (
-        request.initial_prompt.as_deref(),
-        request.summary.as_deref(),
-    ) {
-        (Some(_), Some(_)) | (None, None) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "update_task requires exactly one of initial_prompt or summary".to_string(),
-            ));
-        }
-        (Some(initial_prompt), None) => {
-            let _claim = state
-                .task_claims
-                .try_claim(&request.task_id, TaskOperation::UpdateInitialPrompt)
-                .ok_or_else(|| {
-                    (
-                        StatusCode::CONFLICT,
-                        format!(
-                            "task {} is starting; create a replacement task instead",
-                            request.task_id
-                        ),
-                    )
-                })?;
-            let db = state.db.lock().unwrap();
-            db.update_task_initial_prompt(&request.task_id, initial_prompt)
-                .map_err(|error| match error {
-                    db::TaskInitialPromptUpdateError::NotFound(_) => {
-                        (StatusCode::NOT_FOUND, error.to_string())
-                    }
-                    db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
-                        (StatusCode::CONFLICT, error.to_string())
-                    }
-                    db::TaskInitialPromptUpdateError::Database(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task initial prompt: {error}"),
-                    ),
-                })?;
-        }
-        (None, Some(summary)) => {
-            let db = state.db.lock().unwrap();
-            db.update_task_summary(&request.task_id, summary)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task summary: {e}"),
-                    )
-                })?;
-        }
-    }
-
+    let _claim = state
+        .task_claims
+        .try_claim(&request.task_id, TaskOperation::UpdateInitialPrompt)
+        .ok_or_else(|| {
+            (
+                StatusCode::CONFLICT,
+                format!(
+                    "task {} is starting; create a replacement task instead",
+                    request.task_id
+                ),
+            )
+        })?;
+    let db = state.db.lock().unwrap();
+    db.update_task_initial_prompt(&request.task_id, &request.initial_prompt)
+        .map_err(|error| match error {
+            db::TaskInitialPromptUpdateError::NotFound(_) => {
+                (StatusCode::NOT_FOUND, error.to_string())
+            }
+            db::TaskInitialPromptUpdateError::AlreadyStarted(_) => {
+                (StatusCode::CONFLICT, error.to_string())
+            }
+            db::TaskInitialPromptUpdateError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to update task initial prompt: {error}"),
+            ),
+        })?;
+    drop(db);
     let project_id = state
         .db
         .lock()
@@ -353,7 +330,6 @@ pub async fn get_task_info_handler(
             id: task.id,
             initial_prompt: task.initial_prompt,
             prompt: task.prompt,
-            summary: task.summary,
             status: task.status,
             depends_on: task.depends_on,
             labels: task.labels,

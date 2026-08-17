@@ -168,14 +168,14 @@ fn refresh_task_display_title_once_sets_generated_title() {
 }
 
 #[test]
-fn build_task_display_title_prompt_uses_snapshot_without_management_blocks() {
+fn build_task_display_title_prompt_uses_snapshot_without_cleanup_blocks() {
     let (db, path) = make_test_db("metadata_title_prompt_snapshot");
     let task = db
         .create_task("Initial vague request", "doing", None, None, None)
         .expect("create task");
     let snapshot = MetadataJobSnapshot {
             transcript_path: None,
-            transcript_excerpt: Some("<openforge_task_management>openforge update-task --task-id T-1 --summary ...</openforge_task_management>\nActual topic: repair OAuth token refresh race".to_string()),
+            transcript_excerpt: Some("Actual topic: repair OAuth token refresh race".to_string()),
             activity_excerpt: Some("<openforge_code_cleanup>noise</openforge_code_cleanup>\nTool activity: edited auth middleware".to_string()),
         };
 
@@ -183,9 +183,7 @@ fn build_task_display_title_prompt_uses_snapshot_without_management_blocks() {
 
     assert!(prompt.contains("repair OAuth token refresh race"));
     assert!(prompt.contains("edited auth middleware"));
-    assert!(!prompt.contains("openforge_task_management"));
     assert!(!prompt.contains("openforge_code_cleanup"));
-    assert!(!prompt.contains("openforge update-task"));
     assert!(prompt.contains("Return only JSON"));
 
     let _ = std::fs::remove_file(&path);
@@ -544,7 +542,6 @@ fn refresh_task_display_title_once_skips_manual_title() {
             worktree_source: None,
             worktree_branch: None,
             title: Some("Manual title"),
-            handoff_notes_enabled: true,
             source_ticket_url: None,
             code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,

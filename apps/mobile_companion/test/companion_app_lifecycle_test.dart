@@ -431,7 +431,6 @@ void main() {
           projectId: 'P-1',
           projectName: 'OpenForge',
           boardStatus: 'doing',
-          handoffNotes: 'Primary notes',
           agentState: 'blocked',
           agentErrorSummary: null,
           dependentTasks: const <DependentTask>[
@@ -453,7 +452,6 @@ void main() {
           projectId: 'P-1',
           projectName: 'OpenForge',
           boardStatus: 'backlog',
-          handoffNotes: 'Related notes',
           agentState: 'waiting',
           agentErrorSummary: null,
           createdAt: DateTime.utc(2026, 8, 1),
@@ -504,12 +502,12 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Related Task'));
       await tester.pumpAndSettle();
-      expect(find.text('Related notes'), findsOneWidget);
+      expect(find.text('Investigate the related Task.'), findsOneWidget);
       expect(client.taskDetailCalls, 2);
 
       await tester.pageBack();
       await tester.pumpAndSettle();
-      expect(find.text('Primary notes'), findsOneWidget);
+      expect(find.text('Investigate the primary Task.'), findsOneWidget);
 
       client.liveConnections.last.add(
         const CompanionResourcesInvalidated(
@@ -768,7 +766,6 @@ final class _SuccessfulTailscaleClient implements CompanionClient {
       projectId: 'P-1',
       projectName: 'OpenForge',
       boardStatus: 'doing',
-      handoffNotes: 'Ready for review.',
       agentState: 'needs-input',
       agentErrorSummary: null,
       createdAt: DateTime.utc(2026, 8, 1),

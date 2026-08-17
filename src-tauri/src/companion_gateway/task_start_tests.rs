@@ -116,7 +116,6 @@ fn detail(board_status: &str) -> CompanionTaskDetail {
         project_id: PROJECT_ID.to_string(),
         project_name: "OpenForge".to_string(),
         board_status: board_status.to_string(),
-        handoff_notes: None,
         agent_state: "waiting".to_string(),
         agent_error_summary: None,
         labels: Vec::new(),

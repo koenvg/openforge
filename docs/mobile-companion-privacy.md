@@ -24,7 +24,7 @@ Platform secure storage retains only what is required to recognize and authentic
 - endpoint candidates;
 - device identity and device credential.
 
-Attention, Project, Task, Handoff Note, and terminal data remain in memory for the foreground session. They are not stored as an offline domain snapshot in preferences, files, SQLite, analytics, backups, or another application cache. Suspend, stream-gap, revocation, gateway shutdown, and unavailable-host handling clear domain views before a fresh authenticated read.
+Attention, Project, Task, and terminal data remain in memory for the foreground session. They are not stored as an offline domain snapshot in preferences, files, SQLite, analytics, backups, or another application cache. Suspend, stream-gap, revocation, gateway shutdown, and unavailable-host handling clear domain views before a fresh authenticated read.
 
 Revoking a device or resetting desktop host identity invalidates the mobile credential and requires QR pairing plus desktop approval again.
 

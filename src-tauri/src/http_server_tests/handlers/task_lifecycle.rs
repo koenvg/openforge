@@ -18,8 +18,6 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
             None,
         )
         .expect("create completed task");
-        db.update_task_summary("T-1", "## Handoff Notes\nKeep this reference")
-            .expect("set handoff notes");
         db.create_task("Open task", "backlog", Some(&project.id), None, None)
             .expect("create open task");
     }

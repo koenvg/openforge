@@ -202,7 +202,6 @@ describe('plugin-host backend runtime', () => {
               })
               const composed = await openforge.tasks.compose({ projectId: 'P-1', initialPrompt: 'Composed prompt' })
               const followUp = await openforge.tasks.sendFollowUp({ taskId: created.id, message: 'Review the task' })
-              await openforge.tasks.updateSummary(created.id, 'Scheduler handoff')
               await openforge.tasks.updateStatus(created.id, 'doing')
               const beforeContributions = await openforge.tasks.listStartPromptContributions('P-1')
               const contributions = await openforge.tasks.configureStartPromptContribution({
@@ -227,7 +226,6 @@ describe('plugin-host backend runtime', () => {
       initial_prompt: 'Existing task',
       status: 'backlog',
       prompt: null,
-      summary: null,
       agent: null,
       permission_mode: null,
       depends_on: [],
@@ -250,7 +248,6 @@ describe('plugin-host backend runtime', () => {
         case 'openforge.tasks.create': return createdTask
         case 'openforge.tasks.compose': return { task: createdTask, started: false }
         case 'openforge.tasks.sendFollowUp': return { taskId: request.params.taskId, sessionId: 'session-1', disposition: 'queued' }
-        case 'openforge.tasks.updateSummary': return null
         case 'openforge.tasks.updateStatus': return null
         case 'openforge.tasks.listStartPromptContributions': return []
         case 'openforge.tasks.configureStartPromptContribution': return [{ id: request.params.id, enabled: request.params.enabled, content: request.params.content, order: request.params.order }]
@@ -281,7 +278,6 @@ describe('plugin-host backend runtime', () => {
       { method: 'openforge.tasks.create', params: { initialPrompt: 'Scheduled prompt', projectId: 'P-1', dependsOn: ['T-parent'], labelNames: ['scheduled'] } },
       { method: 'openforge.tasks.compose', params: { projectId: 'P-1', initialPrompt: 'Composed prompt' } },
       { method: 'openforge.tasks.sendFollowUp', params: { taskId: 'T-created', message: 'Review the task' } },
-      { method: 'openforge.tasks.updateSummary', params: { taskId: 'T-created', summary: 'Scheduler handoff' } },
       { method: 'openforge.tasks.updateStatus', params: { taskId: 'T-created', status: 'doing' } },
       { method: 'openforge.tasks.listStartPromptContributions', params: { projectId: 'P-1' } },
       { method: 'openforge.tasks.configureStartPromptContribution', params: { projectId: 'P-1', id: 'scheduler-brief', enabled: true, content: '## Plugin Brief', order: 10 } },

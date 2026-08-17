@@ -29,14 +29,6 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
     default: 'false',
   },
   {
-    key: 'handoff_notes_enabled',
-    label: 'Handoff Notes',
-    description: 'Ask the agent to maintain reviewer handoff notes',
-    control: 'toggle',
-    levels: ['global', 'project', 'task'],
-    default: 'true',
-  },
-  {
     key: 'ai_provider',
     label: 'AI Provider',
     description: 'Coding agent used to run tasks',

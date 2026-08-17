@@ -7,7 +7,7 @@
   import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from './CopyButton.svelte'
   import SourceTicketLink from './SourceTicketLink.svelte'
-  import TaskPromptSummary from './TaskPromptSummary.svelte'
+  import TaskInitialPrompt from './TaskInitialPrompt.svelte'
   import TaskGitStatus from './TaskGitStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
@@ -98,7 +98,7 @@
     taskActionPending={$mergingTaskIds.has(task.id)}
   />
 
-  <TaskPromptSummary {task} {onEditPrompt} />
+  <TaskInitialPrompt {task} {onEditPrompt} />
 
   <CollapsibleInfoSection sectionKey="details" title="Details" cardId="details">
     <div class="px-3 py-2 border-b border-base-300/70">

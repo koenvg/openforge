@@ -38,7 +38,6 @@
     "projectId": "P-4",
     "projectName": "OpenForge",
     "boardStatus": "doing",
-    "handoffNotes": "Ready for review.",
     "agentState": "failed",
     "agentTerminalAvailable": true,
     "agentErrorSummary": "Agent failed. Review details on the desktop.",

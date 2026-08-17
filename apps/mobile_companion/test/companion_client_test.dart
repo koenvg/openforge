@@ -155,10 +155,7 @@ void main() {
           'gateway-closing',
         ],
       );
-      expect(
-        jsonEncode(eventsOperation),
-        isNot(anyOf(contains('handoffNotes'), contains('providerSessionId'))),
-      );
+      expect(jsonEncode(eventsOperation), isNot(contains('providerSessionId')));
       final components = contract['components']! as Map<String, Object?>;
       final schemas = components['schemas']! as Map<String, Object?>;
       final detailSchema = schemas['TaskDetail']! as Map<String, Object?>;
@@ -173,7 +170,6 @@ void main() {
           'projectId',
           'projectName',
           'boardStatus',
-          'handoffNotes',
           'agentState',
           'agentTerminalAvailable',
           'agentErrorSummary',
@@ -288,7 +284,6 @@ void main() {
       expect(detail.initialPrompt, contains('Render the **full** prompt'));
       expect(detail.title, 'Add mobile Task detail');
       expect(detail.boardStatus, 'doing');
-      expect(detail.handoffNotes, 'Ready for review.');
       expect(detail.agentState, 'failed');
       expect(detail.agentTerminalAvailable, isTrue);
       expect(detail.labels, <String>['mobile', 'review']);

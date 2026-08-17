@@ -36,7 +36,7 @@
     { id: 'agents', label: 'Agents & tasks', description: 'Provider and task behavior', icon: Bot },
     { id: 'labels', label: 'Labels', description: 'Task label management', icon: Tags },
     { id: 'focus', label: 'Focus filter', description: 'Attention and board filters', icon: Filter },
-    { id: 'instructions', label: 'AI instructions', description: 'Agent instructions and Handoff Notes template', icon: Sparkles },
+    { id: 'instructions', label: 'AI instructions', description: 'Project-specific agent instructions', icon: Sparkles },
     { id: 'plugins', label: 'Plugins', description: 'Project Plugin Enablement', icon: Blocks },
     { id: 'danger', label: 'Danger Zone', description: 'Destructive project actions', icon: TriangleAlert, danger: true },
   ]

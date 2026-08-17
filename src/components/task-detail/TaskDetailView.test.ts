@@ -245,12 +245,10 @@ const baseTask: Task = {
   title: null,
   title_source: null,
   title_generated_at: null,
-  summary: null,
   agent: null,
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
   project_id: null,
@@ -1704,7 +1702,7 @@ describe('TaskDetailView', () => {
         
         await waitFor(() => expect(screen.getByRole('button', { name: /^agent\b/i })).toBeTruthy())
         
-        const refreshedTask = { ...baseTask, summary: 'updated summary' }
+        const refreshedTask = { ...baseTask, title: 'Updated title', title_source: 'manual' as const }
         rerender({ task: refreshedTask, onRunAction: mockOnRunAction })
         
         await new Promise(r => setTimeout(r, 50))

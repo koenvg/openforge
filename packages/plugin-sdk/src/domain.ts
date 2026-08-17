@@ -26,17 +26,10 @@ export interface Task {
   title_source: 'manual' | 'generated' | null;
   /** Unix timestamp for the first generated title write; null means generation has not written yet. */
   title_generated_at: number | null;
-  summary: string | null;
   agent: string | null;
   permission_mode: string | null;
   worktree_source: WorktreeSource | null;
   worktree_branch: string | null;
-  /**
-   * Whether the task's start prompt includes the OpenForge handoff-notes
-   * (task management) block. Defaults to true; false opts the task out so the
-   * agent is not instructed to maintain Handoff Notes.
-   */
-  handoff_notes_enabled: boolean;
   /**
    * Optional link to the source ticket this task originated from (e.g. a GitHub
    * issue URL or Jira browse link). `null` when no ticket was provided.

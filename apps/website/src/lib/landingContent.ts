@@ -31,7 +31,7 @@ export interface PluginCapability {
 export const TOP_REASONS = [
   {
     title: 'See every task state.',
-    description: 'Tasks, agent owners, and Handoff Notes stay visible so scoped work never turns into guesswork.'
+    description: 'Tasks, agent owners, and review state stay visible so scoped work never turns into guesswork.'
   },
   {
     title: 'Run agents in parallel.',
@@ -39,7 +39,7 @@ export const TOP_REASONS = [
   },
   {
     title: 'Review before it lands.',
-    description: 'Human checkpoints keep handoffs, CI failures, and risky decisions in front of you.'
+    description: 'Human checkpoints keep blocked work, CI failures, and risky decisions in front of you.'
   }
 ] satisfies readonly TopReason[];
 
@@ -100,7 +100,7 @@ export const PLUGIN_CAPABILITIES = [
   {
     title: 'Your automations',
     code: 'background.register',
-    description: 'handoffs, CI, stale work, recurring prompts',
+    description: 'blocked work, CI, stale work, recurring prompts',
     iconPaths: [
       'M6 16.5a3.5 3.5 0 0 1 0-7 5.5 5.5 0 0 1 10.7-1.8A4.2 4.2 0 1 1 18 16.5h-2.2',
       'M9 16.5h3',

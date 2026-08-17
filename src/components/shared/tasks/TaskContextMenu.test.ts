@@ -36,12 +36,10 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   title: null,
   title_source: null,
   title_generated_at: null,
-  summary: null,
   agent: null,
   permission_mode: 'default',
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
 })

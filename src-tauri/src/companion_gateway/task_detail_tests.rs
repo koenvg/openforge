@@ -74,7 +74,6 @@ fn detail() -> CompanionTaskDetail {
         project_id: "P-1".to_string(),
         project_name: "OpenForge".to_string(),
         board_status: "doing".to_string(),
-        handoff_notes: Some("Ready for review.".to_string()),
         agent_state: "failed".to_string(),
         agent_error_summary: Some("Agent failed. Review details on the desktop.".to_string()),
         labels: vec!["mobile".to_string(), "review".to_string()],
@@ -124,7 +123,6 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
         "## Investigate mobile detail\n\nShow the **complete** prompt."
     );
     assert_eq!(json["boardStatus"], "doing");
-    assert_eq!(json["handoffNotes"], "Ready for review.");
     assert_eq!(json["agentState"], "failed");
     assert_eq!(json["agentTerminalAvailable"], false);
     assert_eq!(json["labels"], serde_json::json!(["mobile", "review"]));
@@ -147,7 +145,6 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
             "createdAt",
             "dependencies",
             "dependentTasks",
-            "handoffNotes",
             "initialPrompt",
             "labels",
             "projectId",
@@ -208,7 +205,7 @@ async fn task_detail_maps_authorization_not_found_and_source_failures_to_stable_
 }
 
 #[tokio::test]
-async fn sqlite_task_detail_includes_full_prompt_handoff_and_safe_agent_semantics() {
+async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
     let (database, path) = crate::db::test_helpers::make_test_db("companion_task_detail");
     let project = database
         .create_project("OpenForge", "/Users/secret/repository")
@@ -262,9 +259,6 @@ async fn sqlite_task_detail_includes_full_prompt_handoff_and_safe_agent_semantic
         .add_task_dependency(&dependent.id, &other_dependency.id)
         .expect("dependent remaining link");
     database
-        .update_task_summary(&task.id, "Current Handoff Notes")
-        .expect("summary");
-    database
         .create_agent_session(
             "provider-session-secret",
             &task.id,
@@ -311,7 +305,6 @@ async fn sqlite_task_detail_includes_full_prompt_handoff_and_safe_agent_semantic
     );
     assert_eq!(json["projectName"], "OpenForge");
     assert_eq!(json["boardStatus"], "doing");
-    assert_eq!(json["handoffNotes"], "Current Handoff Notes");
     assert_eq!(json["agentState"], "failed");
     assert_eq!(
         json["agentErrorSummary"],
