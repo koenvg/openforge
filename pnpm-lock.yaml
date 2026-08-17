@@ -337,6 +337,9 @@ importers:
 
   plugins/task-schedules:
     dependencies:
+      '@lucide/svelte':
+        specifier: ^1.28.0
+        version: 1.28.0(svelte@5.56.8)
       '@openforge-app/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk

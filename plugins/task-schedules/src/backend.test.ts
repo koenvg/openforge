@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMockBackendOpenForgeApi, createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import backendPlugin, {
+  CANCEL_RUN_NOW_METHOD,
   LIST_SCHEDULES_METHOD,
   RUN_NOW_METHOD,
   SAVE_SCHEDULE_METHOD,
   SCHEDULES_STORAGE_KEY,
   createGuardedPoll,
+  createManualScheduleRunner,
   createScheduledFiresService,
   listTaskSchedules,
   processDueSchedules,
@@ -46,6 +48,7 @@ describe('Task Schedules backend plugin', () => {
     await registry.activateBackend(backendPlugin)
 
     expect(registry.snapshot.backendMethods.map((method) => method.id).sort()).toEqual([
+      CANCEL_RUN_NOW_METHOD,
       'deleteSchedule',
       LIST_SCHEDULES_METHOD,
       RUN_NOW_METHOD,
@@ -238,6 +241,37 @@ describe('Task Schedules backend plugin', () => {
       { initialPrompt: 'Review incoming dependencies', projectId, labelNames: ['scheduled'] },
     ])
     expect(api.__testing.calls.taskImplementationStarts).toEqual([{ taskId: 'mock-task-1' }])
+  })
+
+  it('rejects duplicate manual submissions while the same schedule is already running', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    await setStoredSchedules(api, [makeSchedule()])
+    let resolveCreate!: (task: Task) => void
+    api.tasks.create = vi.fn(() => new Promise<Task>((resolve) => { resolveCreate = resolve }))
+    const runner = createManualScheduleRunner(api)
+
+    const firstRun = runner.run({ projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
+    await vi.waitFor(() => expect(api.tasks.create).toHaveBeenCalledTimes(1))
+
+    await expect(runner.run({ projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))).rejects.toThrow(/already running/i)
+    resolveCreate(makeScheduleTask('T-running', 'backlog'))
+    await firstRun
+  })
+
+  it('cancels a manual create-and-start run at the next safe point without starting implementation', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    await setStoredSchedules(api, [makeSchedule()])
+    let resolveCreate!: (task: Task) => void
+    api.tasks.create = vi.fn(() => new Promise<Task>((resolve) => { resolveCreate = resolve }))
+    const runner = createManualScheduleRunner(api)
+
+    const pendingRun = runner.run({ projectId, scheduleId: 'schedule-1' }, Date.UTC(2026, 0, 1, 10))
+    await vi.waitFor(() => expect(api.tasks.create).toHaveBeenCalledTimes(1))
+    expect(runner.cancel({ projectId, scheduleId: 'schedule-1' })).toEqual({ cancelled: true })
+    resolveCreate(makeScheduleTask('T-cancelled', 'backlog'))
+
+    await expect(pendingRun).resolves.toMatchObject({ status: 'cancelled', taskId: 'T-cancelled' })
+    expect(api.__testing.calls.taskImplementationStarts).toEqual([])
   })
 
   it('create-only Scheduled Fires do not start implementation', async () => {

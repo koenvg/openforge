@@ -1,7 +1,7 @@
 export type SchedulePreset = 'daily' | 'weekly' | 'monthly' | 'custom'
 export type TaskScheduleMode = 'create-and-start' | 'create-only'
 export type ScheduledFireTrigger = 'scheduled' | 'manual'
-export type ScheduledFireStatus = 'started' | 'created' | 'skipped' | 'failed'
+export type ScheduledFireStatus = 'started' | 'created' | 'skipped' | 'failed' | 'cancelled'
 
 export interface ScheduledFireOutcome {
   id: string

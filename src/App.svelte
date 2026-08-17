@@ -8,6 +8,7 @@
   import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
+  import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
   import type { Task, AppView, Project, ReviewPullRequest } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
@@ -659,7 +660,7 @@
       </div>
     </main>
 
-    {#if $activeProjectId && $currentView !== 'board' && $currentView !== 'global_settings' && !selectedTask}
+    {#if $activeProjectId && $currentView !== 'board' && $currentView !== 'global_settings' && $currentView !== TASK_SCHEDULES_VIEW_KEY && !selectedTask}
       <button
         type="button"
         class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"

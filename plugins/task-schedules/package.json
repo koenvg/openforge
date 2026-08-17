@@ -8,6 +8,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.28.0",
     "@openforge-app/plugin-sdk": "workspace:*",
     "cronstrue": "^3.24.0"
   },
@@ -36,6 +37,7 @@
       "background",
       "storage",
       "context",
+      "navigation",
       "tasks"
     ]
   }
