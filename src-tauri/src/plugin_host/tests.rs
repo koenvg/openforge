@@ -1,55 +1,19 @@
 use super::lifecycle::{
-    format_sidecar_stderr_diagnostic, packaged_electron_node_runtime, resolve_entrypoint,
-    resolve_sidecar_runtime, BUN_PATH_ENV, ELECTRON_RUN_AS_NODE_ENV, ENTRYPOINT_ENV,
-    SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
+    format_sidecar_stderr_diagnostic, SIDECAR_EXITED_EVENT, SIDECAR_FAILED_EVENT,
+};
+use super::runtime_command::{
+    test_support::{lock_plugin_host_env, EnvVarRestore},
+    BUN_PATH_ENV, ENTRYPOINT_ENV,
 };
 use super::*;
 use serde_json::{json, Value};
-use std::ffi::OsString;
 use std::fs;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::tempdir;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-
-static PLUGIN_HOST_ENV_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-
-struct EnvVarRestore {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvVarRestore {
-    fn set_path(key: &'static str, value: &std::path::Path) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, value);
-        Self { key, previous }
-    }
-
-    fn remove(key: &'static str) -> Self {
-        let previous = std::env::var_os(key);
-        std::env::remove_var(key);
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvVarRestore {
-    fn drop(&mut self) {
-        match &self.previous {
-            Some(value) => std::env::set_var(self.key, value),
-            None => std::env::remove_var(self.key),
-        }
-    }
-}
-
-async fn lock_plugin_host_env() -> tokio::sync::MutexGuard<'static, ()> {
-    PLUGIN_HOST_ENV_LOCK
-        .get_or_init(|| tokio::sync::Mutex::new(()))
-        .lock()
-        .await
-}
 
 fn build_plugin_host() -> PluginHost {
     PluginHost::new(AppHandle::new())
@@ -125,108 +89,6 @@ fn plugin_tagged_stderr_diagnostics_escape_control_characters() {
 
     assert!(diagnostic.contains("reset\\u{1b}[2Jterminal"));
     assert!(!diagnostic.contains('\u{1b}'));
-}
-
-#[tokio::test]
-async fn resolve_entrypoint_prefers_packaged_resource_bundle_over_source_and_legacy_app_data() {
-    let temp = tempdir().expect("tempdir should create");
-    let resource_dir = temp.path().join("resources");
-    let app_data_dir = temp.path().join("app-data");
-    let bundled_entrypoint = resource_dir.join("plugin-host").join("index.js");
-    let legacy_app_data_entrypoint = app_data_dir.join("plugin-host").join("index.ts");
-    fs::create_dir_all(
-        bundled_entrypoint
-            .parent()
-            .expect("resource parent should exist"),
-    )
-    .expect("resource dir should create");
-    fs::create_dir_all(
-        legacy_app_data_entrypoint
-            .parent()
-            .expect("app data parent should exist"),
-    )
-    .expect("app data dir should create");
-    fs::write(&bundled_entrypoint, "console.log('bundled plugin host')")
-        .expect("bundled entrypoint should write");
-    fs::write(
-        &legacy_app_data_entrypoint,
-        "console.log('legacy plugin host')",
-    )
-    .expect("legacy entrypoint should write");
-
-    let _env_lock = lock_plugin_host_env().await;
-    let _entrypoint_env = EnvVarRestore::remove(ENTRYPOINT_ENV);
-    let app = AppHandle::with_app_paths(app_data_dir, resource_dir);
-
-    assert_eq!(
-        resolve_entrypoint(&app).expect("entrypoint should resolve"),
-        bundled_entrypoint
-    );
-}
-
-#[tokio::test]
-async fn resolve_sidecar_runtime_prefers_explicit_bun_override() {
-    let temp = tempdir().expect("tempdir should create");
-    let entrypoint = temp.path().join("index.js");
-    let bun_path = temp.path().join("custom-bun");
-    fs::write(&entrypoint, "console.log('plugin host')").expect("entrypoint should write");
-
-    let _env_lock = lock_plugin_host_env().await;
-    let _bun_env = EnvVarRestore::set_path(BUN_PATH_ENV, &bun_path);
-
-    let runtime = resolve_sidecar_runtime(&entrypoint).expect("runtime should resolve");
-
-    assert_eq!(runtime.command, bun_path);
-    assert_eq!(
-        runtime.args,
-        vec![OsString::from("run"), entrypoint.into_os_string()]
-    );
-    assert!(runtime.env.is_empty());
-}
-
-#[test]
-fn packaged_electron_node_runtime_uses_sibling_app_binary_for_bundled_javascript_host() {
-    let temp = tempdir().expect("tempdir should create");
-    let macos_dir = temp
-        .path()
-        .join("Open Forge.app")
-        .join("Contents")
-        .join("MacOS");
-    fs::create_dir_all(&macos_dir).expect("macos dir should create");
-    let sidecar_exe = macos_dir.join("openforge-sidecar");
-    let electron_exe = macos_dir.join(crate::data_identity::package_app_name());
-    let entrypoint = macos_dir.join("plugin-host").join("index.js");
-    fs::create_dir_all(entrypoint.parent().expect("entrypoint parent"))
-        .expect("plugin host dir should create");
-    fs::write(&electron_exe, "electron").expect("electron runtime should write");
-    fs::write(&entrypoint, "console.log('plugin host')").expect("entrypoint should write");
-
-    let runtime = packaged_electron_node_runtime(Some(&sidecar_exe), &entrypoint)
-        .expect("packaged runtime should resolve");
-
-    assert_eq!(runtime.command, electron_exe);
-    assert_eq!(runtime.args, vec![entrypoint.into_os_string()]);
-    assert_eq!(
-        runtime.env.get(ELECTRON_RUN_AS_NODE_ENV),
-        Some(&OsString::from("1"))
-    );
-}
-
-#[test]
-fn packaged_electron_node_runtime_does_not_claim_typescript_dev_entrypoints() {
-    let temp = tempdir().expect("tempdir should create");
-    let macos_dir = temp
-        .path()
-        .join("Open Forge.app")
-        .join("Contents")
-        .join("MacOS");
-    fs::create_dir_all(&macos_dir).expect("macos dir should create");
-    let sidecar_exe = macos_dir.join("openforge-sidecar");
-    let electron_exe = macos_dir.join(crate::data_identity::package_app_name());
-    let entrypoint = macos_dir.join("plugin-host").join("index.ts");
-    fs::write(&electron_exe, "electron").expect("electron runtime should write");
-
-    assert!(packaged_electron_node_runtime(Some(&sidecar_exe), &entrypoint).is_none());
 }
 
 #[tokio::test]

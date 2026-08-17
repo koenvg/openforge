@@ -1,7 +1,9 @@
 mod callbacks;
 mod filesystem_callbacks;
 mod lifecycle;
+mod process_signals;
 mod rpc_transport;
+mod runtime_command;
 mod task_callbacks;
 
 #[cfg(test)]
