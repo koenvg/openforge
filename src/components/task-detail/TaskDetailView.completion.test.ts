@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   baseTask,
@@ -12,7 +12,6 @@ import type { Task } from './TaskDetailView.testUtils'
 const {
   TaskDetailView,
   completingTasks,
-  tasks,
 } = getTaskDetailViewTestDependencies()
 
 describe('TaskDetailView — completion', () => {

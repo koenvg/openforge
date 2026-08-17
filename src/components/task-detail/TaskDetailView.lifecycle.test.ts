@@ -10,7 +10,6 @@ import {
 
 const {
   TaskDetailView,
-  tasks,
 } = getTaskDetailViewTestDependencies()
 
 describe('TaskDetailView — lifecycle', () => {

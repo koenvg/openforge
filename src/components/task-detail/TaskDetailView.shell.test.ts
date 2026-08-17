@@ -9,7 +9,6 @@ import {
   resetTaskDetailViewTestState,
   secondaryTask,
 } from './TaskDetailView.testUtils'
-import type { Task } from './TaskDetailView.testUtils'
 
 const {
   TaskDetailView,

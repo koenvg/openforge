@@ -10,7 +10,6 @@ import {
   resetTaskDetailViewTestState,
   secondaryTask,
 } from './TaskDetailView.testUtils'
-import type { Task } from './TaskDetailView.testUtils'
 
 const {
   PluginSlotTestView,
@@ -22,7 +21,6 @@ const {
   runtimeContributionSources,
   taskActiveView,
   taskRuntimeInfo,
-  tasks,
 } = getTaskDetailViewTestDependencies()
 
 describe('TaskDetailView — tab navigation and state preservation', () => {
