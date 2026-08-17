@@ -116,11 +116,11 @@ describe('theme', () => {
       expect(theme.foreground).toBe('#444444')
     })
 
-    it('falls back to the Catppuccin Latte terminal palette if CSS variables are not present', () => {
+    it('falls back to the GitHub Light Default terminal palette if CSS variables are not present', () => {
       getComputedStyleSpy.mockRestore()
       const theme = getTerminalTheme('light')
-      expect(theme.background).toBe('#EFF1F5')
-      expect(theme.foreground).toBe('#4C4F69')
+      expect(theme.background).toBe('#FFFFFF')
+      expect(theme.foreground).toBe('#1F2328')
     })
 
     it('falls back to hardcoded dark theme if CSS variables are not present', () => {
@@ -137,17 +137,17 @@ describe('theme', () => {
       expect(theme.black).toBe('#454250')
     })
 
-    it('uses the Catppuccin Latte ANSI palette for light terminal fallbacks', () => {
+    it('uses the GitHub Light Default ANSI palette for light terminal fallbacks', () => {
       getComputedStyleSpy.mockRestore()
       const theme = getTerminalTheme('light')
-      expect(theme.black).toBe('#5C5F77')
-      expect(theme.red).toBe('#D20F39')
-      expect(theme.green).toBe('#40A02B')
-      expect(theme.yellow).toBe('#DF8E1D')
-      expect(theme.blue).toBe('#1E66F5')
-      expect(theme.magenta).toBe('#EA76CB')
-      expect(theme.cyan).toBe('#179299')
-      expect(theme.white).toBe('#ACB0BE')
+      expect(theme.black).toBe('#24292F')
+      expect(theme.red).toBe('#CF222E')
+      expect(theme.green).toBe('#116329')
+      expect(theme.yellow).toBe('#4D2D00')
+      expect(theme.blue).toBe('#0969DA')
+      expect(theme.magenta).toBe('#8250DF')
+      expect(theme.cyan).toBe('#1B7C83')
+      expect(theme.white).toBe('#6E7781')
     })
 
     it('returns a fresh theme object on each call', () => {

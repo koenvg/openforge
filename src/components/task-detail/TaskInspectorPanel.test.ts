@@ -80,6 +80,21 @@ describe('TaskInspectorPanel', () => {
     expect(screen.queryByTestId('task-info-panel')).toBeNull()
   })
 
+  it('summarizes task identity, title, and status at the top of the Agent inspector', () => {
+    render(TaskInspectorPanel, {
+      props: {
+        task: baseTask,
+        allTasks: [],
+      },
+    })
+
+    const inspector = screen.getByRole('complementary', { name: 'Task inspector for T-748' })
+    expect(inspector.textContent).toContain('Task')
+    expect(inspector.textContent).toContain('T-748')
+    expect(inspector.textContent).toContain('Fix the dashboard bug.')
+    expect(inspector.textContent).toContain('In Progress')
+  })
+
   it('shows an Edit prompt pencil for backlog tasks when onEditTask is provided', async () => {
     const onEditTask = vi.fn()
     render(TaskInspectorPanel, {

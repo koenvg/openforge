@@ -186,30 +186,34 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
-  <form class="flex items-center gap-2 border-b border-base-300 bg-base-200/50 p-2" onsubmit={submitAddress}>
-    <div class="join shrink-0">
+  <form
+    data-testid="browser-navigation-toolbar"
+    class="flex h-10 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-100 px-2"
+    onsubmit={submitAddress}
+  >
+    <div class="flex shrink-0 items-center gap-0.5">
       <button
-        class="btn btn-square btn-sm join-item"
+        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
         type="button"
         aria-label="Go back"
         title="Go back"
         disabled={opening || !surfaceState.canGoBack}
         onclick={() => void runSurfaceAction(activeSession => activeSession.goBack())}
       >
-        <ArrowLeft size={16} aria-hidden="true" />
+        <ArrowLeft size={15} aria-hidden="true" />
       </button>
       <button
-        class="btn btn-square btn-sm join-item"
+        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
         type="button"
         aria-label="Go forward"
         title="Go forward"
         disabled={opening || !surfaceState.canGoForward}
         onclick={() => void runSurfaceAction(activeSession => activeSession.goForward())}
       >
-        <ArrowRight size={16} aria-hidden="true" />
+        <ArrowRight size={15} aria-hidden="true" />
       </button>
       <button
-        class="btn btn-square btn-sm join-item"
+        class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
         type="button"
         aria-label={surfaceState.loading ? 'Stop loading' : 'Reload page'}
         title={surfaceState.loading ? 'Stop loading' : 'Reload page'}
@@ -219,9 +223,9 @@
           : activeSession.reload())}
       >
         {#if surfaceState.loading}
-          <X size={16} aria-hidden="true" />
+          <X size={15} aria-hidden="true" />
         {:else}
-          <RefreshCw size={16} aria-hidden="true" />
+          <RefreshCw size={15} aria-hidden="true" />
         {/if}
       </button>
     </div>
@@ -229,7 +233,7 @@
     <label class="sr-only" for="task-browser-address">Web address</label>
     <input
       id="task-browser-address"
-      class="input input-bordered input-sm min-w-0 flex-1 font-mono"
+      class="input input-bordered h-8 min-h-8 min-w-0 flex-1 rounded-md px-3 font-mono text-xs"
       type="text"
       inputmode="url"
       autocomplete="off"
@@ -240,7 +244,7 @@
       onfocus={() => { editingAddress = true }}
       onblur={() => { editingAddress = false }}
     />
-    <button class="btn btn-primary btn-sm" type="submit" disabled={opening || address.trim().length === 0}>
+    <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="submit" disabled={opening || address.trim().length === 0}>
       Go
     </button>
 
@@ -253,18 +257,6 @@
     />
   </form>
 
-  <div class="flex min-h-6 items-center gap-2 border-b border-base-300 px-3 py-1 text-xs" aria-live="polite">
-    {#if actionError !== null}
-      <span class="text-error">{actionError}</span>
-    {:else if opening}
-      <span class="text-base-content/60">Opening browser…</span>
-    {:else if surfaceState.loading}
-      <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
-      <span class="text-base-content/60">Loading {surfaceState.title || surfaceState.url}</span>
-    {:else}
-      <span class="truncate text-base-content/60">{surfaceState.title || surfaceState.url || 'Ready'}</span>
-    {/if}
-  </div>
 
   {#if reviewingFeedback && feedbackEditor.annotations.length > 0}
     <VisualFeedbackReview
@@ -274,6 +266,11 @@
   {/if}
 
   <div bind:this={browserRegion} class="relative min-h-0 flex-1 overflow-hidden">
+    {#if actionError !== null && session !== null}
+      <div class="alert alert-error absolute right-3 top-3 z-20 w-auto max-w-lg py-2 text-sm shadow-sm" aria-live="polite">
+        <span>{actionError}</span>
+      </div>
+    {/if}
     {#if opening}
       <div class="flex h-full items-center justify-center p-6 text-sm text-base-content/60" role="status">
         <span class="loading loading-spinner loading-md" aria-hidden="true"></span>

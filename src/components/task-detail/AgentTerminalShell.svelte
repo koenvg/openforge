@@ -4,7 +4,7 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, focusTerminal, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
   import {
     hydrateAgentTerminalPtyInstance,
     syncAgentPanelStatusFromSession,
@@ -17,6 +17,7 @@
     taskId: string
     sessionIdKey: ProviderSessionIdKey | null
     isStarting?: boolean
+    isActive?: boolean
     rootTestId?: string | null
   }
 
@@ -24,6 +25,7 @@
     taskId,
     sessionIdKey,
     isStarting = false,
+    isActive = false,
     rootTestId = null,
   }: Props = $props()
 
@@ -81,6 +83,17 @@
     })
   })
 
+  $effect(() => {
+    if (!isActive || !poolEntryAttached) return
+
+    const activeTaskId = taskId
+    const frame = requestAnimationFrame(() => {
+      if (isActive && poolEntryAttached) focusTerminal(activeTaskId)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  })
+
   onMount(async () => {
     poolEntry = await acquire(taskId)
     if (destroyed || !poolEntry) return
@@ -121,22 +134,22 @@
     </div>
   {/if}
 
-  <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
+  <div class="relative min-h-0 flex-1 overflow-hidden rounded-md border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
     <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
     {#if !session && !terminalActive}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
+      <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4 p-16 pointer-events-none" style="background: var(--of-agent-terminal-bg); color: var(--of-agent-terminal-text)">
         {#if isStarting}
           <span class="loading loading-spinner loading-lg text-primary"></span>
-          <div class="text-base font-semibold text-base-content" style="animation: badge-pulse 2s ease-in-out infinite;">Starting agent session...</div>
-          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Preparing workspace and launching agent</div>
+          <div class="text-base font-semibold" style="animation: badge-pulse 2s ease-in-out infinite;">Starting agent session...</div>
+          <div class="max-w-[320px] text-center text-sm leading-relaxed" style="color: var(--of-agent-terminal-muted)">Preparing workspace and launching agent</div>
         {:else}
-          <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg class="h-16 w-16 opacity-40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div class="text-base font-semibold text-base-content">No active agent session</div>
-          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Use the action buttons in the header to get started</div>
+          <div class="text-base font-semibold">No active agent session</div>
+          <div class="max-w-[320px] text-center text-sm leading-relaxed" style="color: var(--of-agent-terminal-muted)">Use the action buttons in the header to get started</div>
         {/if}
       </div>
     {/if}

@@ -59,12 +59,14 @@
   onInsert={(text) => { void writeAgentTerminalTranscription(taskId, text, 'InjectionPoint') }}
 />
 {#if view}
-  <div class="flex items-center gap-2 min-w-0" data-testid="agent-status-pill" aria-label="Agent status">
-    <span class="shrink-0 {dotClass(status)}"></span>
-    <span class="text-xs font-semibold text-base-content truncate">{view.statusText}</span>
-    {#if view.checkpointActive}
-      <span class="badge badge-sm badge-warning shrink-0" aria-label="Checkpoint question pending">! checkpoint</span>
+  <div class="flex shrink-0 items-center gap-2" data-testid="agent-status-pill" aria-label="Agent status">
+    {#if view.statusText !== null}
+      <span class="shrink-0 {dotClass(status)}"></span>
+      <span class="of-toolbar-compact-label whitespace-nowrap text-xs font-semibold text-base-content">{view.statusText}</span>
     {/if}
-    <VoiceInput onTranscription={handleTranscription} listenToHotkey />
+    {#if view.checkpointActive}
+      <span class="of-toolbar-compact-label badge badge-sm badge-warning shrink-0" aria-label="Checkpoint question pending">! checkpoint</span>
+    {/if}
+    <VoiceInput onTranscription={handleTranscription} listenToHotkey showShortcut={false} />
   </div>
 {/if}
