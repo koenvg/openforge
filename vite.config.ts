@@ -3,11 +3,11 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 import { isOpenForgeHostRuntimeSvelteExternal, OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS, rendererImportMapHtml, svelteHostRuntimeImportUrl } from './packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
-import { createOpenForgePluginSdkSourceAliases } from './packages/plugin-sdk/src/vite'
-import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi'
-import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
-import { createOpenForgeViteLogger } from './src/lib/viteLogger'
-import { DESKTOP_ASSET_BASE } from './src/lib/viteDesktopBuild'
+import { createOpenForgePluginSdkSourceAliases } from './packages/plugin-sdk/src/vite.ts'
+import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi.ts'
+import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks.ts'
+import { createOpenForgeViteLogger } from './src/lib/viteLogger.ts'
+import { DESKTOP_ASSET_BASE } from './src/lib/viteDesktopBuild.ts'
 
 function createOpenForgeHostRuntimeImportMapPlugin() {
   return {
