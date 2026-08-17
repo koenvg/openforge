@@ -130,6 +130,51 @@ describe('AgentTerminalShell', () => {
     })
   })
 
+  it('focuses the pooled TTY when the Agent workbench becomes active', async () => {
+    setActiveSession(baseSession)
+    const { attach, focusTerminal } = await import('../../lib/terminalPool')
+
+    const view = render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        sessionIdKey: 'pi_session_id',
+        isActive: false,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+    expect(focusTerminal).not.toHaveBeenCalled()
+
+    await view.rerender({
+      taskId: 'T-1',
+      sessionIdKey: 'pi_session_id',
+      isActive: true,
+    })
+
+    await vi.waitFor(() => {
+      expect(focusTerminal).toHaveBeenCalledWith('T-1')
+    })
+  })
+
+  it('leaves the agent PTY palette under the shared app theme runtime', async () => {
+    setActiveSession(baseSession)
+
+    const { attach } = await import('../../lib/terminalPool')
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        sessionIdKey: 'pi_session_id',
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+    expect(mockPoolEntry.terminal.options.theme).toEqual({})
+  })
+
   it('shows the shared starting empty state when no session is active', async () => {
     render(AgentTerminalShell, {
       props: {

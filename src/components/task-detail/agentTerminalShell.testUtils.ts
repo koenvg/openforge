@@ -40,7 +40,7 @@ const mocks = vi.hoisted(() => {
   const activeSessions = createMockWritable<Map<string, AgentSession>>(new Map())
   const poolEntry = {
     taskId: '',
-    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
+    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24, options: { theme: {} } },
     fitAddon: { fit: vi.fn(), proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }) },
     hostDiv: document.createElement('div'),
     ptyActive: false,
@@ -119,6 +119,7 @@ vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue(mocks.poolEntry),
   attach: vi.fn(),
   detach: vi.fn(),
+  focusTerminal: vi.fn(),
   release: vi.fn(),
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
@@ -144,6 +145,7 @@ export function resetAgentTerminalTestState() {
   mocks.poolEntry.terminal.write.mockClear()
   mocks.poolEntry.terminal.reset.mockClear()
   mocks.poolEntry.terminal.dispose.mockClear()
+  mocks.poolEntry.terminal.options.theme = {}
   mocks.listenCallbacks.clear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false

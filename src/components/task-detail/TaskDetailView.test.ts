@@ -329,9 +329,9 @@ describe('TaskDetailView', () => {
     registerRenderableContributionComponent('taskPaneTabs', TERMINAL_VIEW_ID, TerminalTaskPane)
   })
 
-  it('renders back button with "back" text', () => {
+  it('renders the Back navigation action', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('back')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to task board' }).textContent).toContain('Back')
   })
 
   it('renders task id', () => {
@@ -344,6 +344,19 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const titles = screen.getAllByText('Implement auth middleware')
     expect(titles.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('co-locates task identity and workbench navigation in one compact toolbar', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    const toolbar = screen.getByTestId('task-workbench-toolbar')
+    const navigation = await screen.findByRole('navigation', { name: 'Task workbench tabs' })
+    expect(toolbar.contains(navigation)).toBe(true)
+
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
   it('registers a task-bound Run app command when the existing button is available', async () => {
@@ -1730,5 +1743,43 @@ describe('TaskDetailView', () => {
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
     })
+
+  describe('workbench tab state preservation', () => {
+    it('keeps the agent PTY component mounted while another tab is active', async () => {
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      const { acquire, detach } = await import('../../lib/terminalPool')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+      vi.mocked(acquire).mockClear()
+      vi.mocked(detach).mockClear()
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => expect(vi.mocked(acquire)).toHaveBeenCalledWith('T-42'))
+
+      await fireEvent.click(screen.getByRole('button', { name: /^review\b/i }))
+      await waitFor(() => expect(screen.getByRole('button', { name: /^review\b/i }).getAttribute('aria-pressed')).toBe('true'))
+
+      expect(screen.getByTestId('agent-workbench').getAttribute('aria-hidden')).toBe('true')
+      expect(vi.mocked(detach)).not.toHaveBeenCalled()
+
+      await fireEvent.click(screen.getByRole('button', { name: /^agent\b/i }))
+      expect(screen.getByTestId('agent-workbench').getAttribute('aria-hidden')).toBe('false')
+      expect(vi.mocked(acquire)).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps a visited plugin workbench mounted when returning to Agent', async () => {
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      const terminalTab = await screen.findByRole('button', { name: /^terminal\b/i })
+      await fireEvent.click(terminalTab)
+      const pluginWorkbench = await screen.findByTestId('plugin-workbench-com.openforge.terminal:terminal')
+
+      await fireEvent.click(screen.getByRole('button', { name: /^agent\b/i }))
+
+      expect(pluginWorkbench.getAttribute('aria-hidden')).toBe('true')
+      expect(pluginWorkbench.isConnected).toBe(true)
+    })
+  })
 
 })

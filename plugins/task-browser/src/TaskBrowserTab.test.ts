@@ -103,6 +103,17 @@ function task(taskId: string) {
 }
 
 describe('TaskBrowserTab lifecycle', () => {
+  it('uses a single compact navigation toolbar without a persistent status strip', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(createSurface('https://example.com/'))
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+
+    await screen.findByDisplayValue('https://example.com/')
+    expect(screen.getByTestId('browser-navigation-toolbar')).toBeTruthy()
+    expect(screen.queryByTestId('browser-status-strip')).toBeNull()
+  })
+
   it('ignores a navigation result from a Task that is no longer active', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
     const staleNavigation = deferred<TaskBrowserSurfaceState>()

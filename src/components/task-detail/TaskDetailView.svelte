@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
   import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
-  import { Play } from '@lucide/svelte'
+  import { ArrowLeft, PanelRightClose, PanelRightOpen, Pencil, Play } from '@lucide/svelte'
   import { activeProjectId, activeSessions, commandHeld, completingTasks, currentView, selectedTaskId, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getProjectConfig, getTaskWorkspace, openInEditor, writePty } from '../../lib/ipc'
   import type { TaskRunAppRegistration } from './taskRunAppController'
@@ -52,6 +52,7 @@
   const router = useAppRouter()
 
   let activeView = $state('agent')
+  let mountedViews = $state<Set<string>>(new Set(['agent']))
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
   let runAppState = $state({ ...INITIAL_TASK_RUN_APP_STATE })
@@ -144,9 +145,17 @@
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
       panelHidden = readPanelHidden(taskId)
+      mountedViews = new Set(['agent'])
     }
 
     taskTerminalLifecycle.syncTask(taskId)
+  })
+
+  $effect(() => {
+    const viewId = activeView
+    if (!mountedViews.has(viewId)) {
+      mountedViews = new Set(mountedViews).add(viewId)
+    }
   })
 
   $effect(() => {
@@ -254,87 +263,63 @@
 <svelte:window onkeydown={handleTaskDetailKeydown} />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
-    <header class="flex flex-col border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
-      <div class="flex items-center gap-3 px-6 py-3.5">
-        <button class="btn btn-ghost btn-sm text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
-          <span aria-hidden="true">&lt; </span><span>back</span>
-        </button>
-        <span class="text-base-content/20 select-none">|</span>
-        <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.id}</span>
-        {#if titleRename.editing}
-          <input
-            class="input input-sm input-bordered text-lg font-semibold flex-1 min-w-0"
-            aria-label="Task title"
-            value={titleRename.draft}
-            oninput={(e) => titleRename.draft = e.currentTarget.value}
-            onkeydown={titleRename.handleKeydown}
-            onblur={() => titleRename.finish(true)}
-            use:focusAndSelect
-          />
-        {:else}
-          <div class="flex items-center gap-1 min-w-0 flex-1">
-            <h1 class="text-lg font-semibold text-base-content m-0 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
-            <button
-              class="btn btn-ghost btn-xs btn-square shrink-0 text-base-content/50 hover:text-base-content"
-              aria-label="Rename task"
-              onclick={() => titleRename.start()}
-            >✎</button>
-          </div>
-        {/if}
-        {#if task.status === 'backlog'}
+  <header
+    data-testid="task-workbench-toolbar"
+    class="of-task-workbench-toolbar flex h-[52px] shrink-0 items-center overflow-x-auto overflow-y-hidden border-b border-base-300 bg-base-100 px-4"
+  >
+    <div class="relative flex h-full min-w-max flex-1 items-center gap-2">
+      <button class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content" aria-label="Back to task board" onclick={handleBack}>
+        <ArrowLeft size={16} aria-hidden="true" />
+        <span>Back</span>
+      </button>
+      <span class="h-5 w-px shrink-0 bg-base-300" aria-hidden="true"></span>
+      <span class="shrink-0 font-mono text-[0.8125rem] font-semibold text-primary">{task.id}</span>
+      {#if titleRename.editing}
+        <input
+          class="input input-sm input-bordered h-9 min-h-9 min-w-32 max-w-72 text-base font-semibold"
+          aria-label="Task title"
+          value={titleRename.draft}
+          oninput={(e) => titleRename.draft = e.currentTarget.value}
+          onkeydown={titleRename.handleKeydown}
+          onblur={() => titleRename.finish(true)}
+          use:focusAndSelect
+        />
+      {:else}
+        <div class="flex min-w-24 max-w-72 items-center gap-1">
+          <h1 class="m-0 min-w-0 truncate text-base font-semibold text-base-content" title={displayTitle}>{displayTitle}</h1>
           <button
-            class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
-            disabled={isStarting}
-            onclick={() => onRunAction({ taskId: task.id, actionPrompt: '', agent: null })}
-          >
-            {#if isStarting}
-              <span class="loading loading-spinner loading-xs"></span>
-              Starting...
-            {:else}
-              Start Task
-            {/if}
-          </button>
-        {:else if task.status === 'doing'}
-          <Button
-            size="sm"
-            class="shrink-0 shadow-sm hover:shadow-md transition-shadow"
-            disabled={isCompleting}
-            onclick={handleComplete}
-          >
-            {#if isCompleting}
-              <span class="loading loading-spinner loading-xs"></span>
-              Completing…
-            {:else}
-              Complete
-            {/if}
-          </Button>
-        {/if}
-      </div>
-    </header>
+            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content"
+            aria-label="Rename task"
+            onclick={() => titleRename.start()}
+          ><Pencil size={14} aria-hidden="true" /></button>
+        </div>
+      {/if}
 
-    <div class="flex items-center justify-between h-10 px-6 border-b border-base-300 shrink-0">
       {#if workspacePath !== null}
-        <div class="flex items-center gap-1">
+        <nav class="absolute left-1/2 top-0 z-10 flex h-full -translate-x-1/2 items-center gap-0.5 bg-base-100" aria-label="Task workbench tabs">
           <button
-            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'agent' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            class="h-full min-w-16 border-b-2 px-3 text-[13px] font-semibold capitalize transition-colors {activeView === 'agent' ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-base-content/65 hover:bg-base-200/70 hover:text-base-content'}"
             aria-pressed={activeView === 'agent'}
             onclick={() => taskPaneController.select('agent')}
           >agent {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
           <button
-            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'review' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            class="h-full min-w-16 border-b-2 px-3 text-[13px] font-semibold capitalize transition-colors {activeView === 'review' ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-base-content/65 hover:bg-base-200/70 hover:text-base-content'}"
             aria-pressed={activeView === 'review'}
             onclick={() => taskPaneController.select('review')}
           >review {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
           {#each sortedTaskPaneTabs as tab, index (tab.namespacedId)}
             <button
-              class="btn btn-ghost btn-xs gap-1.5 {activeView === tab.namespacedId ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+              class="h-full min-w-16 border-b-2 px-3 text-[13px] font-semibold transition-colors {activeView === tab.namespacedId ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-base-content/65 hover:bg-base-200/70 hover:text-base-content'}"
               aria-pressed={activeView === tab.namespacedId}
               onclick={() => taskPaneController.select(tab.namespacedId)}
             >{tab.title}{#if $commandHeld && getTaskPaneShortcut(index) !== null}<kbd class="kbd kbd-xs opacity-50">{getTaskPaneShortcut(index)}</kbd>{/if}</button>
           {/each}
-          <span class="mx-1 text-base-content/20 select-none" aria-hidden="true">|</span>
+        </nav>
+
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+          <AgentStatusPill taskId={task.id} />
           <button
-            class="btn btn-ghost btn-xs gap-1.5 text-base-content/50 border border-base-300 shrink-0 hover:text-base-content"
+            class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-1.5 text-base-content/65 hover:text-base-content"
             aria-label="Run app locally"
             title={runAppTitle}
             disabled={!canRunApp || isRunningApp}
@@ -343,82 +328,129 @@
             {#if isRunningApp}
               <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
             {:else}
-              <Play class="w-3.5 h-3.5" aria-hidden="true" />
+              <Play class="h-3.5 w-3.5" aria-hidden="true" />
             {/if}
-            Run app
+            <span class="of-toolbar-compact-label">Run app</span>
           </button>
           <button
-            class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
+            class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-2 text-base-content/65 hover:text-base-content"
             aria-label="Open in VS Code"
             title="Open in VS Code"
             onclick={openInVsCode}
           >
-            <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor" aria-hidden="true"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true"><path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
+            <span class="of-toolbar-compact-label">Open in VS Code</span>
           </button>
         </div>
-      {:else}
-        <div></div>
       {/if}
-      <div class="flex items-center gap-3 min-w-0">
-        {#if workspacePath !== null}
-          <AgentStatusPill taskId={task.id} />
+
+      {#if task.status === 'backlog'}
+        <button
+          class="btn btn-primary btn-sm min-h-9 shrink-0"
+          disabled={isStarting}
+          onclick={() => onRunAction({ taskId: task.id, actionPrompt: '', agent: null })}
+        >
+          {#if isStarting}
+            <span class="loading loading-spinner loading-xs"></span>
+            Starting...
+          {:else}
+            Start Task
+          {/if}
+        </button>
+      {:else if task.status === 'doing'}
+        <Button
+          size="sm"
+          variant="outline"
+          class="min-h-9 shrink-0 border-primary px-4 text-primary"
+          disabled={isCompleting}
+          onclick={handleComplete}
+        >
+          {#if isCompleting}
+            <span class="loading loading-spinner loading-xs"></span>
+            Completing…
+          {:else}
+            Complete
+          {/if}
+        </Button>
+      {/if}
+
+      {#if activeView === 'agent' && workspacePath !== null}
+        <button
+          class="btn btn-ghost btn-sm min-h-9 shrink-0 gap-2 {!panelHidden ? 'bg-primary/5 text-primary' : 'text-base-content/60'}"
+          aria-label={panelHidden ? 'Show task info panel' : 'Hide task info panel'}
+          title={panelHidden ? 'Show details' : 'Hide details'}
+          aria-pressed={!panelHidden}
+          onclick={togglePanel}
+        >
+          {#if panelHidden}<PanelRightOpen size={16} aria-hidden="true" />{:else}<PanelRightClose size={16} aria-hidden="true" />{/if}
+          <span>Details</span>
+          {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘/</kbd>{/if}
+        </button>
+      {/if}
+    </div>
+  </header>
+
+  <div data-testid="upper-area" class="relative flex flex-1 min-h-0 overflow-hidden">
+    <div
+      data-testid="agent-workbench"
+      aria-hidden={activeView !== 'agent'}
+      class="min-h-0 overflow-hidden {activeView === 'agent' ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}"
+    >
+      <main class="relative flex min-w-0 flex-1 overflow-hidden bg-base-200/50 p-3" aria-label="Agent terminal workbench">
+        <div class="min-h-0 min-w-0 flex-1">
+          {#key task.id}
+            <AgentPanel taskId={task.id} {isStarting} isActive={activeView === 'agent'} />
+          {/key}
+        </div>
+        {#if $commandHeld}
+          <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
         {/if}
-        {#if activeView === 'agent' && workspacePath !== null}
-          <button
-            class="btn btn-ghost btn-xs gap-1.5 text-base-content/50 border border-base-300 shrink-0"
-            aria-label={panelHidden ? 'Show task info panel' : 'Hide task info panel'}
-            aria-pressed={!panelHidden}
-            onclick={togglePanel}
-          >{panelHidden ? 'show info' : 'hide info'}{#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘/</kbd>{/if}</button>
-        {/if}
-      </div>
+      </main>
+      {#if !panelHidden}
+        <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={280} maxWidth={520} side="right">
+          <div
+            data-testid="task-info-scroll-container"
+            data-scroll-owner="task-info-panel"
+            class="h-full min-h-0"
+          >
+            <TaskInspectorPanel
+              {task}
+              {workspacePath}
+              onEditTask={onEdit}
+              onOpenLinkedTask={onOpenTask}
+            />
+          </div>
+        </ResizablePanel>
+      {/if}
     </div>
 
-  <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-    {#if activeView === 'agent' || activeView === 'review'}
-      <div data-testid="upper-area" class="flex flex-1 min-h-0 overflow-hidden max-[800px]:flex-col">
-        {#if activeView === 'review'}
-          {#key task.id}
-            <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
-          {/key}
-        {:else}
-          <div class="relative flex-1 min-h-0 p-5 overflow-hidden max-[800px]:p-4">
-            {#key task.id}
-              <AgentPanel taskId={task.id} {isStarting} />
-            {/key}
-            {#if $commandHeld}
-              <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
-            {/if}
-          </div>
-          {#if !panelHidden}
-            <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
-              <div
-                data-testid="task-info-scroll-container"
-                data-scroll-owner="task-info-panel"
-                class="h-full min-h-0"
-              >
-                <TaskInspectorPanel
-                  {task}
-                  {workspacePath}
-                  onEditTask={onEdit}
-                  onOpenLinkedTask={onOpenTask}
-                />
-              </div>
-            </ResizablePanel>
-          {/if}
-        {/if}
+    {#if mountedViews.has('review')}
+      <div
+        data-testid="review-workbench"
+        aria-hidden={activeView !== 'review'}
+        class="min-h-0 overflow-hidden {activeView === 'review' ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}"
+      >
+        {#key task.id}
+          <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+        {/key}
       </div>
     {/if}
 
-    {#if activeView !== 'agent' && activeView !== 'review' && taskPaneController.isPluginView(activeView) && workspacePath !== null}
-      <div class="flex flex-col flex-1 overflow-hidden">
-        <PluginSlot
-          slotType="taskPaneTabs"
-          slotId={activeView}
-          taskId={task.id}
-          projectId={$activeProjectId}
-        />
-      </div>
-    {/if}
+    {#each sortedTaskPaneTabs as tab (tab.namespacedId)}
+      {#if mountedViews.has(tab.namespacedId) && workspacePath !== null}
+        <div
+          data-testid={`plugin-workbench-${tab.namespacedId}`}
+          aria-hidden={activeView !== tab.namespacedId}
+          class="min-h-0 overflow-hidden {activeView === tab.namespacedId ? 'relative z-[1] flex flex-1' : 'pointer-events-none invisible absolute inset-0 flex'}"
+        >
+          <PluginSlot
+            slotType="taskPaneTabs"
+            slotId={tab.namespacedId}
+            taskId={task.id}
+            projectId={$activeProjectId}
+          />
+        </div>
+      {/if}
+    {/each}
   </div>
 </div>

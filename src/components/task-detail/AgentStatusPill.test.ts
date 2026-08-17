@@ -44,4 +44,12 @@ describe('AgentStatusPill', () => {
 
     expect(await screen.findByLabelText('Checkpoint question pending')).toBeTruthy()
   })
+
+  it('does not render an Implementation complete status after the agent finishes', async () => {
+    setActiveSession(createAgentSession({ provider: 'pi', status: 'completed' }))
+    render(AgentStatusPill, { props: { taskId: 'T-1' } })
+
+    expect(screen.queryByText('Implementation complete')).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Start voice input' })).toBeTruthy()
+  })
 })

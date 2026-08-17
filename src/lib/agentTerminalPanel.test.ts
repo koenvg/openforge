@@ -26,7 +26,7 @@ describe('agent terminal panel helpers', () => {
     expect(getAgentStatusText('running', 'Pi agent running...')).toBe('Pi agent running...')
     expect(getAgentStatusText('running', 'Agent running...')).toBe('Agent running...')
     expect(getAgentStatusText('paused', 'Claude agent running...')).toBe('Agent paused')
-    expect(getAgentStatusText('complete', 'Agent running...')).toBe('Implementation complete')
+    expect(getAgentStatusText('complete', 'Agent running...')).toBeNull()
     expect(getAgentStatusText('error', 'Agent running...')).toBe('Error occurred')
   })
 

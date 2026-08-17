@@ -10,11 +10,12 @@
     disabled?: boolean
     listenToHotkey?: boolean
     showLabel?: boolean
+    showShortcut?: boolean
     appearance?: 'ghost' | 'outline'
     size?: 'sm' | 'md'
   }
 
-  let { onTranscription, disabled = false, listenToHotkey = false, showLabel = false, appearance = 'ghost', size = 'sm' }: Props = $props()
+  let { onTranscription, disabled = false, listenToHotkey = false, showLabel = false, showShortcut = true, appearance = 'ghost', size = 'sm' }: Props = $props()
 
   // ── State ────────────────────────────────────────────────────────────────────
   let voiceState = $state<VoiceInputState>('idle')
@@ -177,7 +178,7 @@
         <line x1="8" y1="22" x2="16" y2="22" />
       </svg>
       {#if showLabel}<span>Voice input</span>{/if}
-      <span class="text-[0.65rem] opacity-50">⌘D</span>
+      {#if showShortcut}<span class="text-[0.65rem] opacity-50">⌘D</span>{/if}
     {/if}
   </button>
 

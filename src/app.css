@@ -100,6 +100,10 @@
   --of-motion-fast: 160ms;
   --of-shadow-surface: 0 1px 2px color-mix(in srgb, var(--color-base-content) 8%, transparent);
   --of-review-canvas: #F7F6F2;
+  --of-agent-terminal-bg: var(--term-background);
+  --of-agent-terminal-border: var(--color-base-300);
+  --of-agent-terminal-text: var(--term-foreground);
+  --of-agent-terminal-muted: color-mix(in srgb, var(--term-foreground) 62%, transparent);
 }
 [data-theme="openforge-dark"] {
   --of-review-canvas: var(--color-base-200);
@@ -110,6 +114,15 @@
   --of-shadow-surface: 0 1px 2px rgb(16 18 36 / 0.06);
 }
 
+.of-task-workbench-toolbar {
+  container: task-workbench-toolbar / inline-size;
+}
+
+@container task-workbench-toolbar (max-width: 1500px) {
+  .of-toolbar-compact-label {
+    display: none;
+  }
+}
 
 .of-field {
   border: 1px solid var(--of-divider);
@@ -195,30 +208,30 @@
   --chip-starting-text: #A5A0ED;
 }
 
-/* Light terminal palette: Catppuccin Latte, a popular Ghostty-compatible theme. */
+/* Light terminal palette: GitHub Light Default (Ghostty-compatible). */
 :root, [data-theme="openforge"] {
-  --term-background: #EFF1F5;
-  --term-foreground: #4C4F69;
-  --term-cursor: #DC8A78;
-  --term-cursor-accent: #EFF1F5;
-  --term-selection-background: #ACB0BE;
-  --term-selection-foreground: #4C4F69;
-  --term-black: #5C5F77;
-  --term-red: #D20F39;
-  --term-green: #40A02B;
-  --term-yellow: #DF8E1D;
-  --term-blue: #1E66F5;
-  --term-magenta: #EA76CB;
-  --term-cyan: #179299;
-  --term-white: #ACB0BE;
-  --term-bright-black: #6C6F85;
-  --term-bright-red: #D20F39;
-  --term-bright-green: #40A02B;
-  --term-bright-yellow: #DF8E1D;
-  --term-bright-blue: #1E66F5;
-  --term-bright-magenta: #EA76CB;
-  --term-bright-cyan: #179299;
-  --term-bright-white: #BCC0CC;
+  --term-background: #FFFFFF;
+  --term-foreground: #1F2328;
+  --term-cursor: #0969DA;
+  --term-cursor-accent: #FFFFFF;
+  --term-selection-background: #0969DA33;
+  --term-selection-foreground: #1F2328;
+  --term-black: #24292F;
+  --term-red: #CF222E;
+  --term-green: #116329;
+  --term-yellow: #4D2D00;
+  --term-blue: #0969DA;
+  --term-magenta: #8250DF;
+  --term-cyan: #1B7C83;
+  --term-white: #6E7781;
+  --term-bright-black: #57606A;
+  --term-bright-red: #A40E26;
+  --term-bright-green: #1A7F37;
+  --term-bright-yellow: #633C01;
+  --term-bright-blue: #218BFF;
+  --term-bright-magenta: #A475F9;
+  --term-bright-cyan: #3192AA;
+  --term-bright-white: #8C959F;
 }
 
 [data-theme="openforge-dark"] {

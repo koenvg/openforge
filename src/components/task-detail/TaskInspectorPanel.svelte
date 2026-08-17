@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Task } from '../../lib/types'
+  import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import ExternalLink from '@lucide/svelte/icons/external-link'
+  import { getTaskTitle } from '../../lib/taskTitle'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
 
   interface Props {
@@ -14,6 +16,14 @@
   }
 
   let { task, workspacePath = null, allTasks, dependencyReferenceTasks, onOpenFullView, onOpenLinkedTask, onEditTask }: Props = $props()
+
+  let taskTitle = $derived(task === null ? '' : getTaskTitle(task))
+  let statusLabel = $derived(task?.status === 'doing' ? 'In Progress' : task?.status === 'done' ? 'Done' : 'Backlog')
+  let statusClass = $derived(task?.status === 'doing'
+    ? 'border-primary/35 bg-primary/10 text-primary'
+    : task?.status === 'done'
+      ? 'border-success/35 bg-success/10 text-success'
+      : 'border-base-300 bg-base-200 text-base-content/65')
 </script>
 
 {#if task === null}
@@ -23,16 +33,26 @@
   </aside>
 {:else}
   <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Task inspector for {task.id}">
-    <header class="flex shrink-0 items-center justify-between gap-4 border-b border-base-300 px-6 py-5">
-      <div class="min-w-0">
-        <h2 class="truncate text-lg font-semibold tracking-[-0.01em] text-base-content">{task.id}</h2>
+    <header class="shrink-0 border-b border-base-300 px-4 py-4">
+      <div class="flex min-h-10 items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <ChevronDown size={14} class="text-base-content/45" aria-hidden="true" />
+          <h2 class="m-0 text-sm font-semibold text-base-content">Task</h2>
+        </div>
+        {#if onOpenFullView}
+          <button class="btn btn-outline btn-sm min-h-10 shrink-0" type="button" onclick={onOpenFullView}>
+            Open full view
+            <ExternalLink size={14} aria-hidden="true" />
+          </button>
+        {/if}
       </div>
-      {#if onOpenFullView}
-        <button class="btn btn-outline btn-sm shrink-0" type="button" onclick={onOpenFullView}>
-          Open full view
-          <ExternalLink size={14} aria-hidden="true" />
-        </button>
-      {/if}
+      <div class="mt-3 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-mono text-xs font-semibold text-base-content/65">{task.id}</div>
+          <p class="mt-1 line-clamp-2 text-[13px] font-medium leading-snug text-base-content" title={taskTitle}>{taskTitle}</p>
+        </div>
+        <span class="shrink-0 rounded-md border px-2 py-1 text-xs font-semibold {statusClass}">{statusLabel}</span>
+      </div>
     </header>
 
     <TaskInfoPanel

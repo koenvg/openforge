@@ -9,7 +9,7 @@ export interface AgentProviderConfig {
 }
 
 export interface AgentStatusPillView {
-  statusText: string
+  statusText: string | null
   checkpointActive: boolean
 }
 

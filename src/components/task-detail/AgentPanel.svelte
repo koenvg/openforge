@@ -7,9 +7,10 @@
   interface Props {
     taskId: string
     isStarting?: boolean
+    isActive?: boolean
   }
 
-  let { taskId, isStarting = false }: Props = $props()
+  let { taskId, isStarting = false, isActive = false }: Props = $props()
 
   // Check the store first; if absent, try loading from DB once on mount.
   let session = $derived($activeSessions.get(taskId) || null)
@@ -37,12 +38,14 @@
   <AgentTerminalShell
     {taskId}
     {isStarting}
+    {isActive}
     sessionIdKey="claude_session_id"
   />
 {:else if provider === 'pi'}
   <AgentTerminalShell
     {taskId}
     {isStarting}
+    {isActive}
     sessionIdKey="pi_session_id"
     rootTestId="pi-agent-panel"
   />
@@ -50,6 +53,7 @@
   <AgentTerminalShell
     {taskId}
     {isStarting}
+    {isActive}
     sessionIdKey={null}
     rootTestId="codex-agent-panel"
   />
@@ -57,6 +61,7 @@
   <AgentTerminalShell
     {taskId}
     {isStarting}
+    {isActive}
     sessionIdKey="grok_session_id"
     rootTestId="grok-agent-panel"
   />
@@ -64,6 +69,7 @@
   <AgentTerminalShell
     {taskId}
     {isStarting}
+    {isActive}
     sessionIdKey="opencode_session_id"
     rootTestId="opencode-agent-panel"
   />
