@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
@@ -402,42 +403,56 @@ function formatPluginValue(value: unknown): string {
   }
 }
 
-let pluginConsoleQueue: Promise<void> = Promise.resolve()
+const pluginConsoleContext = new AsyncLocalStorage<string>()
+let pluginConsoleUsers = 0
+let originalPluginConsole: Pick<Console, 'debug' | 'error' | 'info' | 'log' | 'warn'> | null = null
 
-async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T> | T): Promise<T> {
-  const previousConsoleUse = pluginConsoleQueue
-  let releaseConsoleUse: () => void = () => undefined
-  pluginConsoleQueue = new Promise<void>((resolve) => {
-    releaseConsoleUse = resolve
-  })
-  await previousConsoleUse.catch(() => undefined)
+function writePluginConsole(method: keyof NonNullable<typeof originalPluginConsole>, values: unknown[]): void {
+  const pluginId = pluginConsoleContext.getStore()
+  const original = originalPluginConsole?.[method]
+  if (!pluginId) {
+    original?.(...values)
+    return
+  }
+  process.stderr.write(`[plugin:${pluginId}] ${values.map(formatPluginValue).join(' ')}\n`)
+}
 
-  const originalConsole = {
+function acquirePluginConsole(): void {
+  pluginConsoleUsers += 1
+  if (pluginConsoleUsers !== 1) return
+
+  originalPluginConsole = {
     debug: console.debug,
     error: console.error,
     info: console.info,
     log: console.log,
     warn: console.warn,
   }
-  const write = (...values: unknown[]) => {
-    process.stderr.write(`[plugin:${pluginId}] ${values.map(formatPluginValue).join(' ')}\n`)
-  }
+  console.debug = (...values: unknown[]) => writePluginConsole('debug', values)
+  console.error = (...values: unknown[]) => writePluginConsole('error', values)
+  console.info = (...values: unknown[]) => writePluginConsole('info', values)
+  console.log = (...values: unknown[]) => writePluginConsole('log', values)
+  console.warn = (...values: unknown[]) => writePluginConsole('warn', values)
+}
 
-  console.debug = write
-  console.error = write
-  console.info = write
-  console.log = write
-  console.warn = write
+function releasePluginConsole(): void {
+  pluginConsoleUsers -= 1
+  if (pluginConsoleUsers !== 0 || !originalPluginConsole) return
 
+  console.debug = originalPluginConsole.debug
+  console.error = originalPluginConsole.error
+  console.info = originalPluginConsole.info
+  console.log = originalPluginConsole.log
+  console.warn = originalPluginConsole.warn
+  originalPluginConsole = null
+}
+
+async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T> | T): Promise<T> {
+  acquirePluginConsole()
   try {
-    return await operation()
+    return await pluginConsoleContext.run(pluginId, operation)
   } finally {
-    console.debug = originalConsole.debug
-    console.error = originalConsole.error
-    console.info = originalConsole.info
-    console.log = originalConsole.log
-    console.warn = originalConsole.warn
-    releaseConsoleUse()
+    releasePluginConsole()
   }
 }
 
@@ -1190,8 +1205,6 @@ function startStdioServer(): void {
     crlfDelay: Infinity,
   })
 
-  let requestQueue: Promise<void> = Promise.resolve()
-
   input.on('line', (line) => {
     if (!line.trim()) {
       return
@@ -1210,14 +1223,10 @@ function startStdioServer(): void {
       return
     }
 
-    requestQueue = requestQueue
-      .catch(() => undefined)
-      .then(() => handleRequest(message as JsonRpcRequest))
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error)
-        process.stderr.write(`[plugin_host] request handling error: ${message}\n`)
-      })
-    void requestQueue
+    void handleRequest(message as JsonRpcRequest).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      process.stderr.write(`[plugin_host] request handling error: ${message}\n`)
+    })
   })
 
   input.on('close', () => {
