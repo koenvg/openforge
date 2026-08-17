@@ -6,7 +6,6 @@ import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
 const baseValues: Record<string, string> = {
   code_cleanup_tasks_enabled: 'false',
   task_display_title_metadata_updates_enabled: 'false',
-  handoff_notes_enabled: 'true',
   ai_provider: 'claude-code',
   use_worktrees: 'true',
   task_id_prefix: 'WEB',
@@ -119,7 +118,6 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
 
     // Settings whose only home is the grouped card remain visible.
     expect(screen.queryByTestId('code_cleanup_tasks_enabled')).not.toBeNull()
-    expect(screen.queryByTestId('handoff_notes_enabled')).not.toBeNull()
     expect(screen.queryByTestId('task_id_prefix')).not.toBeNull()
   })
 })

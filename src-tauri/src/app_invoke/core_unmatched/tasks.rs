@@ -92,29 +92,6 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             publish_task_changed(state, &id, project_id.as_deref());
             Ok(serde_json::Value::Null)
         }
-        "update_task_summary" => {
-            let id = payload_string(&request.payload, "id")?;
-            let summary = payload_string(&request.payload, "summary")?;
-            let project_id = {
-                let db = crate::db::acquire_db(&state.db);
-                db.update_task_summary(&id, &summary).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to update task summary: {e}"),
-                    )
-                })?;
-                db.get_task(&id)
-                    .map_err(|error| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to reload task after summary update: {error}"),
-                        )
-                    })?
-                    .and_then(|task| task.project_id)
-            };
-            publish_task_changed(state, &id, project_id.as_deref());
-            Ok(serde_json::Value::Null)
-        }
         "update_task_source_ticket_url" => {
             let id = payload_string(&request.payload, "id")?;
             let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
@@ -225,12 +202,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
     let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
     let title = payload_optional_string(&request.payload, "title")?;
     let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
-    // Default to enabled so callers that omit the flag keep handoff notes.
-    let handoff_notes_enabled = request
-        .payload
-        .get("handoffNotesEnabled")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(true);
     // Task-level hierarchy overrides: absent (None) means "inherit
     // project/global" so the runtime resolves them at start time.
     let code_cleanup_enabled = request
@@ -255,7 +226,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
                 worktree_source: worktree_source.as_deref(),
                 worktree_branch: worktree_branch.as_deref(),
                 title: title.as_deref(),
-                handoff_notes_enabled,
                 source_ticket_url: source_ticket_url.as_deref(),
                 code_cleanup_enabled,
                 task_display_title_updates_enabled,

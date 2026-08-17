@@ -4,7 +4,7 @@ Status: accepted baseline, amended by [Companion Agent Terminal — Design](2026
 
 ## Problem Statement
 
-OpenForge is a local-first desktop command center, so a user must currently be at the Mac running OpenForge to see which Tasks need attention, read current Handoff Notes, or check an Agent's state. That makes it easy to miss a blocked or completed Agent when the user has stepped away from the desktop, even though the user only needs a small amount of read-only context rather than the full development environment.
+OpenForge is a local-first desktop command center, so a user must currently be at the Mac running OpenForge to see which Tasks need attention or check an Agent's state. That makes it easy to miss a blocked or completed Agent when the user has stepped away from the desktop, even though the user only needs a small amount of read-only context rather than the full development environment.
 
 The user does not want an OpenForge-operated account, synchronization service, relay, or central server. Repositories, SQLite data, provider credentials, Agent processes, Worktrees, terminals, and GitHub state must remain owned by the desktop host. The existing authenticated HTTP bridge is not an appropriate mobile interface: it is intentionally loopback-only, uses a per-launch internal token, and exposes broad command execution intended only for Electron.
 
@@ -18,7 +18,7 @@ The desktop gains an opt-in Companion Gateway that is disabled by default and is
 
 Pairing begins in Desktop Settings. The desktop displays a QR code containing a short-lived, single-use pairing secret, the persistent desktop identity, its pinned TLS certificate fingerprint, the protocol version, and reachable LAN/Tailscale endpoints. The phone scans the QR code and waits until the user explicitly approves the device on the desktop. Approval issues a revocable, device-specific credential stored in the phone's Keychain or Keystore. That credential authorizes the purpose-built status and Task reads plus interactive input and resizing for already-running Agent terminals as the desktop user. The desktop stores only a verifier for the credential. A paired device can be revoked individually, and disabling the Companion Gateway invalidates all companion connectivity.
 
-The first release is deliberately small. Its home screen is an attention-first list of Tasks that need the user's attention, using OpenForge's existing Focus/attention terminology and behavior. A user can open a basic Task detail showing the display title, Project, Board Status, Handoff Notes, and current Agent state. The user can manually refresh, and the screen updates live while the app is open. When the desktop is unavailable, the companion displays an unavailable state and does not show a persisted snapshot.
+The first release is deliberately small. Its home screen is an attention-first list of Tasks that need the user's attention, using OpenForge's existing Focus/attention terminology and behavior. A user can open a basic Task detail showing the display title, Project, Board Status, the initial prompt, and current Agent state. The user can manually refresh, and the screen updates live while the app is open. When the desktop is unavailable, the companion displays an unavailable state and does not show a persisted snapshot.
 
 The companion's Task workflow remains non-mutating: it cannot create or edit Tasks, change Board Status, send Agent feedback, start or abort an Agent, inspect repository files or diffs, merge a Pull Request, or Complete a Task. A paired device can attach to, read, type into, and resize an already-running Task Agent terminal as the desktop user; it cannot control Agent lifecycle or access ordinary shell terminals.
 
@@ -74,8 +74,6 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 48. As a mobile user, I want to open an attention Task, so that I can inspect the small amount of context needed to understand it.
 49. As a mobile user, I want Task detail to show the explicit display title or the same prompt-derived fallback used by the desktop, so that Task naming is consistent.
 50. As a mobile user, I want Task detail to show its Project and Board Status, so that I understand where the Task belongs and whether it is active.
-51. As a mobile user, I want Task detail to show Handoff Notes, so that I can read the Agent's current reviewer brief.
-52. As a mobile user, I want a clear empty state when Handoff Notes have not been written, so that absence is not presented as a loading failure.
 53. As a mobile user, I want Task detail to show the current Agent state, so that I know whether it is waiting, running, blocked, failed, or complete.
 54. As a mobile user, I want an Agent error summary when one is available, so that I can understand why a Task needs attention without terminal access.
 55. As a mobile user, I want Task detail to update live while open, so that Agent transitions are visible without leaving the screen.
@@ -92,12 +90,12 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 66. As an OpenForge user, I want Complete, delete, merge, start, abort, and status-change operations to be absent from the companion protocol, so that hiding buttons is not the only protection.
 67. As an iPhone user, I want the core pairing, connection, attention, and Task-detail flow to work in a private/TestFlight build, so that the architecture can be validated before public distribution.
 68. As an Android user, I want the same core flow in an internal build, so that Flutter's cross-platform behavior is validated from the beginning.
-69. As a mobile user using assistive technology, I want connection states, attention rows, Handoff Notes, and Agent states to have meaningful semantic labels, so that the companion is operable with a screen reader.
+69. As a mobile user using assistive technology, I want connection states, attention rows, initial prompts, and Agent states to have meaningful semantic labels, so that the companion is operable with a screen reader.
 70. As a mobile user, I want loading, unavailable, rejected, revoked, and incompatible states to be visually and textually distinct, so that recovery does not depend on color alone.
 71. As a developer, I want the mobile client generated from a versioned API description, so that Rust and Dart contract drift is detected before release.
 72. As a developer, I want companion events to be coarse invalidations rather than internal domain payloads, so that backend model changes do not unnecessarily break the mobile app.
 73. As a developer, I want the existing internal Electron bridge to remain loopback-only and unchanged, so that mobile support does not weaken the desktop security boundary.
-74. As a developer, I want companion access logged without logging credentials or Handoff Note contents, so that connection and authorization failures can be diagnosed safely.
+74. As a developer, I want companion access logged without logging credentials or private Task contents, so that connection and authorization failures can be diagnosed safely.
 
 ## Implementation Decisions
 
@@ -109,7 +107,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - The OpenForge desktop application is the authoritative host and must be running. No background daemon, login item, or always-on service is introduced by this specification.
 - OpenForge operates no account system, synchronization service, rendezvous service, relay, push provider, or central server for the companion.
 - LAN is the default nearby transport. Tailscale is the supported away-from-LAN transport and must be installed and connected on both devices for remote use. OpenForge does not authenticate to the Tailscale control plane or store Tailscale account credentials.
-- The phone keeps no persisted Task, Project-attention, Agent-state, or Handoff-Notes cache. Only the host trust record, endpoint candidates, and device credential persist in secure mobile storage.
+- The phone keeps no persisted Task, Project-attention, or Agent-state cache. Only the host trust record, endpoint candidates, and device credential persist in secure mobile storage.
 
 ### Desktop Companion Gateway
 
@@ -119,7 +117,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - The Companion Gateway is a dedicated Rust-owned interface because Rust already owns Tasks, Projects, SQLite, Agent lifecycle, and the App Event Bus. Electron continues to own settings-window presentation and sidecar supervision rather than becoming a second domain backend.
 - The gateway uses an independently allocated/configured port and a separate router containing only companion routes. It may listen on reachable private interfaces only while the feature is enabled. Every non-pairing route requires a valid device credential.
 - Disabling the gateway closes the listener and live streams. Existing paired-device records remain unless the user explicitly resets companion identity or revokes devices, allowing later re-enablement without accidental trust churn.
-- Companion lifecycle and failures are surfaced through Desktop Settings and developer logs without recording pairing secrets, bearer credentials, Handoff Notes, or other sensitive response content.
+- Companion lifecycle and failures are surfaced through Desktop Settings and developer logs without recording pairing secrets, bearer credentials or other sensitive response content.
 
 ### Versioned API contract
 
@@ -128,11 +126,11 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - The authenticated read surface is intentionally small:
   - a connection/status resource containing host identity, protocol version, and server time;
   - an attention resource containing normalized, task-scoped attention rows grouped or groupable by Project;
-  - a Task-detail resource containing only Task identity, display title/fallback, Project identity/name, Board Status, Handoff Notes, normalized Agent state/error summary, and relevant timestamps;
+  - a Task-detail resource containing only Task identity, display title/fallback, Project identity/name, Board Status, the initial prompt, normalized Agent state/error summary, and relevant timestamps;
   - an SSE event resource for live invalidations.
 - Beyond ephemeral pairing-request submission, the contract exposes no Task or other domain mutation endpoint, generic command name, arbitrary payload, SQL-like filtering, filesystem path, repository content, diff, terminal buffer, provider session identifier, provider credential, GitHub token, or plugin RPC.
 - The gateway returns stable error categories for unauthenticated, revoked, incompatible-version, not-found, rate-limited, and temporarily unavailable states. Mobile copy maps these categories to explicit recovery states rather than displaying raw backend errors.
-- Response payloads use the established OpenForge domain terms: Project, Task, Board Status, Handoff Notes, Agent, Focus, and Needs Attention.
+- Response payloads use the established OpenForge domain terms: Project, Task, Board Status, Agent, Focus, and Needs Attention.
 
 ### Attention read model
 
@@ -179,7 +177,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - The app has two primary authenticated surfaces: the attention-first home and basic Task detail.
 - The app stores no domain snapshot in SQLite, files, shared preferences, or analytics. Domain responses live in memory for the current connected foreground session only.
 - When all endpoints become unavailable, the authenticated domain view is cleared and replaced by Desktop Unavailable. The app does not render the last snapshot with a stale badge.
-- Task-detail content is limited to title, Project, Board Status, Handoff Notes, normalized Agent state, optional safe error summary, and timestamps required for context.
+- Task-detail content is limited to title, Project, Board Status, the initial prompt, normalized Agent state, optional safe error summary, and timestamps required for context.
 - Both iOS and Android use platform secure storage for the pairing credential and host trust record. Sensitive values are excluded from crash reports and application logs.
 - The app includes no analytics or hosted telemetry in v1.
 - Platform privacy controls should obscure app-switcher snapshots where practical. This is defense in depth and does not replace device-level access control.
@@ -214,7 +212,7 @@ The companion's Task workflow remains non-mutating: it cannot create or edit Tas
 - Event-stream tests follow the existing App Event Bus and HTTP transport prior art. They cover authorization, Task/Agent invalidations, cursor resume, replay, lag/gap behavior, revocation of an active stream, gateway shutdown, and fresh-snapshot recovery.
 - OpenAPI contract tests verify that the checked-in/generated contract represents every public gateway response and that generated Dart models/client code is current. Rust response fixtures must decode with the generated Dart contract in CI or an equivalent cross-language compatibility harness.
 - Flutter business tests use one fake `CompanionClient` seam at the generated-client boundary. They cover pairing states, desktop approval polling, secure credential persistence calls, endpoint fallback, certificate mismatch, unavailable/retry behavior, revocation, incompatible versions, reconnect backoff, foreground/resume refresh, event invalidation, and no-offline-snapshot behavior.
-- Flutter widget tests cover user-visible business behavior for the attention list, Project grouping, empty state, Task-detail fields, missing Handoff Notes, Agent error summary, semantic labels, and distinct recovery actions. They do not assert visual styling.
+- Flutter widget tests cover user-visible business behavior for the attention list, Project grouping, empty state, Task-detail fields, Agent error summary, semantic labels, and distinct recovery actions. They do not assert visual styling.
 - Desktop settings tests follow existing Svelte settings and Electron bridge test patterns. They cover opt-in enablement, QR lifecycle, pending-device approval/rejection, device listing, revocation confirmation, confirmed per-device removal of revoked records, disablement, identity-reset confirmation, and IPC error presentation.
 - Electron/sidecar lifecycle tests verify that the gateway starts only when enabled, remains separate from the loopback bridge, reports health to Settings, closes during coordinated shutdown, and does not delay the established sidecar shutdown budget beyond its contract.
 - A focused process-level security smoke test binds the real TLS gateway and proves successful pinned-certificate connection plus rejection of an unpinned certificate. Certificate-library primitives themselves are not re-tested.

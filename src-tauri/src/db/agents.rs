@@ -648,8 +648,8 @@ mod tests {
             .lock()
             .unwrap()
             .execute(
-                "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                rusqlite::params!["T-200", "second task", "doing", None::<String>, 1, 1, "second task", None::<String>, None::<String>, None::<String>],
+                "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params!["T-200", "second task", "doing", None::<String>, 1, 1, "second task", None::<String>, None::<String>],
             )
             .expect("create second task failed");
 

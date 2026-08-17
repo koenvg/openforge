@@ -14,8 +14,6 @@ export interface CreateTaskOptions {
   worktreeBranch?: string | null
   /** Explicit display title; null/empty falls back to the prompt-derived title. */
   title?: string | null
-  /** When false, the task's start prompt omits the handoff-notes block. Defaults to true. */
-  handoffNotesEnabled?: boolean
   /** Optional link to the source ticket (e.g. GitHub issue / Jira URL); null/empty stores nothing. */
   sourceTicketUrl?: string | null
   /** Task-level cleanup override; omit to inherit the project/global default. */
@@ -33,13 +31,12 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     worktreeSource = null,
     worktreeBranch = null,
     title = null,
-    handoffNotesEnabled = true,
     sourceTicketUrl = null,
     codeCleanupEnabled,
     taskDisplayTitleUpdatesEnabled,
     aiProvider = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, handoffNotesEnabled, sourceTicketUrl, codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, aiProvider });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, aiProvider });
   return normalizeTask(task)
 }
 
@@ -51,9 +48,6 @@ export async function updateTaskTitle(id: string, title: string): Promise<void> 
   return invoke("update_task_title", { id, title });
 }
 
-export async function updateTaskSummary(id: string, summary: string): Promise<void> {
-  return invoke("update_task_summary", { id, summary });
-}
 
 export async function updateTaskSourceTicketUrl(id: string, sourceTicketUrl: string | null): Promise<void> {
   return invoke("update_task_source_ticket_url", { id, sourceTicketUrl });

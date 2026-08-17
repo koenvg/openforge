@@ -14,7 +14,7 @@ The approved [Mobile Project Board and Task Actions design](../../docs/superpowe
 Bonjour/mDNS discovery is endpoint selection, not authorization. Its service
 record contains only the persistent host identifier and protocol version plus the
 private addresses and port needed to try the gateway. It broadcasts no Task,
-Project, Agent, or Handoff Note data, no certificate or credential, and no pairing
+Project, or Agent data, no certificate or credential, and no pairing
 secret. A discovered endpoint is accepted only when it belongs to the already
 paired host and presents the exact pinned certificate.
 
@@ -30,15 +30,15 @@ without reapproval, migration, renewed consent, or per-device scopes.
 The Project catalog contains only visible Project identifiers and display names.
 The Board contains the authoritative Focus, In Flight, Out of Focus, and Backlog
 partition with safe Task identity, title, state, reason, and activity metadata.
-Task detail contains Task and Project identity, Board Status, Handoff Notes,
-normalized Agent state, an optional safe Agent error summary, terminal
+Task detail contains Task and Project identity, Board Status, normalized Agent
+state, an optional safe Agent error summary, terminal
 availability, and timestamps. The API omits filesystem paths, repository data,
 provider configuration, internal Agent-session identifiers, terminal content,
 and credentials from these HTTP resources.
 
 Create accepts only an initial prompt and the selected visible Project identifier.
 The desktop creates a Backlog Task and leaves provider, permission, worktree,
-Handoff Notes, and other runtime settings to desktop-saved Project defaults. Create
+and other runtime settings to desktop-saved Project defaults. Create
 makes one network attempt; after transport uncertainty mobile refreshes Backlog and
 warns the user to check for the Task before manually retrying.
 
@@ -68,7 +68,7 @@ failure remove access. The API exposes no generic command dispatch, arbitrary
 status mutation, repository access, ordinary shell terminal, caller-supplied
 provider/workspace options, or public-release scope system. Action diagnostics
 are restricted to safe request, Task, action, outcome, and timing metadata;
-they never contain credentials, prompts, Handoff Notes, terminal content,
+they never contain credentials, prompts, terminal content,
 provider options, workspace paths, or repository data. Every post-pairing LAN or
 Tailscale request uses the same device credential and exact certificate pin.
 Only host trust (host identity and certificate fingerprint), endpoint candidates,

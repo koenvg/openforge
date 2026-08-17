@@ -689,7 +689,7 @@ Replace the intro `<p>` `{#if mode === 'github'} … {:else} … {/if}` with:
       {:else if mode === 'github'}
         Paste a GitHub repository URL and OpenForge will clone it and set up the project.
       {:else}
-        Connect a local repository so OpenForge can track tasks and agent handoffs for it.
+        Connect a local repository so OpenForge can track tasks and agent progress for it.
       {/if}
     </p>
 ```

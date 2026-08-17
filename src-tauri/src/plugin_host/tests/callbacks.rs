@@ -532,19 +532,6 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
 
     assert_eq!(
         host.handle_host_callback(
-            "openforge.tasks.updateSummary",
-            &json!({ "taskId": task_id, "summary": "Scheduler handoff" }),
-        )
-        .await
-        .expect("task summary callback"),
-        Value::Null
-    );
-    let summary_event = events.try_recv().expect("summary Task invalidation");
-    assert_eq!(summary_event.event_name, "task-changed");
-    assert_eq!(summary_event.payload["task_id"], task_id);
-    assert_eq!(summary_event.payload["project_id"], project.id);
-    assert_eq!(
-        host.handle_host_callback(
             "openforge.tasks.updateStatus",
             &json!({ "taskId": task_id, "status": "doing" }),
         )
@@ -590,7 +577,6 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
             .get_task(&task_id)
             .expect("get updated task")
             .expect("task exists");
-        assert_eq!(task.summary.as_deref(), Some("Scheduler handoff"));
         assert_eq!(task.status, "doing");
         db.create_task_workspace_record(
             &task_id,

@@ -316,7 +316,7 @@ async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata
         &state,
         "create_task",
         json!({
-            "initialPrompt": "Preserve the handoff notes",
+            "initialPrompt": "Delete this backlog task",
             "status": "backlog",
             "projectId": project_id,
             "permissionMode": null,
@@ -326,8 +326,6 @@ async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata
     let task_id = task["id"].as_str().expect("task id").to_string();
     {
         let db = crate::db::acquire_db(&state.db);
-        db.update_task_summary(&task_id, "## Handoff Notes\nUseful reference")
-            .expect("set handoff notes");
         db.create_worktree_record(
             &task_id,
             project_id,

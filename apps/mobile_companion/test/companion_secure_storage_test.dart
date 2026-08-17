@@ -179,7 +179,6 @@ void main() {
       'projects',
       'agent',
       'agents',
-      'handoffNotes',
       'attention',
       'terminal',
       'terminalInput',
@@ -190,7 +189,6 @@ void main() {
     ]) {
       expect(persisted, isNot(contains(forbiddenField)));
     }
-    expect(jsonEncode(persisted), isNot(contains('Private Handoff Notes')));
   });
 
   test(

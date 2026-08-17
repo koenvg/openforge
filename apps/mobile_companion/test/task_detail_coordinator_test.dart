@@ -110,7 +110,6 @@ final class _TaskClient implements CompanionClient {
       projectId: 'P-1',
       projectName: 'OpenForge',
       boardStatus: 'doing',
-      handoffNotes: 'Notes',
       agentState: 'running',
       agentErrorSummary: null,
       createdAt: DateTime.utc(2026, 1, 1),

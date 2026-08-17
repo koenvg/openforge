@@ -29,7 +29,6 @@ describe('settingsSaver', () => {
       projectName: 'My Project',
       projectPath: '/tmp/project',
       agentInstructions: 'Do the thing',
-      handoffNotesTemplate: '## Current summary\nCustom template',
       projectColor: 'violet',
       runCommand: 'pnpm dev',
       focusFilterStates: ['idle'],
@@ -38,7 +37,6 @@ describe('settingsSaver', () => {
     expect(updateProject).toHaveBeenCalledWith('project-1', 'My Project', '/tmp/project')
     expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'github_default_repo', expect.anything())
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'handoff_notes_template', '## Current summary\nCustom template')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'run_command', 'pnpm dev')
     expect(saveFocusFilterStates).toHaveBeenCalledWith('project-1', ['idle'])
@@ -50,7 +48,6 @@ describe('settingsSaver', () => {
       projectName: 'My Project',
       projectPath: '/tmp/project',
       agentInstructions: 'Do the thing',
-      handoffNotesTemplate: '## Current summary\nCustom template',
       projectColor: 'violet',
       runCommand: '',
       focusFilterStates: ['idle'],
@@ -67,7 +64,6 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
       githubPollInterval: 45,
-      handoffNotesEnabled: false,
       useWorktrees: false,
       aiProvider: 'opencode',
     })
@@ -77,7 +73,6 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
-    expect(setConfig).toHaveBeenCalledWith('handoff_notes_enabled', 'false')
     expect(setConfig).toHaveBeenCalledWith('use_worktrees', 'false')
     expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')
   })
@@ -96,7 +91,6 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 0,
-      handoffNotesEnabled: true,
       useWorktrees: true,
       aiProvider: 'claude-code',
     })
@@ -111,7 +105,6 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 10,
-      handoffNotesEnabled: true,
       useWorktrees: true,
       aiProvider: 'claude-code',
     })
@@ -126,7 +119,6 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 301,
-      handoffNotesEnabled: true,
       useWorktrees: true,
       aiProvider: 'claude-code',
     })
@@ -141,7 +133,6 @@ describe('settingsSaver', () => {
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: Number.NaN,
-      handoffNotesEnabled: true,
       useWorktrees: true,
       aiProvider: 'claude-code',
     })

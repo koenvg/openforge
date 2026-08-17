@@ -8,7 +8,6 @@ export interface CreateTaskDraft {
   aiProvider: string | null
   title: string
   sourceTicketUrl: string
-  handoffNotesEnabled: boolean
   codeCleanupEnabled: boolean
   taskDisplayTitleUpdatesEnabled: boolean
 }
@@ -27,7 +26,6 @@ export function createTaskDraft(): CreateTaskDraft {
     aiProvider: null,
     title: '',
     sourceTicketUrl: '',
-    handoffNotesEnabled: true,
     codeCleanupEnabled: false,
     taskDisplayTitleUpdatesEnabled: false,
   }

@@ -70,7 +70,6 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskImplementationStarts: [],
     taskFollowUps: [],
     taskListRequests: [],
-    taskSummaryUpdates: [],
     taskStatusUpdates: [],
     configWrites: [],
     fsWrites: [],

@@ -66,7 +66,6 @@ export interface TestingOpenForgeApiCalls {
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]
   taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
-  taskSummaryUpdates: Array<{ taskId: string; summary: string }>
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>

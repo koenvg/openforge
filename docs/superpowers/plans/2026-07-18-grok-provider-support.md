@@ -682,7 +682,6 @@ git commit -m "feat(ui): grok resume command and status pill config (AVIV-117)"
 - [ ] **Step 3:** Create a task, start it. Confirm: Grok launches in the worktree, the task prompt is injected and runs, the status pill goes running→done on `Stop`.
 - [ ] **Step 4:** Stop and resume the task. Confirm it resumes the same Grok session (check `grok sessions list` shows continuity / the stored `grok_session_id`).
 - [ ] **Step 5:** As a non-OpenForge sanity check, run `grok` yourself in an unrelated dir and confirm the global hook stays silent (no OpenForge traffic — the `OPENFORGE_TASK_ID` guard holds).
-- [ ] **Step 6:** Update the OpenForge task handoff notes (`openforge task update --task-id AVIV-117 --summary ...`) with final status and the deferred follow-up list.
 
 ---
 

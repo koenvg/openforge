@@ -52,14 +52,6 @@ _Avoid_: Restart, start, continue with prompt
 A message sent into an existing **Agent Session** to continue or redirect work.
 _Avoid_: Resume, restart
 
-**Handoff Notes**:
-A living reviewer-facing brief on a **Task** that summarizes what needs inspection after agent work.
-_Avoid_: Completion log, run history, random comments
-
-**Handoff Notes Workflow**:
-An optional, project-enabled workflow that prompts agents to maintain **Handoff Notes** and gives users supporting template or review surfaces.
-_Avoid_: Core task summary, mandatory agent ritual, plugin-private notes
-
 **Task Attention Pane**:
 A compact task detail area that prioritizes current signals requiring user attention before long-form task documents.
 _Avoid_: Status cockpit, right sidebar, document reader
@@ -91,11 +83,6 @@ _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
 **Addressed Pull Request Comment**:
 A pull request comment the user has marked as handled in OpenForge's local review workflow; it remains a GitHub comment and does not imply that its GitHub conversation was resolved.
 _Avoid_: Resolved GitHub comment, dismissed comment
-
-**Project Handoff Notes Template**:
-A project-owned format that defines what **Handoff Notes** must contain for that project.
-_Avoid_: Global summary format, additional instructions
-
 **Project Agent Settings**:
 The project-owned choice of provider, agent, and permission mode for new **Implementation Runs**.
 _Avoid_: Plugin run options, per-call agent override
@@ -309,11 +296,11 @@ The repository location for website implementation: an Astro monorepo workspace 
 _Avoid_: Desktop renderer, docs folder site, separate repository
 
 **Marketing Site First Milestone**:
-The first website implementation target: a small static one-page **Marketing Site** ordered as hero with a concrete task → agent → handoff → review workflow visual, top reasons, product screenshot proof, a small plugin customization section, install/GitHub call-to-action block, and footer links.
+The first website implementation target: a small static one-page **Marketing Site** ordered as hero with a concrete task → agent → changes → review workflow visual, top reasons, product screenshot proof, a small plugin customization section, install/GitHub call-to-action block, and footer links.
 _Avoid_: Blog, hosted docs system, plugin marketplace, analytics, mailing list, interactive demo, standalone workflow section, standalone local-first trust section
 
 **Marketing Site Visual Direction**:
-A developer-tool aesthetic for the **Marketing Site** that uses a concrete workflow hero visual and product screenshots rather than generic AI imagery; a vibrant block/bento hero is acceptable when it still makes the task → agent → handoff → review path clear.
+A developer-tool aesthetic for the **Marketing Site** that uses a concrete workflow hero visual and product screenshots rather than generic AI imagery; a vibrant block/bento hero is acceptable when it still makes the task → agent → changes → review path clear.
 _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot art
 
 ## Relationships
@@ -321,7 +308,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Mobile Action Palette** mirrors the desktop action model, not Task or plugin-command search; native mobile navigation remains outside the palette.
 - The **Mobile Action Palette** presents only actions currently granted by **Companion Task Authority** and available for its Task or **Selected Project** context.
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
-- A **Task Display Title** belongs to a **Task** and does not change its initial prompt, mutable prompt, or **Handoff Notes**.
+- A **Task Display Title** belongs to a **Task** and does not change its initial or mutable prompt.
 - Automatic **Task Display Title** generation is an experimental opt-in feature; when enabled, it happens at most once early in **Agent Session** activity and only when the user has not manually set a title.
 - A **Task Label** may be created while assigning labels to a **Task**; removing a label from one **Task** is separate from deleting the reusable **Task Label** from the project.
 - **Project Task Creation Settings** provide defaults for **Task Creation** while still allowing a specific new **Task** to override them before it is saved.
@@ -415,18 +402,14 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.
 - **Implementation Input** targets an existing **Agent Session** and does not choose a new provider or agent.
-- **Handoff Notes** belong to a **Task** and are updated to reflect the current review state rather than appended per **Implementation Run**.
-- A **Handoff Notes Workflow** may be supplied by a **Trusted Plugin**, but the shared **Handoff Notes** brief remains Task-owned when present.
-- A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as **Handoff Notes** or the initial prompt.
+- A **Task Attention Pane** surfaces the most time-sensitive Task signals before lower-priority long-form context such as the initial prompt.
 - A **Reviewed File** can belong to self-review or pull request review; it remains reviewed only while its content identity is unchanged.
 - A **Reviewed File Snapshot** records the accepted file version for a **Reviewed File**, not the latest commit on the branch.
 - A **Review File Tree** keeps **Reviewed Files** in their original location as navigation items.
 - A **Diff File Section** may collapse after its file becomes a **Reviewed File**, while remaining available to reopen.
 - A supported **Diff File Section** defaults to its source diff and may switch independently to a **Rich Diff View** of the post-change result.
 - A **Review Feedback Prompt** instructs the agent to evaluate and fix the feedback only; it never instructs version-control actions (commit, push, PR) — those decisions stay with the user.
-- A **Project Handoff Notes Template** defines the required shape of **Handoff Notes** for Tasks in one project.
-- Existing Tasks may have unstructured historical summaries; **Handoff Notes** are the forward-looking reviewer brief, not a migration requirement.
-- A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, **Handoff Notes**, PR title, or PR body rather than in prompt-derived branch text.
+- A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, PR title, or PR body rather than in prompt-derived branch text.
 - **Merge Readiness** is stricter than review readiness; it should not mark a pull request ready only because a human could start reviewing it.
 - **Ready to Merge** and **Ready to Enqueue** are distinct first-class **Merge Readiness** outcomes because merge queues replace direct merge action with queue entry.
 - **Ready to Enqueue** remains a first-class handoff even before OpenForge can perform the enqueue action itself.
@@ -479,10 +462,6 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Resume" was used to mean both reattaching a detached session and sending a new prompt to an active session — resolved: **Session Reattachment** means reconnect only, while **Implementation Input** is the prompt/message.
 - `agent` and `permissionMode` were considered for plugin **Task Creation** — resolved: task creation records work only; execution policy belongs to **Project Agent Settings**.
 - Task status was considered for plugin **Task Creation** — resolved: plugin-created tasks always enter the backlog.
-- "Handoff" could mean a per-run completion record or the current reviewer brief — resolved: **Handoff Notes** are the current Task-level review brief, not append-only run history.
-- The handoff format could be hidden inside broad project instructions — resolved: use a dedicated **Project Handoff Notes Template** so the review contract is explicit.
-- "Summary" and **Handoff Notes** overlapped — resolved: user-facing review language should say **Handoff Notes**, while existing unstructured summaries remain valid legacy content.
-- "Handoff Notes" could mean the shared reviewer brief or the optional workflow that asks agents to maintain it — resolved: **Handoff Notes** are the Task-owned brief, while a **Handoff Notes Workflow** can be plugin-owned and project-enabled.
 - "Status cockpit" was used for the task detail sidebar redesign — resolved: use **Task Attention Pane** for the compact attention-first task detail area.
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.

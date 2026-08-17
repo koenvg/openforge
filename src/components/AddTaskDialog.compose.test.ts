@@ -13,7 +13,6 @@ vi.mock('../lib/ipc', () => ({
     initial_prompt: 'Implement GitHub issue #412',
     status: 'backlog',
     prompt: null,
-    summary: null,
     agent: null,
     permission_mode: null,
     worktree_source: null,

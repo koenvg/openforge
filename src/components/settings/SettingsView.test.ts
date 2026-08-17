@@ -200,14 +200,6 @@ describe('SettingsView rendering and navigation', () => {
       )
     ).toBeTruthy()
   })
-
-  it('renders the project handoff notes template textarea', async () => {
-    render(SettingsView, { props: defaultProps })
-    await openCategory(/AI instructions/)
-    expect(screen.getByText('Handoff Notes Template')).toBeTruthy()
-    expect(screen.getByPlaceholderText(/## Summary/i)).toBeTruthy()
-  })
-
   it('renders GitHub PAT field on global page', async () => {
     activeProjectId.set(null)
     projects.set([])

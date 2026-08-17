@@ -216,57 +216,33 @@ fn test_delete_task_request_response_models_use_task_id_and_deleted_status() {
 fn test_update_task_request_creation_with_initial_prompt() {
     let request = UpdateTaskRequest {
         task_id: "T-123".to_string(),
-        initial_prompt: Some("Replacement prompt".to_string()),
-        summary: Some("New Summary".to_string()),
+        initial_prompt: "Replacement prompt".to_string(),
     };
     assert_eq!(request.task_id, "T-123");
-    assert_eq!(
-        request.initial_prompt,
-        Some("Replacement prompt".to_string())
-    );
-    assert_eq!(request.summary, Some("New Summary".to_string()));
+    assert_eq!(request.initial_prompt, "Replacement prompt");
 }
 
 #[test]
-fn test_update_task_request_deserializes_both_fields_for_handler_validation() {
-    let json = r#"{"task_id": "T-456", "initial_prompt": "Replacement prompt", "summary": "Updated Summary"}"#;
-    let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-    assert_eq!(request.task_id, "T-456");
-    assert_eq!(
-        request.initial_prompt,
-        Some("Replacement prompt".to_string())
-    );
-    assert_eq!(request.summary, Some("Updated Summary".to_string()));
-}
-
-#[test]
-fn test_update_task_request_deserializes_initial_prompt_without_summary() {
+fn test_update_task_request_deserializes_initial_prompt() {
     let json = r#"{"task_id": "T-789", "initial_prompt": "Replacement prompt"}"#;
-    let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+    let request: UpdateTaskRequest = serde_json::from_str(json).expect("deserialize request");
     assert_eq!(request.task_id, "T-789");
-    assert_eq!(
-        request.initial_prompt,
-        Some("Replacement prompt".to_string())
-    );
-    assert!(request.summary.is_none());
+    assert_eq!(request.initial_prompt, "Replacement prompt");
 }
 
 #[test]
-fn test_update_task_request_deserialize_summary_only() {
-    let json = r#"{"task_id": "T-999", "summary": "Only Summary"}"#;
-    let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-    assert_eq!(request.task_id, "T-999");
-    assert!(request.initial_prompt.is_none());
-    assert_eq!(request.summary, Some("Only Summary".to_string()));
+fn test_update_task_request_rejects_removed_summary_field() {
+    let json =
+        r#"{"task_id": "T-456", "initial_prompt": "Replacement prompt", "summary": "Removed"}"#;
+    let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
+    assert!(result.is_err());
 }
 
 #[test]
-fn test_update_task_request_deserialize_no_update_fields() {
+fn test_update_task_request_requires_initial_prompt() {
     let json = r#"{"task_id": "T-111"}"#;
-    let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-    assert_eq!(request.task_id, "T-111");
-    assert!(request.initial_prompt.is_none());
-    assert!(request.summary.is_none());
+    let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
+    assert!(result.is_err());
 }
 
 #[test]
@@ -283,15 +259,13 @@ fn test_update_task_request_deserialize_missing_task_id_fails() {
 fn test_update_task_request_serialize_roundtrip_preserves_fields() {
     let original = UpdateTaskRequest {
         task_id: "T-555".to_string(),
-        initial_prompt: Some("Replacement prompt".to_string()),
-        summary: Some("Roundtrip Summary".to_string()),
+        initial_prompt: "Replacement prompt".to_string(),
     };
     let json = serde_json::to_string(&original).expect("Failed to serialize");
     let deserialized: UpdateTaskRequest =
         serde_json::from_str(&json).expect("Failed to deserialize");
     assert_eq!(deserialized.task_id, original.task_id);
     assert_eq!(deserialized.initial_prompt, original.initial_prompt);
-    assert_eq!(deserialized.summary, original.summary);
 }
 
 #[test]
@@ -332,7 +306,6 @@ fn test_get_task_info_response_creation_all_fields() {
         id: "T-42".to_string(),
         initial_prompt: "My Task".to_string(),
         prompt: Some("Do something cool".to_string()),
-        summary: Some("Did the thing".to_string()),
         status: "doing".to_string(),
         depends_on: vec!["T-1".to_string()],
         labels: Vec::new(),
@@ -340,7 +313,6 @@ fn test_get_task_info_response_creation_all_fields() {
     assert_eq!(response.id, "T-42");
     assert_eq!(response.initial_prompt, "My Task");
     assert_eq!(response.prompt, Some("Do something cool".to_string()));
-    assert_eq!(response.summary, Some("Did the thing".to_string()));
     assert_eq!(response.status, "doing");
 }
 
@@ -350,13 +322,11 @@ fn test_get_task_info_response_creation_nullable_fields_none() {
         id: "T-1".to_string(),
         initial_prompt: "Simple Task".to_string(),
         prompt: None,
-        summary: None,
         status: "backlog".to_string(),
         depends_on: Vec::new(),
         labels: Vec::new(),
     };
     assert!(response.prompt.is_none());
-    assert!(response.summary.is_none());
 }
 
 #[test]
@@ -365,7 +335,6 @@ fn test_get_task_info_response_serialize_all_fields() {
         id: "T-99".to_string(),
         initial_prompt: "Full Task".to_string(),
         prompt: Some("Implement X".to_string()),
-        summary: Some("Implemented X".to_string()),
         status: "done".to_string(),
         depends_on: Vec::new(),
         labels: Vec::new(),
@@ -374,7 +343,6 @@ fn test_get_task_info_response_serialize_all_fields() {
     assert!(json.contains("\"id\":\"T-99\""));
     assert!(json.contains("\"initial_prompt\":\"Full Task\""));
     assert!(json.contains("\"prompt\":\"Implement X\""));
-    assert!(json.contains("\"summary\":\"Implemented X\""));
     assert!(json.contains("\"status\":\"done\""));
 }
 
@@ -384,7 +352,6 @@ fn test_get_task_info_response_only_exposes_expected_fields() {
         id: "T-99".to_string(),
         initial_prompt: "Full Task".to_string(),
         prompt: Some("Implement X".to_string()),
-        summary: Some("Implemented X".to_string()),
         status: "done".to_string(),
         depends_on: Vec::new(),
         labels: Vec::new(),
@@ -395,7 +362,6 @@ fn test_get_task_info_response_only_exposes_expected_fields() {
         json_value.get("id").is_some()
             && json_value.get("initial_prompt").is_some()
             && json_value.get("prompt").is_some()
-            && json_value.get("summary").is_some()
             && json_value.get("status").is_some()
             && json_value.get("depends_on").is_some()
             && json_value.get("labels").is_some()
@@ -403,7 +369,7 @@ fn test_get_task_info_response_only_exposes_expected_fields() {
                 .as_object()
                 .map(|obj| obj.len())
                 .unwrap_or_default()
-                == 7,
+                == 6,
         "HTTP task info response must only expose the expected task fields"
     );
 }
@@ -414,7 +380,6 @@ fn test_get_task_info_response_serialize_nulls() {
         id: "T-1".to_string(),
         initial_prompt: "Minimal".to_string(),
         prompt: None,
-        summary: None,
         status: "backlog".to_string(),
         depends_on: Vec::new(),
         labels: Vec::new(),
@@ -423,11 +388,10 @@ fn test_get_task_info_response_serialize_nulls() {
     assert_eq!(json_value["id"], "T-1");
     assert_eq!(json_value["initial_prompt"], "Minimal");
     assert!(json_value["prompt"].is_null());
-    assert!(json_value["summary"].is_null());
     assert_eq!(json_value["status"], "backlog");
     assert_eq!(json_value["depends_on"], serde_json::json!([]));
     assert_eq!(json_value["labels"], serde_json::json!([]));
-    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(7));
+    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(6));
 }
 
 #[test]
@@ -436,7 +400,6 @@ fn test_get_task_info_response_json_structure() {
         id: "T-7".to_string(),
         initial_prompt: "Structure Test".to_string(),
         prompt: Some("Test prompt".to_string()),
-        summary: None,
         status: "doing".to_string(),
         depends_on: vec!["T-1".to_string()],
         labels: Vec::new(),
@@ -445,9 +408,8 @@ fn test_get_task_info_response_json_structure() {
     assert_eq!(json_value["id"], "T-7");
     assert_eq!(json_value["initial_prompt"], "Structure Test");
     assert_eq!(json_value["prompt"], "Test prompt");
-    assert!(json_value["summary"].is_null());
     assert_eq!(json_value["status"], "doing");
     assert_eq!(json_value["depends_on"], serde_json::json!(["T-1"]));
     assert_eq!(json_value["labels"], serde_json::json!([]));
-    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(7));
+    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(6));
 }

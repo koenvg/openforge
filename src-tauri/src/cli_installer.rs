@@ -385,7 +385,7 @@ mod tests {
         assert!(skill_content.contains("openforge plugin command invoke --command-id"));
         assert!(skill_content.contains("OPENFORGE_TASK_ID"));
         assert!(skill_content.contains("host-owned invocation context"));
-        assert!(skill_content.contains("Task summaries are Markdown-formatted"));
+        assert!(skill_content.contains("Prompt repair workflow"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
         assert!(skill_content.contains("openforge task create --help"));
         assert!(skill_content.contains("openforge task update --help"));
@@ -502,7 +502,7 @@ mod tests {
             assert!(content.contains("Before creating follow-up Tasks"));
             assert!(content.contains("add useful --label values and dependency links"));
             assert!(content.contains("When creating multiple related Tasks"));
-            assert!(content.contains("Task summaries are Markdown-formatted"));
+            assert!(content.contains("Prompt repair workflow"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
             assert!(content.contains("openforge task create --help"));
             assert!(content.contains("openforge task update --help"));

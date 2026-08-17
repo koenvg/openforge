@@ -14,8 +14,6 @@ override it. Concretely, of the settings the issue targets:
 - **Cleanup** (`code_cleanup_tasks_enabled`) is **global-only** — no project or task override.
 - **Task title auto-update** (`task_display_title_metadata_updates_enabled`, the issue's
   "task dashboard toggle") is **global-only**.
-- **Handoff notes enablement** (`tasks.handoff_notes_enabled`) is **task-only** (plus a
-  separate per-project *template* string) — no global or project default.
 - **Plugin enablement** (`project_plugins`) is **project-only** — no global default.
 
 The goal is one coherent global → project → task override hierarchy: set defaults globally,
@@ -59,7 +57,6 @@ Additionally (confirmed with the requester during design):
 |---|---|---|:--:|:--:|:--:|---|
 | 1 | Cleanup tasks | `code_cleanup_tasks_enabled` | ✅ | ✅ | ✅ | off |
 | 2 | Task title auto-update | `task_display_title_metadata_updates_enabled` | ✅ | ✅ | ✅ | off |
-| 3 | Handoff notes enable | `handoff_notes_enabled` | ✅ | ✅ | ✅ | on |
 | 4 | AI provider | `ai_provider` | ✅ | ✅ | ✅ | `claude-code` |
 | 5 | Default to worktrees | `use_worktrees` | ✅ | ✅ | ✅ | on |
 | 6 | Plugin enablement | (per plugin) | ✅ | ✅ | ➖ | builtins on |
@@ -75,17 +72,14 @@ from the parent level."
 
 - **Global** = base defaults, in the existing `config` KV table. Keys 1, 2, 7, 8 already
   exist there; key 4 (`ai_provider`) already resolves globally via `resolve_ai_provider`.
-  New global keys: `handoff_notes_enabled`, `use_worktrees`.
 - **Project** = overrides in the existing `project_config` KV table (key present = explicit
   override, absent = inherit global). Plugin overrides stay in `project_plugins`.
 - **Task** = resolved-and-snapshotted **at creation time**: the new-task dialog seeds each
   task-applicable control from the project's effective value; the chosen value is persisted
-  on the task; the runtime reads the task's own value. This matches how `handoff_notes_enabled`
   and `worktree_source` already behave, and is the correct semantics because all task-level
   settings only affect how that task runs.
 
 ### Why snapshot-at-creation for tasks
-`handoff_notes_enabled` (column) and `worktree_source` (column) are already snapshotted at
 task creation. Keeping the new task-level settings on the same model preserves consistency
 and keeps runtime consume-sites as simple reads. A task's behavior is fixed by what it was
 created with; later project changes do not retroactively alter existing tasks.
@@ -94,11 +88,8 @@ created with; later project changes do not retroactively alter existing tasks.
 
 | Level | Substrate | Change |
 |---|---|---|
-| Global | `config` (KV) | Add keys `handoff_notes_enabled`, `use_worktrees`. Others already present. |
 | Global (plugins) | **`global_plugins(plugin_id TEXT PK, enabled INTEGER)`** — NEW | Global plugin-default layer. |
-| Project | `project_config` (KV) | Add override keys for cleanup, title-update, handoff, plus existing `ai_provider`, `use_worktrees`, `task_id_prefix`, `github_poll_interval`. |
 | Project (plugins) | `project_plugins` | Unchanged. |
-| Task | `tasks.handoff_notes_enabled`, `tasks.worktree_source` | Unchanged (already task-level). |
 | Task | **`task_config(task_id TEXT, key TEXT, value TEXT, UNIQUE(task_id,key), FK→tasks ON DELETE CASCADE)`** — NEW | Snapshots for task-level cleanup, title-update, ai_provider. Mirrors `project_config`. |
 
 Two new KV tables are added rather than three new `tasks` columns: adding a task column
@@ -143,7 +134,6 @@ plugin-enablement subsection (a list of per-plugin toggles) for entry 6.
 The card replaces/absorbs the toggles currently split across `SettingsExperimentalCard`
 (cleanup, title-update) and the relevant rows of `SettingsGeneralCard`/`SettingsPreferencesCard`
 (provider, worktrees, prefix, poll interval) so the flowing settings read as one group.
-Non-hierarchy settings (theme, credentials, whisper, labels, actions, focus filters, handoff
 *template*, project identity, plugin *install*, developer logs) stay in their existing cards.
 
 ## Runtime consume-site changes
@@ -153,7 +143,6 @@ Non-hierarchy settings (theme, credentials, whisper, labels, actions, focus filt
 | Cleanup | `lifecycle.rs` reads global `code_cleanup_tasks_enabled` | reads the task's `task_config` snapshot |
 | Title-update | gate in `http_server.rs` reads global config | reads the task's `task_config` snapshot |
 | AI provider | `resolve_ai_provider(project)` at task-start | `resolve_ai_provider_for_task(task_id)` |
-| Handoff | `agent_lifecycle.rs` reads `task.handoff_notes_enabled` | unchanged |
 | Worktrees | dialog seeds `worktree_source` from project `use_worktrees` | unchanged behavior; global default now feeds the project effective value |
 
 **Legacy tasks:** tasks created before this feature have no `task_config` rows. The cleanup
@@ -165,14 +154,12 @@ project/global level exactly as they do today.
 ## Load / save / reset flow (frontend)
 
 - **Global:** extend `loadGlobalSettings`/`saveGlobalSettings` (`settingsConfig.ts`/
-  `settingsSaver.ts`) with `handoffNotesEnabled` and `useWorktrees`; add global plugin
   defaults load/save. Provider, prefix, poll-interval already flow globally or are added.
 - **Project effective:** a helper resolves each hierarchy setting as
   `project_config ?? global`. The project page and the new-task dialog both use it.
 - **Reset:** `resetProjectToGlobalDefaults(projectId)` deletes the group's `project_config`
   keys and the project's `project_plugins` rows.
 - **Task snapshot at create:** the dialog passes the chosen task-level values into
-  `createTask`; the backend writes `task_config` rows (and existing columns for handoff/
   worktree). All IPC payloads use camelCase matching the generated API shape.
 
 ## Non-goals / scope boundaries (YAGNI)
@@ -180,8 +167,6 @@ project/global level exactly as they do today.
 - No per-task plugin, prefix, or poll-interval overrides.
 - The "Default to global settings" reset covers only the unified hierarchy settings, not
   unrelated project config (name, path, color, labels, actions, focus filters, instructions/
-  handoff *template*).
-- The per-project handoff-notes **template** string is unchanged; only the handoff
   **enablement** flag joins the hierarchy.
 - Credentials (GitHub token, secret), theme/dark mode, Whisper model management, plugin
   *install* (app-wide by nature), and developer logs are excluded — not meaningful to cascade.
@@ -211,4 +196,3 @@ project/global level exactly as they do today.
    snapshot.
 
 Each phase is independently testable. A post-implementation review effect runs after
-verification and before final handoff.

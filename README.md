@@ -22,7 +22,7 @@
 
 ## Why Open Forge exists
 
-AI coding agents are good at producing code, but their surrounding workflow still creates admin: writing tasks, choosing a project, starting an agent, watching for handoffs, checking CI, reading diffs, giving feedback, and deciding what actually ships.
+AI coding agents are good at producing code, but their surrounding workflow still creates admin: writing tasks, choosing a project, starting an agent, watching for attention, checking CI, reading diffs, giving feedback, and deciding what actually ships.
 
 Open Forge puts that loop in one focused, local-first place. It automates repeated coordination while keeping problem framing, review, trade-offs, and the shipping decision visible and firmly owned by the developer.
 

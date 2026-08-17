@@ -90,10 +90,6 @@ class _LoadedTaskDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final boardStatus = _boardStatusLabel(detail.boardStatus);
     final agentState = _agentStateLabel(detail.agentState);
-    final handoffNotes = detail.handoffNotes?.trim();
-    final visibleHandoff = handoffNotes == null || handoffNotes.isEmpty
-        ? 'No Handoff Notes yet.'
-        : handoffNotes;
 
     return Semantics(
       container: true,
@@ -148,8 +144,6 @@ class _LoadedTaskDetail extends StatelessWidget {
             const SizedBox(height: QuietPaperSpacing.gutter),
             _AgentErrorSummary(error: error),
           ],
-          const SizedBox(height: QuietPaperSpacing.gutter),
-          _MarkdownDetailCard(label: 'Handoff Notes', data: visibleHandoff),
           if (detail.labels.isNotEmpty) ...<Widget>[
             const SizedBox(height: 16),
             _TaskLabelsCard(labels: detail.labels),

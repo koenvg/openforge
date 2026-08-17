@@ -110,23 +110,13 @@ fn strip_between(mut text: String, start: &str, end: &str) -> String {
 }
 
 fn sanitize_metadata_text(text: &str) -> String {
-    let stripped = strip_between(
-        strip_between(
-            text.to_string(),
-            "<openforge_task_management>",
-            "</openforge_task_management>",
-        ),
+    strip_between(
+        text.to_string(),
         "<openforge_code_cleanup>",
         "</openforge_code_cleanup>",
-    );
-
-    stripped
-        .lines()
-        .filter(|line| !line.contains("openforge update-task"))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
+    )
+    .trim()
+    .to_string()
 }
 
 fn tail_bounded_lossy(text: &str, max_bytes: usize) -> String {
@@ -186,7 +176,7 @@ pub(super) fn build_task_display_title_prompt(
         "You are naming an OpenForge Task from bounded provider metadata snapshots.\n\
 Return only JSON with exactly one string field: title.\n\
 The title must be 3-7 words, short, memorable, specific, and at most {MAX_TASK_DISPLAY_TITLE_CHARS} characters.\n\
-Do not mention OpenForge task management, handoff notes, branches, or generic words like task/thread/session.\n\n\
+Do not mention OpenForge task management, branches, or generic words like task/thread/session.\n\n\
 Task prompt:\n{task_prompt}\n\n\
 Provider transcript snapshot:\n{transcript}\n\n\
 Provider activity snapshot:\n{activity}\n"

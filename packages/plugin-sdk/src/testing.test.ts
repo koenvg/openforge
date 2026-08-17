@@ -171,8 +171,6 @@ describe('plugin SDK testing utilities', () => {
   it('filters seeded tasks by project and drops done tasks unless includeDone is set', async () => {
     const baseTask = {
       initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null,
-      summary: null, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null,
-      handoff_notes_enabled: true, source_ticket_url: null, depends_on: [], created_at: 1, updated_at: 2,
     }
     const api = createMockFrontendOpenForgeApi({
       pluginId: 'demo',

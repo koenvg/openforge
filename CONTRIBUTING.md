@@ -119,15 +119,15 @@ The installer creates `~/.openforge/bin/openforge` and adds that directory to `~
 openforge --help
 openforge project list
 openforge task get --task-id T-123
-openforge task update --task-id T-123 --summary "Done"
+openforge task update --task-id T-123 --initial-prompt "Corrected backlog prompt"
 openforge task create --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
 
 The CLI talks to the local Open Forge HTTP bridge and is used by the installed provider skills. `openforge task list` returns compact rows by default; pass `--full` for complete task objects. Completed tasks are excluded unless `--state done` is provided.
 
-### Handoff notes and task prompts
+### Task prompts
 
-`openforge task update` changes only the task `summary`, which Open Forge uses for Handoff Notes. It does not change `initial_prompt` or `prompt` and must not be used to repair an incorrect task prompt.
+`openforge task update --initial-prompt` updates `initial_prompt` and `prompt` together only while the task has never started. Started or completed tasks reject prompt updates and require a replacement task.
 
 If a task has the wrong initial prompt:
 

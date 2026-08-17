@@ -269,7 +269,7 @@ async fn complete_accepts_a_legacy_doing_state_alias_without_a_stale_write() {
     let _ = std::fs::remove_file(path);
 }
 #[tokio::test]
-async fn running_task_stops_agent_and_shells_before_reference_data_is_completed() {
+async fn running_task_stops_agent_and_shells_before_marking_task_complete() {
     let (database, path) = crate::db::test_helpers::make_test_db("terminal_runtime_shutdown");
     let db = Arc::new(Mutex::new(database));
     let task_id = {
@@ -277,9 +277,6 @@ async fn running_task_stops_agent_and_shells_before_reference_data_is_completed(
         let task = database
             .create_task("Running Task", "doing", None, None, None)
             .expect("create doing task");
-        database
-            .update_task_summary(&task.id, "Reviewer reference")
-            .expect("set summary");
         task.id
     };
     let runtime = RecordingRuntime::new(Arc::clone(&db));
@@ -302,7 +299,6 @@ async fn running_task_stops_agent_and_shells_before_reference_data_is_completed(
         .expect("get completed task")
         .expect("completed Task reference remains");
     assert_eq!(completed.status, "done");
-    assert_eq!(completed.summary.as_deref(), Some("Reviewer reference"));
 
     let _ = std::fs::remove_file(path);
 }

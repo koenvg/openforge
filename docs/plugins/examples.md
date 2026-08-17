@@ -267,9 +267,9 @@ export default defineBackendPlugin({
       async handler({ projectId, prompt, dependsOn = [] }) {
         await openforge.tasks.configureStartPromptContribution({
           projectId,
-          id: 'planner-handoff-context',
+          id: 'planner-review-context',
           enabled: true,
-          content: '<openforge_task_management>Task {{taskId}} was created by the Planner plugin. Include a concise handoff summary before review.</openforge_task_management>',
+          content: '<plugin_review_guidance>Task {{taskId}} was created by the Planner plugin. Review the planner context before editing.</plugin_review_guidance>',
           order: 0,
         })
 
@@ -366,7 +366,7 @@ Do not duplicate the full testing guide in plugin docs. Start with [Testing Open
 - [`createOpenForgeRegistryFake`](./testing.md#choose-the-right-helper): activation tests, registration snapshots, same-plugin backend RPC, events, storage scoping, background lifecycle, and cleanup.
 - [`createMockOpenForgeApi` / `createMockFrontendOpenForgeApi`](./testing.md#frontend-and-backend-mock-apis): units that only need a frontend-shaped API object.
 - [`createMockBackendOpenForgeApi`](./testing.md#frontend-and-backend-mock-apis): units that only need a backend-shaped API object.
-- [Task API tests](./testing.md#task-api-tests): assert `tasks.create(...)`, `tasks.startImplementation(...)`, summary/status updates, and recorded calls without shelling out to OpenForge.
+- [Task API tests](./testing.md#task-api-tests): assert `tasks.create(...)`, `tasks.startImplementation(...)`, status updates, and recorded calls without shelling out to OpenForge.
 - [Backend RPC tests](./testing.md#backend-rpc): activate backend and frontend plugins against one registry fake, then call `registry.frontendApi.backend.invoke(...)`.
 - [Background service tests](./testing.md#background-services): prove `start()` and `stop()` behavior and call `registry.disposeAll()`.
 

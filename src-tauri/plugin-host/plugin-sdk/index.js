@@ -329,7 +329,6 @@ function createTestingCalls() {
 		taskImplementationStarts: [],
 		taskFollowUps: [],
 		taskListRequests: [],
-		taskSummaryUpdates: [],
 		taskStatusUpdates: [],
 		configWrites: [],
 		fsWrites: [],
@@ -642,12 +641,10 @@ var TestingCommonApiFake = class {
 						title: null,
 						title_source: null,
 						title_generated_at: null,
-						summary: null,
 						agent: null,
 						permission_mode: null,
 						worktree_source: null,
 						worktree_branch: null,
-						handoff_notes_enabled: true,
 						source_ticket_url: null,
 						depends_on: request.dependsOn ?? [],
 						project_id: request.projectId,
@@ -664,12 +661,6 @@ var TestingCommonApiFake = class {
 						}),
 						started: false
 					};
-				},
-				updateSummary: async (taskId, summary) => {
-					this.services.calls.taskSummaryUpdates.push({
-						taskId,
-						summary
-					});
 				},
 				updateStatus: async (taskId, status) => {
 					this.services.calls.taskStatusUpdates.push({

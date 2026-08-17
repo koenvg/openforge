@@ -40,7 +40,6 @@ vi.mock('../../lib/desktopIpc', () => ({
 const baseTask: Task = {
   id: 'T-748',
   initial_prompt: 'Fix the dashboard bug.',
-  summary: 'Applied reactive fix.',
   status: 'doing',
   prompt: null,
   title: null,
@@ -50,7 +49,6 @@ const baseTask: Task = {
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
   project_id: 'project-1',

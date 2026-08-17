@@ -52,7 +52,6 @@ import {
   transcribeAudio,
   updateTaskInitialPrompt,
   updateTaskSourceTicketUrl,
-  updateTaskSummary,
   writePty,
 } from "./ipc";
 
@@ -254,7 +253,6 @@ describe("ipc spawnShellPty", () => {
 				initial_prompt: "Legacy task",
 				status: "todo",
 				prompt: null,
-				summary: null,
 				agent: null,
 				permission_mode: null,
 				worktree_source: null,
@@ -278,7 +276,6 @@ describe("ipc spawnShellPty", () => {
 				initial_prompt: "Broken task",
 				status: "wat",
 				prompt: null,
-				summary: null,
 				agent: null,
 				permission_mode: null,
 				worktree_source: null,
@@ -299,7 +296,6 @@ describe("ipc spawnShellPty", () => {
 			initial_prompt: "Created task",
 			status: "testing",
 			prompt: null,
-			summary: null,
 			agent: null,
 			permission_mode: null,
 			worktree_source: null,
@@ -323,7 +319,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: null,
 			worktreeBranch: null,
 			title: null,
-			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
 			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
@@ -337,7 +332,6 @@ describe("ipc spawnShellPty", () => {
 			initial_prompt: "Continue PR",
 			status: "backlog",
 			prompt: null,
-			summary: null,
 			agent: null,
 			permission_mode: null,
 			worktree_source: "existingBranch",
@@ -363,7 +357,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: "existingBranch",
 			worktreeBranch: "feature/open-pr",
 			title: null,
-			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
 			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
@@ -377,7 +370,6 @@ describe("ipc spawnShellPty", () => {
 			initial_prompt: "Run without a worktree",
 			status: "backlog",
 			prompt: null,
-			summary: null,
 			agent: null,
 			permission_mode: null,
 			worktree_source: "disabled",
@@ -403,7 +395,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeSource: "disabled",
 			worktreeBranch: null,
 			title: null,
-			handoffNotesEnabled: true,
 			sourceTicketUrl: null,
 			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
@@ -437,16 +428,6 @@ describe("ipc spawnShellPty", () => {
 			initialPrompt: "Updated prompt",
 		});
 	});
-
-	it("sends summary updates without initialPrompt", async () => {
-		await updateTaskSummary("T-42", "Done");
-
-		expect(invokeMock).toHaveBeenCalledWith("update_task_summary", {
-			id: "T-42",
-			summary: "Done",
-		});
-	});
-
 	it("sends camelCase sourceTicketUrl when updating a task's source ticket link", async () => {
 		await updateTaskSourceTicketUrl("T-42", "https://github.com/koenvg/openforge/issues/1294");
 

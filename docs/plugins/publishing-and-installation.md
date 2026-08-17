@@ -49,7 +49,7 @@ Author checklist before publishing, installing from npm, installing from git, or
 1. Run the plugin package build.
 2. Confirm every entry file referenced by `openforge.frontend` or `openforge.backend` exists in the packaged output.
 3. Confirm frontend bundles use the documented host-shared Svelte setup and do not bundle their own Svelte runtime.
-4. Run the plugin's focused tests, especially registration, lifecycle cleanup, backend RPC, storage scoping, **Task** automation, and **Handoff Notes** workflow behavior when applicable.
+4. Run the plugin's focused tests, especially registration, lifecycle cleanup, backend RPC, storage scoping, and **Task** automation.
 5. Inspect the packed contents, for example with the package manager's pack/list tooling, before distributing the package.
 
 If an entry file is missing, OpenForge rejects the package with a build-required error instead of compiling it. If `openforge.contributes` is present, OpenForge rejects the package because contributions must be registered at runtime.
@@ -116,7 +116,6 @@ Reviewer checklist before enabling for a **Project**:
 
 - The requested capabilities match the **Project** workflow need.
 - Any **Task** automation respects OpenForge's model: plugin-created **Tasks** enter the backlog, and starting an **Implementation Run** uses **Project Agent Settings** rather than plugin-supplied provider, model, permission mode, branch, or workspace overrides.
-- Any **Handoff Notes** behavior keeps **Handoff Notes** as the Task-owned reviewer brief, not plugin-private notes.
 - Background services are scoped and quiet enough for the **Project**.
 - User-facing labels and concepts that are not core OpenForge language are clearly owned by the plugin.
 
@@ -185,7 +184,7 @@ Use this before handing a package to another reviewer or user:
 - [ ] `openforge.requires` lists only needed documented capabilities.
 - [ ] Frontend code uses documented SDK exports and Svelte 5-compatible host-shared runtime behavior.
 - [ ] Backend code uses documented SDK exports and cleans up with `context.subscriptions`.
-- [ ] Tests cover runtime registrations, cleanup, storage/config scoping, backend readiness/RPC, and any **Task** or **Handoff Notes** behavior.
+- [ ] Tests cover runtime registrations, cleanup, storage/config scoping, backend readiness/RPC, and **Task** behavior.
 - [ ] The package contents are reviewable and exclude secrets, local credentials, and unrelated files.
 - [ ] Release notes call out version, capability, storage, background-service, and **Project Plugin Enablement** impacts.
 

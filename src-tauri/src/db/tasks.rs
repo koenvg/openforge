@@ -60,7 +60,6 @@ pub struct TaskRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub prompt: Option<String>,
-    pub summary: Option<String>,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
     pub worktree_source: Option<String>,
@@ -73,9 +72,6 @@ pub struct TaskRow {
     /// Timestamp of the first automatic title generation attempt that wrote a title.
     /// Once set, generation will not run again for this task.
     pub title_generated_at: Option<i64>,
-    /// Whether the task's start prompt includes the OpenForge handoff-notes
-    /// (task management) block. Defaults to `true`; `false` opts the task out.
-    pub handoff_notes_enabled: bool,
     /// Optional link to the source ticket that this task originated from (e.g. a
     /// GitHub issue URL or Jira browse link). `None` when no ticket was provided.
     pub source_ticket_url: Option<String>,
@@ -97,7 +93,6 @@ pub struct CompactTaskRow {
     pub title: String,
     pub title_source: Option<String>,
     pub title_generated_at: Option<i64>,
-    pub handoff_notes_enabled: bool,
     pub source_ticket_url: Option<String>,
     pub depends_on: Vec<String>,
     pub labels: Vec<TaskLabelRow>,
@@ -120,7 +115,6 @@ pub struct NewTaskOptions<'a> {
     pub worktree_source: Option<&'a str>,
     pub worktree_branch: Option<&'a str>,
     pub title: Option<&'a str>,
-    pub handoff_notes_enabled: bool,
     pub source_ticket_url: Option<&'a str>,
     /// When `Some`, snapshot `code_cleanup_tasks_enabled` into `task_config` at
     /// creation. `None` leaves it unset so the runtime resolves project/global.
@@ -341,8 +335,8 @@ fn normalize_worktree_source(
     }
 }
 
-const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, source_ticket_url";
-const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, handoff_notes_enabled, source_ticket_url";
+const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
+const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, source_ticket_url";
 
 fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
     Ok(TaskRow {
@@ -353,16 +347,14 @@ fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
         prompt: row.get(6)?,
-        summary: row.get(7)?,
-        agent: row.get(8)?,
-        permission_mode: row.get(9)?,
-        title: row.get(10)?,
-        title_source: row.get(11)?,
-        title_generated_at: row.get(12)?,
-        worktree_source: row.get(13)?,
-        worktree_branch: row.get(14)?,
-        handoff_notes_enabled: row.get(15)?,
-        source_ticket_url: row.get(16)?,
+        agent: row.get(7)?,
+        permission_mode: row.get(8)?,
+        title: row.get(9)?,
+        title_source: row.get(10)?,
+        title_generated_at: row.get(11)?,
+        worktree_source: row.get(12)?,
+        worktree_branch: row.get(13)?,
+        source_ticket_url: row.get(14)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -382,8 +374,7 @@ fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
         title: row.get(9)?,
         title_source: row.get(10)?,
         title_generated_at: row.get(11)?,
-        handoff_notes_enabled: row.get(12)?,
-        source_ticket_url: row.get(13)?,
+        source_ticket_url: row.get(12)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -541,7 +532,6 @@ impl super::Database {
             worktree_source: worktree.source,
             worktree_branch: worktree.branch,
             title: None,
-            handoff_notes_enabled: true,
             source_ticket_url: None,
             code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
@@ -559,7 +549,6 @@ impl super::Database {
             worktree_source,
             worktree_branch,
             title,
-            handoff_notes_enabled,
             source_ticket_url,
             code_cleanup_enabled,
             task_display_title_updates_enabled,
@@ -633,8 +622,8 @@ impl super::Database {
         let execution_started_at = (status != "backlog").then_some(now);
 
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, handoff_notes_enabled, execution_started_at, source_ticket_url)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             rusqlite::params![
                 &task_id,
                 initial_prompt,
@@ -644,14 +633,12 @@ impl super::Database {
                 now,
                 final_prompt,
                 None::<String>,
-                None::<String>,
                 permission_mode,
                 worktree_source.as_deref(),
                 worktree_branch.as_deref(),
                 title.as_deref(),
                 title_source.as_deref(),
                 None::<i64>,
-                handoff_notes_enabled,
                 execution_started_at,
                 source_ticket_url.as_deref(),
             ],
@@ -694,7 +681,6 @@ impl super::Database {
             created_at: now,
             updated_at: now,
             prompt: Some(final_prompt.to_string()),
-            summary: None,
             agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
             worktree_source,
@@ -702,7 +688,6 @@ impl super::Database {
             title,
             title_source,
             title_generated_at: None,
-            handoff_notes_enabled,
             source_ticket_url,
             depends_on: Vec::new(),
             labels: Vec::new(),
@@ -711,34 +696,9 @@ impl super::Database {
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, source_ticket_url
-             FROM tasks ORDER BY updated_at DESC"
-        )?;
-
-        let tasks = stmt.query_map([], |row| {
-            Ok(TaskRow {
-                id: row.get(0)?,
-                initial_prompt: row.get(1)?,
-                status: row.get(2)?,
-                project_id: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                prompt: row.get(6)?,
-                summary: row.get(7)?,
-                agent: row.get(8)?,
-                permission_mode: row.get(9)?,
-                title: row.get(10)?,
-                title_source: row.get(11)?,
-                title_generated_at: row.get(12)?,
-                worktree_source: row.get(13)?,
-                worktree_branch: row.get(14)?,
-                handoff_notes_enabled: row.get(15)?,
-                source_ticket_url: row.get(16)?,
-                depends_on: Vec::new(),
-                labels: Vec::new(),
-            })
-        })?;
+        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks ORDER BY updated_at DESC");
+        let mut stmt = conn.prepare(&query)?;
+        let tasks = stmt.query_map([], task_from_row)?;
 
         let mut result = Vec::new();
         for task in tasks {
@@ -752,33 +712,11 @@ impl super::Database {
 
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, handoff_notes_enabled, source_ticket_url
-             FROM tasks WHERE id = ?1"
-        )?;
+        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE id = ?1");
+        let mut stmt = conn.prepare(&query)?;
         let mut rows = stmt.query([id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(TaskRow {
-                id: row.get(0)?,
-                initial_prompt: row.get(1)?,
-                status: row.get(2)?,
-                project_id: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                prompt: row.get(6)?,
-                summary: row.get(7)?,
-                agent: row.get(8)?,
-                permission_mode: row.get(9)?,
-                title: row.get(10)?,
-                title_source: row.get(11)?,
-                title_generated_at: row.get(12)?,
-                worktree_source: row.get(13)?,
-                worktree_branch: row.get(14)?,
-                handoff_notes_enabled: row.get(15)?,
-                source_ticket_url: row.get(16)?,
-                depends_on: load_task_dependency_ids(&conn, id)?,
-                labels: load_task_labels(&conn, id)?,
-            }))
+            Ok(Some(hydrate_task_row(&conn, task_from_row(row)?)?))
         } else {
             Ok(None)
         }
@@ -1107,19 +1045,6 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn update_task_summary(&self, id: &str, summary: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
-        conn.execute(
-            "UPDATE tasks SET summary = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![summary, now, id],
-        )?;
-        Ok(())
-    }
-
     pub fn add_task_dependency(&self, task_id: &str, depends_on_task_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         validate_dependency(&conn, task_id, depends_on_task_id)?;
@@ -1398,11 +1323,9 @@ mod tests {
         assert_eq!(task.id, "T-1");
         assert_eq!(task.initial_prompt, "My task");
         assert_eq!(task.prompt, Some("Custom prompt".to_string()));
-        assert_eq!(task.summary, None);
 
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(retrieved.prompt, Some("Custom prompt".to_string()));
-        assert_eq!(retrieved.summary, None);
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1440,8 +1363,6 @@ mod tests {
         let task = db
             .create_task("Original", "backlog", Some(&project.id), None, None)
             .expect("create task");
-        db.update_task_summary(&task.id, "Existing handoff notes")
-            .expect("set summary");
         db.add_task_dependency(&task.id, &dependency.id)
             .expect("add dependency");
         db.add_task_label(&task.id, "feature").expect("add label");
@@ -1453,28 +1374,8 @@ mod tests {
         let updated = db.get_task(&task.id).expect("get updated task").unwrap();
         assert_eq!(updated.initial_prompt, "Updated prompt");
         assert_eq!(updated.prompt.as_deref(), Some("Updated prompt"));
-        assert_eq!(updated.summary, before.summary);
         assert_eq!(updated.labels, before.labels);
         assert_eq!(updated.depends_on, before.depends_on);
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_update_task_summary_preserves_initial_prompt() {
-        let (db, path) = make_test_db("update_task_summary_preserves_initial_prompt");
-
-        let task = db
-            .create_task("Original prompt", "backlog", None, None, None)
-            .expect("create failed");
-
-        db.update_task_summary(&task.id, "New Summary")
-            .expect("update summary failed");
-
-        let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.initial_prompt, "Original prompt");
-        assert_eq!(updated.summary, Some("New Summary".to_string()));
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1619,24 +1520,8 @@ mod tests {
     }
 
     #[test]
-    fn test_create_task_defaults_handoff_notes_enabled_true() {
-        let (db, path) = make_test_db("create_task_handoff_default");
-
-        let task = db
-            .create_task("Original", "backlog", None, None, None)
-            .expect("create failed");
-
-        assert!(task.handoff_notes_enabled);
-        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-        assert!(retrieved.handoff_notes_enabled);
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_create_task_with_options_persists_title_and_handoff_opt_out() {
-        let (db, path) = make_test_db("create_task_options_title_handoff");
+    fn test_create_task_with_options_persists_manual_title() {
+        let (db, path) = make_test_db("create_task_options_title");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -1649,7 +1534,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: Some("  Custom title  "),
-                handoff_notes_enabled: false,
                 source_ticket_url: None,
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
@@ -1657,17 +1541,15 @@ mod tests {
             })
             .expect("create failed");
 
-        // Title is trimmed, treated as manual user input, and the handoff opt-out is persisted.
+        // Titles are trimmed and treated as manual user input.
         assert_eq!(task.title.as_deref(), Some("Custom title"));
         assert_eq!(task.title_source.as_deref(), Some("manual"));
         assert_eq!(task.title_generated_at, None);
-        assert!(!task.handoff_notes_enabled);
 
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(retrieved.title.as_deref(), Some("Custom title"));
         assert_eq!(retrieved.title_source.as_deref(), Some("manual"));
         assert_eq!(retrieved.title_generated_at, None);
-        assert!(!retrieved.handoff_notes_enabled);
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1689,7 +1571,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                handoff_notes_enabled: true,
                 source_ticket_url: None,
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
@@ -1716,7 +1597,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                handoff_notes_enabled: true,
                 source_ticket_url: None,
                 code_cleanup_enabled: Some(true),
                 task_display_title_updates_enabled: Some(false),
@@ -1760,7 +1640,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: Some("   "),
-                handoff_notes_enabled: true,
                 source_ticket_url: None,
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
@@ -1791,7 +1670,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                handoff_notes_enabled: true,
                 source_ticket_url: Some(url),
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
@@ -1828,7 +1706,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: None,
-                handoff_notes_enabled: true,
                 source_ticket_url: Some("   "),
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
@@ -1991,7 +1868,6 @@ mod tests {
                 worktree_source: None,
                 worktree_branch: None,
                 title: Some("Manual title"),
-                handoff_notes_enabled: true,
                 source_ticket_url: None,
                 code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,

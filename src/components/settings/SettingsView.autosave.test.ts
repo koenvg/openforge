@@ -172,7 +172,6 @@ describe('SettingsView auto-save', () => {
 
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
       expect(vi.mocked(setProjectConfig)).toHaveBeenCalled()
-      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
       expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
     })
 
@@ -192,7 +191,6 @@ describe('SettingsView auto-save', () => {
       await vi.advanceTimersByTimeAsync(600)
 
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
-      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
       expect(vi.mocked(setConfig)).not.toHaveBeenCalledWith('task_id_prefix', '')
       expect(vi.mocked(setConfig)).not.toHaveBeenCalledWith('github_token', '')
       expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
@@ -217,14 +215,13 @@ describe('SettingsView auto-save', () => {
       expect(requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement).disabled).toBe(true)
 
       await vi.waitFor(() => {
-        expect(resolvers.size).toBeGreaterThanOrEqual(8)
+        expect(resolvers.size).toBeGreaterThanOrEqual(7)
       })
       resolvers.get('task_id_prefix')?.('OF')
       resolvers.get('github_token')?.('ghp_old')
       resolvers.get('code_cleanup_tasks_enabled')?.('false')
       resolvers.get('task_display_title_metadata_updates_enabled')?.('false')
       resolvers.get('github_poll_interval')?.('60')
-      resolvers.get('handoff_notes_enabled')?.('true')
       resolvers.get('use_worktrees')?.('true')
       resolvers.get('ai_provider')?.('claude-code')
 
@@ -439,7 +436,6 @@ describe('SettingsView auto-save', () => {
       await vi.advanceTimersByTimeAsync(600)
 
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
-      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
       expect(vi.mocked(setConfig)).not.toHaveBeenCalled()
     })
 
@@ -482,7 +478,6 @@ describe('SettingsView auto-save', () => {
       await vi.advanceTimersByTimeAsync(600)
 
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
-      expect(vi.mocked(setProjectConfig)).toHaveBeenCalledWith('test-project-id', 'handoff_notes_template', '')
       expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_new')
     })
 

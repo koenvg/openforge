@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
-import TaskPromptSummary from './TaskPromptSummary.svelte'
+import TaskInitialPrompt from './TaskInitialPrompt.svelte'
 import type { Task } from '../../lib/types'
 
 const baseTask: Task = {
@@ -11,12 +11,10 @@ const baseTask: Task = {
   title: null,
   title_source: null,
   title_generated_at: null,
-  summary: 'Implemented JWT auth',
   agent: null,
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
   project_id: null,
@@ -24,9 +22,9 @@ const baseTask: Task = {
   updated_at: 2000,
 }
 
-describe('TaskPromptSummary', () => {
-  it('previews the first three initial prompt lines by default while still rendering handoff notes', () => {
-    render(TaskPromptSummary, {
+describe('TaskInitialPrompt', () => {
+  it('previews the first three initial prompt lines', () => {
+    render(TaskInitialPrompt, {
       props: {
         task: {
           ...baseTask,
@@ -41,14 +39,10 @@ describe('TaskPromptSummary', () => {
     expect(promptContent.textContent).toContain('Line three')
     expect(promptContent.textContent).not.toContain('Line four')
     expect(screen.getByRole('button', { name: /show full initial prompt/i })).toBeTruthy()
-
-    // Handoff Notes behavior is unchanged.
-    expect(screen.getByText('Handoff Notes')).toBeTruthy()
-    expect(screen.getByText('Implemented JWT auth')).toBeTruthy()
   })
 
   it('renders the collapsed Initial Prompt preview as Markdown', () => {
-    render(TaskPromptSummary, {
+    render(TaskInitialPrompt, {
       props: {
         task: {
           ...baseTask,
@@ -64,7 +58,7 @@ describe('TaskPromptSummary', () => {
   })
 
   it('expands and collapses the initial prompt text when the toggle is clicked', async () => {
-    render(TaskPromptSummary, {
+    render(TaskInitialPrompt, {
       props: {
         task: {
           ...baseTask,
@@ -84,7 +78,7 @@ describe('TaskPromptSummary', () => {
   })
 
   it('hides persisted image reference definitions from the initial prompt preview and full text', async () => {
-    render(TaskPromptSummary, {
+    render(TaskInitialPrompt, {
       props: {
         task: {
           ...baseTask,
@@ -104,34 +98,29 @@ describe('TaskPromptSummary', () => {
     expect(promptContent.textContent).not.toContain('data:image/png;base64')
   })
 
-  it('renders handoff notes fallback when summary is empty', () => {
-    render(TaskPromptSummary, { props: { task: { ...baseTask, summary: null } } })
-    expect(screen.getByText(/no handoff notes yet/i)).toBeTruthy()
-  })
-
   it('shows an Edit prompt button for backlog tasks when onEditPrompt is provided', () => {
-    render(TaskPromptSummary, { props: { task: baseTask, onEditPrompt: vi.fn() } })
+    render(TaskInitialPrompt, { props: { task: baseTask, onEditPrompt: vi.fn() } })
     expect(screen.getByRole('button', { name: 'Edit prompt' })).toBeTruthy()
   })
 
   it('does not show Edit prompt when onEditPrompt is not provided', () => {
-    render(TaskPromptSummary, { props: { task: baseTask } })
+    render(TaskInitialPrompt, { props: { task: baseTask } })
     expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
   })
 
   it('does not show Edit prompt for doing tasks (prompt already injected)', () => {
-    render(TaskPromptSummary, { props: { task: { ...baseTask, status: 'doing' }, onEditPrompt: vi.fn() } })
+    render(TaskInitialPrompt, { props: { task: { ...baseTask, status: 'doing' }, onEditPrompt: vi.fn() } })
     expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
   })
 
   it('does not show Edit prompt for done tasks', () => {
-    render(TaskPromptSummary, { props: { task: { ...baseTask, status: 'done' }, onEditPrompt: vi.fn() } })
+    render(TaskInitialPrompt, { props: { task: { ...baseTask, status: 'done' }, onEditPrompt: vi.fn() } })
     expect(screen.queryByRole('button', { name: 'Edit prompt' })).toBeNull()
   })
 
   it('calls onEditPrompt when the Edit prompt button is clicked', async () => {
     const onEditPrompt = vi.fn()
-    render(TaskPromptSummary, { props: { task: baseTask, onEditPrompt } })
+    render(TaskInitialPrompt, { props: { task: baseTask, onEditPrompt } })
     await fireEvent.click(screen.getByRole('button', { name: 'Edit prompt' }))
     expect(onEditPrompt).toHaveBeenCalled()
   })

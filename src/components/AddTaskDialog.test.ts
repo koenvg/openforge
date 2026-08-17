@@ -10,7 +10,6 @@ vi.mock('../lib/ipc', () => ({
     initial_prompt: 'New Task',
     status: 'backlog',
     prompt: null,
-    summary: null,
     agent: null,
     permission_mode: null,
     worktree_source: null,
@@ -39,7 +38,6 @@ const DEFAULT_WORKTREE_OPTIONS = {
   worktreeSource: 'newBranchFromMain',
   worktreeBranch: null,
   title: null,
-  handoffNotesEnabled: true,
   sourceTicketUrl: null,
   codeCleanupEnabled: false,
   taskDisplayTitleUpdatesEnabled: false,
@@ -50,7 +48,6 @@ const PROJECT_DIRECTORY_OPTIONS = {
   worktreeSource: 'disabled',
   worktreeBranch: null,
   title: null,
-  handoffNotesEnabled: true,
   sourceTicketUrl: null,
   codeCleanupEnabled: false,
   taskDisplayTitleUpdatesEnabled: false,
@@ -100,12 +97,10 @@ const mockTask = {
   title: null,
   title_source: null,
   title_generated_at: null,
-  summary: null,
   agent: null,
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
   project_id: null,
@@ -376,7 +371,6 @@ describe('AddTaskDialog', () => {
           worktreeSource: 'existingBranch',
           worktreeBranch: 'feature/open-pr',
           title: null,
-          handoffNotesEnabled: true,
           sourceTicketUrl: null,
           codeCleanupEnabled: false,
           taskDisplayTitleUpdatesEnabled: false,
@@ -605,26 +599,6 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('opts out of handoff notes when the toggle is disabled', async () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    const textbox = await findPromptTextbox()
-    await expandEnvironment()
-    const handoffToggle = await screen.findByLabelText('Handoff notes') as HTMLInputElement
-    expect(handoffToggle.checked).toBe(true)
-    await fireEvent.click(handoffToggle)
-    expect(handoffToggle.checked).toBe(false)
-
-    await fireEvent.input(textbox, { target: { value: 'No handoff task' } })
-    await clickAddToBacklogFromMore()
-
-    await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('No handoff task', 'backlog', 'test-project-id', 'default', {
-        ...DEFAULT_WORKTREE_OPTIONS,
-        handoffNotesEnabled: false,
-      })
-    })
-  })
 
   it('filters the existing branch list when searching', async () => {
     render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })

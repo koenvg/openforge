@@ -228,7 +228,6 @@ final class DomainCompanionClient implements CompanionClient {
     projectId: 'P-private',
     projectName: 'Private Project',
     boardStatus: 'doing',
-    handoffNotes: 'Private Handoff Notes',
     agentState: 'blocked',
     agentErrorSummary: null,
     createdAt: DateTime.utc(2026, 7, 29),

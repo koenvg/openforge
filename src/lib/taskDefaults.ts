@@ -4,7 +4,6 @@ import { computeEffectiveProjectSettings, HIERARCHICAL_SETTINGS } from './hierar
 export interface TaskLevelDefaults {
   codeCleanupEnabled: boolean
   taskDisplayTitleUpdatesEnabled: boolean
-  handoffNotesEnabled: boolean
   aiProvider: string
   useWorktrees: boolean
 }
@@ -42,7 +41,6 @@ export async function loadTaskLevelDefaults(projectId: string | null): Promise<T
   return {
     codeCleanupEnabled: effective.code_cleanup_tasks_enabled === 'true',
     taskDisplayTitleUpdatesEnabled: effective.task_display_title_metadata_updates_enabled === 'true',
-    handoffNotesEnabled: effective.handoff_notes_enabled === 'true',
     aiProvider,
     useWorktrees: effective.use_worktrees === 'true',
   }

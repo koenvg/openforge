@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '8672f8747e2e65ed3704c9b3d9d362cfc0c31f88c5bdab6214e5c150ef346a1b';
+    '214b6f4d77e24f2276747a4ee16cc3075f45efabb256ed345d9933f324d7f4aa';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '2';
 
@@ -909,7 +909,6 @@ final class TaskDetail {
     required this.projectId,
     required this.projectName,
     required this.boardStatus,
-    required this.handoffNotes,
     required this.agentState,
     this.agentTerminalAvailable = false,
     required this.agentErrorSummary,
@@ -924,7 +923,7 @@ final class TaskDetail {
        dependentTasks = List<DependentTask>.unmodifiable(dependentTasks);
 
   factory TaskDetail.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'initialPrompt', 'title', 'projectId', 'projectName', 'boardStatus', 'handoffNotes', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
+    _expectOnly(json, const <String>{'taskId', 'initialPrompt', 'title', 'projectId', 'projectName', 'boardStatus', 'agentState', 'agentTerminalAvailable', 'agentErrorSummary', 'labels', 'dependencies', 'dependentTasks', 'createdAt', 'updatedAt', 'agentUpdatedAt'});
     final model = TaskDetail(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       initialPrompt: _required(json, 'initialPrompt', (value) => _asString(value, 'initialPrompt', minLength: 1)),
@@ -932,7 +931,6 @@ final class TaskDetail {
       projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
       projectName: _required(json, 'projectName', (value) => _asString(value, 'projectName', minLength: 1)),
       boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', allowed: const <String>{'backlog', 'doing', 'done'})),
-      handoffNotes: _requiredNullable(json, 'handoffNotes', (value) => _asString(value, 'handoffNotes')),
       agentState: _required(json, 'agentState', (value) => _asString(value, 'agentState', allowed: const <String>{'waiting', 'running', 'blocked', 'failed', 'complete'})),
       agentTerminalAvailable: _required(json, 'agentTerminalAvailable', (value) => _asBool(value, 'agentTerminalAvailable')),
       agentErrorSummary: _requiredNullable(json, 'agentErrorSummary', (value) => _asString(value, 'agentErrorSummary')),
@@ -953,7 +951,6 @@ final class TaskDetail {
       'projectId': projectId,
       'projectName': projectName,
       'boardStatus': boardStatus,
-      'handoffNotes': handoffNotes == null ? null : handoffNotes!,
       'agentState': agentState,
       'agentTerminalAvailable': agentTerminalAvailable,
       'agentErrorSummary': agentErrorSummary == null ? null : agentErrorSummary!,
@@ -971,7 +968,6 @@ final class TaskDetail {
   final String projectId;
   final String projectName;
   final String boardStatus;
-  final String? handoffNotes;
   final String agentState;
   final bool agentTerminalAvailable;
   final String? agentErrorSummary;

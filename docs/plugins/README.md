@@ -39,7 +39,7 @@ Keep frontend and backend work separate:
 
 For task automation, use the SDK `tasks` capability. **Task Creation** records a new project-owned backlog **Task**; starting an **Implementation Run** asks OpenForge to launch its native task workspace and provider flow. Plugins should not shell out to the OpenForge CLI or choose provider, model, permission mode, branch strategy, or checkout details directly.
 
-Plugins can participate in the **Handoff Notes** workflow by configuring start-prompt contributions, but **Handoff Notes** remain the Task-owned reviewer brief rather than plugin-private notes.
+Plugins can configure project start-prompt contributions for plugin-owned workflow guidance.
 
 ## Where to go next
 

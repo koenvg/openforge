@@ -72,7 +72,6 @@ final class _WidgetClient
     projectId: 'P-1',
     projectName: 'Alpha',
     boardStatus: 'backlog',
-    handoffNotes: null,
     agentState: 'waiting',
     agentErrorSummary: null,
     createdAt: DateTime.utc(2026, 8, 1, 10),
@@ -478,7 +477,7 @@ void main() {
     );
     await tester.tap(row);
     await tester.pumpAndSettle();
-    expect(find.text('Handoff Notes'), findsOneWidget);
+    expect(find.text('Initial Prompt'), findsOneWidget);
     final beforeRefresh = (
       client.projectCatalogCalls,
       client.projectBoardCalls,
@@ -537,7 +536,7 @@ void main() {
     expect(client.deleteCalls, 1);
     expect(client.projectBoardCalls, boardCallsBeforeDelete + 1);
     expect(controller.selectedLane, ProjectBoardLane.backlog);
-    expect(find.text('Handoff Notes'), findsNothing);
+    expect(find.text('Initial Prompt'), findsNothing);
     expect(find.text('Backlog Task'), findsNothing);
     expect(find.text('No Tasks are waiting in the Backlog.'), findsOneWidget);
   });

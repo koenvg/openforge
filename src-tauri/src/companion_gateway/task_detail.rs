@@ -26,7 +26,6 @@ pub(crate) struct CompanionTaskDetail {
     pub(crate) project_id: String,
     pub(crate) project_name: String,
     pub(crate) board_status: String,
-    pub(crate) handoff_notes: Option<String>,
     pub(crate) agent_state: String,
     pub(crate) agent_error_summary: Option<String>,
     pub(crate) labels: Vec<String>,
@@ -150,7 +149,6 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             project_id: project.id,
             project_name: project.name,
             board_status: board_status.as_str().to_string(),
-            handoff_notes: normalized_handoff_notes(task.summary.as_deref()),
             agent_state: agent_state.to_string(),
             agent_error_summary,
             labels: task.labels.iter().map(|label| label.name.clone()).collect(),
@@ -160,15 +158,6 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             updated_at: task.updated_at,
             agent_updated_at,
         }))
-    }
-}
-
-fn normalized_handoff_notes(summary: Option<&str>) -> Option<String> {
-    let notes = summary?.replace("\\n", "\n");
-    if notes.trim().is_empty() {
-        None
-    } else {
-        Some(notes)
     }
 }
 
@@ -229,14 +218,5 @@ mod tests {
         assert_eq!(summary, "Agent failed. Review details on the desktop.");
         assert!(!summary.contains("secret"));
         assert!(!summary.contains("/Users"));
-    }
-
-    #[test]
-    fn blank_handoff_notes_are_absent_and_escaped_newlines_match_desktop() {
-        assert_eq!(normalized_handoff_notes(Some("  \n")), None);
-        assert_eq!(
-            normalized_handoff_notes(Some("Summary\\nReady for review")),
-            Some("Summary\nReady for review".to_string())
-        );
     }
 }

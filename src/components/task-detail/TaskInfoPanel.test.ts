@@ -76,12 +76,10 @@ const baseTask: Task = {
   title: null,
   title_source: null,
   title_generated_at: null,
-  summary: null,
   agent: null,
   permission_mode: null,
   worktree_source: null,
   worktree_branch: null,
-  handoff_notes_enabled: true,
   source_ticket_url: null,
   depends_on: [],
   project_id: 'proj-1',
@@ -180,7 +178,7 @@ describe('TaskInfoPanel', () => {
     })
   })
 
-  it('hosts task UI sections after TaskPromptSummary and before the built-in Details card', async () => {
+  it('hosts task UI sections after TaskInitialPrompt and before the built-in Details card', async () => {
     const pluginId = 'plugin.task-context'
     installedPlugins.set(new Map([[
       pluginId,
@@ -276,25 +274,6 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText(/--session|--resume|codex resume/)).toBeNull()
   })
 
-  it('previews handoff notes by default and expands them on request', async () => {
-    const taskWithSummary = {
-      ...baseTask,
-      summary: 'Current summary: implementation started. Review focus: ordering and comments. Risks: lifecycle fetching. Open questions: none. Follow-up tasks: none.',
-    }
-
-    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
-
-    const handoffSection = screen.getByLabelText('Handoff Notes').closest('section')
-    expect(handoffSection?.textContent).toContain('Current summary')
-    expect(handoffSection?.textContent).not.toContain('Follow-up tasks: none')
-
-    const expandButton = screen.getByRole('button', { name: 'Show full Handoff Notes' })
-    expect(expandButton.getAttribute('aria-expanded')).toBe('false')
-    await fireEvent.click(expandButton)
-
-    expect(screen.getByText(/Follow-up tasks: none/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Show less Handoff Notes' }).getAttribute('aria-expanded')).toBe('true')
-  })
 
   it('previews the initial prompt by default and expands it on request', async () => {
     const promptTask = {
@@ -314,23 +293,6 @@ describe('TaskInfoPanel', () => {
     expect(promptSection?.textContent).toContain('Reserve full text for expansion')
   })
 
-  it('keeps handoff notes content in a separate full-width region before expand controls', () => {
-    const longDocumentTask = {
-      ...baseTask,
-      summary: 'Current summary: implementation started. Review focus: ordering and comments. Risks: lifecycle fetching. Open questions: none. Follow-up tasks: none.',
-    }
-
-    render(TaskInfoPanel, { props: { task: longDocumentTask, workspacePath: null } })
-
-    const handoffSection = requireElement(screen.getByLabelText('Handoff Notes').closest('section'), HTMLElement, 'Expected Handoff Notes section')
-    const handoffContent = within(handoffSection).getByRole('region', { name: 'Handoff Notes content' })
-    const handoffControls = within(handoffSection).getByRole('group', { name: 'Handoff Notes actions' })
-    const handoffButton = within(handoffControls).getByRole('button', { name: 'Show full Handoff Notes' })
-
-    expect(handoffContent.contains(handoffButton)).toBe(false)
-    expect(handoffContent.parentElement).toBe(handoffControls.parentElement)
-    expect(Boolean(handoffContent.compareDocumentPosition(handoffControls) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-  })
 
   it('renders the Initial Prompt section as a preview by default and reveals the full prompt on request', async () => {
     render(TaskInfoPanel, {
@@ -437,45 +399,6 @@ describe('TaskInfoPanel', () => {
     const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
     expect(promptSection?.querySelector('input')).toBeNull()
     expect(promptSection?.querySelector('textarea')).toBeNull()
-  })
-
-  it('renders Handoff Notes label', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('Handoff Notes')).toBeTruthy()
-  })
-
-  it('renders "No handoff notes yet" in muted text when summary is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
-    expect(screen.getByText('No handoff notes yet')).toBeTruthy()
-  })
-
-  it('renders handoff notes content when summary is present', () => {
-    const taskWithSummary = { ...baseTask, summary: 'Implemented JWT auth with refresh token support.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
-    expect(screen.getByText('Implemented JWT auth with refresh token support.')).toBeTruthy()
-    expect(screen.queryByText('No handoff notes yet')).toBeNull()
-  })
-
-  it('renders literal \\n in handoff notes as actual line breaks', () => {
-    const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
-    render(TaskInfoPanel, { props: { task: taskWithNewlines, workspacePath: null } })
-    const handoffNotesSection = screen.getByLabelText('Handoff Notes').closest('section')
-    expect(handoffNotesSection).not.toBeNull()
-    if (!handoffNotesSection) {
-      throw new Error('Expected Handoff Notes section to exist')
-    }
-    expect(handoffNotesSection.textContent).toContain('Added feature.')
-    expect(handoffNotesSection.textContent).toContain('Changes:')
-    expect(handoffNotesSection.textContent).toContain('New file added')
-    expect(handoffNotesSection.textContent).not.toContain('\\n')
-  })
-
-  it('renders handoff notes as read-only text (no input elements in handoff notes section)', () => {
-    const taskWithSummary = { ...baseTask, summary: 'Done.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
-    const handoffNotesSection = screen.getByLabelText('Handoff Notes').closest('section')
-    expect(handoffNotesSection?.querySelector('input')).toBeNull()
-    expect(handoffNotesSection?.querySelector('textarea')).toBeNull()
   })
 
   it('does not show Edit Task or Delete buttons', () => {

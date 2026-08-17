@@ -103,7 +103,7 @@ The first proving contribution is GitHub Task Pull Request status. The current c
 - Backend invocation is restricted to methods registered by the same plugin. The bridge exposes no generic core command or cross-plugin method dispatcher.
 - Pairing grants v1 mobile authority for actions intentionally exposed by enabled trusted plugin Task sections. Gateway disablement, device revocation, host identity reset, certificate mismatch, plugin disablement, and the global setting immediately remove that authority.
 - Availability while macOS is locked matches the existing pre-release Companion authority model. This remains subject to distribution-readiness review before broader release.
-- Logs may include safe request id, device id, plugin id, section id, Task id, method id, outcome class, and timing. They must omit credentials, arbitrary payload bodies, prompts, Handoff Notes, plugin storage values, GitHub tokens, repository content, and backend error bodies that may contain sensitive data.
+- Logs may include safe request id, device id, plugin id, section id, Task id, method id, outcome class, and timing. They must omit credentials, arbitrary payload bodies, prompts, plugin storage values, GitHub tokens, repository content, and backend error bodies that may contain sensitive data.
 
 ### Styling, layout, and accessibility
 
