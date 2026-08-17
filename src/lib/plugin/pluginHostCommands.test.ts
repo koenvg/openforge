@@ -200,6 +200,42 @@ describe('plugin host commands', () => {
     })
     expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
   })
+  it('persists the requesting frontend plugin as the contribution owner', async () => {
+    const { invoke } = installDesktopBridge(null)
+    invoke.mockResolvedValueOnce(JSON.stringify([{
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Legacy unowned guidance',
+      order: 5,
+    }]))
+    invoke.mockResolvedValueOnce(undefined)
+    const host = createPluginRuntimeHost('com.example.workflow')
+
+    await expect(host.configureStartPromptContribution?.({
+      projectId: 'P-1',
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Review before editing',
+      order: 5,
+    })).resolves.toEqual([{
+      ownerPluginId: 'com.example.workflow',
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Review before editing',
+      order: 5,
+    }])
+    expect(invoke).toHaveBeenLastCalledWith('set_project_config', {
+      projectId: 'P-1',
+      key: 'start_prompt_contributions',
+      value: JSON.stringify([{
+        ownerPluginId: 'com.example.workflow',
+        id: 'review-guidance',
+        enabled: true,
+        content: 'Review before editing',
+        order: 5,
+      }]),
+    })
+  })
 
   it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
     const { invoke } = installDesktopBridge('buffered')

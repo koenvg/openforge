@@ -100,8 +100,13 @@ export class TestingCommonApiFake {
         listStartPromptContributions: async (projectId) => this.services.startPromptContributions(projectId),
         configureStartPromptContribution: async (request) => {
           this.services.calls.startPromptContributionConfigurations.push(request)
-          const existing = this.services.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id)
-          const next = [...existing, request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))
+          const contribution = { ...request, ownerPluginId: this.services.pluginId }
+          const existing = this.services.startPromptContributions(request.projectId)
+            .filter((entry) => entry.id !== request.id
+              || (entry.ownerPluginId !== undefined && entry.ownerPluginId !== contribution.ownerPluginId))
+          const next = [...existing, contribution].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+            || a.id.localeCompare(b.id)
+            || (a.ownerPluginId ?? '').localeCompare(b.ownerPluginId ?? ''))
           this.services.config.set(`project:${request.projectId}:start_prompt_contributions`, next as unknown as JsonValue)
           return next
         },

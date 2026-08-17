@@ -507,6 +507,13 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
     let dependency = database
         .create_task("Dependency", "done", Some(&project.id), None, None)
         .expect("dependency fixture");
+    database
+        .set_project_config(
+            &project.id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            r#"[{"id":"backend-owned","enabled":true,"content":"Legacy unowned brief","order":5}]"#,
+        )
+        .expect("legacy unowned contribution fixture");
 
     let app = AppHandle::new();
     app.manage(Arc::new(Mutex::new(database)));
@@ -584,6 +591,7 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .handle_host_callback(
             "openforge.tasks.configureStartPromptContribution",
             &json!({
+                "pluginId": "com.example.backend",
                 "projectId": project.id,
                 "id": "backend-owned",
                 "enabled": true,
@@ -594,10 +602,34 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
         .await
         .expect("configure start prompt contribution callback");
     assert_eq!(contributions[0]["id"], "backend-owned");
+    assert_eq!(contributions[0]["ownerPluginId"], "com.example.backend");
     assert_eq!(contributions[0]["enabled"], true);
     assert_eq!(
         contributions[0]["content"],
         "## Plugin Brief\n- backend owned"
+    );
+
+    let contributions = host
+        .handle_host_callback(
+            "openforge.tasks.configureStartPromptContribution",
+            &json!({
+                "pluginId": "com.example.other-backend",
+                "projectId": project.id,
+                "id": "backend-owned",
+                "enabled": true,
+                "content": "## Other Plugin Brief",
+                "order": 6
+            }),
+        )
+        .await
+        .expect("configure same local contribution id for another plugin");
+    assert_eq!(
+        contributions.as_array().expect("contributions array").len(),
+        2
+    );
+    assert_eq!(
+        contributions[1]["ownerPluginId"],
+        "com.example.other-backend"
     );
 
     let contributions = host

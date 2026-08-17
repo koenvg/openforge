@@ -146,6 +146,7 @@ function normalizeStartPromptContributions(value: string | null): StartPromptCon
     return parsed
       .filter((entry): entry is StartPromptContribution => entry && typeof entry === 'object' && typeof entry.id === 'string' && typeof entry.content === 'string')
       .map((entry) => ({
+        ...(typeof entry.ownerPluginId === 'string' ? { ownerPluginId: entry.ownerPluginId } : {}),
         id: entry.id,
         enabled: entry.enabled !== false,
         content: entry.content,
@@ -164,7 +165,10 @@ async function listStartPromptContributionsForProject(projectId: string): Promis
   return normalizeStartPromptContributions(await getProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY))
 }
 
-async function configureStartPromptContributionForProject(request: ConfigureStartPromptContributionRequest): Promise<StartPromptContribution[]> {
+async function configureStartPromptContributionForProject(
+  request: ConfigureStartPromptContributionRequest,
+  ownerPluginId?: string,
+): Promise<StartPromptContribution[]> {
   const projectId = request.projectId
   if (!projectId) {
     throw new Error('start prompt contributions require projectId')
@@ -181,15 +185,19 @@ async function configureStartPromptContributionForProject(request: ConfigureStar
 
   const existing = await listStartPromptContributionsForProject(projectId)
   const contribution: StartPromptContribution = {
+    ...(ownerPluginId ? { ownerPluginId } : {}),
     id: request.id.trim(),
     enabled: request.enabled !== false,
     content: request.content,
     order: typeof request.order === 'number' && Number.isFinite(request.order) ? request.order : 0,
   }
   const next = [
-    ...existing.filter((entry) => entry.id !== contribution.id),
+    ...existing.filter((entry) => entry.id !== contribution.id
+      || (entry.ownerPluginId !== undefined && entry.ownerPluginId !== contribution.ownerPluginId)),
     contribution,
-  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))
+  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
+    || a.id.localeCompare(b.id)
+    || (a.ownerPluginId ?? '').localeCompare(b.ownerPluginId ?? ''))
 
   await setProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY, JSON.stringify(next))
   return next
@@ -268,7 +276,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     composeTask: composeTaskFromPluginRequest,
     updateTaskStatus: (taskId: string, status: Parameters<typeof updateTaskStatus>[1]) => updateTaskStatus(taskId, status),
     listStartPromptContributions: (projectId: string) => listStartPromptContributionsForProject(projectId),
-    configureStartPromptContribution: (request: ConfigureStartPromptContributionRequest) => configureStartPromptContributionForProject(request),
+    configureStartPromptContribution: (request: ConfigureStartPromptContributionRequest) => configureStartPromptContributionForProject(request, pluginId),
     startTaskImplementation: (request: StartTaskImplementationRequest) => startTaskImplementationFromPluginRequest(request),
     sendTaskFollowUp: (request: SendTaskFollowUpRequest) => sendTaskFollowUpFromPluginRequest(request),
     getTaskWorkspace: (taskId: string) => getTaskWorkspace(taskId),
@@ -407,7 +415,7 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     invokeHostCommand: (command: string, payload: unknown) => {
       ensurePluginHostStoreSubscriptions()
-      return invokePluginHostCommand(command, payload)
+      return invokePluginHostCommand(command, payload, pluginId)
     },
     onHostEvent: (event: string, handler: (payload: unknown) => void) => {
       ensurePluginHostStoreSubscriptions()
@@ -416,7 +424,11 @@ export function createPluginRuntimeHost(pluginId: string) {
   }
 }
 
-export async function invokePluginHostCommand(command: string, payload: unknown): Promise<unknown> {
+export async function invokePluginHostCommand(
+  command: string,
+  payload: unknown,
+  ownerPluginId?: string,
+): Promise<unknown> {
   const commandPayload = payload !== null && typeof payload === 'object'
     ? payload as Record<string, unknown>
     : undefined
@@ -467,7 +479,7 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
         enabled: commandPayload?.enabled !== false,
         content: commandPayload.content,
         order: typeof commandPayload?.order === 'number' ? commandPayload.order : undefined,
-      })
+      }, ownerPluginId)
     }
     case 'startImplementation':
       return startTaskImplementationFromPluginRequest({ taskId: String(commandPayload?.taskId ?? '') })

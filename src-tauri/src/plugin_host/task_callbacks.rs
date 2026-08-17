@@ -179,6 +179,7 @@ impl PluginHost {
         &self,
         params: &Value,
     ) -> Result<Value, String> {
+        let owner_plugin_id = required_param_string(params, "pluginId")?;
         let project_id = required_param_string(params, "projectId")?;
         let id = required_param_string(params, "id")?;
         if id.trim().is_empty() {
@@ -196,6 +197,7 @@ impl PluginHost {
             .unwrap_or(true);
         let order = params.get("order").and_then(Value::as_i64).unwrap_or(0);
         let contribution = crate::agent_lifecycle::StartPromptContribution {
+            owner_plugin_id: Some(owner_plugin_id),
             id: id.trim().to_string(),
             enabled,
             content,
@@ -218,9 +220,18 @@ impl PluginHost {
                     .ok()
                 })
                 .unwrap_or_default();
-            contributions.retain(|existing| existing.id != contribution.id);
+            contributions.retain(|existing| {
+                existing.id != contribution.id
+                    || (existing.owner_plugin_id.is_some()
+                        && existing.owner_plugin_id != contribution.owner_plugin_id)
+            });
             contributions.push(contribution);
-            contributions.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
+            contributions.sort_by(|a, b| {
+                a.order
+                    .cmp(&b.order)
+                    .then_with(|| a.id.cmp(&b.id))
+                    .then_with(|| a.owner_plugin_id.cmp(&b.owner_plugin_id))
+            });
             let serialized = serde_json::to_string(&contributions).map_err(|error| {
                 format!("failed to serialize start prompt contributions: {error}")
             })?;

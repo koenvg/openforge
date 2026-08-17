@@ -168,6 +168,126 @@ fn init_diverged_existing_branch(repo: &Path) {
     );
 }
 
+fn test_plugin(plugin_id: &str) -> db::PluginRow {
+    db::PluginRow {
+        id: plugin_id.to_string(),
+        name: "Start prompt plugin".to_string(),
+        version: "1.0.0".to_string(),
+        api_version: 1,
+        description: "Contributes Task start instructions".to_string(),
+        permissions: "[]".to_string(),
+        contributes: "{}".to_string(),
+        frontend_entry: "dist/frontend.js".to_string(),
+        backend_entry: None,
+        install_path: "/tmp/start-prompt-plugin".to_string(),
+        source_kind: "local".to_string(),
+        source_spec: "/tmp/start-prompt-plugin".to_string(),
+        package_metadata: "{}".to_string(),
+        installed_at: 1,
+        is_builtin: false,
+    }
+}
+
+fn task_with_owned_start_prompt_contribution(
+    state: &crate::http_server::AppState,
+    plugin_id: &str,
+) -> String {
+    let db = db::acquire_db(&state.db);
+    let project = db.create_project("P", "/tmp/p").expect("create Project");
+    db.install_plugin(&test_plugin(plugin_id))
+        .expect("install plugin");
+    db.set_plugin_enabled(&project.id, plugin_id, true)
+        .expect("enable plugin");
+    db.set_project_config(
+        &project.id,
+        agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+        &serde_json::json!([{
+            "id": "plugin-workflow",
+            "enabled": true,
+            "content": "Plugin workflow",
+            "order": 0,
+            "ownerPluginId": plugin_id,
+        }])
+        .to_string(),
+    )
+    .expect("store owned contribution");
+    db.create_task("p", "backlog", Some(&project.id), None, None)
+        .expect("create Task")
+        .id
+}
+
+#[test]
+fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_on_reenable() {
+    let (state, path) =
+        crate::app_invoke::test_support::test_state("task_start_context_disabled_plugin_prompt");
+    let plugin_id = "com.example.start-prompt";
+    let task_id = task_with_owned_start_prompt_contribution(&state, plugin_id);
+    let service = service_for_state(&state);
+
+    let enabled_context = service
+        .load_context(&task_id)
+        .expect("load enabled context");
+    assert_eq!(enabled_context.start_prompt_contributions.len(), 1);
+
+    let project_id = enabled_context.project_id;
+    db::acquire_db(&state.db)
+        .set_plugin_enabled(&project_id, plugin_id, false)
+        .expect("disable plugin");
+    let disabled_context = service
+        .load_context(&task_id)
+        .expect("load disabled context");
+    assert!(disabled_context.start_prompt_contributions.is_empty());
+
+    db::acquire_db(&state.db)
+        .set_plugin_enabled(&project_id, plugin_id, true)
+        .expect("re-enable plugin");
+    let reenabled_context = service
+        .load_context(&task_id)
+        .expect("load re-enabled context");
+    assert_eq!(reenabled_context.start_prompt_contributions.len(), 1);
+
+    drop(state);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_them_after_reinstall()
+{
+    let (state, path) =
+        crate::app_invoke::test_support::test_state("task_start_context_uninstalled_plugin_prompt");
+    let plugin_id = "com.example.start-prompt";
+    let task_id = task_with_owned_start_prompt_contribution(&state, plugin_id);
+    let service = service_for_state(&state);
+
+    let enabled_context = service
+        .load_context(&task_id)
+        .expect("load enabled context");
+    assert_eq!(enabled_context.start_prompt_contributions.len(), 1);
+
+    let project_id = enabled_context.project_id;
+    db::acquire_db(&state.db)
+        .uninstall_plugin(plugin_id)
+        .expect("uninstall plugin");
+    let uninstalled_context = service
+        .load_context(&task_id)
+        .expect("load uninstalled context");
+    assert!(uninstalled_context.start_prompt_contributions.is_empty());
+
+    let db = db::acquire_db(&state.db);
+    db.install_plugin(&test_plugin(plugin_id))
+        .expect("reinstall plugin");
+    db.set_plugin_enabled(&project_id, plugin_id, true)
+        .expect("enable reinstalled plugin");
+    drop(db);
+    let reinstalled_context = service
+        .load_context(&task_id)
+        .expect("load reinstalled context");
+    assert_eq!(reinstalled_context.start_prompt_contributions.len(), 1);
+
+    drop(state);
+    let _ = std::fs::remove_file(path);
+}
+
 #[test]
 fn provider_run_options_borrow_saved_task_agent_and_permission_mode() {
     let task = task_with_provider_options(Some("rust-specialist"), Some("trusted"));

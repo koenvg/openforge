@@ -541,6 +541,7 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
         db.set_project_config(&project.id, "ai_provider", "pi")
             .expect("set provider");
         let contribution = crate::agent_lifecycle::StartPromptContribution {
+            owner_plugin_id: None,
             id: "plugin-review-workflow".to_string(),
             enabled: true,
             content: "<plugin_review>Task {{taskId}}\n## Plugin Template\n- Preserve plugin-owned reviewer brief</plugin_review>".to_string(),

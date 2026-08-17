@@ -506,6 +506,8 @@ export interface ComposeTaskResult {
 }
 
 export interface StartPromptContribution {
+  /** Host-assigned identity of the plugin that owns this persisted contribution. */
+  readonly ownerPluginId?: string
   id: string
   enabled: boolean
   /**
