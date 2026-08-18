@@ -18,7 +18,7 @@ jobs:
           - platform: macos-14
             target: aarch64-apple-darwin
             electron_arch: arm64
-          - platform: macos-13
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
             electron_arch: x64
     timeout-minutes: 20
