@@ -424,6 +424,8 @@ Behavior and limits:
 - `tasks.sendFollowUp({ taskId, message })` submits immediately to that Task's latest active Agent Session through its provider PTY. It returns `{ taskId, sessionId, disposition }`, where `delivered` means the Agent was idle and `queued` means work was running or paused. Failures throw `TaskFollowUpError` with retryable `NO_SESSION` or `DELIVERY_FAILED` codes; callers must retain user work until a receipt is returned.
 - The host resolves provider, agent, permission mode, model, branch/worktree strategy, and project checkout from OpenForge state. Plugins cannot override those execution settings in the API call or through start-prompt contribution configuration.
 - Start-prompt content may use `{{taskId}}` or `{{task_id}}` for the active Task ID. All other content remains plugin-owned and is not rewritten.
+- The host records the configuring plugin as the contribution owner. Contribution IDs are local to that owner, so two plugins may use the same ID without replacing each other.
+- An owned contribution is injected only while its plugin is installed and enabled for the Task's Project. Disabling or uninstalling the plugin suppresses injection without deleting the saved contribution; re-enabling, or reinstalling and then enabling, restores the saved configuration.
 - Starting an Implementation Run can fail when dependencies are unmet, an active Agent Session already exists, the Task/Project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
 - `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state.
 

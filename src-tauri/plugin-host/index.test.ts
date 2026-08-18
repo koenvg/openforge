@@ -250,7 +250,7 @@ describe('plugin-host backend runtime', () => {
         case 'openforge.tasks.sendFollowUp': return { taskId: request.params.taskId, sessionId: 'session-1', disposition: 'queued' }
         case 'openforge.tasks.updateStatus': return null
         case 'openforge.tasks.listStartPromptContributions': return []
-        case 'openforge.tasks.configureStartPromptContribution': return [{ id: request.params.id, enabled: request.params.enabled, content: request.params.content, order: request.params.order }]
+        case 'openforge.tasks.configureStartPromptContribution': return [{ ownerPluginId: request.params.pluginId, id: request.params.id, enabled: request.params.enabled, content: request.params.content, order: request.params.order }]
         case 'openforge.tasks.startImplementation': return { task_id: request.params.taskId, session_id: 'session-1', workspace_path: '/workspace/T-created', port: 0 }
         case 'openforge.tasks.getWorkspace': return { id: 7, task_id: request.params.taskId, project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 }
         case 'openforge.tasks.getLatestSession': return { id: 'session-1', ticket_id: request.params.taskId, opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }
@@ -266,7 +266,7 @@ describe('plugin-host backend runtime', () => {
       composed: { task: createdTask, started: false },
       followUp: { taskId: 'T-created', sessionId: 'session-1', disposition: 'queued' },
       beforeContributions: [],
-      contributions: [{ id: 'scheduler-brief', enabled: true, content: '## Plugin Brief', order: 10 }],
+      contributions: [{ ownerPluginId: 'scheduler', id: 'scheduler-brief', enabled: true, content: '## Plugin Brief', order: 10 }],
       run: { taskId: 'T-created', sessionId: 'session-1', workspacePath: '/workspace/T-created' },
       workspace: { id: 7, task_id: 'T-created', project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 },
       latestSession: { id: 'session-1', ticket_id: 'T-created', opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' },
@@ -280,7 +280,7 @@ describe('plugin-host backend runtime', () => {
       { method: 'openforge.tasks.sendFollowUp', params: { taskId: 'T-created', message: 'Review the task' } },
       { method: 'openforge.tasks.updateStatus', params: { taskId: 'T-created', status: 'doing' } },
       { method: 'openforge.tasks.listStartPromptContributions', params: { projectId: 'P-1' } },
-      { method: 'openforge.tasks.configureStartPromptContribution', params: { projectId: 'P-1', id: 'scheduler-brief', enabled: true, content: '## Plugin Brief', order: 10 } },
+      { method: 'openforge.tasks.configureStartPromptContribution', params: { projectId: 'P-1', id: 'scheduler-brief', enabled: true, content: '## Plugin Brief', order: 10, pluginId: 'scheduler' } },
       { method: 'openforge.tasks.startImplementation', params: { taskId: 'T-created' } },
       { method: 'openforge.tasks.getWorkspace', params: { taskId: 'T-created' } },
       { method: 'openforge.tasks.getLatestSession', params: { taskId: 'T-created' } },

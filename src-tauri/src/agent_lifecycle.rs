@@ -9,6 +9,9 @@ pub const START_PROMPT_CONTRIBUTIONS_CONFIG_KEY: &str = "start_prompt_contributi
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct StartPromptContribution {
+    /// Plugin that owns this persisted contribution. Legacy host-owned entries have no owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_plugin_id: Option<String>,
     pub id: String,
     #[serde(default = "default_start_prompt_contribution_enabled")]
     pub enabled: bool,
@@ -458,6 +461,7 @@ mod tests {
 
     fn start_prompt_contributions() -> Vec<StartPromptContribution> {
         vec![StartPromptContribution {
+            owner_plugin_id: None,
             id: "project-guidance".to_string(),
             enabled: true,
             content: "Project start guidance for {{taskId}}".to_string(),

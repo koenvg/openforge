@@ -673,7 +673,11 @@ var TestingCommonApiFake = class {
 				listStartPromptContributions: async (projectId) => this.services.startPromptContributions(projectId),
 				configureStartPromptContribution: async (request) => {
 					this.services.calls.startPromptContributionConfigurations.push(request);
-					const next = [...this.services.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id), request].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+					const contribution = {
+						...request,
+						ownerPluginId: this.services.pluginId
+					};
+					const next = [...this.services.startPromptContributions(request.projectId).filter((entry) => entry.id !== request.id || entry.ownerPluginId !== void 0 && entry.ownerPluginId !== contribution.ownerPluginId), contribution].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id) || (a.ownerPluginId ?? "").localeCompare(b.ownerPluginId ?? ""));
 					this.services.config.set(`project:${request.projectId}:start_prompt_contributions`, next);
 					return next;
 				},

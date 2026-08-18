@@ -420,7 +420,7 @@ impl TaskStartService {
             .get_project_config(&project_id, "additional_instructions")
             .ok()
             .flatten();
-        let start_prompt_contributions: Vec<StartPromptContribution> = db
+        let mut start_prompt_contributions: Vec<StartPromptContribution> = db
             .get_project_config(
                 &project_id,
                 agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
@@ -429,6 +429,15 @@ impl TaskStartService {
             .flatten()
             .and_then(|value| serde_json::from_str(&value).ok())
             .unwrap_or_default();
+        start_prompt_contributions.retain(|contribution| {
+            contribution
+                .owner_plugin_id
+                .as_deref()
+                .is_none_or(|plugin_id| {
+                    db.is_plugin_enabled(&project_id, plugin_id)
+                        .unwrap_or(false)
+                })
+        });
 
         Ok(StartContext {
             code_cleanup_enabled: db.resolve_task_bool(

@@ -103,7 +103,7 @@ export function createBackendApi(
       compose: async request => await hostCallback<ComposeTaskResult | null>('openforge.tasks.compose', objectCallbackParams(request)),
       updateStatus: async (taskId: string, status: WritableBoardStatus) => { await hostCallback<void>('openforge.tasks.updateStatus', { taskId, status }) },
       listStartPromptContributions: async (projectId: string) => await hostCallback<StartPromptContribution[]>('openforge.tasks.listStartPromptContributions', { projectId }),
-      configureStartPromptContribution: async (request: ConfigureStartPromptContributionRequest) => await hostCallback<StartPromptContribution[]>('openforge.tasks.configureStartPromptContribution', objectCallbackParams(request)),
+      configureStartPromptContribution: async (request: ConfigureStartPromptContributionRequest) => await hostCallback<StartPromptContribution[]>('openforge.tasks.configureStartPromptContribution', { ...objectCallbackParams(request), pluginId: state.pluginId }),
       startImplementation: async (request: StartTaskImplementationRequest) => normalizeImplementationRun(await hostCallback<unknown>('openforge.tasks.startImplementation', objectCallbackParams(request))),
       sendFollowUp: async request => await hostCallback<TaskFollowUpReceipt>('openforge.tasks.sendFollowUp', objectCallbackParams(request)),
       getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
