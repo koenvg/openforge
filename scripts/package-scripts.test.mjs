@@ -68,24 +68,47 @@ describe('package build scripts', () => {
     expect(releaseWorkflow).not.toContain('electron:smoke:packaged')
   })
 
-  it('checks the packed Plugin SDK contract and versions it with desktop releases', async () => {
+  it('checks the packed Plugin SDK contract and publishes it through one reusable workflow', async () => {
     const rootPackage = await readJson('package.json')
     const sdkPackage = await readJson('packages/plugin-sdk/package.json')
     const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
     const publishWorkflow = await readFile(join(repoRoot, '.github/workflows/publish-plugin-sdk.yml'), 'utf8')
     const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
+    const reusablePublishWorkflow = await readFile(
+      join(repoRoot, '.github/workflows/reusable-publish-plugin-sdk.yml'),
+      'utf8',
+    )
 
     expect(sdkPackage.version).toBe('0.2.1')
     expect(sdkPackage.scripts['check:contract']).toBe('node ./scripts/check-published-contract.mjs')
     expect(sdkPackage.scripts.prepublishOnly).toBe('pnpm run check:contract')
     expect(rootPackage.scripts['packages:contract:check']).toBe('pnpm --filter @openforge-app/plugin-sdk check:contract')
+    expect(ciWorkflow).toContain('pnpm packages:contract:check')
 
-    for (const workflow of [ciWorkflow, publishWorkflow, releaseWorkflow]) {
-      expect(workflow).toContain('pnpm packages:contract:check')
+    const sharedPublishSteps = [
+      'Set SDK package version',
+      'pnpm --filter @openforge-app/plugin-sdk build',
+      'pnpm --filter @openforge-app/plugin-sdk test',
+      'pnpm packages:contract:check',
+      'npm view "@openforge-app/plugin-sdk@$PACKAGE_VERSION"',
+      'pnpm packages:metadata:check',
+      'npm pack --dry-run',
+      'npm publish --access public --provenance',
+    ]
+
+    for (const callerWorkflow of [publishWorkflow, releaseWorkflow]) {
+      expect(callerWorkflow).toContain('uses: ./.github/workflows/reusable-publish-plugin-sdk.yml')
+      for (const sharedStep of sharedPublishSteps) {
+        expect(callerWorkflow).not.toContain(sharedStep)
+      }
     }
-    expect(publishWorkflow).not.toContain('inputs.version')
-    expect(publishWorkflow).not.toContain('Set SDK package version')
-    expect(releaseWorkflow).toContain('Set SDK package version from git tag')
-    expect(releaseWorkflow).toContain('VERSION="${GITHUB_REF_NAME#v}"')
+
+    expect(reusablePublishWorkflow).toContain('workflow_call:')
+    for (const sharedStep of sharedPublishSteps) {
+      expect(reusablePublishWorkflow).toContain(sharedStep)
+    }
+    expect(reusablePublishWorkflow).toContain('npm publish --access public --provenance --tag "${{ inputs.npm_tag }}"')
+    expect(releaseWorkflow).toContain('package_version: ${{ github.ref_name }}')
+    expect(publishWorkflow).toContain('dry_run: ${{ inputs.dry_run }}')
   })
 })

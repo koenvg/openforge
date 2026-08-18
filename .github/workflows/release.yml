@@ -105,68 +105,11 @@ jobs:
     name: Publish @openforge-app/plugin-sdk to npm
     # Publishing is tag-driven and must not wait for every desktop runner to become available.
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: npm-publish
     permissions:
       contents: read
       id-token: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Set SDK package version from git tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
-            echo "Invalid semver version: $VERSION" >&2
-            exit 1
-          fi
-          jq --arg v "$VERSION" '.version = $v' packages/plugin-sdk/package.json > packages/plugin-sdk/package.json.tmp
-          mv packages/plugin-sdk/package.json.tmp packages/plugin-sdk/package.json
-
-      - name: Build plugin SDK
-        run: pnpm --filter @openforge-app/plugin-sdk build
-
-      - name: Test plugin SDK
-        run: pnpm --filter @openforge-app/plugin-sdk test
-
-      - name: Check packed Plugin SDK authoring contract
-        run: pnpm packages:contract:check
-
-      - name: Check published SDK version
-        id: published-sdk
-        run: |
-          PACKAGE_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('packages/plugin-sdk/package.json', 'utf8')).version")"
-          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          if npm view "@openforge-app/plugin-sdk@$PACKAGE_VERSION" version >/dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "@openforge-app/plugin-sdk@$PACKAGE_VERSION is already published; publish step will be skipped."
-          else
-            echo "published=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Verify workspace package license metadata
-        run: pnpm packages:metadata:check
-
-      - name: Check package contents
-        working-directory: packages/plugin-sdk
-        run: npm pack --dry-run
-
-      - name: Publish package
-        if: steps.published-sdk.outputs.published != 'true'
-        working-directory: packages/plugin-sdk
-        run: npm publish --access public --provenance --tag latest
+    uses: ./.github/workflows/reusable-publish-plugin-sdk.yml
+    with:
+      package_version: ${{ github.ref_name }}
+      npm_tag: latest
+      dry_run: false
