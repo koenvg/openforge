@@ -1,8 +1,16 @@
 name: Publish Plugin SDK
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
+      package_version:
+        description: "SDK version to publish manually; leave blank to use the checked-in version"
+        required: false
+        default: ""
+        type: string
       npm_tag:
         description: "npm dist-tag to publish"
         required: true
@@ -27,5 +35,6 @@ jobs:
     name: Publish @openforge-app/plugin-sdk
     uses: ./.github/workflows/reusable-publish-plugin-sdk.yml
     with:
-      npm_tag: ${{ inputs.npm_tag }}
-      dry_run: ${{ inputs.dry_run }}
+      package_version: ${{ github.event_name == 'push' && github.ref_name || inputs.package_version }}
+      npm_tag: ${{ inputs.npm_tag || 'latest' }}
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}

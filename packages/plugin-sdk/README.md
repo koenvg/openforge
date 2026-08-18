@@ -15,6 +15,10 @@ Styled frontend plugins must declare Vite/Svelte's emitted CSS artifacts in `pac
 
 The host validates, attaches, reloads, and removes these package-relative stylesheets with the frontend plugin lifecycle.
 
+## Publishing
+
+Automated releases use npm trusted publishing rather than a long-lived npm token. Configure the package's npm Trusted Publisher with repository `koenvg/openforge`, workflow `publish-plugin-sdk.yml`, and environment `npm-publish`. The workflow is the caller npm validates even though the shared publish steps live in `reusable-publish-plugin-sdk.yml`. For a failed tag release, dispatch this workflow manually with the missing `package_version` and disable dry-run.
+
 ## License
 
 `@openforge-app/plugin-sdk` is licensed under the MIT License. Plugin authors may use it for personal, internal, open source, or commercial plugin development, including redistribution and modification under the MIT terms.
