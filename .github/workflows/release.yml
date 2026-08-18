@@ -103,7 +103,7 @@ jobs:
 
   publish-plugin-sdk:
     name: Publish @openforge-app/plugin-sdk to npm
-    needs: release
+    # Publishing is tag-driven and must not wait for every desktop runner to become available.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
