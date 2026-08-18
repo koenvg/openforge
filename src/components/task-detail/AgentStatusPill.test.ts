@@ -13,11 +13,12 @@ describe('AgentStatusPill', () => {
     expect(screen.queryByTestId('agent-status-pill')).toBeNull()
   })
 
-  it('shows a single provider-specific running status without duplicate stage, badge, or resume command', async () => {
+  it('keeps the running task controls without showing a provider-specific running label', async () => {
     setActiveSession(createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123', status: 'running', stage: 'implement' }))
     render(AgentStatusPill, { props: { taskId: 'T-1' } })
 
-    expect(await screen.findByText('Pi agent running...')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Start voice input' })).toBeTruthy()
+    expect(screen.queryByText(/agent running/i)).toBeNull()
     expect(screen.queryByText('implementing')).toBeNull()
     expect(screen.queryByText('RUNNING')).toBeNull()
     expect(screen.queryByText('pi --session pi-sess-abc123')).toBeNull()

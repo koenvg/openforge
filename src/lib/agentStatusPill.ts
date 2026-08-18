@@ -4,7 +4,6 @@ import { getAgentStatusText } from './agentTerminalPanel'
 import { parseCheckpointQuestion } from './parseCheckpoint'
 
 export interface AgentProviderConfig {
-  runningText: string
   supportsCheckpointQuestion: boolean
 }
 
@@ -14,22 +13,17 @@ export interface AgentStatusPillView {
 }
 
 /**
- * Resolve the provider-specific chrome for the agent status pill. Mirrors the
- * provider branches in AgentPanel so the control-row pill and the terminal shell
- * stay in lock-step.
+ * Resolve provider capabilities needed by the agent status pill.
  */
 export function getAgentProviderConfig(provider: string | null): AgentProviderConfig {
   switch (provider) {
     case 'claude-code':
-      return { runningText: 'Claude agent running...', supportsCheckpointQuestion: false }
     case 'pi':
-      return { runningText: 'Pi agent running...', supportsCheckpointQuestion: false }
     case 'codex':
-      return { runningText: 'Codex agent running...', supportsCheckpointQuestion: false }
     case 'grok':
-      return { runningText: 'Grok agent running...', supportsCheckpointQuestion: false }
+      return { supportsCheckpointQuestion: false }
     default:
-      return { runningText: 'Agent running...', supportsCheckpointQuestion: true }
+      return { supportsCheckpointQuestion: true }
   }
 }
 
@@ -47,7 +41,7 @@ export function deriveAgentStatusPillView(session: AgentSession | null, status: 
     && parseCheckpointQuestion(session.checkpoint_data) !== null
 
   return {
-    statusText: getAgentStatusText(status, config.runningText),
+    statusText: getAgentStatusText(status, null),
     checkpointActive,
   }
 }

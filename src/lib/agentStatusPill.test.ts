@@ -23,34 +23,12 @@ function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
 }
 
 describe('getAgentProviderConfig', () => {
-  it('maps claude-code', () => {
-    const c = getAgentProviderConfig('claude-code')
-    expect(c.runningText).toBe('Claude agent running...')
-    expect(c.supportsCheckpointQuestion).toBe(false)
+  it.each(['claude-code', 'pi', 'codex', 'grok'])('disables checkpoint questions for %s', (provider) => {
+    expect(getAgentProviderConfig(provider).supportsCheckpointQuestion).toBe(false)
   })
 
-  it('maps pi', () => {
-    const c = getAgentProviderConfig('pi')
-    expect(c.runningText).toBe('Pi agent running...')
-    expect(c.supportsCheckpointQuestion).toBe(false)
-  })
-
-  it('maps codex', () => {
-    const c = getAgentProviderConfig('codex')
-    expect(c.runningText).toBe('Codex agent running...')
-    expect(c.supportsCheckpointQuestion).toBe(false)
-  })
-
-  it('maps grok', () => {
-    const c = getAgentProviderConfig('grok')
-    expect(c.runningText).toBe('Grok agent running...')
-    expect(c.supportsCheckpointQuestion).toBe(false)
-  })
-
-  it('falls back to opencode chrome for unknown/opencode providers', () => {
-    const c = getAgentProviderConfig('opencode')
-    expect(c.runningText).toBe('Agent running...')
-    expect(c.supportsCheckpointQuestion).toBe(true)
+  it('enables checkpoint questions for OpenCode', () => {
+    expect(getAgentProviderConfig('opencode').supportsCheckpointQuestion).toBe(true)
   })
 })
 
@@ -59,22 +37,11 @@ describe('deriveAgentStatusPillView', () => {
     expect(deriveAgentStatusPillView(null, 'idle')).toBeNull()
   })
 
-  it('describes a running claude session with a single canonical status', () => {
-    const view = deriveAgentStatusPillView(makeSession(), 'running')
+  it.each(['claude-code', 'pi', 'codex', 'grok', 'opencode'])('omits the running status for %s', (provider) => {
+    const view = deriveAgentStatusPillView(makeSession({ provider, status: 'running' }), 'running')
+
     expect(view).not.toBeNull()
-    expect(view!.statusText).toBe('Claude agent running...')
-    expect(view!.checkpointActive).toBe(false)
-  })
-
-  it('uses the codex running status text', () => {
-    const view = deriveAgentStatusPillView(makeSession({ provider: 'codex', status: 'running', claude_session_id: null }), 'running')
-    expect(view!.statusText).toBe('Codex agent running...')
-  })
-
-  it('uses the grok running status text', () => {
-    const view = deriveAgentStatusPillView(makeSession({ provider: 'grok', status: 'running', claude_session_id: null, grok_session_id: 'grok-sess-1' }), 'running')
-    expect(view!.statusText).toBe('Grok agent running...')
-    expect(view!.checkpointActive).toBe(false)
+    expect(view!.statusText).toBeNull()
   })
 
   it('flags an opencode checkpoint question when paused', () => {

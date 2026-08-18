@@ -12,7 +12,7 @@ interface SyncAgentPanelStatusOptions {
   setTerminalActive?: (active: boolean) => void
 }
 
-export function getAgentStatusText(status: AgentPanelStatus, runningText: string): string | null {
+export function getAgentStatusText(status: AgentPanelStatus, runningText: string | null): string | null {
   switch (status) {
     case 'idle': return 'No active implementation'
     case 'running': return runningText
