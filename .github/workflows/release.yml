@@ -100,16 +100,3 @@ jobs:
             xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
             ```
           files: ${{ steps.release-image.outputs.dmg-path }}
-
-  publish-plugin-sdk:
-    name: Publish @openforge-app/plugin-sdk to npm
-    # Publishing is tag-driven and must not wait for every desktop runner to become available.
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/reusable-publish-plugin-sdk.yml
-    with:
-      package_version: ${{ github.ref_name }}
-      npm_tag: latest
-      dry_run: false

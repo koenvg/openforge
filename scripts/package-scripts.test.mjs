@@ -80,6 +80,11 @@ describe('package build scripts', () => {
     )
 
     expect(sdkPackage.version).toBe('0.2.1')
+    expect(sdkPackage.repository).toEqual({
+      type: 'git',
+      url: 'https://github.com/koenvg/openforge.git',
+      directory: 'packages/plugin-sdk',
+    })
     expect(sdkPackage.scripts['check:contract']).toBe('node ./scripts/check-published-contract.mjs')
     expect(sdkPackage.scripts.prepublishOnly).toBe('pnpm run check:contract')
     expect(rootPackage.scripts['packages:contract:check']).toBe('pnpm --filter @openforge-app/plugin-sdk check:contract')
@@ -93,11 +98,15 @@ describe('package build scripts', () => {
       'npm view "@openforge-app/plugin-sdk@$PACKAGE_VERSION"',
       'pnpm packages:metadata:check',
       'npm pack --dry-run',
+      'uses: actions/setup-node@v6',
+      'node-version: 24',
+      'npm install --global npm@^11.5.1',
       'npm publish --access public --provenance',
     ]
 
+    expect(publishWorkflow).toContain('uses: ./.github/workflows/reusable-publish-plugin-sdk.yml')
+    expect(releaseWorkflow).not.toContain('uses: ./.github/workflows/reusable-publish-plugin-sdk.yml')
     for (const callerWorkflow of [publishWorkflow, releaseWorkflow]) {
-      expect(callerWorkflow).toContain('uses: ./.github/workflows/reusable-publish-plugin-sdk.yml')
       for (const sharedStep of sharedPublishSteps) {
         expect(callerWorkflow).not.toContain(sharedStep)
       }
@@ -108,7 +117,10 @@ describe('package build scripts', () => {
       expect(reusablePublishWorkflow).toContain(sharedStep)
     }
     expect(reusablePublishWorkflow).toContain('npm publish --access public --provenance --tag "${{ inputs.npm_tag }}"')
-    expect(releaseWorkflow).toContain('package_version: ${{ github.ref_name }}')
-    expect(publishWorkflow).toContain('dry_run: ${{ inputs.dry_run }}')
+    expect(publishWorkflow).toContain('- "v*"')
+    expect(publishWorkflow).toContain('description: "SDK version to publish manually; leave blank to use the checked-in version"')
+    expect(publishWorkflow).toContain("package_version: ${{ github.event_name == 'push' && github.ref_name || inputs.package_version }}")
+    expect(publishWorkflow).toContain("npm_tag: ${{ inputs.npm_tag || 'latest' }}")
+    expect(publishWorkflow).toContain("dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}")
   })
 })
