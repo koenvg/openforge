@@ -242,21 +242,21 @@ where
 
             if !plugin.frontend_entry.trim().is_empty() {
                 if let Some(frontend) = self.frontend {
-                    let commands = frontend
+                    // Routine discovery is best-effort across frontend runtimes. Exact
+                    // description still reports an unavailable runtime for frontend commands.
+                    if let Ok(commands) = frontend
                         .list_frontend_agent_commands(&plugin.id, &project_id)
                         .await
-                        .map_err(|reason| PluginCommandDiscoveryError::FrontendUnavailable {
-                            plugin_id: plugin.id.clone(),
-                            reason,
-                        })?;
-                    descriptors.extend(commands.into_iter().filter(|command| {
-                        command.discoverable
-                            && is_exact_descriptor(
-                                &plugin.id,
-                                AgentCommandRuntime::Frontend,
-                                command,
-                            )
-                    }));
+                    {
+                        descriptors.extend(commands.into_iter().filter(|command| {
+                            command.discoverable
+                                && is_exact_descriptor(
+                                    &plugin.id,
+                                    AgentCommandRuntime::Frontend,
+                                    command,
+                                )
+                        }));
+                    }
                 }
             }
         }
@@ -820,6 +820,163 @@ mod tests {
         ) -> BoxFuture<'a, Result<Value, String>> {
             self.invoke_agent_command(plugin_id, project_id, command_id, input, context)
         }
+    }
+
+    struct SelectivelyUnavailableFrontendCatalog {
+        plugin_id: String,
+    }
+
+    impl FrontendAgentCommandCatalog for SelectivelyUnavailableFrontendCatalog {
+        fn list_frontend_agent_commands<'a>(
+            &'a self,
+            plugin_id: &'a str,
+            _project_id: &'a str,
+        ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>> {
+            Box::pin(async move {
+                if plugin_id == self.plugin_id {
+                    Err(format!(
+                        "Frontend runtime for Plugin {plugin_id} is unavailable"
+                    ))
+                } else {
+                    Ok(Vec::new())
+                }
+            })
+        }
+
+        fn invoke_frontend_agent_command<'a>(
+            &'a self,
+            plugin_id: &'a str,
+            _project_id: &'a str,
+            _command_id: &'a str,
+            _input: Option<Value>,
+            _context: PluginCommandInvocationContext,
+        ) -> BoxFuture<'a, Result<Value, String>> {
+            Box::pin(async move {
+                Err(format!(
+                    "Frontend runtime for Plugin {plugin_id} is unavailable"
+                ))
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn lists_backend_commands_when_an_unrelated_plugin_frontend_is_unavailable() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_partial_frontend");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        seed_plugin(&database, "com.example.sync", true);
+        seed_plugin(&database, "com.example.unavailable", false);
+        database
+            .set_plugin_enabled(&project.id, "com.example.sync", true)
+            .expect("enable backend plugin");
+        database
+            .set_plugin_enabled(&project.id, "com.example.unavailable", true)
+            .expect("enable unavailable frontend plugin");
+        let backend_command = descriptor("com.example.sync", "visible", true);
+        let backend = FakeBackendCatalog {
+            descriptors: HashMap::from([(
+                "com.example.sync".to_string(),
+                vec![backend_command.clone()],
+            )]),
+            ..Default::default()
+        };
+        let frontend = SelectivelyUnavailableFrontendCatalog {
+            plugin_id: "com.example.unavailable".to_string(),
+        };
+        let broker =
+            PluginCommandBroker::with_frontend(Arc::new(Mutex::new(database)), &backend, &frontend);
+
+        assert_eq!(
+            broker
+                .list(&PluginCommandDiscoveryContext {
+                    task_id: None,
+                    project_id: Some(project.id),
+                })
+                .await
+                .expect("list available commands"),
+            vec![backend_command]
+        );
+    }
+
+    #[tokio::test]
+    async fn describes_exact_backend_command_when_its_plugin_frontend_is_unavailable() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_backend_description");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        seed_plugin(&database, "com.example.sync", true);
+        database
+            .set_plugin_enabled(&project.id, "com.example.sync", true)
+            .expect("enable plugin");
+        let backend_command = descriptor("com.example.sync", "hidden", false);
+        let backend = FakeBackendCatalog {
+            descriptors: HashMap::from([(
+                "com.example.sync".to_string(),
+                vec![backend_command.clone()],
+            )]),
+            ..Default::default()
+        };
+        let frontend = SelectivelyUnavailableFrontendCatalog {
+            plugin_id: "com.example.sync".to_string(),
+        };
+        let broker =
+            PluginCommandBroker::with_frontend(Arc::new(Mutex::new(database)), &backend, &frontend);
+
+        assert_eq!(
+            broker
+                .describe(
+                    &PluginCommandDiscoveryContext {
+                        task_id: None,
+                        project_id: Some(project.id),
+                    },
+                    "com.example.sync.hidden",
+                )
+                .await
+                .expect("describe backend command"),
+            backend_command
+        );
+    }
+
+    #[tokio::test]
+    async fn describing_a_frontend_command_reports_its_unavailable_runtime() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_frontend_unavailable");
+        let project = database
+            .create_project("Project", "/tmp/project")
+            .expect("project");
+        seed_plugin(&database, "com.example.browser", false);
+        database
+            .set_plugin_enabled(&project.id, "com.example.browser", true)
+            .expect("enable plugin");
+        let backend = FakeBackendCatalog::default();
+        let frontend = SelectivelyUnavailableFrontendCatalog {
+            plugin_id: "com.example.browser".to_string(),
+        };
+        let broker =
+            PluginCommandBroker::with_frontend(Arc::new(Mutex::new(database)), &backend, &frontend);
+
+        let error = broker
+            .describe(
+                &PluginCommandDiscoveryContext {
+                    task_id: None,
+                    project_id: Some(project.id),
+                },
+                "com.example.browser.open",
+            )
+            .await
+            .expect_err("unavailable frontend command");
+
+        assert_eq!(
+            error,
+            PluginCommandDiscoveryError::FrontendUnavailable {
+                plugin_id: "com.example.browser".to_string(),
+                reason: "Frontend runtime for Plugin com.example.browser is unavailable"
+                    .to_string(),
+            }
+        );
     }
 
     #[tokio::test]
