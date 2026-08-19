@@ -16,6 +16,7 @@
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
+    onReplyToThread?: (threadId: string, body: string) => void
   }
 
   let {
@@ -27,7 +28,20 @@
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
     onOpenUrl,
+    onReplyToThread,
   }: Props = $props()
+
+  // Per-thread reply drafts for answered AI Q&A threads, keyed by thread id.
+  let threadReplyDrafts = $state<Record<string, string>>({})
+
+  function submitThreadReply(threadId: string) {
+    const body = (threadReplyDrafts[threadId] ?? '').trim()
+    if (!body) return
+    onReplyToThread?.(threadId, body)
+    const next = { ...threadReplyDrafts }
+    delete next[threadId]
+    threadReplyDrafts = next
+  }
 
   async function approveAgentComment(comment: DisplayComment) {
     if (comment.commentId === undefined) return
@@ -62,7 +76,7 @@
 
 <div class="w-full">
   {#each data.comments as comment}
-    <div class="{comment.isReply ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
+    <div class="{comment.isReply ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
       <div class="flex items-center gap-2 mb-1.5">
         {#if comment.type === 'existing'}
           <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
@@ -103,6 +117,15 @@
               <X size={14} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
+        {:else if comment.type === 'ai-thread'}
+          <span class="badge badge-info badge-sm">Ask the AI</span>
+          {#if comment.thread?.status === 'pending'}
+            <span class="loading loading-spinner loading-xs"></span>
+            <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
+          {/if}
+          {#if comment.thread?.status === 'error'}
+            <span class="text-error text-[0.7rem]">failed — send again</span>
+          {/if}
         {:else}
           <span class="badge badge-warning badge-sm">Pending</span>
           <button
@@ -115,7 +138,33 @@
         {/if}
       </div>
       <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
-        <MarkdownContent content={comment.body} {onOpenUrl} />
+        {#if comment.type === 'ai-thread' && comment.thread}
+          {#each comment.thread.messages as message}
+            <div class="mb-1.5">
+              <span class="text-base-content/50 text-[0.7rem] mr-1 {message.role === 'user' ? 'font-semibold' : ''}">{message.role === 'ai' ? 'AI author' : 'You'}</span>
+              <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={message.body} {onOpenUrl} /></span>
+            </div>
+          {/each}
+          {#if comment.thread.status === 'answered'}
+            {@const threadId = comment.thread.id}
+            <div class="flex gap-2 mt-1">
+              <input
+                class="input input-bordered input-xs flex-1"
+                aria-label="Reply to the AI author"
+                placeholder="Reply…"
+                value={threadReplyDrafts[threadId] ?? ''}
+                oninput={(event) => {
+                  if (!(event.currentTarget instanceof HTMLInputElement)) return
+                  threadReplyDrafts = { ...threadReplyDrafts, [threadId]: event.currentTarget.value }
+                }}
+                onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitThreadReply(threadId) } }}
+              />
+              <button type="button" class="btn btn-xs btn-primary" onclick={() => submitThreadReply(threadId)}>Reply</button>
+            </div>
+          {/if}
+        {:else}
+          <MarkdownContent content={comment.body} {onOpenUrl} />
+        {/if}
       </div>
     </div>
   {/each}

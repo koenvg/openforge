@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import type { AgentReviewComment, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { buildExtendData, type CommentDisplayData } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
@@ -36,6 +36,9 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    aiThreads?: AiThread[]
+    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToThread?: (threadId: string, body: string) => void
   }
 
   let {
@@ -64,7 +67,15 @@
     onPendingCommentsChange,
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
+    aiThreads = [],
+    onAskAgent,
+    onReplyToThread,
   }: Props = $props()
+
+  // The diff widget reports a SplitSide; local Q&A anchors use LEFT/RIGHT.
+  function sideToReviewSide(side: SplitSide): ReviewSubmissionComment['side'] {
+    return side === SplitSide.old ? 'LEFT' : 'RIGHT'
+  }
 </script>
 
 {#if richDiffActive}
@@ -136,7 +147,7 @@
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
-    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments)}
+    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments, aiThreads)}
     {diffViewMode}
     {diffViewWrap}
     {diffViewTheme}
@@ -156,6 +167,7 @@
         {onAgentCommentsChange}
         {onUpdateAgentCommentStatus}
         {onOpenUrl}
+        {onReplyToThread}
       />
     {/snippet}
     {#snippet renderWidgetLine({ lineNumber, side, onClose }: { lineNumber: number; side: SplitSide; diffFile: DiffFile; onClose: () => void })}
@@ -170,6 +182,7 @@
           onClearInlineCommentText(lineNumber, side)
           onClose()
         }}
+        onAskAgent={onAskAgent ? (body) => onAskAgent(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
       />
     {/snippet}
   </DiffView>
