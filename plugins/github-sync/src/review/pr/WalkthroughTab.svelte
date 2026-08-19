@@ -132,15 +132,11 @@
     void initWalkthrough()
   })
 
-  // On first open of a PR's walkthrough tab, load any cached result and — when
-  // there is none yet — start generation immediately rather than parking on an
-  // intermediate "Generate walkthrough" button. Guarded by the once-per-key
-  // effect above, so cancelling or a failure does not instantly re-trigger.
+  // Generation is now triggered explicitly from the PR card (see PrReviewView /
+  // PrReviewListSection), so the tab only loads whatever has already been
+  // generated for this (pr, head_sha) — it never auto-kicks generation on open.
   async function initWalkthrough() {
-    const existing = await loadCachedWalkthrough()
-    if (!existing && files.length > 0 && !isStarting) {
-      await handleGenerate()
-    }
+    await loadCachedWalkthrough()
   }
 
   // While generation is in flight, poll the cache until the backend flips the
