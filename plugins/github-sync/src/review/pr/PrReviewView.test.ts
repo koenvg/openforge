@@ -188,6 +188,8 @@ function registerPrReviewBackends(
   backend.registerMethod('getPrOverviewComments', { handler: async () => [] })
   backend.registerMethod('getAgentReviewComments', { handler: async () => [] })
   backend.registerMethod('updateAgentReviewCommentStatus', { handler: async () => undefined })
+  backend.registerMethod('getPrAiReviewComments', { handler: async () => [] })
+  backend.registerMethod('updatePrAiReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })

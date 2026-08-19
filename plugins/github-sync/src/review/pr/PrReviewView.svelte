@@ -510,7 +510,9 @@
       })
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $reviewComments = comments
-      const agentComments = await githubSync.listAgentReviewComments({ reviewPrId: pr.id })
+      // The local, per-commit AI-review store (this feature) is the source of
+      // truth; the older Rust listAgentReviewComments POC path is superseded.
+      const agentComments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $agentReviewComments = agentComments
     } catch (e) {
@@ -799,7 +801,11 @@
       onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
       onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
       onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
-      onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
+      onUpdateAgentCommentStatus={(commentId, status) => {
+        const openPr = $selectedReviewPr
+        if (!openPr) return
+        return githubSync.updatePrAiReviewCommentStatus({ reviewPrId: openPr.id, headSha: openPr.head_sha, commentId, status })
+      }}
       onToggleFileReviewed={handleToggleFileReviewed}
       onSubmitReview={submitReview}
       onOpenUrl={(url) => api.system.openUrl(url)}
