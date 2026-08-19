@@ -22,6 +22,23 @@ use tokio::sync::oneshot;
 /// Hard ceiling on a single generation so a stuck agent process can't hang forever.
 const GENERATION_TIMEOUT_SECS: u64 = 240;
 
+/// Which tools the headless agent may use.
+pub(super) enum ToolPolicy {
+    /// No tool flags — the prompt is fully self-contained (diff-only callers).
+    None,
+    /// Read/search files + read-only git history; no edits, no general shell.
+    ReadAndGitHistory,
+}
+
+/// The read + git-history whitelist, passed as a single `--allowedTools` value.
+const READ_AND_GIT_HISTORY_TOOLS: &str =
+    "Read Grep Glob Bash(git log:*) Bash(git blame:*) Bash(git show:*)";
+
+/// Edit tools hard-disabled for the read-only policy, as a single
+/// `--disallowedTools` value. Defense-in-depth on top of the allowlist + `manual`
+/// permission mode: even if a config widened permissions, these can't run.
+const DISALLOWED_EDIT_TOOLS: &str = "Write Edit";
+
 /// In-flight generations, keyed by session key, so `abort_agent_generate` can cancel them.
 fn generation_registry() -> &'static Mutex<HashMap<String, oneshot::Sender<()>>> {
     static REGISTRY: OnceLock<Mutex<HashMap<String, oneshot::Sender<()>>>> = OnceLock::new();
@@ -76,7 +93,7 @@ async fn run_headless_generation(
     model: Option<&str>,
     session_key: &str,
 ) -> Result<String, String> {
-    let (binary_name, args) = headless_command(provider, model)?;
+    let (binary_name, args) = headless_command(provider, model, &ToolPolicy::None, None)?;
 
     let env = crate::user_environment::user_environment();
     let path = env
@@ -169,18 +186,46 @@ async fn run_child(
 fn headless_command(
     provider: &str,
     model: Option<&str>,
+    tool_policy: &ToolPolicy,
+    output_schema: Option<&str>,
 ) -> Result<(&'static str, Vec<String>), String> {
     match provider {
         "claude-code" => {
             // `claude --print` reads the prompt from stdin, prints the final result, and exits.
-            let mut args = vec![
-                "--print".to_string(),
-                "--output-format".to_string(),
-                "text".to_string(),
-            ];
+            let mut args = vec!["--print".to_string(), "--output-format".to_string()];
+            match output_schema {
+                Some(schema) => {
+                    args.push("json".to_string());
+                    args.push("--json-schema".to_string());
+                    args.push(schema.to_string());
+                }
+                None => args.push("text".to_string()),
+            }
             if let Some(model) = model.filter(|m| !m.is_empty()) {
                 args.push("--model".to_string());
                 args.push(model.to_string());
+            }
+            if let ToolPolicy::ReadAndGitHistory = tool_policy {
+                // Read + git-history only. The grammar here is load-bearing and was
+                // verified empirically (see the repo-aware read-only design notes):
+                // - `--setting-sources project`: do NOT inherit the user's global
+                //   `~/.claude/settings.json` `permissions.allow` (often `Bash(*)`,
+                //   `Write`, `Edit`), which would silently defeat the whitelist for
+                //   this automated run in the end user's environment.
+                // - `--permission-mode manual`: anything not in the allowlist needs
+                //   approval, which in headless `--print` mode is a denial.
+                //   (`dontAsk` would auto-approve everything and is unsafe here.)
+                // - `--disallowedTools`: hard-remove the edit tools regardless.
+                // - `--no-session-persistence`: these one-shot runs keep no history.
+                args.push("--no-session-persistence".to_string());
+                args.push("--setting-sources".to_string());
+                args.push("project".to_string());
+                args.push("--permission-mode".to_string());
+                args.push("manual".to_string());
+                args.push("--disallowedTools".to_string());
+                args.push(DISALLOWED_EDIT_TOOLS.to_string());
+                args.push("--allowedTools".to_string());
+                args.push(READ_AND_GIT_HISTORY_TOOLS.to_string());
             }
             Ok(("claude", args))
         }
@@ -197,7 +242,8 @@ mod tests {
 
     #[test]
     fn claude_code_uses_print_mode_and_reads_stdin() {
-        let (binary, args) = headless_command("claude-code", None).expect("claude-code supported");
+        let (binary, args) =
+            headless_command("claude-code", None, &ToolPolicy::None, None).expect("supported");
         assert_eq!(binary, "claude");
         assert!(args.contains(&"--print".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
@@ -207,7 +253,13 @@ mod tests {
 
     #[test]
     fn claude_code_forwards_model_when_present() {
-        let (_, args) = headless_command("claude-code", Some("claude-opus-4-8")).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            Some("claude-opus-4-8"),
+            &ToolPolicy::None,
+            None,
+        )
+        .unwrap();
         let idx = args
             .iter()
             .position(|a| a == "--model")
@@ -217,14 +269,88 @@ mod tests {
 
     #[test]
     fn empty_model_is_not_forwarded() {
-        let (_, args) = headless_command("claude-code", Some("")).unwrap();
+        let (_, args) = headless_command("claude-code", Some(""), &ToolPolicy::None, None).unwrap();
         assert!(!args.iter().any(|a| a == "--model"));
     }
 
     #[test]
     fn unsupported_provider_returns_actionable_error() {
-        let err = headless_command("opencode", None).expect_err("opencode not yet supported");
+        let err = headless_command("opencode", None, &ToolPolicy::None, None)
+            .expect_err("opencode not supported");
         assert!(err.contains("opencode"));
         assert!(err.contains("claude-code"));
+    }
+
+    #[test]
+    fn none_policy_adds_no_tool_or_permission_flags() {
+        // The existing diff-only caller must be unchanged: no tool/permission flags.
+        let (_, args) = headless_command("claude-code", None, &ToolPolicy::None, None).unwrap();
+        assert!(!args.iter().any(|a| a == "--allowedTools"));
+        assert!(!args.iter().any(|a| a == "--disallowedTools"));
+        assert!(!args.iter().any(|a| a == "--permission-mode"));
+        assert!(!args.iter().any(|a| a == "--setting-sources"));
+        assert!(!args.iter().any(|a| a == "--no-session-persistence"));
+    }
+
+    #[test]
+    fn read_and_git_history_policy_whitelists_read_and_git_only() {
+        let (_, args) =
+            headless_command("claude-code", None, &ToolPolicy::ReadAndGitHistory, None).unwrap();
+        // Do NOT inherit the user's global permissions.allow (often Bash(*)/Write/
+        // Edit) — that would silently defeat the whitelist for this automated run.
+        let src_idx = args
+            .iter()
+            .position(|a| a == "--setting-sources")
+            .expect("setting-sources present");
+        assert_eq!(args[src_idx + 1], "project");
+        // `manual` so a non-allowlisted tool requires approval, which in headless
+        // `--print` mode is a denial. (`dontAsk` would auto-approve everything.)
+        let mode_idx = args
+            .iter()
+            .position(|a| a == "--permission-mode")
+            .expect("mode present");
+        assert_eq!(args[mode_idx + 1], "manual");
+        // One-shot review runs must not accumulate session history.
+        assert!(args.contains(&"--no-session-persistence".to_string()));
+        // Whitelist is a single value listing the allowed tools.
+        let allow_idx = args
+            .iter()
+            .position(|a| a == "--allowedTools")
+            .expect("allowlist present");
+        let allow = &args[allow_idx + 1];
+        assert!(allow.contains("Read"));
+        assert!(allow.contains("Grep"));
+        assert!(allow.contains("Glob"));
+        assert!(allow.contains("Bash(git log:*)"));
+        assert!(allow.contains("Bash(git blame:*)"));
+        assert!(allow.contains("Bash(git show:*)"));
+        // No edit/write/general-bash in the whitelist.
+        assert!(!allow.contains("Edit"));
+        assert!(!allow.contains("Write"));
+        // Belt-and-suspenders: hard-disable the edit tools regardless of mode.
+        let deny_idx = args
+            .iter()
+            .position(|a| a == "--disallowedTools")
+            .expect("disallowlist present");
+        let deny = &args[deny_idx + 1];
+        assert!(deny.contains("Write"));
+        assert!(deny.contains("Edit"));
+    }
+
+    #[test]
+    fn output_schema_switches_to_json_and_passes_schema() {
+        let schema = r#"{"type":"object"}"#;
+        let (_, args) =
+            headless_command("claude-code", None, &ToolPolicy::None, Some(schema)).unwrap();
+        let fmt_idx = args
+            .iter()
+            .position(|a| a == "--output-format")
+            .expect("format flag");
+        assert_eq!(args[fmt_idx + 1], "json");
+        let schema_idx = args
+            .iter()
+            .position(|a| a == "--json-schema")
+            .expect("schema flag");
+        assert_eq!(args[schema_idx + 1], schema);
     }
 }
