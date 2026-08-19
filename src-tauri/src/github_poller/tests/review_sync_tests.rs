@@ -285,6 +285,225 @@ fn test_find_authoritative_task_id_rejects_ambiguous_title_matches() {
     assert_eq!(matched, None);
 }
 
+fn wt_entry(task_id: &str, owner: &str, name: &str, branch: &str) -> WorktreeBranchEntry {
+    WorktreeBranchEntry {
+        task_id: task_id.to_string(),
+        repo_owner: owner.to_string(),
+        repo_name: name.to_string(),
+        branch: branch.to_string(),
+    }
+}
+
+#[test]
+fn test_worktree_branch_index_matches_repo_scoped_branch() {
+    let index = WorktreeBranchIndex::build(vec![wt_entry(
+        "AVIV-152",
+        "acme",
+        "web",
+        "refactor/item-60-tag-write-tests",
+    )]);
+
+    assert_eq!(
+        index.task_for("acme", "web", "refactor/item-60-tag-write-tests"),
+        Some("AVIV-152")
+    );
+}
+
+#[test]
+fn test_worktree_branch_index_is_repo_scoped() {
+    let index = WorktreeBranchIndex::build(vec![wt_entry("AVIV-152", "acme", "web", "shared")]);
+
+    // Same branch name, different repo must not match — task ids are globally
+    // unique but branch names are not, so a cross-repo branch collision must
+    // never produce a link.
+    assert_eq!(index.task_for("acme", "api", "shared"), None);
+    assert_eq!(index.task_for("other", "web", "shared"), None);
+}
+
+#[test]
+fn test_worktree_branch_index_drops_ambiguous_branch() {
+    let index = WorktreeBranchIndex::build(vec![
+        wt_entry("T-1", "acme", "web", "dev"),
+        wt_entry("T-2", "acme", "web", "dev"),
+    ]);
+
+    // Two distinct tasks claiming the same repo+branch is ambiguous; the index
+    // must drop it rather than guess.
+    assert_eq!(index.task_for("acme", "web", "dev"), None);
+}
+
+#[test]
+fn test_worktree_branch_index_keeps_repeated_same_task_entry() {
+    let index = WorktreeBranchIndex::build(vec![
+        wt_entry("T-1", "acme", "web", "openforge/T-1"),
+        wt_entry("T-1", "acme", "web", "openforge/T-1"),
+    ]);
+
+    // The provisioned branch and the resolved current branch can be identical;
+    // repeating the same task for the same branch is not a collision.
+    assert_eq!(index.task_for("acme", "web", "openforge/T-1"), Some("T-1"));
+}
+
+#[test]
+fn test_resolve_authored_pr_task_id_links_by_head_branch_without_textual_task_id() {
+    let index = WorktreeBranchIndex::build(vec![wt_entry(
+        "AVIV-152",
+        "acme",
+        "web",
+        "refactor/item-60-tag-write-tests",
+    )]);
+
+    // Descriptive branch, title, and body all omit the task id — only the
+    // worktree index can link this PR.
+    let matched = resolve_authored_pr_task_id(
+        "acme",
+        "web",
+        "refactor/item-60-tag-write-tests",
+        "Add tag write tests",
+        Some("Covers tag writes end to end"),
+        &["AVIV-152".to_string()],
+        &index,
+    );
+
+    assert_eq!(matched.as_deref(), Some("AVIV-152"));
+}
+
+#[test]
+fn test_resolve_authored_pr_task_id_falls_back_to_textual_match() {
+    let index = WorktreeBranchIndex::build(Vec::new());
+
+    let matched = resolve_authored_pr_task_id(
+        "acme",
+        "web",
+        "feature/auth",
+        "Fix T-3 bug",
+        None,
+        &["T-3".to_string()],
+        &index,
+    );
+
+    assert_eq!(matched.as_deref(), Some("T-3"));
+}
+
+#[test]
+fn test_resolve_authored_pr_task_id_prefers_head_branch_over_textual_match() {
+    let index = WorktreeBranchIndex::build(vec![wt_entry("T-1", "acme", "web", "custom-branch")]);
+
+    // The head branch belongs to T-1's worktree, but the title textually
+    // mentions T-2. The authoritative worktree branch wins.
+    let matched = resolve_authored_pr_task_id(
+        "acme",
+        "web",
+        "custom-branch",
+        "Fix T-2 regression",
+        None,
+        &["T-1".to_string(), "T-2".to_string()],
+        &index,
+    );
+
+    assert_eq!(matched.as_deref(), Some("T-1"));
+}
+
+#[test]
+fn test_resolve_authored_pr_task_id_ignores_index_for_different_repo() {
+    let index = WorktreeBranchIndex::build(vec![wt_entry("AVIV-152", "acme", "web", "shared")]);
+
+    // PR shares the branch name but lives in a different repo; with no textual
+    // task id anywhere there must be no link.
+    let matched = resolve_authored_pr_task_id(
+        "acme",
+        "api",
+        "shared",
+        "Add tag write tests",
+        None,
+        &["AVIV-152".to_string()],
+        &index,
+    );
+
+    assert_eq!(matched, None);
+}
+
+fn run_git(repo_path: &std::path::Path, args: &[&str]) {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .expect("git command should run");
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn init_repo_on_branch(repo_path: &std::path::Path, origin_url: &str, branch: &str) {
+    std::fs::create_dir_all(repo_path).expect("repo dir");
+    run_git(repo_path, &["init", "-b", "main"]);
+    run_git(repo_path, &["config", "user.email", "test@example.com"]);
+    run_git(repo_path, &["config", "user.name", "Test User"]);
+    run_git(repo_path, &["config", "commit.gpgsign", "false"]);
+    run_git(repo_path, &["remote", "add", "origin", origin_url]);
+    std::fs::write(repo_path.join("README.md"), "repo\n").expect("write readme");
+    run_git(repo_path, &["add", "README.md"]);
+    run_git(repo_path, &["commit", "-m", "initial"]);
+    run_git(repo_path, &["checkout", "-b", branch]);
+}
+
+#[tokio::test]
+async fn test_build_worktree_branch_index_indexes_provisioned_and_current_branches() {
+    use crate::db::test_helpers::make_test_db;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let repo_path = temp.path().join("repo");
+    // Worktree checked out on a hand-named branch that shares no text with the
+    // task id — the exact scenario the provisioned-branch-only match misses.
+    init_repo_on_branch(
+        &repo_path,
+        "git@github.com:acme/web.git",
+        "refactor/item-60-tag-write-tests",
+    );
+
+    let (db, db_path) = make_test_db("build_worktree_branch_index");
+    let project = db
+        .create_project("Web", repo_path.to_str().unwrap())
+        .expect("create project");
+    let task = db
+        .create_task("Tag write tests", "doing", Some(&project.id), None, None)
+        .expect("create task");
+    db.create_worktree_record(
+        &task.id,
+        &project.id,
+        repo_path.to_str().unwrap(),
+        repo_path.to_str().unwrap(),
+        "openforge/T-1",
+    )
+    .expect("create worktree record");
+
+    let db = Mutex::new(db);
+    let index = build_worktree_branch_index(&db).await;
+
+    // Linkable by the actual checked-out branch...
+    assert_eq!(
+        index.task_for("acme", "web", "refactor/item-60-tag-write-tests"),
+        Some(task.id.as_str())
+    );
+    // ...and still by the provisioned branch.
+    assert_eq!(
+        index.task_for("acme", "web", "openforge/T-1"),
+        Some(task.id.as_str())
+    );
+    // Repo-scoped: a matching branch in a different repo does not link.
+    assert_eq!(
+        index.task_for("acme", "api", "refactor/item-60-tag-write-tests"),
+        None
+    );
+
+    drop(db);
+    let _ = std::fs::remove_file(&db_path);
+}
+
 #[test]
 fn test_poll_phase_error_rate_limit_detection_uses_typed_github_error() {
     let rate_limited = PollPhaseError::GitHub(crate::github_client::GitHubError::ApiError {
