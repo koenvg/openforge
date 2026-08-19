@@ -1,24 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, lastViewedTaskId, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
-import { captureProjectView, pushNavState, resetToBoard, restoreProjectView, useAppRouter } from './router.svelte'
+import { activeProjectId, currentView, lastViewedTaskId, projects, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
+import { captureProjectView, pushNavState, resetHistory, resetToBoard, restoreProjectView, useAppRouter } from './router.svelte'
 import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
-import type { ReviewPullRequest } from './types'
+import type { Project, ReviewPullRequest } from './types'
 
 const samplePr = { id: 'pr-1', number: 1 } as unknown as ReviewPullRequest
 const PR_REVIEW_VIEW = 'plugin:com.openforge.github-sync:pr_review'
 
 describe('useAppRouter', () => {
   beforeEach(() => {
-    const router = useAppRouter()
-    currentView.set('board')
-    selectedTaskId.set(null)
-    selectedReviewPr.set(null)
-    activeProjectId.set(null)
-
-    while (router.back()) {
-    }
-
+    resetHistory()
+    projects.set([])
     currentView.set('board')
     selectedTaskId.set(null)
     selectedReviewPr.set(null)
@@ -210,18 +203,17 @@ describe('useAppRouter', () => {
     expect(get(currentView)).toBe('board')
   })
 
-  it('resetToBoard clears navigation history', () => {
+  it('resetToBoard pushes an undoable entry instead of clearing history', () => {
     const router = useAppRouter()
     activeProjectId.set('proj-1')
-    currentView.set('board')
-    pushNavState()
-
     currentView.set('settings')
-    pushNavState()
 
     resetToBoard()
+    expect(get(currentView)).toBe('board')
 
-    expect(router.back()).toBe(false)
+    // Board is a normal destination now: Back returns to where ⌘H was pressed.
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('settings')
   })
 
   it('resetToBoard is a no-op when already on board with no task selected', () => {
@@ -247,16 +239,8 @@ describe('useAppRouter', () => {
 
 describe('useAppRouter lastViewedTaskId', () => {
   beforeEach(() => {
-    const router = useAppRouter()
-    currentView.set('board')
-    selectedTaskId.set(null)
-    selectedReviewPr.set(null)
-    activeProjectId.set(null)
-    lastViewedTaskId.set(null)
-
-    while (router.back()) {
-    }
-
+    resetHistory()
+    projects.set([])
     currentView.set('board')
     selectedTaskId.set(null)
     selectedReviewPr.set(null)
@@ -308,9 +292,8 @@ describe('useAppRouter lastViewedTaskId', () => {
 
 describe('project view memory', () => {
   beforeEach(() => {
-    const router = useAppRouter()
-    while (router.back()) {
-    }
+    resetHistory()
+    projects.set([])
     currentView.set('board')
     selectedTaskId.set(null)
     selectedReviewPr.set(null)
@@ -397,7 +380,7 @@ describe('project view memory', () => {
     expect(taskId).toBeNull()
   })
 
-  it('restoreProjectView clears the back-navigation history', () => {
+  it('restoreProjectView preserves the back-navigation history', () => {
     const router = useAppRouter()
     activeProjectId.set('proj-1')
     currentView.set('board')
@@ -407,7 +390,9 @@ describe('project view memory', () => {
 
     restoreProjectView('proj-1')
 
-    expect(router.back()).toBe(false)
+    // Switching projects must not wipe history any more — Back can cross back into
+    // the project we came from.
+    expect(router.back()).toBe(true)
   })
 
   it('changing activeProjectId captures the outgoing project\'s location', () => {
@@ -458,5 +443,162 @@ describe('project view memory', () => {
       selectedTaskId: null,
       selectedReviewPr: null,
     })
+  })
+})
+
+describe('useAppRouter forward navigation', () => {
+  beforeEach(() => {
+    resetHistory()
+    projects.set([])
+    currentView.set('board')
+    selectedTaskId.set(null)
+    selectedReviewPr.set(null)
+    activeProjectId.set(null)
+  })
+
+  it('forward returns false when there is nothing ahead', () => {
+    const router = useAppRouter()
+
+    expect(router.forward()).toBe(false)
+  })
+
+  it('forward re-applies a view undone by back', () => {
+    const router = useAppRouter()
+    router.navigate('settings')
+
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('board')
+
+    expect(router.forward()).toBe(true)
+    expect(get(currentView)).toBe('settings')
+  })
+
+  it('back then forward round-trips a mixed view/task sequence', () => {
+    const router = useAppRouter()
+    router.navigate('settings')
+    router.navigateToTask('task-1')
+    router.navigate('global_settings')
+
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBe('task-1')
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('settings')
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('board')
+    expect(router.back()).toBe(false)
+
+    expect(router.forward()).toBe(true)
+    expect(get(currentView)).toBe('settings')
+    expect(router.forward()).toBe(true)
+    expect(get(selectedTaskId)).toBe('task-1')
+    expect(router.forward()).toBe(true)
+    expect(get(currentView)).toBe('global_settings')
+    expect(router.forward()).toBe(false)
+  })
+
+  it('navigating to a new view after back truncates the forward trail', () => {
+    const router = useAppRouter()
+    router.navigate('settings')
+    router.back()
+    expect(get(currentView)).toBe('board')
+
+    router.navigate('global_settings')
+
+    expect(router.forward()).toBe(false)
+  })
+
+  it('consecutive identical pushNavState calls collapse into one history entry', () => {
+    const router = useAppRouter()
+    activeProjectId.set('proj-1')
+    currentView.set('settings')
+    pushNavState()
+    pushNavState()
+
+    expect(router.back()).toBe(true)
+    expect(router.back()).toBe(false)
+  })
+
+  it('navigating to the already-active view does not add a history entry', () => {
+    const router = useAppRouter()
+    router.navigate('settings')
+    router.navigate('settings')
+
+    expect(router.back()).toBe(true)
+    expect(get(currentView)).toBe('board')
+    expect(router.back()).toBe(false)
+  })
+
+  it('caps the back history at 50 entries, dropping the oldest', () => {
+    const router = useAppRouter()
+    // Alternate two views so consecutive states never dedup.
+    for (let i = 0; i < 60; i++) {
+      router.navigate(i % 2 === 0 ? 'settings' : 'global_settings')
+    }
+
+    let count = 0
+    while (router.back()) count++
+
+    expect(count).toBe(50)
+  })
+})
+
+describe('useAppRouter cross-project history', () => {
+  beforeEach(() => {
+    resetHistory()
+    projects.set([])
+    currentView.set('board')
+    selectedTaskId.set(null)
+    selectedReviewPr.set(null)
+    activeProjectId.set(null)
+    projectViewSnapshots.set(new Map())
+  })
+
+  it('back restores a task detail from another project synchronously', () => {
+    const router = useAppRouter()
+    activeProjectId.set('proj-B')
+    currentView.set('board')
+    selectedTaskId.set('task-B1')
+    pushNavState()
+
+    activeProjectId.set('proj-A')
+    currentView.set('settings')
+    selectedTaskId.set(null)
+
+    expect(router.back()).toBe(true)
+    expect(get(activeProjectId)).toBe('proj-B')
+    expect(get(currentView)).toBe('board')
+    expect(get(selectedTaskId)).toBe('task-B1')
+  })
+
+  it('back skips history entries for a project that no longer exists', () => {
+    const router = useAppRouter()
+    activeProjectId.set('proj-live')
+    currentView.set('settings')
+    pushNavState()
+    activeProjectId.set('proj-gone')
+    currentView.set('global_settings')
+    pushNavState()
+
+    projects.set([{ id: 'proj-live' } as unknown as Project])
+    activeProjectId.set('proj-live')
+    currentView.set('board')
+
+    expect(router.back()).toBe(true)
+    expect(get(activeProjectId)).toBe('proj-live')
+    expect(get(currentView)).toBe('settings')
+  })
+
+  it('back returns false when every history entry is for a deleted project', () => {
+    const router = useAppRouter()
+    activeProjectId.set('proj-gone')
+    currentView.set('settings')
+    pushNavState()
+
+    projects.set([{ id: 'proj-live' } as unknown as Project])
+    activeProjectId.set('proj-live')
+    currentView.set('board')
+
+    expect(router.back()).toBe(false)
   })
 })

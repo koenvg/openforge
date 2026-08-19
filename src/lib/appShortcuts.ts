@@ -10,6 +10,7 @@ export interface AppShortcutHandlers {
   toggleSidebar(): void
   openNewTaskDialog(): void
   goBack(): void
+  navigateForward(): void
   toggleVoiceRecording(): void
   toggleCommandPalette(): void
   toggleFileQuickOpen(): void
@@ -41,6 +42,9 @@ function runAppShortcutAction(action: AppShortcutAction, handlers: AppShortcutHa
       break
     case 'goBack':
       handlers.goBack()
+      break
+    case 'goForward':
+      handlers.navigateForward()
       break
     case 'toggleVoiceRecording':
       handlers.toggleVoiceRecording()
