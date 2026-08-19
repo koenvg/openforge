@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
 import { sideToSplitSide, buildExtendData, prCommentsToReviewComments } from './diffComments'
 
 // ============================================================================
@@ -770,5 +770,26 @@ describe('prCommentsToReviewComments', () => {
     expect(extendData.newFile['10'].data.comments[0].type).toBe('existing')
     expect(extendData.newFile['10'].data.comments[0].author).toBe('reviewer')
     expect(extendData.newFile['10'].data.comments[0].body).toBe('Looks good')
+  })
+})
+
+describe('buildExtendData with AI threads', () => {
+  const thread: AiThread = {
+    id: 't1', anchor: { type: 'line', filename: 'a.ts', line: 3, side: 'RIGHT' }, status: 'answered',
+    messages: [{ role: 'user', body: 'why?', created_at: 1 }, { role: 'ai', body: 'because', created_at: 2 }],
+    created_at: 1, updated_at: 2,
+  }
+
+  it('places a line-anchored thread on the RIGHT side at its line', () => {
+    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.thread?.id).toBe('t1')
+  })
+
+  it('ignores step-anchored threads and threads for other files', () => {
+    const stepThread: AiThread = { ...thread, id: 't2', anchor: { type: 'step', step_id: 's1' } }
+    const otherFile: AiThread = { ...thread, id: 't3', anchor: { type: 'line', filename: 'b.ts', line: 3, side: 'RIGHT' } }
+    const { newFile } = buildExtendData('a.ts', [], [], [], [stepThread, otherFile])
+    expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
   })
 })

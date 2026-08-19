@@ -1,4 +1,4 @@
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
+import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Display data for comments on a single line.
@@ -8,7 +8,7 @@ export interface CommentDisplayData {
   comments: Array<{
     body: string
     author?: string
-    type: 'existing' | 'pending' | 'agent'
+    type: 'existing' | 'pending' | 'agent' | 'ai-thread'
     createdAt?: string
     isReply?: boolean
     index?: number
@@ -17,6 +17,8 @@ export interface CommentDisplayData {
     filePath?: string
     lineNumber?: number
     commentSide?: string
+    /** Present when type === 'ai-thread': the local Q&A conversation to render. */
+    thread?: AiThread
   }>
 }
 
@@ -45,7 +47,8 @@ export function buildExtendData(
   filename: string,
   existingComments: ReviewComment[],
   pendingComments: ReviewSubmissionComment[],
-  agentComments: AgentReviewComment[] = []
+  agentComments: AgentReviewComment[] = [],
+  aiThreads: AiThread[] = []
 ): {
   oldFile: Record<string, { data: CommentDisplayData }>
   newFile: Record<string, { data: CommentDisplayData }>
@@ -142,6 +145,16 @@ export function buildExtendData(
       lineNumber: comment.line_number,
       commentSide: comment.side ?? 'RIGHT',
     })
+  }
+
+  // Local "Ask the AI author" threads anchored to a diff line render inline like
+  // comments. Step-anchored threads are handled by the walkthrough view instead.
+  for (const thread of aiThreads) {
+    if (thread.anchor.type !== 'line') continue
+    if (!pathMatches(thread.anchor.filename, filename)) continue
+    const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
+    const lineKey = String(thread.anchor.line)
+    ensureLine(target, lineKey).comments.push({ body: '', type: 'ai-thread', thread })
   }
 
   return { oldFile, newFile }
