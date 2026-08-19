@@ -1,6 +1,8 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { JsonValue } from '@openforge-app/plugin-sdk'
-import type { PrWalkthrough } from '@openforge-app/plugin-sdk/domain'
+import type { PrWalkthrough, PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+import { parseAndValidateReviewComments } from './reviewCommentsParse'
+import { toAgentReviewComments, writeAiReviewComments } from './reviewCommentsStore'
 
 // The walkthrough cache lives entirely in plugin storage (JSON, namespaced by
 // plugin id) — there is no core SQLite table. Walkthroughs are keyed by
@@ -125,6 +127,48 @@ export async function runWalkthroughGeneration(
   try {
     const text = await generate(sessionKey, prompt)
     const stepsJson = extractWalkthroughStepsJson(text)
+    if (stepsJson) {
+      await persist({ status: 'ready', steps_json: stepsJson, error_message: null })
+    } else {
+      await persist({ status: 'error', steps_json: null, error_message: WALKTHROUGH_INVALID_JSON_MESSAGE })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await persist({ status: 'error', steps_json: null, error_message: message })
+  }
+}
+
+/**
+ * Like `runWalkthroughGeneration`, but the combined pass also produces AI review
+ * comments: validate them against the live diff and persist them locally
+ * (keyed per commit) alongside the walkthrough steps. Session-guarded on the
+ * walkthrough row so a superseded/deleted run never clobbers a newer one.
+ */
+export async function runWalkthroughAndReviewGeneration(
+  openforge: BackendOpenForgeAPI,
+  params: { prId: number; headSha: string; sessionKey: string; prompt: string },
+  generate: (sessionKey: string, prompt: string) => Promise<string>,
+  files: PrFileDiff[],
+  now: () => number = nowSeconds,
+): Promise<void> {
+  const { prId, headSha, sessionKey, prompt } = params
+
+  const persist = async (patch: Partial<PrWalkthrough>): Promise<void> => {
+    const current = await readWalkthrough(openforge, prId, headSha)
+    if (!current || current.walkthrough_session_key !== sessionKey) return
+    await writeWalkthrough(openforge, { ...current, ...patch, updated_at: now() })
+  }
+
+  try {
+    const text = await generate(sessionKey, prompt)
+    // Only persist if this run still owns the row (not superseded/deleted).
+    const current = await readWalkthrough(openforge, prId, headSha)
+    if (!current || current.walkthrough_session_key !== sessionKey) return
+
+    const stepsJson = extractWalkthroughStepsJson(text)
+    const reviewComments = parseAndValidateReviewComments(text, files)
+    await writeAiReviewComments(openforge, prId, headSha, toAgentReviewComments(prId, sessionKey, reviewComments, now))
+
     if (stepsJson) {
       await persist({ status: 'ready', steps_json: stepsJson, error_message: null })
     } else {
