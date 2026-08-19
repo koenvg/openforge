@@ -2,13 +2,13 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   type UnlistenFn = Disposable
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, aiThreads, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
   import PrReviewDetailSection from './PrReviewDetailSection.svelte'
   import PrReviewListSection from './PrReviewListSection.svelte'
-  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AiThread, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import {
@@ -513,6 +513,7 @@
     $pendingManualComments = []
     $prOverviewComments = []
     $agentReviewComments = []
+    $aiThreads = []
     githubSync.markReviewPullRequestViewed({ prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
@@ -535,6 +536,9 @@
       const agentComments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $agentReviewComments = agentComments
+      const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
+      $aiThreads = threads
     } catch (e) {
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       console.error('Failed to load PR diffs:', e)
@@ -567,6 +571,7 @@
     $pendingManualComments = []
     $prOverviewComments = []
     $agentReviewComments = []
+    $aiThreads = []
     activeTab = 'overview'
   }
 
@@ -830,6 +835,99 @@
     walkthroughPollTimers.set(pr.id, timer)
   }
 
+  // ── Ask-the-author Q&A threads (local, per-commit; never pushed to GitHub) ──
+  const threadPollTimers = new Map<number, ReturnType<typeof setInterval>>()
+
+  // Unsent questions (draft/error threads whose last message is the reviewer's).
+  // In-flight ('pending') threads are excluded so the send button reflects backlog.
+  let aiThreadsPendingCount = $derived(
+    $aiThreads.filter(t => t.status !== 'pending' && t.messages.at(-1)?.role === 'user').length,
+  )
+
+  function newThreadId() {
+    return `thread-${crypto.randomUUID()}`
+  }
+
+  async function createThread(anchor: AiThread['anchor'], body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    const now = Math.floor(Date.now() / 1000)
+    const thread: AiThread = {
+      id: newThreadId(),
+      anchor,
+      status: 'draft',
+      messages: [{ role: 'user', body, created_at: now }],
+      created_at: now,
+      updated_at: now,
+    }
+    $aiThreads = [...$aiThreads, thread]
+    await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+  }
+
+  function askAgent(filename: string, line: number, side: 'LEFT' | 'RIGHT', body: string) {
+    void createThread({ type: 'line', filename, line, side }, body)
+  }
+
+  function askAgentStep(stepId: string, body: string) {
+    void createThread({ type: 'step', step_id: stepId }, body)
+  }
+
+  async function replyToThread(threadId: string, body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    const now = Math.floor(Date.now() / 1000)
+    const updated = $aiThreads.map(t => t.id === threadId
+      ? { ...t, status: 'draft' as const, updated_at: now, messages: [...t.messages, { role: 'user' as const, body, created_at: now }] }
+      : t)
+    $aiThreads = updated
+    const thread = updated.find(t => t.id === threadId)
+    if (thread) await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+  }
+
+  async function sendQuestionsToAgent() {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    await githubSync.askAgentQuestions({
+      reviewPrId: pr.id,
+      headSha: pr.head_sha,
+      repoOwner: pr.repo_owner,
+      repoName: pr.repo_name,
+      prNumber: pr.number,
+      projectId: $activeProjectId,
+    })
+    await refreshThreads(pr) // reflect the 'pending' state the backend just persisted
+    startThreadPolling(pr)
+  }
+
+  async function refreshThreads(pr: ReviewPullRequest) {
+    try {
+      const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
+      if ($selectedReviewPr?.id === pr.id && $selectedReviewPr?.head_sha === pr.head_sha) {
+        $aiThreads = threads
+      }
+    } catch (e) {
+      console.error('Failed to load AI threads:', e)
+    }
+  }
+
+  function startThreadPolling(pr: ReviewPullRequest) {
+    if (threadPollTimers.has(pr.id)) return
+    const timer = setInterval(async () => {
+      // Only the currently open PR's threads are shown; stop once the reviewer leaves.
+      if ($selectedReviewPr?.id !== pr.id || $selectedReviewPr?.head_sha !== pr.head_sha) {
+        clearInterval(timer)
+        threadPollTimers.delete(pr.id)
+        return
+      }
+      await refreshThreads(pr)
+      if (!$aiThreads.some(t => t.status === 'pending')) {
+        clearInterval(timer)
+        threadPollTimers.delete(pr.id)
+      }
+    }, 2500)
+    threadPollTimers.set(pr.id, timer)
+  }
+
   onMount(async () => {
     loadGithubConfiguration()
     loadPrs()
@@ -859,6 +957,8 @@
     })
     for (const timer of walkthroughPollTimers.values()) clearInterval(timer)
     walkthroughPollTimers.clear()
+    for (const timer of threadPollTimers.values()) clearInterval(timer)
+    threadPollTimers.clear()
   })
 </script>
 
@@ -900,6 +1000,12 @@
       }}
       onToggleFileReviewed={handleToggleFileReviewed}
       walkthroughReady={selectedWalkthroughReady}
+      aiThreads={$aiThreads}
+      aiThreadsPendingCount={aiThreadsPendingCount}
+      onAskAgent={askAgent}
+      onReplyToThread={replyToThread}
+      onAskAgentStep={askAgentStep}
+      onSendQuestionsToAgent={sendQuestionsToAgent}
       onSubmitReview={submitReview}
       onOpenUrl={(url) => api.system.openUrl(url)}
     />

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import type { AgentReviewComment, AuthoredPullRequest, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AiThread, AuthoredPullRequest, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
 export const activeProjectId = writable<string | null>(null)
 export const reviewPrs = writable<ReviewPullRequest[]>([])
@@ -15,3 +15,5 @@ export const reviewComments = writable<ReviewComment[]>([])
 export const pendingManualComments = writable<ReviewSubmissionComment[]>([])
 export const prOverviewComments = writable<PrOverviewComment[]>([])
 export const agentReviewComments = writable<AgentReviewComment[]>([])
+// Local "Ask the AI author" Q&A threads for the open PR's current head sha.
+export const aiThreads = writable<AiThread[]>([])

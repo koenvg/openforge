@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-  import type { AgentReviewComment, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AiThread, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
@@ -48,6 +48,13 @@
     // sha has finished generating (owned by PrReviewView). Optional so the section
     // renders (tab hidden) before the parent wires status in.
     walkthroughReady?: boolean
+    // Local "Ask the AI author" Q&A threads + handlers (owned by PrReviewView).
+    aiThreads?: AiThread[]
+    aiThreadsPendingCount?: number
+    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToThread?: (threadId: string, body: string) => void
+    onAskAgentStep?: (stepId: string, body: string) => void
+    onSendQuestionsToAgent?: () => void
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -90,6 +97,12 @@
     onUpdateAgentCommentStatus,
     onToggleFileReviewed,
     walkthroughReady = false,
+    aiThreads = [],
+    aiThreadsPendingCount = 0,
+    onAskAgent,
+    onReplyToThread,
+    onAskAgentStep,
+    onSendQuestionsToAgent,
     onSubmitReview,
     onOpenUrl,
   }: Props = $props()
@@ -155,6 +168,16 @@
         {/if}
       </div>
       <span class="flex-1"></span>
+      {#if aiThreadsPendingCount > 0}
+        <button
+          type="button"
+          class="btn btn-xs btn-primary mr-2"
+          onclick={() => onSendQuestionsToAgent?.()}
+          title="Send your unanswered questions to the AI author (stays local, never posted to GitHub)"
+        >
+          Send {aiThreadsPendingCount} question{aiThreadsPendingCount === 1 ? '' : 's'} to AI
+        </button>
+      {/if}
       <div class="flex items-center gap-2 text-xs text-base-content/50">
         <span class="font-semibold text-base-content">#{pr.number}</span>
         <span class="text-base-300">•</span>
@@ -189,6 +212,10 @@
       onAgentCommentsChange={onAgentCommentsChange}
       onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
       {onOpenUrl}
+      aiThreads={aiThreads}
+      onAskAgent={onAskAgent}
+      onReplyToThread={onReplyToThread}
+      onAskAgentStep={onAskAgentStep}
       onSubmitReview={onSubmitReview}
     />
   {:else}
@@ -237,6 +264,9 @@
           onAgentCommentsChange={onAgentCommentsChange}
           onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           {onOpenUrl}
+          aiThreads={aiThreads}
+          onAskAgent={onAskAgent}
+          onReplyToThread={onReplyToThread}
           {reviewedFileShas}
           onToggleFileReviewed={onToggleFileReviewed}
           getFileReviewIdentity={getReviewFileIdentity}

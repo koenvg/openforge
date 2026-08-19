@@ -53,12 +53,14 @@ vi.mock('../../lib/stores', () => ({
   pendingManualComments: writable([]),
   prOverviewComments: writable([]),
   agentReviewComments: writable([]),
+  aiThreads: writable([]),
 }))
 
 import PrReviewView from './PrReviewView.svelte'
 import {
   activeProjectId,
   agentReviewComments,
+  aiThreads,
   authoredPrs,
   pendingManualComments,
   pendingReviewPrOpen,
@@ -159,6 +161,7 @@ function resetStores() {
   pendingManualComments.set([])
   prOverviewComments.set([])
   agentReviewComments.set([])
+  aiThreads.set([])
 }
 
 function registerPrReviewBackends(
@@ -195,6 +198,10 @@ function registerPrReviewBackends(
   backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ walkthrough_session_key: 'session-key' }) })
   backend.registerMethod('deletePrWalkthrough', { handler: async () => undefined })
   backend.registerMethod('abortAgentWalkthrough', { handler: async () => undefined })
+  backend.registerMethod('getAiThreads', { handler: async () => [] })
+  backend.registerMethod('saveAiThread', { handler: async () => undefined })
+  backend.registerMethod('deleteAiThread', { handler: async () => undefined })
+  backend.registerMethod('askAgentQuestions', { handler: async () => undefined })
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })
