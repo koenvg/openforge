@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+import type { AuthoredPullRequest, PrFileDiff, PrWalkthrough, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
 import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import type { TestingOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 
@@ -168,6 +168,7 @@ function registerPrReviewBackends(
   reviewCommentResults: ReviewComment[] | (() => ReviewComment[] | Promise<ReviewComment[]>) = [],
   submitReview: () => Promise<void> = async () => undefined,
   fileContent = '',
+  getWalkthrough: () => PrWalkthrough | null | Promise<PrWalkthrough | null> = () => null,
 ) {
   // Per-repo scope now shows only the project's resolved repo (never all repos), so
   // tests that exercise the repo-scoped view must resolve to the fixtures' repo.
@@ -190,6 +191,10 @@ function registerPrReviewBackends(
   backend.registerMethod('updateAgentReviewCommentStatus', { handler: async () => undefined })
   backend.registerMethod('getPrAiReviewComments', { handler: async () => [] })
   backend.registerMethod('updatePrAiReviewCommentStatus', { handler: async () => undefined })
+  backend.registerMethod('getPrWalkthrough', { handler: async () => getWalkthrough() })
+  backend.registerMethod('startAgentWalkthrough', { handler: async () => ({ walkthrough_session_key: 'session-key' }) })
+  backend.registerMethod('deletePrWalkthrough', { handler: async () => undefined })
+  backend.registerMethod('abortAgentWalkthrough', { handler: async () => undefined })
   backend.registerMethod('getFileContent', { handler: async () => fileContent })
   backend.registerMethod('getFileAtRef', { handler: async () => '' })
   backend.registerMethod('submitPrReview', { handler: submitReview })
@@ -1090,6 +1095,82 @@ describe('PrReviewView non-application file filter', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Mark README.md reviewed')).toBeTruthy()
     })
+  })
+})
+
+describe('PrReviewView walkthrough generation', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('starts a background generation from the card without opening or marking the PR read', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+
+    renderPrReviewView(registry)
+
+    await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(await screen.findByRole('button', { name: 'Generate walkthrough and AI review' }))
+
+    await waitFor(() =>
+      expect(registry.calls.backendInvocations.some((c) => c.method === 'startAgentWalkthrough')).toBe(true),
+    )
+
+    const call = registry.calls.backendInvocations.find((c) => c.method === 'startAgentWalkthrough')
+    expect(call?.payload).toMatchObject({
+      repoOwner: 'acme',
+      repoName: 'repo',
+      prNumber: 42,
+      headRef: 'fix/auth',
+      baseRef: 'main',
+      headSha: 'head-sha',
+      reviewPrId: 12345,
+    })
+    // Plan 2 compiles the combined prompt server-side, so the caller sends none.
+    expect((call?.payload as Record<string, unknown>).prompt).toBeUndefined()
+
+    // Generation is a background action: the PR stays on the list and unread.
+    expect(get(selectedReviewPr)).toBeNull()
+    expect(registry.calls.backendInvocations.some((c) => c.method === 'markReviewPrViewed')).toBe(false)
+  })
+
+  it('reveals the Walkthrough tab only for a PR whose walkthrough is ready for the current head sha', async () => {
+    const readyWalkthrough: PrWalkthrough = {
+      pr_id: basePr.id,
+      head_sha: basePr.head_sha,
+      walkthrough_session_key: 'k',
+      status: 'ready',
+      steps_json: JSON.stringify({
+        steps: [{ id: 's1', title: 'Step one', summary: 'x', files: [{ filename: 'src/main.rs', hunk_indexes: null }] }],
+      }),
+      error_message: null,
+      created_at: 0,
+      updated_at: 0,
+    }
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr], [], async () => undefined, '', () => readyWalkthrough)
+
+    renderPrReviewView(registry)
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+
+    // The tab appears once the open PR's status resolves to ready.
+    expect(await screen.findByRole('button', { name: 'Walkthrough' })).toBeTruthy()
+  })
+
+  it('hides the Walkthrough tab when the open PR has no ready walkthrough', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    registerPrReviewBackends(registry, () => [baseDiff], [basePr])
+
+    renderPrReviewView(registry)
+
+    const title = await screen.findByText('Fix authentication middleware')
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+    await screen.findByRole('tab', { name: 'Overview' })
+
+    expect(screen.queryByRole('button', { name: 'Walkthrough' })).toBeNull()
   })
 })
 

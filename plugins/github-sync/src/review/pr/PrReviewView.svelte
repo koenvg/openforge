@@ -8,8 +8,9 @@
   import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
   import PrReviewDetailSection from './PrReviewDetailSection.svelte'
   import PrReviewListSection from './PrReviewListSection.svelte'
-  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
+  import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import {
     getPrReviewFilesKey,
     loadPrReviewedFileShas,
@@ -75,6 +76,19 @@
   let reviewedFilesLoadSequence = 0
   let prDetailsLoadSequence = 0
   let unlisteners: UnlistenFn[] = []
+
+  // Per-PR walkthrough status so the list card button and the detail tab can
+  // reflect idle/generating/ready/stale without each card hitting the backend.
+  let walkthroughByPr = $state<Map<number, PrWalkthrough | null>>(new Map())
+  // Poll timers live in a plain (non-reactive) map, cleared in onDestroy — never
+  // via $effect cleanup, which would fire on unrelated prop changes.
+  const walkthroughPollTimers = new Map<number, ReturnType<typeof setInterval>>()
+
+  let selectedWalkthroughReady = $derived(
+    $selectedReviewPr
+      ? walkthroughButtonState(walkthroughByPr.get($selectedReviewPr.id), $selectedReviewPr.head_sha) === 'ready'
+      : false,
+  )
 
   // Repo filtering
   let excludedRepos = $state<Set<string>>(new Set())
@@ -216,7 +230,9 @@
       }
       if (e.key === '3') {
         e.preventDefault()
-        activeTab = 'walkthrough'
+        // The Walkthrough tab only exists once a ready walkthrough is cached, so
+        // Cmd+3 is a no-op otherwise (matches the hidden tab).
+        if (selectedWalkthroughReady) activeTab = 'walkthrough'
         return
       }
     }
@@ -398,6 +414,7 @@
     try {
       const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to load PRs:', e)
       error = formatPrLoadError('review', e)
@@ -412,6 +429,7 @@
     try {
       const prs = await githubSync.refreshReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
       error = formatPrLoadError('review', e)
@@ -425,6 +443,7 @@
     try {
       const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to silently refresh PRs:', e)
     }
@@ -487,6 +506,7 @@
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    void refreshWalkthroughStatus(updatedPr)
     includeNonApplicationFiles = true
     $prFileDiffs = []
     $reviewComments = []
@@ -740,6 +760,76 @@
     }
   }
 
+  // Best-effort per-PR walkthrough status read; failures are non-blocking (the
+  // card just stays 'idle'). Reassigns a fresh Map so Svelte re-renders.
+  async function refreshWalkthroughStatus(pr: ReviewPullRequest) {
+    try {
+      const wt = await githubSync.getPrWalkthrough({ reviewPrId: pr.id, headSha: pr.head_sha })
+      const next = new Map(walkthroughByPr)
+      next.set(pr.id, wt)
+      walkthroughByPr = next
+    } catch (e) {
+      console.error('Failed to load walkthrough status:', e)
+    }
+  }
+
+  async function refreshVisibleWalkthroughStatuses(prs: ReviewPullRequest[]) {
+    await Promise.all(prs.map(refreshWalkthroughStatus))
+  }
+
+  // Kick off a background walkthrough + AI-review generation for a PR from the
+  // list card. Deliberately does NOT mark the PR read — read state only changes
+  // when the reviewer opens the PR (openPrDetail). The combined prompt is compiled
+  // server-side (Plan 2), so no prompt is passed here.
+  async function generateWalkthrough(pr: ReviewPullRequest) {
+    try {
+      await githubSync.startAgentWalkthrough({
+        repoOwner: pr.repo_owner,
+        repoName: pr.repo_name,
+        prNumber: pr.number,
+        headRef: pr.head_ref,
+        baseRef: pr.base_ref,
+        prTitle: pr.title,
+        prBody: pr.body,
+        headSha: pr.head_sha,
+        reviewPrId: pr.id,
+        projectId: $activeProjectId,
+      })
+    } catch (e) {
+      console.error('Failed to start walkthrough generation:', e)
+      return
+    }
+    await refreshWalkthroughStatus(pr) // now 'generating' (backend persists it synchronously)
+    startWalkthroughPolling(pr)
+  }
+
+  function startWalkthroughPolling(pr: ReviewPullRequest) {
+    if (walkthroughPollTimers.has(pr.id)) return
+    const timer = setInterval(async () => {
+      await refreshWalkthroughStatus(pr)
+      const wt = walkthroughByPr.get(pr.id)
+      if (wt && wt.status !== 'generating') {
+        clearInterval(timer)
+        walkthroughPollTimers.delete(pr.id)
+        // When generation finishes for the PR the reviewer currently has open,
+        // reload its AI review comments so they appear without reopening the PR
+        // (deferred Plan 2 Task 6 Step 3).
+        if (
+          wt.status === 'ready' &&
+          $selectedReviewPr?.id === pr.id &&
+          $selectedReviewPr?.head_sha === pr.head_sha
+        ) {
+          try {
+            $agentReviewComments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
+          } catch (e) {
+            console.error('Failed to reload AI review comments after generation:', e)
+          }
+        }
+      }
+    }, 2500)
+    walkthroughPollTimers.set(pr.id, timer)
+  }
+
   onMount(async () => {
     loadGithubConfiguration()
     loadPrs()
@@ -767,6 +857,8 @@
     unlisteners.forEach((subscription) => {
       void subscription.dispose()
     })
+    for (const timer of walkthroughPollTimers.values()) clearInterval(timer)
+    walkthroughPollTimers.clear()
   })
 </script>
 
@@ -807,6 +899,7 @@
         return githubSync.updatePrAiReviewCommentStatus({ reviewPrId: openPr.id, headSha: openPr.head_sha, commentId, status })
       }}
       onToggleFileReviewed={handleToggleFileReviewed}
+      walkthroughReady={selectedWalkthroughReady}
       onSubmitReview={submitReview}
       onOpenUrl={(url) => api.system.openUrl(url)}
     />
@@ -849,6 +942,8 @@
       onMarkUnread={(pr) => markPrUnread(pr)}
       onOpenAuthoredPr={(url) => api.system.openUrl(url)}
       {pluralize}
+      {walkthroughByPr}
+      onGenerateWalkthrough={(pr) => { void generateWalkthrough(pr) }}
     />
   {/if}
 </div>
