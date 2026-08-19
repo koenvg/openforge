@@ -9,7 +9,6 @@
     ReviewPullRequest,
     ReviewSubmissionComment,
   } from '@openforge-app/plugin-sdk/domain'
-  import { compileWalkthroughPrompt } from '../../lib/walkthroughPrompt'
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
   import {
     buildSyntheticStepFiles,
@@ -175,11 +174,9 @@
     isStarting = true
     loadError = null
     try {
-      const prompt = compileWalkthroughPrompt({
-        title: pr.title,
-        body: pr.body,
-        files,
-      })
+      // The combined steps+review prompt is compiled server-side now (backend
+      // fetches the diffs and runs the repo-aware agent), so the client no longer
+      // supplies a prompt.
       await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,
@@ -190,7 +187,6 @@
         prBody: pr.body,
         headSha: pr.head_sha,
         reviewPrId: pr.id,
-        prompt,
         projectId,
       })
       walkthrough = {

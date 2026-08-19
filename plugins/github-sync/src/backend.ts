@@ -22,8 +22,15 @@ import {
   beginWalkthroughGeneration,
   readWalkthrough,
   removeWalkthrough,
-  runWalkthroughGeneration,
+  runWalkthroughAndReviewGeneration,
 } from './lib/walkthroughStore'
+import {
+  readAiReviewComments,
+  removeAiReviewComments,
+  updateAiReviewCommentStatus,
+} from './lib/reviewCommentsStore'
+import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
+import { WALKTHROUGH_REVIEW_JSON_SCHEMA } from './lib/walkthroughSchema'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
@@ -119,7 +126,22 @@ export default defineBackendPlugin({
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
-      handler: (request) => removeWalkthrough(openforge, request.reviewPrId, request.headSha),
+      handler: async (request) => {
+        // Clear both the walkthrough and its AI review comments so a regenerate
+        // for the same commit starts from a clean slate.
+        await removeWalkthrough(openforge, request.reviewPrId, request.headSha)
+        await removeAiReviewComments(openforge, request.reviewPrId, request.headSha)
+      },
+    }))
+
+    // AI review comments produced by the combined pass live in local plugin
+    // storage keyed per commit (never pushed to GitHub).
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AgentReviewComment[]>('getPrAiReviewComments', {
+      handler: (request) => readAiReviewComments(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: string }, void>('updatePrAiReviewCommentStatus', {
+      handler: (request) => updateAiReviewCommentStatus(openforge, request.reviewPrId, request.headSha, request.commentId, request.status),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{
@@ -132,24 +154,40 @@ export default defineBackendPlugin({
       prBody: string | null
       headSha: string
       reviewPrId: number
-      prompt: string
       projectId: string | null
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
-        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: request.prompt }
+        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: '' }
         await beginWalkthroughGeneration(openforge, params)
+
+        // Fetch diffs server-side so the trigger works without the UI having loaded files,
+        // then compile the combined steps+review prompt here (not client-supplied).
+        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        })
+        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files })
+
         // Kick off generation in the background so the UI gets its session key
-        // immediately and can render the optimistic "generating" state.
-        // Forward the active project id so the sidecar resolves this project's
-        // AI provider (not the global fallback) for the headless generation.
-        void runWalkthroughGeneration(openforge, params, (key, prompt) =>
-          invokeHostCommand<{ text: string }>(openforge, 'agentGenerate', {
-            sessionKey: key,
-            prompt,
-            model: WALKTHROUGH_MODEL,
-            projectId: request.projectId,
-          }).then((result) => result?.text ?? ''),
+        // immediately and can render the optimistic "generating" state. The
+        // repo-aware agent runs inside a checkout of the PR head (Plan 1) and
+        // returns a schema-validated { steps, review_comments } object.
+        void runWalkthroughAndReviewGeneration(
+          openforge,
+          { ...params, prompt },
+          (key, p) =>
+            invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
+              sessionKey: key,
+              prompt: p,
+              model: WALKTHROUGH_MODEL,
+              projectId: request.projectId,
+              owner: request.repoOwner,
+              repo: request.repoName,
+              prNumber: request.prNumber,
+              headSha: request.headSha,
+              outputSchema: WALKTHROUGH_REVIEW_JSON_SCHEMA,
+            }).then((result) => result?.text ?? ''),
+          files,
         )
         return { walkthrough_session_key: sessionKey }
       },
