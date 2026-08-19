@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { AuthoredPullRequest, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+  import type { AuthoredPullRequest, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
   import RepositoryFilterSection from './RepositoryFilterSection.svelte'
+  import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
 
   interface Props {
     headerTitle: string
@@ -44,6 +45,11 @@
     onMarkUnread: (pr: ReviewPullRequest) => void
     onOpenAuthoredPr: (url: string) => void
     pluralize: (count: number, singular: string, plural?: string) => string
+    // Per-PR walkthrough status (owned by PrReviewView) and the trigger to start
+    // a background walkthrough+AI-review generation from the card. Optional so the
+    // list renders (all cards 'idle') before the parent wires generation.
+    walkthroughByPr?: Map<number, PrWalkthrough | null>
+    onGenerateWalkthrough?: (pr: ReviewPullRequest) => void
   }
 
   let {
@@ -84,6 +90,8 @@
     onMarkUnread,
     onOpenAuthoredPr,
     pluralize,
+    walkthroughByPr = new Map(),
+    onGenerateWalkthrough = () => {},
   }: Props = $props()
 </script>
 
@@ -176,6 +184,7 @@
                 <div class="flex flex-col gap-3">
                   {#each prs as pr}
                     {@const flatIdx = flatPrList.indexOf(pr)}
+                    {@const wtState = walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha)}
                     <div data-vim-pr-item class={flatIdx === focusedIndex ? 'vim-focus' : ''}>
                       <ReviewPrCard
                         {pr}
@@ -183,6 +192,32 @@
                         onClick={() => onSelectPr(pr)}
                         onMarkUnread={() => onMarkUnread(pr)}
                       />
+                      <div class="mt-1.5 px-1">
+                        {#if wtState === 'ready'}
+                          <span class="inline-flex items-center gap-1 text-xs text-success" aria-label="Walkthrough ready">
+                            <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
+                            Walkthrough ready
+                          </span>
+                        {:else if wtState === 'generating'}
+                          <button type="button" class="btn btn-xs btn-ghost gap-1" disabled aria-label="Generating walkthrough">
+                            <span class="loading loading-spinner loading-xs"></span>
+                            Generating…
+                          </button>
+                        {:else}
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-outline"
+                            aria-label="Generate walkthrough and AI review"
+                            onclick={(e) => { e.stopPropagation(); onGenerateWalkthrough(pr) }}
+                          >
+                            {wtState === 'stale'
+                              ? 'Regenerate — new commits'
+                              : wtState === 'error'
+                                ? 'Retry — generation failed'
+                                : 'Generate Walkthrough + AI Review'}
+                          </button>
+                        {/if}
+                      </div>
                     </div>
                   {/each}
                 </div>
