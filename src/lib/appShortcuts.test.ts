@@ -31,6 +31,7 @@ describe('registerAppShortcuts', () => {
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),
       goBack: vi.fn(),
+      navigateForward: vi.fn(),
       toggleVoiceRecording: vi.fn(),
       toggleCommandPalette: vi.fn(),
       toggleFileQuickOpen: vi.fn(),
@@ -86,6 +87,7 @@ describe('registerAppShortcuts', () => {
       toggleSidebar,
       openNewTaskDialog,
       goBack,
+      navigateForward: vi.fn(),
       toggleVoiceRecording,
       toggleCommandPalette,
       toggleFileQuickOpen,
@@ -128,6 +130,39 @@ describe('registerAppShortcuts', () => {
     expect(cycleActiveProject).toHaveBeenNthCalledWith(4, 'next')
   })
 
+  it('maps Ctrl+Tab to Back and Ctrl+Shift+Tab (plus symmetry aliases) to Forward', () => {
+    const { registry, handlers } = createRegistry()
+    const goBack = vi.fn()
+    const navigateForward = vi.fn()
+
+    registerAppShortcuts(registry, {
+      showShortcuts: vi.fn(),
+      openActionPalette: vi.fn(),
+      toggleAttentionOverview: vi.fn(),
+      toggleProjectSwitcher: vi.fn(),
+      toggleSidebar: vi.fn(),
+      openNewTaskDialog: vi.fn(),
+      goBack,
+      navigateForward,
+      toggleVoiceRecording: vi.fn(),
+      toggleCommandPalette: vi.fn(),
+      toggleFileQuickOpen: vi.fn(),
+      canToggleFileQuickOpen: () => true,
+      resetToBoard: vi.fn(),
+      navigateToGlobalSettings: vi.fn(),
+      cycleActiveProject: vi.fn(),
+    })
+
+    handlers.get('⌃tab')?.()
+    expect(goBack).toHaveBeenCalledOnce()
+
+    handlers.get('⌃⇧tab')?.()
+    handlers.get('⌘]')?.()
+    handlers.get('⌘arrowright')?.()
+    handlers.get('⌃]')?.()
+    expect(navigateForward).toHaveBeenCalledTimes(4)
+  })
+
   it('opens the attention overview from either the left-hand or right-hand chord', () => {
     const { registry, handlers } = createRegistry()
     const toggleAttentionOverview = vi.fn()
@@ -140,6 +175,7 @@ describe('registerAppShortcuts', () => {
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),
       goBack: vi.fn(),
+      navigateForward: vi.fn(),
       toggleVoiceRecording: vi.fn(),
       toggleCommandPalette: vi.fn(),
       toggleFileQuickOpen: vi.fn(),
@@ -166,6 +202,7 @@ describe('registerAppShortcuts', () => {
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),
       goBack: vi.fn(),
+      navigateForward: vi.fn(),
       toggleVoiceRecording: vi.fn(),
       toggleCommandPalette: vi.fn(),
       toggleFileQuickOpen: vi.fn(),
@@ -194,6 +231,7 @@ describe('registerAppShortcuts', () => {
       toggleSidebar: vi.fn(),
       openNewTaskDialog: vi.fn(),
       goBack: vi.fn(),
+      navigateForward: vi.fn(),
       toggleVoiceRecording: vi.fn(),
       toggleCommandPalette: vi.fn(),
       toggleFileQuickOpen,

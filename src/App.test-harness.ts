@@ -334,6 +334,7 @@ vi.mock('./lib/doingStatus', () => ({
 
 export const mockRouterPushNavState = vi.fn()
 export const mockRouterBack = vi.fn(() => false)
+export const mockRouterForward = vi.fn(() => false)
 export const mockRouterNavigateToTask = vi.fn((taskId: string) => {
   mockSelectedTaskIdStore.set(taskId)
 })
@@ -369,6 +370,7 @@ vi.mock('./lib/router.svelte', () => ({
     navigate: mockRouterNavigate,
     navigateToTask: mockRouterNavigateToTask,
     back: mockRouterBack,
+    forward: mockRouterForward,
     resetToBoard: mockRouterResetToBoard,
     get currentView() {
       return get(mockCurrentViewStore)

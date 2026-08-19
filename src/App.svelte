@@ -30,7 +30,7 @@
   import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
-  import { useAppRouter, restoreProjectView } from './lib/router.svelte'
+  import { useAppRouter, pushNavState, restoreProjectView } from './lib/router.svelte'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
@@ -439,6 +439,10 @@
     // Pull Requests" — is showing. Those views change only currentView and leave
     // activeProjectId pointing at the project, so without the cross-project check above
     // this would strand the user on the global view instead of returning them (#1285).
+
+    // Record where we're leaving so Back (⌘[ / Ctrl+Tab) can cross back into this project.
+    // Must run while activeProjectId still points at the outgoing project.
+    pushNavState()
     $activeProjectId = projectId
     const rememberedTaskId = restoreProjectView(projectId)
 
@@ -447,6 +451,28 @@
       if (get(activeProjectId) === projectId && get(tasks).some((t) => t.id === rememberedTaskId)) {
         selectedTaskId.set(rememberedTaskId)
       }
+    }
+  }
+
+  // Run a router history move (Back / Forward) and, when it crosses into another project,
+  // re-apply the restored task once that project's tasks have loaded. The router restores
+  // selectedTaskId synchronously, but the task belongs to a project whose tasks aren't
+  // loaded yet, so the "clear unknown selected task" effect nulls it mid-move — the same
+  // race switchToProject / handleOpenTaskFromOverview defer around.
+  async function historyNavigate(move: () => boolean) {
+    const previousProjectId = get(activeProjectId)
+    const moved = move()
+    if (!moved) return
+
+    const nextProjectId = get(activeProjectId)
+    if (!nextProjectId || nextProjectId === previousProjectId) return
+
+    const restoredTaskId = get(selectedTaskId)
+    if (!restoredTaskId) return
+
+    await appData.loadTasks()
+    if (get(activeProjectId) === nextProjectId && get(tasks).some((t) => t.id === restoredTaskId)) {
+      selectedTaskId.set(restoredTaskId)
     }
   }
 
@@ -499,7 +525,8 @@
           showAddDialog = true
         }
       },
-      goBack: () => { router.back() },
+      goBack: () => { void historyNavigate(() => router.back()) },
+      navigateForward: () => { void historyNavigate(() => router.forward()) },
       toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
       toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
       toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },

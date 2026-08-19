@@ -6,6 +6,7 @@ export type AppShortcutAction =
   | 'toggleSidebar'
   | 'openNewTaskDialog'
   | 'goBack'
+  | 'goForward'
   | 'toggleVoiceRecording'
   | 'toggleCommandPalette'
   | 'toggleFileQuickOpen'
@@ -63,8 +64,19 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
       { key: '⌘ArrowLeft', action: 'goBack' },
       { key: '⌃[', action: 'goBack' },
       { key: '⌃ArrowLeft', action: 'goBack' },
+      { key: '⌃Tab', action: 'goBack' },
     ],
     help: { id: 'go-back', label: 'Go Back', keys: [['⌘[']] },
+  },
+  {
+    id: 'go-forward',
+    registrations: [
+      { key: '⌃⇧Tab', action: 'goForward' },
+      { key: '⌘]', action: 'goForward' },
+      { key: '⌘ArrowRight', action: 'goForward' },
+      { key: '⌃]', action: 'goForward' },
+    ],
+    help: null,
   },
   {
     id: 'refresh-github',
