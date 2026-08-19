@@ -21,6 +21,7 @@ use tokio::sync::Mutex;
 pub enum GitWorktreeError {
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
+    FetchFailed(String),
     IoError(io::Error),
 }
 
@@ -32,6 +33,9 @@ impl fmt::Display for GitWorktreeError {
             }
             GitWorktreeError::WorktreeRemoveFailed(msg) => {
                 write!(f, "Failed to remove worktree: {}", msg)
+            }
+            GitWorktreeError::FetchFailed(msg) => {
+                write!(f, "git fetch failed: {}", msg)
             }
             GitWorktreeError::IoError(e) => {
                 write!(f, "IO error: {}", e)
@@ -1123,6 +1127,59 @@ async fn resolve_diverged_worktree(
     }
 }
 
+/// Fetch a PR's head commit from origin and check it out into a throwaway
+/// **detached** worktree at `head_sha`. GitHub publishes the PR head under the
+/// base repo as `refs/pull/{N}/head`, so this works for fork PRs too, as long as
+/// `repo_path`'s origin is the base repo.
+pub async fn checkout_pr_head(
+    repo_path: &Path,
+    worktree_path: &Path,
+    pr_number: i64,
+    head_sha: &str,
+) -> Result<(), GitWorktreeError> {
+    let pull_ref = format!("refs/pull/{pr_number}/head");
+    let fetch_output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("fetch")
+        .arg("origin")
+        .arg(&pull_ref)
+        .output()
+        .await?;
+    if !fetch_output.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
+        return Err(GitWorktreeError::FetchFailed(format!(
+            "could not fetch {pull_ref}: {stderr}"
+        )));
+    }
+
+    try_create_detached_worktree_inner(repo_path, worktree_path, head_sha).await
+}
+
+async fn try_create_detached_worktree_inner(
+    repo_path: &Path,
+    worktree_path: &Path,
+    commit: &str,
+) -> Result<(), GitWorktreeError> {
+    let add_output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("add")
+        .arg("--detach")
+        .arg(worktree_path)
+        .arg(commit)
+        .output()
+        .await?;
+
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+    }
+
+    Ok(())
+}
+
 async fn try_create_worktree_inner(
     repo_path: &Path,
     worktree_path: &Path,
@@ -1566,6 +1623,86 @@ mod tests {
             .expect("fixture file should be written");
         assert_git_success(repo_path, &["add", "README.md"]);
         assert_git_success(repo_path, &["commit", "-m", "initial"]);
+    }
+
+    #[tokio::test]
+    async fn checkout_pr_head_fetches_ref_and_creates_detached_worktree() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+
+        // "origin" plays the role of the GitHub base repo.
+        let origin_path = temp.path().join("origin");
+        init_committed_repo(&origin_path);
+        std::fs::write(origin_path.join("pr_file.txt"), "from the PR\n")
+            .expect("pr file should be written");
+        assert_git_success(&origin_path, &["add", "pr_file.txt"]);
+        assert_git_success(&origin_path, &["commit", "-m", "pr head commit"]);
+        let head_sha = git_stdout(&origin_path, &["rev-parse", "HEAD"]);
+        // GitHub exposes the PR head under the base repo as refs/pull/N/head.
+        assert_git_success(&origin_path, &["update-ref", "refs/pull/7/head", &head_sha]);
+        // Move origin's main back so the PR commit is only reachable via the pull ref.
+        assert_git_success(&origin_path, &["reset", "--hard", "HEAD~1"]);
+
+        // Local clone = OpenForge's local project repo.
+        let repo_path = temp.path().join("repo");
+        assert_git_success(
+            temp.path(),
+            &[
+                "clone",
+                origin_path.to_str().unwrap(),
+                repo_path.to_str().unwrap(),
+            ],
+        );
+
+        let worktree_path = temp.path().join("pr-worktree");
+        let result = checkout_pr_head(&repo_path, &worktree_path, 7, &head_sha).await;
+
+        assert!(
+            result.is_ok(),
+            "checkout_pr_head should succeed: {:?}",
+            result.err()
+        );
+        assert_eq!(git_stdout(&worktree_path, &["rev-parse", "HEAD"]), head_sha);
+        // Detached HEAD: symbolic-ref must fail (no branch).
+        assert!(
+            !git(&worktree_path, &["symbolic-ref", "--quiet", "HEAD"])
+                .status
+                .success(),
+            "worktree HEAD should be detached"
+        );
+        assert!(
+            worktree_path.join("pr_file.txt").exists(),
+            "PR file should be present"
+        );
+    }
+
+    #[tokio::test]
+    async fn checkout_pr_head_worktree_can_be_removed() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let origin_path = temp.path().join("origin");
+        init_committed_repo(&origin_path);
+        let head_sha = git_stdout(&origin_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&origin_path, &["update-ref", "refs/pull/1/head", &head_sha]);
+        let repo_path = temp.path().join("repo");
+        assert_git_success(
+            temp.path(),
+            &[
+                "clone",
+                origin_path.to_str().unwrap(),
+                repo_path.to_str().unwrap(),
+            ],
+        );
+        let worktree_path = temp.path().join("pr-worktree");
+        checkout_pr_head(&repo_path, &worktree_path, 1, &head_sha)
+            .await
+            .expect("checkout should succeed");
+
+        remove_worktree(&repo_path, &worktree_path)
+            .await
+            .expect("removing a detached PR worktree should succeed");
+        assert!(
+            !worktree_path.exists(),
+            "worktree dir should be gone after removal"
+        );
     }
 
     #[test]
