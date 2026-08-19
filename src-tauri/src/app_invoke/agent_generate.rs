@@ -49,6 +49,24 @@ fn generation_registry() -> &'static Mutex<HashMap<String, oneshot::Sender<()>>>
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Ceiling on concurrent repo-aware generations. Each one spawns a throwaway
+/// PR-head worktree checkout plus a long-running agent process, so an unbounded
+/// number would fan out N worktrees + N agents at once (disk/CPU/rate-limit
+/// pressure). Extra callers await a permit instead. Both the walkthrough trigger
+/// and the (future) Q&A batches funnel through here, so this is the single
+/// system-wide gate. Diff-only `agent_generate` is unaffected — it does no
+/// checkout and stays uncapped.
+const MAX_CONCURRENT_REPO_GENERATIONS: usize = 2;
+
+fn make_repo_generation_semaphore() -> tokio::sync::Semaphore {
+    tokio::sync::Semaphore::new(MAX_CONCURRENT_REPO_GENERATIONS)
+}
+
+fn repo_generation_semaphore() -> &'static tokio::sync::Semaphore {
+    static SEMAPHORE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    SEMAPHORE.get_or_init(make_repo_generation_semaphore)
+}
+
 pub(super) async fn handle_app_agent_generate_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -106,6 +124,16 @@ pub(super) async fn handle_app_agent_generate_command(
                     db.resolve_ai_provider(&project_id)
                 }
             };
+
+            // Bound concurrent repo-aware runs system-wide: extra callers wait here
+            // for a permit rather than all spawning worktrees + agents at once. Held
+            // across checkout + generation + cleanup, released when this scope ends.
+            let _permit = repo_generation_semaphore().acquire().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("could not acquire a generation slot: {e}"),
+                )
+            })?;
 
             // Resolve the PR's base repo to a local project clone. Scope the DB
             // guard so the lock is released before the long checkout + agent run.
@@ -350,6 +378,32 @@ fn headless_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repo_generation_semaphore_caps_concurrency_at_two() {
+        // A fresh semaphore built the same way as the global one hands out exactly
+        // two permits; a third concurrent repo-aware run must wait for one to free.
+        let sem = make_repo_generation_semaphore();
+        let _p1 = sem.try_acquire().expect("first repo generation permit");
+        let _p2 = sem.try_acquire().expect("second repo generation permit");
+        assert!(
+            sem.try_acquire().is_err(),
+            "a third concurrent repo generation must be denied a permit"
+        );
+    }
+
+    #[test]
+    fn repo_generation_semaphore_frees_permit_after_drop() {
+        let sem = make_repo_generation_semaphore();
+        let p1 = sem.try_acquire().expect("first permit");
+        let _p2 = sem.try_acquire().expect("second permit");
+        assert!(sem.try_acquire().is_err(), "capacity reached");
+        drop(p1);
+        assert!(
+            sem.try_acquire().is_ok(),
+            "a permit frees up once an in-flight generation finishes"
+        );
+    }
 
     #[test]
     fn temp_pr_worktree_path_is_unique_per_session() {
