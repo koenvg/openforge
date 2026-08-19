@@ -22,6 +22,10 @@ use tokio::sync::oneshot;
 /// Hard ceiling on a single generation so a stuck agent process can't hang forever.
 const GENERATION_TIMEOUT_SECS: u64 = 240;
 
+/// Repo-aware generations (checkout + exploration + review) need more head-room
+/// than the diff-only 240s ceiling.
+const REPO_GENERATION_TIMEOUT_SECS: u64 = 600;
+
 /// Which tools the headless agent may use.
 pub(super) enum ToolPolicy {
     /// No tool flags — the prompt is fully self-contained (diff-only callers).
@@ -64,9 +68,18 @@ pub(super) async fn handle_app_agent_generate_command(
                 }
             };
 
-            let text = run_headless_generation(&provider, &prompt, model.as_deref(), &session_key)
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            let text = run_headless_generation(
+                &provider,
+                &prompt,
+                model.as_deref(),
+                &session_key,
+                None,
+                &ToolPolicy::None,
+                None,
+                GENERATION_TIMEOUT_SECS,
+            )
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             json_value(serde_json::json!({ "text": text }))?
         }
         "abort_agent_generate" => {
@@ -87,13 +100,18 @@ fn abort_generation(session_key: &str) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_headless_generation(
     provider: &str,
     prompt: &str,
     model: Option<&str>,
     session_key: &str,
+    working_directory: Option<&Path>,
+    tool_policy: &ToolPolicy,
+    output_schema: Option<&str>,
+    timeout_secs: u64,
 ) -> Result<String, String> {
-    let (binary_name, args) = headless_command(provider, model, &ToolPolicy::None, None)?;
+    let (binary_name, args) = headless_command(provider, model, tool_policy, output_schema)?;
 
     let env = crate::user_environment::user_environment();
     let path = env
@@ -109,11 +127,29 @@ async fn run_headless_generation(
         .unwrap()
         .insert(session_key.to_string(), abort_tx);
 
-    let result = run_child(&binary, &args, &env, prompt, abort_rx).await;
+    let result = run_child(
+        &binary,
+        &args,
+        &env,
+        prompt,
+        working_directory,
+        timeout_secs,
+        abort_rx,
+    )
+    .await;
 
     // Always drop the registry entry so a finished generation can't be "aborted" later.
     generation_registry().lock().unwrap().remove(session_key);
     result
+}
+
+/// The directory the agent process runs in: an explicit checkout when provided,
+/// otherwise the user's home (a neutral dir for self-contained diff-only prompts).
+fn resolve_working_dir(explicit: Option<&Path>) -> Option<std::path::PathBuf> {
+    match explicit {
+        Some(dir) => Some(dir.to_path_buf()),
+        None => dirs::home_dir(),
+    }
 }
 
 async fn run_child(
@@ -121,6 +157,8 @@ async fn run_child(
     args: &[String],
     env: &HashMap<String, String>,
     prompt: &str,
+    working_directory: Option<&Path>,
+    timeout_secs: u64,
     abort_rx: oneshot::Receiver<()>,
 ) -> Result<String, String> {
     let mut command = tokio::process::Command::new(binary);
@@ -131,9 +169,8 @@ async fn run_child(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    // The prompt is fully self-contained, so a neutral working directory is fine.
-    if let Some(home) = dirs::home_dir() {
-        command.current_dir(home);
+    if let Some(dir) = resolve_working_dir(working_directory) {
+        command.current_dir(dir);
     }
 
     let mut child = command
@@ -150,7 +187,7 @@ async fn run_child(
     }
 
     let output_future = child.wait_with_output();
-    let selected = tokio::time::timeout(Duration::from_secs(GENERATION_TIMEOUT_SECS), async move {
+    let selected = tokio::time::timeout(Duration::from_secs(timeout_secs), async move {
         tokio::select! {
             out = output_future => Some(out),
             // Abort: dropping `output_future` drops the child, and `kill_on_drop` terminates it.
@@ -160,9 +197,7 @@ async fn run_child(
     .await;
 
     match selected {
-        Err(_) => Err(format!(
-            "agent generation timed out after {GENERATION_TIMEOUT_SECS}s"
-        )),
+        Err(_) => Err(format!("agent generation timed out after {timeout_secs}s")),
         Ok(None) => Err("agent generation was aborted".to_string()),
         Ok(Some(Err(e))) => Err(format!("agent process failed: {e}")),
         Ok(Some(Ok(output))) => {
@@ -239,6 +274,14 @@ fn headless_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_working_dir_prefers_explicit_over_home() {
+        let explicit = std::path::PathBuf::from("/tmp/some-worktree");
+        assert_eq!(resolve_working_dir(Some(&explicit)), Some(explicit.clone()));
+        // With no explicit dir it falls back to home (present in test env).
+        assert_eq!(resolve_working_dir(None), dirs::home_dir());
+    }
 
     #[test]
     fn claude_code_uses_print_mode_and_reads_stdin() {
