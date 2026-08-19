@@ -15,19 +15,19 @@ Implement **1 → 2 → 3 → 4**:
 
 ## Open items (not yet resolved in any plan task)
 
-### 1. Global concurrency cap — DECIDE: implement or consciously defer
-The spec (decision R6) called for capping concurrent generations globally (1–2) and queueing the rest, but **no plan task implements it.** As written, every button click / question batch spawns its own PR-head checkout + a 1–2 minute `claude` process with no ceiling — clicking "Generate" on several PRs runs them all at once (N worktrees + N agents + N× disk/CPU).
+### 1. Global concurrency cap — DECIDED: implemented (cap 2, Rust)
+The spec (decision R6) called for capping concurrent generations globally (1–2) and queueing the rest, but no plan task implemented it originally.
 
-Options:
-- **Defer (simplest):** accept unbounded parallelism for v1; realistically the user triggers one at a time. Just say so explicitly.
-- **Implement:** a semaphore/queue. Cleanest home is the Rust side (Plan 1's `agent_generate_in_repo`) since it already owns a session registry — gate concurrent `agent_generate_in_repo` runs there so both walkthrough generation and Q&A batches share one limit. A frontend-only cap would miss the Q&A path.
+**Resolution (Plan 3 execution):** implemented a `tokio::sync::Semaphore` with **2 permits** in `src-tauri/src/app_invoke/agent_generate.rs`, acquired in the `agent_generate_in_repo` arm and held across checkout + generation + cleanup (`MAX_CONCURRENT_REPO_GENERATIONS`, `repo_generation_semaphore()`). This is the single system-wide gate, so both the walkthrough trigger and the future Q&A batches funnel through it; extra callers await a permit rather than fanning out N worktrees + N agents at once. Diff-only `agent_generate` is intentionally uncapped (no checkout). Covered by `repo_generation_semaphore_*` unit tests.
 
-Whichever you pick, make it a deliberate choice, not an accident of omission.
+### 2. Stale per-commit storage — DECIDED: both deferred, documented v1 behavior
+All state is keyed by `(prId, headSha)`: `walkthrough:*`, `pr-ai-review:*`, `pr-ai-threads:*`. Two gaps existed:
+- **Orphaned storage:** `deletePrWalkthrough` clears the *current* key only; older SHAs' entries linger.
+- **Stale UX:** the spec wanted stale (older-SHA) content rendered **read-only** with a "from commit `abc`" banner; keying strictly by current SHA instead shows **empty** until regeneration.
 
-### 2. Stale per-commit storage is never pruned + the "stale" UX diverges from the spec
-All state is keyed by `(prId, headSha)`: `walkthrough:*`, `pr-ai-review:*`, `pr-ai-threads:*`. Two gaps:
-- **Orphaned storage:** `deletePrWalkthrough` clears the *current* key only. When a new commit lands, the previous SHA's walkthrough/review/threads stay in plugin storage forever. Add pruning — e.g. on generate for a new SHA, delete entries for the PR's older SHAs (list keys by the `*:${prId}:` prefix), or prune on PR open.
-- **Stale UX:** the spec said a stale (older-SHA) walkthrough/review/threads should render **read-only** with a "from commit `abc`" banner. The plans instead key strictly by the current SHA, so a new commit shows **empty** until regeneration and the old content is simply not loaded. If the read-only-stale experience matters, it needs explicit work (load the newest available entry, compare SHA, render read-only). Otherwise, document that "new commit → regenerate" is the accepted v1 behavior.
+**Resolution (Plan 3 execution): both deferred for v1.**
+- **Pruning deferred.** `PluginStorageScope` exposes only `get`/`set`/`delete` — **no key enumeration** — so the "list keys by `*:${prId}:` prefix" approach is not implementable as written; real pruning would require maintaining a per-PR head-sha index. Given entries are tiny JSON and bounded by opt-in (button-triggered) usage, the extra machinery isn't worth it for v1.
+- **Read-only-stale UX deferred.** Accepted v1 behavior is **"new commit → regenerate"**, already surfaced to the user by the card button's `stale` state ("Regenerate — new commits", see `walkthroughButtonState`) and the in-tab stale banner. Loading the newest available entry + rendering it read-only is a larger product change left for a follow-up.
 
 ### 3. Add `--no-session-persistence` to the repo-aware headless command
 Plan 1's Global Constraints list `--no-session-persistence` as part of this repo's headless `claude` convention, but the `headless_command` implementation in Plan 1 Task 2 does **not** emit it (the diff-only `agent_generate` never did either). The other headless callers (`roadmap_ai.rs`, `task_metadata_refresh/providers.rs`) do use it. Add `--no-session-persistence` to the `claude-code` arg vector (at least for the `ReadAndGitHistory` / repo-aware path) so these one-shot review runs don't accumulate session history. Update the Task 2 arg-building test accordingly.
