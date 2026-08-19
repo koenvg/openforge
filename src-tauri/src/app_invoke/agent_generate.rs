@@ -82,6 +82,70 @@ pub(super) async fn handle_app_agent_generate_command(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             json_value(serde_json::json!({ "text": text }))?
         }
+        "agent_generate_in_repo" => {
+            let session_key = payload_string(&request.payload, "sessionKey")?;
+            let prompt = payload_string(&request.payload, "prompt")?;
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let pr_number = request
+                .payload
+                .get("prNumber")
+                .and_then(|v| v.as_i64())
+                .ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "missing or invalid 'prNumber'".to_string(),
+                    )
+                })?;
+            let head_sha = payload_string(&request.payload, "headSha")?;
+            let model = payload_optional_string(&request.payload, "model")?;
+            let output_schema = payload_optional_string(&request.payload, "outputSchema")?;
+            let provider = match payload_optional_string(&request.payload, "provider")? {
+                Some(p) if !p.is_empty() => p,
+                _ => {
+                    let db = crate::db::acquire_db(&state.db);
+                    db.resolve_ai_provider(&project_id)
+                }
+            };
+
+            // Resolve the PR's base repo to a local project clone. Scope the DB
+            // guard so the lock is released before the long checkout + agent run.
+            let repo_path = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_project(&project_id)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")))?
+                    .map(|p| std::path::PathBuf::from(p.path))
+                    .ok_or_else(|| {
+                        (
+                            StatusCode::BAD_REQUEST,
+                            repo_not_local_project_error(&project_id),
+                        )
+                    })?
+            };
+
+            let worktree_path = temp_pr_worktree_path(&session_key);
+
+            crate::git_worktree::checkout_pr_head(&repo_path, &worktree_path, pr_number, &head_sha)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{e:?}")))?;
+
+            let run = run_headless_generation(
+                &provider,
+                &prompt,
+                model.as_deref(),
+                &session_key,
+                Some(&worktree_path),
+                &ToolPolicy::ReadAndGitHistory,
+                output_schema.as_deref(),
+                REPO_GENERATION_TIMEOUT_SECS,
+            )
+            .await;
+
+            // Guaranteed cleanup: remove the throwaway worktree on success, error, or abort.
+            let _ = crate::git_worktree::remove_worktree(&repo_path, &worktree_path).await;
+
+            let text = run.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            json_value(serde_json::json!({ "text": text }))?
+        }
         "abort_agent_generate" => {
             let session_key = payload_string(&request.payload, "sessionKey")?;
             abort_generation(&session_key);
@@ -150,6 +214,18 @@ fn resolve_working_dir(explicit: Option<&Path>) -> Option<std::path::PathBuf> {
         Some(dir) => Some(dir.to_path_buf()),
         None => dirs::home_dir(),
     }
+}
+
+/// A throwaway worktree path under the OS temp dir, unique per generation.
+fn temp_pr_worktree_path(session_key: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("openforge-pr-review-{session_key}"))
+}
+
+fn repo_not_local_project_error(project_id: &str) -> String {
+    format!(
+        "cannot generate a repo-aware walkthrough: project '{project_id}' has no local project \
+         clone. Add this repository as a project to enable the walkthrough."
+    )
 }
 
 async fn run_child(
@@ -274,6 +350,22 @@ fn headless_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temp_pr_worktree_path_is_unique_per_session() {
+        let a = temp_pr_worktree_path("sess-a");
+        let b = temp_pr_worktree_path("sess-b");
+        assert_ne!(a, b);
+        assert!(a.starts_with(std::env::temp_dir()));
+        assert!(a.to_string_lossy().contains("sess-a"));
+    }
+
+    #[test]
+    fn repo_not_local_project_error_is_actionable() {
+        let err = repo_not_local_project_error("proj-123");
+        assert!(err.contains("proj-123"));
+        assert!(err.to_lowercase().contains("local project"));
+    }
 
     #[test]
     fn resolve_working_dir_prefers_explicit_over_home() {
