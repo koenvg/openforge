@@ -37,6 +37,7 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
         "agentGenerate" => Ok("agent_generate"),
         "abortAgentGenerate" => Ok("abort_agent_generate"),
+        "agentGenerateInRepo" => Ok("agent_generate_in_repo"),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -51,7 +52,10 @@ fn is_files_review_app_command(command: &str) -> bool {
 }
 
 fn is_agent_generate_app_command(command: &str) -> bool {
-    matches!(command, "agent_generate" | "abort_agent_generate")
+    matches!(
+        command,
+        "agent_generate" | "abort_agent_generate" | "agent_generate_in_repo"
+    )
 }
 
 /// Whether `plugin_id` may invoke the given resolved app command.
@@ -504,6 +508,19 @@ mod tests {
             required_shell_session_key(&params).expect_err("terminalIndex should be required"),
             "plugin host callback missing integer param: terminalIndex"
         );
+    }
+
+    #[test]
+    fn agent_generate_in_repo_maps_and_is_authorized() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.agentGenerateInRepo").unwrap(),
+            "agent_generate_in_repo"
+        );
+        assert!(is_agent_generate_app_command("agent_generate_in_repo"));
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "agent_generate_in_repo"
+        ));
     }
 
     #[test]
