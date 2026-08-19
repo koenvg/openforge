@@ -2,6 +2,7 @@ import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type {
   AgentReviewComment,
+  AiThread,
   AuthoredPullRequest,
   PollResult,
   PrFileDiff,
@@ -29,6 +30,15 @@ import {
   removeAiReviewComments,
   updateAiReviewCommentStatus,
 } from './lib/reviewCommentsStore'
+import {
+  readAiThreads,
+  removeAiThreads,
+  threadsNeedingAnswer,
+  upsertThread,
+  writeAiThreads,
+} from './lib/aiThreadStore'
+import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
+import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
 import { WALKTHROUGH_REVIEW_JSON_SCHEMA } from './lib/walkthroughSchema'
 
@@ -127,10 +137,11 @@ export default defineBackendPlugin({
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
       handler: async (request) => {
-        // Clear both the walkthrough and its AI review comments so a regenerate
-        // for the same commit starts from a clean slate.
+        // Clear the walkthrough, its AI review comments, and any Q&A threads so a
+        // regenerate for the same commit starts from a clean slate.
         await removeWalkthrough(openforge, request.reviewPrId, request.headSha)
         await removeAiReviewComments(openforge, request.reviewPrId, request.headSha)
+        await removeAiThreads(openforge, request.reviewPrId, request.headSha)
       },
     }))
 
@@ -142,6 +153,82 @@ export default defineBackendPlugin({
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: string }, void>('updatePrAiReviewCommentStatus', {
       handler: (request) => updateAiReviewCommentStatus(openforge, request.reviewPrId, request.headSha, request.commentId, request.status),
+    }))
+
+    // Local, per-commit "Ask the AI author" Q&A threads. Never pushed to GitHub.
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AiThread[]>('getAiThreads', {
+      handler: (request) => readAiThreads(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; thread: AiThread }, void>('saveAiThread', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, upsertThread(threads, request.thread))
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; threadId: string }, void>('deleteAiThread', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, threads.filter(t => t.id !== request.threadId))
+      },
+    }))
+
+    // Answer every unanswered thread in one repo-aware agent pass. Fire-and-forget:
+    // mark the pending threads immediately (so the UI shows "thinking"), then run
+    // the agent in the background and merge its answers back (poll from the UI).
+    context.subscriptions.add(openforge.backend.registerMethod<{
+      reviewPrId: number
+      headSha: string
+      repoOwner: string
+      repoName: string
+      prNumber: number
+      projectId: string | null
+    }, void>('askAgentQuestions', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        const pending = threadsNeedingAnswer(threads)
+        if (pending.length === 0) return
+
+        const pendingIds = new Set(pending.map(t => t.id))
+        const marked = threads.map(t => (pendingIds.has(t.id) ? { ...t, status: 'pending' as const } : t))
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, marked)
+
+        // Fetch diffs + the walkthrough steps server-side to anchor each question.
+        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        })
+        const walkthrough = await readWalkthrough(openforge, request.reviewPrId, request.headSha)
+        const steps = parseAndValidateWalkthroughSteps(walkthrough?.steps_json ?? null, files) ?? []
+        const prompt = buildQuestionsPrompt(pending, files, steps)
+
+        void (async () => {
+          const sessionKey = randomUUID()
+          try {
+            const result = await invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
+              sessionKey,
+              prompt,
+              model: WALKTHROUGH_MODEL,
+              projectId: request.projectId,
+              owner: request.repoOwner,
+              repo: request.repoName,
+              prNumber: request.prNumber,
+              headSha: request.headSha,
+              outputSchema: AI_ANSWERS_JSON_SCHEMA,
+            })
+            const answered = mapAnswersToThreads(result?.text ?? '', pending)
+            // Re-read (guard against a concurrent change) and merge the answers back.
+            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+            let merged = latest
+            for (const t of answered) merged = upsertThread(merged, t)
+            await writeAiThreads(openforge, request.reviewPrId, request.headSha, merged)
+          } catch {
+            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+            const errored = latest.map(t => (pendingIds.has(t.id) ? { ...t, status: 'error' as const } : t))
+            await writeAiThreads(openforge, request.reviewPrId, request.headSha, errored)
+          }
+        })()
+      },
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{

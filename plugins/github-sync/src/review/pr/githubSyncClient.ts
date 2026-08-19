@@ -1,6 +1,7 @@
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type {
   AgentReviewComment,
+  AiThread,
   AuthoredPullRequest,
   PollResult,
   PrFileDiff,
@@ -72,6 +73,17 @@ export interface GithubSyncPrReviewClient {
     projectId: string | null
   }): Promise<{ walkthrough_session_key: string }>
   abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
+  getAiThreads(request: { reviewPrId: number; headSha: string }): Promise<AiThread[]>
+  saveAiThread(request: { reviewPrId: number; headSha: string; thread: AiThread }): Promise<void>
+  deleteAiThread(request: { reviewPrId: number; headSha: string; threadId: string }): Promise<void>
+  askAgentQuestions(request: {
+    reviewPrId: number
+    headSha: string
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    projectId: string | null
+  }): Promise<void>
   onAuthoredPullRequestsUpdated(handler: () => void): Disposable
   onReviewPullRequestCountChanged(handler: () => void): Disposable
   onViewInvoked(handler: (payload: { view: string }) => void): Disposable
@@ -121,6 +133,10 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     deletePrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<void>(api, 'deletePrWalkthrough', { reviewPrId, headSha }),
     startAgentWalkthrough: (request) => invokeBackend<{ walkthrough_session_key: string }>(api, 'startAgentWalkthrough', request),
     abortAgentWalkthrough: ({ walkthroughSessionKey }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { walkthroughSessionKey }),
+    getAiThreads: ({ reviewPrId, headSha }) => invokeBackend<AiThread[]>(api, 'getAiThreads', { reviewPrId, headSha }),
+    saveAiThread: ({ reviewPrId, headSha, thread }) => invokeBackend<void>(api, 'saveAiThread', { reviewPrId, headSha, thread }),
+    deleteAiThread: ({ reviewPrId, headSha, threadId }) => invokeBackend<void>(api, 'deleteAiThread', { reviewPrId, headSha, threadId }),
+    askAgentQuestions: (request) => invokeBackend<void>(api, 'askAgentQuestions', request),
     onAuthoredPullRequestsUpdated: (handler) => api.events.onGlobal(hostEventId('authored-prs-updated'), handler),
     onReviewPullRequestCountChanged: (handler) => api.events.onGlobal(hostEventId('review-pr-count-changed'), handler),
     onViewInvoked: (handler) => api.events.onGlobal<{ view: string }>(hostEventId('view-invoked'), handler),
