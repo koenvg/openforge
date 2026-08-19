@@ -7,7 +7,6 @@
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import { isPrLargeEnoughForWalkthroughHint } from '../../lib/walkthroughViewState'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import WalkthroughTab from './WalkthroughTab.svelte'
@@ -45,6 +44,10 @@
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus: (commentId: number, status: string) => Promise<void>
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
+    // The Walkthrough tab is only offered once a walkthrough for the current head
+    // sha has finished generating (owned by PrReviewView). Optional so the section
+    // renders (tab hidden) before the parent wires status in.
+    walkthroughReady?: boolean
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -86,12 +89,22 @@
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
     onToggleFileReviewed,
+    walkthroughReady = false,
     onSubmitReview,
     onOpenUrl,
   }: Props = $props()
 
   let diffViewer = $state<DiffViewer>()
   let prFileTree = $state<FileTree>()
+
+  // If the Walkthrough tab is active but its walkthrough is no longer ready (e.g.
+  // after switching to a PR that hasn't been generated yet), fall back to Overview
+  // so we never strand the reviewer on a hidden/blank tab.
+  $effect(() => {
+    if (activeTab === 'walkthrough' && !walkthroughReady) {
+      onActiveTabChange('overview')
+    }
+  })
 
   // The "Files changed" tab filters non-application files out of the tree and diff, but the
   // tab badge and the Walkthrough tab keep the full changed-file list.
@@ -131,16 +144,15 @@
           class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
           onclick={() => onActiveTabChange('files')}
         >Files changed <span class="badge badge-xs ml-1">{files.length}</span></button>
-        <button
-          class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-          onclick={() => onActiveTabChange('walkthrough')}
-          title={isPrLargeEnoughForWalkthroughHint(pr, files) ? 'This PR is large — a walkthrough may help.' : 'AI walkthrough'}
-        >
-          Walkthrough
-          {#if isPrLargeEnoughForWalkthroughHint(pr, files)}
-            <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
-          {/if}
-        </button>
+        {#if walkthroughReady}
+          <button
+            class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+            onclick={() => onActiveTabChange('walkthrough')}
+            title="AI walkthrough"
+          >
+            Walkthrough
+          </button>
+        {/if}
       </div>
       <span class="flex-1"></span>
       <div class="flex items-center gap-2 text-xs text-base-content/50">

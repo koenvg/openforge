@@ -396,9 +396,10 @@ describe('PrReviewView tab shortcuts', () => {
     await fireEvent.keyDown(window, { key: '1', metaKey: true })
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
 
-    // Cmd+3 → Walkthrough (that button has no role=tab, so verify the other tabs deselect)
+    // Cmd+3 targets the Walkthrough tab, but with no ready walkthrough that tab is
+    // hidden, so the view falls back to Overview instead of stranding on a hidden tab.
     await fireEvent.keyDown(window, { key: '3', metaKey: true })
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true'))
     expect(screen.getByRole('tab', { name: /Files changed/i }).getAttribute('aria-selected')).toBe('false')
   })
 
