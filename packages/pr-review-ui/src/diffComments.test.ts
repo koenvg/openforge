@@ -808,7 +808,7 @@ describe('buildExtendData with AI threads', () => {
     expect(hasPendingReply).toBe(false)
   })
 
-  it('places a comment-anchored thread inline at its line, like a line thread', () => {
+  it('places a comment-anchored thread inline at its line, nested under the comment', () => {
     const commentThread: AiThread = {
       ...thread,
       id: 't4',
@@ -817,6 +817,14 @@ describe('buildExtendData with AI threads', () => {
     const { newFile } = buildExtendData('a.ts', [], [], [], [commentThread])
     const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
     expect(entry?.thread?.id).toBe('t4')
+    // Nested (reply-styled) so it reads as a follow-up to the AI review comment.
+    expect(entry?.isReply).toBe(true)
+  })
+
+  it('does not nest a line-anchored thread', () => {
+    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.isReply).toBeFalsy()
   })
 })
 

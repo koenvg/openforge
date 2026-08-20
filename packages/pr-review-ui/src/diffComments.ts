@@ -206,7 +206,15 @@ export function buildExtendData(
     if (!pathMatches(thread.anchor.filename, filename)) continue
     const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
     const lineKey = String(thread.anchor.line)
-    ensureLine(target, lineKey).comments.push({ body: '', type: 'ai-thread', thread })
+    // A comment-anchored thread is a follow-up to the AI review comment above it,
+    // so nest it (reply styling) to make that relationship clear. A line-anchored
+    // thread stands on its own.
+    ensureLine(target, lineKey).comments.push({
+      body: '',
+      type: 'ai-thread',
+      thread,
+      isReply: thread.anchor.type === 'comment',
+    })
   }
 
   return { oldFile, newFile }
