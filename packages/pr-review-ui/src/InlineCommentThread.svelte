@@ -227,8 +227,8 @@
           <span class="badge badge-info badge-sm">Ask the AI</span>
           {#if comment.thread?.status === 'draft'}
             <span
-              class="badge badge-warning badge-sm"
-              title="Not sent yet. Use the 'Send questions to AI' button at the top to get an answer."
+              class="badge badge-warning badge-sm tooltip tooltip-bottom"
+              data-tip="Not sent yet. Use the 'Send questions to AI' button at the top to get an answer."
             >Pending</span>
           {/if}
           {#if comment.thread?.status === 'pending'}
