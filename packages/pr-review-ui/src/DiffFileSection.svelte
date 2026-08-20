@@ -56,6 +56,7 @@
     onUpdateAgentCommentStatus,
     aiThreads,
     onAskAgent,
+    onCommentNow,
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -113,6 +114,7 @@
       {onUpdateAgentCommentStatus}
       {aiThreads}
       {onAskAgent}
+      {onCommentNow}
       {onReplyToThread}
       {onAskAboutComment}
       {onReplyToExistingComment}

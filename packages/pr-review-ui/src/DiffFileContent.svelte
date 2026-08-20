@@ -38,6 +38,7 @@
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
@@ -71,6 +72,7 @@
     onUpdateAgentCommentStatus,
     aiThreads = [],
     onAskAgent,
+    onCommentNow,
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -189,6 +191,7 @@
           onClose()
         }}
         onAskAgent={onAskAgent ? (body) => onAskAgent(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
+        onCommentNow={onCommentNow ? (body) => onCommentNow(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
       />
     {/snippet}
   </DiffView>

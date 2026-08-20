@@ -43,6 +43,14 @@ export type ReplyToReviewCommentRequest = PullRequestRepositoryRequest & {
   body: string
 }
 
+export type CreateReviewCommentRequest = PullRequestRepositoryRequest & {
+  commitId: string
+  path: string
+  line: number
+  side: 'LEFT' | 'RIGHT'
+  body: string
+}
+
 export interface GithubSyncPrReviewClient {
   syncPullRequests(): Promise<PollResult>
   listReviewPullRequests(): Promise<ReviewPullRequest[]>
@@ -60,6 +68,7 @@ export interface GithubSyncPrReviewClient {
   listPullRequestOverviewComments(request: PullRequestRepositoryRequest): Promise<PrOverviewComment[]>
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
   replyToReviewComment(request: ReplyToReviewCommentRequest): Promise<void>
+  createReviewComment(request: CreateReviewCommentRequest): Promise<void>
   listAgentReviewComments(request: { reviewPrId: number }): Promise<AgentReviewComment[]>
   updateAgentReviewCommentStatus(request: { commentId: number; status: string }): Promise<void>
   getPrAiReviewComments(request: { reviewPrId: number; headSha: string }): Promise<AgentReviewComment[]>
@@ -137,6 +146,16 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
       repo,
       prNumber,
       commentId,
+      body,
+    }),
+    createReviewComment: ({ owner, repo, prNumber, commitId, path, line, side, body }) => invokeBackend<void>(api, 'createReviewComment', {
+      owner,
+      repo,
+      prNumber,
+      commitId,
+      path,
+      line,
+      side,
       body,
     }),
     listAgentReviewComments: ({ reviewPrId }) => invokeBackend<AgentReviewComment[]>(api, 'getAgentReviewComments', { reviewPrId }),

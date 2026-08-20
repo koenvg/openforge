@@ -927,6 +927,25 @@
     }
   }
 
+  // Post a single inline comment to GitHub immediately (the "Comment" action),
+  // instead of holding it in the pending review, then refresh so it appears.
+  async function commentNow(filename: string, line: number, side: 'LEFT' | 'RIGHT', body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    try {
+      await githubSync.createReviewComment({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+        commitId: pr.head_sha, path: filename, line, side, body,
+      })
+      const comments = await githubSync.listReviewComments({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+      })
+      if ($selectedReviewPr?.id === pr.id) $reviewComments = comments
+    } catch (e) {
+      console.error('Failed to create review comment:', e)
+    }
+  }
+
   async function replyToThread(threadId: string, body: string) {
     const pr = $selectedReviewPr
     if (!pr) return
@@ -1058,6 +1077,7 @@
       aiThreads={$aiThreads}
       aiThreadsPendingCount={aiThreadsPendingCount}
       onAskAgent={askAgent}
+      onCommentNow={commentNow}
       onReplyToThread={replyToThread}
       onAskAboutComment={askAboutComment}
       onReplyToExistingComment={replyToExistingComment}

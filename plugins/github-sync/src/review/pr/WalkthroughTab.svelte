@@ -44,6 +44,7 @@
     onOpenUrl: (url: string) => void | Promise<void>
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
@@ -76,6 +77,7 @@
     onOpenUrl,
     aiThreads = [],
     onAskAgent,
+    onCommentNow,
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
@@ -512,6 +514,7 @@
           onOpenUrl={onOpenUrl}
           aiThreads={aiThreads}
           onAskAgent={onAskAgent}
+          onCommentNow={onCommentNow}
           onReplyToThread={onReplyToThread}
           onAskAboutComment={onAskAboutComment}
           onReplyToExistingComment={onReplyToExistingComment}

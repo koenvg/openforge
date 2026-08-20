@@ -385,6 +385,30 @@ pub(super) async fn handle_app_github_review_command(
             .map_err(runtime_error)?;
             serde_json::Value::Null
         }
+        "create_review_comment" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let commit_id = payload_string(&request.payload, "commitId")?;
+            let path = payload_string(&request.payload, "path")?;
+            let line = payload_i64(&request.payload, "line")? as i32;
+            let side = payload_string(&request.payload, "side")?;
+            let body = payload_string(&request.payload, "body")?;
+            crate::github_runtime::create_review_comment(
+                &state.github_client,
+                &owner,
+                &repo,
+                pr_number,
+                &commit_id,
+                &path,
+                line,
+                &side,
+                &body,
+            )
+            .await
+            .map_err(runtime_error)?;
+            serde_json::Value::Null
+        }
         "fetch_authored_prs" => to_app_value(
             crate::github_runtime::fetch_authored_prs(&state.db, &state.github_client)
                 .await

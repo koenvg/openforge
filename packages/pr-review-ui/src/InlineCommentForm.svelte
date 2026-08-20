@@ -13,13 +13,22 @@
     // When provided, the form offers an "Ask the AI" action that routes the draft
     // to a local Q&A thread instead of a GitHub-bound pending comment.
     onAskAgent?: (body: string) => void
+    // When provided, the form offers a "Comment" action that posts the comment to
+    // GitHub immediately, instead of holding it in the pending review.
+    onCommentNow?: (body: string) => void
   }
 
-  let { filename, lineNumber, side, text, onTextChange, onSubmit, onCancel, onAskAgent }: Props = $props()
+  let { filename, lineNumber, side, text, onTextChange, onSubmit, onCancel, onAskAgent, onCommentNow }: Props = $props()
 
   function askAgent() {
     if (!text.trim()) return
     onAskAgent?.(text.trim())
+    onCancel()
+  }
+
+  function commentNow() {
+    if (!text.trim()) return
+    onCommentNow?.(text.trim())
     onCancel()
   }
 
@@ -83,13 +92,22 @@
             onclick={askAgent}
           >Ask the AI</button>
         {/if}
+        {#if onCommentNow}
+          <button
+            type="button"
+            class="btn btn-outline btn-sm h-10 min-h-10 px-3 text-[13px] font-medium"
+            title="Post this comment to GitHub now"
+            onclick={commentNow}
+          >Comment</button>
+        {/if}
         <button
           type="button"
           class="btn btn-primary btn-sm h-10 min-h-10 px-3 text-[13px] font-semibold shadow-sm transition-shadow hover:shadow-md"
+          title="Hold this comment in your pending review"
           onclick={onSubmit}
         >
           <MessageSquarePlus size={15} strokeWidth={1.8} aria-hidden="true" />
-          Add comment
+          Add to review
         </button>
       </div>
     </div>
