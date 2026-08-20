@@ -40,6 +40,7 @@
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void
   }
 
   let {
@@ -72,6 +73,7 @@
     onAskAgent,
     onReplyToThread,
     onAskAboutComment,
+    onReplyToExistingComment,
   }: Props = $props()
 
   // The diff widget reports a SplitSide; local Q&A anchors use LEFT/RIGHT.
@@ -171,6 +173,7 @@
         {onOpenUrl}
         {onReplyToThread}
         {onAskAboutComment}
+        {onReplyToExistingComment}
       />
     {/snippet}
     {#snippet renderWidgetLine({ lineNumber, side, onClose }: { lineNumber: number; side: SplitSide; diffFile: DiffFile; onClose: () => void })}

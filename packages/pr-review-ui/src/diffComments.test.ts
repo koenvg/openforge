@@ -92,6 +92,7 @@ describe('buildExtendData', () => {
       author: 'reviewer',
       type: 'existing',
       createdAt: '2024-01-01T00:00:00Z',
+      commentId: 1,
     })
   })
 

@@ -65,6 +65,40 @@ impl GitHubClient {
         Ok(())
     }
 
+    /// Post a threaded reply to an existing review comment.
+    /// Replies attach under the given comment's thread (GitHub's reply endpoint).
+    pub async fn create_review_comment_reply(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        comment_id: i64,
+        body: &str,
+        token: &str,
+    ) -> Result<(), GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls/{}/comments/{}/replies",
+            owner, repo, pr_number, comment_id
+        );
+
+        let request_body = ReviewCommentReplyRequest {
+            body: body.to_string(),
+        };
+
+        let response = self
+            .send_github(
+                self.github_request(reqwest::Method::POST, &url, token)
+                    .json(&request_body),
+            )
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        Ok(())
+    }
+
     /// Get reviews for a pull request
     ///
     /// Fetches all reviews to determine approval/changes-requested state.

@@ -19,6 +19,8 @@
     onReplyToThread?: (threadId: string, body: string) => void
     /** Ask the agent a follow-up question about a specific AI review comment. */
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    /** Post a threaded reply to an existing GitHub review comment. */
+    onReplyToExistingComment?: (commentId: number, body: string) => void
   }
 
   let {
@@ -31,6 +33,7 @@
     onOpenUrl,
     onReplyToThread,
     onAskAboutComment,
+    onReplyToExistingComment,
   }: Props = $props()
 
   // Per-thread reply drafts for answered AI Q&A threads, keyed by thread id.
@@ -56,6 +59,26 @@
     delete next[comment.commentId]
     commentAskDrafts = next
     askOpenCommentId = null
+  }
+
+  // Threaded replies to existing GitHub comments, keyed by the parent comment id.
+  let existingReplyDrafts = $state<Record<number, string>>({})
+  let replyOpenCommentId = $state<number | null>(null)
+
+  function toggleExistingReply(comment: DisplayComment) {
+    if (comment.commentId === undefined) return
+    replyOpenCommentId = replyOpenCommentId === comment.commentId ? null : comment.commentId
+  }
+
+  function submitExistingReply(comment: DisplayComment) {
+    if (comment.commentId === undefined) return
+    const body = (existingReplyDrafts[comment.commentId] ?? '').trim()
+    if (!body) return
+    onReplyToExistingComment?.(comment.commentId, body)
+    const next = { ...existingReplyDrafts }
+    delete next[comment.commentId]
+    existingReplyDrafts = next
+    replyOpenCommentId = null
   }
 
   function submitThreadReply(threadId: string) {
@@ -127,6 +150,16 @@
               <Reply size={12} strokeWidth={1.8} aria-hidden="true" />
               reply
             </span>
+          {/if}
+          {#if onReplyToExistingComment && !comment.isReply && comment.commentId !== undefined}
+            <button
+              class="btn btn-ghost btn-xs text-base-content/50 hover:text-primary ml-auto"
+              title="Reply on GitHub"
+              aria-label="Reply to this comment"
+              onclick={() => toggleExistingReply(comment)}
+            >
+              <Reply size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
           {/if}
         {:else if comment.type === 'agent'}
           <span class="badge badge-success badge-sm">AI Review</span>
@@ -234,6 +267,23 @@
                 onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitCommentAsk(comment) } }}
               />
               <button type="button" class="btn btn-xs btn-primary" onclick={() => submitCommentAsk(comment)}>Ask</button>
+            </div>
+          {/if}
+          {#if comment.type === 'existing' && !comment.isReply && comment.commentId !== undefined && replyOpenCommentId === comment.commentId}
+            {@const commentId = comment.commentId}
+            <div class="flex gap-2 mt-1.5">
+              <input
+                class="input input-bordered input-xs flex-1"
+                aria-label="Reply to this comment"
+                placeholder="Reply on GitHub…"
+                value={existingReplyDrafts[commentId] ?? ''}
+                oninput={(event) => {
+                  if (!(event.currentTarget instanceof HTMLInputElement)) return
+                  existingReplyDrafts = { ...existingReplyDrafts, [commentId]: event.currentTarget.value }
+                }}
+                onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitExistingReply(comment) } }}
+              />
+              <button type="button" class="btn btn-xs btn-primary" onclick={() => submitExistingReply(comment)}>Reply</button>
             </div>
           {/if}
         {/if}

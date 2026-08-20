@@ -114,6 +114,7 @@ export function buildExtendData(
       author: comment.author,
       type: 'existing',
       createdAt: comment.created_at,
+      commentId: comment.id,
     })
   }
 

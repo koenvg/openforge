@@ -58,6 +58,7 @@
     onAskAgent,
     onReplyToThread,
     onAskAboutComment,
+    onReplyToExistingComment,
   }: Props = $props()
 
   const truncated = $derived(isTruncated(file))
@@ -114,6 +115,7 @@
       {onAskAgent}
       {onReplyToThread}
       {onAskAboutComment}
+      {onReplyToExistingComment}
     />
   {/if}
 </div>

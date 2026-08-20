@@ -11,7 +11,7 @@ import type {
   ReviewComment,
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
-import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
 type TaskPullRequestActionRequest = {
   taskId: string
@@ -118,6 +118,10 @@ export default defineBackendPlugin({
 
     context.subscriptions.add(openforge.backend.registerMethod<SubmitPullRequestReviewRequest, void>('submitPrReview', {
       handler: (request) => invokeHostCommand<void>(openforge, 'submitPrReview', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<ReplyToReviewCommentRequest, void>('replyToReviewComment', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'replyToReviewComment', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number }, AgentReviewComment[]>('getAgentReviewComments', {

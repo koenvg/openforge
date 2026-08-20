@@ -909,6 +909,24 @@
     )
   }
 
+  // Post a threaded reply to an existing GitHub review comment, then refresh the
+  // thread so the reply shows up. Guarded against a PR switch mid-request.
+  async function replyToExistingComment(commentId: number, body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    try {
+      await githubSync.replyToReviewComment({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number, commentId, body,
+      })
+      const comments = await githubSync.listReviewComments({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+      })
+      if ($selectedReviewPr?.id === pr.id) $reviewComments = comments
+    } catch (e) {
+      console.error('Failed to reply to review comment:', e)
+    }
+  }
+
   async function replyToThread(threadId: string, body: string) {
     const pr = $selectedReviewPr
     if (!pr) return
@@ -1042,6 +1060,7 @@
       onAskAgent={askAgent}
       onReplyToThread={replyToThread}
       onAskAboutComment={askAboutComment}
+      onReplyToExistingComment={replyToExistingComment}
       onAskAgentStep={askAgentStep}
       onSendQuestionsToAgent={sendQuestionsToAgent}
       onSubmitReview={submitReview}

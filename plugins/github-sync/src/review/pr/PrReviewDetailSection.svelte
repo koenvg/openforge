@@ -55,6 +55,7 @@
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void
     onAskAgentStep?: (stepId: string, body: string) => void
     onSendQuestionsToAgent?: () => void
     onSubmitReview: (request: {
@@ -104,6 +105,7 @@
     onAskAgent,
     onReplyToThread,
     onAskAboutComment,
+    onReplyToExistingComment,
     onAskAgentStep,
     onSendQuestionsToAgent,
     onSubmitReview,
@@ -242,6 +244,7 @@
       onAskAgent={onAskAgent}
       onReplyToThread={onReplyToThread}
       onAskAboutComment={onAskAboutComment}
+      onReplyToExistingComment={onReplyToExistingComment}
       onAskAgentStep={onAskAgentStep}
       onSubmitReview={onSubmitReview}
     />
@@ -295,6 +298,7 @@
           onAskAgent={onAskAgent}
           onReplyToThread={onReplyToThread}
           onAskAboutComment={onAskAboutComment}
+          onReplyToExistingComment={onReplyToExistingComment}
           {reviewedFileShas}
           onToggleFileReviewed={onToggleFileReviewed}
           getFileReviewIdentity={getReviewFileIdentity}

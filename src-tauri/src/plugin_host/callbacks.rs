@@ -33,6 +33,7 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "getReviewComments" => Ok("get_review_comments"),
         "getPrOverviewComments" => Ok("get_pr_overview_comments"),
         "submitPrReview" => Ok("submit_pr_review"),
+        "replyToReviewComment" => Ok("create_review_comment_reply"),
         "getAgentReviewComments" => Ok("get_agent_review_comments"),
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
         "agentGenerate" => Ok("agent_generate"),
@@ -520,6 +521,18 @@ mod tests {
         assert!(plugin_may_invoke_command(
             GITHUB_SYNC_PLUGIN_ID,
             "agent_generate_in_repo"
+        ));
+    }
+
+    #[test]
+    fn reply_to_review_comment_maps_and_is_authorized() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.replyToReviewComment").unwrap(),
+            "create_review_comment_reply"
+        );
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "create_review_comment_reply"
         ));
     }
 
