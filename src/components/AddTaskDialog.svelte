@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { Task, GitBranchInfo } from '../lib/types'
+  import type { Task } from '../lib/types'
   import { createTask, updateTaskInitialPrompt, listGitBranches, repoHasCommits } from '../lib/ipc'
   import { loadTaskLevelDefaults } from '../lib/taskDefaults'
   import { HIERARCHICAL_SETTINGS } from '../lib/hierarchicalSettings'
-  import { dedupeBranchesForSelector } from '../lib/branchSelector'
+  import { dedupeBranchesForSelector, type BranchListState } from '../lib/branchSelector'
   import { resolveWorktreeAvailability } from '../lib/worktreeAvailability'
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
@@ -43,8 +43,6 @@
   // cannot branch from a repo with no base commit, so the toggle is disabled and
   // the task falls back to running in the project directory.
   let worktreeAllowed = $state(true)
-  let gitBranches = $state<GitBranchInfo[]>([])
-  let branchLoadError = $state<string | null>(null)
   let error = $state<string | null>(null)
   let taskDefaultsError = $state<string | null>(null)
   let promptDraft = $state('')
@@ -61,6 +59,11 @@
   let lastTitleSeed = $state<string | null>(null)
   let lastSourceTicketSeed = $state<string | null>(null)
   let taskDefaultsLoading = $state(true)
+  // Tracked apart from the task defaults so submission never waits on origin.
+  let branchList = $state<BranchListState>({ status: 'loading' })
+  // Identifies the current branch load so a late reply from a superseded load
+  // cannot overwrite the branches of the run that replaced it.
+  let branchLoadRun = 0
 
   const initialPrompt = $derived(mode === 'edit' && task ? getTaskPromptText(task) : promptSeed)
   const promptReady = $derived(promptDraft.trim().length > 0)
@@ -112,15 +115,28 @@
     applySeedsToDraft()
     taskDefaultsLoading = mode === 'create'
     worktreeAllowed = true
-    branchLoadError = null
     taskDefaultsError = null
     error = null
+    // Loading from the start: the repo to list is only known once the defaults
+    // resolve, and until then the selector must not claim there are no branches.
+    branchList = { status: 'loading' }
+    branchLoadRun++
 
+    const branchRepoPath = await loadTaskDefaults()
+    if (branchRepoPath) void loadGitBranches(branchRepoPath)
+    else branchList = { status: 'ready', branches: [] }
+  }
+
+  /**
+   * Loads everything task creation depends on. Branch listing is deliberately
+   * left out: it reaches origin, and a stalled remote would otherwise keep the
+   * dialog disabled forever. Returns the repo to list branches for, if any.
+   */
+  async function loadTaskDefaults(): Promise<string | null> {
     try {
       if (!$activeProjectId) {
         draft.aiProvider = 'claude-code'
-        gitBranches = []
-        return
+        return null
       }
 
       const defaults = await loadTaskLevelDefaults($activeProjectId)
@@ -131,10 +147,7 @@
         useWorktree: defaults.useWorktrees,
       })
 
-      if (!projectPath) {
-        gitBranches = []
-        return
-      }
+      if (!projectPath) return null
 
       let hasCommits = true
       try {
@@ -147,29 +160,36 @@
       worktreeAllowed = availability.worktreeAllowed
       draft.useWorktree = availability.useWorktree
 
-      try {
-        gitBranches = await listGitBranches(projectPath)
-        const options = dedupeBranchesForSelector(gitBranches)
-        const currentNames = new Set(
-          gitBranches.filter((branch) => branch.is_current).map((branch) => branch.name),
-        )
-        const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
-        draft.existingBranch = preferred?.value ?? ''
-      } catch (branchError) {
-        console.error('Failed to list git branches:', branchError)
-        branchLoadError = String(branchError)
-        gitBranches = []
-        draft.existingBranch = ''
-      }
+      return projectPath
     } catch (defaultsError) {
       console.error('Failed to load task defaults:', defaultsError)
       taskDefaultsError = 'Could not load task defaults. Retry before creating this task.'
       draft.aiProvider = null
-      gitBranches = []
       draft.existingBranch = ''
       worktreeAllowed = true
+      return null
     } finally {
       taskDefaultsLoading = false
+    }
+  }
+
+  async function loadGitBranches(repoPath: string) {
+    const run = ++branchLoadRun
+    try {
+      const branches = await listGitBranches(repoPath)
+      if (run !== branchLoadRun) return
+      branchList = { status: 'ready', branches }
+      const options = dedupeBranchesForSelector(branches)
+      const currentNames = new Set(
+        branches.filter((branch) => branch.is_current).map((branch) => branch.name),
+      )
+      const preferred = options.find((option) => !currentNames.has(option.value)) ?? options[0]
+      draft.existingBranch = preferred?.value ?? ''
+    } catch (branchError) {
+      if (run !== branchLoadRun) return
+      console.error('Failed to list git branches:', branchError)
+      branchList = { status: 'error', message: String(branchError) }
+      draft.existingBranch = ''
     }
   }
 
@@ -213,7 +233,9 @@
     }
     if (isSaving) return
     if (mode === 'create' && draft.useWorktree && draft.worktreeSource === 'existingBranch' && draft.existingBranch.trim() === '') {
-      error = 'Select an existing branch before creating the task.'
+      error = branchList.status === 'loading'
+        ? 'Branches are still loading. Wait for the list before starting from an existing branch.'
+        : 'Select an existing branch before creating the task.'
       return
     }
 
@@ -347,8 +369,7 @@
         <CreateTaskEnvironment
           bind:draft
           {worktreeAllowed}
-          {gitBranches}
-          {branchLoadError}
+          {branchList}
           {aiProviderOptions}
         />
         <CreateTaskProgressiveSettings bind:draft />

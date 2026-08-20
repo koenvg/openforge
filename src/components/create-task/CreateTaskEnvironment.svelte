@@ -1,7 +1,10 @@
 <script lang="ts">
   import { FolderGit2, GitBranch, ShieldCheck } from '@lucide/svelte'
-  import type { GitBranchInfo } from '../../lib/types'
-  import { dedupeBranchesForSelector, type BranchLocation } from '../../lib/branchSelector'
+  import {
+    dedupeBranchesForSelector,
+    type BranchListState,
+    type BranchLocation,
+  } from '../../lib/branchSelector'
   import SearchableSelect from '../shared/ui/SearchableSelect.svelte'
   import {
     getEnvironmentSummaryLabel,
@@ -17,21 +20,21 @@
   interface Props {
     draft: CreateTaskDraft
     worktreeAllowed: boolean
-    gitBranches: GitBranchInfo[]
-    branchLoadError?: string | null
+    branchList: BranchListState
     aiProviderOptions: readonly ProviderOption[]
   }
 
   let {
     draft = $bindable(),
     worktreeAllowed,
-    gitBranches,
-    branchLoadError = null,
+    branchList,
     aiProviderOptions,
   }: Props = $props()
 
   let environmentExpanded = $state(false)
-  const branchSelectorOptions = $derived(dedupeBranchesForSelector(gitBranches))
+  const branchSelectorOptions = $derived(
+    branchList.status === 'ready' ? dedupeBranchesForSelector(branchList.branches) : [],
+  )
   const permissionModeSummary = $derived(getPermissionModeSummary(draft.permissionMode))
   const environmentSummaryLabel = $derived(getEnvironmentSummaryLabel(draft))
 
@@ -184,7 +187,7 @@
                 <span class="text-xs font-medium text-base-content/50">Branch</span>
                 {#if branchSelectorOptions.length === 0}
                   <div class="select select-bordered select-xs flex min-w-0 flex-1 items-center text-base-content/40" aria-label="Branch">
-                    No branches available
+                    {branchList.status === 'loading' ? 'Loading branches…' : 'No branches available'}
                   </div>
                 {:else}
                   <div class="min-w-0">
@@ -204,8 +207,8 @@
                   </div>
                 {/if}
               </div>
-              {#if branchLoadError}
-                <span class="mt-1 block text-xs text-error">{branchLoadError}</span>
+              {#if branchList.status === 'error'}
+                <span class="mt-1 block text-xs text-error">{branchList.message}</span>
               {/if}
             {/if}
           {/if}

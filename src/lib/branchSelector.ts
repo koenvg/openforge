@@ -7,6 +7,16 @@ import type { GitBranchInfo } from './types'
  */
 export type BranchLocation = 'local' | 'remote' | 'both'
 
+/**
+ * Branch listing progress, kept apart from the task defaults because it reaches
+ * origin: a stalled remote must leave the dialog submittable, so the selector
+ * has to be able to say "still loading" instead of "no branches available".
+ */
+export type BranchListState =
+  | { status: 'loading' }
+  | { status: 'ready'; branches: GitBranchInfo[] }
+  | { status: 'error'; message: string }
+
 export interface BranchSelectorOption {
   /** Stored value that becomes `worktreeBranch`; decides the backend path. */
   value: string
