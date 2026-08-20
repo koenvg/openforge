@@ -259,7 +259,11 @@ export default defineBackendPlugin({
         const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
           owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
         })
-        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files }, request.promptTemplate)
+        // Existing PR comments (human + earlier AI) so the agent avoids duplicating them.
+        const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        }).catch(() => [] as ReviewComment[])
+        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files, existingComments }, request.promptTemplate)
 
         // Kick off generation in the background so the UI gets its session key
         // immediately and can render the optimistic "generating" state. The

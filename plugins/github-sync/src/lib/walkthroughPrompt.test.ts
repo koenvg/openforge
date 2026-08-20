@@ -1,6 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import { compileWalkthroughPrompt } from './walkthroughPrompt'
-import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, ReviewComment } from '@openforge-app/plugin-sdk/domain'
+
+function makeReviewComment(over: Partial<ReviewComment> = {}): ReviewComment {
+  return {
+    id: 1,
+    pr_number: 7,
+    repo_owner: 'acme',
+    repo_name: 'repo',
+    path: 'src/a.ts',
+    line: 42,
+    side: 'RIGHT',
+    body: 'This branch is never hit.',
+    author: 'alice',
+    created_at: '2026-08-01T00:00:00Z',
+    in_reply_to_id: null,
+    ...over,
+  }
+}
 
 function makeFile(over: Partial<PrFileDiff>): PrFileDiff {
   return {
@@ -137,5 +154,27 @@ describe('compileWalkthroughPrompt', () => {
   it('instructs that hunk_indexes must be valid 0-based indexes for that file', () => {
     const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
     expect(out.toLowerCase()).toContain('0-based')
+  })
+
+  it('lists existing review comments so the agent can avoid duplicating them', () => {
+    const out = compileWalkthroughPrompt({
+      title: 't',
+      body: null,
+      files: [],
+      existingComments: [
+        makeReviewComment({ author: 'alice', path: 'src/a.ts', line: 42, body: 'This branch is never hit.' }),
+        makeReviewComment({ id: 2, author: 'bob', body: 'Agreed, remove it.', in_reply_to_id: 1 }),
+      ],
+    })
+    expect(out).toContain('alice')
+    expect(out).toContain('This branch is never hit.')
+    expect(out).toContain('src/a.ts:42')
+    expect(out).toContain('bob')
+    expect(out).toContain('Agreed, remove it.')
+  })
+
+  it('shows a placeholder when there are no existing review comments', () => {
+    const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
+    expect(out.toLowerCase()).toContain('no existing review comments')
   })
 })

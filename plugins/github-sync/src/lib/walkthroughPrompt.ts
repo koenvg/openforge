@@ -1,4 +1,4 @@
-import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
+import type { PrFileDiff, ReviewComment } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 import promptTemplate from './walkthroughPrompt.md?raw'
 
@@ -13,6 +13,22 @@ export interface WalkthroughPromptInput {
   title: string
   body: string | null
   files: PrFileDiff[]
+  /** Comments already on the PR (human or earlier AI), so the agent doesn't repeat them. */
+  existingComments?: ReviewComment[]
+}
+
+/** One line per existing comment: who said it, where, and what. */
+function formatExistingComments(comments: ReviewComment[]): string {
+  if (comments.length === 0) return '(no existing review comments)'
+  return comments
+    .map((comment) => {
+      const location = comment.line != null
+        ? `${comment.path}:${comment.line} (${comment.side ?? 'RIGHT'})`
+        : comment.path
+      const kind = comment.in_reply_to_id != null ? 'reply' : 'comment'
+      return `- @${comment.author} (${kind} on ${location}): ${comment.body.trim()}`
+    })
+    .join('\n')
 }
 
 /**
@@ -34,10 +50,13 @@ export function compileWalkthroughPrompt(
       ? '(no files in this PR)'
       : input.files.map(fileSection).join('\n\n')
 
+  const existingComments = formatExistingComments(input.existingComments ?? [])
+
   return template
     .replace('{{PR_TITLE}}', () => input.title)
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
     .replace('{{CHANGED_FILES}}', () => changedFiles)
+    .replace('{{EXISTING_COMMENTS}}', () => existingComments)
 }
 
 function fileSection(file: PrFileDiff): string {

@@ -7,6 +7,12 @@ Your job: split the PR into an ordered sequence of small, concept-sized steps â€
 
 {{CHANGED_FILES}}
 
+## Existing Review Comments
+
+These comments are already on the PR (from human reviewers or an earlier AI pass). Do not repeat a point one of them already makes. Where a comment is relevant to a change, build on it or defer to it instead of restating it. You may still add new remarks that do not overlap.
+
+{{EXISTING_COMMENTS}}
+
 ## Output Format
 
 Respond with a single JSON object (and nothing else, no surrounding prose) matching this schema:
@@ -51,6 +57,7 @@ In the SAME JSON object, also return `review_comments`: your own review remarks,
 Additional rules for `review_comments`:
 - Only anchor to lines that actually appear in the diff (added, removed, or context). Do not invent line numbers.
 - Prefer a few high-value remarks over exhaustive nitpicking. `review_comments` may be an empty array.
+- Do not duplicate any point already made in the Existing Review Comments above.
 
 Rules:
 - Order steps so a reader can follow them top-to-bottom.

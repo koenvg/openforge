@@ -80,7 +80,7 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
   {
     key: 'pr_walkthrough_prompt',
     label: 'PR Walkthrough + AI Review Prompt',
-    description: 'Prompt used to generate the PR walkthrough steps and AI review comments. Keep the {{PR_TITLE}}, {{PR_DESCRIPTION}}, and {{CHANGED_FILES}} placeholders — they are filled in per PR.',
+    description: 'Prompt used to generate the PR walkthrough steps and AI review comments. Keep the {{PR_TITLE}}, {{PR_DESCRIPTION}}, {{CHANGED_FILES}}, and {{EXISTING_COMMENTS}} placeholders. They are filled in per PR.',
     control: 'textarea',
     levels: ['global', 'project'],
     default: DEFAULT_PR_WALKTHROUGH_PROMPT,
