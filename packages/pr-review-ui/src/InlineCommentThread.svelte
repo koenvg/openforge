@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Reply, X } from '@lucide/svelte'
+  import { Check, Reply, Undo2, X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { CommentDisplayData } from './diffComments'
@@ -14,14 +14,13 @@
     agentComments: AgentReviewComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
     onReplyToThread?: (threadId: string, body: string) => void
   }
 
   let {
     data,
-    filename,
     pendingComments,
     agentComments,
     onPendingCommentsChange,
@@ -43,21 +42,33 @@
     threadReplyDrafts = next
   }
 
+  // Approving marks the AI comment 'approved' in place — it is NOT copied into
+  // the manual pending list. The approved comment is itself the submittable item
+  // (ReviewSubmitPanel pulls approved comments straight in), so there is one box,
+  // not a duplicate pending copy.
   async function approveAgentComment(comment: DisplayComment) {
     if (comment.commentId === undefined) return
     try {
       await onUpdateAgentCommentStatus?.(comment.commentId, 'approved')
-      onPendingCommentsChange([...pendingComments, {
-        path: comment.filePath || filename,
-        line: comment.lineNumber || 0,
-        side: (comment.commentSide || 'RIGHT') as ReviewSubmissionComment['side'],
-        body: comment.body,
-      }])
       onAgentCommentsChange(agentComments.map(agentComment =>
         agentComment.id === comment.commentId ? { ...agentComment, status: 'approved' } : agentComment
       ))
     } catch (error) {
       console.error('[DiffViewer] Failed to approve comment:', error)
+    }
+  }
+
+  // Un-approve returns an approved comment to 'pending' so it drops out of the
+  // review submission again while staying visible in the AI review list.
+  async function unapproveAgentComment(comment: DisplayComment) {
+    if (comment.commentId === undefined) return
+    try {
+      await onUpdateAgentCommentStatus?.(comment.commentId, 'pending')
+      onAgentCommentsChange(agentComments.map(agentComment =>
+        agentComment.id === comment.commentId ? { ...agentComment, status: 'pending' } : agentComment
+      ))
+    } catch (error) {
+      console.error('[DiffViewer] Failed to un-approve comment:', error)
     }
   }
 
@@ -98,11 +109,20 @@
             <span class="badge badge-info badge-sm">Approved</span>
           {/if}
           <div class="ml-auto flex gap-1">
-            {#if comment.status !== 'approved'}
+            {#if comment.status === 'approved'}
+              <button
+                class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
+                title="Un-approve — remove from this review"
+                aria-label="Un-approve AI review comment"
+                onclick={() => unapproveAgentComment(comment)}
+              >
+                <Undo2 size={14} strokeWidth={2} aria-hidden="true" />
+              </button>
+            {:else}
               <button
                 class="btn btn-ghost btn-xs text-success hover:text-success/80"
-                title="Approve — add to pending comments"
-                aria-label="Approve AI review comment and add to pending comments"
+                title="Approve — include in this review"
+                aria-label="Approve AI review comment"
                 onclick={() => approveAgentComment(comment)}
               >
                 <Check size={14} strokeWidth={2} aria-hidden="true" />

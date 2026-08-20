@@ -22,6 +22,7 @@
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
+  import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
@@ -39,7 +40,7 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     agentComments: AgentReviewComment[]
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
@@ -77,6 +78,24 @@
     onAskAgentStep,
     onSubmitReview,
   }: Props = $props()
+
+  // Approved AI review comments submit with the review directly (mirrors the Files
+  // tab); map them to submission shape and clear them after a successful submit.
+  let approvedAgentSubmissionComments = $derived(
+    approvedInlineAgentComments(agentComments).map(agentCommentToSubmission),
+  )
+
+  function handleApprovedAgentCommentsSubmitted() {
+    const submitted = approvedInlineAgentComments(agentComments)
+    if (submitted.length === 0) return
+    const submittedIds = new Set(submitted.map(comment => comment.id))
+    for (const comment of submitted) void onUpdateAgentCommentStatus(comment.id, 'dismissed')
+    onAgentCommentsChange(
+      agentComments.map(comment =>
+        submittedIds.has(comment.id) ? { ...comment, status: 'dismissed' } : comment,
+      ),
+    )
+  }
 
   let walkthrough = $state<PrWalkthrough | null>(null)
   let isLoading = $state(false)
@@ -499,7 +518,9 @@
                 prNumber={pr.number}
                 commitId={pr.head_sha}
                 pendingComments={pendingComments}
+                approvedAgentComments={approvedAgentSubmissionComments}
                 onPendingCommentsChange={onPendingCommentsChange}
+                onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
                 onSubmitReview={onSubmitReview}
               />
             {/if}

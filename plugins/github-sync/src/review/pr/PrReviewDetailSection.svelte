@@ -5,6 +5,7 @@
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
+  import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
@@ -106,6 +107,29 @@
     onSubmitReview,
     onOpenUrl,
   }: Props = $props()
+
+  // Approved AI review comments are submitted with the review directly (approving
+  // no longer copies them into the manual pending list), so map them to
+  // submission shape for ReviewSubmitPanel.
+  let approvedAgentSubmissionComments = $derived(
+    approvedInlineAgentComments(agentReviewComments).map(agentCommentToSubmission),
+  )
+
+  // After a successful submit the approved AI comments now exist as real GitHub
+  // review comments, so mark them handled: 'dismissed' hides them from the AI list
+  // and keeps them out of the approved set, preventing a duplicate on refresh or a
+  // re-submit. Only runs on submit success (ReviewSubmitPanel guards it).
+  function handleApprovedAgentCommentsSubmitted() {
+    const submitted = approvedInlineAgentComments(agentReviewComments)
+    if (submitted.length === 0) return
+    const submittedIds = new Set(submitted.map(comment => comment.id))
+    for (const comment of submitted) void onUpdateAgentCommentStatus(comment.id, 'dismissed')
+    onAgentCommentsChange(
+      agentReviewComments.map(comment =>
+        submittedIds.has(comment.id) ? { ...comment, status: 'dismissed' } : comment,
+      ),
+    )
+  }
 
   let diffViewer = $state<DiffViewer>()
   let prFileTree = $state<FileTree>()
@@ -279,7 +303,9 @@
               prNumber={pr.number}
               commitId={pr.head_sha}
               pendingComments={pendingManualComments}
+              approvedAgentComments={approvedAgentSubmissionComments}
               onPendingCommentsChange={onPendingCommentsChange}
+              onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
               onSubmitReview={onSubmitReview}
             />
           {/snippet}

@@ -21,7 +21,15 @@
     prNumber: number
     commitId: string
     pendingComments?: ReviewSubmissionComment[]
+    /**
+     * Approved AI review comments, pre-mapped to submission shape. They are
+     * submitted alongside the manual pending comments (approving no longer copies
+     * them into the pending list), so they must be counted and posted here too.
+     */
+    approvedAgentComments?: ReviewSubmissionComment[]
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
+    /** Called after a successful submit so the parent can clear the approved AI comments it just posted. */
+    onApprovedAgentCommentsSubmitted?: () => void
     onSubmitReview: (request: SubmitReviewRequest) => Promise<void>
   }
 
@@ -31,9 +39,15 @@
     prNumber,
     commitId,
     pendingComments = [],
+    approvedAgentComments = [],
     onPendingCommentsChange,
+    onApprovedAgentCommentsSubmitted,
     onSubmitReview,
   }: Props = $props()
+
+  // Everything that will be posted with the review: manual pending comments plus
+  // approved AI review comments.
+  let submissionComments = $derived([...pendingComments, ...approvedAgentComments])
 
   let summary = $state('')
   let isSubmitting = $state(false)
@@ -41,7 +55,7 @@
   let successMessage = $state<string | null>(null)
   let selectedEvent = $state<ReviewEvent>('COMMENT')
 
-  let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || pendingComments.length > 0))
+  let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || submissionComments.length > 0))
   let canApprove = $derived(!isSubmitting)
 
   async function handleSubmit(event: ReviewEvent) {
@@ -59,11 +73,12 @@
         prNumber,
         event,
         body: summary.trim(),
-        comments: pendingComments,
+        comments: submissionComments,
         commitId,
       })
 
       onPendingCommentsChange([])
+      onApprovedAgentCommentsSubmitted?.()
       summary = ''
       successMessage = `Review submitted successfully (${event === 'APPROVE' ? 'Approved' : event === 'REQUEST_CHANGES' ? 'Changes Requested' : 'Commented'})`
 
@@ -104,8 +119,8 @@
 <div class="flex flex-col shrink-0 bg-base-200 border-t border-base-300">
   <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-base-300">
     <h3 class="text-[0.9rem] font-semibold text-base-content m-0">Submit Review</h3>
-    {#if pendingComments.length > 0}
-      <span class="inline-flex items-center px-2.5 py-1 text-[0.7rem] font-semibold text-warning bg-warning/15 rounded-full">{pendingComments.length} comment{pendingComments.length === 1 ? '' : 's'} will be submitted</span>
+    {#if submissionComments.length > 0}
+      <span class="inline-flex items-center px-2.5 py-1 text-[0.7rem] font-semibold text-warning bg-warning/15 rounded-full">{submissionComments.length} comment{submissionComments.length === 1 ? '' : 's'} will be submitted</span>
     {/if}
   </div>
 

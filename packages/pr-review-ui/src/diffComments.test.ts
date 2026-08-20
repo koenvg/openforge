@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
-import { sideToSplitSide, buildExtendData, prCommentsToReviewComments } from './diffComments'
+import { sideToSplitSide, buildExtendData, prCommentsToReviewComments, approvedInlineAgentComments, agentCommentToSubmission } from './diffComments'
 
 // ============================================================================
 // Test Fixtures
@@ -791,5 +791,36 @@ describe('buildExtendData with AI threads', () => {
     const otherFile: AiThread = { ...thread, id: 't3', anchor: { type: 'line', filename: 'b.ts', line: 3, side: 'RIGHT' } }
     const { newFile } = buildExtendData('a.ts', [], [], [], [stepThread, otherFile])
     expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
+  })
+})
+
+describe('approvedInlineAgentComments', () => {
+  it('keeps only approved inline comments that can be anchored to a line', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, id: 1, status: 'approved' }
+    const stillPending: AgentReviewComment = { ...baseAgentComment, id: 2, status: 'pending' }
+    const dismissed: AgentReviewComment = { ...baseAgentComment, id: 3, status: 'dismissed' }
+    const approvedSummary: AgentReviewComment = { ...baseAgentComment, id: 4, status: 'approved', comment_type: 'summary' }
+    const approvedNoLine: AgentReviewComment = { ...baseAgentComment, id: 5, status: 'approved', line_number: null }
+
+    const result = approvedInlineAgentComments([approved, stillPending, dismissed, approvedSummary, approvedNoLine])
+
+    expect(result.map(c => c.id)).toEqual([1])
+  })
+})
+
+describe('agentCommentToSubmission', () => {
+  it('maps an agent comment to a review submission comment', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, file_path: 'src/a.ts', line_number: 42, side: 'LEFT', body: '  trim me  ' }
+    expect(agentCommentToSubmission(approved)).toEqual({
+      path: 'src/a.ts',
+      line: 42,
+      side: 'LEFT',
+      body: 'trim me',
+    })
+  })
+
+  it('defaults a missing side to RIGHT', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, side: null }
+    expect(agentCommentToSubmission(approved).side).toBe('RIGHT')
   })
 })

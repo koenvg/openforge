@@ -32,6 +32,33 @@ export function sideToSplitSide(side: string | null): 'oldFile' | 'newFile' {
 }
 
 /**
+ * The approved inline AI review comments that should be submitted to GitHub with
+ * the review. Approving a comment no longer copies it into the manual pending
+ * list — the approved comment is itself the submittable item — so submission
+ * pulls straight from here. Only line-anchored inline comments qualify (summary
+ * comments and comments without a line can't be posted inline).
+ */
+export function approvedInlineAgentComments(agentComments: AgentReviewComment[]): AgentReviewComment[] {
+  return agentComments.filter(
+    (comment) =>
+      comment.status === 'approved' &&
+      comment.comment_type === 'inline' &&
+      comment.file_path !== null &&
+      comment.line_number !== null,
+  )
+}
+
+/** Map an AI review comment to the shape the review-submission API expects. */
+export function agentCommentToSubmission(comment: AgentReviewComment): ReviewSubmissionComment {
+  return {
+    path: comment.file_path ?? '',
+    line: comment.line_number ?? 0,
+    side: (comment.side ?? 'RIGHT') as ReviewSubmissionComment['side'],
+    body: comment.body.trim(),
+  }
+}
+
+/**
  * Checks if a comment's path matches the target filename.
  * Uses the same matching logic as DiffViewer.svelte findLineRow():
  * exact match OR endsWith in either direction.

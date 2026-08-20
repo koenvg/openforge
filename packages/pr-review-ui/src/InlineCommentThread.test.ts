@@ -68,7 +68,7 @@ describe('InlineCommentThread', () => {
     render(InlineCommentThread, { props: setup.props })
 
     const actionNames = [
-      'Approve AI review comment and add to pending comments',
+      'Approve AI review comment',
       'Dismiss AI review comment',
       'Remove pending comment',
     ]
@@ -116,7 +116,7 @@ describe('InlineCommentThread', () => {
     expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
   })
 
-  it('approves an AI comment using updated props after the status callback resolves', async () => {
+  it('approves an AI comment in place without copying it to the pending list', async () => {
     const statusUpdate = makeDeferred()
     const initialAgent = makeAgentComment()
     const data: CommentDisplayData = {
@@ -138,45 +138,70 @@ describe('InlineCommentThread', () => {
     const { rerender } = render(InlineCommentThread, { props: setup.props })
 
     await fireEvent.click(screen.getByRole('button', {
-      name: 'Approve AI review comment and add to pending comments',
+      name: 'Approve AI review comment',
     }))
 
     expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'approved')
-    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
     expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
 
-    const latestPendingComments: ReviewSubmissionComment[] = [
-      { path: 'src/existing.ts', line: 3, side: 'LEFT', body: 'Added while approving' },
-    ]
     const latestAgentComments = [
       { ...initialAgent, body: 'Updated while approving', updated_at: 2 },
       makeAgentComment({ id: 8, body: 'Another AI comment' }),
     ]
-    await rerender({
-      ...setup.props,
-      pendingComments: latestPendingComments,
-      agentComments: latestAgentComments,
-    })
+    await rerender({ ...setup.props, agentComments: latestAgentComments })
 
     statusUpdate.resolve()
 
     await waitFor(() => {
-      expect(setup.onPendingCommentsChange).toHaveBeenCalledOnce()
-      expect(setup.onPendingCommentsChange).toHaveBeenCalledWith([
-        ...latestPendingComments,
-        {
-          path: 'src/example.ts',
-          line: 12,
-          side: 'RIGHT',
-          body: 'AI suggestion',
-        },
-      ])
       expect(setup.onAgentCommentsChange).toHaveBeenCalledOnce()
       expect(setup.onAgentCommentsChange).toHaveBeenCalledWith([
         { ...latestAgentComments[0], status: 'approved' },
         latestAgentComments[1],
       ])
     })
+    // Approval must NOT create a duplicate pending comment — that was the bug.
+    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
+  })
+
+  it('un-approves an approved AI comment back to pending', async () => {
+    const statusUpdate = makeDeferred()
+    const initialAgent = makeAgentComment({ status: 'approved' })
+    const data: CommentDisplayData = {
+      comments: [{
+        body: initialAgent.body,
+        type: 'agent',
+        commentId: initialAgent.id,
+        status: 'approved',
+      }],
+    }
+    const setup = makeProps({
+      data,
+      agentComments: [initialAgent],
+      onUpdateAgentCommentStatus: vi.fn(() => statusUpdate.promise),
+    })
+    const { rerender } = render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Un-approve AI review comment' }))
+
+    expect(setup.props.onUpdateAgentCommentStatus).toHaveBeenCalledWith(initialAgent.id, 'pending')
+    expect(setup.onAgentCommentsChange).not.toHaveBeenCalled()
+
+    const latestAgentComments = [
+      { ...initialAgent, body: 'Updated while un-approving', updated_at: 2 },
+      makeAgentComment({ id: 8, body: 'Another AI comment' }),
+    ]
+    await rerender({ ...setup.props, agentComments: latestAgentComments })
+
+    statusUpdate.resolve()
+
+    await waitFor(() => {
+      expect(setup.onAgentCommentsChange).toHaveBeenCalledOnce()
+      expect(setup.onAgentCommentsChange).toHaveBeenCalledWith([
+        { ...latestAgentComments[0], status: 'pending' },
+        latestAgentComments[1],
+      ])
+    })
+    expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
   })
 
   it('dismisses an AI comment using updated props after the status callback resolves', async () => {

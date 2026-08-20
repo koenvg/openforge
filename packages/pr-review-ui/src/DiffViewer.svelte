@@ -35,7 +35,7 @@
     pendingComments?: ReviewSubmissionComment[]
     onPendingCommentsChange?: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange?: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>

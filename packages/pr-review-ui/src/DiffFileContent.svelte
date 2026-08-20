@@ -35,7 +35,7 @@
     onSubmitInlineComment: (lineNumber: number, side: SplitSide, onClose: () => void) => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
