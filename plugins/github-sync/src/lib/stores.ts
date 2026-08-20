@@ -13,6 +13,8 @@ export const pendingReviewPrOpen = writable<ReviewPullRequest | null>(null)
 export const prFileDiffs = writable<PrFileDiff[]>([])
 export const reviewComments = writable<ReviewComment[]>([])
 export const pendingManualComments = writable<ReviewSubmissionComment[]>([])
+// Replies queued for the pending review (posted, threaded, when the review is submitted).
+export const pendingReplies = writable<{ commentId: number; body: string }[]>([])
 export const prOverviewComments = writable<PrOverviewComment[]>([])
 export const agentReviewComments = writable<AgentReviewComment[]>([])
 // Local "Ask the AI author" Q&A threads for the open PR's current head sha.

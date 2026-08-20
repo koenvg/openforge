@@ -48,6 +48,9 @@
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: { commentId: number; body: string }[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
     onSubmitReview: (request: {
       repoOwner: string
@@ -81,6 +84,9 @@
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
     onAskAgentStep,
     onSubmitReview,
   }: Props = $props()
@@ -518,6 +524,9 @@
           onReplyToThread={onReplyToThread}
           onAskAboutComment={onAskAboutComment}
           onReplyToExistingComment={onReplyToExistingComment}
+          pendingReplies={pendingReplies}
+          onAddReplyToReview={onAddReplyToReview}
+          onRemovePendingReply={onRemovePendingReply}
         >
           {#snippet footer()}
             {#if isFinalStep}
@@ -528,6 +537,7 @@
                 commitId={pr.head_sha}
                 pendingComments={pendingComments}
                 approvedAgentComments={approvedAgentSubmissionComments}
+                pendingReplyCount={pendingReplies.length}
                 onPendingCommentsChange={onPendingCommentsChange}
                 onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
                 onSubmitReview={onSubmitReview}

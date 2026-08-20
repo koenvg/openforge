@@ -3,7 +3,7 @@
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import { buildExtendData, type CommentDisplayData } from './diffComments'
+  import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
   import InlineCommentForm from './InlineCommentForm.svelte'
@@ -42,6 +42,9 @@
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: PendingReply[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
   }
 
   let {
@@ -76,6 +79,9 @@
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
   }: Props = $props()
 
   // The diff widget reports a SplitSide; local Q&A anchors use LEFT/RIGHT.
@@ -153,7 +159,7 @@
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
-    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments, aiThreads)}
+    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments, aiThreads, pendingReplies)}
     {diffViewMode}
     {diffViewWrap}
     {diffViewTheme}
@@ -176,6 +182,8 @@
         {onReplyToThread}
         {onAskAboutComment}
         {onReplyToExistingComment}
+        {onAddReplyToReview}
+        {onRemovePendingReply}
       />
     {/snippet}
     {#snippet renderWidgetLine({ lineNumber, side, onClose }: { lineNumber: number; side: SplitSide; diffFile: DiffFile; onClose: () => void })}

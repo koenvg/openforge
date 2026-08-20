@@ -51,6 +51,7 @@ vi.mock('../../lib/stores', () => ({
   prFileDiffs: writable([]),
   reviewComments: writable([]),
   pendingManualComments: writable([]),
+  pendingReplies: writable([]),
   prOverviewComments: writable([]),
   agentReviewComments: writable([]),
   aiThreads: writable([]),
@@ -63,6 +64,7 @@ import {
   aiThreads,
   authoredPrs,
   pendingManualComments,
+  pendingReplies,
   pendingReviewPrOpen,
   prFileDiffs,
   prOverviewComments,
@@ -159,6 +161,7 @@ function resetStores() {
   prFileDiffs.set([])
   reviewComments.set([])
   pendingManualComments.set([])
+  pendingReplies.set([])
   prOverviewComments.set([])
   agentReviewComments.set([])
   aiThreads.set([])

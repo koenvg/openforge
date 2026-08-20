@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   type UnlistenFn = Disposable
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, aiThreads, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, pendingReplies, prOverviewComments, agentReviewComments, aiThreads, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
@@ -522,6 +522,7 @@
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
+    $pendingReplies = []
     $prOverviewComments = []
     $agentReviewComments = []
     $aiThreads = []
@@ -580,6 +581,7 @@
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
+    $pendingReplies = []
     $prOverviewComments = []
     $agentReviewComments = []
     $aiThreads = []
@@ -710,8 +712,40 @@
         commitId: request.commitId,
       })
     } catch (error) {
-      if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) return
+      if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) {
+        await postPendingReplies(request)
+        return
+      }
       throw error
+    }
+    await postPendingReplies(request)
+  }
+
+  // Post replies queued via "Add to review" once the review itself is submitted.
+  // Each posts as a threaded reply; then clear the queue and refresh the threads.
+  async function postPendingReplies(request: { repoOwner: string; repoName: string; prNumber: number }) {
+    const queued = $pendingReplies
+    if (queued.length === 0) return
+    for (const reply of queued) {
+      try {
+        await githubSync.replyToReviewComment({
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+          commentId: reply.commentId, body: reply.body,
+        })
+      } catch (e) {
+        console.error('Failed to post queued reply:', e)
+      }
+    }
+    $pendingReplies = []
+    try {
+      const comments = await githubSync.listReviewComments({
+        owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+      })
+      if ($selectedReviewPr?.number === request.prNumber && $selectedReviewPr?.repo_owner === request.repoOwner) {
+        $reviewComments = comments
+      }
+    } catch (e) {
+      console.error('Failed to refresh comments after posting replies:', e)
     }
   }
 
@@ -927,6 +961,18 @@
     }
   }
 
+  // Queue a reply for the pending review (posted, threaded, at submit time).
+  function addReplyToReview(commentId: number, body: string) {
+    $pendingReplies = [...$pendingReplies, { commentId, body }]
+  }
+
+  // Drop a queued reply before submitting.
+  function removePendingReply(commentId: number) {
+    const index = $pendingReplies.findIndex(reply => reply.commentId === commentId)
+    if (index === -1) return
+    $pendingReplies = $pendingReplies.filter((_, i) => i !== index)
+  }
+
   // Post a single inline comment to GitHub immediately (the "Comment" action),
   // instead of holding it in the pending review, then refresh so it appears.
   async function commentNow(filename: string, line: number, side: 'LEFT' | 'RIGHT', body: string) {
@@ -1081,6 +1127,9 @@
       onReplyToThread={replyToThread}
       onAskAboutComment={askAboutComment}
       onReplyToExistingComment={replyToExistingComment}
+      pendingReplies={$pendingReplies}
+      onAddReplyToReview={addReplyToReview}
+      onRemovePendingReply={removePendingReply}
       onAskAgentStep={askAgentStep}
       onSendQuestionsToAgent={sendQuestionsToAgent}
       onSubmitReview={submitReview}

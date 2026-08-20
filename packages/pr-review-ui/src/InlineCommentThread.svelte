@@ -21,6 +21,10 @@
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     /** Post a threaded reply to an existing GitHub review comment. */
     onReplyToExistingComment?: (commentId: number, body: string) => void
+    /** Queue a reply for the pending review instead of posting it now. */
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    /** Remove a queued (pending) reply. */
+    onRemovePendingReply?: (commentId: number) => void
   }
 
   let {
@@ -34,6 +38,8 @@
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
+    onAddReplyToReview,
+    onRemovePendingReply,
   }: Props = $props()
 
   // Per-thread reply drafts for answered AI Q&A threads, keyed by thread id.
@@ -75,8 +81,20 @@
     const body = (existingReplyDrafts[comment.commentId] ?? '').trim()
     if (!body) return
     onReplyToExistingComment?.(comment.commentId, body)
+    clearReplyDraft(comment.commentId)
+  }
+
+  function addReplyToReview(comment: DisplayComment) {
+    if (comment.commentId === undefined) return
+    const body = (existingReplyDrafts[comment.commentId] ?? '').trim()
+    if (!body) return
+    onAddReplyToReview?.(comment.commentId, body)
+    clearReplyDraft(comment.commentId)
+  }
+
+  function clearReplyDraft(commentId: number) {
     const next = { ...existingReplyDrafts }
-    delete next[comment.commentId]
+    delete next[commentId]
     existingReplyDrafts = next
     replyOpenCommentId = null
   }
@@ -135,7 +153,7 @@
 
 <div class="w-full">
   {#each data.comments as comment}
-    <div class="{comment.isReply ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
+    <div class="{comment.isReply || comment.type === 'pending-reply' ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' || comment.type === 'pending-reply' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : comment.type === 'ai-thread' ? 'border-l-4 border-l-info' : ''}">
       <div class="flex items-center gap-2 mb-1.5">
         {#if comment.type === 'existing'}
           <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
@@ -214,6 +232,18 @@
           {#if comment.thread?.status === 'error'}
             <span class="text-error text-[0.7rem]">failed — send again</span>
           {/if}
+        {:else if comment.type === 'pending-reply'}
+          <span class="badge badge-warning badge-sm">Pending reply</span>
+          {#if onRemovePendingReply && comment.commentId !== undefined}
+            {@const commentId = comment.commentId}
+            <button
+              class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
+              aria-label="Remove pending reply"
+              onclick={() => onRemovePendingReply(commentId)}
+            >
+              <X size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
+          {/if}
         {:else}
           <span class="badge badge-warning badge-sm">Pending</span>
           <button
@@ -283,7 +313,10 @@
                 }}
                 onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitExistingReply(comment) } }}
               />
-              <button type="button" class="btn btn-xs btn-primary" onclick={() => submitExistingReply(comment)}>Reply</button>
+              {#if onAddReplyToReview}
+                <button type="button" class="btn btn-xs btn-outline" title="Hold this reply in your pending review" onclick={() => addReplyToReview(comment)}>Add to review</button>
+              {/if}
+              <button type="button" class="btn btn-xs btn-primary" title="Post this reply to GitHub now" onclick={() => submitExistingReply(comment)}>Reply</button>
             </div>
           {/if}
         {/if}

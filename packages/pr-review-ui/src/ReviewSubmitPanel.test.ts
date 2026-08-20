@@ -199,6 +199,12 @@ describe('ReviewSubmitPanel', () => {
     expect(screen.getByText('3 comments will be submitted')).toBeTruthy()
   })
 
+  it('counts queued replies and enables submitting when only replies are queued', async () => {
+    renderPanel({ pendingReplyCount: 2 })
+    expect(screen.getByText('2 comments will be submitted')).toBeTruthy()
+    expect(screen.getByText('Comment').closest('button')?.disabled).toBe(false)
+  })
+
   it('enables submitting when only approved AI comments exist (no summary, no pending)', async () => {
     const approvedAgentComments: ReviewSubmissionComment[] = [
       { path: 'file.ts', line: 20, side: 'RIGHT', body: 'approved AI' },

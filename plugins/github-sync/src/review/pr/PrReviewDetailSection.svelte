@@ -57,6 +57,9 @@
     onReplyToThread?: (threadId: string, body: string) => void
     onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: { commentId: number; body: string }[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
     onAskAgentStep?: (stepId: string, body: string) => void
     onSendQuestionsToAgent?: () => void
     onSubmitReview: (request: {
@@ -108,6 +111,9 @@
     onReplyToThread,
     onAskAboutComment,
     onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
     onAskAgentStep,
     onSendQuestionsToAgent,
     onSubmitReview,
@@ -248,6 +254,9 @@
       onReplyToThread={onReplyToThread}
       onAskAboutComment={onAskAboutComment}
       onReplyToExistingComment={onReplyToExistingComment}
+      pendingReplies={pendingReplies}
+      onAddReplyToReview={onAddReplyToReview}
+      onRemovePendingReply={onRemovePendingReply}
       onAskAgentStep={onAskAgentStep}
       onSubmitReview={onSubmitReview}
     />
@@ -303,6 +312,9 @@
           onReplyToThread={onReplyToThread}
           onAskAboutComment={onAskAboutComment}
           onReplyToExistingComment={onReplyToExistingComment}
+          pendingReplies={pendingReplies}
+          onAddReplyToReview={onAddReplyToReview}
+          onRemovePendingReply={onRemovePendingReply}
           {reviewedFileShas}
           onToggleFileReviewed={onToggleFileReviewed}
           getFileReviewIdentity={getReviewFileIdentity}
@@ -316,6 +328,7 @@
               commitId={pr.head_sha}
               pendingComments={pendingManualComments}
               approvedAgentComments={approvedAgentSubmissionComments}
+              pendingReplyCount={pendingReplies.length}
               onPendingCommentsChange={onPendingCommentsChange}
               onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
               onSubmitReview={onSubmitReview}

@@ -8,7 +8,7 @@ export interface CommentDisplayData {
   comments: Array<{
     body: string
     author?: string
-    type: 'existing' | 'pending' | 'agent' | 'ai-thread'
+    type: 'existing' | 'pending' | 'agent' | 'ai-thread' | 'pending-reply'
     createdAt?: string
     isReply?: boolean
     index?: number
@@ -20,6 +20,12 @@ export interface CommentDisplayData {
     /** Present when type === 'ai-thread': the local Q&A conversation to render. */
     thread?: AiThread
   }>
+}
+
+/** A reply queued for the pending review, keyed to the existing comment it answers. */
+export interface PendingReply {
+  commentId: number
+  body: string
 }
 
 /**
@@ -75,7 +81,8 @@ export function buildExtendData(
   existingComments: ReviewComment[],
   pendingComments: ReviewSubmissionComment[],
   agentComments: AgentReviewComment[] = [],
-  aiThreads: AiThread[] = []
+  aiThreads: AiThread[] = [],
+  pendingReplies: PendingReply[] = []
 ): {
   oldFile: Record<string, { data: CommentDisplayData }>
   newFile: Record<string, { data: CommentDisplayData }>
@@ -153,6 +160,21 @@ export function buildExtendData(
       body: comment.body,
       type: 'pending',
       index,
+    })
+  }
+
+  // Replies queued for the pending review render under the comment they answer,
+  // resolved to that comment's line/side (which must be on this file).
+  for (const pendingReply of pendingReplies) {
+    const parent = commentById.get(pendingReply.commentId)
+    if (!parent || parent.line === null) continue
+
+    const target = sideToSplitSide(parent.side) === 'oldFile' ? oldFile : newFile
+    const lineKey = String(parent.line)
+    ensureLine(target, lineKey).comments.push({
+      body: pendingReply.body,
+      type: 'pending-reply',
+      commentId: pendingReply.commentId,
     })
   }
 

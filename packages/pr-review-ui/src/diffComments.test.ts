@@ -794,6 +794,20 @@ describe('buildExtendData with AI threads', () => {
     expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
   })
 
+  it('places a pending reply under its parent comment line', () => {
+    const parent = { ...baseExistingComment, id: 1, path: 'src/main.ts', line: 20, side: 'RIGHT' }
+    const { newFile } = buildExtendData('src/main.ts', [parent], [], [], [], [{ commentId: 1, body: 'queued reply' }])
+    const entry = newFile['20'].data.comments.find(c => c.type === 'pending-reply')
+    expect(entry?.body).toBe('queued reply')
+    expect(entry?.commentId).toBe(1)
+  })
+
+  it('ignores a pending reply whose parent comment is not on this file', () => {
+    const { newFile } = buildExtendData('src/main.ts', [], [], [], [], [{ commentId: 999, body: 'orphan' }])
+    const hasPendingReply = Object.values(newFile).some(line => line.data.comments.some(c => c.type === 'pending-reply'))
+    expect(hasPendingReply).toBe(false)
+  })
+
   it('places a comment-anchored thread inline at its line, like a line thread', () => {
     const commentThread: AiThread = {
       ...thread,
