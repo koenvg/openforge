@@ -232,7 +232,41 @@ async fn run_headless_generation(
 
     // Always drop the registry entry so a finished generation can't be "aborted" later.
     generation_registry().lock().unwrap().remove(session_key);
-    result
+
+    // With a schema we run the CLI in `--output-format json`, whose stdout is a
+    // *result envelope* — the model's actual answer is the string in `result`.
+    // Callers expect the model's text, not the envelope, so unwrap it here (the
+    // text-format path returns raw stdout and is unaffected).
+    match result {
+        Ok(stdout) if output_schema.is_some() => unwrap_json_result_envelope(&stdout),
+        other => other,
+    }
+}
+
+/// The claude CLI's `--output-format json` wraps the model's answer in a result
+/// envelope (`{ "type": "result", "result": "<the model text>", ... }`). Callers
+/// want the model's text, so extract `result`. A non-`success` envelope surfaces
+/// as an error. Anything that isn't a recognizable envelope is returned unchanged
+/// so we never mangle raw output from a different CLI/version.
+fn unwrap_json_result_envelope(stdout: &str) -> Result<String, String> {
+    let envelope: serde_json::Value = match serde_json::from_str(stdout) {
+        Ok(value) => value,
+        Err(_) => return Ok(stdout.to_string()),
+    };
+    if envelope.get("type").and_then(|v| v.as_str()) != Some("result") {
+        return Ok(stdout.to_string());
+    }
+    if envelope.get("is_error").and_then(|v| v.as_bool()) == Some(true) {
+        let detail = envelope
+            .get("result")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error");
+        return Err(format!("agent generation reported an error: {detail}"));
+    }
+    match envelope.get("result").and_then(|v| v.as_str()) {
+        Some(result) => Ok(result.to_string()),
+        None => Ok(stdout.to_string()),
+    }
 }
 
 /// The directory the agent process runs in: an explicit checkout when provided,
@@ -524,6 +558,39 @@ mod tests {
         let deny = &args[deny_idx + 1];
         assert!(deny.contains("Write"));
         assert!(deny.contains("Edit"));
+    }
+
+    #[test]
+    fn unwrap_json_result_envelope_extracts_model_text() {
+        // Real shape of `claude --print --output-format json --json-schema` stdout:
+        // the model's answer is the *string* in `result`, wrapped in a result
+        // envelope. Callers want that inner text, not the envelope.
+        let envelope = r#"{"type":"result","subtype":"success","is_error":false,"result":"{\"steps\":[{\"id\":\"step-1\",\"title\":\"Hello\"}]}","structured_output":{"steps":[{"id":"step-1","title":"Hello"}]}}"#;
+        assert_eq!(
+            unwrap_json_result_envelope(envelope).unwrap(),
+            r#"{"steps":[{"id":"step-1","title":"Hello"}]}"#,
+        );
+    }
+
+    #[test]
+    fn unwrap_json_result_envelope_passes_through_non_envelope() {
+        // Raw schema JSON (not a result envelope) must be returned untouched so we
+        // never mangle output from a CLI/version that prints the answer directly.
+        let raw = r#"{"steps":[]}"#;
+        assert_eq!(unwrap_json_result_envelope(raw).unwrap(), raw);
+        // Non-JSON text is returned unchanged too (defensive: keep the raw output).
+        assert_eq!(
+            unwrap_json_result_envelope("plain text").unwrap(),
+            "plain text"
+        );
+    }
+
+    #[test]
+    fn unwrap_json_result_envelope_surfaces_error_envelopes() {
+        let envelope =
+            r#"{"type":"result","subtype":"error","is_error":true,"result":"rate limit exceeded"}"#;
+        let err = unwrap_json_result_envelope(envelope).expect_err("error envelope is an error");
+        assert!(err.contains("rate limit exceeded"));
     }
 
     #[test]
