@@ -245,6 +245,7 @@ export default defineBackendPlugin({
       headSha: string
       reviewPrId: number
       projectId: string | null
+      promptTemplate: string
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
@@ -252,11 +253,13 @@ export default defineBackendPlugin({
         await beginWalkthroughGeneration(openforge, params)
 
         // Fetch diffs server-side so the trigger works without the UI having loaded files,
-        // then compile the combined steps+review prompt here (not client-supplied).
+        // then compile the combined steps+review prompt here. The template is the
+        // resolved `pr_walkthrough_prompt` setting (global/project), passed from the UI;
+        // only the {{…}} placeholders are filled in with this PR's title/body/diffs.
         const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
           owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
         })
-        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files })
+        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files }, request.promptTemplate)
 
         // Kick off generation in the background so the UI gets its session key
         // immediately and can render the optimistic "generating" state. The

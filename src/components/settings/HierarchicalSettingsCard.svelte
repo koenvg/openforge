@@ -163,6 +163,15 @@
               oninput={(event) => onChange(setting.key, event.currentTarget.value)}
               data-testid={setting.key}
             />
+          {:else if setting.control === 'textarea'}
+            <textarea
+              class="textarea textarea-bordered w-full min-h-[12rem] font-mono text-xs leading-relaxed"
+              aria-label={setting.label}
+              value={currentValue(setting.key)}
+              disabled={disabled}
+              oninput={(event) => onChange(setting.key, event.currentTarget.value)}
+              data-testid={setting.key}
+            ></textarea>
           {:else if setting.control === 'plugins'}
             <div class="flex w-full flex-col gap-2">
               {#if pluginRows.length === 0}

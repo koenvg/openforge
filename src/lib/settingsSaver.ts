@@ -22,6 +22,7 @@ export interface GlobalSettingsSavePayload {
   githubPollInterval?: number
   useWorktrees?: boolean
   aiProvider?: string
+  walkthroughPrompt?: string
 }
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
@@ -50,4 +51,5 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   }
   if (payload.useWorktrees !== undefined) await setConfig('use_worktrees', payload.useWorktrees ? 'true' : 'false')
   if (payload.aiProvider !== undefined) await setConfig('ai_provider', payload.aiProvider)
+  if (payload.walkthroughPrompt !== undefined) await setConfig('pr_walkthrough_prompt', payload.walkthroughPrompt)
 }

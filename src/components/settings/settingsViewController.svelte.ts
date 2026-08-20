@@ -23,6 +23,7 @@ import {
   parseGitHubPollIntervalSeconds,
 } from '../../lib/settingsConfig'
 import type { ProjectSettingsConfig } from '../../lib/settingsConfig'
+import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
 import { getProjectIdentity, mergeUpdatedProject, resetProjectAndReload, resetProjectSettingAndReload } from '../../lib/settingsProjectSync'
 import { saveGlobalSettings, saveProjectSettings } from '../../lib/settingsSaver'
 import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
@@ -92,6 +93,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
   let globalUseWorktrees = $state(true)
   let globalAiProvider = $state('claude-code')
+  let globalWalkthroughPrompt = $state(DEFAULT_PR_WALKTHROUGH_PROMPT)
   let globalPluginDefaults = $state<Map<string, boolean>>(new Map())
   let globalSettingsLoaded = $state(false)
   let globalSettingsLoadError = $state<string | null>(null)
@@ -146,6 +148,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     use_worktrees: globalUseWorktrees ? 'true' : 'false',
     task_id_prefix: taskIdPrefix,
     github_poll_interval: String(githubPollInterval),
+    pr_walkthrough_prompt: globalWalkthroughPrompt,
   })
   const projectHierarchyValues = $derived<Record<string, string>>(
     computeEffectiveProjectSettings(globalHierarchyValues, projectRawOverrides),
@@ -217,6 +220,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       githubPollInterval = globalSettings.githubPollInterval
       globalUseWorktrees = globalSettings.useWorktrees
       globalAiProvider = globalSettings.aiProvider
+      globalWalkthroughPrompt = globalSettings.walkthroughPrompt
       globalSettingsLoaded = true
     } catch (value) {
       globalSettingsLoadError = getErrorMessage(value)
@@ -401,6 +405,9 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       case 'github_poll_interval':
         githubPollInterval = parseGitHubPollIntervalSeconds(value)
         break
+      case 'pr_walkthrough_prompt':
+        globalWalkthroughPrompt = value
+        break
     }
     const changesByConfigKey: Record<string, GlobalSettingsSavePayload> = {
       code_cleanup_tasks_enabled: { codeCleanupTasksEnabled: isCodeCleanupTasksEnabled },
@@ -411,6 +418,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       use_worktrees: { useWorktrees: globalUseWorktrees },
       task_id_prefix: { taskIdPrefix },
       github_poll_interval: { githubPollInterval },
+      pr_walkthrough_prompt: { walkthroughPrompt: globalWalkthroughPrompt },
     }
     scheduleSave(changesByConfigKey[key])
   }

@@ -32,6 +32,7 @@ import {
   loadProjectSettings,
   loadWhisperModelStatuses,
 } from './settingsConfig'
+import { DEFAULT_PR_WALKTHROUGH_PROMPT } from './prWalkthroughPrompt'
 
 describe('settingsConfig', () => {
   beforeEach(() => {
@@ -120,10 +121,11 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('45')
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('opencode')
+        .mockResolvedValueOnce('Custom walkthrough prompt')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(7)
+      expect(getConfig).toHaveBeenCalledTimes(8)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
@@ -132,6 +134,7 @@ describe('settingsConfig', () => {
         githubPollInterval: 45,
         useWorktrees: false,
         aiProvider: 'opencode',
+        walkthroughPrompt: 'Custom walkthrough prompt',
       })
     })
 
@@ -153,6 +156,7 @@ describe('settingsConfig', () => {
         githubPollInterval: 60,
         useWorktrees: true,
         aiProvider: 'claude-code',
+        walkthroughPrompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
       })
     })
 

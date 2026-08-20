@@ -2,6 +2,13 @@ import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 import promptTemplate from './walkthroughPrompt.md?raw'
 
+/**
+ * Built-in walkthrough + AI-review prompt template. Also the runtime fallback when
+ * the `pr_walkthrough_prompt` setting is unset. Kept byte-identical to the core
+ * copy (`src/lib/prWalkthroughPrompt.md`) via prWalkthroughPrompt.test.ts.
+ */
+export const DEFAULT_WALKTHROUGH_PROMPT = promptTemplate
+
 export interface WalkthroughPromptInput {
   title: string
   body: string | null
@@ -9,13 +16,16 @@ export interface WalkthroughPromptInput {
 }
 
 /**
- * Fills the standalone prompt template (`walkthroughPrompt.md`) with this PR's
- * title, description, and changed-file diffs. The template holds the static
- * instructions so it can be viewed and shared on its own; only the `{{…}}`
- * placeholders are substituted here. Function replacements are used so `$`
- * sequences in titles/bodies/diffs are inserted literally.
+ * Fills the prompt template with this PR's title, description, and changed-file
+ * diffs. The template defaults to the built-in one but can be overridden (the
+ * configurable `pr_walkthrough_prompt` setting is resolved by the caller and
+ * passed in). Only the `{{…}}` placeholders are substituted; function
+ * replacements are used so `$` sequences in titles/bodies/diffs are literal.
  */
-export function compileWalkthroughPrompt(input: WalkthroughPromptInput): string {
+export function compileWalkthroughPrompt(
+  input: WalkthroughPromptInput,
+  template: string = promptTemplate,
+): string {
   const trimmedBody = input.body?.trim() ?? ''
   const prDescription = trimmedBody.length > 0 ? `## PR Description\n${trimmedBody}\n\n` : ''
 
@@ -24,7 +34,7 @@ export function compileWalkthroughPrompt(input: WalkthroughPromptInput): string 
       ? '(no files in this PR)'
       : input.files.map(fileSection).join('\n\n')
 
-  return promptTemplate
+  return template
     .replace('{{PR_TITLE}}', () => input.title)
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
     .replace('{{CHANGED_FILES}}', () => changedFiles)

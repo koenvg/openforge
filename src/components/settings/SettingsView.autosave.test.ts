@@ -224,6 +224,7 @@ describe('SettingsView auto-save', () => {
       resolvers.get('github_poll_interval')?.('60')
       resolvers.get('use_worktrees')?.('true')
       resolvers.get('ai_provider')?.('claude-code')
+      resolvers.get('pr_walkthrough_prompt')?.('Prompt')
 
       await vi.waitFor(() => {
         expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)

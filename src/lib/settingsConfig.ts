@@ -11,6 +11,7 @@ import {
 } from './ipc'
 import { RUN_COMMAND_CONFIG_KEY } from './runAppCommand'
 import { HIERARCHICAL_SETTINGS } from './hierarchicalSettings'
+import { DEFAULT_PR_WALKTHROUGH_PROMPT } from './prWalkthroughPrompt'
 import type { TaskState } from './taskState'
 import type { ClaudeInstallStatus, WhisperModelStatus } from './types'
 
@@ -40,6 +41,7 @@ export interface GlobalSettingsConfig {
   githubPollInterval: number
   useWorktrees: boolean
   aiProvider: string
+  walkthroughPrompt: string
 }
 
 export interface InstallationStatus {
@@ -106,6 +108,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
   useWorktrees: true,
   aiProvider: 'claude-code',
+  walkthroughPrompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
@@ -144,7 +147,7 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
@@ -152,6 +155,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     getConfig('github_poll_interval'),
     getConfig('use_worktrees'),
     getConfig('ai_provider'),
+    getConfig('pr_walkthrough_prompt'),
   ])
 
   return {
@@ -162,6 +166,9 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
     useWorktrees: useWorktrees == null ? DEFAULT_GLOBAL_SETTINGS.useWorktrees : useWorktrees === 'true',
     aiProvider: aiProvider ?? DEFAULT_GLOBAL_SETTINGS.aiProvider,
+    walkthroughPrompt: (walkthroughPrompt != null && walkthroughPrompt.length > 0)
+      ? walkthroughPrompt
+      : DEFAULT_GLOBAL_SETTINGS.walkthroughPrompt,
   }
 }
 
