@@ -129,6 +129,18 @@ where
 {
     let serve_result = serve.await;
 
+    // Outside the cleanup budget on purpose. A git fetch still running when
+    // Electron escalates to SIGKILL is reparented to pid 1 and keeps running
+    // across restarts, so signalling it must not depend on the bounded steps
+    // below finishing. SIGTERM first: git unlinks its lockfiles on it.
+    let signalled_fetches = crate::git_origin_fetch::terminate_active_git_fetches();
+    if signalled_fetches > 0 {
+        info!(
+            "[http_server] Signalled {} running git fetch process group(s) during shutdown",
+            signalled_fetches
+        );
+    }
+
     if tokio::time::timeout(
         SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
         shutdown_sidecar_runtime(state, companion_restore),
@@ -139,6 +151,15 @@ where
         warn!(
             "[http_server] Rust sidecar shutdown cleanup timed out after {:?}",
             SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT
+        );
+    }
+
+    // Whatever ignored SIGTERM through the whole cleanup window is out of chances.
+    let killed_fetches = crate::git_origin_fetch::kill_active_git_fetches();
+    if killed_fetches > 0 {
+        warn!(
+            "[http_server] Killed {} git fetch process group(s) that ignored SIGTERM",
+            killed_fetches
         );
     }
 

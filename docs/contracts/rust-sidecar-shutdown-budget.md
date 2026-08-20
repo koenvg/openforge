@@ -11,7 +11,15 @@ This contract keeps Electron quit cleanup from reporting false failures while st
 2. **Electron sends `SIGTERM`** to the Rust sidecar process.
    - Electron waits **7,000ms** (`RUST_SIDECAR_SIGTERM_GRACE_MS`) for a graceful process exit.
 3. **Rust internal cleanup** runs after the HTTP server graceful shutdown completes.
+   - Before the bounded steps, Rust `SIGTERM`s the process group of every in-flight
+     `git fetch origin` (`git_origin_fetch::terminate_active_git_fetches`). Signalling is
+     immediate and outside the budget on purpose: without it a hung fetch is reparented to
+     pid 1 by the `SIGKILL` in step 4 and keeps running across restarts, so a stalled
+     cleanup step must not be able to starve it. `SIGTERM` rather than `SIGKILL` because
+     git unlinks its ref lockfiles on it.
    - Rust bounds plugin-sidecar and PTY cleanup to **5,000ms** (`SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT`).
+   - After that window, anything that ignored the `SIGTERM` is `SIGKILL`ed
+     (`git_origin_fetch::kill_active_git_fetches`).
 4. **Electron escalates to `SIGKILL`** only if the sidecar process has not exited after the SIGTERM grace.
    - A successful escalation returns a structured `killed` report and is considered completed quit cleanup, not a failure.
 5. **Electron shutdown coordinator deadline** bounds the whole Rust sidecar adapter to **8,000ms** (`RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS`).
@@ -48,4 +56,4 @@ Electron event-stream teardown timeout (250ms)
 - `src/electron/bootLifecycle.test.ts` asserts the exact Electron budget values and ordering, and verifies boot shutdown passes the 7s SIGTERM grace to the sidecar handle.
 - `src/electron/shutdown.test.ts` asserts successful forced sidecar kills do not create failure reports.
 - `src/electron/sidecar.test.ts` covers event-stream teardown before process `SIGTERM`, including the hung-stream timeout path.
-- `src-tauri/src/http_server_tests/shutdown.rs` asserts the Rust cleanup timeout stays at 5s and below Electron's 7s SIGTERM grace.
+- `src-tauri/src/http_server_tests/shutdown.rs` asserts the Rust cleanup timeout stays at 5s and below Electron's 7s SIGTERM grace, and that a hung `git fetch origin` is signalled before the bounded cleanup runs.

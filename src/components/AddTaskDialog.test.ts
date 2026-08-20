@@ -78,6 +78,11 @@ async function clickAddToBacklogFromMore() {
   await fireEvent.click(await screen.findByRole('button', { name: 'Add to backlog' }))
 }
 
+/** Leaves the branch listing pending forever, the way a stalled origin does. */
+function stubBranchListNeverResolves() {
+  vi.mocked(listGitBranches).mockReturnValue(new Promise(() => {}))
+}
+
 async function expandEnvironment() {
   await fireEvent.click(await screen.findByRole('button', { name: 'Edit environment' }))
 }
@@ -283,6 +288,73 @@ describe('AddTaskDialog', () => {
         PROJECT_DIRECTORY_OPTIONS,
       )
     })
+  })
+
+  it('accepts task creation while the branch list is still loading', async () => {
+    // A slow or dead remote must not gate submission: the branch list is only
+    // needed when the task starts from an existing branch.
+    stubBranchListNeverResolves()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Create while branches load' } })
+
+    const startButton = await screen.findByRole('button', { name: /Start Task/ }) as HTMLButtonElement
+    await waitFor(() => {
+      expect(startButton.disabled).toBe(false)
+    })
+    expect(screen.queryByText('Loading task defaults…')).toBeNull()
+
+    await clickAddToBacklogFromMore()
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        'Create while branches load',
+        'backlog',
+        'test-project-id',
+        'default',
+        DEFAULT_WORKTREE_OPTIONS,
+      )
+    })
+  })
+
+  it('reports the branch list as loading rather than empty while it loads', async () => {
+    stubBranchListNeverResolves()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await expandEnvironment()
+    await fireEvent.click(screen.getByLabelText('Existing branch'))
+
+    expect(await screen.findByText('Loading branches…')).toBeTruthy()
+    expect(screen.queryByText('No branches available')).toBeNull()
+  })
+
+  it('reports the branch list as loading before the task defaults resolve', async () => {
+    // The repo to list branches from is only known once the defaults resolve, so
+    // the selector must not claim there are none during that window either.
+    vi.mocked(repoHasCommits).mockReturnValue(new Promise(() => {}))
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await expandEnvironment()
+    await fireEvent.click(screen.getByLabelText('Existing branch'))
+
+    expect(await screen.findByText('Loading branches…')).toBeTruthy()
+    expect(listGitBranches).not.toHaveBeenCalled()
+  })
+
+  it('explains that branches are still loading when starting from an existing branch too early', async () => {
+    stubBranchListNeverResolves()
+    render(AddTaskDialog, { props: { mode: 'create', projectPath: '/repo' } })
+
+    await expandEnvironment()
+    await fireEvent.click(screen.getByLabelText('Existing branch'))
+    const textbox = await findPromptTextbox()
+    await fireEvent.input(textbox, { target: { value: 'Too early for a branch' } })
+    await clickAddToBacklogFromMore()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Branches are still loading.')
+    expect(createTask).not.toHaveBeenCalled()
   })
 
   it('uses the project default when new tasks should start in the project directory', async () => {

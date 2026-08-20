@@ -17,6 +17,7 @@ mod db;
 mod diff_parser;
 mod frontend_host_request_transport;
 mod git_clone;
+mod git_origin_fetch;
 mod git_worktree;
 mod github_client;
 mod github_poller;

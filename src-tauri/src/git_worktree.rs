@@ -1,3 +1,6 @@
+use crate::git_origin_fetch::{
+    fetch_origin, spawn_background_origin_refresh, ORIGIN_FETCH_TIMEOUT,
+};
 use crate::user_environment::user_tool_path;
 use dashmap::DashMap;
 use log::{info, warn};
@@ -164,10 +167,18 @@ fn safe_subprocess_current_dir() -> PathBuf {
     }
 }
 
-fn git_command() -> Command {
+pub(crate) fn git_command() -> Command {
     let mut command = Command::new("git");
     command.env("PATH", user_tool_path());
     command.current_dir(safe_subprocess_current_dir());
+    // The sidecar has no terminal to answer a credential prompt on, so a git
+    // command that decides to ask would block until something kills it.
+    command.env("GIT_TERMINAL_PROMPT", "0");
+    // Own process group: git's network work happens in a child (ssh, or a remote
+    // helper), and that child is what hangs. Signalling the group takes the whole
+    // tree down instead of leaving descendants behind.
+    #[cfg(unix)]
+    command.process_group(0);
     command
 }
 
@@ -410,7 +421,7 @@ async fn inspect_existing_branch_inner(
     validate_repository_path_access(repo_path)?;
 
     let remote_reachable = if refresh_origin {
-        fetch_origin_succeeded(repo_path).await
+        fetch_origin(repo_path, ORIGIN_FETCH_TIMEOUT).await
     } else {
         false
     };
@@ -493,45 +504,10 @@ async fn classify_local_branch_against_remote(
     Ok(LocalBranchRelation::AheadOrDiverged { ahead, behind })
 }
 
-async fn fetch_origin_best_effort(repo_path: &Path) -> Result<(), GitWorktreeError> {
-    let _ = fetch_origin_succeeded(repo_path).await;
-    Ok(())
-}
-
-/// Fetches origin without ever failing the caller, returning whether the fetch
-/// actually succeeded so callers that need to know the remote was reachable
-/// (e.g. the pre-flight inspection) can report a "possibly stale" comparison.
-async fn fetch_origin_succeeded(repo_path: &Path) -> bool {
-    let fetch_output = match git_command()
-        .arg("-C")
-        .arg(repo_path)
-        .arg("fetch")
-        .arg("origin")
-        .output()
-        .await
-    {
-        Ok(output) => output,
-        Err(e) => {
-            warn!("Warning: git fetch origin could not run: {}", e);
-            return false;
-        }
-    };
-
-    if !fetch_output.status.success() {
-        warn!(
-            "Warning: git fetch origin failed status={} stderr_bytes={}",
-            fetch_output.status,
-            fetch_output.stderr.len()
-        );
-        return false;
-    }
-
-    true
-}
-
 pub async fn list_git_branches(repo_path: &Path) -> Result<Vec<GitBranchInfo>, GitWorktreeError> {
     validate_repository_path_access(repo_path)?;
-    fetch_origin_best_effort(repo_path).await?;
+    // Local refs first: a stale branch list beats a dialog that never loads.
+    spawn_background_origin_refresh(repo_path);
 
     let output = git_command()
         .arg("-C")
@@ -837,8 +813,9 @@ pub async fn create_worktree(
         );
     }
 
-    // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
-    fetch_origin_best_effort(repo_path).await?;
+    // Refresh origin so the base ref (e.g. origin/main) is up to date. Best
+    // effort: an unreachable remote means an older base, not a failed worktree.
+    let _ = fetch_origin(repo_path, ORIGIN_FETCH_TIMEOUT).await;
 
     if worktree_path.exists() {
         return Ok(());
@@ -909,7 +886,7 @@ pub async fn create_worktree_from_existing_branch(
         );
     }
 
-    fetch_origin_best_effort(repo_path).await?;
+    let _ = fetch_origin(repo_path, ORIGIN_FETCH_TIMEOUT).await;
 
     if git_ref_exists(repo_path, &format!("refs/heads/{branch_ref}")).await? {
         if existing_worktree_path_matches_branch(repo_path, worktree_path, branch_ref).await? {
@@ -1543,6 +1520,7 @@ mod tests {
     use super::*;
     use std::ffi::OsStr;
     use std::process::{Command as StdCommand, Output};
+    use std::time::Duration;
 
     fn git(repo_path: &Path, args: &[&str]) -> Output {
         StdCommand::new("git")
@@ -1746,6 +1724,36 @@ mod tests {
             !branches.iter().any(|branch| branch.name == "origin/HEAD"),
             "remote HEAD aliases should not be shown as selectable branches"
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn list_git_branches_returns_local_refs_while_the_origin_fetch_hangs() {
+        use crate::git_origin_fetch::hanging_fetch_test_support::*;
+
+        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        let pid_file = init_repo_with_hanging_origin(&repo_path);
+        assert_git_success(&repo_path, &["branch", "feature/hangs-on-fetch"]);
+
+        let branches = tokio::time::timeout(Duration::from_secs(20), list_git_branches(&repo_path))
+            .await
+            .expect("listing branches must not wait on a fetch that never returns")
+            .expect("branches should list");
+
+        assert!(
+            branches
+                .iter()
+                .any(|branch| branch.name == "feature/hangs-on-fetch"),
+            "local refs must be returned even when origin is unreachable"
+        );
+
+        // The background refresh is still hanging; take it down so the fixture
+        // cannot outlive the test.
+        let helper_pid = wait_for_recorded_pid(&pid_file).await;
+        terminate_fetch_process_group(process_group_of(helper_pid));
+        assert_process_exits(helper_pid).await;
     }
 
     fn init_uncommitted_repo(repo_path: &Path) {
