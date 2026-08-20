@@ -199,11 +199,31 @@ There is no `validatePluginMetadata` export. Use `validateOpenForgePackageMetada
 Supported `requires` capabilities are:
 
 ```ts
-'commands' | 'events' | 'views' | 'taskPane' | 'settings' | 'background' |
-'backend' | 'storage' | 'context' | 'navigation' | 'tasks' | 'projects' |
-'fs' | 'shell' | 'notifications' | 'attention' | 'system.openUrl' |
-'system.writeClipboardText' |
-'config' | 'projectConfig'
+export type OpenForgePluginCapability =
+  | 'commands'
+  | 'events'
+  | 'views'
+  | 'injectionPoints'
+  | 'taskPane'
+  | 'taskStart'
+  | 'settings'
+  | 'background'
+  | 'backend'
+  | 'storage'
+  | 'context'
+  | 'navigation'
+  | 'tasks'
+  | 'projects'
+  | 'fs'
+  | 'shell'
+  | 'notifications'
+  | 'attention'
+  | 'system.openUrl'
+  | 'system.writeClipboardText'
+  | 'config'
+  | 'projectConfig'
+  | 'browserSurfaces'
+  | 'taskLinks'
 ```
 
 Manifest contribution arrays are not supported. `validateOpenForgePackageMetadata` rejects a `contributes` field with the message that contribution arrays are not supported; register contributions at runtime in `activate()` instead.

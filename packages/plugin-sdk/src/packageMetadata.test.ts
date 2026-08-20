@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import {
@@ -213,5 +215,17 @@ describe('package.json#openforge metadata contract', () => {
       apiVersion: 2,
       requires: ['schemaOnlyCapability'],
     }))).toEqual([])
+  })
+
+  it('documents every capability from the canonical package metadata schema', () => {
+    const reference = readFileSync(resolve(import.meta.dirname, '../../../docs/plugins/sdk-reference.md'), 'utf8')
+    const capabilitySection = reference.match(/Supported `requires` capabilities are:\s+```ts\n(?<union>[\s\S]*?)\n```/)
+
+    expect(capabilitySection?.groups?.union).toBeDefined()
+
+    const documentedCapabilities = [...capabilitySection!.groups!.union.matchAll(/'([^']+)'/g)]
+      .map(([, capability]) => capability)
+
+    expect(documentedCapabilities).toEqual(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.requires.items.enum)
   })
 })
