@@ -437,6 +437,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('get_authored_prs')).toBe(true)
     expect(isSidecarBackedCommand('fs_read_dir')).toBe(true)
     expect(isSidecarBackedCommand('fs_read_file')).toBe(true)
+    expect(isSidecarBackedCommand('fs_write_file')).toBe(true)
     expect(isSidecarBackedCommand('fs_search_files')).toBe(true)
     expect(isSidecarBackedCommand('get_task_diff')).toBe(true)
     expect(isSidecarBackedCommand('get_task_file_contents')).toBe(true)

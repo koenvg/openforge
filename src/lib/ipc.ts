@@ -655,6 +655,10 @@ export async function fsReadFile(projectId: string, filePath: string): Promise<F
   return invoke<FileContent>("fs_read_file", { projectId, filePath });
 }
 
+export async function fsWriteFile(projectId: string, filePath: string, content: string): Promise<void> {
+  return invoke<void>("fs_write_file", { projectId, filePath, content });
+}
+
 export async function fsSearchFiles(projectId: string, query: string, limit: number = 50): Promise<string[]> {
   return invoke<string[]>("fs_search_files", { projectId, query, limit });
 }

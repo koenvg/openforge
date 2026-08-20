@@ -69,6 +69,20 @@ pub(super) async fn handle_app_files_review_command(
                     .map_err(app_project_fs_error)?,
             )?
         }
+        "fs_write_file" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let file_path = payload_string(&request.payload, "filePath")?;
+            let content = payload_string(&request.payload, "content")?;
+            let project_root = app_project_root(state, &project_id)?;
+            crate::project_fs::write_file(
+                std::path::Path::new(&project_root),
+                &file_path,
+                &content,
+            )
+            .await
+            .map_err(app_project_fs_error)?;
+            serde_json::Value::Null
+        }
         "fs_search_files" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let query = payload_string(&request.payload, "query")?;
