@@ -11,6 +11,7 @@
   import type { AiThread, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
+  import { walkthroughReadyFirst } from '../../lib/reviewListSort'
   import {
     getPrReviewFilesKey,
     loadPrReviewedFileShas,
@@ -157,10 +158,19 @@
   let filteredReviewPrs = $derived($reviewPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
   let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
 
-  // PRs labeled "DO NOT REVIEW" always sort to the bottom of the review list. The authored
+  // PRs whose walkthrough + AI review has finished generating ('ready') are lifted
+  // to the top so reviewers reach the prepared ones first. Computed from the
+  // reactive walkthroughByPr map, keyed to each PR's current head sha.
+  let readyReviewPrIds = $derived(new Set(
+    filteredReviewPrs
+      .filter(pr => walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha) === 'ready')
+      .map(pr => pr.id),
+  ))
+  // PRs labeled "DO NOT REVIEW" always sort to the bottom of the review list (applied
+  // after the ready-first lift so a do-not-review PR never jumps up). The authored
   // list ignores that label — it tells reviewers to skip a PR, not its author — and is
   // ordered by attention instead, per repo section in groupedAuthoredPrs below.
-  let sortedReviewPrs = $derived(sortDoNotReviewLast(filteredReviewPrs))
+  let sortedReviewPrs = $derived(sortDoNotReviewLast(walkthroughReadyFirst(filteredReviewPrs, readyReviewPrIds)))
   let sortedAuthoredPrs = $derived(filteredAuthoredPrs)
 
   // Text input for manually adding repos

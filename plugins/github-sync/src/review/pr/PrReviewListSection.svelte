@@ -191,33 +191,36 @@
                         selected={false}
                         onClick={() => onSelectPr(pr)}
                         onMarkUnread={() => onMarkUnread(pr)}
-                      />
-                      <div class="mt-1.5 px-1">
-                        {#if wtState === 'ready'}
-                          <span class="inline-flex items-center gap-1 text-xs text-success" aria-label="Walkthrough ready">
-                            <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
-                            Walkthrough ready
-                          </span>
-                        {:else if wtState === 'generating'}
-                          <button type="button" class="btn btn-xs btn-ghost gap-1" disabled aria-label="Generating walkthrough">
-                            <span class="loading loading-spinner loading-xs"></span>
-                            Generating…
-                          </button>
-                        {:else}
-                          <button
-                            type="button"
-                            class="btn btn-xs btn-outline"
-                            aria-label="Generate walkthrough and AI review"
-                            onclick={(e) => { e.stopPropagation(); onGenerateWalkthrough(pr) }}
-                          >
-                            {wtState === 'stale'
-                              ? 'Regenerate — new commits'
-                              : wtState === 'error'
-                                ? 'Retry — generation failed'
-                                : 'Generate Walkthrough + AI Review'}
-                          </button>
-                        {/if}
-                      </div>
+                      >
+                        {#snippet footer()}
+                          <div class="pt-1">
+                            {#if wtState === 'ready'}
+                              <span class="inline-flex items-center gap-1 text-xs text-success" aria-label="Walkthrough ready">
+                                <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
+                                Walkthrough ready
+                              </span>
+                            {:else if wtState === 'generating'}
+                              <button type="button" class="btn btn-xs btn-ghost gap-1" disabled aria-label="Generating walkthrough">
+                                <span class="loading loading-spinner loading-xs"></span>
+                                Generating…
+                              </button>
+                            {:else}
+                              <button
+                                type="button"
+                                class="btn btn-xs btn-outline"
+                                aria-label="Generate walkthrough and AI review"
+                                onclick={(e) => { e.stopPropagation(); onGenerateWalkthrough(pr) }}
+                              >
+                                {wtState === 'stale'
+                                  ? 'Regenerate — new commits'
+                                  : wtState === 'error'
+                                    ? 'Retry — generation failed'
+                                    : 'Generate Walkthrough + AI Review'}
+                              </button>
+                            {/if}
+                          </div>
+                        {/snippet}
+                      </ReviewPrCard>
                     </div>
                   {/each}
                 </div>

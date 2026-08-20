@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import { hasDoNotReviewLabel } from '@openforge-app/plugin-sdk/domain'
   import Card from './ui/Card.svelte'
@@ -12,9 +13,11 @@
     selected?: boolean
     onClick: () => void
     onMarkUnread?: () => void
+    /** Optional content rendered inside the card, below the labels (e.g. walkthrough controls). */
+    footer?: Snippet
   }
 
-  let { pr, selected = false, onClick, onMarkUnread }: Props = $props()
+  let { pr, selected = false, onClick, onMarkUnread, footer }: Props = $props()
 
   const MAX_VISIBLE_LABELS = 4
   let visibleLabels = $derived((pr.labels ?? []).slice(0, MAX_VISIBLE_LABELS))
@@ -87,6 +90,12 @@
       {#if overflowCount > 0}
         <span class="badge badge-sm badge-ghost">+{overflowCount}</span>
       {/if}
+    </div>
+  {/if}
+
+  {#if footer}
+    <div class="mt-0.5">
+      {@render footer()}
     </div>
   {/if}
 </Card>
