@@ -212,7 +212,7 @@
 <SettingsSectionCard id="section-plugins" title="Plugins" {disabled}>
   {#snippet icon()}<Blocks size={16} />{/snippet}
   <div class="flex flex-col gap-6">
-    <PluginFolderPanel {disabled} />
+    <PluginFolderPanel {activeProjectId} {disabled} />
 
     <form class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30" onsubmit={handleInstall}>
       <div class="flex flex-col gap-1">

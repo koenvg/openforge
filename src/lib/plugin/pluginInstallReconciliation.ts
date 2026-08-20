@@ -11,7 +11,7 @@ import {
   loadEnabledPluginIdsForProject,
 } from './pluginStore'
 import { activatePlugin, deactivatePluginById } from './pluginActivationLifecycle'
-import { setPluginRuntimeError, upsertInstalledPlugin } from './pluginInstallState'
+import { installFromLocal, setPluginRuntimeError, upsertInstalledPlugin } from './pluginInstallState'
 import { ensurePluginBackendReady } from './pluginHostCommands'
 
 export async function uninstallPlugin(pluginId: string): Promise<void> {
@@ -104,6 +104,35 @@ export async function reloadPluginForProject(projectId: string, pluginId: string
   }
 
   return activateEnabledPlugin(pluginId)
+}
+
+/**
+ * Re-apply a plugin that is installed straight from a folder on disk.
+ *
+ * Local installs point at the source folder rather than a managed copy, so a rebuild is
+ * already on disk — but nothing picks it up on its own. The recorded row still carries the
+ * metadata captured at install time, and the renderer still holds the module it imported
+ * from the unchanged `plugin://` URL. Reinstalling refreshes the row; the reload cycle bumps
+ * the frontend reload generation so the next import is cache-busted.
+ *
+ * With no active project there is nothing to reactivate into, but the generation bump is
+ * renderer-wide, so whichever project is opened next imports the rebuilt bundle.
+ *
+ * Throws when the package on disk no longer installs (an unbuilt or broken rebuild).
+ */
+export async function reloadLocalPluginFromDisk(
+  pluginId: string,
+  sourcePath: string,
+  projectId: string | null,
+): Promise<void> {
+  await installFromLocal(sourcePath, '')
+
+  if (!projectId) {
+    await deactivatePluginById(pluginId)
+    return
+  }
+
+  await reloadPluginForProject(projectId, pluginId)
 }
 
 async function reconcileLoadedPlugins(): Promise<void> {

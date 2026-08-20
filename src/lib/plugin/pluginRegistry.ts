@@ -20,6 +20,7 @@ export {
   enablePluginForProject,
   loadEnabledForProject,
   reloadInstalledPluginMetadata,
+  reloadLocalPluginFromDisk,
   reloadPluginForProject,
   uninstallPlugin,
 } from './pluginInstallReconciliation'

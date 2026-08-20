@@ -147,6 +147,7 @@ import {
   enablePluginForProject,
   disablePluginForProject,
   reloadInstalledPluginMetadata,
+  reloadLocalPluginFromDisk,
   reloadPluginForProject,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from './pluginStore'
@@ -1278,6 +1279,128 @@ describe('pluginRegistry', () => {
       state: 'active',
       error: null,
     })
+  })
+
+  it('reloadLocalPluginFromDisk re-reads the package so the recorded version catches up with the folder', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', version: '1.0.0' })
+    const rebuiltRow = {
+      ...makeNormalized('reload-plugin'),
+      version: '1.1.0',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+      installPath: '/plugins/reload-plugin',
+    }
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      installPath: '/plugins/reload-plugin',
+    }]]))
+    installPluginFromLocalIpcMock.mockResolvedValue(rebuiltRow)
+    getPluginIpcMock.mockResolvedValue(rebuiltRow)
+    getEnabledPluginsMock.mockResolvedValue([rebuiltRow])
+    loadPluginFrontendMock.mockResolvedValue({
+      pluginId: 'reload-plugin',
+      module: defineFrontendPlugin({ activate: vi.fn(() => undefined) }),
+    })
+
+    await reloadLocalPluginFromDisk('reload-plugin', '/plugins/reload-plugin', 'project-1')
+
+    expect(installPluginFromLocalIpcMock).toHaveBeenCalledWith('/plugins/reload-plugin')
+    expect(get(installedPlugins).get('reload-plugin')?.manifest.version).toBe('1.1.0')
+  })
+
+  it('reloadLocalPluginFromDisk cache-busts the frontend import so a rebuilt bundle replaces the cached one', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const row = {
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: './dist/frontend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+      installPath: '/plugins/reload-plugin',
+    }
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      sourceKind: 'local',
+      installPath: '/plugins/reload-plugin',
+    }]]))
+    installPluginFromLocalIpcMock.mockResolvedValue(row)
+    getPluginIpcMock.mockResolvedValue(row)
+    getEnabledPluginsMock.mockResolvedValue([row])
+    const staleActivate = vi.fn(() => undefined)
+    const rebuiltActivate = vi.fn(() => undefined)
+    loadPluginFrontendMock
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: defineFrontendPlugin({ activate: staleActivate }) })
+      .mockResolvedValueOnce({ pluginId: 'reload-plugin', module: defineFrontendPlugin({ activate: rebuiltActivate }) })
+
+    await expect(activatePlugin('reload-plugin')).resolves.toBe(true)
+    await reloadLocalPluginFromDisk('reload-plugin', '/plugins/reload-plugin', 'project-1')
+
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(1, 'reload-plugin', 'plugin://reload-plugin/dist/frontend.js')
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(
+      2,
+      'reload-plugin',
+      'plugin://reload-plugin/dist/frontend.js?openforgeReload=1',
+    )
+    expect(rebuiltActivate).toHaveBeenCalledOnce()
+  })
+
+  it('reloadLocalPluginFromDisk cycles a plugin with no active project so the next activation re-imports', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin', frontend: './dist/frontend.js' })
+    const row = {
+      ...makeNormalized('reload-plugin'),
+      frontendEntry: './dist/frontend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+      installPath: '/plugins/reload-plugin',
+    }
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      sourceKind: 'local',
+      installPath: '/plugins/reload-plugin',
+    }]]))
+    enabledPluginIds.set(new Set(['reload-plugin']))
+    installPluginFromLocalIpcMock.mockResolvedValue(row)
+    loadPluginFrontendMock.mockResolvedValue({
+      pluginId: 'reload-plugin',
+      module: defineFrontendPlugin({ activate: vi.fn(() => undefined) }),
+    })
+
+    await expect(activatePlugin('reload-plugin')).resolves.toBe(true)
+    await reloadLocalPluginFromDisk('reload-plugin', '/plugins/reload-plugin', null)
+
+    // No project to reactivate into, but the generation bump means whichever project is
+    // opened next imports the rebuilt bundle instead of the one pinned in the module cache.
+    expect(getPluginIpcMock).not.toHaveBeenCalled()
+    await expect(activatePlugin('reload-plugin')).resolves.toBe(true)
+    expect(loadPluginFrontendMock).toHaveBeenNthCalledWith(
+      2,
+      'reload-plugin',
+      'plugin://reload-plugin/dist/frontend.js?openforgeReload=1',
+    )
+  })
+
+  it('reloadLocalPluginFromDisk surfaces a package that no longer installs instead of reporting success', async () => {
+    const manifest = makeManifest({ id: 'reload-plugin' })
+    installedPlugins.set(new Map([['reload-plugin', {
+      manifest,
+      state: 'active',
+      error: null,
+      sourceKind: 'local',
+      installPath: '/plugins/reload-plugin',
+    }]]))
+    installPluginFromLocalIpcMock.mockRejectedValue(new Error('OpenForge plugin frontend entry is missing'))
+
+    await expect(reloadLocalPluginFromDisk('reload-plugin', '/plugins/reload-plugin', 'project-1'))
+      .rejects.toThrow('OpenForge plugin frontend entry is missing')
+    expect(getPluginIpcMock).not.toHaveBeenCalled()
   })
 
   it('activatePlugin dedupes concurrent activation for the same plugin', async () => {
