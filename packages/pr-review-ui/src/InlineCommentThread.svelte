@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Reply, Undo2, X } from '@lucide/svelte'
+  import { Check, MessageCircleQuestion, Reply, Undo2, X } from '@lucide/svelte'
   import type { AgentReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { CommentDisplayData } from './diffComments'
@@ -17,6 +17,8 @@
     onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl?: (url: string) => void | Promise<void>
     onReplyToThread?: (threadId: string, body: string) => void
+    /** Ask the agent a follow-up question about a specific AI review comment. */
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
   }
 
   let {
@@ -28,10 +30,33 @@
     onUpdateAgentCommentStatus,
     onOpenUrl,
     onReplyToThread,
+    onAskAboutComment,
   }: Props = $props()
 
   // Per-thread reply drafts for answered AI Q&A threads, keyed by thread id.
   let threadReplyDrafts = $state<Record<string, string>>({})
+
+  // "Ask the agent about this comment" drafts, keyed by AI review comment id, plus
+  // which comment currently has its ask input open (one at a time).
+  let commentAskDrafts = $state<Record<number, string>>({})
+  let askOpenCommentId = $state<number | null>(null)
+
+  function toggleAskComment(comment: DisplayComment) {
+    if (comment.commentId === undefined) return
+    askOpenCommentId = askOpenCommentId === comment.commentId ? null : comment.commentId
+  }
+
+  function submitCommentAsk(comment: DisplayComment) {
+    if (comment.commentId === undefined || comment.filePath === undefined || comment.lineNumber === undefined) return
+    const body = (commentAskDrafts[comment.commentId] ?? '').trim()
+    if (!body) return
+    const side = comment.commentSide === 'LEFT' ? 'LEFT' : 'RIGHT'
+    onAskAboutComment?.({ commentId: comment.commentId, filename: comment.filePath, line: comment.lineNumber, side, body })
+    const next = { ...commentAskDrafts }
+    delete next[comment.commentId]
+    commentAskDrafts = next
+    askOpenCommentId = null
+  }
 
   function submitThreadReply(threadId: string) {
     const body = (threadReplyDrafts[threadId] ?? '').trim()
@@ -128,6 +153,16 @@
                 <Check size={14} strokeWidth={2} aria-hidden="true" />
               </button>
             {/if}
+            {#if onAskAboutComment}
+              <button
+                class="btn btn-ghost btn-xs text-info hover:text-info/80"
+                title="Ask the agent about this suggestion"
+                aria-label="Ask the agent about this AI review comment"
+                onclick={() => toggleAskComment(comment)}
+              >
+                <MessageCircleQuestion size={14} strokeWidth={2} aria-hidden="true" />
+              </button>
+            {/if}
             <button
               class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
               title="Dismiss"
@@ -184,6 +219,23 @@
           {/if}
         {:else}
           <MarkdownContent content={comment.body} {onOpenUrl} />
+          {#if comment.type === 'agent' && comment.commentId !== undefined && askOpenCommentId === comment.commentId}
+            {@const commentId = comment.commentId}
+            <div class="flex gap-2 mt-1.5">
+              <input
+                class="input input-bordered input-xs flex-1"
+                aria-label="Ask the agent about this AI review comment"
+                placeholder="Ask why the agent suggested this…"
+                value={commentAskDrafts[commentId] ?? ''}
+                oninput={(event) => {
+                  if (!(event.currentTarget instanceof HTMLInputElement)) return
+                  commentAskDrafts = { ...commentAskDrafts, [commentId]: event.currentTarget.value }
+                }}
+                onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitCommentAsk(comment) } }}
+              />
+              <button type="button" class="btn btn-xs btn-primary" onclick={() => submitCommentAsk(comment)}>Ask</button>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>

@@ -882,6 +882,16 @@
     void createThread({ type: 'step', step_id: stepId }, body)
   }
 
+  // Follow-up question about a specific AI review comment. Anchored to the comment
+  // (so the prompt can quote its suggestion) plus its diff location (so the thread
+  // renders inline right under it).
+  function askAboutComment(args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) {
+    void createThread(
+      { type: 'comment', comment_id: args.commentId, filename: args.filename, line: args.line, side: args.side },
+      args.body,
+    )
+  }
+
   async function replyToThread(threadId: string, body: string) {
     const pr = $selectedReviewPr
     if (!pr) return
@@ -1014,6 +1024,7 @@
       aiThreadsPendingCount={aiThreadsPendingCount}
       onAskAgent={askAgent}
       onReplyToThread={replyToThread}
+      onAskAboutComment={askAboutComment}
       onAskAgentStep={askAgentStep}
       onSendQuestionsToAgent={sendQuestionsToAgent}
       onSubmitReview={submitReview}

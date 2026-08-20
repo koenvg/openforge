@@ -45,6 +45,7 @@
     aiThreads?: AiThread[]
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onAskAgentStep?: (stepId: string, body: string) => void
     onSubmitReview: (request: {
       repoOwner: string
@@ -75,6 +76,7 @@
     aiThreads = [],
     onAskAgent,
     onReplyToThread,
+    onAskAboutComment,
     onAskAgentStep,
     onSubmitReview,
   }: Props = $props()
@@ -509,6 +511,7 @@
           aiThreads={aiThreads}
           onAskAgent={onAskAgent}
           onReplyToThread={onReplyToThread}
+          onAskAboutComment={onAskAboutComment}
         >
           {#snippet footer()}
             {#if isFinalStep}

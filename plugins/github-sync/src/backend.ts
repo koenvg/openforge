@@ -200,7 +200,10 @@ export default defineBackendPlugin({
         })
         const walkthrough = await readWalkthrough(openforge, request.reviewPrId, request.headSha)
         const steps = parseAndValidateWalkthroughSteps(walkthrough?.steps_json ?? null, files) ?? []
-        const prompt = buildQuestionsPrompt(pending, files, steps)
+        // Include the AI review comments so a "comment"-anchored follow-up thread can
+        // quote the exact suggestion it's asking about.
+        const agentComments = await readAiReviewComments(openforge, request.reviewPrId, request.headSha)
+        const prompt = buildQuestionsPrompt(pending, files, steps, agentComments)
 
         void (async () => {
           const sessionKey = randomUUID()

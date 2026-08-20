@@ -54,6 +54,7 @@
     aiThreadsPendingCount?: number
     onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
     onReplyToThread?: (threadId: string, body: string) => void
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
     onAskAgentStep?: (stepId: string, body: string) => void
     onSendQuestionsToAgent?: () => void
     onSubmitReview: (request: {
@@ -102,6 +103,7 @@
     aiThreadsPendingCount = 0,
     onAskAgent,
     onReplyToThread,
+    onAskAboutComment,
     onAskAgentStep,
     onSendQuestionsToAgent,
     onSubmitReview,
@@ -239,6 +241,7 @@
       aiThreads={aiThreads}
       onAskAgent={onAskAgent}
       onReplyToThread={onReplyToThread}
+      onAskAboutComment={onAskAboutComment}
       onAskAgentStep={onAskAgentStep}
       onSubmitReview={onSubmitReview}
     />
@@ -291,6 +294,7 @@
           aiThreads={aiThreads}
           onAskAgent={onAskAgent}
           onReplyToThread={onReplyToThread}
+          onAskAboutComment={onAskAboutComment}
           {reviewedFileShas}
           onToggleFileReviewed={onToggleFileReviewed}
           getFileReviewIdentity={getReviewFileIdentity}

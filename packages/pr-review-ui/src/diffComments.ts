@@ -174,10 +174,12 @@ export function buildExtendData(
     })
   }
 
-  // Local "Ask the AI author" threads anchored to a diff line render inline like
-  // comments. Step-anchored threads are handled by the walkthrough view instead.
+  // Local "Ask the AI author" threads anchored to a diff line — or to a specific
+  // AI review comment (a follow-up question), which carries the same denormalized
+  // location — render inline like comments. Step-anchored threads are handled by
+  // the walkthrough view instead.
   for (const thread of aiThreads) {
-    if (thread.anchor.type !== 'line') continue
+    if (thread.anchor.type !== 'line' && thread.anchor.type !== 'comment') continue
     if (!pathMatches(thread.anchor.filename, filename)) continue
     const target = sideToSplitSide(thread.anchor.side) === 'oldFile' ? oldFile : newFile
     const lineKey = String(thread.anchor.line)

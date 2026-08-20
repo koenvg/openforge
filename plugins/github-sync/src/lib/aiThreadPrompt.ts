@@ -1,4 +1,4 @@
-import type { AiThread, PrFileDiff, PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
+import type { AgentReviewComment, AiThread, PrFileDiff, PrWalkthroughStep } from '@openforge-app/plugin-sdk/domain'
 import { parseHunks } from './hunkParser'
 
 export const AI_ANSWERS_JSON_SCHEMA = JSON.stringify({
@@ -16,7 +16,12 @@ export const AI_ANSWERS_JSON_SCHEMA = JSON.stringify({
   },
 })
 
-function anchorContext(thread: AiThread, files: PrFileDiff[], steps: PrWalkthroughStep[]): string {
+function anchorContext(
+  thread: AiThread,
+  files: PrFileDiff[],
+  steps: PrWalkthroughStep[],
+  agentComments: AgentReviewComment[],
+): string {
   if (thread.anchor.type === 'step') {
     // Hoist the narrowed value: TS drops the discriminated-union narrowing of
     // `thread.anchor` inside the `.find` closure below.
@@ -29,13 +34,26 @@ function anchorContext(thread: AiThread, files: PrFileDiff[], steps: PrWalkthrou
   const a = thread.anchor
   const file = files.find(f => f.filename === a.filename)
   const hunk = file ? parseHunks(file.patch).find(h => h.text.length > 0) : undefined
-  return `About ${a.filename} line ${a.line} (${a.side}):\n\`\`\`diff\n${hunk?.text ?? '(diff unavailable)'}\n\`\`\``
+  const lineContext = `About ${a.filename} line ${a.line} (${a.side}):\n\`\`\`diff\n${hunk?.text ?? '(diff unavailable)'}\n\`\`\``
+  if (a.type === 'comment') {
+    // Hoist before the closure so the narrowing survives (see the step case).
+    const commentId = a.comment_id
+    const comment = agentComments.find(c => c.id === commentId)
+    const suggestion = comment ? comment.body : '(original suggestion unavailable)'
+    return `The reviewer is following up on your earlier AI review comment here:\n"${suggestion}"\n${lineContext}`
+  }
+  return lineContext
 }
 
-export function buildQuestionsPrompt(threads: AiThread[], files: PrFileDiff[], steps: PrWalkthroughStep[]): string {
+export function buildQuestionsPrompt(
+  threads: AiThread[],
+  files: PrFileDiff[],
+  steps: PrWalkthroughStep[],
+  agentComments: AgentReviewComment[] = [],
+): string {
   const blocks = threads.map(t => {
     const convo = t.messages.map(m => `${m.role === 'user' ? 'Reviewer' : 'You'}: ${m.body}`).join('\n')
-    return `--- thread_id: ${t.id} ---\n${anchorContext(t, files, steps)}\n${convo}`
+    return `--- thread_id: ${t.id} ---\n${anchorContext(t, files, steps, agentComments)}\n${convo}`
   })
   return [
     'You are the author of this pull request, answering a reviewer\'s questions. You are running inside a checkout of the PR head — read any file and use git history to answer precisely and honestly. If a choice was arbitrary, say so.',

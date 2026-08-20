@@ -792,6 +792,17 @@ describe('buildExtendData with AI threads', () => {
     const { newFile } = buildExtendData('a.ts', [], [], [], [stepThread, otherFile])
     expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
   })
+
+  it('places a comment-anchored thread inline at its line, like a line thread', () => {
+    const commentThread: AiThread = {
+      ...thread,
+      id: 't4',
+      anchor: { type: 'comment', comment_id: 99, filename: 'a.ts', line: 3, side: 'RIGHT' },
+    }
+    const { newFile } = buildExtendData('a.ts', [], [], [], [commentThread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.thread?.id).toBe('t4')
+  })
 })
 
 describe('approvedInlineAgentComments', () => {
