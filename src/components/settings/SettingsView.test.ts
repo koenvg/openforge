@@ -40,6 +40,20 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryAllByText(/credentials/i).length).toBeGreaterThan(0)
   })
 
+  it('gives the PR walkthrough prompt a single home on the global page', async () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+
+    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
+
+    await openCategory(/^Agents/)
+    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(1)
+
+    await openCategory(/GitHub & Credentials/)
+    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
+  })
+
   it('renders the opt-in Companion section on the global page', async () => {
     activeProjectId.set(null)
     projects.set([])
