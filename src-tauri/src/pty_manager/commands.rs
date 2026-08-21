@@ -30,10 +30,16 @@ pub(crate) fn build_claude_args(
     args
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PiSessionTarget {
+    New(String),
+    Existing(String),
+    ContinueLatest,
+}
+
 pub(crate) fn build_pi_args(
     prompt: &str,
-    resume_session_id: Option<&str>,
-    continue_session: bool,
+    session_target: &PiSessionTarget,
     extension_path: Option<&Path>,
 ) -> Vec<String> {
     let mut args = Vec::new();
@@ -42,11 +48,16 @@ pub(crate) fn build_pi_args(
         args.push(path.to_string_lossy().to_string());
     }
     args.push("--approve".to_string());
-    if let Some(session_id) = resume_session_id {
-        args.push("--session".to_string());
-        args.push(session_id.to_string());
-    } else if continue_session {
-        args.push("--continue".to_string());
+    match session_target {
+        PiSessionTarget::New(session_id) => {
+            args.push("--session-id".to_string());
+            args.push(session_id.clone());
+        }
+        PiSessionTarget::Existing(session_id) => {
+            args.push("--session".to_string());
+            args.push(session_id.clone());
+        }
+        PiSessionTarget::ContinueLatest => args.push("--continue".to_string()),
     }
     if !prompt.is_empty() {
         args.push(prompt.to_string());
@@ -174,18 +185,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_pi_args_trusts_project_for_new_session_without_persisting_decision() {
+    fn build_pi_args_assigns_id_to_new_agent_session() {
         assert_eq!(
             build_pi_args(
                 "implement the feature",
-                None,
-                false,
+                &PiSessionTarget::New("openforge-pi-session-1".to_string()),
                 Some(Path::new("/tmp/openforge-pi-extension.ts")),
             ),
             vec![
                 "-e",
                 "/tmp/openforge-pi-extension.ts",
                 "--approve",
+                "--session-id",
+                "openforge-pi-session-1",
                 "implement the feature",
             ]
         );
@@ -196,8 +208,7 @@ mod tests {
         assert_eq!(
             build_pi_args(
                 "continue work",
-                Some("pi-session-1"),
-                false,
+                &PiSessionTarget::Existing("pi-session-1".to_string()),
                 Some(Path::new("/tmp/openforge-pi-extension.ts")),
             ),
             vec![
@@ -214,7 +225,7 @@ mod tests {
     #[test]
     fn build_pi_args_trusts_project_for_continue_session_without_prompt() {
         assert_eq!(
-            build_pi_args("", None, true, None),
+            build_pi_args("", &PiSessionTarget::ContinueLatest, None),
             vec!["--approve", "--continue"]
         );
     }

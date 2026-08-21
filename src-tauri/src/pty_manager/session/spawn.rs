@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use super::super::attachment::{PtyAttachmentHub, COMPANION_ATTACHMENT_EVENT_CAPACITY};
-use super::super::commands::get_shell_path;
+use super::super::commands::{get_shell_path, PiSessionTarget};
 use super::super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
     RingBuffer, CLAUDE_BUFFER_CAPACITY,
@@ -214,8 +214,7 @@ impl PtyManager {
         task_id: &str,
         cwd: &Path,
         prompt: &str,
-        resume_session_id: Option<&str>,
-        continue_session: bool,
+        session_target: PiSessionTarget,
         cols: u16,
         rows: u16,
         app_handle: Option<crate::backend_runtime::AppHandle>,
@@ -223,7 +222,7 @@ impl PtyManager {
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
-            PiPtyAdapter::new(prompt, resume_session_id, continue_session, None),
+            PiPtyAdapter::new(prompt, session_target, None),
             PtySpawnContext {
                 task_id,
                 cwd,

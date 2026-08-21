@@ -2,6 +2,7 @@ mod attachment;
 #[cfg(test)]
 mod attachment_tests;
 mod commands;
+pub(crate) use commands::PiSessionTarget;
 mod events;
 mod managed_process;
 mod pids;
@@ -21,7 +22,7 @@ use tokio::sync::Mutex;
 #[cfg(test)]
 use commands::resolve_shell_path;
 #[cfg(test)]
-pub(crate) use commands::{build_claude_args, build_pi_args, get_shell_path};
+pub(crate) use commands::{build_claude_args, get_shell_path};
 #[cfg(test)]
 use events::{
     finalize_pty_exit, find_utf8_boundary, read_pty_output_loop, spawn_batched_pty_event_emitter,
@@ -1683,61 +1684,6 @@ mod tests {
             .position(|a| a == "--permission-mode")
             .expect("--permission-mode flag should be present");
         assert_eq!(args[pm_pos + 1], "auto");
-    }
-
-    #[test]
-    fn test_build_pi_args_new_session_with_prompt() {
-        let args = build_pi_args("implement the feature", None, false, None);
-        assert_eq!(args, vec!["--approve", "implement the feature"]);
-    }
-
-    #[test]
-    fn test_build_pi_args_includes_openforge_extension_before_prompt() {
-        let extension = Path::new("/tmp/openforge-pi-extension.ts");
-        let args = build_pi_args("implement the feature", None, false, Some(extension));
-        assert_eq!(
-            args,
-            vec![
-                "-e",
-                "/tmp/openforge-pi-extension.ts",
-                "--approve",
-                "implement the feature",
-            ]
-        );
-    }
-
-    #[test]
-    fn test_build_pi_args_resume_session_with_prompt() {
-        let args = build_pi_args("continue work", Some("sess-abc-123"), false, None);
-        assert_eq!(
-            args,
-            vec!["--approve", "--session", "sess-abc-123", "continue work"]
-        );
-    }
-
-    #[test]
-    fn test_build_pi_args_resume_session_without_prompt() {
-        let args = build_pi_args("", Some("sess-abc-123"), false, None);
-        assert_eq!(args, vec!["--approve", "--session", "sess-abc-123"]);
-    }
-
-    #[test]
-    fn test_build_pi_args_continue_session() {
-        let args = build_pi_args("", None, true, None);
-        assert_eq!(args, vec!["--approve", "--continue"]);
-    }
-
-    #[test]
-    fn test_build_pi_args_continue_with_prompt() {
-        let args = build_pi_args("what changed?", None, true, None);
-        assert_eq!(args, vec!["--approve", "--continue", "what changed?"]);
-    }
-
-    #[test]
-    fn test_build_pi_args_resume_takes_precedence_over_continue() {
-        let args = build_pi_args("", Some("sess-123"), true, None);
-        assert!(args.contains(&"--session".to_string()));
-        assert!(!args.contains(&"--continue".to_string()));
     }
 
     #[test]

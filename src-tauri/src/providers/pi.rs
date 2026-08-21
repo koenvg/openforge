@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::{ProviderError, ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
-use crate::pty_manager::PtyManager;
+use crate::pty_manager::{PiSessionTarget, PtyManager};
 
 pub struct PiProvider {
     pub pty_mgr: PtyManager,
@@ -24,14 +24,14 @@ impl PiProvider {
         _model: Option<&crate::opencode_client::PromptModel>,
         start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, ProviderError> {
+        let pi_session_id = uuid::Uuid::new_v4().to_string();
         let pty_instance_id = self
             .pty_mgr
             .spawn_pi_pty(
                 task_id,
                 worktree_path,
                 prompt,
-                None,
-                false,
+                PiSessionTarget::New(pi_session_id.clone()),
                 start_context.cols,
                 start_context.rows,
                 start_context.app_handle.clone(),
@@ -43,7 +43,7 @@ impl PiProvider {
         Ok(ProviderSessionResult {
             port: 0,
             opencode_session_id: None,
-            pi_session_id: None,
+            pi_session_id: Some(pi_session_id),
             pty_instance_id: Some(pty_instance_id),
         })
     }
@@ -62,7 +62,9 @@ impl PiProvider {
     ) -> Result<ProviderSessionResult, ProviderError> {
         let resume_session_id = session.pi_session_id.as_deref();
         let actual_prompt = prompt.unwrap_or("");
-        let continue_session = resume_session_id.is_none();
+        let session_target = resume_session_id
+            .map(|session_id| PiSessionTarget::Existing(session_id.to_string()))
+            .unwrap_or(PiSessionTarget::ContinueLatest);
 
         let pty_instance_id = self
             .pty_mgr
@@ -70,8 +72,7 @@ impl PiProvider {
                 task_id,
                 worktree_path,
                 actual_prompt,
-                resume_session_id,
-                continue_session,
+                session_target,
                 start_context.cols,
                 start_context.rows,
                 start_context.app_handle.clone(),

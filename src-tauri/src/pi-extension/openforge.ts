@@ -6,6 +6,7 @@ const MAX_ACTIVITY_SNAPSHOT_CHARS = 8_000;
 type OpenForgePiLifecycleEventType = "agent.start" | "agent.end" | "user_prompt";
 
 interface OpenForgePiLifecycleMetadata {
+  provider_session_id?: string;
   transcript_path?: string;
   activity_snapshot?: string;
 }
@@ -73,16 +74,21 @@ export default function openForgeExtension(pi: ExtensionAPI) {
   pi.on("input", async (event, ctx) => {
     const transcriptPath = ctx.sessionManager?.getSessionFile?.();
     await reportPiLifecycle("user_prompt", {
+      provider_session_id: ctx.sessionManager?.getSessionId?.(),
       transcript_path: transcriptPath,
       activity_snapshot: buildPiActivitySnapshot(event, ctx),
     });
   });
 
-  pi.on("agent_start", async () => {
-    await reportPiLifecycle("agent.start");
+  pi.on("agent_start", async (_event, ctx) => {
+    await reportPiLifecycle("agent.start", {
+      provider_session_id: ctx.sessionManager?.getSessionId?.(),
+    });
   });
 
-  pi.on("agent_end", async () => {
-    await reportPiLifecycle("agent.end");
+  pi.on("agent_end", async (_event, ctx) => {
+    await reportPiLifecycle("agent.end", {
+      provider_session_id: ctx.sessionManager?.getSessionId?.(),
+    });
   });
 }
