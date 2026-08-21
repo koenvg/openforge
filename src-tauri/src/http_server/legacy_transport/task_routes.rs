@@ -8,6 +8,29 @@ use axum::{
     http::StatusCode,
 };
 
+/// Find a registered project without changing behavior for unavailable paths.
+/// Exact strings always match, including paths that do not exist. Otherwise, the
+/// requested path is canonicalized once and registered paths are canonicalized until
+/// a match is found. Canonicalization removes trailing separators and `.`/`..`
+/// components and resolves symlinks. A canonicalization failure is not a match.
+fn find_registered_project_by_path<'a>(
+    projects: &'a [db::ProjectRow],
+    requested_path: &str,
+) -> Option<&'a db::ProjectRow> {
+    if let Some(project) = projects
+        .iter()
+        .find(|project| project.path == requested_path)
+    {
+        return Some(project);
+    }
+
+    let requested_path = std::fs::canonicalize(requested_path).ok()?;
+    projects.iter().find(|project| {
+        std::fs::canonicalize(&project.path)
+            .is_ok_and(|registered_path| registered_path == requested_path)
+    })
+}
+
 /// Resolve project_id from request parameters, failing if no project can be determined.
 ///
 /// Priority: explicit project_id > worktree deduction.
@@ -63,7 +86,7 @@ pub(in crate::http_server) fn resolve_project_id(
         ))
     })?;
     if let Some(wt) = worktree {
-        if let Some(project) = projects.iter().find(|project| project.path == wt) {
+        if let Some(project) = find_registered_project_by_path(&projects, wt) {
             return Ok(project.id.clone());
         }
     }
@@ -94,14 +117,27 @@ pub async fn create_task_handler(
     State(state): State<AppState>,
     Json(request): Json<CreateTaskRequest>,
 ) -> Result<Json<CreateTaskResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-
-    let project_id = resolve_project_id(
-        &db,
-        request.project_id.as_deref(),
-        request.worktree.as_deref(),
-    )
+    let resolution_db = std::sync::Arc::clone(&state.db);
+    let explicit_project_id = request.project_id.clone();
+    let worktree = request.worktree.clone();
+    let project_id = tokio::task::spawn_blocking(move || {
+        let db = resolution_db.lock().map_err(|_| {
+            ResolveProjectIdError::Storage(
+                "Failed to lock database while resolving project".to_string(),
+            )
+        })?;
+        resolve_project_id(&db, explicit_project_id.as_deref(), worktree.as_deref())
+    })
+    .await
+    .map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to join project resolution task: {error}"),
+        )
+    })?
     .map_err(ResolveProjectIdError::into_http_response)?;
+
+    let db = state.db.lock().unwrap();
 
     let task = db
         .create_task(

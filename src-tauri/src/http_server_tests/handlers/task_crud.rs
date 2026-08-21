@@ -284,6 +284,96 @@ async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
     let _ = std::fs::remove_file(path);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn create_task_infers_project_from_equivalent_registered_path() {
+    let (state, path) = test_state("http_create_task_equivalent_registered_path");
+    let filesystem = tempfile::tempdir().expect("create filesystem fixture");
+    let project_directory = filesystem.path().join("project");
+    let nested_directory = project_directory.join("nested");
+    std::fs::create_dir_all(&nested_directory).expect("create registered project directory");
+    let project_symlink = filesystem.path().join("project-link");
+    std::os::unix::fs::symlink(&project_directory, &project_symlink)
+        .expect("create project symlink");
+
+    let project_id = {
+        let db = state.db.lock().expect("lock db");
+        db.create_project(
+            "Project",
+            project_directory.to_str().expect("UTF-8 project path"),
+        )
+        .expect("create project")
+        .id
+    };
+    let equivalent_paths = [
+        format!("{}/", project_directory.display()),
+        format!("{}/./nested/..", project_directory.display()),
+        project_symlink.to_string_lossy().into_owned(),
+    ];
+    let router = create_router(state);
+
+    for (index, worktree) in equivalent_paths.into_iter().enumerate() {
+        let body = serde_json::json!({
+            "initial_prompt": format!("Equivalent path task {index}"),
+            "worktree": &worktree,
+        });
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/create_task")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK, "worktree: {worktree}");
+        let json = response_body_json(response).await;
+        assert_eq!(json["project_id"], project_id, "worktree: {worktree}");
+    }
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn create_task_infers_project_when_registered_path_is_missing() {
+    let (state, path) = test_state("http_create_task_missing_registered_path");
+    let filesystem = tempfile::tempdir().expect("create filesystem fixture");
+    let missing_project = filesystem.path().join("missing-project");
+    let missing_project = missing_project.to_str().expect("UTF-8 missing path");
+    let project_id = {
+        let db = state.db.lock().expect("lock db");
+        db.create_project("Missing Project", missing_project)
+            .expect("create project")
+            .id
+    };
+
+    let body = serde_json::json!({
+        "initial_prompt": "Missing path task",
+        "worktree": missing_project,
+    });
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["project_id"], project_id);
+
+    let _ = std::fs::remove_file(path);
+}
+
 #[tokio::test]
 async fn test_get_tasks_handler_filters_by_state() {
     let (state, path) = test_state("http_get_tasks_handler_filters_by_state");
