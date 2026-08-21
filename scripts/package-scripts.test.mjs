@@ -116,7 +116,15 @@ describe('package build scripts', () => {
     for (const sharedStep of sharedPublishSteps) {
       expect(reusablePublishWorkflow).toContain(sharedStep)
     }
-    expect(reusablePublishWorkflow).toContain('npm publish --access public --provenance --tag "${{ inputs.npm_tag }}"')
+    const validationStepIndex = reusablePublishWorkflow.indexOf('name: Validate npm dist-tag')
+    const publishStepIndex = reusablePublishWorkflow.indexOf(
+      'npm publish --access public --provenance --tag "$NPM_TAG"',
+    )
+    expect(validationStepIndex).toBeGreaterThan(-1)
+    expect(publishStepIndex).toBeGreaterThan(validationStepIndex)
+    expect(reusablePublishWorkflow).toContain('NPM_TAG: ${{ inputs.npm_tag }}')
+    expect(reusablePublishWorkflow).toContain('run: node scripts/npm-dist-tag.mjs')
+    expect(reusablePublishWorkflow).not.toContain('--tag "${{ inputs.npm_tag }}"')
     expect(publishWorkflow).toContain('- "v*"')
     expect(publishWorkflow).toContain('description: "SDK version to publish manually; leave blank to use the checked-in version"')
     expect(publishWorkflow).toContain("package_version: ${{ github.event_name == 'push' && github.ref_name || inputs.package_version }}")

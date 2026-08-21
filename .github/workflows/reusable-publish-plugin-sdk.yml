@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm-publish
+    env:
+      NPM_TAG: ${{ inputs.npm_tag }}
     permissions:
       contents: read
       id-token: write
@@ -47,6 +49,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Validate npm dist-tag
+        run: node scripts/npm-dist-tag.mjs
 
       - name: Set SDK package version
         if: inputs.package_version != ''
@@ -92,7 +97,7 @@ jobs:
       - name: Publish package
         if: inputs.dry_run == false && steps.published-sdk.outputs.published != 'true'
         working-directory: packages/plugin-sdk
-        run: npm publish --access public --provenance --tag "${{ inputs.npm_tag }}"
+        run: npm publish --access public --provenance --tag "$NPM_TAG"
 
       - name: Report dry run
         if: inputs.dry_run == true
