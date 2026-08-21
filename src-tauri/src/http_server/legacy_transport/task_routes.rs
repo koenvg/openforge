@@ -137,7 +137,7 @@ pub async fn create_task_handler(
     })?
     .map_err(ResolveProjectIdError::into_http_response)?;
 
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
 
     let task = db
         .create_task_with_metadata(
@@ -209,7 +209,7 @@ pub async fn update_task_handler(
                 ),
             )
         })?;
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     db.update_task_initial_prompt(&request.task_id, &request.initial_prompt)
         .map_err(|error| match error {
             db::TaskInitialPromptUpdateError::NotFound(_) => {
@@ -224,10 +224,7 @@ pub async fn update_task_handler(
             ),
         })?;
     drop(db);
-    let project_id = state
-        .db
-        .lock()
-        .unwrap()
+    let project_id = db::acquire_db(&state.db)
         .get_task(&request.task_id)
         .map_err(|error| {
             (
@@ -281,7 +278,7 @@ pub async fn hard_delete_task_handler(
                 "Task has another lifecycle operation in progress".to_string(),
             )
         })?;
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     let task = db
         .get_task(&request.task_id)
         .map_err(|e| {
@@ -318,7 +315,7 @@ pub async fn set_task_dependencies_handler(
     State(state): State<AppState>,
     Json(request): Json<SetTaskDependenciesRequest>,
 ) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     db.set_task_dependencies(&request.task_id, &request.depends_on)
         .map_err(|e| {
             (
@@ -340,7 +337,7 @@ pub async fn add_task_dependency_handler(
     State(state): State<AppState>,
     Json(request): Json<AddTaskDependencyRequest>,
 ) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     db.add_task_dependency(&request.task_id, &request.depends_on)
         .map_err(|e| {
             (
@@ -362,7 +359,7 @@ pub async fn link_task_chain_handler(
     State(state): State<AppState>,
     Json(request): Json<LinkTaskChainRequest>,
 ) -> Result<Json<LinkTaskChainResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     let links = db.link_task_chain(&request.chain).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
@@ -391,7 +388,7 @@ pub async fn get_task_info_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<GetTaskInfoResponse>, StatusCode> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
 
     match db
         .get_task(&id)
@@ -413,7 +410,7 @@ pub async fn list_task_labels_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<TaskLabelsResponse>, StatusCode> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
 
     match db
         .get_task(&id)
@@ -431,7 +428,7 @@ pub async fn add_task_label_handler(
     State(state): State<AppState>,
     Json(request): Json<AddTaskLabelRequest>,
 ) -> Result<Json<AddTaskLabelResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     let label = db
         .add_task_label(&request.task_id, &request.label)
         .map_err(|e| {
@@ -455,7 +452,7 @@ pub async fn remove_task_label_handler(
     State(state): State<AppState>,
     Json(request): Json<RemoveTaskLabelRequest>,
 ) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     db.remove_task_label(&request.task_id, request.label_id)
         .map_err(|e| {
             (
@@ -476,7 +473,7 @@ pub async fn remove_task_label_handler(
 pub async fn get_projects_handler(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<db::ProjectRow>>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     let projects = db.get_all_projects().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -491,7 +488,7 @@ pub async fn get_project_task_labels_handler(
     State(state): State<AppState>,
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<db::TaskLabelRow>>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
     let labels = db.get_project_task_labels(&project_id).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -517,7 +514,7 @@ pub async fn get_tasks_handler(
 
     let compact = query.compact.unwrap_or(false);
     let exclude_done = query.exclude_done.unwrap_or(false) || !query.include_done.unwrap_or(true);
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
 
     if compact {
         let tasks = match query.state.as_deref() {
@@ -581,7 +578,7 @@ pub async fn get_project_attention_handler(
     State(state): State<AppState>,
     Path(project_id): Path<String>,
 ) -> Result<Json<db::ProjectAttentionRow>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
+    let db = db::acquire_db(&state.db);
 
     let project = db
         .get_project(&project_id)

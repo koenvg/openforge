@@ -40,3 +40,31 @@ async fn test_get_projects_handler_returns_all_projects() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn get_projects_handler_recovers_from_poisoned_database_lock() {
+    let (state, path) = test_state("http_get_projects_handler_poisoned_database_lock");
+    let database = Arc::clone(&state.db);
+    let poison_result = std::thread::spawn(move || {
+        let _database = database.lock().expect("lock healthy test database");
+        panic!("poison test database lock");
+    })
+    .join();
+    assert!(poison_result.is_err());
+
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/projects")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should return a controlled response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response_body_json(response).await, serde_json::json!([]));
+
+    let _ = std::fs::remove_file(path);
+}
