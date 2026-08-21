@@ -3,16 +3,17 @@
   import { AlertCircle, FolderOpen } from '@lucide/svelte'
   import { getConfig, setConfig, selectDirectory, scanPluginFolder, writeClipboardText } from '../../lib/ipc'
   import type { DiscoveredPlugin } from '../../lib/ipc'
-  import { installFromLocal, reloadInstalledPluginMetadata } from '../../lib/plugin/pluginRegistry'
+  import { installFromLocal, reloadLocalPluginFromDisk } from '../../lib/plugin/pluginRegistry'
   import { installedPlugins } from '../../lib/plugin/pluginStore'
 
   const PLUGIN_FOLDER_CONFIG_KEY = 'plugin_folder_path'
 
   interface Props {
+    activeProjectId?: string | null
     disabled?: boolean
   }
 
-  let { disabled = false }: Props = $props()
+  let { activeProjectId = null, disabled = false }: Props = $props()
 
   // A discovered package is offered for install only when the folder is the same one it is
   // already installed from, so a matching plugin id can never silently repoint an install
@@ -24,12 +25,13 @@
   let scanError = $state<string | null>(null)
   let actionError = $state<string | null>(null)
   let isScanning = $state(false)
+  let isRefreshing = $state(false)
   let busyPluginId = $state<string | null>(null)
   let isInstallingAll = $state(false)
 
   let rows = $derived.by(() => discovered.map((row) => ({ row, status: rowStatus(row) })))
   let installableRows = $derived(rows.filter(({ status }) => status === 'installable').map(({ row }) => row))
-  let isBusy = $derived(isScanning || isInstallingAll || busyPluginId !== null)
+  let isBusy = $derived(isScanning || isRefreshing || isInstallingAll || busyPluginId !== null)
 
   function normalizePath(path: string | null | undefined): string {
     return (path ?? '').replace(/\/+$/, '')
@@ -150,18 +152,54 @@
     actionError = null
     busyPluginId = row.id
     try {
-      // A false return means the reload found nothing usable at the install path — most
-      // often the folder moved on to a version that has not been rebuilt yet. Saying so
-      // beats a button that appears to do nothing.
-      const reloaded = await reloadInstalledPluginMetadata(row.id)
-      if (!reloaded) {
-        actionError = `Could not reload ${row.name} from this folder. Rebuild it and try again.`
-      }
+      await reloadLocalPluginFromDisk(row.id, row.path, activeProjectId)
       await scan()
     } catch (error) {
-      actionError = errorMessage(error)
+      // Most often the package moved on to something that has not been rebuilt yet, and the
+      // sidecar says exactly what is missing. Passing that through beats a button that
+      // appears to do nothing.
+      actionError = `Could not reload ${row.name}: ${errorMessage(error)}`
     } finally {
       busyPluginId = null
+    }
+  }
+
+  /**
+   * Rescan, then re-apply every package installed from this folder.
+   *
+   * A rebuild does not have to bump the version, so this cannot be limited to rows that look
+   * outdated — it re-reads each one from disk and cycles its runtime, which is what a manual
+   * disable/enable in project settings used to be needed for.
+   */
+  async function refresh() {
+    if (disabled || !folderPath) return
+
+    actionError = null
+    isRefreshing = true
+    try {
+      await scan()
+      if (scanError) return
+
+      const installedHere = discovered.filter((row) => {
+        const status = rowStatus(row)
+        return status === 'installed' || status === 'outdated'
+      })
+      if (installedHere.length === 0) return
+
+      const failures: string[] = []
+      // Sequential: each reload rewrites the plugin table and cycles a runtime.
+      for (const row of installedHere) {
+        try {
+          await reloadLocalPluginFromDisk(row.id, row.path, activeProjectId)
+        } catch (error) {
+          failures.push(`Could not reload ${row.name}: ${errorMessage(error)}`)
+        }
+      }
+
+      if (failures.length > 0) actionError = failures.join('\n')
+      await scan()
+    } finally {
+      isRefreshing = false
     }
   }
 
@@ -181,8 +219,8 @@
   <div class="flex flex-col gap-1">
     <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Plugin folder</span>
     <p class="text-xs text-base-content/60 m-0">
-      Point OpenForge at a folder of plugin packages to install any of them in one click. After pulling new
-      plugins into it, refresh to pick them up.
+      Point OpenForge at a folder of plugin packages to install any of them in one click. Refresh picks up
+      new packages and reloads the ones already installed from here, so a rebuild reaches every project.
     </p>
   </div>
 
@@ -210,9 +248,9 @@
           type="button"
           aria-label="Refresh plugin folder"
           disabled={disabled || isBusy}
-          onclick={scan}
+          onclick={refresh}
         >
-          {isScanning ? 'Refreshing…' : 'Refresh'}
+          {isScanning || isRefreshing ? 'Refreshing…' : 'Refresh'}
         </button>
         <button
           class="btn btn-ghost btn-xs"
@@ -280,7 +318,7 @@
             >
               {busyPluginId === row.id ? 'Installing…' : 'Install'}
             </button>
-          {:else if status === 'outdated'}
+          {:else if status === 'installed' || status === 'outdated'}
             <button
               class="btn btn-ghost btn-xs"
               type="button"
@@ -311,7 +349,8 @@
   {#if actionError}
     <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
       <AlertCircle size={14} class="shrink-0 mt-0.5" />
-      <span class="break-words">{actionError}</span>
+      <!-- A refresh can fail for more than one package, so each failure keeps its own line. -->
+      <span class="break-words whitespace-pre-line">{actionError}</span>
     </div>
   {/if}
 </div>

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   scanPluginFolder: vi.fn(),
   writeClipboardText: vi.fn(),
   installFromLocal: vi.fn(),
-  reloadInstalledPluginMetadata: vi.fn(),
+  reloadLocalPluginFromDisk: vi.fn(),
 }))
 
 vi.mock('../../lib/ipc', () => ({
@@ -23,13 +23,14 @@ vi.mock('../../lib/ipc', () => ({
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
   installFromLocal: mocks.installFromLocal,
-  reloadInstalledPluginMetadata: mocks.reloadInstalledPluginMetadata,
+  reloadLocalPluginFromDisk: mocks.reloadLocalPluginFromDisk,
 }))
 
 import { installedPlugins } from '../../lib/plugin/pluginStore'
 import PluginFolderPanel from './PluginFolderPanel.svelte'
 
 const FOLDER = '/Users/me/repos/openforge-plugins'
+const PROJECT = 'project-1'
 
 function discovered(overrides: Partial<DiscoveredPlugin> = {}): DiscoveredPlugin {
   return {
@@ -73,11 +74,15 @@ function markInstalled(...entries: PluginEntry[]) {
   installedPlugins.set(new Map(entries.map((entry) => [entry.manifest.id, entry])))
 }
 
-async function renderWithFolder(rows: DiscoveredPlugin[]) {
+async function renderWithFolder(rows: DiscoveredPlugin[], activeProjectId: string | null = PROJECT) {
   mocks.getConfig.mockResolvedValue(FOLDER)
   mocks.scanPluginFolder.mockResolvedValue(rows)
-  render(PluginFolderPanel)
+  render(PluginFolderPanel, { props: { activeProjectId } })
   await vi.waitFor(() => expect(mocks.scanPluginFolder).toHaveBeenCalledWith(FOLDER))
+}
+
+function clickRefresh() {
+  return fireEvent.click(screen.getByRole('button', { name: 'Refresh plugin folder' }))
 }
 
 describe('PluginFolderPanel', () => {
@@ -88,7 +93,7 @@ describe('PluginFolderPanel', () => {
     mocks.setConfig.mockResolvedValue(undefined)
     mocks.scanPluginFolder.mockResolvedValue([])
     mocks.installFromLocal.mockResolvedValue(undefined)
-    mocks.reloadInstalledPluginMetadata.mockResolvedValue(true)
+    mocks.reloadLocalPluginFromDisk.mockResolvedValue(undefined)
   })
 
   it('offers to choose a folder when none is remembered yet', async () => {
@@ -233,20 +238,117 @@ describe('PluginFolderPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Alpha' }))
 
     await vi.waitFor(() =>
-      expect(mocks.reloadInstalledPluginMetadata).toHaveBeenCalledWith('com.acme.alpha'),
+      expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith(
+        'com.acme.alpha',
+        `${FOLDER}/plugins/alpha`,
+        PROJECT,
+      ),
+    )
+  })
+
+  // A rebuild does not have to bump the version, so an up-to-date row still needs the affordance.
+  it('offers a reload for a plugin whose version has not moved', async () => {
+    markInstalled(installedEntry({ version: '1.0.0' }))
+    await renderWithFolder([discovered({ version: '1.0.0' })])
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Alpha' }))
+
+    await vi.waitFor(() =>
+      expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith(
+        'com.acme.alpha',
+        `${FOLDER}/plugins/alpha`,
+        PROJECT,
+      ),
     )
   })
 
   it('reports a reload that did not take', async () => {
-    mocks.reloadInstalledPluginMetadata.mockResolvedValue(false)
+    mocks.reloadLocalPluginFromDisk.mockRejectedValue(new Error('frontend entry is missing'))
     markInstalled(installedEntry({ version: '1.0.0' }))
     await renderWithFolder([discovered({ version: '1.1.0' })])
 
     await fireEvent.click(screen.getByRole('button', { name: 'Reload plugin: Alpha' }))
 
     await vi.waitFor(() =>
-      expect(screen.getByText('Could not reload Alpha from this folder. Rebuild it and try again.')).toBeTruthy(),
+      expect(screen.getByText('Could not reload Alpha: frontend entry is missing')).toBeTruthy(),
     )
+  })
+
+  it('reloads every plugin installed from this folder on refresh', async () => {
+    markInstalled(
+      installedEntry({ version: '1.0.0' }),
+      installedEntry({ id: 'com.acme.beta', version: '1.0.0', installPath: `${FOLDER}/plugins/beta` }),
+    )
+    await renderWithFolder([
+      discovered({ version: '1.0.0' }),
+      discovered({ path: `${FOLDER}/plugins/beta`, id: 'com.acme.beta', name: 'Beta', version: '2.0.0' }),
+      discovered({ path: `${FOLDER}/plugins/gamma`, id: 'com.acme.gamma', name: 'Gamma' }),
+    ])
+
+    await clickRefresh()
+
+    await vi.waitFor(() => expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledTimes(2))
+    expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith('com.acme.alpha', `${FOLDER}/plugins/alpha`, PROJECT)
+    expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith('com.acme.beta', `${FOLDER}/plugins/beta`, PROJECT)
+  })
+
+  it('leaves packages installed from somewhere else untouched on refresh', async () => {
+    markInstalled(installedEntry({ installPath: '/somewhere/else/alpha' }))
+    await renderWithFolder([discovered()])
+
+    await clickRefresh()
+
+    await vi.waitFor(() => expect(mocks.scanPluginFolder).toHaveBeenCalledTimes(2))
+    expect(mocks.reloadLocalPluginFromDisk).not.toHaveBeenCalled()
+  })
+
+  it('reloads plugins on refresh even with no active project', async () => {
+    markInstalled(installedEntry())
+    await renderWithFolder([discovered()], null)
+
+    await clickRefresh()
+
+    await vi.waitFor(() =>
+      expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith(
+        'com.acme.alpha',
+        `${FOLDER}/plugins/alpha`,
+        null,
+      ),
+    )
+  })
+
+  it('reports the plugins that failed to reload and still reloads the rest', async () => {
+    mocks.reloadLocalPluginFromDisk.mockImplementation(async (pluginId: string) => {
+      if (pluginId === 'com.acme.alpha') throw new Error('frontend entry is missing')
+    })
+    markInstalled(
+      installedEntry(),
+      installedEntry({ id: 'com.acme.beta', installPath: `${FOLDER}/plugins/beta` }),
+    )
+    await renderWithFolder([
+      discovered(),
+      discovered({ path: `${FOLDER}/plugins/beta`, id: 'com.acme.beta', name: 'Beta' }),
+    ])
+
+    await clickRefresh()
+
+    await vi.waitFor(() =>
+      expect(screen.getByText('Could not reload Alpha: frontend entry is missing')).toBeTruthy(),
+    )
+    expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith('com.acme.beta', `${FOLDER}/plugins/beta`, PROJECT)
+  })
+
+  it('does not reload anything when the folder can no longer be scanned', async () => {
+    markInstalled(installedEntry())
+    await renderWithFolder([discovered()])
+    mocks.scanPluginFolder.mockRejectedValue(new Error('plugin folder is not a directory: /gone'))
+
+    await clickRefresh()
+
+    await vi.waitFor(() =>
+      expect(screen.getByText('plugin folder is not a directory: /gone')).toBeTruthy(),
+    )
+    expect(mocks.reloadLocalPluginFromDisk).not.toHaveBeenCalled()
   })
 
   it('refuses to repoint a plugin installed from a different folder', async () => {
@@ -294,7 +396,7 @@ describe('PluginFolderPanel', () => {
       discovered({ path: `${FOLDER}/plugins/beta`, id: 'com.acme.beta', name: 'Beta' }),
     ])
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Refresh plugin folder' }))
+    await clickRefresh()
 
     await vi.waitFor(() => expect(screen.getByText('Beta')).toBeTruthy())
   })
