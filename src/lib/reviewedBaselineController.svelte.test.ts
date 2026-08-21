@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createReviewedBaselineController } from './reviewedBaselineController.svelte'
+import type { SelfReviewContext } from './selfReviewFileContentLoader'
 import type { PrFileDiff } from './types'
 
 const currentFile: PrFileDiff = {
@@ -15,6 +16,23 @@ const currentFile: PrFileDiff = {
   patch_line_count: null,
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver
+  })
+  return { promise, resolve }
+}
+
+const contextChanges: Array<[
+  name: string,
+  change: (context: SelfReviewContext) => SelfReviewContext,
+]> = [
+  ['the task changes', (context) => ({ ...context, taskId: 'task-b' })],
+  ['the diff scope changes', (context) => ({ ...context, includeCommitted: false })],
+  ['a commit is selected', (context) => ({ ...context, selectedCommitSha: 'commit-sha' })],
+]
+
 describe('createReviewedBaselineController', () => {
   it('shows and restores changes since the Reviewed File Snapshot', async () => {
     const controller = createReviewedBaselineController({
@@ -22,7 +40,12 @@ describe('createReviewedBaselineController', () => {
       getSnapshots: () => new Map([
         [currentFile.filename, { identity: 'old-sha', newContent: 'reviewed\n' }],
       ]),
-      getSelectedCommitSha: () => null,
+      getReviewContext: () => ({
+        taskId: 'task-a',
+        selectedCommitSha: null,
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
       getFileIdentity: (file) => file.sha,
       fetchCurrentContents: async () => new Map([
         [currentFile.filename, { oldContent: 'base\n', newContent: 'current\n' }],
@@ -56,7 +79,12 @@ describe('createReviewedBaselineController', () => {
       getSnapshots: () => new Map([
         [currentFile.filename, { identity: 'old-sha', newContent: 'reviewed\n' }],
       ]),
-      getSelectedCommitSha: () => 'commit-sha',
+      getReviewContext: () => ({
+        taskId: 'task-a',
+        selectedCommitSha: 'commit-sha',
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
       getFileIdentity: (file) => file.sha,
       fetchCurrentContents: async () => new Map(),
     })
@@ -64,5 +92,86 @@ describe('createReviewedBaselineController', () => {
     expect(controller.getReviewFile(displayedFile)).toBe(currentFile)
     expect(controller.getVisibleFileReviewIdentity(displayedFile)).toBe('new-sha')
     expect(controller.hasReviewedBaselineChange(displayedFile)).toBe(false)
+  })
+
+  it('clears loaded comparisons when the review context is synchronized', async () => {
+    let reviewContext: SelfReviewContext = {
+      taskId: 'task-a',
+      selectedCommitSha: null,
+      includeCommitted: true,
+      includeUncommitted: true,
+    }
+    const controller = createReviewedBaselineController({
+      getReviewFiles: () => [currentFile],
+      getSnapshots: () => new Map([
+        [currentFile.filename, { identity: 'old-sha', newContent: 'reviewed\n' }],
+      ]),
+      getReviewContext: () => reviewContext,
+      getFileIdentity: (file) => file.sha,
+      fetchCurrentContents: async () => new Map([
+        [currentFile.filename, { oldContent: 'base\n', newContent: 'current\n' }],
+      ]),
+    })
+
+    await controller.showChangesSinceReviewed(currentFile)
+    reviewContext = { ...reviewContext, includeUncommitted: false }
+    controller.syncReviewContext()
+
+    expect(controller.comparisonFilenames.size).toBe(0)
+  })
+
+  it.each(contextChanges)('discards an in-flight comparison when %s', async (_name, changeContext) => {
+    let reviewContext: SelfReviewContext = {
+      taskId: 'task-a',
+      selectedCommitSha: null,
+      includeCommitted: true,
+      includeUncommitted: true,
+    }
+    const contents = deferred<Map<string, { oldContent: string; newContent: string }>>()
+    const controller = createReviewedBaselineController({
+      getReviewFiles: () => [currentFile],
+      getSnapshots: () => new Map([
+        [currentFile.filename, { identity: 'old-sha', newContent: 'reviewed\n' }],
+      ]),
+      getReviewContext: () => reviewContext,
+      getFileIdentity: (file) => file.sha,
+      fetchCurrentContents: () => contents.promise,
+    })
+
+    const comparison = controller.showChangesSinceReviewed(currentFile)
+    reviewContext = changeContext(reviewContext)
+    contents.resolve(new Map([
+      [currentFile.filename, { oldContent: 'base\n', newContent: 'current\n' }],
+    ]))
+
+    await expect(comparison).resolves.toBe(false)
+    expect(controller.comparisonFilenames.size).toBe(0)
+  })
+
+  it('does not restore an in-flight comparison after restoring all comparisons', async () => {
+    const contents = deferred<Map<string, { oldContent: string; newContent: string }>>()
+    const controller = createReviewedBaselineController({
+      getReviewFiles: () => [currentFile],
+      getSnapshots: () => new Map([
+        [currentFile.filename, { identity: 'old-sha', newContent: 'reviewed\n' }],
+      ]),
+      getReviewContext: () => ({
+        taskId: 'task-a',
+        selectedCommitSha: null,
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
+      getFileIdentity: (file) => file.sha,
+      fetchCurrentContents: () => contents.promise,
+    })
+
+    const comparison = controller.showChangesSinceReviewed(currentFile)
+    controller.restoreAll()
+    contents.resolve(new Map([
+      [currentFile.filename, { oldContent: 'base\n', newContent: 'current\n' }],
+    ]))
+
+    await expect(comparison).resolves.toBe(false)
+    expect(controller.comparisonFilenames.size).toBe(0)
   })
 })
