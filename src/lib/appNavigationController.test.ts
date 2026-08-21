@@ -8,10 +8,31 @@ const projectOne = { id: 'P-1', name: 'One', path: '/one' } as Project
 const projectTwo = { id: 'P-2', name: 'Two', path: '/two' } as Project
 const rememberedTask = { id: 'T-2', project_id: projectTwo.id } as Task
 const reviewPullRequest = {
-  id: 'PR-1',
-  head_sha: 'abc123',
+  id: 1,
+  number: 1,
+  title: 'Review pull request',
+  body: null,
+  state: 'open',
+  draft: false,
   html_url: 'https://example.test/pull/1',
-} as ReviewPullRequest
+  user_login: 'reviewer',
+  user_avatar_url: null,
+  repo_owner: 'openforge',
+  repo_name: 'app',
+  head_ref: 'feature',
+  base_ref: 'main',
+  head_sha: 'abc123',
+  additions: 0,
+  deletions: 0,
+  changed_files: 0,
+  mergeable: true,
+  mergeable_state: 'clean',
+  created_at: 0,
+  updated_at: 0,
+  viewed_at: null,
+  viewed_head_sha: null,
+  labels: [],
+} satisfies ReviewPullRequest
 
 function createRouter() {
   return {
