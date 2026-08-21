@@ -48,7 +48,9 @@ interface SettingsViewControllerOptions {
 }
 
 const SAVE_DEBOUNCE_MS = 500
-const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins']
+// `pr_walkthrough_prompt` lives in the Agents section only, mirroring project settings —
+// every other global section excludes it so the long prompt is not rendered three times.
+const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins', 'pr_walkthrough_prompt']
 const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'code_cleanup_tasks_enabled',
   'task_display_title_metadata_updates_enabled',
@@ -64,6 +66,7 @@ const GITHUB_ONLY_EXCLUDE_KEYS = [
   'use_worktrees',
   'task_id_prefix',
   'plugins',
+  'pr_walkthrough_prompt',
 ]
 
 function getErrorMessage(value: unknown): string {

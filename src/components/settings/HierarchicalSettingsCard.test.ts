@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { createRawSnippet } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
 import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
 
 const baseValues: Record<string, string> = {
@@ -10,6 +11,7 @@ const baseValues: Record<string, string> = {
   use_worktrees: 'true',
   task_id_prefix: 'WEB',
   github_poll_interval: '60',
+  pr_walkthrough_prompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
 }
 
 const pluginRows = [{ id: 'demo', name: 'Demo Plugin', enabled: true }]
@@ -119,5 +121,69 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
     // Settings whose only home is the grouped card remain visible.
     expect(screen.queryByTestId('code_cleanup_tasks_enabled')).not.toBeNull()
     expect(screen.queryByTestId('task_id_prefix')).not.toBeNull()
+  })
+})
+
+describe('HierarchicalSettingsCard long-text settings', () => {
+  it('gives long-text settings the full card width instead of the narrow control column', () => {
+    render(HierarchicalSettingsCard, {
+      props: { mode: 'global', values: baseValues, onChange: vi.fn() },
+    })
+
+    expect(screen.getByTestId('row-pr_walkthrough_prompt').dataset.layout).toBe('stacked')
+    expect(screen.getByTestId('row-task_id_prefix').dataset.layout).toBe('split')
+  })
+
+  it('expands and collapses a long-text setting from a single button', async () => {
+    render(HierarchicalSettingsCard, {
+      props: { mode: 'global', values: baseValues, onChange: vi.fn() },
+    })
+
+    const collapsed = screen.getByTestId('expand-pr_walkthrough_prompt')
+    expect(collapsed.getAttribute('aria-expanded')).toBe('false')
+    expect(collapsed.textContent).toContain('Expand')
+
+    await fireEvent.click(collapsed)
+    const expanded = screen.getByTestId('expand-pr_walkthrough_prompt')
+    expect(expanded.getAttribute('aria-expanded')).toBe('true')
+    expect(expanded.textContent).toContain('Collapse')
+
+    await fireEvent.click(expanded)
+    expect(screen.getByTestId('expand-pr_walkthrough_prompt').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('offers reset to default in global mode only once the value drifts from the shipped default', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(HierarchicalSettingsCard, {
+      props: { mode: 'global', values: baseValues, onChange },
+    })
+
+    expect(screen.queryByTestId('reset-default-pr_walkthrough_prompt')).toBeNull()
+
+    await rerender({
+      mode: 'global',
+      values: { ...baseValues, pr_walkthrough_prompt: 'Hand-edited prompt' },
+      onChange,
+    })
+
+    await fireEvent.click(screen.getByTestId('reset-default-pr_walkthrough_prompt'))
+    expect(onChange).toHaveBeenCalledWith('pr_walkthrough_prompt', DEFAULT_PR_WALKTHROUGH_PROMPT)
+  })
+
+  it('keeps the project card on reset-to-global rather than reset-to-default', () => {
+    render(HierarchicalSettingsCard, {
+      props: {
+        mode: 'project',
+        values: { ...baseValues, pr_walkthrough_prompt: 'Project prompt' },
+        overrides: { pr_walkthrough_prompt: 'Project prompt' },
+        onChange: vi.fn(),
+        onResetSetting: vi.fn(),
+      },
+    })
+
+    expect(screen.queryByTestId('reset-default-pr_walkthrough_prompt')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Reset PR Walkthrough + AI Review Prompt to global default' }),
+    ).toBeTruthy()
   })
 })

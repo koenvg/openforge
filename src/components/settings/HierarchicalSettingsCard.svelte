@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RotateCcw, SlidersHorizontal } from '@lucide/svelte'
+  import { ChevronsDownUp, ChevronsUpDown, RotateCcw, SlidersHorizontal } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
   import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
   import type { HierarchicalSettingDef, SettingLevel } from '../../lib/hierarchicalSettings'
@@ -47,6 +47,8 @@
       : 'Settings inherited from your global defaults. Change one to override it for this project only; reset it to resume inheriting.',
   )
 
+  let expandedKeys = $state<Record<string, boolean>>({})
+
   function currentValue(key: string): string {
     return values[key] ?? ''
   }
@@ -58,7 +60,74 @@
   function settingStatus(setting: HierarchicalSettingDef): string {
     return isOverridden(setting.key) ? 'Overridden' : 'Inherited'
   }
+
+  /**
+   * Long-form values (prompts) are unreadable in the narrow right-hand control column,
+   * so they stack under their label and take the full card width instead.
+   */
+  function isFullWidth(setting: HierarchicalSettingDef): boolean {
+    return setting.control === 'textarea'
+  }
+
+  function isExpanded(key: string): boolean {
+    return expandedKeys[key] === true
+  }
+
+  function toggleExpanded(key: string): void {
+    expandedKeys = { ...expandedKeys, [key]: !isExpanded(key) }
+  }
+
+  function differsFromDefault(setting: HierarchicalSettingDef): boolean {
+    return currentValue(setting.key) !== setting.default
+  }
+
+  /**
+   * Grows an expanded textarea to fit its whole value so the full prompt is visible in one
+   * click, and hands height back to the stylesheet (and to manual resizing) when collapsed.
+   * Measuring is deferred so it runs after Svelte has written the new value to the element.
+   */
+  function fitToContent(node: HTMLTextAreaElement, options: { expanded: boolean; value: string }) {
+    let expanded = options.expanded
+
+    function apply(): void {
+      if (!expanded) {
+        node.style.height = ''
+        return
+      }
+      node.style.height = 'auto'
+      node.style.height = `${node.scrollHeight}px`
+    }
+
+    const handleInput = (): void => apply()
+    node.addEventListener('input', handleInput)
+    queueMicrotask(apply)
+
+    return {
+      update(next: { expanded: boolean; value: string }): void {
+        expanded = next.expanded
+        queueMicrotask(apply)
+      },
+      destroy(): void {
+        node.removeEventListener('input', handleInput)
+      },
+    }
+  }
 </script>
+
+{#snippet resetToGlobalButton(setting: HierarchicalSettingDef)}
+  {#if mode === 'project' && setting.control !== 'plugins' && isOverridden(setting.key)}
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm min-h-10 shrink-0"
+      aria-label="Reset {setting.label} to global default"
+      disabled={disabled || resettingKey === setting.key}
+      onclick={() => onResetSetting?.(setting.key)}
+    >
+      <RotateCcw size={14} aria-hidden="true" />
+      {resettingKey === setting.key ? 'Resetting…' : 'Reset'}
+    </button>
+  {/if}
+{/snippet}
 
 <section
   id="section-configuration"
@@ -94,24 +163,68 @@
 
   <div class="divide-y divide-base-300/80">
     {#each visibleSettings as setting (setting.key)}
-      <div class="grid min-h-16 gap-3 px-5 py-3 md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.85fr)] md:items-center">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-sm font-medium text-base-content">{setting.label}</span>
-            {#if mode === 'project' && setting.control !== 'plugins'}
-              <span
-                class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-medium {isOverridden(setting.key) ? 'border-warning/35 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}"
-                data-testid="status-{setting.key}"
-              >
-                <span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
-                {settingStatus(setting)}
-              </span>
-            {/if}
+      {@const fullWidth = isFullWidth(setting)}
+      <div
+        class="grid min-h-16 gap-3 px-5 py-3 {fullWidth ? '' : 'md:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.85fr)] md:items-center'}"
+        data-testid="row-{setting.key}"
+        data-layout={fullWidth ? 'stacked' : 'split'}
+      >
+        <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm font-medium text-base-content">{setting.label}</span>
+              {#if mode === 'project' && setting.control !== 'plugins'}
+                <span
+                  class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.68rem] font-medium {isOverridden(setting.key) ? 'border-warning/35 bg-warning/10 text-warning' : 'border-success/30 bg-success/10 text-success'}"
+                  data-testid="status-{setting.key}"
+                >
+                  <span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
+                  {settingStatus(setting)}
+                </span>
+              {/if}
+            </div>
+            <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/55 {fullWidth ? 'max-w-4xl' : ''}">{setting.description}</p>
           </div>
-          <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/55">{setting.description}</p>
+
+          {#if fullWidth}
+            <!-- Anchored beside the label so the toggle stays put while the field grows below it. -->
+            <div class="flex shrink-0 flex-wrap items-center gap-1">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm min-h-10"
+                aria-expanded={isExpanded(setting.key)}
+                aria-controls="setting-{setting.key}"
+                aria-label="{isExpanded(setting.key) ? 'Collapse' : 'Expand'} {setting.label}"
+                onclick={() => toggleExpanded(setting.key)}
+                data-testid="expand-{setting.key}"
+              >
+                {#if isExpanded(setting.key)}
+                  <ChevronsDownUp size={14} aria-hidden="true" />
+                  Collapse
+                {:else}
+                  <ChevronsUpDown size={14} aria-hidden="true" />
+                  Expand
+                {/if}
+              </button>
+              {#if mode === 'global' && differsFromDefault(setting)}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm min-h-10"
+                  aria-label="Reset {setting.label} to default"
+                  disabled={disabled}
+                  onclick={() => onChange(setting.key, setting.default)}
+                  data-testid="reset-default-{setting.key}"
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                  Reset to default
+                </button>
+              {/if}
+              {@render resetToGlobalButton(setting)}
+            </div>
+          {/if}
         </div>
 
-        <div class="flex min-w-0 items-center justify-between gap-3 md:justify-end">
+        <div class="flex min-w-0 gap-3 {fullWidth ? 'flex-col items-stretch' : 'items-center justify-between md:justify-end'}">
           {#if setting.control === 'toggle'}
             <label class="flex min-h-10 cursor-pointer items-center gap-2">
               <input
@@ -165,12 +278,14 @@
             />
           {:else if setting.control === 'textarea'}
             <textarea
-              class="textarea textarea-bordered w-full min-h-[12rem] font-mono text-xs leading-relaxed"
+              id="setting-{setting.key}"
+              class="textarea textarea-bordered w-full min-h-[12rem] resize-y font-mono text-xs leading-relaxed"
               aria-label={setting.label}
               value={currentValue(setting.key)}
               disabled={disabled}
               oninput={(event) => onChange(setting.key, event.currentTarget.value)}
               data-testid={setting.key}
+              use:fitToContent={{ expanded: isExpanded(setting.key), value: currentValue(setting.key) }}
             ></textarea>
           {:else if setting.control === 'plugins'}
             <div class="flex w-full flex-col gap-2">
@@ -196,17 +311,8 @@
             </div>
           {/if}
 
-          {#if mode === 'project' && setting.control !== 'plugins' && isOverridden(setting.key)}
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm min-h-10 shrink-0"
-              aria-label="Reset {setting.label} to global default"
-              disabled={disabled || resettingKey === setting.key}
-              onclick={() => onResetSetting?.(setting.key)}
-            >
-              <RotateCcw size={14} aria-hidden="true" />
-              {resettingKey === setting.key ? 'Resetting…' : 'Reset'}
-            </button>
+          {#if !fullWidth}
+            {@render resetToGlobalButton(setting)}
           {/if}
         </div>
       </div>
