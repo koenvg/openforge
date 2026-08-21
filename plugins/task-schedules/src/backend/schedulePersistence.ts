@@ -1,7 +1,7 @@
 import type { JsonValue } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { TaskSchedule, TaskScheduleDraft } from '../lib/types'
-import { isTerminalOneOff, normalizeScheduleDraft, normalizeStoredSchedule } from './scheduleValidation'
+import { isActiveTaskSchedule, normalizeScheduleDraft, normalizeStoredSchedule } from './scheduleValidation'
 
 export const SCHEDULES_STORAGE_KEY = 'task-schedules.v1'
 
@@ -20,7 +20,7 @@ export async function saveTaskSchedule(
 ): Promise<TaskSchedule> {
   const schedules = await readSchedules(openforge, request.projectId)
   const existing = request.schedule.id ? schedules.find((schedule) => schedule.id === request.schedule.id) ?? null : null
-  if (existing && (existing.cancelledAt !== null || isTerminalOneOff(existing))) {
+  if (existing && !isActiveTaskSchedule(existing)) {
     throw new Error('Completed or cancelled Task Schedules cannot be updated')
   }
   const normalized = normalizeScheduleDraft(request.schedule, existing, now)

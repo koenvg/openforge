@@ -1,30 +1,34 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
-import type { TaskSchedule } from '../lib/types'
+import type { TaskSchedule, TaskScheduleBase, TaskScheduleTiming } from '../lib/types'
 import { SCHEDULES_STORAGE_KEY } from './schedulePersistence'
 
 export const projectId = 'P-1'
 
-export function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
+type ScheduleOverrides = Partial<TaskScheduleBase> & {
+  timing?: TaskScheduleTiming
+  lifecycle?: TaskSchedule['lifecycle']
+}
+
+export function makeSchedule(overrides: ScheduleOverrides = {}): TaskSchedule {
+  const {
+    timing = { type: 'recurring', preset: 'daily', cron: '0 9 * * *' },
+    lifecycle = { state: 'active', enabled: true, nextFireAt: Date.UTC(2026, 0, 1, 9) },
+    ...baseOverrides
+  } = overrides
   return {
     id: 'schedule-1',
     title: 'Daily triage',
     prompt: 'Review incoming dependencies',
-    kind: 'recurring',
-    preset: 'daily',
-    cron: '0 9 * * *',
-    runAt: null,
     mode: 'create-and-start',
-    enabled: true,
     createdAt: Date.UTC(2026, 0, 1, 8),
     updatedAt: Date.UTC(2026, 0, 1, 8),
-    nextFireAt: Date.UTC(2026, 0, 1, 9),
-    lastFireAt: null,
     lastTaskId: null,
-    cancelledAt: null,
     idempotencyKey: null,
     history: [],
-    ...overrides,
-  }
+    ...baseOverrides,
+    timing,
+    lifecycle,
+  } as TaskSchedule
 }
 
 export async function setStoredSchedules(api: BackendOpenForgeAPI, schedules: TaskSchedule[]) {

@@ -18,18 +18,15 @@ describe('Scheduled Fire execution', () => {
     const runAt = Date.UTC(2026, 0, 2, 9)
     const now = Date.UTC(2026, 0, 1, 10)
     await setStoredSchedules(api, [makeSchedule({
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      nextFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
     })])
 
     await runScheduleNow(api, { projectId, scheduleId: 'schedule-1' }, now)
     const [completed] = await listTaskSchedules(api, { projectId })
     const laterOutcomes = await processDueSchedules(api, projectId, runAt + 60_000)
 
-    expect(completed).toMatchObject({ enabled: false, nextFireAt: null, lastFireAt: now })
+    expect(completed.lifecycle).toEqual({ state: 'completed', completedAt: now })
     expect(laterOutcomes).toEqual([])
     expect(api.__testing.calls.taskCreations).toHaveLength(1)
   })
@@ -38,11 +35,8 @@ describe('Scheduled Fire execution', () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     const runAt = Date.UTC(2026, 0, 2, 9)
     await setStoredSchedules(api, [makeSchedule({
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      nextFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
     })])
 
     const outcome = await runScheduleNow(
@@ -54,7 +48,7 @@ describe('Scheduled Fire execution', () => {
     const [pending] = await listTaskSchedules(api, { projectId })
 
     expect(outcome.status).toBe('cancelled')
-    expect(pending).toMatchObject({ enabled: true, nextFireAt: runAt, lastFireAt: null })
+    expect(pending.lifecycle).toEqual({ state: 'active', enabled: true, nextFireAt: runAt })
     expect(api.__testing.calls.taskCreations).toEqual([])
   })
 
@@ -141,7 +135,10 @@ describe('Scheduled Fire execution', () => {
   it('does not skip a due background Scheduled Fire when the previous scheduled Task was deleted', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     api.tasks.get = vi.fn(async () => null)
-    await setStoredSchedules(api, [makeSchedule({ lastTaskId: 'T-completed', nextFireAt: Date.UTC(2025, 11, 28, 9) })])
+    await setStoredSchedules(api, [makeSchedule({
+      lastTaskId: 'T-completed',
+      lifecycle: { state: 'active', enabled: true, nextFireAt: Date.UTC(2025, 11, 28, 9) },
+    })])
 
     const outcomes = await processDueSchedules(api, projectId, Date.UTC(2026, 0, 1, 10))
 
@@ -272,7 +269,7 @@ describe('Scheduled Fire execution', () => {
   it('background processing scans project-scoped schedules without needing an active project context', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId: null })
     api.projects.list = vi.fn(async () => [{ id: projectId, name: 'Project', path: '/repo', created_at: 0, updated_at: 0 }])
-    await setStoredSchedules(api, [makeSchedule({ nextFireAt: Date.UTC(2025, 11, 28, 9) })])
+    await setStoredSchedules(api, [makeSchedule({ lifecycle: { state: 'active', enabled: true, nextFireAt: Date.UTC(2025, 11, 28, 9) } })])
 
     const outcomes = await processDueSchedulesForAllProjects(api, Date.UTC(2026, 0, 1, 10))
 
@@ -285,11 +282,8 @@ describe('Scheduled Fire execution', () => {
     const runAt = Date.UTC(2026, 0, 1, 9)
     const now = Date.UTC(2026, 0, 1, 10)
     await setStoredSchedules(api, [makeSchedule({
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      nextFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
     })])
 
     const firstOutcomes = await processDueSchedules(api, projectId, now)
@@ -299,13 +293,13 @@ describe('Scheduled Fire execution', () => {
     expect(firstOutcomes).toHaveLength(1)
     expect(secondOutcomes).toEqual([])
     expect(api.__testing.calls.taskCreations).toHaveLength(1)
-    expect(completed).toMatchObject({ enabled: false, nextFireAt: null, lastFireAt: now })
+    expect(completed.lifecycle).toEqual({ state: 'completed', completedAt: now })
   })
 
   it('processes at most one missed Scheduled Fire and advances the next fire after restart', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     await setStoredSchedules(api, [
-      makeSchedule({ nextFireAt: Date.UTC(2025, 11, 28, 9) }),
+      makeSchedule({ lifecycle: { state: 'active', enabled: true, nextFireAt: Date.UTC(2025, 11, 28, 9) } }),
     ])
 
     const outcomes = await processDueSchedules(api, projectId, Date.UTC(2026, 0, 1, 10))
@@ -313,7 +307,7 @@ describe('Scheduled Fire execution', () => {
 
     expect(outcomes).toHaveLength(1)
     expect(api.__testing.calls.taskCreations).toHaveLength(1)
-    expect(saved.nextFireAt).toBeGreaterThan(Date.UTC(2026, 0, 1, 10))
+    expect(saved.lifecycle.state === 'active' ? saved.lifecycle.nextFireAt : null).toBeGreaterThan(Date.UTC(2026, 0, 1, 10))
   })
 
   it('keeps only the last five outcomes', async () => {

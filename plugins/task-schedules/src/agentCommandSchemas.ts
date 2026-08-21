@@ -47,43 +47,85 @@ const fireOutcomeSchema: JsonSchema = {
   },
 }
 
+const scheduleTimingOutputSchema: JsonSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      required: ['type', 'runAt'],
+      additionalProperties: false,
+      properties: { type: { const: 'once' }, runAt: { type: 'number' } },
+    },
+    {
+      type: 'object',
+      required: ['type', 'preset', 'cron'],
+      additionalProperties: false,
+      properties: {
+        type: { const: 'recurring' },
+        preset: literalSchema('daily', 'weekly', 'monthly', 'custom'),
+        cron: { type: 'string' },
+      },
+    },
+  ],
+}
+
+const scheduleLifecycleOutputSchema: JsonSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      required: ['state', 'enabled', 'nextFireAt'],
+      additionalProperties: false,
+      properties: {
+        state: { const: 'active' },
+        enabled: { type: 'boolean' },
+        nextFireAt: { type: 'number' },
+        lastFireAt: { type: 'number' },
+      },
+    },
+    {
+      type: 'object',
+      required: ['state', 'completedAt'],
+      additionalProperties: false,
+      properties: { state: { const: 'completed' }, completedAt: { type: 'number' } },
+    },
+    {
+      type: 'object',
+      required: ['state', 'cancelledAt'],
+      additionalProperties: false,
+      properties: {
+        state: { const: 'cancelled' },
+        cancelledAt: { type: 'number' },
+        lastFireAt: { type: 'number' },
+      },
+    },
+  ],
+}
+
 export const taskScheduleOutputSchema: JsonSchema = {
   type: 'object',
   required: [
     'id',
     'title',
     'prompt',
-    'kind',
-    'preset',
-    'cron',
-    'runAt',
+    'timing',
+    'lifecycle',
     'mode',
-    'enabled',
     'createdAt',
     'updatedAt',
-    'nextFireAt',
-    'lastFireAt',
     'lastTaskId',
-    'cancelledAt',
     'idempotencyKey',
     'history',
   ],
+  additionalProperties: false,
   properties: {
     id: { type: 'string' },
     title: { type: 'string' },
     prompt: { type: 'string' },
-    kind: literalSchema('once', 'recurring'),
-    preset: literalSchema('daily', 'weekly', 'monthly', 'custom', null),
-    cron: nullableSchema({ type: 'string' }),
-    runAt: nullableSchema({ type: 'number' }),
+    timing: scheduleTimingOutputSchema,
+    lifecycle: scheduleLifecycleOutputSchema,
     mode: modeSchema,
-    enabled: { type: 'boolean' },
     createdAt: { type: 'number' },
     updatedAt: { type: 'number' },
-    nextFireAt: nullableSchema({ type: 'number' }),
-    lastFireAt: nullableSchema({ type: 'number' }),
     lastTaskId: nullableSchema({ type: 'string' }),
-    cancelledAt: nullableSchema({ type: 'number' }),
     idempotencyKey: nullableSchema({ type: 'string' }),
     history: { type: 'array', items: fireOutcomeSchema },
   },
