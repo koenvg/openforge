@@ -226,6 +226,44 @@ pub async fn submit_pr_review(
         .map_err(|e| format!("Failed to submit review: {e}"))
 }
 
+/// Post a single review comment immediately (not batched into a pending review).
+#[allow(clippy::too_many_arguments)]
+pub async fn create_review_comment(
+    github_client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+    commit_id: &str,
+    path: &str,
+    line: i32,
+    side: &str,
+    body: &str,
+) -> Result<(), String> {
+    let token = github_token().await?;
+    github_client
+        .create_review_comment(
+            owner, repo, pr_number, commit_id, path, line, side, body, &token,
+        )
+        .await
+        .map_err(|e| format!("Failed to create review comment: {e}"))
+}
+
+/// Post a threaded reply to an existing PR review comment.
+pub async fn create_review_comment_reply(
+    github_client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    pr_number: i64,
+    comment_id: i64,
+    body: &str,
+) -> Result<(), String> {
+    let token = github_token().await?;
+    github_client
+        .create_review_comment_reply(owner, repo, pr_number, comment_id, body, &token)
+        .await
+        .map_err(|e| format!("Failed to reply to review comment: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::github_client::{GitHubUser, PrComment, PrReviewComment};

@@ -2,14 +2,17 @@
   import { onMount, onDestroy } from 'svelte'
   import type { Disposable, FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
   type UnlistenFn = Disposable
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, pendingReplies, prOverviewComments, agentReviewComments, aiThreads, authoredPrs, activeProjectId, pendingReviewPrOpen } from '../../lib/stores'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { sortAuthoredPrs, sortDoNotReviewLast } from '@openforge-app/pr-review-ui/prSort'
   import PrReviewDetailSection from './PrReviewDetailSection.svelte'
   import PrReviewListSection from './PrReviewListSection.svelte'
-  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AiThread, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, PrWalkthrough, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
+  import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
+  import { walkthroughReadyFirst } from '../../lib/reviewListSort'
+  import { DEFAULT_WALKTHROUGH_PROMPT } from '../../lib/walkthroughPrompt'
   import {
     getPrReviewFilesKey,
     loadPrReviewedFileShas,
@@ -75,6 +78,19 @@
   let reviewedFilesLoadSequence = 0
   let prDetailsLoadSequence = 0
   let unlisteners: UnlistenFn[] = []
+
+  // Per-PR walkthrough status so the list card button and the detail tab can
+  // reflect idle/generating/ready/stale without each card hitting the backend.
+  let walkthroughByPr = $state<Map<number, PrWalkthrough | null>>(new Map())
+  // Poll timers live in a plain (non-reactive) map, cleared in onDestroy — never
+  // via $effect cleanup, which would fire on unrelated prop changes.
+  const walkthroughPollTimers = new Map<number, ReturnType<typeof setInterval>>()
+
+  let selectedWalkthroughReady = $derived(
+    $selectedReviewPr
+      ? walkthroughButtonState(walkthroughByPr.get($selectedReviewPr.id), $selectedReviewPr.head_sha) === 'ready'
+      : false,
+  )
 
   // Repo filtering
   let excludedRepos = $state<Set<string>>(new Set())
@@ -143,10 +159,19 @@
   let filteredReviewPrs = $derived($reviewPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
   let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => matchesScope(pr.repo_owner, pr.repo_name) && (!showFilters || !isRepoExcluded(pr.repo_owner, pr.repo_name))))
 
-  // PRs labeled "DO NOT REVIEW" always sort to the bottom of the review list. The authored
+  // PRs whose walkthrough + AI review has finished generating ('ready') are lifted
+  // to the top so reviewers reach the prepared ones first. Computed from the
+  // reactive walkthroughByPr map, keyed to each PR's current head sha.
+  let readyReviewPrIds = $derived(new Set(
+    filteredReviewPrs
+      .filter(pr => walkthroughButtonState(walkthroughByPr.get(pr.id), pr.head_sha) === 'ready')
+      .map(pr => pr.id),
+  ))
+  // PRs labeled "DO NOT REVIEW" always sort to the bottom of the review list (applied
+  // after the ready-first lift so a do-not-review PR never jumps up). The authored
   // list ignores that label — it tells reviewers to skip a PR, not its author — and is
   // ordered by attention instead, per repo section in groupedAuthoredPrs below.
-  let sortedReviewPrs = $derived(sortDoNotReviewLast(filteredReviewPrs))
+  let sortedReviewPrs = $derived(sortDoNotReviewLast(walkthroughReadyFirst(filteredReviewPrs, readyReviewPrIds)))
   let sortedAuthoredPrs = $derived(filteredAuthoredPrs)
 
   // Text input for manually adding repos
@@ -216,7 +241,9 @@
       }
       if (e.key === '3') {
         e.preventDefault()
-        activeTab = 'walkthrough'
+        // The Walkthrough tab only exists once a ready walkthrough is cached, so
+        // Cmd+3 is a no-op otherwise (matches the hidden tab).
+        if (selectedWalkthroughReady) activeTab = 'walkthrough'
         return
       }
     }
@@ -398,6 +425,7 @@
     try {
       const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to load PRs:', e)
       error = formatPrLoadError('review', e)
@@ -412,6 +440,7 @@
     try {
       const prs = await githubSync.refreshReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
       error = formatPrLoadError('review', e)
@@ -425,6 +454,7 @@
     try {
       const prs = await githubSync.listReviewPullRequests()
       $reviewPrs = prs
+      void refreshVisibleWalkthroughStatuses(prs)
     } catch (e) {
       console.error('Failed to silently refresh PRs:', e)
     }
@@ -487,12 +517,15 @@
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
+    void refreshWalkthroughStatus(updatedPr)
     includeNonApplicationFiles = true
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
+    $pendingReplies = []
     $prOverviewComments = []
     $agentReviewComments = []
+    $aiThreads = []
     githubSync.markReviewPullRequestViewed({ prId: pr.id, headSha: pr.head_sha }).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
@@ -510,9 +543,14 @@
       })
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $reviewComments = comments
-      const agentComments = await githubSync.listAgentReviewComments({ reviewPrId: pr.id })
+      // The local, per-commit AI-review store (this feature) is the source of
+      // truth; the older Rust listAgentReviewComments POC path is superseded.
+      const agentComments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       $agentReviewComments = agentComments
+      const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
+      if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
+      $aiThreads = threads
     } catch (e) {
       if (!isCurrentPrDetailsLoad(loadSequence, pr)) return
       console.error('Failed to load PR diffs:', e)
@@ -543,8 +581,10 @@
     $prFileDiffs = []
     $reviewComments = []
     $pendingManualComments = []
+    $pendingReplies = []
     $prOverviewComments = []
     $agentReviewComments = []
+    $aiThreads = []
     activeTab = 'overview'
   }
 
@@ -672,8 +712,40 @@
         commitId: request.commitId,
       })
     } catch (error) {
-      if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) return
+      if (await recoverAlreadySubmittedInlineComments({ ...request, previousComments })) {
+        await postPendingReplies(request)
+        return
+      }
       throw error
+    }
+    await postPendingReplies(request)
+  }
+
+  // Post replies queued via "Add to review" once the review itself is submitted.
+  // Each posts as a threaded reply; then clear the queue and refresh the threads.
+  async function postPendingReplies(request: { repoOwner: string; repoName: string; prNumber: number }) {
+    const queued = $pendingReplies
+    if (queued.length === 0) return
+    for (const reply of queued) {
+      try {
+        await githubSync.replyToReviewComment({
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+          commentId: reply.commentId, body: reply.body,
+        })
+      } catch (e) {
+        console.error('Failed to post queued reply:', e)
+      }
+    }
+    $pendingReplies = []
+    try {
+      const comments = await githubSync.listReviewComments({
+        owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+      })
+      if ($selectedReviewPr?.number === request.prNumber && $selectedReviewPr?.repo_owner === request.repoOwner) {
+        $reviewComments = comments
+      }
+    } catch (e) {
+      console.error('Failed to refresh comments after posting replies:', e)
     }
   }
 
@@ -738,6 +810,244 @@
     }
   }
 
+  // Best-effort per-PR walkthrough status read; failures are non-blocking (the
+  // card just stays 'idle'). Reassigns a fresh Map so Svelte re-renders.
+  async function refreshWalkthroughStatus(pr: ReviewPullRequest) {
+    try {
+      const wt = await githubSync.getPrWalkthrough({ reviewPrId: pr.id, headSha: pr.head_sha })
+      const next = new Map(walkthroughByPr)
+      next.set(pr.id, wt)
+      walkthroughByPr = next
+    } catch (e) {
+      console.error('Failed to load walkthrough status:', e)
+    }
+  }
+
+  async function refreshVisibleWalkthroughStatuses(prs: ReviewPullRequest[]) {
+    await Promise.all(prs.map(refreshWalkthroughStatus))
+  }
+
+  // Resolve the configurable walkthrough + AI-review prompt template: per-project
+  // override, else global default, else the built-in template. Mirrors how other
+  // hierarchical settings (e.g. ai_provider) inherit global → project.
+  async function resolveWalkthroughPromptTemplate(): Promise<string> {
+    const projectId = $activeProjectId
+    const projectPrompt = projectId
+      ? await api.projectConfig.get<string>('pr_walkthrough_prompt', projectId)
+      : null
+    if (projectPrompt && projectPrompt.length > 0) return projectPrompt
+    const globalPrompt = await api.config.get<string>('pr_walkthrough_prompt')
+    if (globalPrompt && globalPrompt.length > 0) return globalPrompt
+    return DEFAULT_WALKTHROUGH_PROMPT
+  }
+
+  // Kick off a background walkthrough + AI-review generation for a PR from the
+  // list card. Deliberately does NOT mark the PR read — read state only changes
+  // when the reviewer opens the PR (openPrDetail). The prompt is compiled
+  // server-side (Plan 2); the template (resolved from settings here) is passed in.
+  async function generateWalkthrough(pr: ReviewPullRequest) {
+    try {
+      const promptTemplate = await resolveWalkthroughPromptTemplate()
+      await githubSync.startAgentWalkthrough({
+        repoOwner: pr.repo_owner,
+        repoName: pr.repo_name,
+        prNumber: pr.number,
+        headRef: pr.head_ref,
+        baseRef: pr.base_ref,
+        prTitle: pr.title,
+        prBody: pr.body,
+        headSha: pr.head_sha,
+        reviewPrId: pr.id,
+        projectId: $activeProjectId,
+        promptTemplate,
+      })
+    } catch (e) {
+      console.error('Failed to start walkthrough generation:', e)
+      return
+    }
+    await refreshWalkthroughStatus(pr) // now 'generating' (backend persists it synchronously)
+    startWalkthroughPolling(pr)
+  }
+
+  function startWalkthroughPolling(pr: ReviewPullRequest) {
+    if (walkthroughPollTimers.has(pr.id)) return
+    const timer = setInterval(async () => {
+      await refreshWalkthroughStatus(pr)
+      const wt = walkthroughByPr.get(pr.id)
+      if (wt && wt.status !== 'generating') {
+        clearInterval(timer)
+        walkthroughPollTimers.delete(pr.id)
+        // When generation finishes for the PR the reviewer currently has open,
+        // reload its AI review comments so they appear without reopening the PR
+        // (deferred Plan 2 Task 6 Step 3).
+        if (
+          wt.status === 'ready' &&
+          $selectedReviewPr?.id === pr.id &&
+          $selectedReviewPr?.head_sha === pr.head_sha
+        ) {
+          try {
+            $agentReviewComments = await githubSync.getPrAiReviewComments({ reviewPrId: pr.id, headSha: pr.head_sha })
+          } catch (e) {
+            console.error('Failed to reload AI review comments after generation:', e)
+          }
+        }
+      }
+    }, 2500)
+    walkthroughPollTimers.set(pr.id, timer)
+  }
+
+  // ── Ask-the-author Q&A threads (local, per-commit; never pushed to GitHub) ──
+  const threadPollTimers = new Map<number, ReturnType<typeof setInterval>>()
+
+  // Unsent questions (draft/error threads whose last message is the reviewer's).
+  // In-flight ('pending') threads are excluded so the send button reflects backlog.
+  let aiThreadsPendingCount = $derived(
+    $aiThreads.filter(t => t.status !== 'pending' && t.messages.at(-1)?.role === 'user').length,
+  )
+
+  function newThreadId() {
+    return `thread-${crypto.randomUUID()}`
+  }
+
+  async function createThread(anchor: AiThread['anchor'], body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    const now = Math.floor(Date.now() / 1000)
+    const thread: AiThread = {
+      id: newThreadId(),
+      anchor,
+      status: 'draft',
+      messages: [{ role: 'user', body, created_at: now }],
+      created_at: now,
+      updated_at: now,
+    }
+    $aiThreads = [...$aiThreads, thread]
+    await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+  }
+
+  function askAgent(filename: string, line: number, side: 'LEFT' | 'RIGHT', body: string) {
+    void createThread({ type: 'line', filename, line, side }, body)
+  }
+
+  function askAgentStep(stepId: string, body: string) {
+    void createThread({ type: 'step', step_id: stepId }, body)
+  }
+
+  // Follow-up question about a specific AI review comment. Anchored to the comment
+  // (so the prompt can quote its suggestion) plus its diff location (so the thread
+  // renders inline right under it).
+  function askAboutComment(args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) {
+    void createThread(
+      { type: 'comment', comment_id: args.commentId, filename: args.filename, line: args.line, side: args.side },
+      args.body,
+    )
+  }
+
+  // Post a threaded reply to an existing GitHub review comment, then refresh the
+  // thread so the reply shows up. Guarded against a PR switch mid-request.
+  async function replyToExistingComment(commentId: number, body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    try {
+      await githubSync.replyToReviewComment({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number, commentId, body,
+      })
+      const comments = await githubSync.listReviewComments({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+      })
+      if ($selectedReviewPr?.id === pr.id) $reviewComments = comments
+    } catch (e) {
+      console.error('Failed to reply to review comment:', e)
+    }
+  }
+
+  // Queue a reply for the pending review (posted, threaded, at submit time).
+  function addReplyToReview(commentId: number, body: string) {
+    $pendingReplies = [...$pendingReplies, { commentId, body }]
+  }
+
+  // Drop a queued reply before submitting.
+  function removePendingReply(commentId: number) {
+    const index = $pendingReplies.findIndex(reply => reply.commentId === commentId)
+    if (index === -1) return
+    $pendingReplies = $pendingReplies.filter((_, i) => i !== index)
+  }
+
+  // Post a single inline comment to GitHub immediately (the "Comment" action),
+  // instead of holding it in the pending review, then refresh so it appears.
+  async function commentNow(filename: string, line: number, side: 'LEFT' | 'RIGHT', body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    try {
+      await githubSync.createReviewComment({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+        commitId: pr.head_sha, path: filename, line, side, body,
+      })
+      const comments = await githubSync.listReviewComments({
+        owner: pr.repo_owner, repo: pr.repo_name, prNumber: pr.number,
+      })
+      if ($selectedReviewPr?.id === pr.id) $reviewComments = comments
+    } catch (e) {
+      console.error('Failed to create review comment:', e)
+    }
+  }
+
+  async function replyToThread(threadId: string, body: string) {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    const now = Math.floor(Date.now() / 1000)
+    const updated = $aiThreads.map(t => t.id === threadId
+      ? { ...t, status: 'draft' as const, updated_at: now, messages: [...t.messages, { role: 'user' as const, body, created_at: now }] }
+      : t)
+    $aiThreads = updated
+    const thread = updated.find(t => t.id === threadId)
+    if (thread) await githubSync.saveAiThread({ reviewPrId: pr.id, headSha: pr.head_sha, thread })
+  }
+
+  async function sendQuestionsToAgent() {
+    const pr = $selectedReviewPr
+    if (!pr) return
+    await githubSync.askAgentQuestions({
+      reviewPrId: pr.id,
+      headSha: pr.head_sha,
+      repoOwner: pr.repo_owner,
+      repoName: pr.repo_name,
+      prNumber: pr.number,
+      projectId: $activeProjectId,
+    })
+    await refreshThreads(pr) // reflect the 'pending' state the backend just persisted
+    startThreadPolling(pr)
+  }
+
+  async function refreshThreads(pr: ReviewPullRequest) {
+    try {
+      const threads = await githubSync.getAiThreads({ reviewPrId: pr.id, headSha: pr.head_sha })
+      if ($selectedReviewPr?.id === pr.id && $selectedReviewPr?.head_sha === pr.head_sha) {
+        $aiThreads = threads
+      }
+    } catch (e) {
+      console.error('Failed to load AI threads:', e)
+    }
+  }
+
+  function startThreadPolling(pr: ReviewPullRequest) {
+    if (threadPollTimers.has(pr.id)) return
+    const timer = setInterval(async () => {
+      // Only the currently open PR's threads are shown; stop once the reviewer leaves.
+      if ($selectedReviewPr?.id !== pr.id || $selectedReviewPr?.head_sha !== pr.head_sha) {
+        clearInterval(timer)
+        threadPollTimers.delete(pr.id)
+        return
+      }
+      await refreshThreads(pr)
+      if (!$aiThreads.some(t => t.status === 'pending')) {
+        clearInterval(timer)
+        threadPollTimers.delete(pr.id)
+      }
+    }, 2500)
+    threadPollTimers.set(pr.id, timer)
+  }
+
   onMount(async () => {
     loadGithubConfiguration()
     loadPrs()
@@ -765,6 +1075,10 @@
     unlisteners.forEach((subscription) => {
       void subscription.dispose()
     })
+    for (const timer of walkthroughPollTimers.values()) clearInterval(timer)
+    walkthroughPollTimers.clear()
+    for (const timer of threadPollTimers.values()) clearInterval(timer)
+    threadPollTimers.clear()
   })
 </script>
 
@@ -799,8 +1113,25 @@
       onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
       onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
       onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
-      onUpdateAgentCommentStatus={(commentId, status) => githubSync.updateAgentReviewCommentStatus({ commentId, status })}
+      onUpdateAgentCommentStatus={(commentId, status) => {
+        const openPr = $selectedReviewPr
+        if (!openPr) return
+        return githubSync.updatePrAiReviewCommentStatus({ reviewPrId: openPr.id, headSha: openPr.head_sha, commentId, status })
+      }}
       onToggleFileReviewed={handleToggleFileReviewed}
+      walkthroughReady={selectedWalkthroughReady}
+      aiThreads={$aiThreads}
+      aiThreadsPendingCount={aiThreadsPendingCount}
+      onAskAgent={askAgent}
+      onCommentNow={commentNow}
+      onReplyToThread={replyToThread}
+      onAskAboutComment={askAboutComment}
+      onReplyToExistingComment={replyToExistingComment}
+      pendingReplies={$pendingReplies}
+      onAddReplyToReview={addReplyToReview}
+      onRemovePendingReply={removePendingReply}
+      onAskAgentStep={askAgentStep}
+      onSendQuestionsToAgent={sendQuestionsToAgent}
       onSubmitReview={submitReview}
       onOpenUrl={(url) => api.system.openUrl(url)}
     />
@@ -843,6 +1174,8 @@
       onMarkUnread={(pr) => markPrUnread(pr)}
       onOpenAuthoredPr={(url) => api.system.openUrl(url)}
       {pluralize}
+      {walkthroughByPr}
+      onGenerateWalkthrough={(pr) => { void generateWalkthrough(pr) }}
     />
   {/if}
 </div>

@@ -581,7 +581,7 @@ describe('DiffViewer pending comments source', () => {
     const lastCall = mockDiffView.mock.calls.at(-1)
     void lastCall?.[1]?.extendData
 
-    expect(buildExtendData).toHaveBeenCalledWith('src/test.ts', [], pendingComments, [])
+    expect(buildExtendData).toHaveBeenCalledWith('src/test.ts', [], pendingComments, [], [], [])
   })
 })
 
@@ -671,7 +671,7 @@ describe('DiffViewer inline textarea drafts', () => {
 
     const textarea = await screen.findByPlaceholderText('Leave a comment…')
     await fireEvent.input(textarea, { target: { value: 'pending comment body' } })
-    await fireEvent.click(screen.getByRole('button', { name: 'Add comment' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to review' }))
 
     expect(onPendingCommentsChange).toHaveBeenCalledWith([
       { path: 'src/test.ts', line: 2, side: 'RIGHT', body: 'pending comment body' },

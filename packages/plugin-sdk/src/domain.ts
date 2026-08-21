@@ -984,6 +984,35 @@ export interface AgentReviewComment {
   updated_at: number;
 }
 
+/** One message in a local "Ask the AI author" Q&A thread. Never sent to GitHub. */
+export interface AiThreadMessage {
+  role: 'user' | 'ai';
+  body: string;
+  created_at: number;
+}
+
+/**
+ * Where a Q&A thread is anchored: a specific diff line, a walkthrough step, or a
+ * specific AI review comment (a follow-up like "why did you suggest this?"). The
+ * `comment` variant carries the AI comment's id (so its suggestion can be quoted
+ * as context) plus the denormalized diff location so it renders inline like a
+ * line-anchored thread.
+ */
+export type AiThreadAnchor =
+  | { type: 'line'; filename: string; line: number; side: 'LEFT' | 'RIGHT' }
+  | { type: 'step'; step_id: string }
+  | { type: 'comment'; comment_id: number; filename: string; line: number; side: 'LEFT' | 'RIGHT' };
+
+/** A private, per-commit reviewer↔AI conversation, stored locally (never on GitHub). */
+export interface AiThread {
+  id: string;
+  anchor: AiThreadAnchor;
+  status: 'draft' | 'pending' | 'answered' | 'error';
+  messages: AiThreadMessage[];
+  created_at: number;
+  updated_at: number;
+}
+
 /** App-level view for top-bar navigation */
 export type CoreAppView = 'board' | 'settings' | 'global_settings' | 'files'
 

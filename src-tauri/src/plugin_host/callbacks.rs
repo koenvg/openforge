@@ -33,10 +33,13 @@ fn openforge_global_command_to_app_invoke(qualified_id: &str) -> Result<&'static
         "getReviewComments" => Ok("get_review_comments"),
         "getPrOverviewComments" => Ok("get_pr_overview_comments"),
         "submitPrReview" => Ok("submit_pr_review"),
+        "replyToReviewComment" => Ok("create_review_comment_reply"),
+        "createReviewComment" => Ok("create_review_comment"),
         "getAgentReviewComments" => Ok("get_agent_review_comments"),
         "updateAgentReviewCommentStatus" => Ok("update_agent_review_comment_status"),
         "agentGenerate" => Ok("agent_generate"),
         "abortAgentGenerate" => Ok("abort_agent_generate"),
+        "agentGenerateInRepo" => Ok("agent_generate_in_repo"),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -51,7 +54,10 @@ fn is_files_review_app_command(command: &str) -> bool {
 }
 
 fn is_agent_generate_app_command(command: &str) -> bool {
-    matches!(command, "agent_generate" | "abort_agent_generate")
+    matches!(
+        command,
+        "agent_generate" | "abort_agent_generate" | "agent_generate_in_repo"
+    )
 }
 
 /// Whether `plugin_id` may invoke the given resolved app command.
@@ -504,6 +510,43 @@ mod tests {
             required_shell_session_key(&params).expect_err("terminalIndex should be required"),
             "plugin host callback missing integer param: terminalIndex"
         );
+    }
+
+    #[test]
+    fn agent_generate_in_repo_maps_and_is_authorized() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.agentGenerateInRepo").unwrap(),
+            "agent_generate_in_repo"
+        );
+        assert!(is_agent_generate_app_command("agent_generate_in_repo"));
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "agent_generate_in_repo"
+        ));
+    }
+
+    #[test]
+    fn reply_to_review_comment_maps_and_is_authorized() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.replyToReviewComment").unwrap(),
+            "create_review_comment_reply"
+        );
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "create_review_comment_reply"
+        ));
+    }
+
+    #[test]
+    fn create_review_comment_maps_and_is_authorized() {
+        assert_eq!(
+            openforge_global_command_to_app_invoke("openforge.createReviewComment").unwrap(),
+            "create_review_comment"
+        );
+        assert!(plugin_may_invoke_command(
+            GITHUB_SYNC_PLUGIN_ID,
+            "create_review_comment"
+        ));
     }
 
     #[test]

@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import type { AgentReviewComment, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
-  import { buildExtendData, type CommentDisplayData } from './diffComments'
+  import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
   import InlineCommentForm from './InlineCommentForm.svelte'
@@ -35,7 +35,16 @@
     onSubmitInlineComment: (lineNumber: number, side: SplitSide, onClose: () => void) => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
+    aiThreads?: AiThread[]
+    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToThread?: (threadId: string, body: string) => void
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: PendingReply[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
   }
 
   let {
@@ -64,7 +73,21 @@
     onPendingCommentsChange,
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
+    aiThreads = [],
+    onAskAgent,
+    onCommentNow,
+    onReplyToThread,
+    onAskAboutComment,
+    onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
   }: Props = $props()
+
+  // The diff widget reports a SplitSide; local Q&A anchors use LEFT/RIGHT.
+  function sideToReviewSide(side: SplitSide): ReviewSubmissionComment['side'] {
+    return side === SplitSide.old ? 'LEFT' : 'RIGHT'
+  }
 </script>
 
 {#if richDiffActive}
@@ -136,7 +159,7 @@
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}
-    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments)}
+    extendData={buildExtendData(file.filename, existingComments, pendingComments, agentComments, aiThreads, pendingReplies)}
     {diffViewMode}
     {diffViewWrap}
     {diffViewTheme}
@@ -156,6 +179,11 @@
         {onAgentCommentsChange}
         {onUpdateAgentCommentStatus}
         {onOpenUrl}
+        {onReplyToThread}
+        {onAskAboutComment}
+        {onReplyToExistingComment}
+        {onAddReplyToReview}
+        {onRemovePendingReply}
       />
     {/snippet}
     {#snippet renderWidgetLine({ lineNumber, side, onClose }: { lineNumber: number; side: SplitSide; diffFile: DiffFile; onClose: () => void })}
@@ -170,6 +198,8 @@
           onClearInlineCommentText(lineNumber, side)
           onClose()
         }}
+        onAskAgent={onAskAgent ? (body) => onAskAgent(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
+        onCommentNow={onCommentNow ? (body) => onCommentNow(file.filename, lineNumber, sideToReviewSide(side), body) : undefined}
       />
     {/snippet}
   </DiffView>

@@ -1,5 +1,7 @@
+import { DEFAULT_PR_WALKTHROUGH_PROMPT } from './prWalkthroughPrompt'
+
 export type SettingLevel = 'global' | 'project' | 'task'
-export type SettingControl = 'toggle' | 'select' | 'text' | 'number' | 'plugins'
+export type SettingControl = 'toggle' | 'select' | 'text' | 'number' | 'textarea' | 'plugins'
 
 export interface HierarchicalSettingDef {
   key: string
@@ -74,6 +76,14 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
     control: 'number',
     levels: ['global', 'project'],
     default: '60',
+  },
+  {
+    key: 'pr_walkthrough_prompt',
+    label: 'PR Walkthrough + AI Review Prompt',
+    description: 'Prompt used to generate the PR walkthrough steps and AI review comments. Keep the {{PR_TITLE}}, {{PR_DESCRIPTION}}, {{CHANGED_FILES}}, and {{EXISTING_COMMENTS}} placeholders. They are filled in per PR.',
+    control: 'textarea',
+    levels: ['global', 'project'],
+    default: DEFAULT_PR_WALKTHROUGH_PROMPT,
   },
 ]
 

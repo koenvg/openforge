@@ -9,6 +9,7 @@ pub const HIERARCHY_PROJECT_CONFIG_KEYS: &[&str] = &[
     "use_worktrees",
     "task_id_prefix",
     "github_poll_interval",
+    "pr_walkthrough_prompt",
 ];
 
 impl super::Database {

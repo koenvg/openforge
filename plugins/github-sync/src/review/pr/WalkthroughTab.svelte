@@ -2,6 +2,7 @@
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type {
     AgentReviewComment,
+    AiThread,
     PrFileDiff,
     PrWalkthrough,
     PrWalkthroughStep,
@@ -9,7 +10,6 @@
     ReviewPullRequest,
     ReviewSubmissionComment,
   } from '@openforge-app/plugin-sdk/domain'
-  import { compileWalkthroughPrompt } from '../../lib/walkthroughPrompt'
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
   import {
     buildSyntheticStepFiles,
@@ -22,6 +22,8 @@
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
+  import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
+  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
@@ -38,8 +40,18 @@
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     agentComments: AgentReviewComment[]
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
-    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onUpdateAgentCommentStatus: (commentId: number, status: 'approved' | 'dismissed' | 'pending') => Promise<void> | void
     onOpenUrl: (url: string) => void | Promise<void>
+    aiThreads?: AiThread[]
+    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToThread?: (threadId: string, body: string) => void
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: { commentId: number; body: string }[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
+    onAskAgentStep?: (stepId: string, body: string) => void
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -66,8 +78,36 @@
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
     onOpenUrl,
+    aiThreads = [],
+    onAskAgent,
+    onCommentNow,
+    onReplyToThread,
+    onAskAboutComment,
+    onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
+    onAskAgentStep,
     onSubmitReview,
   }: Props = $props()
+
+  // Approved AI review comments submit with the review directly (mirrors the Files
+  // tab); map them to submission shape and clear them after a successful submit.
+  let approvedAgentSubmissionComments = $derived(
+    approvedInlineAgentComments(agentComments).map(agentCommentToSubmission),
+  )
+
+  function handleApprovedAgentCommentsSubmitted() {
+    const submitted = approvedInlineAgentComments(agentComments)
+    if (submitted.length === 0) return
+    const submittedIds = new Set(submitted.map(comment => comment.id))
+    for (const comment of submitted) void onUpdateAgentCommentStatus(comment.id, 'dismissed')
+    onAgentCommentsChange(
+      agentComments.map(comment =>
+        submittedIds.has(comment.id) ? { ...comment, status: 'dismissed' } : comment,
+      ),
+    )
+  }
 
   let walkthrough = $state<PrWalkthrough | null>(null)
   let isLoading = $state(false)
@@ -101,6 +141,34 @@
     parsedSteps && !isFinalStep ? parsedSteps[clampedStepIndex] : null,
   )
 
+  // Step-anchored "Ask the AI author" threads for the current step.
+  let activeStepThreads = $derived.by(() => {
+    const step = activeStep
+    if (!step) return []
+    return aiThreads.filter(t => t.anchor.type === 'step' && t.anchor.step_id === step.id)
+  })
+  let stepQuestionOpen = $state(false)
+  let stepQuestionText = $state('')
+  let stepReplyDrafts = $state<Record<string, string>>({})
+
+  function submitStepQuestion() {
+    const text = stepQuestionText.trim()
+    const step = activeStep
+    if (!text || !step) return
+    onAskAgentStep?.(step.id, text)
+    stepQuestionText = ''
+    stepQuestionOpen = false
+  }
+
+  function submitStepReply(threadId: string) {
+    const text = (stepReplyDrafts[threadId] ?? '').trim()
+    if (!text) return
+    onReplyToThread?.(threadId, text)
+    const next = { ...stepReplyDrafts }
+    delete next[threadId]
+    stepReplyDrafts = next
+  }
+
   // The final step shows every file; a per-concept step shows only its hunks.
   let stepFiles = $derived<PrFileDiff[]>(
     isFinalStep ? files : activeStep ? buildSyntheticStepFiles(files, activeStep) : [],
@@ -133,15 +201,11 @@
     void initWalkthrough()
   })
 
-  // On first open of a PR's walkthrough tab, load any cached result and — when
-  // there is none yet — start generation immediately rather than parking on an
-  // intermediate "Generate walkthrough" button. Guarded by the once-per-key
-  // effect above, so cancelling or a failure does not instantly re-trigger.
+  // Generation is now triggered explicitly from the PR card (see PrReviewView /
+  // PrReviewListSection), so the tab only loads whatever has already been
+  // generated for this (pr, head_sha) — it never auto-kicks generation on open.
   async function initWalkthrough() {
-    const existing = await loadCachedWalkthrough()
-    if (!existing && files.length > 0 && !isStarting) {
-      await handleGenerate()
-    }
+    await loadCachedWalkthrough()
   }
 
   // While generation is in flight, poll the cache until the backend flips the
@@ -175,11 +239,9 @@
     isStarting = true
     loadError = null
     try {
-      const prompt = compileWalkthroughPrompt({
-        title: pr.title,
-        body: pr.body,
-        files,
-      })
+      // The combined steps+review prompt is compiled server-side now (backend
+      // fetches the diffs and runs the repo-aware agent), so the client no longer
+      // supplies a prompt.
       await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,
@@ -190,7 +252,6 @@
         prBody: pr.body,
         headSha: pr.head_sha,
         reviewPrId: pr.id,
-        prompt,
         projectId,
       })
       walkthrough = {
@@ -337,6 +398,66 @@
           {#if stepSummary}
             <p class="text-lg leading-relaxed text-base-content/90 m-0">{stepSummary}</p>
           {/if}
+
+          {#if activeStep && onAskAgentStep}
+            <div class="flex flex-col gap-2 mt-1 max-h-48 overflow-y-auto">
+              {#each activeStepThreads as thread}
+                <div class="px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md text-[0.8rem]">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="badge badge-info badge-sm">Ask the AI</span>
+                    {#if thread.status === 'pending'}
+                      <span class="loading loading-spinner loading-xs"></span>
+                      <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
+                    {/if}
+                    {#if thread.status === 'error'}
+                      <span class="text-error text-[0.7rem]">failed — send again</span>
+                    {/if}
+                  </div>
+                  {#each thread.messages as m}
+                    <div class="mb-1">
+                      <span class="text-base-content/50 text-[0.7rem] mr-1 {m.role === 'user' ? 'font-semibold' : ''}">{m.role === 'ai' ? 'AI author' : 'You'}</span>
+                      <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={m.body} {onOpenUrl} /></span>
+                    </div>
+                  {/each}
+                  {#if thread.status === 'answered'}
+                    <div class="flex gap-2 mt-1">
+                      <input
+                        class="input input-bordered input-xs flex-1"
+                        aria-label="Reply to the AI author"
+                        placeholder="Reply…"
+                        value={stepReplyDrafts[thread.id] ?? ''}
+                        oninput={(e: Event) => {
+                          if (!(e.currentTarget instanceof HTMLInputElement)) return
+                          stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: e.currentTarget.value }
+                        }}
+                        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); submitStepReply(thread.id) } }}
+                      />
+                      <button type="button" class="btn btn-xs btn-primary" onclick={() => submitStepReply(thread.id)}>Reply</button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+
+              {#if stepQuestionOpen}
+                <div>
+                  <textarea
+                    class="textarea textarea-bordered w-full min-h-[44px] text-[0.8rem] resize-y"
+                    aria-label="Ask the AI author about this step"
+                    placeholder="Ask the AI author about this step… (Cmd/Ctrl+Enter to send)"
+                    rows="2"
+                    bind:value={stepQuestionText}
+                    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitStepQuestion() } }}
+                  ></textarea>
+                  <div class="flex justify-end gap-2 mt-1">
+                    <button type="button" class="btn btn-xs btn-ghost" onclick={() => { stepQuestionOpen = false; stepQuestionText = '' }}>Cancel</button>
+                    <button type="button" class="btn btn-xs btn-primary" onclick={submitStepQuestion}>Ask</button>
+                  </div>
+                </div>
+              {:else}
+                <button type="button" class="btn btn-ghost btn-xs text-info self-start" onclick={() => { stepQuestionOpen = true }}>+ Ask about this step</button>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         <div class="flex items-center gap-1 shrink-0">
@@ -397,6 +518,15 @@
           onAgentCommentsChange={onAgentCommentsChange}
           onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           onOpenUrl={onOpenUrl}
+          aiThreads={aiThreads}
+          onAskAgent={onAskAgent}
+          onCommentNow={onCommentNow}
+          onReplyToThread={onReplyToThread}
+          onAskAboutComment={onAskAboutComment}
+          onReplyToExistingComment={onReplyToExistingComment}
+          pendingReplies={pendingReplies}
+          onAddReplyToReview={onAddReplyToReview}
+          onRemovePendingReply={onRemovePendingReply}
         >
           {#snippet footer()}
             {#if isFinalStep}
@@ -406,7 +536,10 @@
                 prNumber={pr.number}
                 commitId={pr.head_sha}
                 pendingComments={pendingComments}
+                approvedAgentComments={approvedAgentSubmissionComments}
+                pendingReplyCount={pendingReplies.length}
                 onPendingCommentsChange={onPendingCommentsChange}
+                onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
                 onSubmitReview={onSubmitReview}
               />
             {/if}

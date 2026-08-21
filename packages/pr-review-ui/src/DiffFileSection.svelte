@@ -54,6 +54,15 @@
     onPendingCommentsChange,
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
+    aiThreads,
+    onAskAgent,
+    onCommentNow,
+    onReplyToThread,
+    onAskAboutComment,
+    onReplyToExistingComment,
+    pendingReplies,
+    onAddReplyToReview,
+    onRemovePendingReply,
   }: Props = $props()
 
   const truncated = $derived(isTruncated(file))
@@ -106,6 +115,15 @@
       {onPendingCommentsChange}
       {onAgentCommentsChange}
       {onUpdateAgentCommentStatus}
+      {aiThreads}
+      {onAskAgent}
+      {onCommentNow}
+      {onReplyToThread}
+      {onAskAboutComment}
+      {onReplyToExistingComment}
+      {pendingReplies}
+      {onAddReplyToReview}
+      {onRemovePendingReply}
     />
   {/if}
 </div>

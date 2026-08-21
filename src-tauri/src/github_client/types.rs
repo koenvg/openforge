@@ -234,6 +234,20 @@ pub(crate) struct ReviewSubmitRequest {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct ReviewCommentReplyRequest {
+    pub body: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct CreateReviewCommentRequest {
+    pub body: String,
+    pub commit_id: String,
+    pub path: String,
+    pub line: i32,
+    pub side: String,
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct MergePrRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_title: Option<String>,

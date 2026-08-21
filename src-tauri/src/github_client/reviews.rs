@@ -65,6 +65,82 @@ impl GitHubClient {
         Ok(())
     }
 
+    /// Post a single review comment immediately (not part of a pending review).
+    /// GitHub's create-review-comment endpoint; anchored to a line on the head commit.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_review_comment(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        commit_id: &str,
+        path: &str,
+        line: i32,
+        side: &str,
+        body: &str,
+        token: &str,
+    ) -> Result<(), GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls/{}/comments",
+            owner, repo, pr_number
+        );
+
+        let request_body = CreateReviewCommentRequest {
+            body: body.to_string(),
+            commit_id: commit_id.to_string(),
+            path: path.to_string(),
+            line,
+            side: side.to_string(),
+        };
+
+        let response = self
+            .send_github(
+                self.github_request(reqwest::Method::POST, &url, token)
+                    .json(&request_body),
+            )
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        Ok(())
+    }
+
+    /// Post a threaded reply to an existing review comment.
+    /// Replies attach under the given comment's thread (GitHub's reply endpoint).
+    pub async fn create_review_comment_reply(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: i64,
+        comment_id: i64,
+        body: &str,
+        token: &str,
+    ) -> Result<(), GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/pulls/{}/comments/{}/replies",
+            owner, repo, pr_number, comment_id
+        );
+
+        let request_body = ReviewCommentReplyRequest {
+            body: body.to_string(),
+        };
+
+        let response = self
+            .send_github(
+                self.github_request(reqwest::Method::POST, &url, token)
+                    .json(&request_body),
+            )
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        Ok(())
+    }
+
     /// Get reviews for a pull request
     ///
     /// Fetches all reviews to determine approval/changes-requested state.

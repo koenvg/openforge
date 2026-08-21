@@ -1,13 +1,13 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-  import type { AgentReviewComment, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
+  import type { AgentReviewComment, AiThread, PrFileDiff, PrOverviewComment, ReviewComment, ReviewPullRequest, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
+  import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import { isPrLargeEnoughForWalkthroughHint } from '../../lib/walkthroughViewState'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import WalkthroughTab from './WalkthroughTab.svelte'
@@ -45,6 +45,23 @@
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
     onUpdateAgentCommentStatus: (commentId: number, status: string) => Promise<void>
     onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void
+    // The Walkthrough tab is only offered once a walkthrough for the current head
+    // sha has finished generating (owned by PrReviewView). Optional so the section
+    // renders (tab hidden) before the parent wires status in.
+    walkthroughReady?: boolean
+    // Local "Ask the AI author" Q&A threads + handlers (owned by PrReviewView).
+    aiThreads?: AiThread[]
+    aiThreadsPendingCount?: number
+    onAskAgent?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onCommentNow?: (filename: string, line: number, side: ReviewSubmissionComment['side'], body: string) => void
+    onReplyToThread?: (threadId: string, body: string) => void
+    onAskAboutComment?: (args: { commentId: number; filename: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }) => void
+    onReplyToExistingComment?: (commentId: number, body: string) => void
+    pendingReplies?: { commentId: number; body: string }[]
+    onAddReplyToReview?: (commentId: number, body: string) => void
+    onRemovePendingReply?: (commentId: number) => void
+    onAskAgentStep?: (stepId: string, body: string) => void
+    onSendQuestionsToAgent?: () => void
     onSubmitReview: (request: {
       repoOwner: string
       repoName: string
@@ -86,12 +103,57 @@
     onAgentCommentsChange,
     onUpdateAgentCommentStatus,
     onToggleFileReviewed,
+    walkthroughReady = false,
+    aiThreads = [],
+    aiThreadsPendingCount = 0,
+    onAskAgent,
+    onCommentNow,
+    onReplyToThread,
+    onAskAboutComment,
+    onReplyToExistingComment,
+    pendingReplies = [],
+    onAddReplyToReview,
+    onRemovePendingReply,
+    onAskAgentStep,
+    onSendQuestionsToAgent,
     onSubmitReview,
     onOpenUrl,
   }: Props = $props()
 
+  // Approved AI review comments are submitted with the review directly (approving
+  // no longer copies them into the manual pending list), so map them to
+  // submission shape for ReviewSubmitPanel.
+  let approvedAgentSubmissionComments = $derived(
+    approvedInlineAgentComments(agentReviewComments).map(agentCommentToSubmission),
+  )
+
+  // After a successful submit the approved AI comments now exist as real GitHub
+  // review comments, so mark them handled: 'dismissed' hides them from the AI list
+  // and keeps them out of the approved set, preventing a duplicate on refresh or a
+  // re-submit. Only runs on submit success (ReviewSubmitPanel guards it).
+  function handleApprovedAgentCommentsSubmitted() {
+    const submitted = approvedInlineAgentComments(agentReviewComments)
+    if (submitted.length === 0) return
+    const submittedIds = new Set(submitted.map(comment => comment.id))
+    for (const comment of submitted) void onUpdateAgentCommentStatus(comment.id, 'dismissed')
+    onAgentCommentsChange(
+      agentReviewComments.map(comment =>
+        submittedIds.has(comment.id) ? { ...comment, status: 'dismissed' } : comment,
+      ),
+    )
+  }
+
   let diffViewer = $state<DiffViewer>()
   let prFileTree = $state<FileTree>()
+
+  // If the Walkthrough tab is active but its walkthrough is no longer ready (e.g.
+  // after switching to a PR that hasn't been generated yet), fall back to Overview
+  // so we never strand the reviewer on a hidden/blank tab.
+  $effect(() => {
+    if (activeTab === 'walkthrough' && !walkthroughReady) {
+      onActiveTabChange('overview')
+    }
+  })
 
   // The "Files changed" tab filters non-application files out of the tree and diff, but the
   // tab badge and the Walkthrough tab keep the full changed-file list.
@@ -131,18 +193,27 @@
           class="btn btn-ghost btn-xs {activeTab === 'files' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
           onclick={() => onActiveTabChange('files')}
         >Files changed <span class="badge badge-xs ml-1">{files.length}</span></button>
-        <button
-          class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-          onclick={() => onActiveTabChange('walkthrough')}
-          title={isPrLargeEnoughForWalkthroughHint(pr, files) ? 'This PR is large — a walkthrough may help.' : 'AI walkthrough'}
-        >
-          Walkthrough
-          {#if isPrLargeEnoughForWalkthroughHint(pr, files)}
-            <span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-warning"></span>
-          {/if}
-        </button>
+        {#if walkthroughReady}
+          <button
+            class="btn btn-ghost btn-xs {activeTab === 'walkthrough' ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+            onclick={() => onActiveTabChange('walkthrough')}
+            title="AI walkthrough"
+          >
+            Walkthrough
+          </button>
+        {/if}
       </div>
       <span class="flex-1"></span>
+      {#if aiThreadsPendingCount > 0}
+        <button
+          type="button"
+          class="btn btn-xs btn-primary mr-2"
+          onclick={() => onSendQuestionsToAgent?.()}
+          title="Send your unanswered questions to the AI author (stays local, never posted to GitHub)"
+        >
+          Send {aiThreadsPendingCount} question{aiThreadsPendingCount === 1 ? '' : 's'} to AI
+        </button>
+      {/if}
       <div class="flex items-center gap-2 text-xs text-base-content/50">
         <span class="font-semibold text-base-content">#{pr.number}</span>
         <span class="text-base-300">•</span>
@@ -177,6 +248,16 @@
       onAgentCommentsChange={onAgentCommentsChange}
       onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
       {onOpenUrl}
+      aiThreads={aiThreads}
+      onAskAgent={onAskAgent}
+      onCommentNow={onCommentNow}
+      onReplyToThread={onReplyToThread}
+      onAskAboutComment={onAskAboutComment}
+      onReplyToExistingComment={onReplyToExistingComment}
+      pendingReplies={pendingReplies}
+      onAddReplyToReview={onAddReplyToReview}
+      onRemovePendingReply={onRemovePendingReply}
+      onAskAgentStep={onAskAgentStep}
       onSubmitReview={onSubmitReview}
     />
   {:else}
@@ -225,6 +306,15 @@
           onAgentCommentsChange={onAgentCommentsChange}
           onUpdateAgentCommentStatus={onUpdateAgentCommentStatus}
           {onOpenUrl}
+          aiThreads={aiThreads}
+          onAskAgent={onAskAgent}
+          onCommentNow={onCommentNow}
+          onReplyToThread={onReplyToThread}
+          onAskAboutComment={onAskAboutComment}
+          onReplyToExistingComment={onReplyToExistingComment}
+          pendingReplies={pendingReplies}
+          onAddReplyToReview={onAddReplyToReview}
+          onRemovePendingReply={onRemovePendingReply}
           {reviewedFileShas}
           onToggleFileReviewed={onToggleFileReviewed}
           getFileReviewIdentity={getReviewFileIdentity}
@@ -237,7 +327,10 @@
               prNumber={pr.number}
               commitId={pr.head_sha}
               pendingComments={pendingManualComments}
+              approvedAgentComments={approvedAgentSubmissionComments}
+              pendingReplyCount={pendingReplies.length}
               onPendingCommentsChange={onPendingCommentsChange}
+              onApprovedAgentCommentsSubmitted={handleApprovedAgentCommentsSubmitted}
               onSubmitReview={onSubmitReview}
             />
           {/snippet}

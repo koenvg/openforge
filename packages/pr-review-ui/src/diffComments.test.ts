@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
-import { sideToSplitSide, buildExtendData, prCommentsToReviewComments } from './diffComments'
+import type { AiThread, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge-app/plugin-sdk/domain'
+import { sideToSplitSide, buildExtendData, prCommentsToReviewComments, approvedInlineAgentComments, agentCommentToSubmission } from './diffComments'
 
 // ============================================================================
 // Test Fixtures
@@ -92,6 +92,7 @@ describe('buildExtendData', () => {
       author: 'reviewer',
       type: 'existing',
       createdAt: '2024-01-01T00:00:00Z',
+      commentId: 1,
     })
   })
 
@@ -770,5 +771,90 @@ describe('prCommentsToReviewComments', () => {
     expect(extendData.newFile['10'].data.comments[0].type).toBe('existing')
     expect(extendData.newFile['10'].data.comments[0].author).toBe('reviewer')
     expect(extendData.newFile['10'].data.comments[0].body).toBe('Looks good')
+  })
+})
+
+describe('buildExtendData with AI threads', () => {
+  const thread: AiThread = {
+    id: 't1', anchor: { type: 'line', filename: 'a.ts', line: 3, side: 'RIGHT' }, status: 'answered',
+    messages: [{ role: 'user', body: 'why?', created_at: 1 }, { role: 'ai', body: 'because', created_at: 2 }],
+    created_at: 1, updated_at: 2,
+  }
+
+  it('places a line-anchored thread on the RIGHT side at its line', () => {
+    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.thread?.id).toBe('t1')
+  })
+
+  it('ignores step-anchored threads and threads for other files', () => {
+    const stepThread: AiThread = { ...thread, id: 't2', anchor: { type: 'step', step_id: 's1' } }
+    const otherFile: AiThread = { ...thread, id: 't3', anchor: { type: 'line', filename: 'b.ts', line: 3, side: 'RIGHT' } }
+    const { newFile } = buildExtendData('a.ts', [], [], [], [stepThread, otherFile])
+    expect(newFile['3']?.data.comments.some(c => c.type === 'ai-thread')).toBeFalsy()
+  })
+
+  it('places a pending reply under its parent comment line', () => {
+    const parent = { ...baseExistingComment, id: 1, path: 'src/main.ts', line: 20, side: 'RIGHT' }
+    const { newFile } = buildExtendData('src/main.ts', [parent], [], [], [], [{ commentId: 1, body: 'queued reply' }])
+    const entry = newFile['20'].data.comments.find(c => c.type === 'pending-reply')
+    expect(entry?.body).toBe('queued reply')
+    expect(entry?.commentId).toBe(1)
+  })
+
+  it('ignores a pending reply whose parent comment is not on this file', () => {
+    const { newFile } = buildExtendData('src/main.ts', [], [], [], [], [{ commentId: 999, body: 'orphan' }])
+    const hasPendingReply = Object.values(newFile).some(line => line.data.comments.some(c => c.type === 'pending-reply'))
+    expect(hasPendingReply).toBe(false)
+  })
+
+  it('places a comment-anchored thread inline at its line, nested under the comment', () => {
+    const commentThread: AiThread = {
+      ...thread,
+      id: 't4',
+      anchor: { type: 'comment', comment_id: 99, filename: 'a.ts', line: 3, side: 'RIGHT' },
+    }
+    const { newFile } = buildExtendData('a.ts', [], [], [], [commentThread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.thread?.id).toBe('t4')
+    // Nested (reply-styled) so it reads as a follow-up to the AI review comment.
+    expect(entry?.isReply).toBe(true)
+  })
+
+  it('does not nest a line-anchored thread', () => {
+    const { newFile } = buildExtendData('a.ts', [], [], [], [thread])
+    const entry = newFile['3'].data.comments.find(c => c.type === 'ai-thread')
+    expect(entry?.isReply).toBeFalsy()
+  })
+})
+
+describe('approvedInlineAgentComments', () => {
+  it('keeps only approved inline comments that can be anchored to a line', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, id: 1, status: 'approved' }
+    const stillPending: AgentReviewComment = { ...baseAgentComment, id: 2, status: 'pending' }
+    const dismissed: AgentReviewComment = { ...baseAgentComment, id: 3, status: 'dismissed' }
+    const approvedSummary: AgentReviewComment = { ...baseAgentComment, id: 4, status: 'approved', comment_type: 'summary' }
+    const approvedNoLine: AgentReviewComment = { ...baseAgentComment, id: 5, status: 'approved', line_number: null }
+
+    const result = approvedInlineAgentComments([approved, stillPending, dismissed, approvedSummary, approvedNoLine])
+
+    expect(result.map(c => c.id)).toEqual([1])
+  })
+})
+
+describe('agentCommentToSubmission', () => {
+  it('maps an agent comment to a review submission comment', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, file_path: 'src/a.ts', line_number: 42, side: 'LEFT', body: '  trim me  ' }
+    expect(agentCommentToSubmission(approved)).toEqual({
+      path: 'src/a.ts',
+      line: 42,
+      side: 'LEFT',
+      body: 'trim me',
+    })
+  })
+
+  it('defaults a missing side to RIGHT', () => {
+    const approved: AgentReviewComment = { ...baseAgentComment, side: null }
+    expect(agentCommentToSubmission(approved).side).toBe('RIGHT')
   })
 })

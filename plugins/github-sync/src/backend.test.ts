@@ -17,7 +17,8 @@ function getPackageMetadata() {
 function makeBackendHarness() {
   const store = new Map<string, unknown>()
   const invokeGlobal = vi.fn(async (id: string) => {
-    if (id === 'openforge.agentGenerate') return { text: '{"steps":[]}' }
+    if (id === 'openforge.getPrFileDiffs') return []
+    if (id === 'openforge.agentGenerateInRepo') return { text: '{"steps":[]}' }
     return null
   })
   const handlers = new Map<string, (request: unknown) => Promise<unknown>>()
@@ -67,13 +68,12 @@ const walkthroughRequest = (overrides: Record<string, unknown> = {}) => ({
   prBody: null,
   headSha: 'sha123',
   reviewPrId: 42,
-  prompt: 'Split this PR into steps.',
   projectId: 'project-frontend',
   ...overrides,
 })
 
 describe('startAgentWalkthrough backend handler', () => {
-  it('forwards the project id to agentGenerate so the per-project provider is used', async () => {
+  it('forwards the project id to agentGenerateInRepo so the per-project provider is used', async () => {
     const { invokeGlobal, handlers } = await activateBackend()
     const handler = handlers.get('startAgentWalkthrough')
     expect(handler).toBeTypeOf('function')
@@ -82,7 +82,7 @@ describe('startAgentWalkthrough backend handler', () => {
 
     await vi.waitFor(() => {
       expect(invokeGlobal).toHaveBeenCalledWith(
-        'openforge.agentGenerate',
+        'openforge.agentGenerateInRepo',
         expect.objectContaining({ projectId: 'project-frontend' }),
       )
     })
@@ -96,7 +96,7 @@ describe('startAgentWalkthrough backend handler', () => {
 
     await vi.waitFor(() => {
       expect(invokeGlobal).toHaveBeenCalledWith(
-        'openforge.agentGenerate',
+        'openforge.agentGenerateInRepo',
         expect.objectContaining({ projectId: null }),
       )
     })

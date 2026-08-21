@@ -2,6 +2,7 @@ import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type {
   AgentReviewComment,
+  AiThread,
   AuthoredPullRequest,
   PollResult,
   PrFileDiff,
@@ -10,7 +11,7 @@ import type {
   ReviewComment,
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
-import type { FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+import type { CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
 type TaskPullRequestActionRequest = {
   taskId: string
@@ -22,8 +23,24 @@ import {
   beginWalkthroughGeneration,
   readWalkthrough,
   removeWalkthrough,
-  runWalkthroughGeneration,
+  runWalkthroughAndReviewGeneration,
 } from './lib/walkthroughStore'
+import {
+  readAiReviewComments,
+  removeAiReviewComments,
+  updateAiReviewCommentStatus,
+} from './lib/reviewCommentsStore'
+import {
+  readAiThreads,
+  removeAiThreads,
+  threadsNeedingAnswer,
+  upsertThread,
+  writeAiThreads,
+} from './lib/aiThreadStore'
+import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
+import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
+import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
+import { WALKTHROUGH_REVIEW_JSON_SCHEMA } from './lib/walkthroughSchema'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
@@ -103,6 +120,14 @@ export default defineBackendPlugin({
       handler: (request) => invokeHostCommand<void>(openforge, 'submitPrReview', request),
     }))
 
+    context.subscriptions.add(openforge.backend.registerMethod<ReplyToReviewCommentRequest, void>('replyToReviewComment', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'replyToReviewComment', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<CreateReviewCommentRequest, void>('createReviewComment', {
+      handler: (request) => invokeHostCommand<void>(openforge, 'createReviewComment', request),
+    }))
+
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number }, AgentReviewComment[]>('getAgentReviewComments', {
       handler: (request) => invokeHostCommand<AgentReviewComment[]>(openforge, 'getAgentReviewComments', request),
     }))
@@ -119,7 +144,102 @@ export default defineBackendPlugin({
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, void>('deletePrWalkthrough', {
-      handler: (request) => removeWalkthrough(openforge, request.reviewPrId, request.headSha),
+      handler: async (request) => {
+        // Clear the walkthrough, its AI review comments, and any Q&A threads so a
+        // regenerate for the same commit starts from a clean slate.
+        await removeWalkthrough(openforge, request.reviewPrId, request.headSha)
+        await removeAiReviewComments(openforge, request.reviewPrId, request.headSha)
+        await removeAiThreads(openforge, request.reviewPrId, request.headSha)
+      },
+    }))
+
+    // AI review comments produced by the combined pass live in local plugin
+    // storage keyed per commit (never pushed to GitHub).
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AgentReviewComment[]>('getPrAiReviewComments', {
+      handler: (request) => readAiReviewComments(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; commentId: number; status: string }, void>('updatePrAiReviewCommentStatus', {
+      handler: (request) => updateAiReviewCommentStatus(openforge, request.reviewPrId, request.headSha, request.commentId, request.status),
+    }))
+
+    // Local, per-commit "Ask the AI author" Q&A threads. Never pushed to GitHub.
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string }, AiThread[]>('getAiThreads', {
+      handler: (request) => readAiThreads(openforge, request.reviewPrId, request.headSha),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; thread: AiThread }, void>('saveAiThread', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, upsertThread(threads, request.thread))
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<{ reviewPrId: number; headSha: string; threadId: string }, void>('deleteAiThread', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, threads.filter(t => t.id !== request.threadId))
+      },
+    }))
+
+    // Answer every unanswered thread in one repo-aware agent pass. Fire-and-forget:
+    // mark the pending threads immediately (so the UI shows "thinking"), then run
+    // the agent in the background and merge its answers back (poll from the UI).
+    context.subscriptions.add(openforge.backend.registerMethod<{
+      reviewPrId: number
+      headSha: string
+      repoOwner: string
+      repoName: string
+      prNumber: number
+      projectId: string | null
+    }, void>('askAgentQuestions', {
+      handler: async (request) => {
+        const threads = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+        const pending = threadsNeedingAnswer(threads)
+        if (pending.length === 0) return
+
+        const pendingIds = new Set(pending.map(t => t.id))
+        const marked = threads.map(t => (pendingIds.has(t.id) ? { ...t, status: 'pending' as const } : t))
+        await writeAiThreads(openforge, request.reviewPrId, request.headSha, marked)
+
+        // Fetch diffs + the walkthrough steps server-side to anchor each question.
+        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        })
+        const walkthrough = await readWalkthrough(openforge, request.reviewPrId, request.headSha)
+        const steps = parseAndValidateWalkthroughSteps(walkthrough?.steps_json ?? null, files) ?? []
+        // Include the AI review comments so a "comment"-anchored follow-up thread can
+        // quote the exact suggestion it's asking about.
+        const agentComments = await readAiReviewComments(openforge, request.reviewPrId, request.headSha)
+        const prompt = buildQuestionsPrompt(pending, files, steps, agentComments)
+
+        void (async () => {
+          const sessionKey = randomUUID()
+          try {
+            const result = await invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
+              sessionKey,
+              prompt,
+              model: WALKTHROUGH_MODEL,
+              projectId: request.projectId,
+              owner: request.repoOwner,
+              repo: request.repoName,
+              prNumber: request.prNumber,
+              headSha: request.headSha,
+              outputSchema: AI_ANSWERS_JSON_SCHEMA,
+            })
+            const answered = mapAnswersToThreads(result?.text ?? '', pending)
+            // Re-read (guard against a concurrent change) and merge the answers back.
+            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+            let merged = latest
+            for (const t of answered) merged = upsertThread(merged, t)
+            await writeAiThreads(openforge, request.reviewPrId, request.headSha, merged)
+          } catch {
+            const latest = await readAiThreads(openforge, request.reviewPrId, request.headSha)
+            const errored = latest.map(t => (pendingIds.has(t.id) ? { ...t, status: 'error' as const } : t))
+            await writeAiThreads(openforge, request.reviewPrId, request.headSha, errored)
+          }
+        })()
+      },
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{
@@ -132,24 +252,47 @@ export default defineBackendPlugin({
       prBody: string | null
       headSha: string
       reviewPrId: number
-      prompt: string
       projectId: string | null
+      promptTemplate: string
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
-        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: request.prompt }
+        const params = { prId: request.reviewPrId, headSha: request.headSha, sessionKey, prompt: '' }
         await beginWalkthroughGeneration(openforge, params)
+
+        // Fetch diffs server-side so the trigger works without the UI having loaded files,
+        // then compile the combined steps+review prompt here. The template is the
+        // resolved `pr_walkthrough_prompt` setting (global/project), passed from the UI;
+        // only the {{…}} placeholders are filled in with this PR's title/body/diffs.
+        const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        })
+        // Existing PR comments (human + earlier AI) so the agent avoids duplicating them.
+        const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
+          owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
+        }).catch(() => [] as ReviewComment[])
+        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files, existingComments }, request.promptTemplate)
+
         // Kick off generation in the background so the UI gets its session key
-        // immediately and can render the optimistic "generating" state.
-        // Forward the active project id so the sidecar resolves this project's
-        // AI provider (not the global fallback) for the headless generation.
-        void runWalkthroughGeneration(openforge, params, (key, prompt) =>
-          invokeHostCommand<{ text: string }>(openforge, 'agentGenerate', {
-            sessionKey: key,
-            prompt,
-            model: WALKTHROUGH_MODEL,
-            projectId: request.projectId,
-          }).then((result) => result?.text ?? ''),
+        // immediately and can render the optimistic "generating" state. The
+        // repo-aware agent runs inside a checkout of the PR head (Plan 1) and
+        // returns a schema-validated { steps, review_comments } object.
+        void runWalkthroughAndReviewGeneration(
+          openforge,
+          { ...params, prompt },
+          (key, p) =>
+            invokeHostCommand<{ text: string }>(openforge, 'agentGenerateInRepo', {
+              sessionKey: key,
+              prompt: p,
+              model: WALKTHROUGH_MODEL,
+              projectId: request.projectId,
+              owner: request.repoOwner,
+              repo: request.repoName,
+              prNumber: request.prNumber,
+              headSha: request.headSha,
+              outputSchema: WALKTHROUGH_REVIEW_JSON_SCHEMA,
+            }).then((result) => result?.text ?? ''),
+          files,
         )
         return { walkthrough_session_key: sessionKey }
       },

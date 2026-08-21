@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseHunks, buildPatchFromHunks, selectHunksByIndex } from './hunkParser'
+import { parseHunks, buildPatchFromHunks, selectHunksByIndex, commentableLines } from './hunkParser'
 
 describe('parseHunks', () => {
   it('returns empty array for null', () => {
@@ -133,5 +133,25 @@ describe('selectHunksByIndex', () => {
 
   it('returns empty array when indexes is empty', () => {
     expect(selectHunksByIndex(all, [])).toEqual([])
+  })
+})
+
+describe('commentableLines', () => {
+  it('maps context/added lines to RIGHT and context/removed to LEFT', () => {
+    const patch = [
+      '@@ -1,3 +1,4 @@',
+      ' context1',   // old 1, new 1
+      '-removed',     // old 2
+      '+added1',      // new 2
+      '+added2',      // new 3
+      ' context2',   // old 3, new 4
+    ].join('\n')
+    const { right, left } = commentableLines(patch)
+    expect([...right].sort((a, b) => a - b)).toEqual([1, 2, 3, 4])
+    expect([...left].sort((a, b) => a - b)).toEqual([1, 2, 3])
+  })
+  it('returns empty sets for empty/absent patch', () => {
+    expect(commentableLines(null).right.size).toBe(0)
+    expect(commentableLines('').left.size).toBe(0)
   })
 })
