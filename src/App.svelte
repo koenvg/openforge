@@ -4,8 +4,8 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
-  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { getAppMode, getConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
   import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
@@ -31,8 +31,6 @@
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
   import { useAppRouter, pushNavState, restoreProjectView } from './lib/router.svelte'
-  import { getProjectColor } from './lib/projectColors'
-  import { themeMode } from './lib/theme'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { getViews, isCrossProjectView } from './lib/views'
@@ -285,27 +283,6 @@
   $effect(() => {
     void $outOfFocusTaskIdsByProject
     appData.scheduleAttentionCountRefresh()
-  })
-
-  $effect(() => {
-    const pid = $activeProjectId
-    $activeProjectColorId = null
-    if (pid) {
-      getProjectConfig(pid, 'project_color').then((val) => {
-        if (get(activeProjectId) === pid && get(activeProjectColorId) === null) {
-          $activeProjectColorId = val
-        }
-      })
-    }
-  })
-
-  let contentBg = $derived.by(() => {
-    const color = getProjectColor($activeProjectColorId)
-    return $themeMode === 'dark' ? color.dark : color.light
-  })
-  let contentBgAlt = $derived.by(() => {
-    const color = getProjectColor($activeProjectColorId)
-    return $themeMode === 'dark' ? color.darkAlt : color.lightAlt
   })
 
   async function handleProjectCreated(project: Project) {
@@ -579,7 +556,7 @@
   })
 </script>
 
-<div class="flex h-screen overflow-hidden bg-base-100" style="--project-bg: {contentBg}; --project-bg-alt: {contentBgAlt}">
+<div class="flex h-screen overflow-hidden bg-base-100">
   <AppSidebar
     collapsed={appSidebarCollapsed}
     currentView={$currentView}
@@ -596,7 +573,7 @@
     <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 
-  <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
+  <div class="flex flex-col flex-1 min-w-0 relative">
     <main class="flex-1 overflow-hidden flex">
       <div class="flex-1 overflow-hidden flex flex-col">
         {#if renderedActiveView !== null}

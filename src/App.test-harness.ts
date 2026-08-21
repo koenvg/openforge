@@ -172,7 +172,6 @@ vi.mock('./lib/stores', () => {
   projects: writable<Project[]>([]),
   hiddenProjectIds: writable<Set<string>>(new Set()),
   activeProjectId: mockActiveProjectIdStore,
-  activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   taskAttentionRows: writable([]),
   taskAttentionLoaded: writable(false),

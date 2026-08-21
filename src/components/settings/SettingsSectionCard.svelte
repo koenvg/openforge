@@ -34,8 +34,7 @@
   aria-labelledby={headingId}
   aria-disabled={disabled}
   inert={disabled}
-  class="overflow-hidden rounded-lg border {tone === 'danger' ? 'border-error/30' : 'border-base-300'} {disabled ? 'pointer-events-none opacity-50' : ''}"
-  style="background-color: var(--project-bg, oklch(var(--b1)))"
+  class="overflow-hidden rounded-lg border bg-base-100 {tone === 'danger' ? 'border-error/30' : 'border-base-300'} {disabled ? 'pointer-events-none opacity-50' : ''}"
 >
   <div class="flex flex-col gap-3 border-b px-5 py-3 sm:flex-row sm:items-center sm:justify-between {tone === 'danger' ? 'border-error/30' : 'border-base-300'}">
     <div class="flex min-w-0 items-center gap-3">

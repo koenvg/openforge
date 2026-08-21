@@ -13,7 +13,7 @@ import {
   setProjectConfig,
   updateProject,
 } from '../../lib/ipc'
-import { activeProjectColorId, activeProjectId, projects } from '../../lib/stores'
+import { activeProjectId, projects } from '../../lib/stores'
 import SettingsView from './SettingsView.svelte'
 
 describe('SettingsView auto-save', () => {
@@ -92,18 +92,6 @@ describe('SettingsView auto-save', () => {
       await vi.waitFor(() => {
         expect(screen.getByText('All changes saved')).toBeTruthy()
       })
-    })
-
-    it('updates the shared active project color before debounced persistence', async () => {
-      render(SettingsView, { props: defaultProps })
-
-      await vi.advanceTimersByTimeAsync(50)
-      vi.mocked(setProjectConfig).mockClear()
-
-      await fireEvent.click(screen.getByRole('radio', { name: 'Violet project color' }))
-
-      expect(get(activeProjectColorId)).toBe('violet')
-      expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()
     })
 
     it('refreshes provider installation status from the recovery warning', async () => {

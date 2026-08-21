@@ -29,7 +29,6 @@ describe('settingsSaver', () => {
       projectName: 'My Project',
       projectPath: '/tmp/project',
       agentInstructions: 'Do the thing',
-      projectColor: 'violet',
       runCommand: 'pnpm dev',
       focusFilterStates: ['idle'],
     })
@@ -37,7 +36,7 @@ describe('settingsSaver', () => {
     expect(updateProject).toHaveBeenCalledWith('project-1', 'My Project', '/tmp/project')
     expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'github_default_repo', expect.anything())
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'project_color', 'violet')
+    expect(setProjectConfig).not.toHaveBeenCalledWith('project-1', 'project_color', expect.anything())
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'run_command', 'pnpm dev')
     expect(saveFocusFilterStates).toHaveBeenCalledWith('project-1', ['idle'])
   })
@@ -48,7 +47,6 @@ describe('settingsSaver', () => {
       projectName: 'My Project',
       projectPath: '/tmp/project',
       agentInstructions: 'Do the thing',
-      projectColor: 'violet',
       runCommand: '',
       focusFilterStates: ['idle'],
     })

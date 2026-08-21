@@ -75,7 +75,6 @@ describe('settingsConfig', () => {
       vi.mocked(getProjectConfig)
         .mockResolvedValueOnce('Be careful')
         .mockResolvedValueOnce('opencode')
-        .mockResolvedValueOnce('amber')
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('pnpm dev')
 
@@ -83,14 +82,14 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(5)
+      expect(getProjectConfig).toHaveBeenCalledTimes(4)
+      expect(getProjectConfig).not.toHaveBeenCalledWith('project-1', 'project_color')
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'use_worktrees')
       expect(getProjectConfig).toHaveBeenCalledWith('project-1', 'run_command')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
         agentInstructions: 'Be careful',
         aiProvider: 'opencode',
-        projectColor: 'amber',
         useWorktrees: false,
         runCommand: 'pnpm dev',
         focusFilterStates: ['idle'],
@@ -103,7 +102,6 @@ describe('settingsConfig', () => {
       expect(result).toEqual({
         agentInstructions: '',
         aiProvider: 'claude-code',
-        projectColor: '',
         useWorktrees: true,
         runCommand: '',
         focusFilterStates: [],

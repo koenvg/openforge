@@ -45,7 +45,6 @@ export const projects = writable<Project[]>([]);
 // Persisted to the global config key `project_sidebar_hidden`. See projectVisibility.ts.
 export const hiddenProjectIds = writable<Set<string>>(new Set());
 export const activeProjectId = writable<string | null>(null);
-export const activeProjectColorId = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 // Backend-authoritative Task-only attention projection used by the Focus board and badges.
 export const taskAttentionRows = writable<TaskAttentionRow[]>([]);
