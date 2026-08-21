@@ -26,10 +26,7 @@ impl super::Database {
         branch_name: &str,
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         // Upsert keyed on the UNIQUE task_id. A blind INSERT would fail with a
         // "UNIQUE constraint failed: worktrees.task_id" error whenever a record
@@ -109,10 +106,7 @@ impl super::Database {
     /// Update worktree status
     pub fn update_worktree_status(&self, task_id: &str, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE worktrees SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
             rusqlite::params![status, now, task_id],

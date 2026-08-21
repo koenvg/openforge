@@ -156,10 +156,7 @@ impl super::Database {
     /// Sets `viewed_at` to the current Unix timestamp and `viewed_head_sha` to the provided sha.
     pub fn mark_review_pr_viewed(&self, pr_id: i64, head_sha: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE review_prs SET viewed_at = ?1, viewed_head_sha = ?2 WHERE id = ?3",
             rusqlite::params![now, head_sha, pr_id],

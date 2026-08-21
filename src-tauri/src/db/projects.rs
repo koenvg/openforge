@@ -48,10 +48,7 @@ impl super::Database {
             [&(next_id + 1).to_string()],
         )?;
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "INSERT INTO projects (id, name, path, created_at, updated_at)
@@ -128,10 +125,7 @@ impl super::Database {
     /// Update a project
     pub fn update_project(&self, id: &str, name: &str, path: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE projects SET name = ?1, path = ?2, updated_at = ?3 WHERE id = ?4",
             rusqlite::params![name, path, now, id],

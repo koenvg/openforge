@@ -26,10 +26,7 @@ impl super::Database {
         body: &str,
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         // Determine round: if there are active comments, use their round; otherwise use max archived round + 1
         let active_round: Option<i32> = conn.query_row(
@@ -141,10 +138,7 @@ impl super::Database {
     /// Archive all active comments for a task by setting archived_at to current time.
     pub fn archive_self_review_comments(&self, task_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "UPDATE self_review_comments SET archived_at = ?1 WHERE task_id = ?2 AND archived_at IS NULL",

@@ -62,10 +62,7 @@ impl super::Database {
             .lock()
             .map_err(|_| FinalizeTaskStartError::LockPoisoned)?;
         let transaction = conn.transaction()?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         let transitioned = transaction.execute(
             "UPDATE tasks
