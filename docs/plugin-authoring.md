@@ -28,7 +28,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
   "name": "@acme/openforge-notes",
   "version": "1.0.0",
   "dependencies": {
-    "@openforge-app/plugin-sdk": "^0.2.1"
+    "@openforge-app/plugin-sdk": "latest"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -58,11 +58,11 @@ Metadata rules:
 
 ## SDK package and host API versions
 
-The current authoring package is `@openforge-app/plugin-sdk@0.2.1`. The npm package version and `openforge.apiVersion` have different jobs: package semver versions the TypeScript helpers and declarations, while `openforge.apiVersion` gates host runtime compatibility and remains `1` for the current API-v1 runtime contract.
+The authoring SDK is published as `@openforge-app/plugin-sdk`; install npm's `latest` dist-tag. The npm package version and `openforge.apiVersion` have different jobs: package semver versions the TypeScript helpers and declarations, while `openforge.apiVersion` gates host runtime compatibility and remains `1` for the current API-v1 runtime contract.
 
-Version `0.2.1` matches the current host contract. It includes agent command metadata, `PluginCommandInvocationContext`, and the corresponding `@openforge-app/plugin-sdk/testing` command registration types. It does not include the removed `Task.summary` field or `tasks.updateSummary(...)` method. Plugin packages should upgrade from `0.1.0` rather than casting command registrations around those stale declarations.
+The current SDK contract includes agent command metadata, `PluginCommandInvocationContext`, and the corresponding `@openforge-app/plugin-sdk/testing` command registration types. It does not include the removed `Task.summary` field or `tasks.updateSummary(...)` method. Do not cast command registrations around stale declarations from older SDK releases.
 
-The desktop release workflow publishes the SDK in the same flow and assigns the desktop git tag's semver to the package artifact. The checked-in SDK version is used by the manual publish workflow between desktop releases. CI and both publish paths pack the package, verify every declared export target, and compile a plugin-authoring fixture against the tarball before publication.
+The desktop release workflow assigns the desktop git tag's semver to the package artifact; the checked-in SDK version is used by the manual publish workflow between desktop releases. CI and both publish paths pack the package, verify every declared export target, and compile a plugin-authoring fixture against the tarball before publication.
 
 ## SDK import surface
 

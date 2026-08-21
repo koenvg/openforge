@@ -79,7 +79,7 @@ describe('package build scripts', () => {
       'utf8',
     )
 
-    expect(sdkPackage.version).toBe('0.2.1')
+    expect(sdkPackage.version).toBe('0.2.3')
     expect(sdkPackage.repository).toEqual({
       type: 'git',
       url: 'https://github.com/koenvg/openforge.git',
@@ -116,6 +116,7 @@ describe('package build scripts', () => {
     for (const sharedStep of sharedPublishSteps) {
       expect(reusablePublishWorkflow).toContain(sharedStep)
     }
+
     const validationStepIndex = reusablePublishWorkflow.indexOf('name: Validate npm dist-tag')
     const publishStepIndex = reusablePublishWorkflow.indexOf(
       'npm publish --access public --provenance --tag "$NPM_TAG"',
