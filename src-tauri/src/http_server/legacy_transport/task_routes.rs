@@ -31,6 +31,11 @@ pub(in crate::http_server) fn resolve_project_id(
     }
 
     let projects = db.get_all_projects().unwrap_or_default();
+    if let Some(wt) = worktree {
+        if let Some(project) = projects.iter().find(|project| project.path == wt) {
+            return Ok(project.id.clone());
+        }
+    }
     let project_list = if projects.is_empty() {
         "  (none — create a project in Open Forge first)".to_string()
     } else {

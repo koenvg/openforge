@@ -173,6 +173,46 @@ async fn http_create_task_handler_uses_project_worktree_default() {
 }
 
 #[tokio::test]
+async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
+    let (state, path) = test_state("http_create_task_explicit_project_worktree");
+    let project_id = {
+        let db = state.db.lock().expect("lock db");
+        db.create_project("OpenForge", "/Users/koen/workspace/openforge")
+            .expect("create project")
+            .id
+    };
+
+    let response = create_router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Explicit worktree task","worktree":"/Users/koen/workspace/openforge"}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["project_id"], project_id);
+    let task_id = json["task_id"].as_str().expect("task id");
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task(task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.project_id.as_deref(), Some(project_id.as_str()));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_get_tasks_handler_filters_by_state() {
     let (state, path) = test_state("http_get_tasks_handler_filters_by_state");
     {
