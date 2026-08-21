@@ -90,7 +90,11 @@
   }
 </script>
 
-{#if richDiffActive}
+{#if !file.patch && file.status === 'renamed' && file.changes === 0}
+  <div class="flex items-center justify-center py-8 text-base-content/50">
+    <span class="text-xs">File renamed without content changes.</span>
+  </div>
+{:else if richDiffActive}
   <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
     {#if fileContents}
       <MarkdownContent

@@ -828,6 +828,51 @@ describe('DiffViewer file content fetching', () => {
     expect(batchFn).not.toHaveBeenCalled()
   })
 
+  it('shows a terminal state for a pure rename without a text patch', () => {
+    const renamedFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'src/new-name.ts',
+      previous_filename: 'src/old-name.ts',
+      status: 'renamed',
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+      patch: null,
+    }
+
+    render(DiffViewer, { props: { files: [renamedFile] } })
+
+    expect(screen.getByText('File renamed without content changes.')).toBeTruthy()
+    expect(screen.queryByText('Processing diff…')).toBeNull()
+  })
+
+  it('keeps a pure Markdown rename terminal when Rich view is selected', async () => {
+    const renamedFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'docs/new-name.md',
+      previous_filename: 'docs/old-name.md',
+      status: 'renamed',
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+      patch: null,
+    }
+    const batchFn = vi.fn().mockResolvedValue(new Map())
+
+    render(DiffViewer, {
+      props: {
+        files: [renamedFile],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show rich diff for docs/new-name.md' }))
+
+    expect(screen.getByText('File renamed without content changes.')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Loading rich diff for docs/new-name.md' })).toBeNull()
+    expect(batchFn).not.toHaveBeenCalled()
+  })
+
   it('renders image previews for image files without text patches', async () => {
     const imageFile: PrFileDiff = {
       ...fileWithPatch,
