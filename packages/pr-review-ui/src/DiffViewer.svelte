@@ -10,7 +10,7 @@
   import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
   import { createVirtualizer } from './useVirtualizer.svelte'
   import { createInlineCommentDrafts } from './useInlineCommentDrafts.svelte'
-  import { onDestroy, tick } from 'svelte'
+  import { createDiffViewerNavigation } from './useDiffViewerNavigation.svelte'
   import { sortFilesAsTree } from './fileSort'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
   import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
@@ -70,12 +70,6 @@
   let richDiffSectionKeys = $state(new Set<string>())
   let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
-  let pendingScrollTop: number | null = null
-  let scrollRestoreTimer: ReturnType<typeof setTimeout> | null = null
-  let scrollRestoreAttempts = 0
-  let hasRestoredInitialScroll = false
-  const maxScrollRestoreAttempts = 40
-  const scrollRestoreRetryMs = 25
   let hasAutoCollapsed = false
   let previousReviewedFileIdentities = new Map<string, string>()
   const inlineCommentDrafts = createInlineCommentDrafts({
@@ -116,6 +110,12 @@
     } else {
       next.add(filename)
     }
+    collapsedFiles = next
+  }
+
+  function uncollapseFile(filename: string) {
+    const next = new Set(collapsedFiles)
+    next.delete(filename)
     collapsedFiles = next
   }
 
@@ -226,128 +226,28 @@
     }
   })
 
-  // Move keyboard focus onto the scroll area so arrow keys scroll the current file.
   export function focusDiff() {
-    scrollContainerEl?.focus()
+    navigation.focusDiff()
   }
 
-  // Shift+Tab hands focus back to the file tree; other keys (arrows) fall through so the
-  // browser scrolls the focused scroll area natively.
   function handleScrollAreaKeydown(event: KeyboardEvent) {
-    if (event.key === 'Tab' && event.shiftKey && onRequestFocusFileTree) {
-      event.preventDefault()
-      onRequestFocusFileTree()
-    }
+    navigation.handleScrollAreaKeydown(event)
   }
 
   export function scrollToFile(filename: string) {
-    const index = sortedFiles.findIndex(f => f.filename === filename)
-    if (index >= 0) {
-      const file = sortedFiles[index]
-      if (file && !isFileReviewed(file) && collapsedFiles.has(filename)) {
-        const next = new Set(collapsedFiles)
-        next.delete(filename)
-        collapsedFiles = next
-      }
-      virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' })
-    }
+    navigation.scrollToFile(filename)
   }
 
   export function getScrollTop() {
-    return scrollContainerEl?.scrollTop ?? 0
-  }
-
-  function clearScrollRestoreTimer() {
-    if (scrollRestoreTimer === null) return
-    clearTimeout(scrollRestoreTimer)
-    scrollRestoreTimer = null
-  }
-
-  function canReachScrollTop(scrollTop: number) {
-    if (!scrollContainerEl) return false
-    return scrollTop <= Math.max(0, scrollContainerEl.scrollHeight - scrollContainerEl.clientHeight)
-  }
-
-  function applyPendingScrollTop() {
-    clearScrollRestoreTimer()
-    if (!scrollContainerEl || pendingScrollTop === null) return
-
-    const targetScrollTop = pendingScrollTop
-    scrollContainerEl.scrollTop = targetScrollTop
-
-    if (
-      targetScrollTop <= 0 ||
-      scrollContainerEl.scrollTop === targetScrollTop ||
-      canReachScrollTop(targetScrollTop) ||
-      scrollRestoreAttempts >= maxScrollRestoreAttempts
-    ) {
-      pendingScrollTop = null
-      scrollRestoreAttempts = 0
-      return
-    }
-
-    scrollRestoreAttempts += 1
-    scrollRestoreTimer = setTimeout(applyPendingScrollTop, scrollRestoreRetryMs)
+    return navigation.getScrollTop()
   }
 
   export function setScrollTop(scrollTop: number) {
-    pendingScrollTop = scrollTop
-    scrollRestoreAttempts = 0
-    applyPendingScrollTop()
+    navigation.setScrollTop(scrollTop)
   }
 
-  $effect(() => {
-    if (!scrollContainerEl) return
-    if (!hasRestoredInitialScroll) {
-      hasRestoredInitialScroll = true
-      if (initialScrollTop > 0) {
-        setScrollTop(initialScrollTop)
-      }
-    }
-    applyPendingScrollTop()
-  })
-
-  onDestroy(() => {
-    clearScrollRestoreTimer()
-  })
-
-  export async function scrollToComment(filename: string, lineNumber: number) {
-    const index = sortedFiles.findIndex(f => f.filename === filename)
-    if (index < 0) return
-
-    // Uncollapse the file if needed
-    if (collapsedFiles.has(filename)) {
-      const next = new Set(collapsedFiles)
-      next.delete(filename)
-      collapsedFiles = next
-    }
-
-    // Scroll virtualizer to the file
-    virtualizer.scrollToIndex(index, { align: 'start' })
-
-    // Wait for DOM to render (same pattern as useDiffSearch navigateToCurrentMatch)
-    await tick()
-    await new Promise<void>(r => requestAnimationFrame(() => r()))
-    await tick()
-
-    if (!scrollContainerEl) return
-
-    // Find the file container, then the line within it
-    const fileEl = scrollContainerEl.querySelector(`[data-diff-file="${CSS.escape(filename)}"]`)
-    if (!fileEl) return
-
-    // Try to find the extend line (comment annotation) first, then the content line
-    const targetEl =
-      fileEl.querySelector(`tr[data-line="${lineNumber}-extend"]`) ??
-      fileEl.querySelector(`tr[data-line="${lineNumber}"]`)
-
-    if (!targetEl) return
-
-    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-    // Flash highlight
-    targetEl.classList.add('diff-comment-highlight')
-    setTimeout(() => targetEl.classList.remove('diff-comment-highlight'), 2000)
+  export function scrollToComment(filename: string, lineNumber: number) {
+    return navigation.scrollToComment(filename, lineNumber)
   }
 
 
@@ -378,6 +278,16 @@
     getOverscan: () => 2,
     getEnabled: () => (scrollContainerEl?.clientHeight ?? 0) > 0,
   })
+  const navigation = createDiffViewerNavigation({
+    getFiles: () => sortedFiles,
+    getCollapsedFiles: () => collapsedFiles,
+    getScrollContainer: () => scrollContainerEl,
+    getInitialScrollTop: () => initialScrollTop,
+    isFileReviewed,
+    onUncollapseFile: uncollapseFile,
+    scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
+    getOnRequestFocusFileTree: () => onRequestFocusFileTree,
+  })
   const search = createDiffSearch({
     isSplitMode: () => diffViewMode === DiffModeEnum.Split,
     getDiffViewWrap: () => diffViewWrap,
@@ -386,11 +296,7 @@
     getScrollContainer: () => scrollContainerEl,
     getVisibleItems: () => virtualizer.virtualItems,
     scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
-    onUncollapseFile: (filename) => {
-      const next = new Set(collapsedFiles)
-      next.delete(filename)
-      collapsedFiles = next
-    },
+    onUncollapseFile: uncollapseFile,
   })
 </script>
 
