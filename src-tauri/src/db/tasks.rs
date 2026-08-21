@@ -37,6 +37,61 @@ impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
     }
 }
 
+#[derive(Debug)]
+pub enum TaskCreationError {
+    Storage(rusqlite::Error),
+    Dependencies(rusqlite::Error),
+    Labels(rusqlite::Error),
+}
+
+impl TaskCreationError {
+    fn dependencies(error: rusqlite::Error) -> Self {
+        if matches!(&error, rusqlite::Error::InvalidParameterName(_)) {
+            Self::Dependencies(error)
+        } else {
+            Self::Storage(error)
+        }
+    }
+
+    fn labels(error: rusqlite::Error) -> Self {
+        if matches!(&error, rusqlite::Error::InvalidParameterName(_)) {
+            Self::Labels(error)
+        } else {
+            Self::Storage(error)
+        }
+    }
+
+    fn into_database_error(self) -> rusqlite::Error {
+        match self {
+            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => error,
+        }
+    }
+}
+
+impl fmt::Display for TaskCreationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => {
+                error.fmt(formatter)
+            }
+        }
+    }
+}
+
+impl std::error::Error for TaskCreationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => Some(error),
+        }
+    }
+}
+
+impl From<rusqlite::Error> for TaskCreationError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Storage(error)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompleteTaskWriteOutcome {
     Completed,
@@ -178,6 +233,108 @@ fn normalize_label_name(name: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
+fn create_task_label_on_connection(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    name: &str,
+) -> Result<TaskLabelRow> {
+    let name = normalize_label_name(name)?;
+    let key = name.to_lowercase();
+
+    if let Some(existing) = conn
+        .query_row(
+            "SELECT id FROM task_labels WHERE project_id = ?1 AND name_normalized = ?2",
+            rusqlite::params![project_id, key],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+    {
+        return query_task_label_by_id(conn, existing)?.ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!("label {existing} does not exist"))
+        });
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_secs() as i64;
+    conn.execute(
+        "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![project_id, name, key, now, now],
+    )?;
+    let label_id = conn.last_insert_rowid();
+    query_task_label_by_id(conn, label_id)?.ok_or_else(|| {
+        rusqlite::Error::InvalidParameterName(format!("label {label_id} does not exist"))
+    })
+}
+
+fn persist_new_task_dependencies(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    dependency_ids: &[String],
+    now: i64,
+) -> Result<Vec<String>> {
+    let dependency_ids = dedupe_dependency_ids(dependency_ids);
+    for dependency_id in &dependency_ids {
+        validate_dependency(conn, task_id, dependency_id)?;
+    }
+
+    for dependency_id in &dependency_ids {
+        conn.execute(
+            "INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![task_id, dependency_id, now],
+        )?;
+    }
+    if !dependency_ids.is_empty() {
+        conn.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+    }
+    Ok(dependency_ids)
+}
+
+fn persist_new_task_labels(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    label_names: &[String],
+    now: i64,
+) -> Result<Vec<TaskLabelRow>> {
+    let project_id = task_project_id(conn, task_id)?.flatten().ok_or_else(|| {
+        rusqlite::Error::InvalidParameterName(format!(
+            "task {task_id} must belong to a project before labels can be assigned"
+        ))
+    })?;
+
+    let mut labels = Vec::new();
+    let mut seen = Vec::new();
+    for label_name in label_names {
+        let key = normalized_label_key(label_name)?;
+        if seen.iter().any(|existing| existing == &key) {
+            continue;
+        }
+        seen.push(key);
+        labels.push(create_task_label_on_connection(
+            conn,
+            &project_id,
+            label_name,
+        )?);
+    }
+
+    for label in &labels {
+        conn.execute(
+            "INSERT INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![task_id, label.id, now],
+        )?;
+    }
+    if !labels.is_empty() {
+        conn.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+    }
+    Ok(labels)
+}
 fn normalized_label_key(name: &str) -> Result<String> {
     Ok(normalize_label_name(name)?.to_lowercase())
 }
@@ -540,6 +697,16 @@ impl super::Database {
     }
 
     pub fn create_task_with_options(&self, opts: NewTaskOptions) -> Result<TaskRow> {
+        self.create_task_with_metadata(opts, &[], &[])
+            .map_err(TaskCreationError::into_database_error)
+    }
+
+    pub fn create_task_with_metadata(
+        &self,
+        opts: NewTaskOptions,
+        dependency_ids: &[String],
+        label_names: &[String],
+    ) -> std::result::Result<TaskRow, TaskCreationError> {
         let NewTaskOptions {
             initial_prompt,
             status,
@@ -554,9 +721,11 @@ impl super::Database {
             task_display_title_updates_enabled,
             ai_provider,
         } = opts;
-        let conn = self.conn.lock().unwrap();
+        let mut connection = self.conn.lock().unwrap();
+        let transaction = connection.transaction()?;
+        let conn = &transaction;
         let defaulted_worktree_source =
-            project_defaulted_worktree_source(&conn, project_id, worktree_source)?;
+            project_defaulted_worktree_source(conn, project_id, worktree_source)?;
         let (worktree_source, worktree_branch) =
             normalize_worktree_source(defaulted_worktree_source.as_deref(), worktree_branch)?;
         // Normalize a blank title to NULL so the UI falls back to the derived title.
@@ -673,7 +842,7 @@ impl super::Database {
             }
         }
 
-        Ok(TaskRow {
+        let mut task = TaskRow {
             id: task_id,
             initial_prompt: initial_prompt.to_string(),
             status: status.to_string(),
@@ -691,7 +860,19 @@ impl super::Database {
             source_ticket_url,
             depends_on: Vec::new(),
             labels: Vec::new(),
-        })
+        };
+
+        if !dependency_ids.is_empty() {
+            task.depends_on = persist_new_task_dependencies(conn, &task.id, dependency_ids, now)
+                .map_err(TaskCreationError::dependencies)?;
+        }
+        if !label_names.is_empty() {
+            task.labels = persist_new_task_labels(conn, &task.id, label_names, now)
+                .map_err(TaskCreationError::labels)?;
+        }
+
+        transaction.commit().map_err(TaskCreationError::Storage)?;
+        Ok(task)
     }
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
@@ -743,34 +924,7 @@ impl super::Database {
 
     pub fn create_task_label(&self, project_id: &str, name: &str) -> Result<TaskLabelRow> {
         let conn = self.conn.lock().unwrap();
-        let name = normalize_label_name(name)?;
-        let key = name.to_lowercase();
-
-        if let Some(existing) = conn
-            .query_row(
-                "SELECT id FROM task_labels WHERE project_id = ?1 AND name_normalized = ?2",
-                rusqlite::params![project_id, key],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()?
-        {
-            return query_task_label_by_id(&conn, existing)?.ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(format!("label {existing} does not exist"))
-            });
-        }
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
-        conn.execute(
-            "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![project_id, name, key, now, now],
-        )?;
-        let label_id = conn.last_insert_rowid();
-        query_task_label_by_id(&conn, label_id)?.ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!("label {label_id} does not exist"))
-        })
+        create_task_label_on_connection(&conn, project_id, name)
     }
 
     pub fn add_task_label(&self, task_id: &str, label_name: &str) -> Result<TaskLabelRow> {
