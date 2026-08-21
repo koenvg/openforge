@@ -59,7 +59,7 @@ describe('sortFilesAsTree', () => {
     ])
   })
 
-  it('sorts nested directories before files at each level', () => {
+  it('keeps a parent path group before its nested path groups to match the file tree', () => {
     const files = [
       makeFile('src/utils.ts'),
       makeFile('src/lib/helper.ts'),
@@ -67,13 +67,13 @@ describe('sortFilesAsTree', () => {
     ]
     const sorted = sortFilesAsTree(files)
     expect(sorted.map(f => f.filename)).toEqual([
-      'src/lib/helper.ts',
       'src/utils.ts',
+      'src/lib/helper.ts',
       'README.md',
     ])
   })
 
-  it('handles complex tree with multiple directories', () => {
+  it('sorts complex shallow path groups in the same order as the file tree', () => {
     const files = [
       makeFile('README.md'),
       makeFile('src/components/Button.svelte'),
@@ -85,10 +85,10 @@ describe('sortFilesAsTree', () => {
     ]
     const sorted = sortFilesAsTree(files)
     expect(sorted.map(f => f.filename)).toEqual([
+      'src/main.ts',
       'src/components/Button.svelte',
       'src/lib/types.ts',
       'src/lib/utils.ts',
-      'src/main.ts',
       'tests/unit/test.ts',
       'package.json',
       'README.md',
