@@ -4,7 +4,26 @@ import {
   getFileStatusColor,
   getFileStatusClass,
   getFileStatusLabel,
+  getFileStatusPresentation,
 } from '@openforge-app/pr-review-ui/fileStatus'
+
+describe('getFileStatusPresentation', () => {
+  it.each([
+    ['added', 'Added', 'text-success border-success/45 bg-success/5'],
+    ['removed', 'Deleted', 'text-error border-error/45 bg-error/5'],
+    ['modified', 'Modified', 'text-primary border-primary/45 bg-primary/5'],
+    ['renamed', 'Renamed', 'text-info border-info/45 bg-info/5'],
+  ])('maps %s to its badge label and classes', (status, label, badgeClass) => {
+    expect(getFileStatusPresentation(status)).toMatchObject({ label, badgeClass })
+  })
+
+  it('preserves unknown status labels and uses the fallback badge classes', () => {
+    expect(getFileStatusPresentation('unknown')).toMatchObject({
+      label: 'unknown',
+      badgeClass: 'text-base-content/60 border-base-300 bg-base-200',
+    })
+  })
+})
 
 describe('fileStatus', () => {
   describe('getFileStatusIcon', () => {

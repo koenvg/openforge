@@ -2,7 +2,7 @@
   import { ChevronDown, ChevronRight, File, Folder } from '@lucide/svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
-  import { getFileStatusLabel } from './fileStatus'
+  import { getFileStatusPresentation } from './fileStatus'
   import type { FileTreeNode } from './fileTreeModel'
 
   interface Props {
@@ -31,15 +31,6 @@
     onToggleFileReviewed,
   }: Props = $props()
 
-  function getTreeStatusClass(status: string): string {
-    switch (status) {
-      case 'added': return 'text-success border-success/45 bg-success/5'
-      case 'removed': return 'text-error border-error/45 bg-error/5'
-      case 'modified': return 'text-primary border-primary/45 bg-primary/5'
-      case 'renamed': return 'text-info border-info/45 bg-info/5'
-      default: return 'text-base-content/60 border-base-300 bg-base-200'
-    }
-  }
 
   function handleReviewedChange(file: PrFileDiff, event: Event) {
     if (!(event.currentTarget instanceof HTMLInputElement)) return
@@ -91,6 +82,7 @@
     </span>
   </button>
 {:else if node.file}
+  {@const statusPresentation = getFileStatusPresentation(node.file.status)}
   <div
     class="relative flex min-h-10 w-full items-center gap-1 pr-2 transition-colors {selected ? 'bg-primary/8 border-l-2 border-l-primary' : 'hover:bg-base-200/70'} {active ? 'group-focus-within/tree:ring-2 group-focus-within/tree:ring-primary group-focus-within/tree:ring-inset' : ''}"
     style="padding-left: {selected ? 2 + depth * 16 : 4 + depth * 16}px"
@@ -119,10 +111,10 @@
       <File size={16} strokeWidth={1.8} class="shrink-0 text-base-content/45" aria-hidden="true" />
       <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-[13px] {reviewed ? 'line-through text-base-content/50' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined} title={node.file.filename}>{node.name}</span>
       <span
-        class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] font-semibold leading-none {getTreeStatusClass(node.file.status)}"
-        aria-label={getFileStatusLabel(node.file.status)}
-        title={getFileStatusLabel(node.file.status)}
-      >{getFileStatusLabel(node.file.status).charAt(0)}</span>
+        class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] font-semibold leading-none {statusPresentation.badgeClass}"
+        aria-label={statusPresentation.label}
+        title={statusPresentation.label}
+      >{statusPresentation.label.charAt(0)}</span>
       <span class="flex shrink-0 items-center gap-1.5 text-[13px] tabular-nums" aria-label="{node.file.additions} additions and {node.file.deletions} deletions">
         {#if node.file.additions > 0}<span class="font-medium text-success">+{node.file.additions}</span>{/if}
         {#if node.file.deletions > 0}<span class="font-medium text-error">−{node.file.deletions}</span>{/if}
