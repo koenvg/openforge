@@ -1054,6 +1054,27 @@ describe("terminalPool", () => {
 			expect(focusSpy).toHaveBeenCalled();
 		});
 
+		it("does not move focus to an attached terminal while a modal dialog is open", async () => {
+			const entry = await acquire("task-focus-modal");
+			const wrapper = document.createElement("div");
+			await attach(entry, wrapper);
+			const dialog = document.createElement("div");
+			dialog.setAttribute("role", "dialog");
+			dialog.setAttribute("aria-modal", "true");
+			document.body.appendChild(dialog);
+
+			try {
+				const { focus: focusSpy } = getTerminalMocks(entry);
+				focusSpy.mockClear();
+
+				focusTerminal("task-focus-modal");
+
+				expect(focusSpy).not.toHaveBeenCalled();
+			} finally {
+				dialog.remove();
+			}
+		});
+
 		it("does nothing for unknown taskId", () => {
 			expect(() => focusTerminal("nonexistent")).not.toThrow();
 		});

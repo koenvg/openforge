@@ -821,7 +821,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   
   function focusTerminal(taskId: string): void {
     const entry = pool.get(taskId)
-    if (entry?.attached) {
+    if (entry?.attached && !isModalOpen()) {
       entry.terminal.focus()
     }
   }
