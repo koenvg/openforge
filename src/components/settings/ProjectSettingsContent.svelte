@@ -22,12 +22,10 @@
   <SettingsGeneralCard
     projectName={controller.projectName}
     projectPath={controller.projectPath}
-    projectColor={controller.projectColor}
     runCommand={controller.runCommand}
     disabled={!controller.hasProject}
     onProjectNameChange={controller.setProjectName}
     onProjectPathChange={controller.setProjectPath}
-    onProjectColorChange={controller.handleProjectColorChange}
     onRunCommandChange={controller.setRunCommand}
   />
 {:else if activeSection === 'agents'}

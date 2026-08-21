@@ -27,7 +27,6 @@ export const PROJECT_HIERARCHY_KEYS: string[] = HIERARCHICAL_SETTINGS
 export interface ProjectSettingsConfig {
   agentInstructions: string
   aiProvider: string
-  projectColor: string
   useWorktrees: boolean
   runCommand: string
   focusFilterStates: TaskState[]
@@ -95,7 +94,6 @@ interface OpenCodeInstallStatus {
 const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'focusFilterStates'> = {
   agentInstructions: '',
   aiProvider: 'claude-code',
-  projectColor: '',
   useWorktrees: true,
   runCommand: '',
 }
@@ -112,10 +110,9 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [instructions, provider, color, useWorktrees, runCommand, focusFilterStates] = await Promise.all([
+  const [instructions, provider, useWorktrees, runCommand, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'ai_provider'),
-    getProjectConfig(projectId, 'project_color'),
     getProjectConfig(projectId, 'use_worktrees'),
     getProjectConfig(projectId, RUN_COMMAND_CONFIG_KEY),
     loadFocusFilterStates(projectId),
@@ -124,7 +121,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
   return {
     agentInstructions: instructions ?? DEFAULT_PROJECT_SETTINGS.agentInstructions,
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,
-    projectColor: color ?? DEFAULT_PROJECT_SETTINGS.projectColor,
     useWorktrees: useWorktrees == null ? DEFAULT_PROJECT_SETTINGS.useWorktrees : useWorktrees === 'true',
     runCommand: runCommand ?? DEFAULT_PROJECT_SETTINGS.runCommand,
     focusFilterStates,

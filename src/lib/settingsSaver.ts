@@ -9,7 +9,6 @@ export interface ProjectSettingsSavePayload {
   projectName: string
   projectPath: string
   agentInstructions: string
-  projectColor: string
   runCommand: string
   focusFilterStates: TaskState[]
 }
@@ -32,7 +31,6 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
   // written here so exactly one path persists them, avoiding a debounced-vs-immediate race.
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
-  await setProjectConfig(payload.projectId, 'project_color', payload.projectColor)
   await setProjectConfig(payload.projectId, RUN_COMMAND_CONFIG_KEY, payload.runCommand)
   await saveFocusFilterStates(payload.projectId, payload.focusFilterStates)
 }

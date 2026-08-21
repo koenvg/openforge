@@ -49,7 +49,6 @@ const mocks = vi.hoisted(() => {
     getDeveloperLogSnapshot: vi.fn(),
     getProjectTaskLabels: vi.fn(),
     activeProjectId: createMockWritable<string | null>('test-project-id'),
-    activeProjectColorId: createMockWritable<string | null>(null),
     codeCleanupTasksEnabled: createMockWritable(false),
     error: createMockWritable<string | null>(null),
     projects: createMockWritable([
@@ -108,7 +107,6 @@ vi.mock('../../lib/boardFilters', () => ({
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: mocks.activeProjectId,
-  activeProjectColorId: mocks.activeProjectColorId,
   projects: mocks.projects,
   codeCleanupTasksEnabled: mocks.codeCleanupTasksEnabled,
   error: mocks.error,
@@ -173,7 +171,6 @@ export async function resetSettingsViewTest() {
   mocks.getProjectTaskLabels.mockResolvedValue([])
 
   mocks.activeProjectId.set('test-project-id')
-  mocks.activeProjectColorId.set(null)
   mocks.codeCleanupTasksEnabled.set(false)
   mocks.error.set(null)
   mocks.projects.set([

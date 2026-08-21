@@ -28,7 +28,6 @@ import { getProjectIdentity, mergeUpdatedProject, resetProjectAndReload, resetPr
 import { saveGlobalSettings, saveProjectSettings } from '../../lib/settingsSaver'
 import type { GlobalSettingsSavePayload, ProjectSettingsSavePayload } from '../../lib/settingsSaver'
 import {
-  activeProjectColorId,
   activeProjectId,
   codeCleanupTasksEnabled,
   error,
@@ -83,7 +82,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let projectName = $state('')
   let projectPath = $state('')
   let agentInstructions = $state('')
-  let projectColor = $state('')
   let runCommand = $state('')
   let projectRawOverrides = $state<Record<string, string | null>>({})
   let resettingProjectSetting = $state<string | null>(null)
@@ -199,7 +197,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     projectSettingsLoadError = null
     projectSettingsLoading = false
     agentInstructions = ''
-    projectColor = ''
     runCommand = ''
     focusFilterStates = [...DEFAULT_FOCUS_STATES]
     projectRawOverrides = {}
@@ -251,7 +248,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
 
   function applyProjectSettings(settings: ProjectSettingsConfig): void {
     agentInstructions = settings.agentInstructions
-    projectColor = settings.projectColor
     runCommand = settings.runCommand
     focusFilterStates = settings.focusFilterStates
   }
@@ -286,7 +282,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
         projectName,
         projectPath,
         agentInstructions,
-        projectColor,
         runCommand,
         focusFilterStates,
       }
@@ -467,11 +462,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     }
   }
 
-  function handleProjectColorChange(value: string): void {
-    projectColor = value
-    activeProjectColorId.set(value)
-    scheduleSave()
-  }
 
   function applyInstallationStatus(status: Awaited<ReturnType<typeof loadInstallationStatus>>): void {
     opencodeInstalled = status.opencodeInstalled
@@ -537,7 +527,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get hasProject() { return hasProject },
     get projectName() { return projectName },
     get projectPath() { return projectPath },
-    get projectColor() { return projectColor },
     get runCommand() { return runCommand },
     get agentInstructions() { return agentInstructions },
     get focusFilterStates() { return focusFilterStates },
@@ -595,7 +584,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     handleProjectSettingChange,
     handleResetToGlobal,
     handleResetProjectSetting,
-    handleProjectColorChange,
     refreshInstallationStatus,
     handleDelete,
     handleModelChange,

@@ -166,7 +166,7 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
+  <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 bg-base-200 shrink-0">
     <div class="flex items-center gap-2 min-w-0">
       <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={onBackToList}>← Back</button>
       <span class="badge badge-primary badge-sm shrink-0">{pr.repo_owner}/{pr.repo_name}</span>
