@@ -79,7 +79,7 @@ describe('package build scripts', () => {
       'utf8',
     )
 
-    expect(sdkPackage.version).toBe('0.2.1')
+    expect(sdkPackage.version).toBe('0.2.3')
     expect(sdkPackage.repository).toEqual({
       type: 'git',
       url: 'https://github.com/koenvg/openforge.git',
@@ -88,10 +88,13 @@ describe('package build scripts', () => {
     expect(sdkPackage.scripts['check:contract']).toBe('node ./scripts/check-published-contract.mjs')
     expect(sdkPackage.scripts.prepublishOnly).toBe('pnpm run check:contract')
     expect(rootPackage.scripts['packages:contract:check']).toBe('pnpm --filter @openforge-app/plugin-sdk check:contract')
+    expect(rootPackage.scripts['packages:docs-version:check']).toBe('node scripts/check-plugin-sdk-doc-version.mjs')
     expect(ciWorkflow).toContain('pnpm packages:contract:check')
+    expect(ciWorkflow).toContain('pnpm packages:docs-version:check')
 
     const sharedPublishSteps = [
       'Set SDK package version',
+      'pnpm packages:docs-version:check',
       'pnpm --filter @openforge-app/plugin-sdk build',
       'pnpm --filter @openforge-app/plugin-sdk test',
       'pnpm packages:contract:check',
@@ -116,6 +119,14 @@ describe('package build scripts', () => {
     for (const sharedStep of sharedPublishSteps) {
       expect(reusablePublishWorkflow).toContain(sharedStep)
     }
+    const docsVersionStepIndex = reusablePublishWorkflow.indexOf('name: Check Plugin SDK documentation version')
+    const buildStepIndex = reusablePublishWorkflow.indexOf('name: Build plugin SDK')
+    expect(docsVersionStepIndex).toBeGreaterThan(
+      reusablePublishWorkflow.indexOf('name: Set SDK package version'),
+    )
+    expect(buildStepIndex).toBeGreaterThan(docsVersionStepIndex)
+    expect(reusablePublishWorkflow).toContain("if: inputs.npm_tag == 'latest'")
+
     const validationStepIndex = reusablePublishWorkflow.indexOf('name: Validate npm dist-tag')
     const publishStepIndex = reusablePublishWorkflow.indexOf(
       'npm publish --access public --provenance --tag "$NPM_TAG"',
