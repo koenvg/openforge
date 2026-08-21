@@ -202,6 +202,16 @@ mod tests {
                 "agent_generate_in_repo",
                 GlobalCommandHandler::AgentGenerate,
             ),
+            (
+                "openforge.replyToReviewComment",
+                "create_review_comment_reply",
+                GlobalCommandHandler::GithubReview,
+            ),
+            (
+                "openforge.createReviewComment",
+                "create_review_comment",
+                GlobalCommandHandler::GithubReview,
+            ),
         ];
 
         for (qualified_id, expected_app_command, expected_handler) in cases {
@@ -210,27 +220,6 @@ mod tests {
             assert_eq!(resolved.app_command, expected_app_command);
             assert_eq!(resolved.handler, expected_handler);
         }
-    }
-
-    #[test]
-    fn agent_generate_in_repo_maps_to_agent_handler() {
-        let resolved = resolve_openforge_global_command("openforge.agentGenerateInRepo").unwrap();
-        assert_eq!(resolved.app_command, "agent_generate_in_repo");
-        assert_eq!(resolved.handler, GlobalCommandHandler::AgentGenerate);
-    }
-
-    #[test]
-    fn reply_to_review_comment_maps_to_github_handler() {
-        let resolved = resolve_openforge_global_command("openforge.replyToReviewComment").unwrap();
-        assert_eq!(resolved.app_command, "create_review_comment_reply");
-        assert_eq!(resolved.handler, GlobalCommandHandler::GithubReview);
-    }
-
-    #[test]
-    fn create_review_comment_maps_to_github_handler() {
-        let resolved = resolve_openforge_global_command("openforge.createReviewComment").unwrap();
-        assert_eq!(resolved.app_command, "create_review_comment");
-        assert_eq!(resolved.handler, GlobalCommandHandler::GithubReview);
     }
 
     #[test]
