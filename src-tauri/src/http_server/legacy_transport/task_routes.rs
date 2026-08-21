@@ -13,11 +13,34 @@ use axum::{
 /// Priority: explicit project_id > worktree deduction.
 /// If neither succeeds, returns an error message listing available projects
 /// so the calling agent can retry with the correct project_id.
+#[derive(Debug, PartialEq)]
+pub(in crate::http_server) enum ResolveProjectIdError {
+    Deduction(String),
+    Storage(String),
+}
+
+impl ResolveProjectIdError {
+    fn into_http_response(self) -> (StatusCode, String) {
+        match self {
+            Self::Deduction(message) => (StatusCode::UNPROCESSABLE_ENTITY, message),
+            Self::Storage(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+        }
+    }
+}
+
+impl std::fmt::Display for ResolveProjectIdError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Deduction(message) | Self::Storage(message) => formatter.write_str(message),
+        }
+    }
+}
+
 pub(in crate::http_server) fn resolve_project_id(
     db: &db::Database,
     explicit_project_id: Option<&str>,
     worktree: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String, ResolveProjectIdError> {
     if let Some(id) = explicit_project_id {
         if !id.is_empty() {
             return Ok(id.to_string());
@@ -25,12 +48,20 @@ pub(in crate::http_server) fn resolve_project_id(
     }
 
     if let Some(wt) = worktree {
-        if let Ok(Some(id)) = db.get_project_for_worktree(wt) {
+        if let Some(id) = db.get_project_for_worktree(wt).map_err(|error| {
+            ResolveProjectIdError::Storage(format!(
+                "Failed to resolve project from worktree: {error}"
+            ))
+        })? {
             return Ok(id);
         }
     }
 
-    let projects = db.get_all_projects().unwrap_or_default();
+    let projects = db.get_all_projects().map_err(|error| {
+        ResolveProjectIdError::Storage(format!(
+            "Failed to list projects while resolving project: {error}"
+        ))
+    })?;
     if let Some(wt) = worktree {
         if let Some(project) = projects.iter().find(|project| project.path == wt) {
             return Ok(project.id.clone());
@@ -46,10 +77,10 @@ pub(in crate::http_server) fn resolve_project_id(
             .join("\n")
     };
 
-    Err(format!(
+    Err(ResolveProjectIdError::Deduction(format!(
         "Could not determine project for this task. project_id was not provided and could not be deduced from the worktree path.\n\nAvailable projects:\n{}\n\nPlease call create_task again with the correct project_id parameter.",
         project_list
-    ))
+    )))
 }
 
 /// Handle create_task requests from OpenCode sessions
@@ -70,7 +101,7 @@ pub async fn create_task_handler(
         request.project_id.as_deref(),
         request.worktree.as_deref(),
     )
-    .map_err(|msg| (StatusCode::UNPROCESSABLE_ENTITY, msg))?;
+    .map_err(ResolveProjectIdError::into_http_response)?;
 
     let task = db
         .create_task(

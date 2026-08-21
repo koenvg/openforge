@@ -173,6 +173,78 @@ async fn http_create_task_handler_uses_project_worktree_default() {
 }
 
 #[tokio::test]
+async fn create_task_returns_server_error_when_worktree_lookup_fails() {
+    let (state, path) = test_state("http_create_task_worktree_lookup_failure");
+    state
+        .db
+        .lock()
+        .expect("lock db")
+        .connection()
+        .lock()
+        .expect("lock connection")
+        .execute("DROP TABLE worktrees", [])
+        .expect("drop worktrees table");
+
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Lookup failure","worktree":"/tmp/worktree"}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body = response_body_text(response).await;
+    assert!(
+        body.contains("Failed to resolve project from worktree"),
+        "unexpected response body: {body}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn create_task_returns_server_error_when_project_listing_fails() {
+    let (state, path) = test_state("http_create_task_project_listing_failure");
+    state
+        .db
+        .lock()
+        .expect("lock db")
+        .connection()
+        .lock()
+        .expect("lock connection")
+        .execute("DROP TABLE projects", [])
+        .expect("drop projects table");
+
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"initial_prompt":"Lookup failure"}"#))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body = response_body_text(response).await;
+    assert!(
+        body.contains("Failed to list projects while resolving project"),
+        "unexpected response body: {body}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
     let (state, path) = test_state("http_create_task_explicit_project_worktree");
     let project_id = {
