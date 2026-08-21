@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, ChevronUp, PanelLeftOpen, Search, X } from '@lucide/svelte'
-  import { DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
+  import { DiffModeEnum } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge-app/plugin-sdk/domain'
@@ -9,6 +9,7 @@
   import { createDiffWorker } from './useDiffWorker.svelte'
   import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
   import { createVirtualizer } from './useVirtualizer.svelte'
+  import { createInlineCommentDrafts } from './useInlineCommentDrafts.svelte'
   import { onDestroy, tick } from 'svelte'
   import { sortFilesAsTree } from './fileSort'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
@@ -64,18 +65,9 @@
   }
   type Props = BaseProps
   let { files = [], existingComments = [], repoOwner = '', repoName = '', headSha = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, fileHeaderExtra, footer, includeCommitted = true, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, resolveRepositoryImage, onOpenRepositoryPath, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme, reviewedFileShas = new Map(), onToggleFileReviewed, getFileReviewIdentity = (file: PrFileDiff) => file.sha.trim() || null, onRequestFocusFileTree, aiThreads = [], onAskAgent, onCommentNow, onReplyToThread, onAskAboutComment, onReplyToExistingComment, pendingReplies = [], onAddReplyToReview, onRemovePendingReply }: Props = $props()
-  let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
-  let commentText = $state('')
-  type InlineCommentDraftSide = ReviewSubmissionComment['side']
-  type InlineCommentDraftKey = {
-    filename: string
-    lineNumber: number
-    side: InlineCommentDraftSide
-  }
-  let activeInlineCommentDraftKey = $state<InlineCommentDraftKey | null>(null)
   let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
   let pendingScrollTop: number | null = null
@@ -86,6 +78,14 @@
   const scrollRestoreRetryMs = 25
   let hasAutoCollapsed = false
   let previousReviewedFileIdentities = new Map<string, string>()
+  const inlineCommentDrafts = createInlineCommentDrafts({
+    getPendingComments: () => pendingComments,
+    getOnPendingCommentsChange: () => onPendingCommentsChange,
+    getInlineDraftScopeId: () => inlineDraftScopeId,
+    getInlineDraft: () => getInlineDraft,
+    getSetInlineDraft: () => setInlineDraft,
+    getClearInlineDraft: () => clearInlineDraft,
+  })
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
     getIncludeCommitted: () => includeCommitted,
@@ -351,89 +351,11 @@
   }
 
 
-  const visiblePendingComments = $derived(pendingComments ?? internalPendingComments)
-  const pendingCommentCountByFile = $derived.by(() => {
-    const counts = new Map<string, number>()
-    for (const comment of visiblePendingComments) {
-      counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1)
-    }
-    return counts
-  })
-
-  function setVisiblePendingComments(comments: ReviewSubmissionComment[]) {
-    if (onPendingCommentsChange) {
-      onPendingCommentsChange(comments)
-    } else {
-      internalPendingComments = comments
-    }
-  }
 
   function setVisibleAgentComments(comments: AgentReviewComment[]) {
     onAgentCommentsChange?.(comments)
   }
 
-  function inlineCommentDraftSide(side: SplitSide): InlineCommentDraftSide {
-    return side === SplitSide.old ? 'LEFT' : 'RIGHT'
-  }
-
-  function isActiveInlineCommentDraft(filename: string, lineNumber: number, side: InlineCommentDraftSide) {
-    return activeInlineCommentDraftKey?.filename === filename &&
-      activeInlineCommentDraftKey.lineNumber === lineNumber &&
-      activeInlineCommentDraftKey.side === side
-  }
-
-  function getInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
-    const reviewSide = inlineCommentDraftSide(side)
-    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
-      return commentText
-    }
-    if (inlineDraftScopeId) {
-      return getInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide) ?? ''
-    }
-    return ''
-  }
-
-  function openInlineCommentWidget(filename: string, lineNumber: number, side: SplitSide) {
-    const reviewSide = inlineCommentDraftSide(side)
-    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
-    commentText = inlineDraftScopeId
-      ? getInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide) ?? ''
-      : ''
-  }
-
-  function setInlineCommentText(filename: string, lineNumber: number, side: SplitSide, text: string) {
-    const reviewSide = inlineCommentDraftSide(side)
-    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
-    commentText = text
-    if (inlineDraftScopeId) {
-      setInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide, text)
-    }
-  }
-
-  function clearInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
-    const reviewSide = inlineCommentDraftSide(side)
-    if (inlineDraftScopeId) {
-      clearInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide)
-    }
-    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
-      commentText = ''
-      activeInlineCommentDraftKey = null
-    }
-  }
-
-  function submitInlineComment(filename: string, lineNumber: number, side: SplitSide, onClose: () => void) {
-    const text = getInlineCommentText(filename, lineNumber, side)
-    if (!text.trim()) return
-    const newComment: ReviewSubmissionComment = {
-      path: filename,
-      line: lineNumber,
-      side: inlineCommentDraftSide(side),
-      body: text.trim()
-    }
-    setVisiblePendingComments([...visiblePendingComments, newComment])
-    clearInlineCommentText(filename, lineNumber, side)
-    onClose()
-  }
 
   // Large diff warning banner calculations
   const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
@@ -620,18 +542,18 @@
               diffViewTheme={resolveDiffTheme()}
               {githubMarkdownImageBaseUrl}
               {existingComments}
-              pendingComments={visiblePendingComments}
-              pendingCommentCount={pendingCommentCountByFile.get(file.filename) ?? 0}
+              pendingComments={inlineCommentDrafts.pendingComments}
+              pendingCommentCount={inlineCommentDrafts.pendingCommentCountByFile.get(file.filename) ?? 0}
               {agentComments}
               {resolveRepositoryImage}
               onOpenRepositoryPath={openRepositoryPath}
               {onOpenUrl}
-              onOpenInlineCommentWidget={(lineNumber, side) => openInlineCommentWidget(file.filename, lineNumber, side)}
-              getInlineCommentText={(lineNumber, side) => getInlineCommentText(file.filename, lineNumber, side)}
-              onSetInlineCommentText={(lineNumber, side, text) => setInlineCommentText(file.filename, lineNumber, side, text)}
-              onClearInlineCommentText={(lineNumber, side) => clearInlineCommentText(file.filename, lineNumber, side)}
-              onSubmitInlineComment={(lineNumber, side, onClose) => submitInlineComment(file.filename, lineNumber, side, onClose)}
-              onPendingCommentsChange={setVisiblePendingComments}
+              onOpenInlineCommentWidget={(lineNumber, side) => inlineCommentDrafts.open(file.filename, lineNumber, side)}
+              getInlineCommentText={(lineNumber, side) => inlineCommentDrafts.getText(file.filename, lineNumber, side)}
+              onSetInlineCommentText={(lineNumber, side, text) => inlineCommentDrafts.setText(file.filename, lineNumber, side, text)}
+              onClearInlineCommentText={(lineNumber, side) => inlineCommentDrafts.clear(file.filename, lineNumber, side)}
+              onSubmitInlineComment={(lineNumber, side, onClose) => inlineCommentDrafts.submit(file.filename, lineNumber, side, onClose)}
+              onPendingCommentsChange={inlineCommentDrafts.setPendingComments}
               onAgentCommentsChange={setVisibleAgentComments}
               {onUpdateAgentCommentStatus}
               {fileHeaderExtra}
