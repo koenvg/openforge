@@ -140,39 +140,38 @@ pub async fn create_task_handler(
     let db = state.db.lock().unwrap();
 
     let task = db
-        .create_task(
-            &request.initial_prompt,
-            "backlog",
-            Some(&project_id),
-            None,
-            None,
+        .create_task_with_metadata(
+            db::NewTaskOptions {
+                initial_prompt: &request.initial_prompt,
+                status: "backlog",
+                project_id: Some(&project_id),
+                prompt: None,
+                permission_mode: None,
+                worktree_source: None,
+                worktree_branch: None,
+                title: None,
+                source_ticket_url: None,
+                code_cleanup_enabled: None,
+                task_display_title_updates_enabled: None,
+                ai_provider: None,
+            },
+            &request.depends_on,
+            &request.labels,
         )
-        .map_err(|e| {
-            (
+        .map_err(|error| match error {
+            db::TaskCreationError::Storage(error) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to create task: {}", e),
-            )
+                format!("Failed to create task: {error}"),
+            ),
+            db::TaskCreationError::Dependencies(error) => (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to set task dependencies: {error}"),
+            ),
+            db::TaskCreationError::Labels(error) => (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to set task labels: {error}"),
+            ),
         })?;
-
-    if !request.depends_on.is_empty() {
-        if let Err(e) = db.set_task_dependencies(&task.id, &request.depends_on) {
-            let _ = db.hard_delete_task(&task.id);
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("Failed to set task dependencies: {e}"),
-            ));
-        }
-    }
-
-    if !request.labels.is_empty() {
-        if let Err(e) = db.set_task_labels(&task.id, &request.labels) {
-            let _ = db.hard_delete_task(&task.id);
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("Failed to set task labels: {e}"),
-            ));
-        }
-    }
 
     drop(db);
 

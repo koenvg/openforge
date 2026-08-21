@@ -43,6 +43,76 @@ async fn test_create_task_handler_persists_dependency_ids() {
 }
 
 #[tokio::test]
+async fn create_task_dependency_storage_failure_is_atomic_when_cleanup_delete_would_fail() {
+    let (state, path) = test_state("http_create_task_dependency_failure_atomic");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        db.create_task("First", "done", Some(&project.id), None, None)
+            .expect("create first dependency");
+        db.create_task("Second", "done", Some(&project.id), None, None)
+            .expect("create second dependency");
+        db.connection()
+            .lock()
+            .expect("lock connection")
+            .execute_batch(
+                "CREATE TRIGGER reject_second_task_dependency
+                 BEFORE INSERT ON task_dependencies
+                 WHEN NEW.depends_on_task_id = 'T-2'
+                 BEGIN
+                   SELECT RAISE(ABORT, 'dependency insert rejected');
+                 END;
+                 CREATE TRIGGER reject_task_delete
+                 BEFORE DELETE ON tasks
+                 BEGIN
+                   SELECT RAISE(ABORT, 'task delete rejected');
+                 END;",
+            )
+            .expect("create storage failure triggers");
+    }
+
+    let response = create_router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Dependent","project_id":"P-1","depends_on":["T-1","T-2"]}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let db = state.db.lock().expect("lock db");
+    assert!(db.get_task("T-3").expect("get attempted task").is_none());
+    assert_eq!(
+        db.get_config("next_task_id").expect("get task counter"),
+        Some("3".to_string())
+    );
+    let dependency_count: i64 = db
+        .connection()
+        .lock()
+        .expect("lock connection")
+        .query_row(
+            "SELECT COUNT(*) FROM task_dependencies WHERE task_id = 'T-3'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count rolled-back dependencies");
+    assert_eq!(dependency_count, 0);
+    drop(db);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_set_task_dependencies_handler_replaces_dependencies() {
     let (state, path) = test_state("http_set_task_dependencies_handler");
     {

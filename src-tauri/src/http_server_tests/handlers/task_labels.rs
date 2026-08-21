@@ -95,6 +95,85 @@ async fn test_create_task_handler_persists_labels() {
 }
 
 #[tokio::test]
+async fn create_task_label_storage_failure_is_atomic_when_cleanup_delete_would_fail() {
+    let (state, path) = test_state("http_create_task_label_failure_atomic");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        let existing_label = db
+            .create_task_label(&project.id, "existing")
+            .expect("create existing label");
+        let triggers = format!(
+            "CREATE TRIGGER reject_new_task_label_assignment
+             BEFORE INSERT ON task_label_assignments
+             WHEN NEW.label_id != {}
+             BEGIN
+               SELECT RAISE(ABORT, 'label assignment rejected');
+             END;
+             CREATE TRIGGER reject_task_delete
+             BEFORE DELETE ON tasks
+             BEGIN
+               SELECT RAISE(ABORT, 'task delete rejected');
+             END;",
+            existing_label.id
+        );
+        db.connection()
+            .lock()
+            .expect("lock connection")
+            .execute_batch(&triggers)
+            .expect("create storage failure triggers");
+    }
+
+    let response = create_router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Labelled task","project_id":"P-1","labels":["existing","new"]}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let db = state.db.lock().expect("lock db");
+    assert!(db.get_task("T-1").expect("get attempted task").is_none());
+    let labels = db
+        .get_project_task_labels("P-1")
+        .expect("list project labels");
+    assert_eq!(
+        labels
+            .iter()
+            .map(|label| label.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["existing"]
+    );
+    assert_eq!(
+        db.get_config("next_task_id").expect("get task counter"),
+        Some("1".to_string())
+    );
+    let assignment_count: i64 = db
+        .connection()
+        .lock()
+        .expect("lock connection")
+        .query_row("SELECT COUNT(*) FROM task_label_assignments", [], |row| {
+            row.get(0)
+        })
+        .expect("count rolled-back assignments");
+    assert_eq!(assignment_count, 0);
+    drop(db);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_task_label_handlers_list_add_and_remove_labels() {
     let (state, path) = test_state("http_task_label_handlers");
     {
