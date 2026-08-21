@@ -59,7 +59,7 @@ describe('sortFilesAsTree', () => {
     ])
   })
 
-  it('sorts nested directories before files at each level', () => {
+  it('walks nested directories before sibling files to match the file tree', () => {
     const files = [
       makeFile('src/utils.ts'),
       makeFile('src/lib/helper.ts'),
@@ -73,7 +73,7 @@ describe('sortFilesAsTree', () => {
     ])
   })
 
-  it('handles complex tree with multiple directories', () => {
+  it('sorts a complex hierarchy in the same order as the file tree', () => {
     const files = [
       makeFile('README.md'),
       makeFile('src/components/Button.svelte'),

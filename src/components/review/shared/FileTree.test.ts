@@ -116,7 +116,7 @@ describe('FileTree', () => {
     expect(selectedFilename).toBe('test.ts')
   })
 
-  it('groups files under their full immediate parent path', () => {
+  it('renders a compact directory chain under its full path', () => {
     const onSelectFile = () => {}
     const nestedFiles: PrFileDiff[] = [
       {
@@ -134,10 +134,9 @@ describe('FileTree', () => {
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
 
-    expect(screen.getByText('src/components')).toBeTruthy()
-    expect(screen.getByText('Button.svelte')).toBeTruthy()
-    expect(screen.queryByText('src')).toBeNull()
-    expect(screen.queryByText('components')).toBeNull()
+    expect(screen.getByRole('treeitem', { name: 'Collapse src/components' })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: 'Select file src/components/Button.svelte' })).toBeTruthy()
+    expect(screen.queryByRole('treeitem', { name: 'Collapse src' })).toBeNull()
   })
 
   it('directories are collapsed when clicked', async () => {
@@ -157,10 +156,14 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    const dir = screen.getByText('src/lib')
-    expect(screen.getByText('test.ts')).toBeTruthy()
+    const dir = screen.getByRole('treeitem', { name: 'Collapse src/lib' })
+    expect(dir.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('treeitem', { name: 'Select file src/lib/test.ts' })).toBeTruthy()
+
     await fireEvent.click(dir)
-    expect(screen.queryByText('test.ts')).toBeNull()
+
+    expect(screen.getByRole('treeitem', { name: 'Expand src/lib' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('treeitem', { name: 'Select file src/lib/test.ts' })).toBeNull()
   })
 
   it('directories are expanded when clicked again', async () => {
@@ -180,11 +183,15 @@ describe('FileTree', () => {
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
-    const dir = screen.getByText('src/lib')
+    const dir = screen.getByRole('treeitem', { name: 'Collapse src/lib' })
     await fireEvent.click(dir)
-    expect(screen.queryByText('test.ts')).toBeNull()
-    await fireEvent.click(dir)
-    expect(screen.getByText('test.ts')).toBeTruthy()
+    const collapsedDir = screen.getByRole('treeitem', { name: 'Expand src/lib' })
+    expect(screen.queryByRole('treeitem', { name: 'Select file src/lib/test.ts' })).toBeNull()
+
+    await fireEvent.click(collapsedDir)
+
+    expect(screen.getByRole('treeitem', { name: 'Collapse src/lib' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('treeitem', { name: 'Select file src/lib/test.ts' })).toBeTruthy()
   })
 
   it('shows file stats for each file', () => {

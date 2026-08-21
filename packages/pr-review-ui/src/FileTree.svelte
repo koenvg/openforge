@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronDown, ChevronRight, ChevronsLeft, Folder, Search, X } from '@lucide/svelte'
+  import { ChevronDown, ChevronRight, ChevronsLeft, File, Folder, Search, X } from '@lucide/svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import { tick } from 'svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
@@ -59,13 +59,15 @@
     file?: PrFileDiff
   }
 
-  function getParentPath(filename: string): string {
-    const separatorIndex = filename.lastIndexOf('/')
-    return separatorIndex < 0 ? '' : filename.slice(0, separatorIndex)
-  }
-
   function collectDirPaths(files: PrFileDiff[]): Set<string> {
-    return new Set(files.map((file) => getParentPath(file.filename)).filter(Boolean))
+    const dirs = new Set<string>()
+    for (const file of files) {
+      const parts = file.filename.split('/')
+      for (let index = 0; index < parts.length - 1; index++) {
+        dirs.add(parts.slice(0, index + 1).join('/'))
+      }
+    }
+    return dirs
   }
 
   $effect(() => {
@@ -103,38 +105,53 @@
     const root: TreeNode = { name: '', fullPath: '', isDir: true, children: new Map() }
 
     for (const file of files) {
-      const parentPath = getParentPath(file.filename)
-      const fileName = parentPath ? file.filename.slice(parentPath.length + 1) : file.filename
-      const fileNode: TreeNode = {
-        name: fileName,
-        fullPath: file.filename,
-        isDir: false,
-        children: new Map(),
-        file,
-      }
+      const parts = file.filename.split('/')
+      let current = root
 
-      if (!parentPath) {
-        root.children.set(file.filename, fileNode)
-        continue
-      }
+      for (let index = 0; index < parts.length; index++) {
+        const part = parts[index]
+        const isFile = index === parts.length - 1
+        const fullPath = parts.slice(0, index + 1).join('/')
 
-      let group = root.children.get(parentPath)
-      if (!group) {
-        group = {
-          name: parentPath,
-          fullPath: parentPath,
-          isDir: true,
-          children: new Map(),
+        if (!current.children.has(part)) {
+          current.children.set(part, {
+            name: part,
+            fullPath,
+            isDir: !isFile,
+            children: new Map(),
+            file: isFile ? file : undefined,
+          })
         }
-        root.children.set(parentPath, group)
+
+        current = current.children.get(part)!
       }
-      group.children.set(file.filename, fileNode)
     }
 
     return root
   }
 
+  function compactTree(node: TreeNode, isRoot = false): TreeNode {
+    const compactedChildren = new Map<string, TreeNode>()
+    for (const [key, child] of node.children) {
+      compactedChildren.set(key, child.isDir ? compactTree(child) : child)
+    }
 
+    let result: TreeNode = { ...node, children: compactedChildren }
+    if (!isRoot) {
+      while (result.children.size === 1) {
+        const onlyChild = result.children.values().next().value as TreeNode
+        if (!onlyChild.isDir) break
+        result = {
+          name: `${result.name}/${onlyChild.name}`,
+          fullPath: onlyChild.fullPath,
+          isDir: true,
+          children: onlyChild.children,
+        }
+      }
+    }
+
+    return result
+  }
   function handleFileClick(file: PrFileDiff) {
     selectedFile = file.filename
     onSelectFile(file.filename)
@@ -179,7 +196,7 @@
     if (!query) return files
     return files.filter((file) => file.filename.toLocaleLowerCase().includes(query))
   })
-  let flattenedNodes = $derived(flattenTree(buildTree(filteredFiles), 0))
+  let flattenedNodes = $derived(flattenTree(compactTree(buildTree(filteredFiles), true), 0))
 
   // Files currently visible in the tree (excludes files under collapsed folders),
   // in display order. Drives ArrowUp/ArrowDown navigation.
@@ -287,6 +304,23 @@
   }
 </script>
 
+{#snippet treeGuides(depth: number)}
+  {#each Array(depth) as _, guideDepth}
+    <span
+      class="pointer-events-none absolute inset-y-0 w-px bg-base-300/80"
+      style="left: {20 + guideDepth * 16}px"
+      aria-hidden="true"
+    ></span>
+  {/each}
+  {#if depth > 0}
+    <span
+      class="pointer-events-none absolute h-px w-2 bg-base-300/80"
+      style="left: {20 + (depth - 1) * 16}px; top: 50%"
+      aria-hidden="true"
+    ></span>
+  {/if}
+{/snippet}
+
 <div class="flex h-full flex-col border-r border-base-300 bg-base-100">
   <div class="border-b border-base-300 bg-base-100 p-3">
     <div class="mb-3 flex items-start justify-between gap-3">
@@ -356,31 +390,39 @@
       {#if node.isDir}
         {@const expanded = expandedDirs.has(node.fullPath)}
         <button
-          class="flex min-h-9 w-full cursor-pointer items-center gap-2 px-3 text-[13px] font-semibold text-base-content/70 transition-colors hover:bg-base-200/70"
+          class="relative flex min-h-9 w-full cursor-pointer items-center gap-2 px-3 text-[13px] font-medium text-base-content/75 transition-colors hover:bg-base-200/70"
           style="padding-left: {12 + depth * 16}px"
           role="treeitem"
+          aria-level={depth + 1}
           tabindex="-1"
           aria-label="{expanded ? 'Collapse' : 'Expand'} {node.fullPath}"
           aria-expanded={expanded}
           aria-selected={false}
           onclick={() => toggleDir(node.fullPath)}
         >
+          {@render treeGuides(depth)}
           {#if expanded}
             <ChevronDown size={14} strokeWidth={2} class="shrink-0 text-base-content/45" aria-hidden="true" />
           {:else}
             <ChevronRight size={14} strokeWidth={2} class="shrink-0 text-base-content/45" aria-hidden="true" />
           {/if}
-          <Folder size={16} strokeWidth={1.8} class="shrink-0 text-base-content/45" data-testid="file-tree-folder-icon" aria-hidden="true" />
-          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}</span>
+          <Folder size={16} strokeWidth={1.8} class="shrink-0 text-base-content/50" data-testid="file-tree-folder-icon" aria-hidden="true" />
+          <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap text-left" title={node.fullPath}>
+            {#each node.name.split('/') as segment, index}
+              {#if index > 0}<span class="px-1 text-base-content/30" aria-hidden="true">/</span>{/if}
+              <span class="overflow-hidden text-ellipsis">{segment}</span>
+            {/each}
+          </span>
         </button>
       {:else if node.file}
         {@const reviewed = isFileReviewed(node.file)}
         {@const selected = selectedFile === node.file.filename}
         {@const active = node.file.filename === activeRowFilename}
         <div
-          class="flex min-h-10 w-full items-center gap-1 pr-2 transition-colors {selected ? 'bg-primary/8 border-l-2 border-l-primary' : 'hover:bg-base-200/70'} {active ? 'group-focus-within/tree:ring-2 group-focus-within/tree:ring-primary group-focus-within/tree:ring-inset' : ''}"
-          style="padding-left: {selected ? 2 + depth * 12 : 4 + depth * 12}px"
+          class="relative flex min-h-10 w-full items-center gap-1 pr-2 transition-colors {selected ? 'bg-primary/8 border-l-2 border-l-primary' : 'hover:bg-base-200/70'} {active ? 'group-focus-within/tree:ring-2 group-focus-within/tree:ring-primary group-focus-within/tree:ring-inset' : ''}"
+          style="padding-left: {selected ? 2 + depth * 16 : 4 + depth * 16}px"
         >
+          {@render treeGuides(depth)}
           {#if onToggleFileReviewed}
             <label class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center">
               <Checkbox
@@ -394,13 +436,15 @@
           <button
             class="flex-1 min-w-0 flex items-center gap-2 text-[13px] transition-colors py-2 text-base-content text-left focus:outline-none"
             role="treeitem"
+            aria-level={depth + 1}
             tabindex="-1"
             data-file={node.file.filename}
             aria-label="{selected ? 'Selected' : 'Select'} file {node.file.filename}{reviewed ? ' (reviewed)' : ''}"
             aria-selected={selected}
             onclick={() => node.file && handleFileClick(node.file)}
           >
-            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-[13px] {reviewed ? 'line-through text-base-content/50' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined}>{node.name}</span>
+            <File size={16} strokeWidth={1.8} class="shrink-0 text-base-content/45" aria-hidden="true" />
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-[13px] {reviewed ? 'line-through text-base-content/50' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined} title={node.file.filename}>{node.name}</span>
             <span
               class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] font-semibold leading-none {getTreeStatusClass(node.file.status)}"
               aria-label={getFileStatusLabel(node.file.status)}
