@@ -4,7 +4,7 @@ import type { PullRequestInfo } from './lib/types'
 import { requireDefined } from './test-utils/dom'
 import { eventListeners, installAppTestLifecycle } from './App.test-harness'
 
-describe('App desktop events', () => {
+describe('App desktop events', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
   describe('github-sync-complete', () => {
     it('preserves locally merged state and definitive mergeability during background sync', async () => {

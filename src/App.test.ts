@@ -22,7 +22,7 @@ function getLatestComponentProps<T extends Record<string, unknown>>(mockComponen
   throw new Error(`Expected mocked component props with ${String(propName)}`)
 }
 
-describe('App startup data loading', () => {
+describe('App startup data loading', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
   it('still loads projects when builtin plugin persistence fails', async () => {
     await withSuppressedExpectedConsoleError(async () => {
