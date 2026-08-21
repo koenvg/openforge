@@ -19,8 +19,8 @@ function makeFile(filename: string, overrides: Partial<PrFileDiff> = {}): PrFile
   }
 }
 
-describe('FileTree shallow path groups', () => {
-  it('groups a deeply nested file under its full parent path', () => {
+describe('FileTree compact hierarchy', () => {
+  it('compacts a deeply nested single-child directory chain', () => {
     const filename = 'libs/bound-shared/forge/src/widgets/ai-generated/AssetsByStatus.tsx'
     render(FileTree, { props: { files: [makeFile(filename)], onSelectFile: vi.fn() } })
 
@@ -31,7 +31,7 @@ describe('FileTree shallow path groups', () => {
     expect(screen.getByRole('treeitem', { name: `Select file ${filename}` })).toBeTruthy()
   })
 
-  it('renders sibling parent paths as separate shallow groups', () => {
+  it('stops compacting at a branch and resumes below it', () => {
     render(FileTree, {
       props: {
         files: [makeFile('src/deep/one/x.ts'), makeFile('src/deep/two/y.ts')],
@@ -39,12 +39,48 @@ describe('FileTree shallow path groups', () => {
       },
     })
 
+    expect(screen.getByRole('treeitem', { name: 'Collapse src/deep' })).toBeTruthy()
     expect(screen.getByRole('treeitem', { name: 'Collapse src/deep/one' })).toBeTruthy()
     expect(screen.getByRole('treeitem', { name: 'Collapse src/deep/two' })).toBeTruthy()
-    expect(screen.queryByRole('treeitem', { name: 'Collapse src/deep' })).toBeNull()
+    expect(screen.queryByRole('treeitem', { name: 'Collapse src' })).toBeNull()
   })
 
-  it('keeps parent and nested parent paths as separate groups', () => {
+  it('exposes the visible hierarchy level to assistive technology', () => {
+    const filename = 'src/deep/one/x.ts'
+    render(FileTree, {
+      props: {
+        files: [makeFile(filename), makeFile('src/deep/two/y.ts')],
+        onSelectFile: vi.fn(),
+      },
+    })
+
+    expect(screen.getByRole('treeitem', { name: 'Collapse src/deep' }).getAttribute('aria-level')).toBe('1')
+    expect(screen.getByRole('treeitem', { name: 'Collapse src/deep/one' }).getAttribute('aria-level')).toBe('2')
+    expect(screen.getByRole('treeitem', { name: `Select file ${filename}` }).getAttribute('aria-level')).toBe('3')
+  })
+
+  it('renders files in depth-first directory order', () => {
+    render(FileTree, {
+      props: {
+        files: [
+          makeFile('README.md'),
+          makeFile('src/main.ts'),
+          makeFile('src/lib/utils.ts'),
+          makeFile('src/components/Button.svelte'),
+        ],
+        onSelectFile: vi.fn(),
+      },
+    })
+
+    expect(screen.getAllByRole('treeitem', { name: /Select file/ }).map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Select file src/components/Button.svelte',
+      'Select file src/lib/utils.ts',
+      'Select file src/main.ts',
+      'Select file README.md',
+    ])
+  })
+
+  it('does not compact a directory containing both a file and a subdirectory', () => {
     render(FileTree, {
       props: {
         files: [makeFile('pkg/readme.md'), makeFile('pkg/sub/deep.ts')],
@@ -56,7 +92,7 @@ describe('FileTree shallow path groups', () => {
     expect(screen.getByRole('treeitem', { name: 'Collapse pkg/sub' })).toBeTruthy()
   })
 
-  it('selects the correct file within a shallow group', async () => {
+  it('selects the correct file inside a compact directory chain', async () => {
     const onSelectFile = vi.fn()
     const filename = 'a/b/c/d/File.svelte'
     render(FileTree, { props: { files: [makeFile(filename)], onSelectFile } })
@@ -65,7 +101,7 @@ describe('FileTree shallow path groups', () => {
     expect(onSelectFile).toHaveBeenCalledWith(filename)
   })
 
-  it('collapses one path group without hiding sibling groups', async () => {
+  it('collapses one branch without hiding its sibling branch', async () => {
     const first = 'a/b/c/File.svelte'
     const second = 'a/b/d/Other.svelte'
     render(FileTree, { props: { files: [makeFile(first), makeFile(second)], onSelectFile: vi.fn() } })

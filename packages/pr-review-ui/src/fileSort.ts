@@ -1,47 +1,49 @@
 import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
 
-interface FileGroup {
-  path: string
+interface SortNode {
+  directories: Map<string, SortNode>
   files: PrFileDiff[]
 }
 
-function getParentPath(filename: string): string {
-  const separatorIndex = filename.lastIndexOf('/')
-  return separatorIndex < 0 ? '' : filename.slice(0, separatorIndex)
+function createSortNode(): SortNode {
+  return { directories: new Map(), files: [] }
 }
 
-function getFileName(file: PrFileDiff): string {
-  const parentPath = getParentPath(file.filename)
-  return parentPath ? file.filename.slice(parentPath.length + 1) : file.filename
+function flattenSortNode(node: SortNode): PrFileDiff[] {
+  const result: PrFileDiff[] = []
+  const directories = [...node.directories.entries()].sort(([a], [b]) => a.localeCompare(b))
+
+  for (const [, directory] of directories) {
+    result.push(...flattenSortNode(directory))
+  }
+
+  result.push(...[...node.files].sort((a, b) => a.filename.localeCompare(b.filename)))
+  return result
 }
 
 /**
- * Sort files in the same shallow path-group order used by FileTree.svelte.
- * Path groups come first and sort by their full path. Files within each group
- * sort by name, followed by root-level files sorted by name.
+ * Sort files in the depth-first, directories-before-files order used by FileTree.svelte.
+ * Compact directory labels do not change the underlying traversal order.
  */
 export function sortFilesAsTree(files: PrFileDiff[]): PrFileDiff[] {
   if (files.length <= 1) return files
 
-  const groups = new Map<string, FileGroup>()
-  const rootFiles: PrFileDiff[] = []
-
+  const root = createSortNode()
   for (const file of files) {
-    const parentPath = getParentPath(file.filename)
-    if (!parentPath) {
-      rootFiles.push(file)
-      continue
+    const parts = file.filename.split('/')
+    let current = root
+
+    for (const directoryName of parts.slice(0, -1)) {
+      let directory = current.directories.get(directoryName)
+      if (!directory) {
+        directory = createSortNode()
+        current.directories.set(directoryName, directory)
+      }
+      current = directory
     }
 
-    const group = groups.get(parentPath) ?? { path: parentPath, files: [] }
-    group.files.push(file)
-    groups.set(parentPath, group)
+    current.files.push(file)
   }
 
-  const sortedGroups = [...groups.values()].sort((a, b) => a.path.localeCompare(b.path))
-  const sortedFiles = sortedGroups.flatMap((group) =>
-    [...group.files].sort((a, b) => getFileName(a).localeCompare(getFileName(b))),
-  )
-
-  return sortedFiles.concat([...rootFiles].sort((a, b) => getFileName(a).localeCompare(getFileName(b))))
+  return flattenSortNode(root)
 }
