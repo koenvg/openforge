@@ -12,6 +12,7 @@
     X,
   } from '@lucide/svelte'
   import type { TaskSchedule } from '../lib/types'
+  import { scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
   import type { ScheduleRunState } from '../lib/viewTypes'
 
   interface Props {
@@ -50,7 +51,8 @@
 
   let busy = $derived(updating || runState?.phase === 'running' || runState?.phase === 'cancelling')
   let history = $derived([...schedule.history].reverse())
-
+  let status = $derived(scheduleStatusLabel(schedule))
+  let terminalOneOff = $derived(schedule.kind === 'once' && (schedule.lastFireAt !== null || schedule.cancelledAt !== null))
   function resultLabel(status: string): string {
     if (status === 'started') return 'Succeeded'
     if (status === 'created') return 'Created'
@@ -74,8 +76,12 @@
       <div class="min-w-0">
         <h2 class="truncate text-lg font-semibold">{schedule.title}</h2>
         <span class="mt-1 inline-flex items-center gap-1.5 text-sm font-medium">
-          {#if schedule.enabled}
+          {#if status === 'Enabled'}
             <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Enabled
+          {:else if status === 'Completed'}
+            <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Completed
+          {:else if status === 'Cancelled'}
+            <CircleX class="size-4 text-error" aria-hidden="true" /> Cancelled
           {:else}
             <CirclePause class="size-4 text-warning" aria-hidden="true" /> Paused
           {/if}
@@ -154,7 +160,8 @@
   </div>
 
   <footer class="border-t border-base-300 p-4">
-    <div class="grid grid-cols-3 gap-2">
+    {#if !terminalOneOff}
+      <div class="grid grid-cols-3 gap-2">
       <button class="btn btn-primary min-h-10" type="button" disabled={busy} onclick={() => onRunNow(schedule.id)}>
         <Play class="size-4" aria-hidden="true" /> Run now
       </button>
@@ -164,7 +171,8 @@
       <button class="btn min-h-10" type="button" disabled={busy} onclick={() => onToggleEnabled(schedule)}>
         {#if updating}<span class="loading loading-spinner loading-xs" aria-hidden="true"></span> Updating…{:else if schedule.enabled}<CirclePause class="size-4" aria-hidden="true" /> Pause{:else}<CheckCircle2 class="size-4" aria-hidden="true" /> Enable{/if}
       </button>
-    </div>
+      </div>
+    {/if}
 
     {#if runState}
       <div class={`mt-3 rounded-box border p-3 text-sm ${runStateClasses(runState)}`} role="status" aria-live="polite">

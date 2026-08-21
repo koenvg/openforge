@@ -14,7 +14,7 @@ describe('Task Schedules frontend plugin', () => {
       frontend: './dist/frontend.js',
       backend: './dist/backend.js',
     })
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'background', 'storage', 'navigation', 'tasks']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['views', 'backend', 'background', 'commands', 'storage', 'navigation', 'tasks']))
   })
 
   it('registers the Task Schedules rail view with shortcut metadata for host navigation', async () => {

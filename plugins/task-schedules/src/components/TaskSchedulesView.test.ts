@@ -41,8 +41,10 @@ function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
     id: 'schedule-1',
     title: 'Daily dependency triage',
     prompt: 'Review dependency update tasks and create follow-up work.',
+    kind: 'recurring',
     preset: 'daily',
     cron: '0 9 * * *',
+    runAt: null,
     mode: 'create-and-start',
     enabled: true,
     createdAt: Date.UTC(2026, 0, 1, 8),
@@ -50,6 +52,8 @@ function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
     nextFireAt: Date.UTC(2026, 0, 2, 9),
     lastFireAt: null,
     lastTaskId: null,
+    cancelledAt: null,
+    idempotencyKey: null,
     history: [],
     ...overrides,
   }
@@ -114,6 +118,11 @@ function mockBackend(initialSchedules: TaskSchedule[]) {
     }
     throw new Error(`Unexpected backend method: ${method}`)
   })
+  return {
+    setSchedules(nextSchedules: TaskSchedule[]) {
+      schedules = nextSchedules
+    },
+  }
 }
 
 async function waitForSchedules() {
@@ -166,6 +175,77 @@ describe('TaskSchedulesView workspace', () => {
     expect(screen.getByTestId('resize-handle').getAttribute('aria-label')).toMatch(/schedule details/i)
   })
 
+  it('shows agent-created one-off schedules and keeps completed runs inspectable', async () => {
+    const runAt = Date.UTC(2026, 7, 26, 13, 46)
+    const oneOff = makeSchedule({
+      id: 'schedule-once',
+      title: 'Resume dependency upgrade',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt,
+      enabled: false,
+      nextFireAt: null,
+      lastFireAt: runAt,
+      history: [{ id: 'run-once', firedAt: runAt, trigger: 'scheduled', status: 'started', taskId: 'KVG-4000', message: 'Started KVG-4000' }],
+    })
+    mockBackend([oneOff])
+
+    renderView()
+    const scheduleButton = await screen.findByRole('button', { name: 'Resume dependency upgrade' })
+    const row = scheduleButton.closest('tr')
+    expect(row?.textContent).toContain('One time')
+    expect(row?.textContent).toContain('Completed')
+
+    const inspector = await selectSchedule('Resume dependency upgrade')
+    expect(within(inspector).getByText('Completed')).toBeTruthy()
+    expect(within(inspector).getByText('One time')).toBeTruthy()
+    expect(within(inspector).getByRole('button', { name: 'KVG-4000' })).toBeTruthy()
+    expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+  })
+
+  it('keeps cancelled one-off schedules visible without runnable actions', async () => {
+    const runAt = Date.UTC(2026, 7, 26, 13, 46)
+    const cancelled = makeSchedule({
+      id: 'schedule-cancelled',
+      title: 'Cancelled dependency retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt,
+      enabled: false,
+      nextFireAt: runAt,
+      cancelledAt: Date.UTC(2026, 7, 22, 9),
+    })
+    mockBackend([cancelled])
+
+    renderView()
+    const inspector = await selectSchedule('Cancelled dependency retry')
+
+    expect(within(inspector).getByText('Cancelled')).toBeTruthy()
+    expect(within(inspector).getByText('One time')).toBeTruthy()
+    expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+  })
+
+  it('refreshes the mounted view when agent-created schedules may have changed', async () => {
+    const runAt = Date.UTC(2026, 7, 26, 13, 46)
+    const backend = mockBackend([])
+    renderView()
+    await screen.findByText('No schedules found')
+
+    backend.setSchedules([makeSchedule({
+      id: 'schedule-agent',
+      title: 'Agent-created retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt,
+      nextFireAt: runAt,
+    })])
+    window.dispatchEvent(new Event('focus'))
+
+    expect(await screen.findByRole('button', { name: 'Agent-created retry' })).toBeTruthy()
+  })
   it('selects a schedule when clicking anywhere on its row and supports keyboard row selection', async () => {
     mockBackend([enabledSchedule])
     renderView()
