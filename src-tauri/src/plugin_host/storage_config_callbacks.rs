@@ -1,7 +1,6 @@
 use super::callbacks::{optional_param_string, required_param_string};
 use super::PluginHost;
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
 
 impl PluginHost {
     pub(super) fn get_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -11,11 +10,8 @@ impl PluginHost {
         let key = required_param_string(params, "key")?;
         crate::plugin_platform::validate_plugin_storage_scope(&scope, scope_id.as_deref())?;
 
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         let raw = db
             .get_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
             .map_err(|error| format!("failed to get plugin storage: {error}"))?;
@@ -34,11 +30,8 @@ impl PluginHost {
         let serialized = serde_json::to_string(&value)
             .map_err(|error| format!("failed to serialize plugin storage value: {error}"))?;
 
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         db.set_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key, &serialized)
             .map_err(|error| format!("failed to set plugin storage: {error}"))?;
         Ok(Value::Null)
@@ -51,11 +44,8 @@ impl PluginHost {
         let key = required_param_string(params, "key")?;
         crate::plugin_platform::validate_plugin_storage_scope(&scope, scope_id.as_deref())?;
 
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         db.delete_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
             .map_err(|error| format!("failed to delete plugin storage: {error}"))?;
         Ok(Value::Null)
@@ -63,16 +53,13 @@ impl PluginHost {
 
     pub(super) async fn get_config_for_host(&self, params: &Value) -> Result<Value, String> {
         let key = required_param_string(params, "key")?;
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db_state = self.database_state_for_host()?;
         let value = if crate::secure_store::is_secret(&key) {
-            crate::secure_config::get(db_state.inner(), &key)
+            crate::secure_config::get(&db_state, &key)
                 .await
                 .map_err(|error| format!("failed to get secret config: {error}"))?
         } else {
-            let db = crate::db::acquire_db(db_state.inner().as_ref());
+            let db = crate::db::acquire_db(db_state.as_ref());
             db.get_config(&key)
                 .map_err(|error| format!("failed to get config: {error}"))?
         };
@@ -82,16 +69,13 @@ impl PluginHost {
     pub(super) async fn set_config_for_host(&self, params: &Value) -> Result<Value, String> {
         let key = required_param_string(params, "key")?;
         let value = host_config_value(params);
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
+        let db_state = self.database_state_for_host()?;
         if crate::secure_store::is_secret(&key) {
-            crate::secure_config::set(db_state.inner(), &key, &value)
+            crate::secure_config::set(&db_state, &key, &value)
                 .await
                 .map_err(|error| format!("failed to set secret config: {error}"))?;
         } else {
-            let db = crate::db::acquire_db(db_state.inner().as_ref());
+            let db = crate::db::acquire_db(db_state.as_ref());
             db.set_config(&key, &value)
                 .map_err(|error| format!("failed to set config: {error}"))?;
         }
@@ -101,11 +85,8 @@ impl PluginHost {
     pub(super) fn get_project_config_for_host(&self, params: &Value) -> Result<Value, String> {
         let project_id = required_param_string(params, "projectId")?;
         let key = required_param_string(params, "key")?;
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         serde_json::to_value(
             db.get_project_config(&project_id, &key)
                 .map_err(|error| format!("failed to get project config: {error}"))?,
@@ -117,11 +98,8 @@ impl PluginHost {
         let project_id = required_param_string(params, "projectId")?;
         let key = required_param_string(params, "key")?;
         let value = host_config_value(params);
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         db.set_project_config(&project_id, &key, &value)
             .map_err(|error| format!("failed to set project config: {error}"))?;
         Ok(Value::Null)
