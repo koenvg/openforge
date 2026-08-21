@@ -2,7 +2,6 @@ use super::callbacks::{optional_param_string, optional_param_usize, required_par
 use super::PluginHost;
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 impl PluginHost {
     pub(super) async fn read_project_dir_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -59,11 +58,8 @@ impl PluginHost {
     }
 
     fn project_root_for_host(&self, project_id: &str) -> Result<PathBuf, String> {
-        let db_state = self
-            .app_handle
-            .try_state::<Arc<Mutex<crate::db::Database>>>()
-            .ok_or_else(|| "plugin host database state is not available".to_string())?;
-        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
         let project = db
             .get_project(project_id)
             .map_err(|error| format!("failed to get project root: {error}"))?
