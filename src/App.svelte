@@ -13,7 +13,8 @@
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
-  import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import AppCloseConfirmationDialog from './components/shell/AppCloseConfirmationDialog.svelte'
+  import AppShortcutHelpDialog from './components/shell/AppShortcutHelpDialog.svelte'
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
@@ -34,7 +35,7 @@
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { getViews, isCrossProjectView } from './lib/views'
   import { registerAppShortcuts } from './lib/appShortcuts'
-  import { getGlobalShortcutHelpEntries } from './lib/appShortcutDefinitions'
+  import { useAppShortcutHelpController } from './lib/appShortcutHelpController.svelte'
   import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
   import { loadAppStartupData } from './lib/appStartup'
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
@@ -45,14 +46,12 @@
   import { createAppLifecycleController } from './lib/appLifecycleController'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
-  import { hasActiveAgentSessions } from './lib/quitGuard'
+  import { useAppCloseController } from './lib/appCloseController.svelte'
   
   let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
-  let showShortcutsDialog = $state(false)
-  let showCloseConfirm = $state(false)
   let showProjectSwitcher = $state(false)
   let showAttentionOverview = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
@@ -61,7 +60,6 @@
   let taskRunAppRegistration = $state<TaskRunAppRegistration | null>(null)
   let router = useAppRouter()
   let registeredPluginShortcuts = new Set<string>()
-  const globalShortcutHelpEntries = getGlobalShortcutHelpEntries()
   let previousPluginProjectId = $state<string | null>(null)
   let appWindow: DesktopWindowTarget | null = null
 
@@ -88,6 +86,12 @@
 
   const appData = useAppDataOrchestrator({
     setShowProjectSetup: (show) => { showProjectSetup = show },
+  })
+  const shortcutHelp = useAppShortcutHelpController()
+  const closeController = useAppCloseController({
+    refreshAttention: appData.loadProjectAttention,
+    getAttention: () => get(projectAttention),
+    getAppWindow: () => appWindow,
   })
   const taskActions = createTaskActionRunner({
     getActiveProject: () => activeProject,
@@ -303,51 +307,6 @@
     // Land the user on the new project's settings page to finish configuring it.
     router.navigate('settings')
   }
-
-
-
-
-
-
-  async function handleCloseRequested(event: { preventDefault: () => void }) {
-    // Always cancel this close attempt synchronously; we re-drive the quit below
-    // once we know whether a confirmation is warranted.
-    event.preventDefault()
-
-    // Only interrupt the quit when there are agents that closing would kill —
-    // running, or paused waiting for input — across every project. Refresh the
-    // attention snapshot first so the decision reflects current agent state.
-    try {
-      await appData.loadProjectAttention()
-    } catch (e) {
-      console.error('[App] Failed to refresh project attention before quit:', e)
-    }
-
-    if (hasActiveAgentSessions(get(projectAttention))) {
-      showCloseConfirm = true
-    } else {
-      await handleCloseConfirm()
-    }
-  }
-
-  async function handleCloseConfirm() {
-    if (!appWindow) return
-
-    showCloseConfirm = false
-
-    try {
-      await appWindow.destroy()
-    } catch (e) {
-      showCloseConfirm = true
-      console.error('[App] Failed to close window:', e)
-    }
-  }
-
-  function handleCloseCancel() {
-    showCloseConfirm = false
-  }
-
-
   const lifecycle = createAppLifecycleController({
     createWindow: () => {
       const target = createDesktopWindow()
@@ -361,7 +320,7 @@
     },
     registerShortcuts: (registry) => {
       registerAppShortcuts(registry, {
-        showShortcuts: () => { showShortcutsDialog = true },
+        showShortcuts: shortcutHelp.open,
         openActionPalette: actionPalette.openActionPalette,
         toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
         toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
@@ -377,7 +336,7 @@
         toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
         toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
         toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-        canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !showShortcutsDialog,
+        canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !shortcutHelp.isOpen,
         resetToBoard: () => { router.resetToBoard() },
         navigateToGlobalSettings: () => { navigation.navigate('global_settings') },
         cycleActiveProject: (direction, options) => { void navigation.cycleActiveProject(direction, options) },
@@ -385,7 +344,7 @@
     },
     registerDesktopEvents: (target) => registerAppDesktopEventListeners({
       appWindow: target,
-      onCloseRequested: handleCloseRequested,
+      onCloseRequested: closeController.handleCloseRequested,
       loadTasks: appData.loadTasks,
       loadSessions: appData.loadSessions,
       loadPullRequests: appData.loadPullRequests,
@@ -545,112 +504,9 @@
 <!-- Branch divergence prompt (global, store-driven, awaited as a Promise) -->
 <BranchDivergenceModal />
 
-{#if showCloseConfirm}
-  <Modal onClose={handleCloseCancel} maxWidth="360px" initialFocus="[data-close-confirm-action='quit']" ariaLabel="Agents still running">
-    {#snippet header()}
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Agents still running</h2>
-    {/snippet}
-    <div class="p-5 flex flex-col gap-4">
-      <p class="text-sm text-base-content/70 m-0">One or more agents are still running or waiting for your input. Quitting now will stop them. Are you sure you want to quit?</p>
-      <div class="flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" type="button" onclick={handleCloseCancel}>Cancel</button>
-        <button data-close-confirm-action="quit" class="btn btn-error btn-sm" type="button" onclick={handleCloseConfirm}>Quit</button>
-      </div>
-    </div>
-  </Modal>
-{/if}
-
-<!-- Keyboard shortcuts help dialog (global) -->
-{#if showShortcutsDialog}
-  <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px" ariaLabel="Keyboard Shortcuts">
-    {#snippet header()}
-      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Keyboard Shortcuts</h2>
-    {/snippet}
-    <div class="p-5 flex flex-col gap-4">
-      <!-- Global shortcuts -->
-      <div>
-        <div class="font-mono text-xs text-secondary mb-3">Global</div>
-        <div class="flex flex-col gap-2">
-          {#each globalShortcutHelpEntries as shortcut}
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">{shortcut.label}</span>
-              <!-- Each entry in `keys` is an alternative chord for the same action, so
-                   sequences are separated by "or" while keys within a sequence stay
-                   grouped. Without the separator two alternatives render as one long
-                   nonsensical chord. -->
-              <div class="flex items-center gap-1.5">
-                {#each shortcut.keys as keySequence, sequenceIndex}
-                  {#if sequenceIndex > 0}
-                    <span class="text-xs text-base-content/50">or</span>
-                  {/if}
-                  <span class="flex gap-0.5">
-                    {#each keySequence as key}
-                      <kbd class="kbd kbd-sm">{key}</kbd>
-                    {/each}
-                  </span>
-                {/each}
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Vim navigation -->
-      <div>
-        <div class="font-mono text-xs text-secondary mb-3">Vim navigation</div>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Move down / up</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd><kbd class="kbd kbd-sm">↓</kbd><kbd class="kbd kbd-sm">↑</kbd></div>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Select / open</span>
-            <kbd class="kbd kbd-sm">Enter</kbd>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Action on task</span>
-            <kbd class="kbd kbd-sm">x</kbd>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">First / last item</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">gg</kbd><kbd class="kbd kbd-sm">G</kbd></div>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Back</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">Esc</kbd><kbd class="kbd kbd-sm">q</kbd></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Task view shortcuts -->
-      {#if selectedTask}
-        <div>
-          <div class="font-mono text-xs text-secondary mb-3">Task view</div>
-          <div class="flex flex-col gap-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Info panel</span>
-              <kbd class="kbd kbd-sm">⌘/</kbd>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Agent / Review / Terminal (if available)</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
-            </div>
-            </div>
-          </div>
-       {/if}
-
-      <!-- Board-specific shortcuts -->
-      {#if $currentView === 'board' && !selectedTask}
-        <div>
-          <div class="font-mono text-xs text-secondary mb-3">Board</div>
-          <div class="flex flex-col gap-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-base-content">Board filters</span>
-              <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘1</kbd><kbd class="kbd kbd-sm">⌘2</kbd><kbd class="kbd kbd-sm">⌘3</kbd></div>
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
-  </Modal>
-{/if}
+<AppCloseConfirmationDialog controller={closeController} />
+<AppShortcutHelpDialog
+  controller={shortcutHelp}
+  taskSelected={selectedTask !== null}
+  boardVisible={$currentView === 'board' && selectedTask === null}
+/>
