@@ -45,6 +45,7 @@ describe('findPluginImportBoundaryViolations', () => {
           import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
           import TerminalTabsShell from '@openforge-app/terminal-runtime/TerminalTabsShell'
           import PrOverviewTab from '@openforge-app/pr-review-ui/PrOverviewTab.svelte'
+          import { getFileStatusLabel } from '@openforge-app/pr-review-ui/fileStatus'
           import LocalCard from './components/LocalCard.svelte'
         </script>`
       ]
