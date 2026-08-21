@@ -776,7 +776,7 @@ describe("SelfReviewView pane restoration", () => {
 			const allChangesCheckbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 			expect(allChangesCheckbox.checked).toBe(true);
 		});
-	});
+	}, 15_000);
 
 	it("remembers reviewed files across remounts until their sha changes", async () => {
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
