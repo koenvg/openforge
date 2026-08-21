@@ -16,8 +16,13 @@ const file: PrFileDiff = {
 }
 
 describe('createSelfReviewFileContentLoader', () => {
-  it('loads current task file contents for the active review scope', async () => {
-    const getTaskFileContents = vi.fn().mockResolvedValue(['old', 'new'])
+  it('uses task-scoped content for single files, batches, and repository images', async () => {
+    const getTaskFileContents = vi.fn()
+      .mockResolvedValueOnce(['old', 'new'])
+      .mockResolvedValueOnce(['', 'base64-diagram'])
+    const getTaskBatchFileContents = vi.fn().mockResolvedValue([['batch old', 'batch new']])
+    const getCommitFileContents = vi.fn()
+    const getCommitBatchFileContents = vi.fn()
     const loader = createSelfReviewFileContentLoader({
       getContext: () => ({
         taskId: 'task-1',
@@ -27,13 +32,21 @@ describe('createSelfReviewFileContentLoader', () => {
       }),
       getComparisonContents: () => undefined,
       getTaskFileContents,
-      getTaskBatchFileContents: vi.fn(),
-      getCommitFileContents: vi.fn(),
-      getCommitBatchFileContents: vi.fn(),
+      getTaskBatchFileContents,
+      getCommitFileContents,
+      getCommitBatchFileContents,
     })
 
     await expect(loader.fetchCurrent(file)).resolves.toEqual({ oldContent: 'old', newContent: 'new' })
-    expect(getTaskFileContents).toHaveBeenCalledWith(
+    await expect(loader.fetchCurrentBatch([file])).resolves.toEqual(new Map([
+      [file.filename, { oldContent: 'batch old', newContent: 'batch new' }],
+    ]))
+    await expect(loader.resolveRepositoryImage('docs/diagram.png')).resolves.toBe(
+      'data:image/png;base64,base64-diagram',
+    )
+
+    expect(getTaskFileContents).toHaveBeenNthCalledWith(
+      1,
       'task-1',
       file.filename,
       file.previous_filename,
@@ -41,11 +54,32 @@ describe('createSelfReviewFileContentLoader', () => {
       true,
       false,
     )
+    expect(getTaskBatchFileContents).toHaveBeenCalledWith(
+      'task-1',
+      [{ path: file.filename, oldPath: file.previous_filename, status: file.status }],
+      true,
+      false,
+    )
+    expect(getTaskFileContents).toHaveBeenNthCalledWith(
+      2,
+      'task-1',
+      'docs/diagram.png',
+      null,
+      'modified',
+      true,
+      false,
+    )
+    expect(getCommitFileContents).not.toHaveBeenCalled()
+    expect(getCommitBatchFileContents).not.toHaveBeenCalled()
   })
 
-  it('loads file contents from a selected commit', async () => {
-    const getCommitFileContents = vi.fn().mockResolvedValue(['before commit', 'after commit'])
+  it('uses commit-scoped content for single files, batches, and repository images', async () => {
+    const getCommitFileContents = vi.fn()
+      .mockResolvedValueOnce(['before commit', 'after commit'])
+      .mockResolvedValueOnce(['', 'base64-commit-diagram'])
+    const getCommitBatchFileContents = vi.fn().mockResolvedValue([['batch before', 'batch after']])
     const getTaskFileContents = vi.fn()
+    const getTaskBatchFileContents = vi.fn()
     const loader = createSelfReviewFileContentLoader({
       getContext: () => ({
         taskId: 'task-1',
@@ -55,23 +89,45 @@ describe('createSelfReviewFileContentLoader', () => {
       }),
       getComparisonContents: () => undefined,
       getTaskFileContents,
-      getTaskBatchFileContents: vi.fn(),
+      getTaskBatchFileContents,
       getCommitFileContents,
-      getCommitBatchFileContents: vi.fn(),
+      getCommitBatchFileContents,
     })
 
     await expect(loader.fetchCurrent(file)).resolves.toEqual({
       oldContent: 'before commit',
       newContent: 'after commit',
     })
-    expect(getCommitFileContents).toHaveBeenCalledWith(
+    await expect(loader.fetchCurrentBatch([file])).resolves.toEqual(new Map([
+      [file.filename, { oldContent: 'batch before', newContent: 'batch after' }],
+    ]))
+    await expect(loader.resolveRepositoryImage('docs/diagram.png')).resolves.toBe(
+      'data:image/png;base64,base64-commit-diagram',
+    )
+
+    expect(getCommitFileContents).toHaveBeenNthCalledWith(
+      1,
       'task-1',
       'commit-sha',
       file.filename,
       file.previous_filename,
       file.status,
     )
+    expect(getCommitBatchFileContents).toHaveBeenCalledWith(
+      'task-1',
+      'commit-sha',
+      [{ path: file.filename, oldPath: file.previous_filename, status: file.status }],
+    )
+    expect(getCommitFileContents).toHaveBeenNthCalledWith(
+      2,
+      'task-1',
+      'commit-sha',
+      'docs/diagram.png',
+      null,
+      'modified',
+    )
     expect(getTaskFileContents).not.toHaveBeenCalled()
+    expect(getTaskBatchFileContents).not.toHaveBeenCalled()
   })
 
   it('merges reviewed comparisons with one batch request for current files', async () => {
@@ -124,62 +180,5 @@ describe('createSelfReviewFileContentLoader', () => {
 
     await expect(loader.fetch(file)).resolves.toBe(comparisonContents)
     expect(getTaskFileContents).not.toHaveBeenCalled()
-  })
-
-  it('loads current batches from the selected commit', async () => {
-    const getCommitBatchFileContents = vi.fn().mockResolvedValue([['before', 'after']])
-    const getTaskBatchFileContents = vi.fn()
-    const loader = createSelfReviewFileContentLoader({
-      getContext: () => ({
-        taskId: 'task-1',
-        selectedCommitSha: 'commit-sha',
-        includeCommitted: true,
-        includeUncommitted: true,
-      }),
-      getComparisonContents: () => undefined,
-      getTaskFileContents: vi.fn(),
-      getTaskBatchFileContents,
-      getCommitFileContents: vi.fn(),
-      getCommitBatchFileContents,
-    })
-
-    await expect(loader.fetchCurrentBatch([file])).resolves.toEqual(new Map([
-      [file.filename, { oldContent: 'before', newContent: 'after' }],
-    ]))
-    expect(getCommitBatchFileContents).toHaveBeenCalledWith(
-      'task-1',
-      'commit-sha',
-      [{ path: file.filename, oldPath: file.previous_filename, status: file.status }],
-    )
-    expect(getTaskBatchFileContents).not.toHaveBeenCalled()
-  })
-
-  it('loads repository images through the active file-content source', async () => {
-    const getTaskFileContents = vi.fn().mockResolvedValue(['', 'base64-diagram'])
-    const loader = createSelfReviewFileContentLoader({
-      getContext: () => ({
-        taskId: 'task-1',
-        selectedCommitSha: null,
-        includeCommitted: true,
-        includeUncommitted: true,
-      }),
-      getComparisonContents: () => undefined,
-      getTaskFileContents,
-      getTaskBatchFileContents: vi.fn(),
-      getCommitFileContents: vi.fn(),
-      getCommitBatchFileContents: vi.fn(),
-    })
-
-    await expect(loader.resolveRepositoryImage('docs/diagram.png')).resolves.toBe(
-      'data:image/png;base64,base64-diagram',
-    )
-    expect(getTaskFileContents).toHaveBeenCalledWith(
-      'task-1',
-      'docs/diagram.png',
-      null,
-      'modified',
-      true,
-      true,
-    )
   })
 })
