@@ -245,6 +245,34 @@ async fn create_task_returns_server_error_when_project_listing_fails() {
 }
 
 #[tokio::test]
+async fn create_task_returns_unprocessable_entity_for_unresolved_worktree() {
+    let (state, path) = test_state("http_create_task_unresolved_worktree");
+
+    let response = create_router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Unresolved project","worktree":"/unknown/path"}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response_body_text(response).await;
+    assert!(
+        body.contains("Could not determine project"),
+        "unexpected response body: {body}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
     let (state, path) = test_state("http_create_task_explicit_project_worktree");
     let project_id = {
