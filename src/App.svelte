@@ -41,6 +41,7 @@
   import { createTaskActionRunner } from './lib/taskActionRunner'
   import { useAppTaskCreationController } from './lib/appTaskCreationController.svelte'
   import { createAppNavigationController } from './lib/appNavigationController'
+  import { createReviewNavigationController } from './lib/reviewNavigationController'
   import { createAppLifecycleController } from './lib/appLifecycleController'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
@@ -77,6 +78,10 @@
       .filter((source) => source !== undefined)
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+  function closeAttentionOverview(): void {
+    showAttentionOverview = false
+  }
+
   function handleRunAppRegistrationChange(registration: TaskRunAppRegistration | null): void {
     taskRunAppRegistration = registration
   }
@@ -101,7 +106,10 @@
     loadTasks: appData.loadTasks,
     getSelectedTask: () => selectedTask,
     getSidebarPluginViewKeys: () => get(sidebarPluginViewKeys),
-    closeAttentionOverview: () => { showAttentionOverview = false },
+    closeAttentionOverview,
+  })
+  const reviewNavigation = createReviewNavigationController({
+    closeAttentionOverview,
   })
   const actionPalette = useActionPaletteController({
     getSelectedTask: () => selectedTask,
@@ -510,9 +518,9 @@
 
 {#if showAttentionOverview}
   <AttentionOverviewDialog
-    onClose={() => showAttentionOverview = false}
+    onClose={closeAttentionOverview}
     onOpenTask={navigation.openTaskFromOverview}
-    onOpenPr={navigation.openReviewFromOverview}
+    onOpenPr={reviewNavigation.openReviewFromOverview}
   />
 {/if}
 
