@@ -1,6 +1,7 @@
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentView, selectedTaskId, taskActiveView } from '../stores'
+import { createPluginHostCommandDispatcher } from './pluginHostCommandRegistry'
 import { createPluginRuntimeHost, invokePluginHostCommand } from './pluginHostCommands'
 
 function installDesktopBridge(result: unknown = []): { invoke: ReturnType<typeof vi.fn> } {
@@ -19,6 +20,15 @@ describe('plugin host commands', () => {
     currentView.set('board')
     selectedTaskId.set(null)
     taskActiveView.set(new Map())
+  })
+
+  it('rejects duplicate command ownership across capability modules', () => {
+    const handler = vi.fn()
+
+    expect(() => createPluginHostCommandDispatcher(
+      [['duplicate', handler]],
+      [['duplicate', handler]],
+    )).toThrow('Duplicate plugin host command: duplicate')
   })
 
   it('navigates to a Task and foregrounds the requesting plugin’s local Task UI tab', async () => {
