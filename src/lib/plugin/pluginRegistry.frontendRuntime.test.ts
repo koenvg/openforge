@@ -24,19 +24,52 @@ import {
   setProjectConfigMock,
   writeClipboardTextMock,
 } from './pluginRegistryTestSupport'
-import type { FrontendOpenForgeAPI } from './pluginRegistryTestSupport'
 
-describe('pluginRegistry frontend runtime fallback and render props', () => {
+const RUNTIME_PLUGIN_ID = 'runtime-plugin'
+const RUNTIME_PLUGIN_URL = 'plugin://runtime-plugin/dist/frontend.js'
+
+function installRuntimePlugin(activate: Parameters<typeof defineFrontendPlugin>[0]['activate']): void {
+  const manifest = makeManifest({
+    id: RUNTIME_PLUGIN_ID,
+    frontend: './dist/frontend.js',
+    backend: './dist/backend.js',
+  })
+  const frontendPlugin = defineFrontendPlugin({ activate })
+
+  installedPlugins.set(new Map([[RUNTIME_PLUGIN_ID, {
+    manifest,
+    state: 'installed',
+    error: null,
+    packageMetadata: {
+      id: RUNTIME_PLUGIN_ID,
+      apiVersion: 1,
+      displayName: 'Runtime Plugin',
+      description: 'Runtime plugin',
+      frontend: './dist/frontend.js',
+    },
+  }]]))
+  enabledPluginIds.set(new Set([RUNTIME_PLUGIN_ID]))
+  loadPluginFrontendMock.mockResolvedValue({ pluginId: RUNTIME_PLUGIN_ID, module: frontendPlugin })
+}
+
+describe('pluginRegistry frontend runtime', () => {
   beforeEach(resetPluginRegistryTestState)
 
-  it('activates defineFrontendPlugin package entries through plugin:// assets and runtime registries', async () => {
+  it('activates defineFrontendPlugin package entries through plugin:// assets', async () => {
+    const activateFrontend = vi.fn(() => undefined)
+    installRuntimePlugin(activateFrontend)
+
+    await expect(activatePlugin(RUNTIME_PLUGIN_ID)).resolves.toBe(true)
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, RUNTIME_PLUGIN_URL)
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(activateFrontend).toHaveBeenCalledOnce()
+  })
+
+  it('registers frontend runtime contributions', async () => {
     const LazyView = vi.fn() as never
     const commandHandler = vi.fn(async () => ({ ok: true }))
-    const capturedApis: FrontendOpenForgeAPI[] = []
-    const backendStateDuringActivation: string[] = []
-    const activateFrontend = vi.fn((openforge, context) => {
-      capturedApis.push(openforge)
-      backendStateDuringActivation.push(openforge.backend.state)
+    installRuntimePlugin((openforge, context) => {
       context.subscriptions.add(openforge.views.register({
         id: 'prs',
         title: 'Pull Requests',
@@ -61,79 +94,90 @@ describe('pluginRegistry frontend runtime fallback and render props', () => {
         handler: commandHandler,
       }))
     })
-    const frontendPlugin = defineFrontendPlugin({ activate: activateFrontend })
-    const manifest = makeManifest({
-      id: 'runtime-plugin',
-      frontend: './dist/frontend.js',
-      backend: './dist/backend.js',
-    })
 
-    installedPlugins.set(new Map([['runtime-plugin', {
-      manifest,
-      state: 'installed',
-      error: null,
-      packageMetadata: {
-        id: 'runtime-plugin',
-        apiVersion: 1,
-        displayName: 'Runtime Plugin',
-        description: 'Runtime plugin',
-        frontend: './dist/frontend.js',
-      },
-    }]]))
-    enabledPluginIds.set(new Set(['runtime-plugin']))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'runtime-plugin', module: frontendPlugin })
+    await activatePlugin(RUNTIME_PLUGIN_ID)
 
-    await expect(activatePlugin('runtime-plugin')).resolves.toBe(true)
-
-    expect(loadPluginFrontendMock).toHaveBeenCalledWith('runtime-plugin', 'plugin://runtime-plugin/dist/frontend.js')
-    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
-    expect(activateFrontend).toHaveBeenCalledOnce()
-    expect(get(runtimeContributionSources).get('runtime-plugin')?.views).toMatchObject([
+    expect(get(runtimeContributionSources).get(RUNTIME_PLUGIN_ID)?.views).toMatchObject([
       { id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 25 },
     ])
     expect(getRegisteredComponent('plugin:runtime-plugin:prs')).toBeDefined()
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'runtime-plugin:activity')).toBeDefined()
     expect(getRegisteredRenderableComponent('settingsSections', 'runtime-plugin:prefs')).toBeDefined()
-    await expect(executePluginCommand('runtime-plugin', 'refresh', { source: 'test' })).resolves.toBe(true)
+    await expect(executePluginCommand(RUNTIME_PLUGIN_ID, 'refresh', { source: 'test' })).resolves.toBe(true)
     expect(commandHandler).toHaveBeenCalledWith({ source: 'test' })
+  })
 
-    const firstProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-1', taskId: 'T-1' })
-    const secondProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-1', taskId: 'T-2' })
+  it('returns stable frontend APIs with render-specific context', async () => {
+    installRuntimePlugin(() => undefined)
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+
+    const firstProps = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
+    const secondProps = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-2' })
+    const otherSlotProps = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-2', taskId: 'T-99' })
+
     expect(firstProps.api).toBe(secondProps.api)
-    expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
-    expect(secondProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-2' })
-    expect(secondProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+    expect(firstProps.context).toEqual({ pluginId: RUNTIME_PLUGIN_ID, projectId: 'P-1', taskId: 'T-1' })
+    expect(secondProps.context).toEqual({ pluginId: RUNTIME_PLUGIN_ID, projectId: 'P-1', taskId: 'T-2' })
+    expect(otherSlotProps.context).toEqual({ pluginId: RUNTIME_PLUGIN_ID, projectId: 'P-2', taskId: 'T-99' })
+    expect(firstProps.api.context.getSnapshot()).toEqual({ pluginId: RUNTIME_PLUGIN_ID, projectId: null })
+  })
 
-    await firstProps.api.storage.task('T-1').set('reviewState', { viewedFiles: ['README.md'] })
-    expect(setPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'task', 'T-1', 'reviewState', { viewedFiles: ['README.md'] })
+  it('delegates task and project storage to plugin storage IPC', async () => {
+    installRuntimePlugin(() => undefined)
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    const { api } = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
+
+    await api.storage.task('T-1').set('reviewState', { viewedFiles: ['README.md'] })
+    expect(setPluginStorageMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, 'task', 'T-1', 'reviewState', { viewedFiles: ['README.md'] })
+
     getPluginStorageMock.mockResolvedValueOnce({ owner: 'acme', name: 'app' })
-    await expect(firstProps.api.storage.project('P-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
-    expect(getPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'project', 'P-1', 'repo')
+    await expect(api.storage.project('P-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
+    expect(getPluginStorageMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, 'project', 'P-1', 'repo')
+  })
 
+  it('delegates filesystem and system APIs to host wrappers', async () => {
+    installRuntimePlugin(() => undefined)
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    const { api } = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
     const readmeContent = { type: 'text' as const, content: 'readme', mimeType: null, size: 6 }
     fsReadFileMock.mockResolvedValueOnce(readmeContent)
-    await expect(firstProps.api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual(readmeContent)
-    await firstProps.api.system.openUrl('https://example.com/plugin')
-    await firstProps.api.system.writeClipboardText('Reviewer brief')
-    await firstProps.api.config.set('theme', { mode: 'dark' })
-    await firstProps.api.projectConfig.set('repo', { owner: 'acme', name: 'app' }, 'P-1')
-    await firstProps.api.backend.whenReady()
-    await expect(firstProps.api.backend.invoke('syncProject', { projectId: 'P-1' })).resolves.toBeUndefined()
 
-    expect(backendStateDuringActivation).toEqual(['starting'])
-    expect(capturedApis[0].backend.state).toBe('ready')
+    await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual(readmeContent)
+    await api.system.openUrl('https://example.com/plugin')
+    await api.system.writeClipboardText('Reviewer brief')
+
     expect(fsReadFileMock).toHaveBeenCalledWith('P-1', 'README.md')
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
     expect(writeClipboardTextMock).toHaveBeenCalledWith('Reviewer brief')
+  })
+
+  it('serializes global and project configuration writes', async () => {
+    installRuntimePlugin(() => undefined)
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    const { api } = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
+
+    await api.config.set('theme', { mode: 'dark' })
+    await api.projectConfig.set('repo', { owner: 'acme', name: 'app' }, 'P-1')
+
     expect(setConfigMock).toHaveBeenCalledWith('theme', '{"mode":"dark"}')
     expect(setProjectConfigMock).toHaveBeenCalledWith('P-1', 'repo', '{"owner":"acme","name":"app"}')
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('runtime-plugin')
-    expect(pluginInvokeMock).toHaveBeenCalledWith('runtime-plugin', 'syncProject', { projectId: 'P-1' })
+  })
 
-    const otherSlotProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-2', taskId: 'T-99' })
-    expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
-    expect(otherSlotProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-2', taskId: 'T-99' })
-    expect(firstProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+  it('reports backend state and delegates readiness and invocations', async () => {
+    const backendStateDuringActivation: string[] = []
+    installRuntimePlugin((openforge) => {
+      backendStateDuringActivation.push(openforge.backend.state)
+    })
+
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+    const { api } = getPluginRenderProps(RUNTIME_PLUGIN_ID, { projectId: 'P-1', taskId: 'T-1' })
+
+    expect(backendStateDuringActivation).toEqual(['starting'])
+    await api.backend.whenReady()
+    expect(api.backend.state).toBe('ready')
+    await expect(api.backend.invoke('syncProject', { projectId: 'P-1' })).resolves.toBeUndefined()
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID)
+    expect(pluginInvokeMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, 'syncProject', { projectId: 'P-1' })
   })
 
   it('returns capability-specific unavailable APIs for render props before frontend activation', async () => {
