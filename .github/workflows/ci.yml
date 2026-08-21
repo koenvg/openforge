@@ -124,13 +124,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check Plugin SDK documentation version
-        id: package_docs_version
-        run: |
-          set +e -o pipefail
-          pnpm packages:docs-version:check 2>&1 | tee /tmp/npm-package-docs-version.log
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
       - name: Build package workspaces
         id: package_build
         run: |
@@ -165,7 +158,6 @@ jobs:
         with:
           name: npm-package-logs
           path: |
-            /tmp/npm-package-docs-version.log
             /tmp/npm-package-build.log
             /tmp/npm-package-tests.log
             /tmp/npm-package-contract.log
@@ -177,7 +169,6 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/ci-results
-          echo "${{ steps.package_docs_version.outputs.exit_code }}" > /tmp/ci-results/package-docs-version-exit-code
           echo "${{ steps.package_build.outputs.exit_code }}" > /tmp/ci-results/package-build-exit-code
           echo "${{ steps.package_tests.outputs.exit_code }}" > /tmp/ci-results/package-tests-exit-code
           echo "${{ steps.package_contract.outputs.exit_code }}" > /tmp/ci-results/package-contract-exit-code
@@ -192,7 +183,7 @@ jobs:
           retention-days: 1
 
       - name: Fail if package checks failed
-        if: steps.package_docs_version.outputs.exit_code != '0' || steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_contract.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
+        if: steps.package_build.outputs.exit_code != '0' || steps.package_tests.outputs.exit_code != '0' || steps.package_contract.outputs.exit_code != '0' || steps.package_pack.outputs.exit_code != '0'
         run: exit 1
 
   mobile-checks:

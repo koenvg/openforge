@@ -66,9 +66,6 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' packages/plugin-sdk/package.json > packages/plugin-sdk/package.json.tmp
           mv packages/plugin-sdk/package.json.tmp packages/plugin-sdk/package.json
 
-      - name: Check Plugin SDK documentation version
-        if: inputs.npm_tag == 'latest'
-        run: pnpm packages:docs-version:check
       - name: Build plugin SDK
         run: pnpm --filter @openforge-app/plugin-sdk build
 

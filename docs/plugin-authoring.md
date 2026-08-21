@@ -28,7 +28,7 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
   "name": "@acme/openforge-notes",
   "version": "1.0.0",
   "dependencies": {
-    "@openforge-app/plugin-sdk": "^0.2.3"
+    "@openforge-app/plugin-sdk": "latest"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
@@ -58,11 +58,11 @@ Metadata rules:
 
 ## SDK package and host API versions
 
-The current authoring release on npm is `@openforge-app/plugin-sdk@0.2.3`. The npm package version and `openforge.apiVersion` have different jobs: package semver versions the TypeScript helpers and declarations, while `openforge.apiVersion` gates host runtime compatibility and remains `1` for the current API-v1 runtime contract.
+The authoring SDK is published as `@openforge-app/plugin-sdk`; install npm's `latest` dist-tag. The npm package version and `openforge.apiVersion` have different jobs: package semver versions the TypeScript helpers and declarations, while `openforge.apiVersion` gates host runtime compatibility and remains `1` for the current API-v1 runtime contract.
 
-The package example uses a caret range so compatible API-v1 patch releases can be installed. This release matches the current host contract, including agent command metadata, `PluginCommandInvocationContext`, and the corresponding `@openforge-app/plugin-sdk/testing` command registration types. It does not include the removed `Task.summary` field or `tasks.updateSummary(...)` method. Plugin packages should upgrade from `0.1.0` rather than casting command registrations around those stale declarations.
+The current SDK contract includes agent command metadata, `PluginCommandInvocationContext`, and the corresponding `@openforge-app/plugin-sdk/testing` command registration types. It does not include the removed `Task.summary` field or `tasks.updateSummary(...)` method. Do not cast command registrations around stale declarations from older SDK releases.
 
-The npm `latest` dist-tag is the source of truth for the current authoring release. The desktop release workflow assigns the desktop git tag's semver to the package artifact; the checked-in SDK version is used by the manual publish workflow between desktop releases. Before publishing to `latest`, the reusable workflow verifies that the package example and current-release statement in this guide match the version being published. CI runs the same check against the checked-in package version. CI and both publish paths also pack the package, verify every declared export target, and compile a plugin-authoring fixture against the tarball before publication.
+The desktop release workflow assigns the desktop git tag's semver to the package artifact; the checked-in SDK version is used by the manual publish workflow between desktop releases. CI and both publish paths pack the package, verify every declared export target, and compile a plugin-authoring fixture against the tarball before publication.
 
 ## SDK import surface
 
