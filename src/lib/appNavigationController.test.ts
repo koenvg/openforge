@@ -1,0 +1,173 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { get } from 'svelte/store'
+import { activeProjectId, currentView, projects, selectedTaskId, tasks } from './stores'
+import type { Project, ReviewPullRequest, Task } from './types'
+import { createAppNavigationController } from './appNavigationController'
+
+const projectOne = { id: 'P-1', name: 'One', path: '/one' } as Project
+const projectTwo = { id: 'P-2', name: 'Two', path: '/two' } as Project
+const rememberedTask = { id: 'T-2', project_id: projectTwo.id } as Task
+const reviewPullRequest = {
+  id: 1,
+  number: 1,
+  title: 'Review pull request',
+  body: null,
+  state: 'open',
+  draft: false,
+  html_url: 'https://example.test/pull/1',
+  user_login: 'reviewer',
+  user_avatar_url: null,
+  repo_owner: 'openforge',
+  repo_name: 'app',
+  head_ref: 'feature',
+  base_ref: 'main',
+  head_sha: 'abc123',
+  additions: 0,
+  deletions: 0,
+  changed_files: 0,
+  mergeable: true,
+  mergeable_state: 'clean',
+  created_at: 0,
+  updated_at: 0,
+  viewed_at: null,
+  viewed_head_sha: null,
+  labels: [],
+} satisfies ReviewPullRequest
+
+function createRouter() {
+  return {
+    navigate: vi.fn(),
+    navigateToTask: vi.fn(),
+    resetToBoard: vi.fn(),
+    back: vi.fn(() => false),
+    forward: vi.fn(() => false),
+  }
+}
+
+describe('App navigation controller', () => {
+  beforeEach(() => {
+    activeProjectId.set(projectOne.id)
+    currentView.set('board')
+    projects.set([projectOne, projectTwo])
+    selectedTaskId.set(null)
+    tasks.set([])
+  })
+
+  it('restores a remembered task after the target project tasks load', async () => {
+    const calls: string[] = []
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(async () => {
+        calls.push('load')
+        tasks.set([rememberedTask])
+      }),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+      history: {
+        push: vi.fn(() => { calls.push('push') }),
+        restoreProject: vi.fn(() => {
+          calls.push('restore')
+          return rememberedTask.id
+        }),
+      },
+    })
+
+    await controller.switchToProject(projectTwo.id)
+
+    expect(calls).toEqual(['push', 'restore', 'load'])
+    expect(get(activeProjectId)).toBe(projectTwo.id)
+    expect(get(selectedTaskId)).toBe(rememberedTask.id)
+  })
+
+  it('loads a task project before opening a task from the attention overview', async () => {
+    const calls: string[] = []
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(async () => {
+        calls.push('load')
+        tasks.set([rememberedTask])
+      }),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(() => { calls.push('close') }),
+    })
+
+    await controller.openTaskFromOverview(rememberedTask)
+
+    expect(calls).toEqual(['close', 'load'])
+    expect(get(activeProjectId)).toBe(projectTwo.id)
+    expect(router.navigateToTask).toHaveBeenCalledWith(rememberedTask.id)
+  })
+
+  it('reloads project tasks after browser-style history crosses projects', async () => {
+    const router = createRouter()
+    router.back.mockImplementation(() => {
+      activeProjectId.set(projectTwo.id)
+      selectedTaskId.set(rememberedTask.id)
+      return true
+    })
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(async () => { tasks.set([rememberedTask]) }),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+    })
+
+    await controller.goBack()
+
+    expect(router.back).toHaveBeenCalledOnce()
+    expect(get(selectedTaskId)).toBe(rememberedTask.id)
+  })
+
+  it('cycles projects only from an unselected board when board-only is requested', async () => {
+    let selectedTask: Task | null = rememberedTask
+    const controller = createAppNavigationController({
+      router: createRouter(),
+      loadTasks: vi.fn(),
+      getSelectedTask: () => selectedTask,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+      history: {
+        push: vi.fn(),
+        restoreProject: vi.fn(() => null),
+      },
+    })
+
+    await controller.cycleActiveProject('next', { boardOnly: true })
+    expect(get(activeProjectId)).toBe(projectOne.id)
+
+    selectedTask = null
+    await controller.cycleActiveProject('next', { boardOnly: true })
+    expect(get(activeProjectId)).toBe(projectTwo.id)
+  })
+
+  it('marks overview reviews as viewed and falls back to the browser', async () => {
+    const calls: string[] = []
+    const controller = createAppNavigationController({
+      router: createRouter(),
+      loadTasks: vi.fn(),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(() => { calls.push('close') }),
+      reviewNavigation: {
+        nowSeconds: () => 123,
+        updateViewed: vi.fn(() => { calls.push('update') }),
+        markViewed: vi.fn(async () => { calls.push('mark') }),
+        openInPlugin: vi.fn(async () => {
+          calls.push('plugin')
+          return false
+        }),
+        openUrl: vi.fn(async () => { calls.push('browser') }),
+        logError: vi.fn(),
+      },
+    })
+
+    await controller.openReviewFromOverview(reviewPullRequest, projectTwo.id)
+
+    expect(calls).toEqual(['close', 'update', 'mark', 'plugin', 'browser'])
+  })
+})
