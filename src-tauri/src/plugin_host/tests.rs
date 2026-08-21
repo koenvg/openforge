@@ -1,7 +1,12 @@
 use super::*;
 
-mod callbacks;
+mod command_callbacks;
+mod filesystem_callbacks;
+mod host_app_event_callbacks;
 mod lifecycle;
+mod project_callbacks;
+mod storage_config_callbacks;
+mod task_callbacks;
 mod transport;
 
 fn build_plugin_host() -> PluginHost {
