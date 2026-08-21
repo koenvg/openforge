@@ -13,6 +13,7 @@
     richDiffSupported: boolean
     richDiffActive: boolean
     reviewed: boolean
+    pendingCommentCount: number
     fileHeaderExtra?: Snippet<[PrFileDiff]>
     onToggleCollapse: () => void
     onSetRichDiffActive: (active: boolean) => void
@@ -27,6 +28,7 @@
     richDiffSupported,
     richDiffActive,
     reviewed,
+    pendingCommentCount,
     fileContents,
     fileContentError,
     onRetryFileContents,
@@ -76,6 +78,7 @@
     {richDiffSupported}
     {richDiffActive}
     {reviewed}
+    {pendingCommentCount}
     {fileHeaderExtra}
     {onToggleCollapse}
     {onSetRichDiffActive}

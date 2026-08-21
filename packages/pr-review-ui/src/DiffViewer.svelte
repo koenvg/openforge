@@ -352,6 +352,13 @@
 
 
   const visiblePendingComments = $derived(pendingComments ?? internalPendingComments)
+  const pendingCommentCountByFile = $derived.by(() => {
+    const counts = new Map<string, number>()
+    for (const comment of visiblePendingComments) {
+      counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1)
+    }
+    return counts
+  })
 
   function setVisiblePendingComments(comments: ReviewSubmissionComment[]) {
     if (onPendingCommentsChange) {
@@ -614,6 +621,7 @@
               {githubMarkdownImageBaseUrl}
               {existingComments}
               pendingComments={visiblePendingComments}
+              pendingCommentCount={pendingCommentCountByFile.get(file.filename) ?? 0}
               {agentComments}
               {resolveRepositoryImage}
               onOpenRepositoryPath={openRepositoryPath}

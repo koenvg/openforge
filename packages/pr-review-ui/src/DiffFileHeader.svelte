@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MessageSquare } from '@lucide/svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { Snippet } from 'svelte'
@@ -10,6 +11,7 @@
     richDiffSupported: boolean
     richDiffActive: boolean
     reviewed: boolean
+    pendingCommentCount: number
     fileHeaderExtra?: Snippet<[PrFileDiff]>
     onToggleCollapse: () => void
     onSetRichDiffActive: (active: boolean) => void
@@ -22,17 +24,29 @@
     richDiffSupported,
     richDiffActive,
     reviewed,
+    pendingCommentCount,
     fileHeaderExtra,
     onToggleCollapse,
     onSetRichDiffActive,
     onReviewedChange,
   }: Props = $props()
+
+  function getPendingCommentLabel(): string {
+    const commentLabel = pendingCommentCount === 1 ? 'comment' : 'comments'
+    return `${pendingCommentCount} pending ${commentLabel}`
+  }
+
+  function getToggleLabel(): string {
+    const action = collapsed ? 'Expand' : 'Collapse'
+    const baseLabel = `${action} diff for ${file.filename}`
+    return pendingCommentCount === 0 ? baseLabel : `${baseLabel}, ${getPendingCommentLabel()}`
+  }
 </script>
 
 <div class="sticky top-0 z-20 w-full flex items-center gap-2 px-4 py-3 bg-base-200 border-b border-base-300 rounded-t-md shadow-sm">
   <button
     class="min-w-0 flex flex-1 items-center gap-2 text-left hover:text-primary transition-colors"
-    aria-label="{collapsed ? 'Expand' : 'Collapse'} diff for {file.filename}"
+    aria-label={getToggleLabel()}
     aria-expanded={!collapsed}
     onclick={onToggleCollapse}
   >
@@ -47,6 +61,16 @@
       {/if}
       {file.filename}
     </span>
+    {#if pendingCommentCount > 0}
+      <span
+        class="badge badge-sm badge-outline h-5 flex-shrink-0 gap-1 border-base-content/30 bg-base-100 px-1.5 text-xs font-medium tabular-nums text-base-content/80"
+        title={getPendingCommentLabel()}
+        aria-hidden="true"
+      >
+        <MessageSquare size={12} strokeWidth={1.8} />
+        {pendingCommentCount}
+      </span>
+    {/if}
   </button>
   {#if fileHeaderExtra}
     {@render fileHeaderExtra(file)}
