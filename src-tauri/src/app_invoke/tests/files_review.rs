@@ -163,6 +163,37 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
 }
 
 #[tokio::test]
+async fn writes_project_files_through_the_app_invoke_boundary() {
+    let (state, path) = test_state("app_invoke_write_project_file");
+    let temp_dir = tempfile::tempdir().expect("temp project dir");
+    let project_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_project("Open Forge", temp_dir.path().to_str().expect("utf8 path"))
+            .expect("create project")
+            .id
+    };
+
+    let result = invoke_ok(
+        &state,
+        "fs_write_file",
+        json!({
+            "projectId": project_id,
+            "filePath": "generated/report.md",
+            "content": "# Report\n",
+        }),
+    )
+    .await;
+
+    assert_eq!(result, serde_json::Value::Null);
+    assert_eq!(
+        std::fs::read_to_string(temp_dir.path().join("generated/report.md"))
+            .expect("read written file"),
+        "# Report\n"
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn fs_read_file_treats_gitignore_dotfile_as_text() {
     let (state, path) = test_state("app_invoke_gitignore_dotfile_text_preview");
     let temp_dir = tempfile::tempdir().expect("temp project dir");

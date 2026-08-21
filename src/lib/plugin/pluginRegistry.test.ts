@@ -24,6 +24,7 @@ const {
   writeClipboardTextMock,
   fsReadDirMock,
   fsReadFileMock,
+  fsWriteFileMock,
   fsSearchFilesMock,
   getConfigMock,
   setConfigMock,
@@ -50,6 +51,7 @@ const {
   writeClipboardTextMock: vi.fn(),
   fsReadDirMock: vi.fn(),
   fsReadFileMock: vi.fn(),
+  fsWriteFileMock: vi.fn(),
   fsSearchFilesMock: vi.fn(),
   getConfigMock: vi.fn(),
   setConfigMock: vi.fn(),
@@ -79,6 +81,7 @@ vi.mock('../ipc', () => ({
   writeClipboardText: writeClipboardTextMock,
   fsReadDir: fsReadDirMock,
   fsReadFile: fsReadFileMock,
+  fsWriteFile: fsWriteFileMock,
   fsSearchFiles: fsSearchFilesMock,
   getConfig: getConfigMock,
   setConfig: setConfigMock,
@@ -222,6 +225,7 @@ describe('pluginRegistry', () => {
     openUrlMock.mockResolvedValue(undefined)
     fsReadDirMock.mockReset()
     fsReadFileMock.mockReset()
+    fsWriteFileMock.mockReset()
     fsSearchFilesMock.mockReset()
     getConfigMock.mockReset()
     setConfigMock.mockReset()
@@ -561,6 +565,36 @@ describe('pluginRegistry', () => {
     expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
     expect(otherSlotProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-2', taskId: 'T-99' })
     expect(firstProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+  })
+
+  it('routes frontend plugin fs.writeFile through the typed renderer IPC wrapper', async () => {
+    let api: FrontendOpenForgeAPI | undefined
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge) {
+        api = openforge
+      },
+    })
+    const manifest = makeManifest({ id: 'fs-write-plugin', frontend: './dist/frontend.js' })
+    installedPlugins.set(new Map([['fs-write-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      packageMetadata: {
+        id: 'fs-write-plugin',
+        apiVersion: 1,
+        displayName: 'Filesystem Write Plugin',
+        description: 'Writes project files',
+        frontend: './dist/frontend.js',
+      },
+    }]]))
+    enabledPluginIds.set(new Set(['fs-write-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'fs-write-plugin', module: frontendPlugin })
+    fsWriteFileMock.mockResolvedValue(undefined)
+
+    await expect(activatePlugin('fs-write-plugin')).resolves.toBe(true)
+    await api!.fs.writeFile({ projectId: 'P-1', path: 'generated/report.md', content: '# Report\n' })
+
+    expect(fsWriteFileMock).toHaveBeenCalledWith('P-1', 'generated/report.md', '# Report\n')
   })
 
   it('returns capability-specific unavailable APIs for render props before frontend activation', async () => {

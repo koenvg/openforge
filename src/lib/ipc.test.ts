@@ -21,6 +21,7 @@ import {
   deleteTaskLabel,
   enqueuePullRequest,
   fsSearchFiles,
+  fsWriteFile,
   getAllTasks,
   getTaskAttention,
   getCommitBatchFileContents,
@@ -617,6 +618,23 @@ describe("ipc checkCodexInstalled", () => {
 			installed: true,
 			path: "/usr/local/bin/codex",
 			version: "codex-cli 0.137.0",
+		});
+	});
+});
+
+describe("ipc fsWriteFile", () => {
+	beforeEach(() => {
+		invokeMock.mockReset();
+		invokeMock.mockResolvedValue(undefined);
+	});
+
+	it("calls fs_write_file with the project-relative path and content", async () => {
+		await fsWriteFile("P-1", "generated/report.md", "# Report\n");
+
+		expect(invokeMock).toHaveBeenCalledWith("fs_write_file", {
+			projectId: "P-1",
+			filePath: "generated/report.md",
+			content: "# Report\n",
 		});
 	});
 });

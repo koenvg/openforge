@@ -143,6 +143,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_authored_prs',
   'fs_read_dir',
   'fs_read_file',
+  'fs_write_file',
   'fs_search_files',
   'get_task_diff',
   'get_task_git_status',

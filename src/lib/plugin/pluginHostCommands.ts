@@ -5,6 +5,7 @@ import {
   createTask,
   fsReadDir,
   fsReadFile,
+  fsWriteFile,
   fsSearchFiles,
   getAllTasks,
   getConfig,
@@ -287,6 +288,7 @@ export function createPluginRuntimeHost(pluginId: string) {
       request?.projectId ? listOpenCodeCommands(request.projectId) : Promise.resolve([]),
     readDir: (request: { projectId: string; path?: string | null }) => fsReadDir(request.projectId, request.path ?? null),
     readFile: (request: { projectId: string; path: string }) => fsReadFile(request.projectId, request.path),
+    writeFile: (request: { projectId: string; path: string; content: string }) => fsWriteFile(request.projectId, request.path, request.content),
     searchFiles: (request: { projectId: string; query: string; limit?: number }) => fsSearchFiles(request.projectId, request.query, request.limit),
     spawnShell: async (request: ShellSpawnRequest) => {
       await waitForTerminalEventSubscriptions(request)
