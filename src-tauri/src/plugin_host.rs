@@ -7,6 +7,7 @@ mod process_signals;
 mod project_callbacks;
 mod rpc_transport;
 mod runtime_command;
+mod shell_callbacks;
 mod storage_config_callbacks;
 mod task_callbacks;
 
