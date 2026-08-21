@@ -43,7 +43,7 @@ fn test_resolve_project_id_no_match_lists_available_projects() {
 
     let result = resolve_project_id(&db, None, None);
     assert!(result.is_err());
-    let err = result.unwrap_err();
+    let err = result.unwrap_err().to_string();
     assert!(err.contains("Could not determine project"), "Error: {err}");
     assert!(err.contains("P-1"), "Should list project ID. Error: {err}");
     assert!(
@@ -65,7 +65,7 @@ fn test_resolve_project_id_no_projects_at_all() {
     let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_projects");
     let result = resolve_project_id(&db, None, None);
     assert!(result.is_err());
-    let err = result.unwrap_err();
+    let err = result.unwrap_err().to_string();
     assert!(
         err.contains("none"),
         "Should indicate no projects exist. Error: {err}"
@@ -80,7 +80,7 @@ fn test_resolve_project_id_worktree_not_found_lists_projects() {
 
     let result = resolve_project_id(&db, None, Some("/unknown/path"));
     assert!(result.is_err());
-    let err = result.unwrap_err();
+    let err = result.unwrap_err().to_string();
     assert!(err.contains("Could not determine project"), "Error: {err}");
     assert!(
         err.contains("P-1"),
