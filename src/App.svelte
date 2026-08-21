@@ -1,18 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, reviewPrs, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
-  import { getAppMode, getConfig, resumeStartupSessions, setPollContext, getProjectRepo, openUrl, markReviewPrViewed } from './lib/ipc'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { getAppMode, getConfig, resumeStartupSessions, setPollContext, getProjectRepo } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
-  import { GITHUB_SYNC_GLOBAL_VIEW_KEY, GITHUB_SYNC_PLUGIN_ID } from './lib/githubSyncPlugin'
+  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
-  import type { Task, AppView, Project, ReviewPullRequest } from './lib/types'
+  import type { Project } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
-  import AddTaskDialog from './components/AddTaskDialog.svelte'
+  import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
@@ -30,7 +29,7 @@
   import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
-  import { useAppRouter, pushNavState, restoreProjectView } from './lib/router.svelte'
+  import { useAppRouter } from './lib/router.svelte'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { getViews, isCrossProjectView } from './lib/views'
@@ -40,14 +39,13 @@
   import { loadAppStartupData } from './lib/appStartup'
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
   import { createTaskActionRunner } from './lib/taskActionRunner'
-  import { pendingComposeRequest, settleTaskCompose } from './lib/taskCompose'
+  import { useAppTaskCreationController } from './lib/appTaskCreationController.svelte'
+  import { createAppNavigationController } from './lib/appNavigationController'
+  import { createAppLifecycleController } from './lib/appLifecycleController'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
   import { hasActiveAgentSessions } from './lib/quitGuard'
   
-  let unlisteners: DesktopUnlistenFn[] = []
-  let showAddDialog = $state(false)
-  let editingTask = $state<Task | null>(null)
   let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
   let showProjectSetup = $state(false)
@@ -91,15 +89,26 @@
     loadTasks: appData.loadTasks,
     loadProjectAttention: appData.loadProjectAttention,
   })
+  const taskCreation = useAppTaskCreationController({
+    getTasks: () => $tasks,
+    loadTasks: appData.loadTasks,
+    resetToBoard: () => { router.resetToBoard() },
+    navigateToTask: (taskId) => { router.navigateToTask(taskId) },
+    runAction: taskActions.handleRunAction,
+  })
+  const navigation = createAppNavigationController({
+    router,
+    loadTasks: appData.loadTasks,
+    getSelectedTask: () => selectedTask,
+    getSidebarPluginViewKeys: () => get(sidebarPluginViewKeys),
+    closeAttentionOverview: () => { showAttentionOverview = false },
+  })
   const actionPalette = useActionPaletteController({
     getSelectedTask: () => selectedTask,
     taskActions,
     goBack: () => { router.back() },
     showSearchTasks: () => { showCommandPalette = true },
-    showNewTask: () => {
-      editingTask = null
-      showAddDialog = true
-    },
+    showNewTask: taskCreation.openNewTask,
     showProjectSwitcher: () => { showProjectSwitcher = true },
     triggerGithubSync: appData.triggerGithubSync,
     runApp: {
@@ -201,12 +210,6 @@
   let windowFocused = $state(true)
   let lastPollContext: PollContextPayload | null = null
 
-  function refreshWindowFocus() {
-    windowFocused =
-      typeof document === 'undefined'
-        ? true
-        : document.visibilityState === 'visible' && document.hasFocus()
-  }
 
   $effect(() => {
     const payload = computePollContext({
@@ -239,7 +242,7 @@
 
       nextShortcutKeys.add(view.shortcut)
       shortcuts.register(view.shortcut, () => {
-        handleNavigate(makePluginViewKey(view.pluginId, view.contributionId))
+        navigation.navigate(makePluginViewKey(view.pluginId, view.contributionId))
       })
     }
 
@@ -293,64 +296,10 @@
     router.navigate('settings')
   }
 
-  function handleNavigate(view: AppView) {
-    router.navigate(view)
-  }
 
-  function handleOpenTask(taskId: string) {
-    router.navigateToTask(taskId)
-  }
 
-  // Open a task from the cross-project attention overview: switch to its project
-  // and wait for that project's tasks to load before selecting it, so the
-  // "clear unknown selected task" effect doesn't drop it mid-switch.
-  async function handleOpenTaskFromOverview(task: Task) {
-    showAttentionOverview = false
-    if (task.project_id && task.project_id !== $activeProjectId) {
-      $activeProjectId = task.project_id
-      await appData.loadTasks()
-    }
-    router.navigateToTask(task.id)
-  }
 
-  // Open a review PR from the overview inside Open Forge's PR review, as if opened
-  // from that project's Pull Requests. `projectId` is the dialog section the PR was
-  // nested under: a real project opens its per-repo view; null ("Other repositories")
-  // opens the all-repos view. The github-sync command navigates and loads the detail.
-  // Marking it viewed here drops it off the overview and the review badge (matches the
-  // existing "opening a review = viewed" semantics; the backend re-surfaces it on new
-  // commits). Falls back to the browser if the plugin can't handle it.
-  async function handleOpenPrFromOverview(pr: ReviewPullRequest, projectId: string | null) {
-    showAttentionOverview = false
-    const viewedAt = Math.floor(Date.now() / 1000)
-    reviewPrs.update((list) =>
-      list.map((p) => (p.id === pr.id ? { ...p, viewed_at: viewedAt, viewed_head_sha: pr.head_sha } : p)),
-    )
-    markReviewPrViewed(pr.id, pr.head_sha).catch((e) => console.error('[App] Failed to mark review PR viewed:', e))
-    try {
-      const opened = await executePluginCommand(GITHUB_SYNC_PLUGIN_ID, 'open_review_pr', { pr, projectId })
-      if (!opened) {
-        await openUrl(pr.html_url)
-      }
-    } catch (e) {
-      console.error('[App] Failed to open PR in review view:', e)
-      await openUrl(pr.html_url)
-    }
-  }
 
-  function openEditTask(taskId: string) {
-    const task = $tasks.find((t) => t.id === taskId)
-    // Only never-started (backlog) tasks may have their prompt edited.
-    if (!task || task.status !== 'backlog') return
-    editingTask = task
-    showAddDialog = true
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (shortcuts) {
-      shortcuts.handleKeydown(e)
-    }
-  }
 
   async function handleCloseRequested(event: { preventDefault: () => void }) {
     // Always cancel this close attempt synchronously; we re-drive the quit below
@@ -390,148 +339,55 @@
     showCloseConfirm = false
   }
 
-  // Switch to a project, restoring its last-viewed location (tab + open task/PR)
-  // instead of always resetting to the board. The outgoing project's location is
-  // snapshotted automatically by the activeProjectId subscriber in router.svelte.ts.
-  // The remembered task is re-applied only after the target project's tasks have
-  // loaded — otherwise the "clear unknown selected task" effect drops it, because the
-  // tasks store still holds the previous project's tasks (same pattern as
-  // handleOpenTaskFromOverview). This is the single entry point every user-initiated
-  // project switch (sidebar, switcher, ⌘-cycle) goes through.
-  async function switchToProject(projectId: string) {
-    // Already on this project, viewing one of its own tabs (a per-project, non
-    // cross-project view). Re-clicking the project name is a shortcut back to the
-    // Dashboard: from any other tab (Pull Requests, Project Settings, …) jump to
-    // the board. On the board already there is nothing to do — and we must NOT reset
-    // there, or an open task detail (which renders on the board view) would be wiped.
-    if ($activeProjectId === projectId && !isCrossProjectView($currentView, sidebarPluginViewKeySet)) {
-      if ($currentView !== 'board') {
-        router.resetToBoard()
-      }
-      return
-    }
 
-    // Falls through here when switching to a different project, or re-entering the active
-    // one while a cross-project view — Global Settings or a sidebar plugin view like "All
-    // Pull Requests" — is showing. Those views change only currentView and leave
-    // activeProjectId pointing at the project, so without the cross-project check above
-    // this would strand the user on the global view instead of returning them (#1285).
-
-    // Record where we're leaving so Back (⌘[ / Ctrl+Tab) can cross back into this project.
-    // Must run while activeProjectId still points at the outgoing project.
-    pushNavState()
-    $activeProjectId = projectId
-    const rememberedTaskId = restoreProjectView(projectId)
-
-    if (rememberedTaskId) {
-      await appData.loadTasks()
-      if (get(activeProjectId) === projectId && get(tasks).some((t) => t.id === rememberedTaskId)) {
-        selectedTaskId.set(rememberedTaskId)
-      }
-    }
-  }
-
-  // Run a router history move (Back / Forward) and, when it crosses into another project,
-  // re-apply the restored task once that project's tasks have loaded. The router restores
-  // selectedTaskId synchronously, but the task belongs to a project whose tasks aren't
-  // loaded yet, so the "clear unknown selected task" effect nulls it mid-move — the same
-  // race switchToProject / handleOpenTaskFromOverview defer around.
-  async function historyNavigate(move: () => boolean) {
-    const previousProjectId = get(activeProjectId)
-    const moved = move()
-    if (!moved) return
-
-    const nextProjectId = get(activeProjectId)
-    if (!nextProjectId || nextProjectId === previousProjectId) return
-
-    const restoredTaskId = get(selectedTaskId)
-    if (!restoredTaskId) return
-
-    await appData.loadTasks()
-    if (get(activeProjectId) === nextProjectId && get(tasks).some((t) => t.id === restoredTaskId)) {
-      selectedTaskId.set(restoredTaskId)
-    }
-  }
-
-  function cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }) {
-    if (options?.boardOnly && ($currentView !== 'board' || selectedTask !== null)) {
-      return
-    }
-
-    const projectList = $projects
-    if (projectList.length === 0) return
-
-    const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
-    const nextIndex = direction === 'next'
-      ? (currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length)
-      : (currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1)
-
-    void switchToProject(projectList[nextIndex].id)
-  }
-
-  onMount(async () => {
-    appWindow = createDesktopWindow()
-    shortcuts = useShortcutRegistry()
-
-    window.addEventListener('keydown', handleKeydown)
-    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
-
-    // Track window focus/visibility so the poll-context effect can focus-gate polling.
-    refreshWindowFocus()
-    window.addEventListener('focus', refreshWindowFocus)
-    window.addEventListener('blur', refreshWindowFocus)
-    document.addEventListener('visibilitychange', refreshWindowFocus)
-    unlisteners.push(() => {
-      window.removeEventListener('focus', refreshWindowFocus)
-      window.removeEventListener('blur', refreshWindowFocus)
-      document.removeEventListener('visibilitychange', refreshWindowFocus)
-    })
-
-    registerAppShortcuts(shortcuts, {
-      showShortcuts: () => { showShortcutsDialog = true },
-      openActionPalette: actionPalette.openActionPalette,
-      toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
-      toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
-      toggleSidebar: () => {
-        appSidebarCollapsed = !appSidebarCollapsed
-        localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
-      },
-      openNewTaskDialog: () => {
-        if (!showAddDialog) {
-          editingTask = null
-          showAddDialog = true
-        }
-      },
-      goBack: () => { void historyNavigate(() => router.back()) },
-      navigateForward: () => { void historyNavigate(() => router.forward()) },
-      toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
-      toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
-      toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !showShortcutsDialog,
-      resetToBoard: () => { router.resetToBoard() },
-      navigateToGlobalSettings: () => { handleNavigate('global_settings') },
-      cycleActiveProject,
-    })
-
-    unlisteners.push(...await registerAppDesktopEventListeners({
-      appWindow,
+  const lifecycle = createAppLifecycleController({
+    createWindow: () => {
+      const target = createDesktopWindow()
+      appWindow = target
+      return target
+    },
+    createShortcuts: () => {
+      const registry = useShortcutRegistry()
+      shortcuts = registry
+      return registry
+    },
+    registerShortcuts: (registry) => {
+      registerAppShortcuts(registry, {
+        showShortcuts: () => { showShortcutsDialog = true },
+        openActionPalette: actionPalette.openActionPalette,
+        toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
+        toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
+        toggleSidebar: () => {
+          appSidebarCollapsed = !appSidebarCollapsed
+          localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
+        },
+        openNewTaskDialog: () => {
+          if (!taskCreation.dialog) taskCreation.openNewTask()
+        },
+        goBack: () => { void navigation.goBack() },
+        navigateForward: () => { void navigation.goForward() },
+        toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
+        toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
+        toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
+        canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !showShortcutsDialog,
+        resetToBoard: () => { router.resetToBoard() },
+        navigateToGlobalSettings: () => { navigation.navigate('global_settings') },
+        cycleActiveProject: (direction, options) => { void navigation.cycleActiveProject(direction, options) },
+      })
+    },
+    registerDesktopEvents: (target) => registerAppDesktopEventListeners({
+      appWindow: target,
       onCloseRequested: handleCloseRequested,
       loadTasks: appData.loadTasks,
       loadSessions: appData.loadSessions,
       loadPullRequests: appData.loadPullRequests,
       loadProjectAttention: appData.loadProjectAttention,
       refreshPrCounts: appData.refreshPrCounts,
-      getActiveProjectId: () => $activeProjectId,
+      getActiveProjectId: () => get(activeProjectId),
       loadEnabledPluginsForProject: loadEnabledForProject,
-    }))
-
-    try {
-      await resumeStartupSessions()
-    } catch (e) {
-      console.error('[App] Failed to resume startup sessions:', e)
-    }
-
-    await loadAppStartupData({
+    }),
+    resumeStartupSessions,
+    loadStartupData: () => loadAppStartupData({
       initializePluginRuntime,
       loadProjects: appData.loadProjects,
       getAppMode,
@@ -540,7 +396,12 @@
       setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
       loadProjectAttention: appData.loadProjectAttention,
       loadTasks: appData.loadTasks,
-    })
+    }),
+    onWindowFocusChange: (focused) => { windowFocused = focused },
+  })
+
+  onMount(() => {
+    void lifecycle.start()
   })
 
   onDestroy(() => {
@@ -550,9 +411,7 @@
       }
     }
 
-    unlisteners.forEach((fn) => {
-      fn()
-    })
+    lifecycle.dispose()
   })
 </script>
 
@@ -563,14 +422,14 @@
     {appMode}
     onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
     onNewProject={() => showProjectSetup = true}
-    onNavigate={handleNavigate}
-    onSelectProject={switchToProject}
+    onNavigate={navigation.navigate}
+    onSelectProject={navigation.switchToProject}
     onOpenAttentionOverview={() => { showAttentionOverview = true }}
     pluginNavItems={sidebarPluginNavItems}
     reviewRequestCount={$reviewRequestCount}
   />
   {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+    <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative">
@@ -584,8 +443,8 @@
           <TaskDetailView
             task={selectedTask}
             onRunAction={handleRunAction}
-            onEdit={openEditTask}
-            onOpenTask={handleOpenTask}
+            onEdit={taskCreation.openEditTask}
+            onOpenTask={navigation.openTask}
             onTaskUpdated={async () => { await appData.loadTasks() }}
             onRunAppRegistrationChange={handleRunAppRegistrationChange}
           />
@@ -606,57 +465,23 @@
                 ticketPrs={$ticketPrs}
                 attentionRows={$taskAttentionRows}
                 attentionRowsLoaded={$taskAttentionLoaded}
-                onOpenTask={handleOpenTask}
-                onEditTask={openEditTask}
+                onOpenTask={navigation.openTask}
+                onEditTask={taskCreation.openEditTask}
                 onTaskUpdated={async () => { await appData.loadTasks() }}
                 onProjectAttentionChanged={appData.loadProjectAttention}
                 onOpenCommandSearch={() => { showCommandPalette = true }}
-                onNewTask={() => {
-                  editingTask = null
-                  showAddDialog = true
-                }}
+                onNewTask={taskCreation.openNewTask}
                 onRunAction={handleRunAction}
               />
             {/if}
           </div>
         {/if}
 
-        {#if showAddDialog && $activeProjectId}
-          <AddTaskDialog
-            mode={editingTask ? 'edit' : 'create'}
-            task={editingTask}
-            projectPath={activeProject?.path ?? null}
-            projectName={activeProject?.name ?? null}
-            onClose={() => { showAddDialog = false; editingTask = null }}
-            onTaskSaved={async () => { await appData.loadTasks() }}
-            onRunAction={async (taskId, actionPrompt, agent) => {
-              await appData.loadTasks()
-              router.resetToBoard()
-              router.navigateToTask(taskId)
-              await handleRunAction({ taskId, actionPrompt, agent })
-            }}
-          />
-        {/if}
-
-        {#if $pendingComposeRequest}
-          <AddTaskDialog
-            mode="create"
-            projectPath={activeProject?.path ?? null}
-            promptSeed={$pendingComposeRequest.request.initialPrompt}
-            sourceTicketUrlSeed={$pendingComposeRequest.request.sourceTicketUrl ?? null}
-            titleSeed={$pendingComposeRequest.request.title ?? null}
-            onClose={() => settleTaskCompose(null)}
-            onTaskSaved={async (task, options) => {
-              await appData.loadTasks()
-              if (task) settleTaskCompose({ task, started: options?.started ?? false })
-            }}
-            onRunAction={async (taskId, actionPrompt, agent) => {
-              router.resetToBoard()
-              router.navigateToTask(taskId)
-              await handleRunAction({ taskId, actionPrompt, agent })
-            }}
-          />
-        {/if}
+        <AppTaskCreationDialogs
+          controller={taskCreation}
+          projectPath={activeProject?.path ?? null}
+          projectName={activeProject?.name ?? null}
+        />
 
         {#if showProjectSetup}
           <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
@@ -669,10 +494,7 @@
         type="button"
         class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"
         aria-label="Create new task"
-        onclick={() => {
-          editingTask = null
-          showAddDialog = true
-        }}
+        onclick={taskCreation.openNewTask}
       >
         +
       </button>
@@ -683,14 +505,14 @@
 <ToastHost />
 
 {#if showProjectSwitcher}
-  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={switchToProject} />
+  <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} onSelectProject={navigation.switchToProject} />
 {/if}
 
 {#if showAttentionOverview}
   <AttentionOverviewDialog
     onClose={() => showAttentionOverview = false}
-    onOpenTask={handleOpenTaskFromOverview}
-    onOpenPr={handleOpenPrFromOverview}
+    onOpenTask={navigation.openTaskFromOverview}
+    onOpenPr={navigation.openReviewFromOverview}
   />
 {/if}
 
