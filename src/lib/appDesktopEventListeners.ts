@@ -45,6 +45,7 @@ export async function registerAppDesktopEventListeners(
     pullRequestAttentionListeners.authoredPrsUpdated,
     pullRequestAttentionListeners.githubRateLimited,
     frontendHostRequestListener,
+    pluginSystemListeners.openUrl,
     pluginSystemListeners.writeClipboardText,
     pluginListeners.pluginInstallationChanged,
     pluginListeners.projectPluginEnablementChanged,
