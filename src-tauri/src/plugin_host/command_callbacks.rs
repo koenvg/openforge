@@ -111,12 +111,12 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
     }
 }
 
-/// Whether `plugin_id` may invoke the given resolved app command.
+/// Whether `plugin_id` may invoke private global commands exposed by this host callback.
 ///
-/// Only built-in plugins reach app commands, and each owns its own namespace.
-/// Everything else — including every externally installed plugin — is denied.
-fn plugin_may_invoke_command(plugin_id: &str, command: &str) -> bool {
-    let _ = command;
+/// Command selection is allowlisted by `resolve_openforge_global_command`; authorization is
+/// intentionally plugin-scoped. The built-in GitHub Sync plugin is trusted for every resolved
+/// command, while all other plugins, including externally installed plugins, are denied.
+fn plugin_may_invoke_private_host_commands(plugin_id: &str) -> bool {
     matches!(plugin_id, GITHUB_SYNC_PLUGIN_ID)
 }
 
@@ -149,7 +149,7 @@ impl PluginHost {
         let caller_plugin_id = required_param_string(params, "callerPluginId")?;
         let resolved = resolve_openforge_global_command(&qualified_id)?;
         let app_command = resolved.app_command;
-        if !plugin_may_invoke_command(&caller_plugin_id, app_command) {
+        if !plugin_may_invoke_private_host_commands(&caller_plugin_id) {
             return Err(format!(
                 "plugin {caller_plugin_id} is not authorized to invoke private host command {qualified_id}"
             ));
@@ -213,55 +213,40 @@ mod tests {
     }
 
     #[test]
-    fn agent_generate_in_repo_maps_and_is_authorized() {
+    fn agent_generate_in_repo_maps_to_agent_handler() {
         let resolved = resolve_openforge_global_command("openforge.agentGenerateInRepo").unwrap();
         assert_eq!(resolved.app_command, "agent_generate_in_repo");
         assert_eq!(resolved.handler, GlobalCommandHandler::AgentGenerate);
-        assert!(plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            resolved.app_command
-        ));
     }
 
     #[test]
-    fn reply_to_review_comment_maps_and_is_authorized() {
+    fn reply_to_review_comment_maps_to_github_handler() {
         let resolved = resolve_openforge_global_command("openforge.replyToReviewComment").unwrap();
         assert_eq!(resolved.app_command, "create_review_comment_reply");
         assert_eq!(resolved.handler, GlobalCommandHandler::GithubReview);
-        assert!(plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            resolved.app_command
-        ));
     }
 
     #[test]
-    fn create_review_comment_maps_and_is_authorized() {
+    fn create_review_comment_maps_to_github_handler() {
         let resolved = resolve_openforge_global_command("openforge.createReviewComment").unwrap();
         assert_eq!(resolved.app_command, "create_review_comment");
         assert_eq!(resolved.handler, GlobalCommandHandler::GithubReview);
-        assert!(plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            resolved.app_command
+    }
+
+    #[test]
+    fn built_in_github_sync_plugin_may_invoke_private_host_commands() {
+        assert!(plugin_may_invoke_private_host_commands(
+            GITHUB_SYNC_PLUGIN_ID
         ));
     }
 
     #[test]
-    fn authorization_gate_admits_only_built_in_plugins() {
-        assert!(plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            "fetch_review_prs"
-        ));
-        assert!(plugin_may_invoke_command(
-            GITHUB_SYNC_PLUGIN_ID,
-            "get_agent_review_comments"
-        ));
-        assert!(!plugin_may_invoke_command(
-            "com.openforge.issues",
-            "fetch_review_prs"
-        ));
-        assert!(!plugin_may_invoke_command(
-            "com.example.evil",
-            "fetch_review_prs"
-        ));
+    fn third_party_plugins_may_not_invoke_private_host_commands() {
+        for plugin_id in ["com.openforge.issues", "com.example.evil"] {
+            assert!(
+                !plugin_may_invoke_private_host_commands(plugin_id),
+                "{plugin_id}"
+            );
+        }
     }
 }
