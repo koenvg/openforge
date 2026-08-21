@@ -103,6 +103,37 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByRole('button', { name: 'Expand diff for src/main.ts' }).getAttribute('aria-expanded')).toBe('false')
   })
 
+  it('shows each file pending comment count while expanded and collapsed', async () => {
+    const otherFile = { ...files[0], sha: 'def456', filename: 'src/other.ts' }
+    const uncommentedFile = { ...files[0], sha: 'ghi789', filename: 'src/uncommented.ts' }
+    const pendingComments = [
+      { path: 'src/main.ts', line: 1, side: 'RIGHT', body: 'First comment' },
+      { path: 'src/main.ts', line: 2, side: 'RIGHT', body: 'Second comment' },
+      { path: 'src/other.ts', line: 1, side: 'RIGHT', body: 'Other comment' },
+    ]
+
+    render(DiffViewer, {
+      props: { files: [files[0], otherFile, uncommentedFile], pendingComments },
+    })
+
+    expect(screen.getByRole('button', {
+      name: 'Collapse diff for src/uncommented.ts',
+    })).toBeTruthy()
+
+    const mainHeader = screen.getByRole('button', {
+      name: 'Collapse diff for src/main.ts, 2 pending comments',
+    })
+    expect(mainHeader.textContent).toContain('2')
+    expect(screen.getByRole('button', {
+      name: 'Collapse diff for src/other.ts, 1 pending comment',
+    }).textContent).toContain('1')
+
+    await fireEvent.click(mainHeader)
+
+    expect(screen.getByRole('button', {
+      name: 'Expand diff for src/main.ts, 2 pending comments',
+    }).textContent).toContain('2')
+  })
   it('announces large change sets and auto-collapses oversized files', () => {
     const largeFiles = Array.from({ length: 12 }, (_, index) => ({
       ...files[0],
