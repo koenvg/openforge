@@ -44,12 +44,19 @@ export function createReviewNavigationController(options: ReviewNavigationContro
       logError('[App] Failed to mark review PR viewed:', error)
     })
 
+    let openedInPlugin = false
     try {
-      const opened = await openInPlugin(pr, projectId)
-      if (!opened) await openExternalUrl(pr.html_url)
+      openedInPlugin = await openInPlugin(pr, projectId)
     } catch (error) {
       logError('[App] Failed to open PR in review view:', error)
+    }
+
+    if (openedInPlugin) return
+
+    try {
       await openExternalUrl(pr.html_url)
+    } catch (error) {
+      logError('[App] Failed to open PR in browser:', error)
     }
   }
 

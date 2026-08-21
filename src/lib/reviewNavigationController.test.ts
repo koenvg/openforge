@@ -66,6 +66,24 @@ describe('Review navigation controller', () => {
     expect(dependencies.openUrl).toHaveBeenCalledWith(reviewPullRequest.html_url)
   })
 
+  it('logs a browser failure after the plugin declines without retrying the browser open', async () => {
+    const browserError = new Error('browser failed')
+    const dependencies = createDependencies({
+      openInPlugin: vi.fn(async () => false),
+      openUrl: vi.fn(async () => { throw browserError }),
+    })
+    const controller = createReviewNavigationController(dependencies)
+
+    await controller.openReviewFromOverview(reviewPullRequest, 'P-2')
+
+    expect(dependencies.openUrl).toHaveBeenCalledTimes(1)
+    expect(dependencies.logError).toHaveBeenCalledOnce()
+    expect(dependencies.logError).toHaveBeenCalledWith(
+      '[App] Failed to open PR in browser:',
+      browserError,
+    )
+  })
+
   it('keeps a plugin-opened pull request inside OpenForge', async () => {
     const dependencies = createDependencies()
     const controller = createReviewNavigationController(dependencies)
@@ -90,6 +108,30 @@ describe('Review navigation controller', () => {
       pluginError,
     )
     expect(dependencies.openUrl).toHaveBeenCalledWith(reviewPullRequest.html_url)
+  })
+
+  it('logs both failures when the plugin fails and its browser fallback also fails', async () => {
+    const pluginError = new Error('plugin failed')
+    const browserError = new Error('browser failed')
+    const dependencies = createDependencies({
+      openInPlugin: vi.fn(async () => { throw pluginError }),
+      openUrl: vi.fn(async () => { throw browserError }),
+    })
+    const controller = createReviewNavigationController(dependencies)
+
+    await controller.openReviewFromOverview(reviewPullRequest, 'P-2')
+
+    expect(dependencies.openUrl).toHaveBeenCalledTimes(1)
+    expect(dependencies.logError).toHaveBeenNthCalledWith(
+      1,
+      '[App] Failed to open PR in review view:',
+      pluginError,
+    )
+    expect(dependencies.logError).toHaveBeenNthCalledWith(
+      2,
+      '[App] Failed to open PR in browser:',
+      browserError,
+    )
   })
 
   it('logs viewed-state persistence failures without blocking plugin navigation', async () => {
