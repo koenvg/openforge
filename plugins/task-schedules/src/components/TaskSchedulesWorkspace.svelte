@@ -25,7 +25,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden bg-base-100">
-  <PluginPageHeader title="Task Schedules" subtitle="Create recurring project tasks and implementation runs" surface="default">
+  <PluginPageHeader title="Task Schedules" subtitle="Manage one-off and recurring project task automation" surface="default">
     {#snippet actions()}
       {#if controller.projectId}
         <button bind:this={newScheduleButton} class="btn btn-primary min-h-10" type="button" onclick={controller.openNewSchedule}>

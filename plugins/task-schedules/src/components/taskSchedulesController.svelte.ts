@@ -59,7 +59,7 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   const selectedSchedule = $derived(schedules.find((schedule) => schedule.id === selectedScheduleId) ?? null)
   const enabledCount = $derived(schedules.filter((schedule) => schedule.enabled).length)
   const nextRunAt = $derived.by(() => {
-    const enabledRuns = schedules.filter((schedule) => schedule.enabled).map((schedule) => schedule.nextFireAt)
+    const enabledRuns = schedules.flatMap((schedule) => schedule.enabled && schedule.nextFireAt !== null ? [schedule.nextFireAt] : [])
     return enabledRuns.length > 0 ? Math.min(...enabledRuns) : null
   })
   const filteredSchedules = $derived(visibleSchedules(schedules, filter, sortKey, sortDirection))
@@ -124,6 +124,12 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
 
   function retryLoad(): void {
     if (projectId) void loadSchedules(projectId)
+  }
+
+  function refreshSchedules(): void {
+    const activeProjectId = projectId
+    if (!activeProjectId || loading || saving || updatingScheduleId !== null || deleting) return
+    void loadSchedules(activeProjectId)
   }
 
   function handleSort(nextKey: ScheduleSortKey): void {
@@ -402,6 +408,7 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
     cancelRun,
     openTask,
     retryLoad,
+    refreshSchedules,
   }
 }
 

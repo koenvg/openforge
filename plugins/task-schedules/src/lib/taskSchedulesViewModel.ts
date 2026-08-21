@@ -36,15 +36,17 @@ export function emptyScheduleDraft(): ScheduleDraft {
 }
 
 export function draftFromSchedule(schedule: TaskSchedule): ScheduleDraft {
+  const cron = schedule.cron ?? '0 9 * * *'
+  const preset = schedule.preset ?? 'daily'
   return {
     id: schedule.id,
     title: schedule.title,
     prompt: schedule.prompt,
-    preset: schedule.preset === 'custom' ? 'daily' : schedule.preset,
-    cron: schedule.cron,
-    timeOfDay: timeOfDayFromCron(schedule.cron),
-    dayOfWeek: schedule.preset === 'weekly' ? dayOfWeekFromCron(schedule.cron) : 1,
-    advancedCron: schedule.preset === 'custom',
+    preset: preset === 'custom' ? 'daily' : preset,
+    cron,
+    timeOfDay: timeOfDayFromCron(cron),
+    dayOfWeek: preset === 'weekly' ? dayOfWeekFromCron(cron) : 1,
+    advancedCron: preset === 'custom',
     mode: schedule.mode,
     enabled: schedule.enabled,
   }
@@ -95,7 +97,7 @@ function compareSchedules(
   if (sortKey === 'title') comparison = a.title.localeCompare(b.title)
   else if (sortKey === 'cadence') comparison = cadenceLabel(a).localeCompare(cadenceLabel(b))
   else if (sortKey === 'mode') comparison = a.mode.localeCompare(b.mode)
-  else if (sortKey === 'nextFireAt') comparison = a.nextFireAt - b.nextFireAt
+  else if (sortKey === 'nextFireAt') comparison = (a.nextFireAt ?? Number.MAX_SAFE_INTEGER) - (b.nextFireAt ?? Number.MAX_SAFE_INTEGER)
   else if (sortKey === 'lastResult') comparison = (a.history.at(-1)?.firedAt ?? 0) - (b.history.at(-1)?.firedAt ?? 0)
   else comparison = Number(b.enabled) - Number(a.enabled)
   if (comparison === 0) comparison = a.title.localeCompare(b.title)
@@ -103,10 +105,12 @@ function compareSchedules(
 }
 
 export function cadenceLabel(schedule: TaskSchedule): string {
+  if (schedule.kind === 'once') return 'One time'
   if (schedule.preset === 'custom') return 'Custom'
-  const time = timeOfDayFromCron(schedule.cron)
+  const cron = schedule.cron ?? '0 9 * * *'
+  const time = timeOfDayFromCron(cron)
   if (schedule.preset === 'weekly') {
-    const day = DAY_OF_WEEK_OPTIONS.find((option) => option.value === dayOfWeekFromCron(schedule.cron))?.label ?? 'Weekly'
+    const day = DAY_OF_WEEK_OPTIONS.find((option) => option.value === dayOfWeekFromCron(cron))?.label ?? 'Weekly'
     return `${day} · ${time}`
   }
   if (schedule.preset === 'monthly') return `Monthly · ${time}`
@@ -114,7 +118,14 @@ export function cadenceLabel(schedule: TaskSchedule): string {
 }
 
 export function cadenceDescription(schedule: TaskSchedule): string | null {
-  return schedule.preset === 'custom' ? describeCronExpression(schedule.cron) : null
+  if (schedule.kind === 'once') return schedule.runAt === null ? null : `Runs once on ${formatScheduleDate(schedule.runAt)}`
+  return schedule.preset === 'custom' && schedule.cron ? describeCronExpression(schedule.cron) : null
+}
+
+export function scheduleStatusLabel(schedule: TaskSchedule): 'Enabled' | 'Paused' | 'Completed' | 'Cancelled' {
+  if (schedule.cancelledAt !== null) return 'Cancelled'
+  if (schedule.kind === 'once' && schedule.lastFireAt !== null) return 'Completed'
+  return schedule.enabled ? 'Enabled' : 'Paused'
 }
 
 export function formatScheduleDate(value: number | null): string {

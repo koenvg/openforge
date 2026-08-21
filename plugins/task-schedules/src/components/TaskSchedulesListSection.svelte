@@ -2,6 +2,7 @@
   import { ArrowDown, ArrowUp, CheckCircle2, CirclePause, CircleX, Clock3, TriangleAlert } from '@lucide/svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import type { TaskSchedule } from '../lib/types'
+  import { scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
   import type { ScheduleSortKey, SortDirection } from '../lib/viewTypes'
 
   interface Props {
@@ -109,6 +110,7 @@
         <tbody>
           {#each schedules as schedule (schedule.id)}
             {@const outcome = latestOutcome(schedule)}
+            {@const status = scheduleStatusLabel(schedule)}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
             <tr
               class:selected={selectedScheduleId === schedule.id}
@@ -126,7 +128,7 @@
               </td>
               <td class="text-sm">
                 <span class="font-medium">{cadenceLabel(schedule)}</span>
-                {#if schedule.preset === 'custom'}
+                {#if schedule.kind === 'recurring' && schedule.preset === 'custom' && schedule.cron}
                   <span class="mt-0.5 block max-w-40 truncate font-mono text-xs text-secondary">{schedule.cron}</span>
                 {/if}
               </td>
@@ -151,8 +153,12 @@
               </td>
               <td class="text-sm">
                 <span class="inline-flex items-center gap-1.5 font-medium">
-                  {#if schedule.enabled}
+                  {#if status === 'Enabled'}
                     <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Enabled
+                  {:else if status === 'Completed'}
+                    <CheckCircle2 class="size-4 text-success" aria-hidden="true" /> Completed
+                  {:else if status === 'Cancelled'}
+                    <CircleX class="size-4 text-error" aria-hidden="true" /> Cancelled
                   {:else}
                     <CirclePause class="size-4 text-warning" aria-hidden="true" /> Paused
                   {/if}
