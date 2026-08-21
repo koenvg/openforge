@@ -10,6 +10,7 @@ import {
 	getPrComments,
 	getTaskDiff,
 	markCommentAddressed,
+	resolveGithubAsset,
 } from "../../lib/ipc";
 import { ticketPrs } from "../../lib/stores";
 import {
@@ -73,6 +74,24 @@ describe("SelfReviewView — hide addressed comments", () => {
 		merge_queue_state: null,
 		readiness_updated_at: null,
 	};
+
+	it("resolves GitHub upload URLs in PR comments through the sidecar", async () => {
+		const uploadUrl = "https://github.com/user-attachments/assets/971f5efc-5e71-4d11-a2b5-daecad5323f3";
+		const signedUrl = "https://private-user-images.githubusercontent.com/signed.png";
+		vi.mocked(resolveGithubAsset).mockResolvedValue({ url: signedUrl, kind: "image" });
+		vi.mocked(getPrComments).mockResolvedValue([
+			makeComment(1, 0, `![Screenshot](${uploadUrl})`),
+		]);
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		const { container } = renderSelfReviewView();
+
+		await waitFor(() => {
+			expect(resolveGithubAsset).toHaveBeenCalledWith("acme", "repo", uploadUrl);
+			expect(container.querySelector("img")?.getAttribute("src")).toBe(signedUrl);
+		});
+	});
 
 	it("resolves relative PR comment image sources against the linked PR head commit", async () => {
 		vi.mocked(getPrComments).mockResolvedValue([

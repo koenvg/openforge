@@ -22,6 +22,8 @@
     updatePrReviewedFileShas,
   } from './reviewedFilesState'
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
+  import { isGitHubAttachmentUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
+  import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 
   type PrDetailTab = 'overview' | 'files' | 'walkthrough'
 
@@ -812,6 +814,21 @@
 
   // Best-effort per-PR walkthrough status read; failures are non-blocking (the
   // card just stays 'idle'). Reassigns a fresh Map so Svelte re-renders.
+  // Screenshots, GIFs and recordings pasted into a PR body/comment are stored
+  // behind a github.com URL that only a signed-in browser session can fetch, so
+  // the sidecar swaps them for the signed CDN URL GitHub itself renders. Anything
+  // else keeps whatever the Markdown said.
+  async function resolvePrRemoteMedia(url: string): Promise<ResolvedMarkdownMedia | null> {
+    const pr = $selectedReviewPr
+    if (!pr || !isGitHubAttachmentUrl(url)) return null
+
+    try {
+      return await githubSync.resolveGithubAsset({ owner: pr.repo_owner, repo: pr.repo_name, url })
+    } catch {
+      return null
+    }
+  }
+
   async function refreshWalkthroughStatus(pr: ReviewPullRequest) {
     try {
       const wt = await githubSync.getPrWalkthrough({ reviewPrId: pr.id, headSha: pr.head_sha })
@@ -1110,6 +1127,7 @@
       {loadOverviewComments}
       fetchFileContents={fetchPrFileContents}
       resolveRepositoryImage={resolvePrRepositoryImage}
+      resolveRemoteMedia={resolvePrRemoteMedia}
       onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
       onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
       onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}

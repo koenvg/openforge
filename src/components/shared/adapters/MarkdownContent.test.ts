@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import MarkdownContent from './MarkdownContent.svelte'
 
@@ -29,5 +29,29 @@ describe('MarkdownContent', () => {
 
     const image = screen.getByRole('img', { name: 'Uploaded' })
     expect(image.getAttribute('src')).toBe('https://github.com/user-attachments/assets/image-id')
+  })
+
+  it('shows resolved uploads as pictures or players', async () => {
+    const imageUrl = 'https://github.com/user-attachments/assets/image-id'
+    const videoUrl = 'https://github.com/user-attachments/assets/recording-id'
+    const resolveRemoteMedia = vi.fn(async (url: string) => {
+      if (url === imageUrl) return { url: 'https://cdn.example.com/shot.gif?jwt=signed', kind: 'image' as const }
+      if (url === videoUrl) return { url: 'https://cdn.example.com/clip.mp4?jwt=signed', kind: 'video' as const }
+      return null
+    })
+
+    const { container } = render(MarkdownContent, {
+      props: {
+        content: `![Uploaded](${imageUrl})\n\n${videoUrl}`,
+        resolveRemoteMedia,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Uploaded' }).getAttribute('src'))
+        .toBe('https://cdn.example.com/shot.gif?jwt=signed')
+      expect(container.querySelector('video')?.getAttribute('src'))
+        .toBe('https://cdn.example.com/clip.mp4?jwt=signed')
+    })
   })
 })

@@ -8,6 +8,7 @@
   import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import { getReviewFileIdentity } from '@openforge-app/pr-review-ui/reviewFileIdentity'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+  import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import WalkthroughTab from './WalkthroughTab.svelte'
@@ -40,6 +41,7 @@
     loadOverviewComments: (pr: ReviewPullRequest) => Promise<PrOverviewComment[]>
     fetchFileContents: (file: PrFileDiff) => Promise<FileContents>
     resolveRepositoryImage: (repositoryPath: string) => Promise<string | null>
+    resolveRemoteMedia: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onToggleFileTree: () => void
     onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
     onAgentCommentsChange: (comments: AgentReviewComment[]) => void
@@ -98,6 +100,7 @@
     loadOverviewComments,
     fetchFileContents,
     resolveRepositoryImage,
+    resolveRemoteMedia,
     onToggleFileTree,
     onPendingCommentsChange,
     onAgentCommentsChange,
@@ -230,6 +233,7 @@
       comments={overviewComments}
       onCommentsChange={onOverviewCommentsChange}
       loadComments={loadOverviewComments}
+      {resolveRemoteMedia}
       {onOpenUrl}
     />
   {:else if activeTab === 'walkthrough'}

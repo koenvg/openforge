@@ -6,7 +6,17 @@ export interface RenderMarkdownOptions {
   imageBaseUrl?: string | null
   markdownFilePath?: string | null
   deferRepositoryImages?: boolean
+  deferRemoteMedia?: boolean
 }
+
+/** How a deferred remote URL should be presented once it has been resolved. */
+export interface ResolvedMarkdownMedia {
+  url: string
+  kind: 'image' | 'video'
+}
+
+/** Attribute holding the original URL of a `<img>`/`<a>` awaiting resolution. */
+export const MARKDOWN_REMOTE_MEDIA_ATTRIBUTE = 'data-markdown-remote-src'
 
 const markedOptions = {
   gfm: true,
@@ -93,17 +103,69 @@ export function resolveMarkdownImageSrc(
   }
 }
 
-function prepareMarkdownImageSources(
+function isRemoteUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+const TEXT_NODE = 3
+
+/**
+ * Whether nothing but a line break separates `anchor` from the end of its line.
+ * GitHub only turns a bare URL into an embedded player when it stands on its own
+ * line, so link markup mid-sentence stays a link.
+ */
+function isAtLineBoundary(from: ChildNode | null, step: 'previousSibling' | 'nextSibling'): boolean {
+  let node = from
+  while (node) {
+    if (node.nodeType !== TEXT_NODE) return node.nodeName === 'BR'
+    if ((node.textContent ?? '').trim() !== '') return false
+    node = node[step]
+  }
+  return true
+}
+
+function isBareLinkOnItsOwnLine(anchor: Element, href: string): boolean {
+  return (anchor.textContent ?? '').trim() === href
+    && isAtLineBoundary(anchor.previousSibling, 'previousSibling')
+    && isAtLineBoundary(anchor.nextSibling, 'nextSibling')
+}
+
+function deferRemoteMediaLinks(root: DocumentFragment): void {
+  for (const anchor of root.querySelectorAll('a[href]')) {
+    const href = anchor.getAttribute('href')?.trim() ?? ''
+    if (!isRemoteUrl(href) || !isBareLinkOnItsOwnLine(anchor, href)) continue
+
+    anchor.setAttribute(MARKDOWN_REMOTE_MEDIA_ATTRIBUTE, href)
+  }
+}
+
+function prepareMarkdownMediaSources(
   html: string,
   options: RenderMarkdownOptions,
 ): string {
-  if (typeof document === 'undefined' || (!options.imageBaseUrl && !options.deferRepositoryImages)) return html
+  if (
+    typeof document === 'undefined' ||
+    (!options.imageBaseUrl && !options.deferRepositoryImages && !options.deferRemoteMedia)
+  ) return html
 
   const template = document.createElement('template')
   template.innerHTML = html
 
+  if (options.deferRemoteMedia) {
+    deferRemoteMediaLinks(template.content)
+  }
+
   for (const image of template.content.querySelectorAll('img[src]')) {
     const source = image.getAttribute('src')?.trim() ?? ''
+
+    // Hold the remote URL back so the caller can exchange it for one the
+    // renderer can actually load, instead of flashing a broken image first.
+    if (options.deferRemoteMedia && isRemoteUrl(source)) {
+      image.removeAttribute('src')
+      image.setAttribute(MARKDOWN_REMOTE_MEDIA_ATTRIBUTE, source)
+      continue
+    }
+
     const shouldDefer = options.deferRepositoryImages && source.length > 0 && !hasAbsoluteOrSpecialUrl(source)
 
     if (shouldDefer) {
@@ -129,5 +191,5 @@ function prepareMarkdownImageSources(
 
 export function renderMarkdownHtml(content: string, options: RenderMarkdownOptions = {}): string {
   const rawHtml = marked.parse(content, markedOptions) as string
-  return sanitizeHtml(prepareMarkdownImageSources(rawHtml, options))
+  return sanitizeHtml(prepareMarkdownMediaSources(rawHtml, options))
 }

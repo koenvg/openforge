@@ -11,7 +11,8 @@ import type {
   ReviewComment,
   ReviewPullRequest,
 } from '@openforge-app/plugin-sdk/domain'
-import type { CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
+import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
+import type { CreateReviewCommentRequest, FileAtRefRequest, FileContentRequest, GithubAssetRequest, PullRequestRepositoryRequest, ReplyToReviewCommentRequest, SubmitPullRequestReviewRequest } from './review/pr/githubSyncClient'
 
 type TaskPullRequestActionRequest = {
   taskId: string
@@ -106,6 +107,10 @@ export default defineBackendPlugin({
 
     context.subscriptions.add(openforge.backend.registerMethod<FileAtRefRequest, string>('getFileAtRefBase64', {
       handler: (request) => invokeHostCommand<string>(openforge, 'getFileAtRefBase64', request),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<GithubAssetRequest, ResolvedMarkdownMedia | null>('resolveGithubAsset', {
+      handler: (request) => invokeHostCommand<ResolvedMarkdownMedia | null>(openforge, 'resolveGithubAsset', request),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<PullRequestRepositoryRequest, ReviewComment[]>('getReviewComments', {

@@ -4,6 +4,7 @@ import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type { PtyBufferState, TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
+import type { ResolvedMarkdownMedia } from './markdown'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -443,6 +444,14 @@ export async function getFileAtRef(owner: string, repo: string, path: string, re
 
 export async function getFileAtRefBase64(owner: string, repo: string, path: string, refSha: string): Promise<string> {
   return invoke<string>("get_file_at_ref_base64", { owner, repo, path, refSha });
+}
+
+/**
+ * Trade a GitHub upload URL from PR Markdown for one the renderer can load.
+ * Resolves to null when GitHub will not resolve the URL for us.
+ */
+export async function resolveGithubAsset(owner: string, repo: string, url: string): Promise<ResolvedMarkdownMedia | null> {
+  return invoke<ResolvedMarkdownMedia | null>("resolve_github_asset", { owner, repo, url });
 }
 
 export async function getReviewComments(owner: string, repo: string, prNumber: number): Promise<ReviewComment[]> {

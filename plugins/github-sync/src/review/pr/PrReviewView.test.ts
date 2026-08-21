@@ -1210,6 +1210,73 @@ describe('PrReviewView header title', () => {
   })
 })
 
+describe('PrReviewView Overview images', () => {
+  beforeEach(() => {
+    resetStores()
+    vi.clearAllMocks()
+  })
+
+  it('shows PR body uploads through a signed URL from the sidecar', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/971f5efc-5e71-4d11-a2b5-daecad5323f3'
+    const signedUrl = 'https://private-user-images.githubusercontent.com/1/shot.png?jwt=signed'
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const prWithUpload: ReviewPullRequest = { ...basePr, body: `![image](${uploadUrl})` }
+    registerPrReviewBackends(registry, () => [baseDiff], [prWithUpload])
+    const resolveGithubAsset = vi.fn().mockResolvedValue({ url: signedUrl, kind: 'image' })
+    registry.backendApi.backend.registerMethod('resolveGithubAsset', { handler: resolveGithubAsset })
+
+    renderPrReviewView(registry)
+    const title = await screen.findByText(prWithUpload.title)
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'image' }).getAttribute('src')).toBe(signedUrl)
+    })
+    expect(resolveGithubAsset).toHaveBeenCalledWith({
+      owner: basePr.repo_owner,
+      repo: basePr.repo_name,
+      url: uploadUrl,
+    })
+  })
+
+  it('plays an uploaded screen recording linked in the PR body', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/a1ffcc8c-9060-458f-b61b-8f70a26ea646'
+    const signedUrl = 'https://private-user-images.githubusercontent.com/1/clip.mp4?jwt=signed'
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const prWithRecording: ReviewPullRequest = { ...basePr, body: `Recorded it:\n\n${uploadUrl}` }
+    registerPrReviewBackends(registry, () => [baseDiff], [prWithRecording])
+    registry.backendApi.backend.registerMethod('resolveGithubAsset', {
+      handler: async () => ({ url: signedUrl, kind: 'video' }),
+    })
+
+    const { container } = renderPrReviewView(registry)
+    const title = await screen.findByText(prWithRecording.title)
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+
+    await waitFor(() => {
+      expect(container.querySelector('video')?.getAttribute('src')).toBe(signedUrl)
+    })
+  })
+
+  it('leaves images the sidecar cannot resolve on their original URL', async () => {
+    const badgeUrl = 'https://img.shields.io/badge.svg'
+    const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.github-sync', projectId: 'project-1' })
+    const prWithBadge: ReviewPullRequest = { ...basePr, body: `![Badge](${badgeUrl})` }
+    registerPrReviewBackends(registry, () => [baseDiff], [prWithBadge])
+    const resolveGithubAsset = vi.fn().mockResolvedValue(null)
+    registry.backendApi.backend.registerMethod('resolveGithubAsset', { handler: resolveGithubAsset })
+
+    renderPrReviewView(registry)
+    const title = await screen.findByText(prWithBadge.title)
+    await fireEvent.click(requireElement(title.closest('button'), HTMLButtonElement))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Badge' }).getAttribute('src')).toBe(badgeUrl)
+    })
+    expect(resolveGithubAsset).not.toHaveBeenCalled()
+  })
+})
+
 describe('PrReviewView Rich Diff repository paths', () => {
   beforeEach(() => {
     resetStores()

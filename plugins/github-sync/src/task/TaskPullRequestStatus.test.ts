@@ -376,4 +376,27 @@ describe('GitHub Sync Task pull request section', () => {
     expect(invoke.mock.calls.filter(([method]) => method === 'refreshTaskGithubStatus')).toHaveLength(0)
     expect(screen.queryByText('Pull request merged successfully.')).toBeNull()
   })
+
+  it('resolves GitHub uploads pasted into an unaddressed review comment', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/971f5efc-5e71-4d11-a2b5-daecad5323f3'
+    const signedUrl = 'https://private-user-images.githubusercontent.com/1/shot.png?jwt=signed'
+    const pr = createPullRequest({ unaddressed_comment_count: 1 })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pr]
+      if (method === 'getTaskPrComments') return [{ ...baseComment, body: `![Screenshot](${uploadUrl})` }]
+      if (method === 'resolveGithubAsset') return { url: signedUrl, kind: 'image' }
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Screenshot' }).getAttribute('src')).toBe(signedUrl)
+    })
+    expect(invoke).toHaveBeenCalledWith('resolveGithubAsset', {
+      owner: pr.repo_owner,
+      repo: pr.repo_name,
+      url: uploadUrl,
+    })
+  })
 })

@@ -32,6 +32,7 @@ describe('self review feedback pane', () => {
         get generalCommentCount() { return generalCommentCount },
         get pendingInlineComments() { return pendingInlineComments },
         markdownImageBaseUrl: null,
+        resolveRemoteMedia: vi.fn(),
         handlePendingInlineCommentsChange: (comments) => { pendingInlineComments = comments },
       },
       navigation: {

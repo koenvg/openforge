@@ -121,6 +121,7 @@ export const desktopCommandContracts = [
   { functionName: 'getFileContentBase64', ipcCommand: 'get_file_content_base64', payloadKeys: ['owner', 'repo', 'sha'], owner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'getFileAtRef', ipcCommand: 'get_file_at_ref', payloadKeys: ['owner', 'repo', 'path', 'refSha'], owner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'getFileAtRefBase64', ipcCommand: 'get_file_at_ref_base64', payloadKeys: ['owner', 'repo', 'path', 'refSha'], owner: 'rust-sidecar', domain: 'files-review' },
+  { functionName: 'resolveGithubAsset', ipcCommand: 'resolve_github_asset', payloadKeys: ['owner', 'repo', 'url'], owner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getReviewComments', ipcCommand: 'get_review_comments', payloadKeys: ['owner', 'repo', 'prNumber'], owner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getPrOverviewComments', ipcCommand: 'get_pr_overview_comments', payloadKeys: ['owner', 'repo', 'prNumber'], owner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'submitPrReview', ipcCommand: 'submit_pr_review', payloadKeys: ['owner', 'repo', 'prNumber', 'event', 'body', 'comments', 'commitId'], owner: 'rust-sidecar', domain: 'github-review' },

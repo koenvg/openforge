@@ -70,6 +70,61 @@ describe('PrOverviewTab', () => {
     expect(image.getAttribute('src')).toBe('https://raw.githubusercontent.com/acme/repo/abc123def456/docs/architecture.png')
   })
 
+  it('resolves GitHub upload images in the PR body and in comments', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/upload-id'
+    const signedUrl = 'https://private-user-images.githubusercontent.com/1/upload-id.gif?jwt=signed'
+    const resolveRemoteMedia = vi.fn(async (url: string) => (
+      url === uploadUrl ? { url: signedUrl, kind: 'image' as const } : null
+    ))
+    const comments: PrOverviewComment[] = [{
+      id: 1,
+      author: 'reviewer',
+      avatar_url: null,
+      body: `![Comment shot](${uploadUrl})`,
+      file_path: null,
+      line_number: null,
+      created_at: '2024-01-01T00:00:00Z',
+      comment_type: 'issue_comment',
+    }]
+
+    render(PrOverviewTab, {
+      props: {
+        pr: { ...basePr, body: `![Body shot](${uploadUrl})` },
+        comments,
+        onCommentsChange: vi.fn(),
+        loadComments: vi.fn().mockResolvedValue(comments),
+        resolveRemoteMedia,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Body shot' }).getAttribute('src')).toBe(signedUrl)
+      expect(screen.getByRole('img', { name: 'Comment shot' }).getAttribute('src')).toBe(signedUrl)
+    })
+  })
+
+  it('plays an uploaded screen recording linked from the PR body', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/recording-id'
+    const signedUrl = 'https://private-user-images.githubusercontent.com/1/recording-id.mp4?jwt=signed'
+    const resolveRemoteMedia = vi.fn(async (url: string) => (
+      url === uploadUrl ? { url: signedUrl, kind: 'video' as const } : null
+    ))
+
+    const { container } = render(PrOverviewTab, {
+      props: {
+        pr: { ...basePr, body: `Recorded it:\n\n${uploadUrl}` },
+        comments: [],
+        onCommentsChange: vi.fn(),
+        loadComments: vi.fn().mockResolvedValue([]),
+        resolveRemoteMedia,
+      },
+    })
+
+    await waitFor(() => {
+      expect(container.querySelector('video')?.getAttribute('src')).toBe(signedUrl)
+    })
+  })
+
   it('loads overview comments and renders their source labels', async () => {
     const comments: PrOverviewComment[] = [{
       id: 1,

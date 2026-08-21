@@ -1,5 +1,7 @@
 import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
-import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
+import { getGitHubMarkdownImageBaseUrl, isGitHubAttachmentUrl } from '../../lib/githubMarkdown'
+import { resolveGithubAsset } from '../../lib/ipc'
+import type { ResolvedMarkdownMedia } from '../../lib/markdown'
 import {
   emptySelfReviewTaskState,
   mergeVisiblePendingSelfReviewComments,
@@ -59,6 +61,20 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
     )
   }
 
+  // Uploads pasted into a review comment sit behind a github.com URL only a
+  // signed-in browser session can fetch; the sidecar trades it for a URL this app
+  // can render, and tells us whether it is a picture or a recording.
+  async function resolveRemoteMedia(url: string): Promise<ResolvedMarkdownMedia | null> {
+    const pr = options.getLinkedPr?.() ?? null
+    if (!pr || !isGitHubAttachmentUrl(url)) return null
+
+    try {
+      return await resolveGithubAsset(pr.repo_owner, pr.repo_name, url)
+    } catch {
+      return null
+    }
+  }
+
   return {
     get commentSelection() { return commentSelection },
     get generalCommentCount() { return generalComments.length },
@@ -66,6 +82,7 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
     get visibleInlineReviewComments() { return visibleInlineReviewComments },
     get visiblePendingInlineComments() { return visiblePendingInlineComments },
     get markdownImageBaseUrl() { return markdownImageBaseUrl },
+    resolveRemoteMedia,
     synchronize,
     handlePendingInlineCommentsChange,
   }

@@ -1,3 +1,4 @@
+import type { ResolvedMarkdownMedia } from '../../lib/markdown'
 import type { CommentSelectionState } from '../../lib/useCommentSelection.svelte'
 import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
 import type { SelfReviewCommentController } from './selfReviewCommentController.svelte'
@@ -11,6 +12,7 @@ interface SelfReviewPullRequestFeedback {
   readonly selection: CommentSelectionState
   readonly markdownImageBaseUrl: string | null
   readonly showAddressed: boolean
+  resolveRemoteMedia: (url: string) => Promise<ResolvedMarkdownMedia | null>
   onRefresh: () => void | Promise<void>
   onCommentClick: (comment: PrComment) => void
   onOpenLinkedPr: () => void
@@ -51,6 +53,7 @@ interface SelfReviewFeedbackPaneSources {
     | 'generalCommentCount'
     | 'pendingInlineComments'
     | 'markdownImageBaseUrl'
+    | 'resolveRemoteMedia'
     | 'handlePendingInlineCommentsChange'
   >
   navigation: Pick<
@@ -85,6 +88,7 @@ export function createSelfReviewFeedbackPane(
       get selection() { return sources.comments.commentSelection },
       get markdownImageBaseUrl() { return sources.comments.markdownImageBaseUrl },
       get showAddressed() { return sources.navigation.showAddressed },
+      resolveRemoteMedia: sources.comments.resolveRemoteMedia,
       onRefresh: sources.diff.refresh,
       onCommentClick: sources.navigation.scrollToComment,
       onOpenLinkedPr: sources.navigation.openLinkedPr,
