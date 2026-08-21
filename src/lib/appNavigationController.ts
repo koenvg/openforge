@@ -1,11 +1,8 @@
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, projects, reviewPrs, selectedTaskId, tasks } from './stores'
+import { activeProjectId, currentView, projects, selectedTaskId, tasks } from './stores'
 import { isCrossProjectView } from './views'
 import { pushNavState, restoreProjectView } from './router.svelte'
-import type { AppView, ReviewPullRequest, Task } from './types'
-import { markReviewPrViewed, openUrl } from './ipc'
-import { executePluginCommand } from './plugin/pluginRegistry'
-import { GITHUB_SYNC_PLUGIN_ID } from './githubSyncPlugin'
+import type { AppView, Task } from './types'
 
 interface AppRouter {
   navigate(view: AppView): void
@@ -20,15 +17,6 @@ interface AppNavigationHistory {
   restoreProject(projectId: string): string | null
 }
 
-interface ReviewNavigation {
-  nowSeconds(): number
-  updateViewed(pr: ReviewPullRequest, viewedAt: number): void
-  markViewed(pr: ReviewPullRequest): Promise<void>
-  openInPlugin(pr: ReviewPullRequest, projectId: string | null): Promise<boolean>
-  openUrl(url: string): Promise<void>
-  logError(message: string, error: unknown): void
-}
-
 interface AppNavigationControllerOptions {
   router: AppRouter
   loadTasks(): Promise<void>
@@ -36,29 +24,12 @@ interface AppNavigationControllerOptions {
   getSidebarPluginViewKeys(): ReadonlySet<string>
   closeAttentionOverview(): void
   history?: AppNavigationHistory
-  reviewNavigation?: ReviewNavigation
 }
 
 export function createAppNavigationController(options: AppNavigationControllerOptions) {
   const history = options.history ?? {
     push: pushNavState,
     restoreProject: restoreProjectView,
-  }
-  const reviewNavigation = options.reviewNavigation ?? {
-    nowSeconds: () => Math.floor(Date.now() / 1000),
-    updateViewed: (pr: ReviewPullRequest, viewedAt: number) => {
-      reviewPrs.update((list) => list.map((candidate) => (
-        candidate.id === pr.id
-          ? { ...candidate, viewed_at: viewedAt, viewed_head_sha: pr.head_sha }
-          : candidate
-      )))
-    },
-    markViewed: (pr: ReviewPullRequest) => markReviewPrViewed(pr.id, pr.head_sha),
-    openInPlugin: (pr: ReviewPullRequest, projectId: string | null) => (
-      executePluginCommand(GITHUB_SYNC_PLUGIN_ID, 'open_review_pr', { pr, projectId })
-    ),
-    openUrl,
-    logError: (message: string, error: unknown) => { console.error(message, error) },
   }
 
   function navigate(view: AppView): void {
@@ -143,25 +114,6 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     await switchToProject(projectList[nextIndex].id)
   }
 
-  async function openReviewFromOverview(
-    pr: ReviewPullRequest,
-    projectId: string | null,
-  ): Promise<void> {
-    options.closeAttentionOverview()
-    reviewNavigation.updateViewed(pr, reviewNavigation.nowSeconds())
-    void reviewNavigation.markViewed(pr).catch((error) => {
-      reviewNavigation.logError('[App] Failed to mark review PR viewed:', error)
-    })
-
-    try {
-      const opened = await reviewNavigation.openInPlugin(pr, projectId)
-      if (!opened) await reviewNavigation.openUrl(pr.html_url)
-    } catch (error) {
-      reviewNavigation.logError('[App] Failed to open PR in review view:', error)
-      await reviewNavigation.openUrl(pr.html_url)
-    }
-  }
-
   return {
     navigate,
     openTask,
@@ -170,6 +122,5 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     goBack,
     goForward,
     cycleActiveProject,
-    openReviewFromOverview,
   }
 }
