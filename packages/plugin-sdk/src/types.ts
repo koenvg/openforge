@@ -45,30 +45,51 @@ export interface ValidationError {
   message: string
 }
 
-export type OpenForgePluginCapability =
-  | 'commands'
-  | 'events'
-  | 'views'
-  | 'taskPane'
-  | 'taskStart'
-  | 'settings'
-  | 'background'
-  | 'backend'
-  | 'storage'
-  | 'context'
-  | 'navigation'
-  | 'tasks'
-  | 'projects'
-  | 'fs'
-  | 'shell'
-  | 'notifications'
-  | 'attention'
-  | 'system.openUrl'
-  | 'system.writeClipboardText'
-  | 'config'
-  | 'projectConfig'
-  | 'browserSurfaces'
-  | 'taskLinks'
+const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
+  'commands',
+  'events',
+  'views',
+  'injectionPoints',
+  'taskPane',
+  'taskStart',
+  'settings',
+  'background',
+  'backend',
+  'storage',
+  'context',
+  'navigation',
+  'tasks',
+  'projects',
+  'fs',
+  'shell',
+  'notifications',
+  'attention',
+  'system.openUrl',
+  'system.writeClipboardText',
+  'config',
+  'projectConfig',
+  'browserSurfaces',
+  'taskLinks',
+] as const
+
+export type OpenForgePluginCapability = (typeof OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS)[number]
+
+function assertOpenForgePluginCapabilitiesMatchSchema(): void {
+  const schemaCapabilities: unknown = packageMetadataSchemaData.properties.requires.items.enum
+
+  if (!Array.isArray(schemaCapabilities) || !schemaCapabilities.every((capability) => typeof capability === 'string')) {
+    throw new Error('openforgePackageMetadataSchema.json properties.requires.items.enum must contain only strings')
+  }
+
+  if (
+    schemaCapabilities.length !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS.length
+    || schemaCapabilities.some((capability, index) => capability !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS[index])
+  ) {
+    throw new Error('OpenForgePluginCapability must match openforgePackageMetadataSchema.json properties.requires.items.enum')
+  }
+}
+
+assertOpenForgePluginCapabilitiesMatchSchema()
 
 export interface OpenForgePackageMetadata {
   id: string

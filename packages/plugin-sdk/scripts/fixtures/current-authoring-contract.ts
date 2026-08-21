@@ -2,6 +2,7 @@ import {
   OPENFORGE_PLUGIN_API_VERSION,
   type AgentCommandMetadata,
   type CommandRegistration,
+  type OpenForgePackageMetadata,
   type PluginCommandInvocationContext,
   type Task,
   type TasksAPI,
@@ -68,3 +69,12 @@ void defineFrontendPlugin({
 
 const apiVersion: 1 = OPENFORGE_PLUGIN_API_VERSION
 void apiVersion
+
+const packageMetadata = {
+  id: 'contract-fixture',
+  apiVersion,
+  displayName: 'Contract fixture',
+  description: 'Exercises the public Plugin SDK authoring contract.',
+  requires: ['injectionPoints'],
+} satisfies OpenForgePackageMetadata
+void packageMetadata

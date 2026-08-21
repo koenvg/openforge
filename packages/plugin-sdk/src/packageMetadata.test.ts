@@ -47,6 +47,13 @@ describe('package.json#openforge metadata contract', () => {
     }))).toEqual([])
     expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('system.writeClipboardText')
   })
+
+  it('accepts injection points as a declared plugin capability', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      requires: ['injectionPoints'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('injectionPoints')
+  })
   it('accepts browserSurfaces only as a declared frontend capability', () => {
     expect(validateOpenForgePackageMetadata(validMetadata({
       requires: ['browserSurfaces'],
@@ -197,24 +204,32 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PLUGIN_CAPABILITIES).toEqual(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.requires.items.enum)
     expect(SUPPORTED_OPENFORGE_API_VERSIONS).toEqual(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion.enum)
 
-    const schemaWithNewEnums = structuredClone(OPENFORGE_PACKAGE_METADATA_SCHEMA)
-    schemaWithNewEnums.properties.apiVersion = { enum: [1, 2] }
-    schemaWithNewEnums.properties.requires.items.enum = [
+    const schemaWithNewApiVersion = structuredClone(OPENFORGE_PACKAGE_METADATA_SCHEMA)
+    schemaWithNewApiVersion.properties.apiVersion = { enum: [1, 2] }
+
+    vi.resetModules()
+    vi.doMock('./openforgePackageMetadataSchema.json', () => ({ default: schemaWithNewApiVersion }))
+
+    const manifest = await import('./manifest')
+
+    expect(manifest.OPENFORGE_PLUGIN_CAPABILITIES).toEqual(schemaWithNewApiVersion.properties.requires.items.enum)
+    expect(manifest.isSupportedOpenForgeApiVersion(2)).toBe(true)
+    expect(manifest.validateOpenForgePackageMetadata(validMetadata({
+      apiVersion: 2,
+    }))).toEqual([])
+  })
+
+  it('fails fast when the public capability type diverges from the schema', async () => {
+    const schemaWithNewCapability = structuredClone(OPENFORGE_PACKAGE_METADATA_SCHEMA)
+    schemaWithNewCapability.properties.requires.items.enum = [
       ...OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.requires.items.enum,
       'schemaOnlyCapability',
     ]
 
     vi.resetModules()
-    vi.doMock('./openforgePackageMetadataSchema.json', () => ({ default: schemaWithNewEnums }))
+    vi.doMock('./openforgePackageMetadataSchema.json', () => ({ default: schemaWithNewCapability }))
 
-    const manifest = await import('./manifest')
-
-    expect(manifest.OPENFORGE_PLUGIN_CAPABILITIES).toEqual(schemaWithNewEnums.properties.requires.items.enum)
-    expect(manifest.isSupportedOpenForgeApiVersion(2)).toBe(true)
-    expect(manifest.validateOpenForgePackageMetadata(validMetadata({
-      apiVersion: 2,
-      requires: ['schemaOnlyCapability'],
-    }))).toEqual([])
+    await expect(import('./manifest')).rejects.toThrow('OpenForgePluginCapability must match')
   })
 
   it('documents every capability from the canonical package metadata schema', () => {

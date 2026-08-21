@@ -128,6 +128,38 @@ var SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVe
 var OPENFORGE_PLUGIN_API_VERSION = SUPPORTED_OPENFORGE_API_VERSIONS[0];
 var MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS);
 var MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS);
+var OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
+	"commands",
+	"events",
+	"views",
+	"injectionPoints",
+	"taskPane",
+	"taskStart",
+	"settings",
+	"background",
+	"backend",
+	"storage",
+	"context",
+	"navigation",
+	"tasks",
+	"projects",
+	"fs",
+	"shell",
+	"notifications",
+	"attention",
+	"system.openUrl",
+	"system.writeClipboardText",
+	"config",
+	"projectConfig",
+	"browserSurfaces",
+	"taskLinks"
+];
+function assertOpenForgePluginCapabilitiesMatchSchema() {
+	const schemaCapabilities = openforgePackageMetadataSchema_default.properties.requires.items.enum;
+	if (!Array.isArray(schemaCapabilities) || !schemaCapabilities.every((capability) => typeof capability === "string")) throw new Error("openforgePackageMetadataSchema.json properties.requires.items.enum must contain only strings");
+	if (schemaCapabilities.length !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS.length || schemaCapabilities.some((capability, index) => capability !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS[index])) throw new Error("OpenForgePluginCapability must match openforgePackageMetadataSchema.json properties.requires.items.enum");
+}
+assertOpenForgePluginCapabilitiesMatchSchema();
 var TaskFollowUpError = class extends Error {
 	code;
 	constructor(code, message) {
