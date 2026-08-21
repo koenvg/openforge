@@ -90,11 +90,11 @@
   }
 </script>
 
-{#if !file.patch && file.status === 'renamed' && file.changes === 0}
+{#if !file.patch && !isImageFileDiff(file) && file.status === 'renamed' && file.changes === 0}
   <div class="flex items-center justify-center py-8 text-base-content/50">
     <span class="text-xs">File renamed without content changes.</span>
   </div>
-{:else if richDiffActive}
+{:else if richDiffActive && file.patch}
   <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
     {#if fileContents}
       <MarkdownContent
@@ -160,6 +160,14 @@
     {/if}
     </div>
   {/if}
+{:else if !file.patch && file.status === 'binary'}
+  <div class="flex items-center justify-center py-8 text-base-content/50">
+    <span class="text-xs">Binary file changes cannot be displayed.</span>
+  </div>
+{:else if !file.patch}
+  <div class="flex items-center justify-center py-8 text-base-content/50">
+    <span class="text-xs">Diff unavailable for this file.</span>
+  </div>
 {:else if workerDiffFile}
   <DiffView
     diffFile={workerDiffFile}

@@ -828,6 +828,73 @@ describe('DiffViewer file content fetching', () => {
     expect(batchFn).not.toHaveBeenCalled()
   })
 
+  it('shows a terminal state for a binary file without an image preview', () => {
+    const binaryFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'assets/archive.zip',
+      status: 'binary',
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+      patch: null,
+    }
+
+    render(DiffViewer, { props: { files: [binaryFile] } })
+
+    expect(screen.getByText('Binary file changes cannot be displayed.')).toBeTruthy()
+    expect(screen.queryByText('Processing diff…')).toBeNull()
+  })
+
+  it('shows a terminal state when a text diff is unavailable', () => {
+    const unavailableFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'src/generated.ts',
+      status: 'modified',
+      patch: null,
+    }
+
+    render(DiffViewer, { props: { files: [unavailableFile] } })
+
+    expect(screen.getByText('Diff unavailable for this file.')).toBeTruthy()
+    expect(screen.queryByText('Processing diff…')).toBeNull()
+  })
+
+  it('keeps an unavailable Markdown diff terminal when Rich view is selected', async () => {
+    const unavailableFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'docs/generated.md',
+      status: 'modified',
+      patch: null,
+    }
+    const batchFn = vi.fn().mockResolvedValue(new Map())
+
+    render(DiffViewer, {
+      props: {
+        files: [unavailableFile],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show rich diff for docs/generated.md' }))
+
+    expect(screen.getByText('Diff unavailable for this file.')).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Loading rich diff for docs/generated.md' })).toBeNull()
+    expect(batchFn).not.toHaveBeenCalled()
+  })
+
+  it('keeps the worker-backed loading state for files with text patches', async () => {
+    const { createDiffWorker } = await import('@openforge-app/pr-review-ui/useDiffWorker.svelte')
+    vi.mocked(createDiffWorker).mockReturnValue({
+      getDiffFile: () => undefined,
+      processing: true,
+    })
+
+    render(DiffViewer, { props: { files: [fileWithPatch] } })
+
+    expect(screen.getByText('Processing diff…')).toBeTruthy()
+    expect(screen.queryByText('Diff unavailable for this file.')).toBeNull()
+  })
+
   it('shows a terminal state for a pure rename without a text patch', () => {
     const renamedFile: PrFileDiff = {
       ...fileWithPatch,
@@ -902,6 +969,36 @@ describe('DiffViewer file content fetching', () => {
     const image = requireElement(screen.getByRole('img', { name: 'assets/logo.png new preview' }), HTMLImageElement)
     expect(image.getAttribute('src')).toBe('data:image/png;base64,base64-image')
     expect(screen.queryByText('Processing diff…')).toBeNull()
+  })
+
+  it('preserves image previews for a pure image rename', async () => {
+    const imageFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'assets/new-logo.png',
+      previous_filename: 'assets/old-logo.png',
+      status: 'renamed',
+      patch: null,
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+    }
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['assets/new-logo.png', { oldContent: 'old-image', newContent: 'new-image' }],
+    ]))
+
+    render(DiffViewer, {
+      props: {
+        files: [imageFile],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'assets/old-logo.png old preview' })).toBeTruthy()
+      expect(screen.getByRole('img', { name: 'assets/new-logo.png new preview' })).toBeTruthy()
+    })
+
+    expect(screen.queryByText('File renamed without content changes.')).toBeNull()
   })
 
   it('re-fetches when includeUncommitted prop changes', async () => {
