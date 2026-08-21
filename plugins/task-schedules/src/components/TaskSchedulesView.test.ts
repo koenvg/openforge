@@ -91,8 +91,11 @@ function mockBackend(initialSchedules: TaskSchedule[]) {
         id: input.id ?? 'saved-schedule',
         title: input.title,
         prompt: input.prompt,
+        kind: input.kind ?? existing?.kind ?? 'recurring',
         preset: input.preset,
-        cron: input.cron ?? existing?.cron ?? '0 9 * * *',
+        cron: input.kind === 'once' ? null : input.cron ?? existing?.cron ?? '0 9 * * *',
+        runAt: input.runAt ?? existing?.runAt ?? null,
+        nextFireAt: input.kind === 'once' ? input.runAt : existing?.nextFireAt ?? Date.UTC(2026, 0, 2, 9),
         mode: input.mode,
         enabled: input.enabled,
       })
@@ -227,6 +230,70 @@ describe('TaskSchedulesView workspace', () => {
     expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
   })
 
+  it('edits the date and time of a future one-off schedule', async () => {
+    const initialRunAtValue = '2099-08-26T13:45'
+    const updatedRunAtValue = '2099-08-27T10:15'
+    const oneOff = makeSchedule({
+      id: 'schedule-future-once',
+      title: 'Future dependency retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: new Date(initialRunAtValue).getTime(),
+      nextFireAt: new Date(initialRunAtValue).getTime(),
+    })
+    mockBackend([oneOff])
+    renderView()
+
+    const inspector = await selectSchedule('Future dependency retry')
+    await fireEvent.click(within(inspector).getByRole('button', { name: 'Edit' }))
+    const form = screen.getByRole('complementary', { name: 'Schedule form' })
+    const oneTime = within(form).getByRole('radio', { name: /One time/i }) as HTMLInputElement
+    expect(oneTime.checked).toBe(true)
+    expect(oneTime.disabled).toBe(true)
+    expect(within(form).getByText('Schedule type can’t be changed after creation.')).toBeTruthy()
+    const runAt = within(form).getByLabelText(/^Run on/i) as HTMLInputElement
+    expect(runAt.value).toBe(initialRunAtValue)
+
+    await fireEvent.input(runAt, { target: { value: updatedRunAtValue } })
+    await fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
+      projectId: 'project-1',
+      schedule: expect.objectContaining({
+        id: 'schedule-future-once',
+        kind: 'once',
+        runAt: new Date(updatedRunAtValue).getTime(),
+      }),
+    }))
+  })
+
+  it('preserves the exact one-off timestamp when editing other fields', async () => {
+    const exactRunAt = new Date('2099-08-26T13:45:32.456').getTime()
+    const oneOff = makeSchedule({
+      id: 'schedule-exact-once',
+      title: 'Exact dependency retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: exactRunAt,
+      nextFireAt: exactRunAt,
+    })
+    mockBackend([oneOff])
+    renderView()
+
+    const inspector = await selectSchedule('Exact dependency retry')
+    await fireEvent.click(within(inspector).getByRole('button', { name: 'Edit' }))
+    const form = screen.getByRole('complementary', { name: 'Schedule form' })
+    await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Exact dependency retry updated' } })
+    await fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
+      projectId: 'project-1',
+      schedule: expect.objectContaining({ id: 'schedule-exact-once', runAt: exactRunAt }),
+    }))
+  })
+
   it('refreshes the mounted view when agent-created schedules may have changed', async () => {
     const runAt = Date.UTC(2026, 7, 26, 13, 46)
     const backend = mockBackend([])
@@ -302,6 +369,52 @@ describe('TaskSchedulesView workspace', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.queryByRole('complementary', { name: 'Schedule form' })).toBeNull()
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New schedule' })))
+  })
+
+  it('creates a one-off schedule for a local date and time', async () => {
+    mockBackend([])
+    renderView()
+    await screen.findByText('No schedules found')
+    const form = await openNewSchedule()
+    const runAtValue = '2099-08-26T13:45'
+
+    await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Resume dependency upgrade' } })
+    await fireEvent.input(within(form).getByLabelText(/prompt/i), { target: { value: 'Continue the dependency upgrade.' } })
+    await fireEvent.click(within(form).getByRole('radio', { name: /One time/i }))
+    const runAt = await within(form).findByLabelText(/^Run on/i)
+    expect(within(form).queryByLabelText('Frequency')).toBeNull()
+    await fireEvent.input(runAt, { target: { value: runAtValue } })
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
+      projectId: 'project-1',
+      schedule: expect.objectContaining({
+        title: 'Resume dependency upgrade',
+        kind: 'once',
+        runAt: new Date(runAtValue).getTime(),
+        preset: null,
+        cron: null,
+      }),
+    }))
+  })
+
+  it('focuses a one-off date that is not in the future', async () => {
+    mockBackend([])
+    renderView()
+    await screen.findByText('No schedules found')
+    const form = await openNewSchedule()
+
+    await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Expired schedule' } })
+    await fireEvent.input(within(form).getByLabelText(/prompt/i), { target: { value: 'This should not be created.' } })
+    await fireEvent.click(within(form).getByRole('radio', { name: /One time/i }))
+    const runAt = await within(form).findByLabelText(/^Run on/i)
+    await fireEvent.input(runAt, { target: { value: '2000-01-01T09:00' } })
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+
+    expect(await within(form).findByText('Choose a date and time in the future.')).toBeTruthy()
+    expect(runAt.getAttribute('aria-invalid')).toBe('true')
+    await waitFor(() => expect(document.activeElement).toBe(runAt))
+    expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
   })
 
   it('creates and edits schedules through labelled forms', async () => {

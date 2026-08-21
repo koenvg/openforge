@@ -1,9 +1,12 @@
-import type { SchedulePreset, TaskScheduleMode } from './types'
+import type { SchedulePreset, TaskScheduleKind, TaskScheduleMode } from './types'
 
 export type ScheduleDraft = {
   id: string | null
   title: string
   prompt: string
+  kind: TaskScheduleKind
+  runAt: string
+  originalRunAt: number | null
   preset: SchedulePreset
   cron: string
   timeOfDay: string
@@ -15,6 +18,7 @@ export type ScheduleDraft = {
 
 export type ScheduleFieldErrors = {
   cron: string | null
+  runAt: string | null
 }
 
 export type ScheduleFilter = 'all' | 'enabled' | 'paused'

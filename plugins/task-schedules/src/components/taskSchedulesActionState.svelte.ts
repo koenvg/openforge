@@ -127,6 +127,7 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
     try {
       const saved = await ipc.save(activeProjectId, {
         ...draftToPayload(draftFromSchedule(schedule)),
+        runAt: schedule.runAt,
         enabled: !schedule.enabled,
       })
       if (!isCurrentProject(activeProjectId)) return

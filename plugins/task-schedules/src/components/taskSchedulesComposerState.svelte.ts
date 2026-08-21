@@ -1,6 +1,7 @@
 import {
   CRON_HELP_TEXT,
   draftCronError,
+  draftRunAtError,
   draftFromSchedule,
   emptyScheduleDraft,
 } from '../lib/taskSchedulesViewModel'
@@ -22,7 +23,7 @@ interface TaskSchedulesComposerStateOptions {
 
 export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStateOptions) {
   let draft = $state<ScheduleDraft>(emptyScheduleDraft())
-  let fieldErrors = $state<ScheduleFieldErrors>({ cron: null })
+  let fieldErrors = $state<ScheduleFieldErrors>({ cron: null, runAt: null })
   let selectedScheduleId = $state<string | null>(null)
   let panelMode = $state<SchedulePanelMode>(null)
   let filter = $state<ScheduleFilter>('all')
@@ -44,7 +45,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
     panelMode = null
     draft = emptyScheduleDraft()
     draftDirty = false
-    fieldErrors = { cron: null }
+    fieldErrors = { cron: null, runAt: null }
     filter = 'all'
     schedulePendingDelete = null
     showDiscardConfirmation = false
@@ -78,7 +79,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   function openNewSchedule(): void {
     requestPanelChange(() => {
       draft = emptyScheduleDraft()
-      fieldErrors = { cron: null }
+      fieldErrors = { cron: null, runAt: null }
       draftDirty = false
       panelMode = 'form'
       titleFocusRequest += 1
@@ -88,7 +89,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
 
   function editSchedule(schedule: TaskSchedule): void {
     draft = draftFromSchedule(schedule)
-    fieldErrors = { cron: null }
+    fieldErrors = { cron: null, runAt: null }
     draftDirty = false
     panelMode = 'form'
     titleFocusRequest += 1
@@ -137,20 +138,21 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
 
   function validateDraft(focusError = false): boolean {
     const cronError = draftCronError(draft)
-    if (!cronError) return true
-    fieldErrors = { cron: cronError }
+    const runAtError = draftRunAtError(draft)
+    if (!cronError && !runAtError) return true
+    fieldErrors = { cron: cronError, runAt: runAtError }
     options.reportError('Fix the highlighted schedule fields and try again.')
     if (focusError) errorFocusRequest += 1
     return false
   }
 
   function prepareDraftForSave(): ScheduleDraft | null {
-    fieldErrors = { cron: null }
+    fieldErrors = { cron: null, runAt: null }
     return validateDraft(true) ? draft : null
   }
 
   function handleCronSaveError(): void {
-    fieldErrors = { cron: CRON_HELP_TEXT }
+    fieldErrors = { cron: CRON_HELP_TEXT, runAt: null }
     errorFocusRequest += 1
   }
 
