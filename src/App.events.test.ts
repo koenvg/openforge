@@ -111,6 +111,27 @@ describe('App desktop events', () => {
     })
   })
 
+  describe('openforge.open-url', () => {
+    it('routes backend Trusted Plugin URL requests through the host URL adapter', async () => {
+      const App = (await import('./App.svelte')).default
+      const { openUrl } = await import('./lib/ipc')
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(eventListeners.has('openforge.open-url')).toBe(true)
+      })
+
+      const callback = requireDefined(
+        eventListeners.get('openforge.open-url'),
+        'Expected openforge.open-url listener to be registered',
+      )
+      await callback({ payload: { url: 'https://example.com/plugin-docs' } })
+
+      expect(openUrl).toHaveBeenCalledWith('https://example.com/plugin-docs')
+    })
+  })
+
   describe('task-changed created events', () => {
     it('stores the created task prompt text for the spawned-task toast', async () => {
       const App = (await import('./App.svelte')).default
