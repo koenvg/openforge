@@ -7,7 +7,8 @@
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
-  import { getImagePreviewDataUrl } from '@openforge-app/pr-review-ui/diffAdapter'
+  import { createReviewedBaselineController } from '../../lib/reviewedBaselineController.svelte'
+  import { createSelfReviewFileContentLoader } from '../../lib/selfReviewFileContentLoader'
   import {
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
@@ -20,12 +21,10 @@
     type ReviewedFileSnapshot,
   } from '../../lib/taskReviewPaneState'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
-  import { buildReviewedBaselineComparison } from '../../lib/reviewedBaselineDiff'
   import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin'
   import { useAppRouter } from '../../lib/router.svelte'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
-  import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
   import DiffViewer from '../review/shared/diff-viewer/DiffViewer.svelte'
   import SelfReviewChangedFilesPanel from './SelfReviewChangedFilesPanel.svelte'
   import SelfReviewFeedbackPanel from './SelfReviewFeedbackPanel.svelte'
@@ -60,8 +59,6 @@
   let showAddressed = $state(false)
   let reviewedFileShas = $state<Map<string, string>>(new Map())
   let reviewedFileSnapshots = $state<Map<string, ReviewedFileSnapshot>>(new Map())
-  type ReviewedFileComparison = { file: PrFileDiff; contents: FileContents }
-  let reviewedComparisonByFilename = $state<Map<string, ReviewedFileComparison>>(new Map())
 
   let hasRestoredScroll = false
 
@@ -85,16 +82,38 @@
 
   let selfReviewState = $derived($selfReviewStateByTask.get(task.id))
   let selfReviewDiffFiles = $derived(selfReviewState?.diffFiles ?? [])
+
+  const reviewedBaseline = createReviewedBaselineController({
+    getReviewFiles: () => selfReviewDiffFiles,
+    getSnapshots: () => reviewedFileSnapshots,
+    getSelectedCommitSha: () => diffLoader.selectedCommitSha,
+    getFileIdentity: getTaskReviewFileIdentity,
+    fetchCurrentContents: (files) => fileContentLoader.fetchCurrentBatch(files),
+  })
+
+  const fileContentLoader = createSelfReviewFileContentLoader({
+    getContext: () => ({
+      taskId: task.id,
+      selectedCommitSha: diffLoader.selectedCommitSha,
+      includeCommitted,
+      includeUncommitted,
+    }),
+    getComparisonContents: reviewedBaseline.getComparisonContents,
+    getTaskFileContents: (...args) => getTaskFileContents(...args),
+    getTaskBatchFileContents: (...args) => getTaskBatchFileContents(...args),
+    getCommitFileContents: (...args) => getCommitFileContents(...args),
+    getCommitBatchFileContents: (...args) => getCommitBatchFileContents(...args),
+  })
   let nonApplicationFileCount = $derived(countNonApplicationFiles(selfReviewDiffFiles))
   // The file tree and diff must show the same set, so both derive from the same toggle.
   let treeFiles = $derived(filterApplicationFiles(selfReviewDiffFiles, includeNonApplicationFiles))
-  let comparisonMappedDiffFiles = $derived(selfReviewDiffFiles.map((file) => reviewedComparisonByFilename.get(file.filename)?.file ?? file))
+  let comparisonMappedDiffFiles = $derived(reviewedBaseline.mapFiles(selfReviewDiffFiles))
   let visibleDiffFiles = $derived(filterApplicationFiles(comparisonMappedDiffFiles, includeNonApplicationFiles))
   let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
   let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
-  let visibleInlineReviewComments = $derived(inlineReviewComments.filter((comment) => !reviewedComparisonByFilename.has(comment.path)))
-  let visiblePendingInlineComments = $derived(pendingInlineComments.filter((comment) => !reviewedComparisonByFilename.has(comment.path)))
+  let visibleInlineReviewComments = $derived(inlineReviewComments.filter((comment) => !reviewedBaseline.hasComparison(comment.path)))
+  let visiblePendingInlineComments = $derived(pendingInlineComments.filter((comment) => !reviewedBaseline.hasComparison(comment.path)))
   let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(diffLoader.linkedPr))
 
   let hasAutoOpened = false
@@ -117,76 +136,6 @@
     }
   }
 
-  function getBackingSelfReviewFile(file: PrFileDiff): PrFileDiff {
-    return selfReviewDiffFiles.find((currentFile) => currentFile.filename === file.filename) ?? file
-  }
-
-  function getVisibleFileReviewIdentity(file: PrFileDiff): string | null {
-    return getTaskReviewFileIdentity(getBackingSelfReviewFile(file))
-  }
-
-
-  function hasReviewedBaselineChange(file: PrFileDiff): boolean {
-    if (diffLoader.selectedCommitSha !== null) return false
-    const snapshot = reviewedFileSnapshots.get(file.filename)
-    const currentIdentity = getTaskReviewFileIdentity(getBackingSelfReviewFile(file))
-    return snapshot !== undefined && currentIdentity !== null && snapshot.identity !== currentIdentity
-  }
-
-  async function fetchCurrentTaskFileContents(file: PrFileDiff): Promise<FileContents> {
-    const sha = diffLoader.selectedCommitSha
-    if (sha !== null) {
-      const [oldContent, newContent] = await getCommitFileContents(
-        task.id,
-        sha,
-        file.filename,
-        file.previous_filename,
-        file.status,
-      )
-      return { oldContent, newContent }
-    }
-    const [oldContent, newContent] = await getTaskFileContents(
-      task.id,
-      file.filename,
-      file.previous_filename,
-      file.status,
-      includeCommitted,
-      includeUncommitted,
-    )
-    return { oldContent, newContent }
-  }
-
-  async function batchFetchCurrentTaskFileContents(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
-    const requests = files.map(f => ({ path: f.filename, oldPath: f.previous_filename ?? null, status: f.status }))
-    const sha = diffLoader.selectedCommitSha
-
-    const results = sha !== null
-      ? await getCommitBatchFileContents(task.id, sha, requests)
-      : await getTaskBatchFileContents(task.id, requests, includeCommitted, includeUncommitted)
-
-    const map = new Map<string, FileContents>()
-    files.forEach((file, i) => {
-      const [oldContent, newContent] = results[i]
-      map.set(file.filename, { oldContent, newContent })
-    })
-    return map
-  }
-
-  async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
-    const sha = diffLoader.selectedCommitSha
-    const [, content] = sha !== null
-      ? await getCommitFileContents(task.id, sha, repositoryPath, null, 'modified')
-      : await getTaskFileContents(
-        task.id,
-        repositoryPath,
-        null,
-        'modified',
-        includeCommitted,
-        includeUncommitted,
-      )
-
-    return getImagePreviewDataUrl(repositoryPath, content)
-  }
 
   async function openRepositoryPath(repositoryPath: string) {
     try {
@@ -196,77 +145,24 @@
     }
   }
 
-  async function fetchTaskFileContents(file: PrFileDiff): Promise<FileContents> {
-    const comparisonContents = reviewedComparisonByFilename.get(file.filename)?.contents
-    if (comparisonContents !== undefined) return comparisonContents
-    return fetchCurrentTaskFileContents(file)
-  }
-
-  async function batchFetchTaskFileContents(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
-    const map = new Map<string, FileContents>()
-    const currentFiles: PrFileDiff[] = []
-    for (const file of files) {
-      const comparisonContents = reviewedComparisonByFilename.get(file.filename)?.contents
-      if (comparisonContents !== undefined) {
-        map.set(file.filename, comparisonContents)
-      } else {
-        currentFiles.push(file)
-      }
-    }
-
-    if (currentFiles.length > 0) {
-      const currentContents = await batchFetchCurrentTaskFileContents(currentFiles)
-      for (const [filename, contents] of currentContents) {
-        map.set(filename, contents)
-      }
-    }
-    return map
-  }
 
   function handleIncludeCommittedChange(value: boolean) {
     includeCommitted = value
-    restoreAllChangesView()
+    reviewedBaseline.restoreAll()
     void diffLoader.refresh()
   }
 
   function handleIncludeUncommittedChange(value: boolean) {
     includeUncommitted = value
-    restoreAllChangesView()
+    reviewedBaseline.restoreAll()
     void diffLoader.refresh()
   }
 
   async function handleCommitSelect(sha: string | null) {
-    restoreAllChangesView()
+    reviewedBaseline.restoreAll()
     await diffLoader.selectCommit(sha)
   }
 
-  function restoreAllChangesView() {
-    reviewedComparisonByFilename = new Map()
-  }
-
-  function restoreFileAllChanges(filename: string) {
-    if (!reviewedComparisonByFilename.has(filename)) return
-    const next = new Map(reviewedComparisonByFilename)
-    next.delete(filename)
-    reviewedComparisonByFilename = next
-  }
-
-  async function showFileChangesSinceReviewed(file: PrFileDiff) {
-    const reviewFile = getBackingSelfReviewFile(file)
-    const result = await buildReviewedBaselineComparison({
-      files: [reviewFile],
-      snapshots: reviewedFileSnapshots,
-      getFileIdentity: getTaskReviewFileIdentity,
-      fetchCurrentContents: batchFetchCurrentTaskFileContents,
-    })
-    const comparisonFile = result.files[0]
-    const comparisonContents = result.contents.get(reviewFile.filename)
-    if (comparisonFile === undefined || comparisonContents === undefined) return
-    reviewedComparisonByFilename = new Map(reviewedComparisonByFilename).set(reviewFile.filename, {
-      file: comparisonFile,
-      contents: comparisonContents,
-    })
-  }
 
   function handlePendingInlineCommentsChange(comments: ReviewSubmissionComment[]) {
     setPendingSelfReviewComments(
@@ -274,7 +170,7 @@
       mergeVisiblePendingSelfReviewComments(
         pendingInlineComments,
         comments,
-        new Set(reviewedComparisonByFilename.keys()),
+        reviewedBaseline.comparisonFilenames,
       ),
     )
   }
@@ -286,18 +182,18 @@
 
   async function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
     if (reviewed) {
-      const reviewFile = getBackingSelfReviewFile(file)
+      const reviewFile = reviewedBaseline.getReviewFile(file)
       try {
-        const contents = await fetchCurrentTaskFileContents(reviewFile)
+        const contents = await fileContentLoader.fetchCurrent(reviewFile)
         markTaskReviewFileReviewed(task.id, reviewFile, { newContent: contents.newContent })
-        restoreFileAllChanges(reviewFile.filename)
+        reviewedBaseline.restoreFile(reviewFile.filename)
       } catch (e) {
         console.error(`Failed to snapshot reviewed file ${file.filename}:`, e)
         markTaskReviewFileReviewed(task.id, reviewFile)
       }
     } else {
       unmarkTaskReviewFileReviewed(task.id, file.filename)
-      restoreFileAllChanges(file.filename)
+      reviewedBaseline.restoreFile(file.filename)
     }
     syncReviewedFileShas()
   }
@@ -347,7 +243,7 @@
         bind:this={changedFilesPanel}
         files={treeFiles}
         {reviewedFileShas}
-        getFileReviewIdentity={getVisibleFileReviewIdentity}
+        getFileReviewIdentity={reviewedBaseline.getVisibleFileReviewIdentity}
         onToggleFileReviewed={handleToggleFileReviewed}
         {includeNonApplicationFiles}
         {nonApplicationFileCount}
@@ -427,9 +323,9 @@
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               onRequestFocusFileTree={() => changedFilesPanel?.focusTree()}
-              fetchFileContents={fetchTaskFileContents}
-              batchFetchFileContents={batchFetchTaskFileContents}
-              {resolveRepositoryImage}
+              fetchFileContents={fileContentLoader.fetch}
+              batchFetchFileContents={fileContentLoader.fetchBatch}
+              resolveRepositoryImage={fileContentLoader.resolveRepositoryImage}
               onOpenRepositoryPath={openRepositoryPath}
               {includeCommitted}
               {includeUncommitted}
@@ -437,16 +333,18 @@
               onScrollTopChange={(diffScrollTop) => updateTaskReviewPaneState(task.id, { diffScrollTop })}
               {reviewedFileShas}
               onToggleFileReviewed={handleToggleFileReviewed}
-              getFileReviewIdentity={getVisibleFileReviewIdentity}
+              getFileReviewIdentity={reviewedBaseline.getVisibleFileReviewIdentity}
             >
               {#snippet fileHeaderExtra(file)}
-                {@const comparisonActive = reviewedComparisonByFilename.has(file.filename)}
-                {#if comparisonActive || hasReviewedBaselineChange(file)}
+                {@const comparisonActive = reviewedBaseline.hasComparison(file.filename)}
+                {#if comparisonActive || reviewedBaseline.hasReviewedBaselineChange(file)}
                   <button
                     class="btn btn-ghost btn-sm h-10 min-h-10 flex-shrink-0 gap-1 text-[13px] {comparisonActive ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/60'}"
                     aria-label={comparisonActive ? `Show normal diff for ${file.filename}` : `Compare ${file.filename} with Reviewed File Snapshot`}
                     title={comparisonActive ? 'Show the normal diff for this file' : 'Compare this file with the last version you marked reviewed'}
-                    onclick={() => comparisonActive ? restoreFileAllChanges(file.filename) : showFileChangesSinceReviewed(file)}
+                    onclick={() => comparisonActive
+                      ? reviewedBaseline.restoreFile(file.filename)
+                      : reviewedBaseline.showChangesSinceReviewed(file)}
                   >
                     {comparisonActive ? 'Current diff' : 'Since reviewed'}
                   </button>
