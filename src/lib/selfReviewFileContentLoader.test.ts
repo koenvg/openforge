@@ -161,6 +161,27 @@ describe('createSelfReviewFileContentLoader', () => {
     )
   })
 
+  it('rejects an undersized task batch response with request and result counts', async () => {
+    const secondFile = { ...file, filename: 'src/second-feature.ts' }
+    const loader = createSelfReviewFileContentLoader({
+      getContext: () => ({
+        taskId: 'task-1',
+        selectedCommitSha: null,
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
+      getComparisonContents: () => undefined,
+      getTaskFileContents: vi.fn(),
+      getTaskBatchFileContents: vi.fn().mockResolvedValue([['before', 'after']]),
+      getCommitFileContents: vi.fn(),
+      getCommitBatchFileContents: vi.fn(),
+    })
+
+    await expect(loader.fetchCurrentBatch([file, secondFile])).rejects.toThrow(
+      'getTaskBatchFileContents response count mismatch: requestCount=2, resultCount=1',
+    )
+  })
+
   it('returns reviewed comparison contents without loading the current file again', async () => {
     const comparisonContents = { oldContent: 'reviewed', newContent: 'current' }
     const getTaskFileContents = vi.fn()
@@ -180,5 +201,26 @@ describe('createSelfReviewFileContentLoader', () => {
 
     await expect(loader.fetch(file)).resolves.toBe(comparisonContents)
     expect(getTaskFileContents).not.toHaveBeenCalled()
+  })
+
+  it('rejects an undersized commit batch response with request and result counts', async () => {
+    const secondFile = { ...file, filename: 'src/second-feature.ts' }
+    const loader = createSelfReviewFileContentLoader({
+      getContext: () => ({
+        taskId: 'task-1',
+        selectedCommitSha: 'commit-sha',
+        includeCommitted: true,
+        includeUncommitted: true,
+      }),
+      getComparisonContents: () => undefined,
+      getTaskFileContents: vi.fn(),
+      getTaskBatchFileContents: vi.fn(),
+      getCommitFileContents: vi.fn(),
+      getCommitBatchFileContents: vi.fn().mockResolvedValue([['before', 'after']]),
+    })
+
+    await expect(loader.fetchCurrentBatch([file, secondFile])).rejects.toThrow(
+      'getCommitBatchFileContents response count mismatch: requestCount=2, resultCount=1',
+    )
   })
 })
