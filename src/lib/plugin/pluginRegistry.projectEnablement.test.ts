@@ -1,0 +1,248 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  activatePlugin,
+  clearLoadedPluginMock,
+  deactivatePluginLoaderMock,
+  defineFrontendPlugin,
+  disablePluginForProject,
+  enablePluginForProject,
+  enabledPluginIds,
+  get,
+  getEnabledPluginsMock,
+  getRegisteredComponent,
+  installFromLocal,
+  installPluginFromLocalIpcMock,
+  installedPlugins,
+  loadPluginFrontendMock,
+  makeManifest,
+  makeNormalized,
+  pluginBackendWhenReadyMock,
+  registryLoadEnabledForProject,
+  resetPluginRegistryTestState,
+  runtimeContributionSources,
+} from './pluginRegistryTestSupport'
+
+describe('pluginRegistry project enablement', () => {
+  beforeEach(resetPluginRegistryTestState)
+
+  it('loadEnabledForProject populates enabled set', async () => {
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('pa'), makeNormalized('pb')])
+    await registryLoadEnabledForProject('proj1')
+    const set = get(enabledPluginIds)
+    expect(set.has('pa')).toBe(true)
+    expect(set.has('pb')).toBe(true)
+  })
+
+  it('readies enabled backend plugins during project load without opening their view', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'schedules',
+          title: 'Task Schedules',
+          icon: 'clock',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'scheduler-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['scheduler-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('scheduler-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'scheduler-plugin', module: frontendPlugin })
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('scheduler-plugin', 'plugin://scheduler-plugin/index.js')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('scheduler-plugin')
+    expect(get(installedPlugins).get('scheduler-plugin')).toMatchObject({ state: 'active', error: null })
+  })
+
+  it('does not request backend readiness for enabled frontend-only plugins', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'frontend-only-plugin', frontend: 'index.js', backend: null })
+    installedPlugins.set(new Map([['frontend-only-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('frontend-only-plugin')])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'frontend-only-plugin', module: frontendPlugin })
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('frontend-only-plugin', 'plugin://frontend-only-plugin/index.js')
+    expect(pluginBackendWhenReadyMock).not.toHaveBeenCalled()
+  })
+
+  it('readies a backend plugin when it is enabled for a project', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Backend Plugin',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'enabled-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['enabled-backend-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enabled-backend-plugin', module: frontendPlugin })
+
+    await expect(enablePluginForProject('P-1', 'enabled-backend-plugin')).resolves.toBe(true)
+
+    expect(get(enabledPluginIds)).toEqual(new Set(['enabled-backend-plugin']))
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('enabled-backend-plugin')
+  })
+
+  it('records backend readiness failures in the existing plugin runtime error state', async () => {
+    const View = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Backend Plugin',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'failing-backend-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['failing-backend-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('failing-backend-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'failing-backend-plugin', module: frontendPlugin })
+    pluginBackendWhenReadyMock.mockRejectedValueOnce(new Error('backend failed'))
+
+    await registryLoadEnabledForProject('P-1')
+
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('failing-backend-plugin')
+    expect(get(installedPlugins).get('failing-backend-plugin')).toMatchObject({ state: 'error', error: 'backend failed' })
+  })
+
+  it('activates package plugins immediately when enabling and deactivates them when disabling', async () => {
+    const RuntimeView = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main View',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: RuntimeView,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'enable-runtime-plugin', frontend: './dist/frontend.js' })
+    installedPlugins.set(new Map([['enable-runtime-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      packageMetadata: {
+        id: 'enable-runtime-plugin',
+        apiVersion: 1,
+        displayName: 'Enable Runtime Plugin',
+        description: 'Runtime package plugin',
+        frontend: './dist/frontend.js',
+      },
+    }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enable-runtime-plugin', module: frontendPlugin })
+
+    await expect(enablePluginForProject('P-1', 'enable-runtime-plugin')).resolves.toBe(true)
+
+    expect(get(enabledPluginIds)).toEqual(new Set(['enable-runtime-plugin']))
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('active')
+    expect(get(runtimeContributionSources).get('enable-runtime-plugin')?.views).toMatchObject([
+      { id: 'main', title: 'Main View' },
+    ])
+
+    await disablePluginForProject('P-1', 'enable-runtime-plugin')
+
+    expect(get(enabledPluginIds)).toEqual(new Set())
+    expect(clearLoadedPluginMock).toHaveBeenCalledWith('enable-runtime-plugin')
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('installed')
+    expect(get(runtimeContributionSources).get('enable-runtime-plugin')).toBeUndefined()
+  })
+
+  it('loads declared Svelte styles when an installed local plugin is enabled', async () => {
+    const frontendPlugin = defineFrontendPlugin({ activate: vi.fn(() => undefined) })
+    installPluginFromLocalIpcMock.mockResolvedValue({
+      ...makeNormalized('local-svelte-plugin'),
+      frontendEntry: './dist/frontend.js',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/local-svelte-plugin',
+      packageMetadata: JSON.stringify({
+        id: 'local-svelte-plugin',
+        apiVersion: 1,
+        displayName: 'Local Svelte Plugin',
+        description: 'Styled local plugin',
+        frontend: './dist/frontend.js',
+        frontendStyles: ['./dist/plugin-local-svelte.css'],
+      }),
+    })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'local-svelte-plugin', module: frontendPlugin })
+
+    await installFromLocal('/plugins/local-svelte-plugin', 'project-1')
+    await expect(enablePluginForProject('project-1', 'local-svelte-plugin')).resolves.toBe(true)
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith(
+      'local-svelte-plugin',
+      'plugin://local-svelte-plugin/dist/frontend.js',
+      ['plugin://local-svelte-plugin/dist/plugin-local-svelte.css'],
+    )
+  })
+
+  it('disabling a plugin reconciles active lifecycle state and unregisters its views', async () => {
+    const manifest = makeManifest()
+    const Component = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({ id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: Component }))
+      },
+    })
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(true)
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(Component)
+
+    await disablePluginForProject('P-1', 'test-plugin')
+
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+  })
+
+  it('coalesces a synchronous burst of store writes into a single reconcile teardown', async () => {
+    const manifest = makeManifest({ id: 'burst-plugin' })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+
+    // Plugin is active in the store but no longer enabled: reconcile must deactivate it.
+    // Several transient writes land in the same tick (as happens during activation via
+    // setPluginRuntimeState). Each write notifies the reconcile subscribers, but they must
+    // coalesce into a single pass rather than spawning overlapping async reconciles that all
+    // read the same 'active' snapshot and tear the plugin down concurrently.
+    enabledPluginIds.set(new Set())
+    for (let i = 0; i < 5; i++) {
+      installedPlugins.set(new Map([['burst-plugin', { manifest, state: 'active', error: null }]]))
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(deactivatePluginLoaderMock).toHaveBeenCalledTimes(1)
+    expect(get(installedPlugins).get('burst-plugin')).toMatchObject({ state: 'installed' })
+  })
+})
