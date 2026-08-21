@@ -4,7 +4,7 @@ import {
   getFileStatusColor,
   getFileStatusClass,
   getFileStatusLabel,
-} from './fileStatus'
+} from '@openforge-app/pr-review-ui/fileStatus'
 
 describe('fileStatus', () => {
   describe('getFileStatusIcon', () => {
