@@ -50,7 +50,13 @@ export function createAppLifecycleController(options: AppLifecycleControllerOpti
     refreshWindowFocus()
 
     options.registerShortcuts(shortcuts)
-    const registeredUnlisteners = await options.registerDesktopEvents(appWindow)
+    let registeredUnlisteners: DesktopUnlistenFn[]
+    try {
+      registeredUnlisteners = await options.registerDesktopEvents(appWindow)
+    } catch (error) {
+      logError('[App] Failed to register desktop event listeners:', error)
+      registeredUnlisteners = []
+    }
     if (!started || generation !== startGeneration) {
       registeredUnlisteners.forEach((unlisten) => { unlisten() })
       return

@@ -105,4 +105,35 @@ describe('App lifecycle controller', () => {
 
     expect(loadStartupData).not.toHaveBeenCalled()
   })
+
+  it('reports desktop event registration failures and continues startup', async () => {
+    const registrationError = new Error('desktop bridge unavailable')
+    const resumeStartupSessions = vi.fn(async () => undefined)
+    const loadStartupData = vi.fn(async () => undefined)
+    const logError = vi.fn()
+    const controller = createAppLifecycleController({
+      createWindow: vi.fn(() => ({ destroy: vi.fn() } as never)),
+      createShortcuts: vi.fn(() => ({
+        register: vi.fn(),
+        unregister: vi.fn(),
+        handleKeydown: vi.fn(),
+      })),
+      registerShortcuts: vi.fn(),
+      registerDesktopEvents: vi.fn(async () => { throw registrationError }),
+      resumeStartupSessions,
+      loadStartupData,
+      onWindowFocusChange: vi.fn(),
+      logError,
+    })
+    controllers.push(controller)
+
+    await expect(controller.start()).resolves.toBeUndefined()
+
+    expect(logError).toHaveBeenCalledWith(
+      '[App] Failed to register desktop event listeners:',
+      registrationError,
+    )
+    expect(resumeStartupSessions).toHaveBeenCalledOnce()
+    expect(loadStartupData).toHaveBeenCalledOnce()
+  })
 })
