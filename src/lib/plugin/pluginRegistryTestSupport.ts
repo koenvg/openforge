@@ -1,0 +1,322 @@
+import { vi } from 'vitest'
+
+const {
+  forceGithubSyncMock,
+  installPluginMock,
+  getPluginIpcMock,
+  listPluginsMock,
+  installPluginFromGitIpcMock,
+  installPluginFromLocalIpcMock,
+  installPluginFromNpmIpcMock,
+  uninstallPluginIpcMock,
+  getEnabledPluginsMock,
+  pluginInvokeMock,
+  pluginBackendDeactivateMock,
+  pluginBackendWhenReadyMock,
+  getPluginStorageMock,
+  setPluginStorageMock,
+  deletePluginStorageMock,
+  spawnShellPtyMock,
+  openUrlMock,
+  writeClipboardTextMock,
+  fsReadDirMock,
+  fsReadFileMock,
+  fsWriteFileMock,
+  fsSearchFilesMock,
+  getConfigMock,
+  setConfigMock,
+  getProjectConfigMock,
+  setProjectConfigMock,
+} = vi.hoisted(() => ({
+  forceGithubSyncMock: vi.fn(),
+  installPluginMock: vi.fn(),
+  getPluginIpcMock: vi.fn(),
+  listPluginsMock: vi.fn(),
+  installPluginFromGitIpcMock: vi.fn(),
+  installPluginFromLocalIpcMock: vi.fn(),
+  installPluginFromNpmIpcMock: vi.fn(),
+  uninstallPluginIpcMock: vi.fn(),
+  getEnabledPluginsMock: vi.fn(),
+  pluginInvokeMock: vi.fn(),
+  pluginBackendDeactivateMock: vi.fn(),
+  pluginBackendWhenReadyMock: vi.fn(),
+  getPluginStorageMock: vi.fn(),
+  setPluginStorageMock: vi.fn(),
+  deletePluginStorageMock: vi.fn(),
+  spawnShellPtyMock: vi.fn(),
+  openUrlMock: vi.fn(),
+  writeClipboardTextMock: vi.fn(),
+  fsReadDirMock: vi.fn(),
+  fsReadFileMock: vi.fn(),
+  fsWriteFileMock: vi.fn(),
+  fsSearchFilesMock: vi.fn(),
+  getConfigMock: vi.fn(),
+  setConfigMock: vi.fn(),
+  getProjectConfigMock: vi.fn(),
+  setProjectConfigMock: vi.fn(),
+}))
+
+vi.mock('../ipc', () => ({
+  forceGithubSync: forceGithubSyncMock,
+  registerBuiltinPlugin: installPluginMock,
+  uninstallPlugin: uninstallPluginIpcMock,
+  getEnabledPlugins: getEnabledPluginsMock,
+  getPlugin: getPluginIpcMock,
+  listPlugins: listPluginsMock,
+  setPluginEnabled: vi.fn(),
+  installPluginFromGit: installPluginFromGitIpcMock,
+  installPluginFromLocal: installPluginFromLocalIpcMock,
+  installPluginFromNpm: installPluginFromNpmIpcMock,
+  pluginInvoke: pluginInvokeMock,
+  pluginBackendDeactivate: pluginBackendDeactivateMock,
+  pluginBackendWhenReady: pluginBackendWhenReadyMock,
+  getPluginStorage: getPluginStorageMock,
+  setPluginStorage: setPluginStorageMock,
+  deletePluginStorage: deletePluginStorageMock,
+  spawnShellPty: spawnShellPtyMock,
+  openUrl: openUrlMock,
+  writeClipboardText: writeClipboardTextMock,
+  fsReadDir: fsReadDirMock,
+  fsReadFile: fsReadFileMock,
+  fsWriteFile: fsWriteFileMock,
+  fsSearchFiles: fsSearchFilesMock,
+  getConfig: getConfigMock,
+  setConfig: setConfigMock,
+  getProjectConfig: getProjectConfigMock,
+  setProjectConfig: setProjectConfigMock,
+}))
+
+const {
+  loadPluginFrontendMock,
+  activatePluginLoaderMock,
+  deactivatePluginLoaderMock,
+  clearLoadedPluginMock,
+  isPluginLoadedMock,
+  getBuiltinPluginModuleMock,
+} = vi.hoisted(() => ({
+  loadPluginFrontendMock: vi.fn(),
+  activatePluginLoaderMock: vi.fn(),
+  deactivatePluginLoaderMock: vi.fn(),
+  clearLoadedPluginMock: vi.fn(),
+  isPluginLoadedMock: vi.fn(),
+  getBuiltinPluginModuleMock: vi.fn(),
+}))
+
+vi.mock('./pluginLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./pluginLoader')>()
+
+  return {
+    ...actual,
+    loadPluginFrontend: loadPluginFrontendMock,
+    activatePlugin: activatePluginLoaderMock,
+    deactivatePlugin: deactivatePluginLoaderMock,
+    clearLoadedPlugin: clearLoadedPluginMock,
+    isPluginLoaded: isPluginLoadedMock,
+  }
+})
+
+const {
+  listenDesktopEventMock,
+  desktopEventHandlers,
+} = vi.hoisted(() => ({
+  listenDesktopEventMock: vi.fn(),
+  desktopEventHandlers: new Map<string, (event: { payload: unknown }) => void>(),
+}))
+
+vi.mock('../desktopIpc', () => ({
+  listenDesktopEvent: listenDesktopEventMock,
+}))
+
+vi.mock('./builtinPluginModules', () => ({
+  getBuiltinPluginModule: getBuiltinPluginModuleMock,
+}))
+
+import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { PluginManifest } from './types'
+import type { NormalizedPluginRow } from '../ipc'
+import type { RuntimeContributionSnapshot } from './runtimeContributionRegistry'
+
+const { defineFrontendPlugin } = await import('@openforge-app/plugin-sdk/frontend')
+const { get } = await import('svelte/store')
+const {
+  activatePlugin,
+  deactivatePluginById,
+  disablePluginForProject,
+  emitPluginHostEvent,
+  enablePluginForProject,
+  executePluginCommand,
+  getPluginRenderProps,
+  initializePluginRuntime,
+  installFromLocal,
+  installPluginFromGit,
+  installPluginFromManifest,
+  installPluginFromNpm,
+  loadEnabledForProject: registryLoadEnabledForProject,
+  reloadInstalledPluginMetadata,
+  reloadLocalPluginFromDisk,
+  reloadPluginForProject,
+  uninstallPlugin,
+} = await import('./pluginRegistry')
+const { installedPlugins, enabledPluginIds, runtimeContributionSources } = await import('./pluginStore')
+const { _resetPluginActivationLifecycleForTests } = await import('./pluginActivationLifecycle')
+const {
+  clearComponentRegistry,
+  getRegisteredComponent,
+  getRegisteredRenderableComponent,
+} = await import('./componentRegistry')
+const {
+  applyRuntimeSnapshotContributions,
+  getPluginCommandHandler,
+} = await import('./pluginRuntimeContributions')
+
+function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+  return {
+    id: 'test-plugin',
+    name: 'Test Plugin',
+    version: '1.0.0',
+    apiVersion: 1,
+    description: 'A test plugin',
+    permissions: [],
+    frontend: 'index.js',
+    backend: null,
+    ...overrides,
+  }
+}
+
+function makeNormalized(id: string): NormalizedPluginRow {
+  return {
+    id,
+    name: `Plugin ${id}`,
+    version: '1.0.0',
+    apiVersion: 1,
+    description: 'Test',
+    permissions: '[]',
+    contributes: '{}',
+    frontendEntry: 'index.js',
+    backendEntry: null,
+    installPath: '/tmp/plugin',
+    sourceKind: 'legacy',
+    sourceSpec: '',
+    packageMetadata: '{}',
+    installedAt: 0,
+    isBuiltin: false,
+  }
+}
+
+export function resetPluginRegistryTestState(): void {
+  delete window.openforge
+  installPluginMock.mockReset()
+  forceGithubSyncMock.mockReset()
+  getPluginIpcMock.mockReset()
+  listPluginsMock.mockReset()
+  listPluginsMock.mockResolvedValue([])
+  installPluginFromGitIpcMock.mockReset()
+  installPluginFromLocalIpcMock.mockReset()
+  installPluginFromNpmIpcMock.mockReset()
+  uninstallPluginIpcMock.mockReset()
+  getEnabledPluginsMock.mockReset()
+  pluginInvokeMock.mockReset()
+  pluginInvokeMock.mockResolvedValue(undefined)
+  pluginBackendDeactivateMock.mockReset()
+  pluginBackendDeactivateMock.mockResolvedValue(undefined)
+  pluginBackendWhenReadyMock.mockReset()
+  pluginBackendWhenReadyMock.mockResolvedValue(undefined)
+  getPluginStorageMock.mockReset()
+  setPluginStorageMock.mockReset()
+  deletePluginStorageMock.mockReset()
+  spawnShellPtyMock.mockReset()
+  openUrlMock.mockReset()
+  openUrlMock.mockResolvedValue(undefined)
+  fsReadDirMock.mockReset()
+  fsReadFileMock.mockReset()
+  fsWriteFileMock.mockReset()
+  fsSearchFilesMock.mockReset()
+  getConfigMock.mockReset()
+  setConfigMock.mockReset()
+  getProjectConfigMock.mockReset()
+  setProjectConfigMock.mockReset()
+  listenDesktopEventMock.mockReset()
+  desktopEventHandlers.clear()
+  listenDesktopEventMock.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
+    desktopEventHandlers.set(event, handler)
+    return vi.fn()
+  })
+  loadPluginFrontendMock.mockReset()
+  activatePluginLoaderMock.mockReset()
+  deactivatePluginLoaderMock.mockReset()
+  clearLoadedPluginMock.mockReset()
+  isPluginLoadedMock.mockReset()
+  getBuiltinPluginModuleMock.mockReset()
+  _resetPluginActivationLifecycleForTests()
+  installedPlugins.set(new Map())
+  enabledPluginIds.set(new Set())
+  runtimeContributionSources.set(new Map())
+  clearComponentRegistry()
+}
+
+
+export {
+  activatePlugin,
+  activatePluginLoaderMock,
+  applyRuntimeSnapshotContributions,
+  clearLoadedPluginMock,
+  deactivatePluginById,
+  deactivatePluginLoaderMock,
+  defineFrontendPlugin,
+  deletePluginStorageMock,
+  desktopEventHandlers,
+  disablePluginForProject,
+  emitPluginHostEvent,
+  enablePluginForProject,
+  enabledPluginIds,
+  executePluginCommand,
+  forceGithubSyncMock,
+  fsReadDirMock,
+  fsReadFileMock,
+  fsSearchFilesMock,
+  fsWriteFileMock,
+  get,
+  getBuiltinPluginModuleMock,
+  getConfigMock,
+  getEnabledPluginsMock,
+  getPluginCommandHandler,
+  getPluginIpcMock,
+  getPluginRenderProps,
+  getPluginStorageMock,
+  getProjectConfigMock,
+  getRegisteredComponent,
+  getRegisteredRenderableComponent,
+  initializePluginRuntime,
+  installFromLocal,
+  installPluginFromGit,
+  installPluginFromGitIpcMock,
+  installPluginFromLocalIpcMock,
+  installPluginFromManifest,
+  installPluginFromNpm,
+  installPluginFromNpmIpcMock,
+  installPluginMock,
+  installedPlugins,
+  isPluginLoadedMock,
+  listPluginsMock,
+  listenDesktopEventMock,
+  loadPluginFrontendMock,
+  makeManifest,
+  makeNormalized,
+  openUrlMock,
+  pluginBackendDeactivateMock,
+  pluginBackendWhenReadyMock,
+  pluginInvokeMock,
+  registryLoadEnabledForProject,
+  reloadInstalledPluginMetadata,
+  reloadLocalPluginFromDisk,
+  reloadPluginForProject,
+  runtimeContributionSources,
+  setConfigMock,
+  setPluginStorageMock,
+  setProjectConfigMock,
+  spawnShellPtyMock,
+  uninstallPlugin,
+  uninstallPluginIpcMock,
+  writeClipboardTextMock,
+}
+export type { FrontendOpenForgeAPI, RuntimeContributionSnapshot }
