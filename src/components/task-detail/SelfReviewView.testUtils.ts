@@ -2,15 +2,20 @@ import { DiffFile } from "@git-diff-view/core";
 import { highlighter } from "@git-diff-view/lowlight";
 import { configureDiffHighlighter } from "@openforge-app/pr-review-ui/diffHighlightConfig";
 import type { DiffWorkerRequest, DiffWorkerResponse } from "@openforge-app/pr-review-ui/diffWorker";
-import { writable } from "svelte/store";
+import { render } from "@testing-library/svelte";
+import type { ComponentProps } from "svelte";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import type { PrFileDiff, Task } from "../../lib/types";
+import SelfReviewView from "./SelfReviewView.svelte";
 
-vi.mock("../../lib/stores", () => ({
+vi.mock("../../lib/stores", async () => {
+	const { writable } = await import("svelte/store");
+	return {
 	pendingManualComments: writable([]),
 	ticketPrs: writable(new Map()),
 	taskDraftNotes: writable(new Map()),
-}));
+	};
+});
 
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
 
@@ -98,6 +103,19 @@ export const baseDiff: PrFileDiff = {
 	is_truncated: false,
 	patch_line_count: null,
 };
+
+export function renderSelfReviewView(
+	overrides: Partial<ComponentProps<typeof SelfReviewView>> = {},
+) {
+	return render(SelfReviewView, {
+		props: {
+			task: baseTask,
+			agentStatus: null,
+			onSendToAgent: vi.fn(),
+			...overrides,
+		},
+	});
+}
 
 export class InlineDiffWorker {
 	onmessage: ((ev: MessageEvent<DiffWorkerResponse>) => void) | null = null;

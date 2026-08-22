@@ -1,9 +1,9 @@
 import {
 	baseDiff,
-	baseTask,
+	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
 import type { PrComment, PullRequestInfo } from "../../lib/types";
@@ -18,7 +18,6 @@ import {
 	setSelfReviewDiffFiles,
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
-import SelfReviewView from "./SelfReviewView.svelte";
 
 setupSelfReviewViewTestSuite();
 
@@ -83,13 +82,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		const { container } = render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		const { container } = renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(container.querySelector("img")?.getAttribute("src")).toBe("https://raw.githubusercontent.com/acme/repo/abc/docs/review.png");
@@ -105,13 +98,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			// Unaddressed comment should be visible
@@ -130,13 +117,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await fireEvent.click(await screen.findByRole("button", { name: /mark addressed/i }));
 
@@ -164,13 +145,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByText("Comment 1")).toBeTruthy();
@@ -197,13 +172,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByText("Comment 1")).toBeTruthy();
@@ -221,13 +190,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		// Feedback stays visible in the normal review flow even when every comment is addressed.
 		await waitFor(() => {
@@ -250,13 +213,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		ticketPrs.set(new Map([["task-1", [mockPr]]]));
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			// Sidebar should auto-open due to unaddressed comment
