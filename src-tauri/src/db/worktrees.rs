@@ -25,7 +25,7 @@ impl super::Database {
         worktree_path: &str,
         branch_name: &str,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         // Upsert keyed on the UNIQUE task_id. A blind INSERT would fail with a
@@ -58,7 +58,7 @@ impl super::Database {
 
     /// Restore a worktree record replaced during a failed Task Start attempt.
     pub fn restore_worktree_record(&self, record: &WorktreeRow) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE worktrees
              SET project_id = ?1, repo_path = ?2, worktree_path = ?3,
@@ -80,7 +80,7 @@ impl super::Database {
 
     /// Get worktree for a task
     pub fn get_worktree_for_task(&self, task_id: &str) -> Result<Option<WorktreeRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at
              FROM worktrees WHERE task_id = ?1",
@@ -105,7 +105,7 @@ impl super::Database {
 
     /// Update worktree status
     pub fn update_worktree_status(&self, task_id: &str, status: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE worktrees SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
@@ -116,7 +116,7 @@ impl super::Database {
 
     /// Delete a worktree record
     pub fn delete_worktree_record(&self, task_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "DELETE FROM worktrees WHERE task_id = ?1",
             rusqlite::params![task_id],
@@ -126,7 +126,7 @@ impl super::Database {
 
     /// Get all active worktrees
     pub fn get_active_worktrees(&self) -> Result<Vec<WorktreeRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at
              FROM worktrees WHERE status = 'active' ORDER BY updated_at DESC",
@@ -157,7 +157,7 @@ impl super::Database {
     /// Returns active worktrees for non-done tasks that have at least one agent session
     /// (i.e., tasks that previously had agent work in progress).
     pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT DISTINCT w.id, w.task_id, w.project_id, w.repo_path, w.worktree_path,
                     w.branch_name, w.status, w.created_at, w.updated_at
@@ -210,7 +210,7 @@ impl super::Database {
     /// Get project_id for a given worktree path.
     /// Used by create_task to deduce the project when an agent creates a subtask.
     pub fn get_project_for_worktree(&self, worktree_path: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt =
             conn.prepare("SELECT project_id FROM worktrees WHERE worktree_path = ?1 LIMIT 1")?;
         let mut rows = stmt.query([worktree_path])?;

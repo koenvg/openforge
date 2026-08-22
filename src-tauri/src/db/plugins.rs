@@ -24,7 +24,7 @@ pub struct PluginRow {
 impl super::Database {
     /// Insert a plugin record. Updates metadata if id already exists.
     pub fn install_plugin(&self, plugin: &PluginRow) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO plugins
                 (id, name, version, api_version, description, permissions, contributes,
@@ -69,7 +69,7 @@ impl super::Database {
 
     /// Remove a plugin and transactionally enqueue its Task Browser Session purge.
     pub fn uninstall_plugin(&self, plugin_id: &str) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let transaction = conn.transaction()?;
         super::browser_session_purges::enqueue_plugin_purge_if_present(&transaction, plugin_id)?;
         transaction.execute("DELETE FROM plugins WHERE id = ?1", [plugin_id])?;
@@ -79,7 +79,7 @@ impl super::Database {
 
     /// Fetch a single plugin by id.
     pub fn get_plugin(&self, plugin_id: &str) -> Result<Option<PluginRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, version, api_version, description, permissions, contributes,
                     frontend_entry, backend_entry, install_path, source_kind, source_spec,
@@ -95,7 +95,7 @@ impl super::Database {
 
     /// Return all installed plugins ordered by name.
     pub fn list_plugins(&self) -> Result<Vec<PluginRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, version, api_version, description, permissions, contributes,
                     frontend_entry, backend_entry, install_path, source_kind, source_spec,
@@ -118,7 +118,7 @@ impl super::Database {
         plugin_id: &str,
         enabled: bool,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO project_plugins (project_id, plugin_id, enabled)
              VALUES (?1, ?2, ?3)
@@ -130,7 +130,7 @@ impl super::Database {
 
     /// Set the global default enabled flag for a plugin (upsert).
     pub fn set_global_plugin_enabled(&self, plugin_id: &str, enabled: bool) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO global_plugins (plugin_id, enabled) VALUES (?1, ?2)
              ON CONFLICT(plugin_id) DO UPDATE SET enabled = excluded.enabled",
@@ -141,7 +141,7 @@ impl super::Database {
 
     /// Return (plugin_id, enabled) for every plugin with an explicit global default.
     pub fn get_global_plugin_defaults(&self) -> Result<Vec<(String, bool)>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT plugin_id, enabled FROM global_plugins")?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
@@ -159,7 +159,7 @@ impl super::Database {
     /// is_builtin`, so a project inherits the global default when it has no
     /// explicit override, and falls back to the built-in default otherwise.
     pub fn get_enabled_plugins(&self, project_id: &str) -> Result<Vec<PluginRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT p.id, p.name, p.version, p.api_version, p.description, p.permissions,
                     p.contributes, p.frontend_entry, p.backend_entry, p.install_path,
@@ -183,7 +183,7 @@ impl super::Database {
     /// Precedence: `project_plugins.enabled ?? global_plugins.enabled ??
     /// is_builtin`.
     pub fn is_plugin_enabled(&self, project_id: &str, plugin_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let enabled = conn
             .query_row(
                 "SELECT COALESCE(
@@ -209,7 +209,7 @@ impl super::Database {
         scope_id: Option<&str>,
         key: &str,
     ) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
         let mut stmt = conn.prepare(
             "SELECT value FROM plugin_storage
@@ -231,7 +231,7 @@ impl super::Database {
         key: &str,
         value: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
         conn.execute(
             "INSERT INTO plugin_storage (plugin_id, scope, scope_id, key, value)
@@ -249,7 +249,7 @@ impl super::Database {
         scope_id: Option<&str>,
         key: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
         conn.execute(
             "DELETE FROM plugin_storage

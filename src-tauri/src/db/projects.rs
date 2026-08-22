@@ -30,7 +30,7 @@ pub struct ProjectAttentionRow {
 impl super::Database {
     /// Create a new project with auto-incremented ID
     pub fn create_project(&self, name: &str, path: &str) -> Result<ProjectRow> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
 
         let next_id: i64 = conn.query_row(
             "SELECT value FROM config WHERE key = 'next_project_id'",
@@ -67,7 +67,7 @@ impl super::Database {
 
     /// Returns true if any project is registered at the exact given path.
     pub fn project_with_path_exists(&self, path: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM projects WHERE path = ?1",
             [path],
@@ -78,7 +78,7 @@ impl super::Database {
 
     /// Get all projects
     pub fn get_all_projects(&self) -> Result<Vec<ProjectRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, path, created_at, updated_at 
              FROM projects ORDER BY updated_at DESC",
@@ -103,7 +103,7 @@ impl super::Database {
 
     /// Get a project by ID
     pub fn get_project(&self, id: &str) -> Result<Option<ProjectRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, path, created_at, updated_at 
              FROM projects WHERE id = ?1",
@@ -124,7 +124,7 @@ impl super::Database {
 
     /// Update a project
     pub fn update_project(&self, id: &str, name: &str, path: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE projects SET name = ?1, path = ?2, updated_at = ?3 WHERE id = ?4",
@@ -135,7 +135,7 @@ impl super::Database {
 
     /// Delete a project and all associated data
     pub fn delete_project(&self, id: &str) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
         tx.execute(
             "DELETE FROM agent_sessions WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
@@ -181,7 +181,7 @@ impl super::Database {
 
     /// Get a project config value
     pub fn get_project_config(&self, project_id: &str, key: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt =
             conn.prepare("SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2")?;
         let mut rows = stmt.query([project_id, key])?;
@@ -195,7 +195,7 @@ impl super::Database {
 
     /// Set a project config value
     pub fn set_project_config(&self, project_id: &str, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
             [project_id, key, value],
@@ -205,7 +205,7 @@ impl super::Database {
 
     /// Clear an explicit project config value so callers inherit its global default.
     pub fn clear_project_config(&self, project_id: &str, key: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "DELETE FROM project_config WHERE project_id = ?1 AND key = ?2",
             [project_id, key],
@@ -218,7 +218,7 @@ impl super::Database {
         &self,
         project_id: &str,
     ) -> Result<std::collections::HashMap<String, String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt =
             conn.prepare("SELECT key, value FROM project_config WHERE project_id = ?1")?;
         let rows = stmt.query_map([project_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
@@ -252,7 +252,7 @@ impl super::Database {
     /// Aggregates cross-domain signals (agent status, PR status) per project
     /// so the project switcher can show which projects need attention.
     pub fn get_project_attention_summaries(&self) -> Result<Vec<ProjectAttentionRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut attention: std::collections::HashMap<String, ProjectAttentionRow> =
             std::collections::HashMap::new();
 

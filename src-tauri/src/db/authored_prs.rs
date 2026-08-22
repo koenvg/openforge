@@ -68,7 +68,7 @@ impl super::Database {
         updated_at: i64,
     ) -> Result<()> {
         let labels_json = super::serialize_labels_column(labels);
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO authored_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued, task_id, labels, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
@@ -136,7 +136,7 @@ impl super::Database {
         mergeable: Option<bool>,
         mergeable_state: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE authored_prs SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
             rusqlite::params![mergeable, mergeable_state, id],
@@ -145,7 +145,7 @@ impl super::Database {
     }
 
     pub fn get_all_authored_prs(&self) -> Result<Vec<AuthoredPrRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
@@ -194,7 +194,7 @@ impl super::Database {
     }
 
     pub fn delete_stale_authored_prs(&self, current_ids: &[i64]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         if current_ids.is_empty() {
             conn.execute("DELETE FROM authored_prs", [])?;
         } else {
@@ -220,7 +220,7 @@ impl super::Database {
     }
 
     pub fn get_authored_pr_count(&self) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.query_row(
             "SELECT COUNT(*) FROM authored_prs WHERE state = 'open'",
             [],

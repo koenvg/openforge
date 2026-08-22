@@ -149,7 +149,7 @@ fn query_task_label_by_id(
 
 impl Database {
     pub fn get_project_task_labels(&self, project_id: &str) -> Result<Vec<TaskLabelRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, project_id, name FROM task_labels WHERE project_id = ?1 ORDER BY name COLLATE NOCASE ASC, id ASC",
         )?;
@@ -168,12 +168,12 @@ impl Database {
     }
 
     pub fn create_task_label(&self, project_id: &str, name: &str) -> Result<TaskLabelRow> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         create_task_label_on_connection(&conn, project_id, name)
     }
 
     pub fn add_task_label(&self, task_id: &str, label_name: &str) -> Result<TaskLabelRow> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let project_id = task_project_id(&conn, task_id)?
             .ok_or_else(|| {
                 rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
@@ -186,7 +186,7 @@ impl Database {
         drop(conn);
 
         let label = self.create_task_label(&project_id, label_name)?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let task_project = task_project_id(&conn, task_id)?.flatten().ok_or_else(|| {
             rusqlite::Error::InvalidParameterName(format!(
                 "task {task_id} must belong to a project before labels can be assigned"
@@ -210,7 +210,7 @@ impl Database {
     }
 
     pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         task_project_id(&conn, task_id)?.ok_or_else(|| {
             rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
         })?;
@@ -227,7 +227,7 @@ impl Database {
     }
 
     pub fn delete_task_label(&self, label_id: i64) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT task_id FROM task_label_assignments WHERE label_id = ?1 ORDER BY task_id ASC",
         )?;
@@ -260,7 +260,7 @@ impl Database {
         task_id: &str,
         label_names: &[String],
     ) -> Result<Vec<TaskLabelRow>> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
         let project_id = task_project_id(&tx, task_id)?
             .ok_or_else(|| {
