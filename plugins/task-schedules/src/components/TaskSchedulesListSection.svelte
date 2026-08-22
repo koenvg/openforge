@@ -32,7 +32,7 @@
   }: Props = $props()
 
   const columns: { key: ScheduleSortKey; label: string }[] = [
-    { key: 'title', label: 'Schedule' },
+    { key: 'title', label: 'Task Schedule' },
     { key: 'cadence', label: 'Cadence' },
     { key: 'mode', label: 'Mode' },
     { key: 'nextFireAt', label: 'Next run' },
@@ -70,20 +70,20 @@
   }
 </script>
 
-<section class="min-w-0 flex-1 overflow-auto" aria-label="Task schedules list">
+<section class="min-w-0 flex-1 overflow-auto" aria-label="Task Schedules list">
   {#if loading && schedules.length === 0}
     <PluginViewState loading loadingLabel="Loading Task Schedules" />
   {:else if schedules.length === 0}
     <div class="flex min-h-64 items-center justify-center rounded-box border border-dashed border-base-300 bg-base-100 p-8">
       <div class="max-w-sm text-center">
         <Clock3 class="mx-auto size-8 text-secondary" aria-hidden="true" />
-        <h3 class="mt-3 text-base font-semibold">No schedules found</h3>
-        <p class="mt-1 text-sm text-secondary">Use New schedule to create a one-off or recurring Task Schedule.</p>
+        <h3 class="mt-3 text-base font-semibold">No Task Schedules found</h3>
+        <p class="mt-1 text-sm text-secondary">Use New Task Schedule to create a one-off or recurring Task Schedule.</p>
       </div>
     </div>
   {:else}
     <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-      <table class="table table-sm w-full min-w-[760px]" aria-label="Task schedules">
+      <table class="table table-sm w-full min-w-[760px]" aria-label="Task Schedules">
         <thead>
           <tr class="border-base-300 text-xs text-secondary">
             {#each columns as column}
@@ -91,7 +91,7 @@
                 <button
                   class="inline-flex min-h-10 items-center gap-1 rounded-md px-1 font-semibold text-base-content hover:text-primary"
                   type="button"
-                  aria-label={`Sort by ${column.label.toLowerCase()}`}
+                  aria-label={`Sort by ${column.label}`}
                   onclick={() => onSort(column.key)}
                 >
                   {column.label}

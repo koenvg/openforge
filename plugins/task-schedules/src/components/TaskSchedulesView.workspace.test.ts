@@ -27,24 +27,25 @@ describe('TaskSchedulesView workspace', () => {
     await waitForSchedules()
 
     expect(screen.getByRole('heading', { name: 'Task Schedules' })).toBeTruthy()
-    expect(screen.getByRole('table', { name: 'Task schedules' })).toBeTruthy()
-    expect(screen.getByLabelText('Schedule summary').textContent).toMatch(/2\s*schedules.*1\s*enabled.*Next run/i)
-    expect(screen.queryByRole('searchbox', { name: 'Search schedules' })).toBeNull()
+    expect(screen.getByRole('table', { name: 'Task Schedules' })).toBeTruthy()
+    expect(screen.getByLabelText('Task Schedule summary').textContent).toMatch(/2\s*Task Schedules.*1\s*enabled.*Next run/)
+    expect(screen.queryByRole('searchbox', { name: 'Search Task Schedules' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull()
-    await fireEvent.click(screen.getByRole('button', { name: 'Paused schedules' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Paused Task Schedules' }))
     expect(screen.queryByRole('button', { name: 'Daily dependency triage' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Dormant cleanup review' })).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'All schedules' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Sort by schedule' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'All Task Schedules' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Sort by Task Schedule' }))
     expect(screen.getAllByRole('row')[1]?.textContent).toContain('Daily dependency triage')
-    expect(screen.getByRole('columnheader', { name: /schedule/i }).getAttribute('aria-sort')).toBe('ascending')
+    expect(screen.getByRole('columnheader', { name: /Task Schedule/ }).getAttribute('aria-sort')).toBe('ascending')
 
     const inspector = await selectSchedule('Dormant cleanup review')
     expect(within(inspector).getByRole('heading', { name: 'Dormant cleanup review' })).toBeTruthy()
     expect(within(inspector).getByText(pausedSchedule.prompt)).toBeTruthy()
     expect(within(inspector).getByText('Paused')).toBeTruthy()
-    expect(screen.getByTestId('resize-handle').getAttribute('aria-label')).toMatch(/schedule details/i)
+    expect(within(inspector).getByText('Creates a board Task and starts implementation when no previous scheduled Task is still open.')).toBeTruthy()
+    expect(screen.getByTestId('resize-handle').getAttribute('aria-label')).toMatch(/Task Schedule details/)
   })
 
   it('shows agent-created one-off schedules and keeps completed runs inspectable', async () => {
@@ -135,7 +136,7 @@ describe('TaskSchedulesView workspace', () => {
     expect(screen.getByRole('button', { name: 'Recurring with old history' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Expired completed retry' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Expired cancelled retry' })).toBeNull()
-    expect(screen.getByLabelText('Schedule summary').textContent).toMatch(/3\s*schedules/i)
+    expect(screen.getByLabelText('Task Schedule summary').textContent).toMatch(/3\s*Task Schedules/)
   })
 
 
@@ -143,7 +144,7 @@ describe('TaskSchedulesView workspace', () => {
     const runAt = Date.UTC(2026, 7, 26, 13, 46)
     const backend = mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
 
     backend.setSchedules([makeSchedule({
       id: 'schedule-agent',
@@ -163,12 +164,12 @@ describe('TaskSchedulesView workspace', () => {
     if (!(row instanceof HTMLTableRowElement)) throw new Error('Expected schedule row')
 
     await fireEvent.click(within(row).getByText('Create + start'))
-    expect(screen.getByRole('complementary', { name: 'Schedule details' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Task Schedule details' })).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Close schedule details' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Close Task Schedule details' }))
     row.focus()
     await fireEvent.keyDown(row, { key: 'Enter' })
-    expect(screen.getByRole('complementary', { name: 'Schedule details' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Task Schedule details' })).toBeTruthy()
   })
 
 

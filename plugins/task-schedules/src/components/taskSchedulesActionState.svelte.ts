@@ -117,7 +117,7 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
   function handleSaveError(cause: unknown): void {
     if (isCronError(cause)) {
       options.onCronSaveError()
-      error = 'Fix the highlighted schedule fields and try again.'
+      error = 'Fix the highlighted Task Schedule fields and try again.'
       return
     }
     error = messageForAsyncError(cause)
@@ -167,7 +167,7 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
   async function runNow(scheduleId: string): Promise<void> {
     const activeProjectId = projectId
     if (!activeProjectId || runState?.phase === 'running' || runState?.phase === 'cancelling') return
-    runState = { scheduleId, phase: 'running', message: 'Creating the scheduled task…' }
+    runState = { scheduleId, phase: 'running', message: 'Creating the scheduled Task…' }
     try {
       const outcome = await ipc.runNow(activeProjectId, scheduleId)
       if (!isCurrentProject(activeProjectId)) return

@@ -38,8 +38,8 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   let errorFocusRequest = $state(0)
   let newScheduleFocusRequest = $state(0)
 
-  const composerTitle = $derived(draft.id ? 'Edit schedule' : 'New schedule')
-  const enabledToggleLabel = $derived(draft.id ? (draft.enabled ? 'Schedule enabled' : 'Schedule paused') : 'Enable after creation')
+  const composerTitle = $derived(draft.id ? 'Edit Task Schedule' : 'New Task Schedule')
+  const enabledToggleLabel = $derived(draft.id ? (draft.enabled ? 'Task Schedule enabled' : 'Task Schedule paused') : 'Enable after creation')
 
   function resetDraftState(nextDraft: ScheduleDraft = emptyScheduleDraft()): void {
     draft = nextDraft
@@ -86,7 +86,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
       resetDraftState()
       panelMode = 'form'
       titleFocusRequest += 1
-      options.announce('New schedule form opened')
+      options.announce('New Task Schedule form opened')
     })
   }
 
@@ -141,7 +141,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
     const runAtError = draftRunAtError(draft)
     if (!cronError && !runAtError) return true
     fieldErrors = { cron: cronError, runAt: runAtError }
-    options.reportError('Fix the highlighted schedule fields and try again.')
+    options.reportError('Fix the highlighted Task Schedule fields and try again.')
     if (focusError) errorFocusRequest += 1
     return false
   }

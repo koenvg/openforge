@@ -37,11 +37,11 @@ describe('TaskSchedulesView composer and actions', () => {
 
     const inspector = await selectSchedule('Future dependency retry')
     await fireEvent.click(within(inspector).getByRole('button', { name: 'Edit' }))
-    const form = screen.getByRole('complementary', { name: 'Schedule form' })
+    const form = screen.getByRole('complementary', { name: 'Task Schedule form' })
     const oneTime = within(form).getByRole('radio', { name: /One time/i }) as HTMLInputElement
     expect(oneTime.checked).toBe(true)
     expect(oneTime.disabled).toBe(true)
-    expect(within(form).getByText('Schedule type can’t be changed after creation.')).toBeTruthy()
+    expect(within(form).getByText('Task Schedule type can’t be changed after creation.')).toBeTruthy()
     const runAt = within(form).getByLabelText(/^Run on/i) as HTMLInputElement
     expect(runAt.value).toBe(initialRunAtValue)
 
@@ -71,7 +71,7 @@ describe('TaskSchedulesView composer and actions', () => {
 
     const inspector = await selectSchedule('Exact dependency retry')
     await fireEvent.click(within(inspector).getByRole('button', { name: 'Edit' }))
-    const form = screen.getByRole('complementary', { name: 'Schedule form' })
+    const form = screen.getByRole('complementary', { name: 'Task Schedule form' })
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Exact dependency retry updated' } })
     await fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }))
 
@@ -85,10 +85,14 @@ describe('TaskSchedulesView composer and actions', () => {
   it('opens creation in a dedicated drawer, progressively reveals cron, and focuses invalid input', async () => {
     mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
 
     const form = await openNewSchedule()
     expect(document.activeElement).toBe(within(form).getByLabelText(/title/i))
+    expect(within(form).getByRole('heading', { name: 'New Task Schedule' })).toBeTruthy()
+    expect(within(form).getByText('This becomes the Task prompt for every scheduled run.')).toBeTruthy()
+    expect(within(form).getByText('Creates a Task and starts implementation when the previous scheduled Task is closed.')).toBeTruthy()
+    expect(within(form).getByText('Paused Task Schedules can still be run manually.')).toBeTruthy()
     expect(within(form).queryByLabelText('Cron expression')).toBeNull()
 
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Every minute' } })
@@ -96,7 +100,7 @@ describe('TaskSchedulesView composer and actions', () => {
     await fireEvent.click(within(form).getByLabelText('Use a custom cron expression'))
     const cron = within(form).getByLabelText('Cron expression')
     await fireEvent.input(cron, { target: { value: '* * * * *' } })
-    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create Task Schedule' }))
 
     expect(await within(form).findByText(/at most once every 5 minutes/i)).toBeTruthy()
     expect(cron.getAttribute('aria-invalid')).toBe('true')
@@ -104,10 +108,10 @@ describe('TaskSchedulesView composer and actions', () => {
     expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
   })
 
-  it('preserves timing fields while changing the new schedule type', async () => {
+  it('preserves timing fields while changing the new Task Schedule type', async () => {
     mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
     const form = await openNewSchedule()
     const cronValue = '0 8 * * 1'
     const runAtValue = '2099-08-26T13:45'
@@ -124,30 +128,30 @@ describe('TaskSchedulesView composer and actions', () => {
     expect((within(form).getByLabelText(/^Run on/i) as HTMLInputElement).value).toBe(runAtValue)
   })
 
-  it('protects unsaved changes and returns focus to New schedule after dismissal', async () => {
+  it('protects unsaved changes and returns focus to New Task Schedule after dismissal', async () => {
     mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
     const form = await openNewSchedule()
 
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Unsaved schedule' } })
-    await fireEvent.click(within(form).getByRole('button', { name: 'Close schedule form' }))
+    await fireEvent.click(within(form).getByRole('button', { name: 'Close Task Schedule form' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Discard schedule changes' })
+    const dialog = screen.getByRole('dialog', { name: 'Discard Task Schedule changes' })
     expect(within(dialog).getByText(/not been saved/i)).toBeTruthy()
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
-    expect(screen.getByRole('complementary', { name: 'Schedule form' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Task Schedule form' })).toBeTruthy()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Close schedule form' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Close Task Schedule form' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
-    expect(screen.queryByRole('complementary', { name: 'Schedule form' })).toBeNull()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New schedule' })))
+    expect(screen.queryByRole('complementary', { name: 'Task Schedule form' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New Task Schedule' })))
   })
 
   it('creates a one-off schedule for a local date and time', async () => {
     mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
     const form = await openNewSchedule()
     const runAtValue = '2099-08-26T13:45'
 
@@ -157,7 +161,7 @@ describe('TaskSchedulesView composer and actions', () => {
     const runAt = await within(form).findByLabelText(/^Run on/i)
     expect(within(form).queryByLabelText('Frequency')).toBeNull()
     await fireEvent.input(runAt, { target: { value: runAtValue } })
-    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create Task Schedule' }))
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
       projectId: 'project-1',
@@ -174,7 +178,7 @@ describe('TaskSchedulesView composer and actions', () => {
   it('focuses a one-off date that is not in the future', async () => {
     mockBackend([])
     renderView()
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
     const form = await openNewSchedule()
 
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Expired schedule' } })
@@ -182,7 +186,7 @@ describe('TaskSchedulesView composer and actions', () => {
     await fireEvent.click(within(form).getByRole('radio', { name: /One time/i }))
     const runAt = await within(form).findByLabelText(/^Run on/i)
     await fireEvent.input(runAt, { target: { value: '2000-01-01T09:00' } })
-    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create Task Schedule' }))
 
     expect(await within(form).findByText('Choose a date and time in the future.')).toBeTruthy()
     expect(runAt.getAttribute('aria-invalid')).toBe('true')
@@ -199,17 +203,17 @@ describe('TaskSchedulesView composer and actions', () => {
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Release notes' } })
     await fireEvent.input(within(form).getByLabelText(/prompt/i), { target: { value: 'Draft weekly release notes.' } })
     await fireEvent.change(within(form).getByLabelText('Mode'), { target: { value: 'create-only' } })
-    await fireEvent.click(within(form).getByRole('button', { name: 'Create schedule' }))
+    await fireEvent.click(within(form).getByRole('button', { name: 'Create Task Schedule' }))
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', {
       projectId: 'project-1',
       schedule: expect.objectContaining({ title: 'Release notes', prompt: 'Draft weekly release notes.', mode: 'create-only' }),
     }))
-    expect(screen.getByRole('complementary', { name: 'Schedule details' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Task Schedule details' })).toBeTruthy()
 
     await selectSchedule('Daily dependency triage')
     await fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    form = screen.getByRole('complementary', { name: 'Schedule form' })
+    form = screen.getByRole('complementary', { name: 'Task Schedule form' })
     await waitFor(() => expect(document.activeElement).toBe(within(form).getByLabelText(/title/i)))
     await fireEvent.input(within(form).getByLabelText(/title/i), { target: { value: 'Dependency triage updated' } })
     await fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }))
@@ -303,11 +307,11 @@ describe('TaskSchedulesView composer and actions', () => {
     renderView()
     const inspector = await selectSchedule()
 
-    await fireEvent.click(within(inspector).getByRole('button', { name: 'Delete schedule' }))
+    await fireEvent.click(within(inspector).getByRole('button', { name: 'Delete Task Schedule' }))
     expect(invoke).not.toHaveBeenCalledWith('deleteSchedule', expect.anything())
-    const dialog = screen.getByRole('dialog', { name: 'Delete schedule confirmation' })
-    expect(within(dialog).getByText(/permanently deletes/i)).toBeTruthy()
-    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete schedule' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete Task Schedule confirmation' })
+    expect(within(dialog).getByText('This permanently deletes the Task Schedule. Existing Tasks and run history outside this Task Schedule are not removed.')).toBeTruthy()
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete Task Schedule' }))
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('deleteSchedule', { projectId: 'project-1', scheduleId: 'schedule-1' }))
     expect(screen.queryByRole('button', { name: 'Daily dependency triage' })).toBeNull()

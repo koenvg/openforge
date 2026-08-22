@@ -25,11 +25,11 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden bg-base-100">
-  <PluginPageHeader title="Task Schedules" subtitle="Manage one-off and recurring project task automation" surface="default">
+  <PluginPageHeader title="Task Schedules" subtitle="Manage one-off and recurring project Task Schedules" surface="default">
     {#snippet actions()}
       {#if controller.projectId}
         <button bind:this={newScheduleButton} class="btn btn-primary min-h-10" type="button" onclick={controller.openNewSchedule}>
-          <Plus class="size-4" aria-hidden="true" /> New schedule
+          <Plus class="size-4" aria-hidden="true" /> New Task Schedule
         </button>
       {/if}
     {/snippet}
@@ -48,24 +48,24 @@
     {/if}
 
     <div class="flex min-h-0 flex-1">
-      <main class="min-w-0 flex-1 overflow-auto px-5 py-5" aria-label="Task schedules workspace">
+      <main class="min-w-0 flex-1 overflow-auto px-5 py-5" aria-label="Task Schedules workspace">
         <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div class="flex flex-wrap gap-3" aria-label="Schedule summary">
-            <div class="min-w-28 rounded-box border border-base-300 bg-base-100 px-4 py-3"><strong class="block text-xl tabular-nums">{controller.schedules.length}</strong><span class="text-xs text-secondary">{controller.schedules.length === 1 ? 'schedule' : 'schedules'}</span></div>
+          <div class="flex flex-wrap gap-3" aria-label="Task Schedule summary">
+            <div class="min-w-28 rounded-box border border-base-300 bg-base-100 px-4 py-3"><strong class="block text-xl tabular-nums">{controller.schedules.length}</strong><span class="text-xs text-secondary">{controller.schedules.length === 1 ? 'Task Schedule' : 'Task Schedules'}</span></div>
             <div class="min-w-28 rounded-box border border-base-300 bg-base-100 px-4 py-3"><strong class="block text-xl tabular-nums">{controller.enabledCount}</strong><span class="text-xs text-secondary">enabled</span></div>
             <div class="flex min-w-48 items-center gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-3"><CalendarClock class="size-5 text-secondary" aria-hidden="true" /><span><span class="block text-xs text-secondary">Next run</span><strong class="mt-0.5 block text-sm font-medium tabular-nums">{controller.nextRunAt === null ? 'None scheduled' : controller.formatDate(controller.nextRunAt)}</strong></span></div>
           </div>
 
-          <div class="join rounded-box border border-base-300 bg-base-100 p-1" aria-label="Filter schedules">
-            <button class="btn join-item min-h-9 border-0 {controller.filter === 'all' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="All schedules" aria-pressed={controller.filter === 'all'} onclick={() => controller.setFilter('all')}>All</button>
-            <button class="btn join-item min-h-9 border-0 {controller.filter === 'enabled' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="Enabled schedules" aria-pressed={controller.filter === 'enabled'} onclick={() => controller.setFilter('enabled')}>Enabled</button>
-            <button class="btn join-item min-h-9 border-0 {controller.filter === 'paused' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="Paused schedules" aria-pressed={controller.filter === 'paused'} onclick={() => controller.setFilter('paused')}>Paused</button>
+          <div class="join rounded-box border border-base-300 bg-base-100 p-1" aria-label="Filter Task Schedules">
+            <button class="btn join-item min-h-9 border-0 {controller.filter === 'all' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="All Task Schedules" aria-pressed={controller.filter === 'all'} onclick={() => controller.setFilter('all')}>All</button>
+            <button class="btn join-item min-h-9 border-0 {controller.filter === 'enabled' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="Enabled Task Schedules" aria-pressed={controller.filter === 'enabled'} onclick={() => controller.setFilter('enabled')}>Enabled</button>
+            <button class="btn join-item min-h-9 border-0 {controller.filter === 'paused' ? 'btn-primary' : 'btn-ghost'}" type="button" aria-label="Paused Task Schedules" aria-pressed={controller.filter === 'paused'} onclick={() => controller.setFilter('paused')}>Paused</button>
           </div>
         </div>
 
         {#if !controller.loading && controller.schedules.length > 0 && controller.visibleSchedules.length === 0}
           <div class="flex min-h-64 items-center justify-center rounded-box border border-dashed border-base-300 bg-base-100 p-8 text-center">
-            <div><CalendarClock class="mx-auto size-8 text-secondary" aria-hidden="true" /><h3 class="mt-3 font-semibold">No matching schedules</h3><p class="mt-1 text-sm text-secondary">Choose another status filter.</p></div>
+            <div><CalendarClock class="mx-auto size-8 text-secondary" aria-hidden="true" /><h3 class="mt-3 font-semibold">No matching Task Schedules</h3><p class="mt-1 text-sm text-secondary">Choose another status filter.</p></div>
           </div>
         {:else}
           <TaskSchedulesListSection
@@ -84,7 +84,7 @@
       </main>
 
       {#if controller.panelMode === 'details' && controller.selectedSchedule}
-        <ResizablePanel storageKey="task-schedules-inspector" defaultWidth={430} minWidth={340} maxWidth={620} side="right" label="schedule details">
+        <ResizablePanel storageKey="task-schedules-inspector" defaultWidth={430} minWidth={340} maxWidth={620} side="right" label="Task Schedule details">
           <TaskScheduleInspector
             schedule={controller.selectedSchedule}
             runState={controller.runState?.scheduleId === controller.selectedSchedule.id ? controller.runState : null}
@@ -103,7 +103,7 @@
           />
         </ResizablePanel>
       {:else if controller.panelMode === 'form'}
-        <ResizablePanel storageKey="task-schedules-form" defaultWidth={460} minWidth={360} maxWidth={640} side="right" label="schedule form">
+        <ResizablePanel storageKey="task-schedules-form" defaultWidth={460} minWidth={360} maxWidth={640} side="right" label="Task Schedule form">
           <TaskScheduleComposerSection
             draft={controller.draft}
             fieldErrors={controller.fieldErrors}

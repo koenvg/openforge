@@ -195,12 +195,12 @@ export async function waitForSchedules() {
 
 export async function selectSchedule(title = 'Daily dependency triage') {
   await fireEvent.click(await screen.findByRole('button', { name: title }))
-  return screen.getByRole('complementary', { name: 'Schedule details' })
+  return screen.getByRole('complementary', { name: 'Task Schedule details' })
 }
 
 export async function openNewSchedule() {
-  await fireEvent.click(screen.getByRole('button', { name: 'New schedule' }))
-  return screen.getByRole('complementary', { name: 'Schedule form' })
+  await fireEvent.click(screen.getByRole('button', { name: 'New Task Schedule' }))
+  return screen.getByRole('complementary', { name: 'Task Schedule form' })
 }
 
 export function resetTaskSchedulesViewMocks() {

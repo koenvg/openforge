@@ -29,23 +29,23 @@ describe('TaskSchedulesView project-switch stale completions', () => {
       projectASchedules: [],
       backendResponses: { saveSchedule: pendingSave.promise },
     })
-    await screen.findByText('No schedules found')
+    await screen.findByText('No Task Schedules found')
 
     const projectAForm = await openNewSchedule()
     await fireEvent.input(within(projectAForm).getByLabelText(/title/i), { target: { value: 'Project A saved schedule' } })
     await fireEvent.input(within(projectAForm).getByLabelText(/prompt/i), { target: { value: 'Only belongs to Project A.' } })
-    await fireEvent.click(within(projectAForm).getByRole('button', { name: 'Create schedule' }))
+    await fireEvent.click(within(projectAForm).getByRole('button', { name: 'Create Task Schedule' }))
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('saveSchedule', expect.objectContaining({ projectId: projectA.id })))
 
     await switchToProjectB()
     expect(await screen.findByRole('button', { name: projectB.scheduleTitle })).toBeTruthy()
     const projectBForm = await openNewSchedule()
-    expect((within(projectBForm).getByRole('button', { name: 'Create schedule' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((within(projectBForm).getByRole('button', { name: 'Create Task Schedule' }) as HTMLButtonElement).disabled).toBe(false)
 
     pendingSave.resolve(makeSchedule({ title: 'Project A saved schedule' }))
     await settleAsyncWork(pendingSave.promise)
 
-    expect(screen.getByRole('complementary', { name: 'Schedule form' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Task Schedule form' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Project A saved schedule' })).toBeNull()
   })
 
@@ -78,13 +78,13 @@ describe('TaskSchedulesView project-switch stale completions', () => {
       backendResponses: { deleteSchedule: pendingDelete.promise },
     })
     const projectAInspector = await selectSchedule(projectA.scheduleTitle)
-    await fireEvent.click(within(projectAInspector).getByRole('button', { name: 'Delete schedule' }))
-    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete schedule confirmation' })).getByRole('button', { name: 'Delete schedule' }))
+    await fireEvent.click(within(projectAInspector).getByRole('button', { name: 'Delete Task Schedule' }))
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete Task Schedule confirmation' })).getByRole('button', { name: 'Delete Task Schedule' }))
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('deleteSchedule', { projectId: projectA.id, scheduleId: 'schedule-1' }))
 
     await switchToProjectB()
     const projectBInspector = await selectSchedule(projectB.scheduleTitle)
-    expect((within(projectBInspector).getByRole('button', { name: 'Delete schedule' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((within(projectBInspector).getByRole('button', { name: 'Delete Task Schedule' }) as HTMLButtonElement).disabled).toBe(false)
 
     pendingDelete.resolve({ deleted: true })
     await settleAsyncWork(pendingDelete.promise)
