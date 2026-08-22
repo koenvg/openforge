@@ -99,10 +99,6 @@ export function normalizeStoredSchedule(value: unknown): TaskSchedule | null {
   return { ...base, timing, lifecycle }
 }
 
-export function isActiveTaskSchedule(schedule: TaskSchedule): schedule is ActiveTaskSchedule {
-  return schedule.lifecycle.state === 'active'
-}
-
 export function completeOneOffSchedule(schedule: ActiveTaskSchedule, completedAt: number): TaskSchedule {
   if (schedule.timing.type !== 'once') throw new Error('Only one-off Task Schedules can be completed')
   return { ...schedule, timing: schedule.timing, lifecycle: { state: 'completed', completedAt } }

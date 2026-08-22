@@ -69,6 +69,8 @@ describe('TaskSchedulesView workspace', () => {
     expect(within(inspector).getByText('One time')).toBeTruthy()
     expect(within(inspector).getByRole('button', { name: 'KVG-4000' })).toBeTruthy()
     expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: /Pause|Enable/ })).toBeNull()
   })
 
   it('keeps cancelled one-off schedules visible without runnable actions', async () => {
@@ -88,6 +90,8 @@ describe('TaskSchedulesView workspace', () => {
     expect(within(inspector).getByText('Cancelled')).toBeTruthy()
     expect(within(inspector).getByText('One time')).toBeTruthy()
     expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: /Pause|Enable/ })).toBeNull()
   })
 
   it('removes terminal one-off schedules from the table after seven days', async () => {
