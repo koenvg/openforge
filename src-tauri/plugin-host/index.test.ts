@@ -834,6 +834,88 @@ describe('plugin-host backend runtime', () => {
     })
   })
 
+  it('allows activation again after the crash-loop window expires', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          globalThis.__expiringCrashAttempts = (globalThis.__expiringCrashAttempts ?? 0) + 1
+          if (globalThis.__expiringCrashAttempts <= 2) {
+            throw new Error('expiring crash ' + globalThis.__expiringCrashAttempts)
+          }
+          context.subscriptions.add(openforge.backend.registerMethod('ping', { handler() { return 'pong' } }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime({ crashLoopLimit: 2, crashLoopWindowMs: 1_000 })
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0)
+
+    try {
+      await expectOnlyPluginHostStderr([
+        '[plugin:expiring] activation error: expiring crash 1',
+        '[plugin:expiring] activation error: expiring crash 2',
+      ], async () => {
+        await expect(runtime.activateBackend({ pluginId: 'expiring', backendPath })).rejects.toThrow('expiring crash 1')
+        await expect(runtime.activateBackend({ pluginId: 'expiring', backendPath })).rejects.toThrow('expiring crash 2')
+        await expect(runtime.activateBackend({ pluginId: 'expiring', backendPath })).rejects.toThrow(/crash-loop guard/i)
+      })
+
+      expect(await runtime.getBackendState('expiring')).toMatchObject({
+        state: 'error',
+        error: 'expiring crash 2',
+        crashLoopGuardTripped: true,
+      })
+
+      now.mockReturnValue(1_001)
+
+      expect(await runtime.getBackendState('expiring')).toMatchObject({
+        state: 'error',
+        error: 'expiring crash 2',
+        crashLoopGuardTripped: false,
+      })
+
+      await expect(runtime.activateBackend({ pluginId: 'expiring', backendPath })).resolves.toMatchObject({
+        state: 'ready',
+        error: null,
+        crashLoopGuardTripped: false,
+      })
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it('resets the crash-loop guard when the backend is explicitly deactivated', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          globalThis.__resetCrashAttempts = (globalThis.__resetCrashAttempts ?? 0) + 1
+          if (globalThis.__resetCrashAttempts <= 2) {
+            throw new Error('reset crash ' + globalThis.__resetCrashAttempts)
+          }
+          context.subscriptions.add(openforge.backend.registerMethod('ping', { handler() { return 'pong' } }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime({ crashLoopLimit: 2 })
+
+    await expectOnlyPluginHostStderr([
+      '[plugin:resettable] activation error: reset crash 1',
+      '[plugin:resettable] activation error: reset crash 2',
+    ], async () => {
+      await expect(runtime.activateBackend({ pluginId: 'resettable', backendPath })).rejects.toThrow('reset crash 1')
+      await expect(runtime.activateBackend({ pluginId: 'resettable', backendPath })).rejects.toThrow('reset crash 2')
+    })
+
+    await expect(runtime.deactivateBackend('resettable')).resolves.toMatchObject({
+      state: 'missing',
+      error: null,
+      crashLoopGuardTripped: false,
+    })
+    await expect(runtime.activateBackend({ pluginId: 'resettable', backendPath })).resolves.toMatchObject({
+      state: 'ready',
+      crashLoopGuardTripped: false,
+    })
+  })
+
   it('exposes backend readiness through explicit JSON-RPC state and whenReady methods without hijacking dotted plugin methods', async () => {
     const backendPath = await writeBackendModule(`
       export default {

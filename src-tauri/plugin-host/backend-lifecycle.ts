@@ -56,6 +56,7 @@ export class BackendLifecycle {
     }
 
     const state = this.getState(input.pluginId)
+    this.refreshCrashLoopGuard(state)
     if (state.crashLoopGuardTripped) {
       throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
     }
@@ -98,6 +99,8 @@ export class BackendLifecycle {
     state.projectId = null
     state.module = null
     state.activationPromise = null
+    state.crashTimestamps = []
+    state.crashLoopGuardTripped = false
     return this.snapshot(pluginId)
   }
 
@@ -148,6 +151,7 @@ export class BackendLifecycle {
   snapshot(pluginId: string): BackendStateSnapshot {
     assertLocalId('backend', pluginId)
     const state = this.getState(pluginId)
+    this.refreshCrashLoopGuard(state)
     return {
       pluginId,
       state: state.state,
@@ -196,7 +200,7 @@ export class BackendLifecycle {
       const pluginError = toError(error)
       state.error = pluginError
       await this.cleanup(state)
-      this.recordActivationCrash(state, pluginError)
+      this.recordActivationCrash(state)
       state.state = 'error'
       logPluginHostError(state.pluginId, `activation error: ${pluginError.message}`)
       throw pluginError
@@ -205,14 +209,16 @@ export class BackendLifecycle {
     }
   }
 
-  private recordActivationCrash(state: RuntimePluginState, error: Error): void {
+  private refreshCrashLoopGuard(state: RuntimePluginState): void {
     const now = Date.now()
     state.crashTimestamps = state.crashTimestamps.filter(timestamp => now - timestamp <= this.crashLoopWindowMs)
-    state.crashTimestamps.push(now)
-    if (state.crashTimestamps.length >= this.crashLoopLimit) {
-      state.crashLoopGuardTripped = true
-      state.error = new Error(`Plugin ${state.pluginId} activation blocked by crash-loop guard after ${state.crashTimestamps.length} crashes: ${error.message}`)
-    }
+    state.crashLoopGuardTripped = state.crashTimestamps.length >= this.crashLoopLimit
+  }
+
+  private recordActivationCrash(state: RuntimePluginState): void {
+    this.refreshCrashLoopGuard(state)
+    state.crashTimestamps.push(Date.now())
+    state.crashLoopGuardTripped = state.crashTimestamps.length >= this.crashLoopLimit
   }
 
   private async cleanup(state: RuntimePluginState): Promise<void> {
