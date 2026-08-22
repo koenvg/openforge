@@ -54,7 +54,7 @@ describe('Task Schedule command registration', () => {
     ]))
     expect(commands.find((command) => command.id === SCHEDULE_COMMAND)).toMatchObject({
       input: { type: 'object', required: ['title', 'prompt', 'timing'] },
-      output: { type: 'object', required: expect.arrayContaining(['id', 'kind', 'nextFireAt']) },
+      output: { type: 'object', required: expect.arrayContaining(['id', 'timing', 'lifecycle']) },
     })
     const listCommand = commands.find((command) => command.id === LIST_SCHEDULES_COMMAND)
     expect(listCommand?.input).toBeUndefined()
@@ -95,14 +95,9 @@ describe('Task Schedule command registration', () => {
       expect(scheduled).toMatchObject({
         title: 'Resume dependency upgrade',
         prompt: 'Retry the dependency upgrade after its release-age gate.',
-        kind: 'once',
-        preset: null,
-        cron: null,
-        runAt,
-        nextFireAt: runAt,
+        timing: { type: 'once', runAt },
+        lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
         mode: 'create-and-start',
-        enabled: true,
-        cancelledAt: null,
         idempotencyKey: 'bits-ui-2.18.2-release-age',
       })
       await expect(listTaskSchedules(registry.backendApi, { projectId })).resolves.toEqual([scheduled])
@@ -124,7 +119,7 @@ describe('Task Schedule command registration', () => {
         timing: { type: 'once', at: '2026-12-31t23:59:60z' },
       })
 
-      expect(scheduled.runAt).toBe(Date.UTC(2027, 0, 1, 0, 0))
+      expect(scheduled.timing).toEqual({ type: 'once', runAt: Date.UTC(2027, 0, 1, 0, 0) })
     } finally {
       vi.useRealTimers()
     }
@@ -192,13 +187,10 @@ describe('Task Schedule command registration', () => {
       })
 
       expect(scheduled).toMatchObject({
-        kind: 'recurring',
-        preset: 'custom',
-        cron: '0 9 * * 1',
-        runAt: null,
+        timing: { type: 'recurring', preset: 'custom', cron: '0 9 * * 1' },
         mode: 'create-only',
       })
-      expect(scheduled.nextFireAt).toBeGreaterThan(Date.now())
+      expect(scheduled.lifecycle.state === 'active' ? scheduled.lifecycle.nextFireAt : null).toBeGreaterThan(Date.now())
     } finally {
       vi.useRealTimers()
     }
@@ -240,8 +232,7 @@ describe('Task Schedule command registration', () => {
         id: 'schedule-1',
         title: 'Tuesday dependency review',
         prompt: 'Review incoming dependencies',
-        kind: 'recurring',
-        cron: '0 10 * * 2',
+        timing: { type: 'recurring', preset: 'custom', cron: '0 10 * * 2' },
         mode: 'create-only',
       })
       await expect(listTaskSchedules(registry.backendApi, { projectId })).resolves.toEqual([updated])
@@ -255,13 +246,8 @@ describe('Task Schedule command registration', () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
     await registry.activateBackend(backendPlugin)
     await setStoredSchedules(registry.backendApi, [makeSchedule({
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      enabled: false,
-      nextFireAt: null,
-      lastFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'completed', completedAt: runAt },
     })])
 
     await expect(registry.backendApi.commands.invoke(UPDATE_SCHEDULE_COMMAND, {
@@ -274,8 +260,7 @@ describe('Task Schedule command registration', () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
     await registry.activateBackend(backendPlugin)
     await setStoredSchedules(registry.backendApi, [makeSchedule({
-      enabled: false,
-      cancelledAt: Date.UTC(2026, 0, 1, 9),
+      lifecycle: { state: 'cancelled', cancelledAt: Date.UTC(2026, 0, 1, 9) },
     })])
 
     await expect(registry.backendApi.commands.invoke(UPDATE_SCHEDULE_COMMAND, {
@@ -303,11 +288,8 @@ describe('Task Schedule command registration', () => {
       const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
       await registry.activateBackend(backendPlugin)
       await setStoredSchedules(registry.backendApi, [makeSchedule({
-        kind: 'once',
-        preset: null,
-        cron: null,
-        runAt,
-        nextFireAt: runAt,
+        timing: { type: 'once', runAt },
+        lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
       })])
 
       const cancelled = await registry.backendApi.commands.invoke<TaskSchedule>(CANCEL_SCHEDULE_COMMAND, {
@@ -316,9 +298,7 @@ describe('Task Schedule command registration', () => {
 
       expect(cancelled).toMatchObject({
         id: 'schedule-1',
-        enabled: false,
-        cancelledAt: now,
-        nextFireAt: runAt,
+        lifecycle: { state: 'cancelled', cancelledAt: now },
       })
       await expect(listTaskSchedules(registry.backendApi, { projectId })).resolves.toEqual([cancelled])
       await expect(processDueSchedules(registry.backendApi, projectId, runAt + 60_000)).resolves.toEqual([])
@@ -333,19 +313,14 @@ describe('Task Schedule command registration', () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'com.openforge.task-schedules', projectId })
     await registry.activateBackend(backendPlugin)
     await setStoredSchedules(registry.backendApi, [makeSchedule({
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      enabled: false,
-      nextFireAt: null,
-      lastFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'completed', completedAt: runAt },
     })])
 
     const completed = await registry.backendApi.commands.invoke<TaskSchedule>(CANCEL_SCHEDULE_COMMAND, {
       scheduleId: 'schedule-1',
     })
 
-    expect(completed).toMatchObject({ lastFireAt: runAt, cancelledAt: null })
+    expect(completed.lifecycle).toEqual({ state: 'completed', completedAt: runAt })
   })
 })

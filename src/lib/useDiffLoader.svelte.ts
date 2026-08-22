@@ -55,6 +55,7 @@ export function createDiffLoader(deps: {
 	let commits = $state<CommitInfo[]>([]);
 	let selectedCommitSha = $state<string | null>(deps.initialSelectedCommitSha ?? null);
 	let loadGeneration = 0;
+	let commitLoadGeneration = 0;
 
 	function beginLoad(): number {
 		const generation = ++loadGeneration;
@@ -65,6 +66,10 @@ export function createDiffLoader(deps: {
 
 	function isStale(generation: number): boolean {
 		return generation !== loadGeneration;
+	}
+
+	function isCommitLoadStale(generation: number, taskId: string): boolean {
+		return generation !== commitLoadGeneration || taskId !== deps.getTaskId();
 	}
 
 	async function loadDiff(): Promise<void> {
@@ -138,9 +143,14 @@ export function createDiffLoader(deps: {
 	}
 
 	async function loadCommits(): Promise<void> {
+		const generation = ++commitLoadGeneration;
+		const taskId = deps.getTaskId();
 		try {
-			commits = await getTaskCommits(deps.getTaskId());
+			const nextCommits = await getTaskCommits(taskId);
+			if (isCommitLoadStale(generation, taskId)) return;
+			commits = nextCommits;
 		} catch (e) {
+			if (isCommitLoadStale(generation, taskId)) return;
 			console.error("Failed to load commits:", e);
 		}
 	}
@@ -179,6 +189,7 @@ export function createDiffLoader(deps: {
 
 	function cleanup(): void {
 		loadGeneration += 1;
+		commitLoadGeneration += 1;
 		isLoading = false;
 		error = null;
 		prComments = [];

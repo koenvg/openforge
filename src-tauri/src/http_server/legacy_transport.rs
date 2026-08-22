@@ -37,7 +37,8 @@ pub use task_routes::{
 
 #[cfg(test)]
 pub(super) use events::{
-    record_agent_lifecycle_notification, should_start_task_display_title_refresh,
+    handle_agent_lifecycle_notification_with_refresh, record_agent_lifecycle_notification,
+    should_start_task_display_title_refresh,
 };
 #[cfg(test)]
 pub(super) use hook_routes::{

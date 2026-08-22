@@ -33,7 +33,7 @@ impl Database {
         pr_id: i64,
         facts: &PrMergeReadinessFacts,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET
                 merge_readiness_status = ?1,

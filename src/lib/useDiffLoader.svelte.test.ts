@@ -462,6 +462,65 @@ describe("createDiffLoader", () => {
 		expect(mockGetTaskCommits).toHaveBeenCalledWith("task-1");
 	});
 
+	it("keeps commits for the latest Task when an earlier request resolves late", async () => {
+		let resolveTaskOne!: (value: CommitInfo[]) => void;
+		let resolveTaskTwo!: (value: CommitInfo[]) => void;
+		const taskOneCommits = [
+			{ ...baseCommit, sha: "task-one", short_sha: "task-one" },
+		];
+		const taskTwoCommits = [
+			{ ...baseCommit, sha: "task-two", short_sha: "task-two" },
+		] satisfies CommitInfo[];
+		const taskOnePromise = new Promise<CommitInfo[]>((resolve) => {
+			resolveTaskOne = resolve;
+		});
+		const taskTwoPromise = new Promise<CommitInfo[]>((resolve) => {
+			resolveTaskTwo = resolve;
+		});
+		let taskId = "task-1";
+
+		mockGetTaskCommits.mockImplementation((requestedTaskId) => {
+			return requestedTaskId === "task-1" ? taskOnePromise : taskTwoPromise;
+		});
+		const loader = createDiffLoader({
+			getTaskId: () => taskId,
+			getIncludeUncommitted: () => false,
+		});
+
+		const taskOneLoad = loader.loadCommits();
+		taskId = "task-2";
+		const taskTwoLoad = loader.loadCommits();
+
+		resolveTaskTwo(taskTwoCommits);
+		await taskTwoLoad;
+		expect(loader.commits).toEqual(taskTwoCommits);
+
+		resolveTaskOne(taskOneCommits);
+		await taskOneLoad;
+		expect(loader.commits).toEqual(taskTwoCommits);
+	});
+
+	it("discards commit results when the Task changes without another request", async () => {
+		let resolveCommits!: (value: CommitInfo[]) => void;
+		const pendingCommits = new Promise<CommitInfo[]>((resolve) => {
+			resolveCommits = resolve;
+		});
+		let taskId = "task-1";
+
+		mockGetTaskCommits.mockReturnValue(pendingCommits);
+		const loader = createDiffLoader({
+			getTaskId: () => taskId,
+			getIncludeUncommitted: () => false,
+		});
+
+		const load = loader.loadCommits();
+		taskId = "task-2";
+		resolveCommits([baseCommit]);
+		await load;
+
+		expect(loader.commits).toEqual([]);
+	});
+
 	it("selectCommit clears store then loads commit diff", async () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 		mockGetCommitDiff.mockResolvedValue([

@@ -170,7 +170,7 @@ where
     let activity_snapshot = refresh.activity_snapshot;
 
     let task = {
-        let guard = db.lock().unwrap();
+        let guard = db::acquire_db(&db);
         guard
             .get_task(&queued.task_id)
             .map_err(|error| format!("failed to load task for AI title refresh: {error}"))?
@@ -262,7 +262,7 @@ where
         candidate.chars().count()
     );
 
-    let guard = db.lock().unwrap();
+    let guard = db::acquire_db(&db);
     let result = guard.update_generated_task_title_once(&queued.task_id, &candidate);
     match &result {
         Ok(updated) => info!(

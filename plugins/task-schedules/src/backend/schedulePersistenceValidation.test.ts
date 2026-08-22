@@ -11,18 +11,90 @@ import type { TaskScheduleDraft } from '../lib/types'
 import { makeSchedule, projectId, setStoredSchedules } from './testFixtures'
 
 describe('Task Schedule persistence and validation', () => {
-  it.each([
-    ['completed', { enabled: false, nextFireAt: null, lastFireAt: Date.UTC(2026, 0, 1, 9), cancelledAt: null }],
-    ['cancelled', { enabled: false, nextFireAt: Date.UTC(2026, 0, 2, 9), lastFireAt: null, cancelledAt: Date.UTC(2026, 0, 1, 10) }],
-  ] as const)('enforces terminal %s one-off schedules at every backend write boundary', async (_state, terminalState) => {
+  it('migrates stored v1 one-off schedules into discriminated timing and lifecycle data', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
-    const runAt = Date.UTC(2026, 0, 2, 9)
-    await setStoredSchedules(api, [makeSchedule({
+    const runAt = Date.UTC(2026, 0, 1, 9)
+    await api.storage.project(projectId).set(SCHEDULES_STORAGE_KEY, [{
+      id: 'schedule-v1',
+      title: 'Stored one-off',
+      prompt: 'Preserve this schedule.',
       kind: 'once',
       preset: null,
       cron: null,
       runAt,
-      ...terminalState,
+      mode: 'create-only',
+      enabled: false,
+      createdAt: runAt - 60_000,
+      updatedAt: runAt,
+      nextFireAt: null,
+      lastFireAt: runAt,
+      lastTaskId: 'T-v1',
+      cancelledAt: null,
+      idempotencyKey: null,
+      history: [],
+    }] as unknown as never)
+
+    const [migrated] = await listTaskSchedules(api, { projectId })
+
+    expect(migrated).toMatchObject({
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'completed', completedAt: runAt },
+    })
+    expect(migrated).not.toHaveProperty('kind')
+    expect(migrated).not.toHaveProperty('enabled')
+    expect(migrated).not.toHaveProperty('nextFireAt')
+  })
+
+  it('migrates stored v1 recurring active and cancelled lifecycle states', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const nextFireAt = Date.UTC(2026, 0, 2, 9)
+    const lastFireAt = Date.UTC(2026, 0, 1, 9)
+    const cancelledAt = Date.UTC(2026, 0, 1, 12)
+    const base = {
+      title: 'Stored recurring schedule',
+      prompt: 'Preserve this recurring schedule.',
+      kind: 'recurring',
+      preset: 'weekly',
+      cron: '0 9 * * 1',
+      runAt: null,
+      mode: 'create-and-start',
+      createdAt: Date.UTC(2025, 11, 1, 9),
+      updatedAt: cancelledAt,
+      nextFireAt,
+      lastFireAt,
+      lastTaskId: 'T-v1',
+      idempotencyKey: null,
+      history: [],
+    }
+    await api.storage.project(projectId).set(SCHEDULES_STORAGE_KEY, [
+      { ...base, id: 'schedule-active-v1', enabled: false, cancelledAt: null },
+      { ...base, id: 'schedule-cancelled-v1', enabled: false, cancelledAt },
+    ] as unknown as never)
+
+    const migrated = await listTaskSchedules(api, { projectId })
+
+    expect(migrated).toEqual([
+      expect.objectContaining({
+        id: 'schedule-active-v1',
+        timing: { type: 'recurring', preset: 'weekly', cron: '0 9 * * 1' },
+        lifecycle: { state: 'active', enabled: false, nextFireAt, lastFireAt },
+      }),
+      expect.objectContaining({
+        id: 'schedule-cancelled-v1',
+        timing: { type: 'recurring', preset: 'weekly', cron: '0 9 * * 1' },
+        lifecycle: { state: 'cancelled', cancelledAt, lastFireAt },
+      }),
+    ])
+  })
+  it.each([
+    ['completed', { state: 'completed', completedAt: Date.UTC(2026, 0, 1, 9) }],
+    ['cancelled', { state: 'cancelled', cancelledAt: Date.UTC(2026, 0, 1, 10) }],
+  ] as const)('enforces terminal %s one-off schedules at every backend write boundary', async (_state, lifecycle) => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const runAt = Date.UTC(2026, 0, 2, 9)
+    await setStoredSchedules(api, [makeSchedule({
+      timing: { type: 'once', runAt },
+      lifecycle,
     })])
 
     await expect(saveTaskSchedule(api, {
@@ -54,10 +126,9 @@ describe('Task Schedule persistence and validation', () => {
     expect(saved).toMatchObject({
       title: 'Weekly cleanup',
       prompt: 'Clean up stale branches',
-      preset: 'weekly',
-      cron: '30 14 * * 1',
+      timing: { type: 'recurring', preset: 'weekly', cron: '30 14 * * 1' },
       mode: 'create-and-start',
-      enabled: true,
+      lifecycle: { state: 'active', enabled: true },
       lastTaskId: null,
       history: [],
     })
@@ -129,7 +200,7 @@ describe('Task Schedule persistence and validation', () => {
       },
     }, Date.UTC(2026, 0, 1, 8))
 
-    expect(saved).toMatchObject({ preset: 'custom', cron: '*/5 * * * *' })
+    expect(saved.timing).toEqual({ type: 'recurring', preset: 'custom', cron: '*/5 * * * *' })
   })
 
   it('saves selected weekly Task Schedule days into the cron-backed schedule', async () => {
@@ -147,8 +218,7 @@ describe('Task Schedule persistence and validation', () => {
     }, Date.UTC(2026, 0, 1, 8))
 
     expect(saved).toMatchObject({
-      preset: 'weekly',
-      cron: '30 14 * * 5',
+      timing: { type: 'recurring', preset: 'weekly', cron: '30 14 * * 5' },
     })
   })
 
@@ -202,7 +272,7 @@ describe('Task Schedule persistence and validation', () => {
     expect(saved.id).toMatch(/^schedule-/)
     expect(saved).toMatchObject({
       createdAt: now,
-      lastFireAt: null,
+      lifecycle: { state: 'active' },
       lastTaskId: null,
       history: [],
     })

@@ -416,7 +416,7 @@ fn hydrate_compact_task_row(
 impl super::Database {
     /// Get all tasks for a project
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!(
             "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC"
         );
@@ -435,7 +435,7 @@ impl super::Database {
         project_id: &str,
         state: &str,
     ) -> Result<Vec<TaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([project_id, state], task_from_row)?;
@@ -448,7 +448,7 @@ impl super::Database {
     }
 
     pub fn get_compact_tasks_for_project(&self, project_id: &str) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([project_id], compact_task_from_row)?;
@@ -465,7 +465,7 @@ impl super::Database {
         project_id: &str,
         state: &str,
     ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
@@ -482,7 +482,7 @@ impl super::Database {
         project_id: &str,
         state: &str,
     ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
@@ -499,7 +499,7 @@ impl super::Database {
         project_id: &str,
         state: &str,
     ) -> Result<Vec<TaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([project_id, state], task_from_row)?;
@@ -582,7 +582,7 @@ impl super::Database {
             task_display_title_updates_enabled,
             ai_provider,
         } = opts;
-        let mut connection = self.conn.lock().unwrap();
+        let mut connection = self.lock_conn()?;
         let transaction = connection.transaction()?;
         let conn = &transaction;
         let defaulted_worktree_source =
@@ -734,7 +734,7 @@ impl super::Database {
     }
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks ORDER BY updated_at DESC");
         let mut stmt = conn.prepare(&query)?;
         let tasks = stmt.query_map([], task_from_row)?;
@@ -750,7 +750,7 @@ impl super::Database {
     }
 
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE id = ?1");
         let mut stmt = conn.prepare(&query)?;
         let mut rows = stmt.query([id])?;
@@ -772,7 +772,7 @@ impl super::Database {
         id: &str,
         initial_prompt: &str,
     ) -> std::result::Result<(), TaskInitialPromptUpdateError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         let changed = conn.execute(
             "UPDATE tasks
@@ -804,7 +804,7 @@ impl super::Database {
     /// title is decoupled from the prompt. A blank title clears it back to `NULL`
     /// so the UI falls back to the prompt-derived title.
     pub fn update_task_title(&self, id: &str, title: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         let trimmed = title.trim();
         let (stored_title, title_source): (Option<&str>, Option<&str>) = if trimmed.is_empty() {
@@ -823,7 +823,7 @@ impl super::Database {
     /// link can be added, changed, or cleared after the task was created. A blank
     /// or `None` value clears it back to `NULL` so the UI shows nothing.
     pub fn update_task_source_ticket_url(&self, id: &str, url: Option<&str>) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         // Normalize a blank link to NULL, matching creation (see create_task_with_options).
         let stored_url: Option<&str> = url.map(str::trim).filter(|value| !value.is_empty());
@@ -843,7 +843,7 @@ impl super::Database {
             return Ok(false);
         }
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         let changed = conn.execute(
             "UPDATE tasks
@@ -858,7 +858,7 @@ impl super::Database {
     }
 
     pub fn update_task_status(&self, id: &str, status: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE tasks
@@ -875,7 +875,7 @@ impl super::Database {
     }
 
     pub fn add_task_dependency(&self, task_id: &str, depends_on_task_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         validate_dependency(&conn, task_id, depends_on_task_id)?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
@@ -890,7 +890,7 @@ impl super::Database {
     }
 
     pub fn set_task_dependencies(&self, task_id: &str, dependency_ids: &[String]) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         task_project_id(&conn, task_id)?.ok_or_else(|| {
             rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
         })?;
@@ -925,7 +925,7 @@ impl super::Database {
             ));
         }
 
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         let tx = conn.transaction()?;
         let mut links = Vec::new();
@@ -970,7 +970,7 @@ impl super::Database {
         id: &str,
         expected_status: Option<&str>,
     ) -> Result<CompleteTaskWriteOutcome> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<CompleteTaskWriteOutcome> {
             let current_status = conn
@@ -1051,7 +1051,7 @@ impl super::Database {
         id: &str,
         expected_status: Option<&str>,
     ) -> Result<CompleteTaskWriteOutcome> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> Result<CompleteTaskWriteOutcome> {
             let current_status = conn
@@ -1109,7 +1109,7 @@ impl super::Database {
     }
 
     pub fn get_all_task_ids(&self) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT id FROM tasks")?;
         let ids = stmt.query_map([], |row| row.get(0))?;
         let mut result = Vec::new();

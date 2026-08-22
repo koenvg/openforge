@@ -59,7 +59,7 @@ impl super::Database {
         updated_at: i64,
     ) -> Result<()> {
         let labels_json = super::serialize_labels_column(labels);
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, labels, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
@@ -100,7 +100,7 @@ impl super::Database {
         mergeable: Option<bool>,
         mergeable_state: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE review_prs SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
             rusqlite::params![mergeable, mergeable_state, id],
@@ -109,7 +109,7 @@ impl super::Database {
     }
 
     pub fn get_all_review_prs(&self) -> Result<Vec<ReviewPrRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
@@ -155,7 +155,7 @@ impl super::Database {
     /// Mark a review PR as viewed with the given head SHA.
     /// Sets `viewed_at` to the current Unix timestamp and `viewed_head_sha` to the provided sha.
     pub fn mark_review_pr_viewed(&self, pr_id: i64, head_sha: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE review_prs SET viewed_at = ?1, viewed_head_sha = ?2 WHERE id = ?3",
@@ -168,7 +168,7 @@ impl super::Database {
     /// Clears `viewed_at` and `viewed_head_sha` to NULL so the PR re-surfaces as unread
     /// (and re-sorts to the top of the list), mirroring the never-viewed state.
     pub fn mark_review_pr_unviewed(&self, pr_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE review_prs SET viewed_at = NULL, viewed_head_sha = NULL WHERE id = ?1",
             rusqlite::params![pr_id],
@@ -177,7 +177,7 @@ impl super::Database {
     }
 
     pub fn delete_stale_review_prs(&self, current_ids: &[i64]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         if current_ids.is_empty() {
             conn.execute("DELETE FROM review_prs", [])?;
         } else {

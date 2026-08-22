@@ -40,22 +40,23 @@ export function emptyScheduleDraft(): ScheduleDraft {
 }
 
 export function draftFromSchedule(schedule: TaskSchedule): ScheduleDraft {
-  const cron = schedule.cron ?? '0 9 * * *'
-  const preset = schedule.preset ?? 'daily'
+  const timing = schedule.timing.type === 'recurring'
+    ? schedule.timing
+    : { type: 'recurring' as const, preset: 'daily' as const, cron: '0 9 * * *' }
   return {
     id: schedule.id,
     title: schedule.title,
     prompt: schedule.prompt,
-    kind: schedule.kind,
-    runAt: schedule.runAt === null ? '' : localDateTimeValue(schedule.runAt),
-    originalRunAt: schedule.runAt,
-    preset: preset === 'custom' ? 'daily' : preset,
-    cron,
-    timeOfDay: timeOfDayFromCron(cron),
-    dayOfWeek: preset === 'weekly' ? dayOfWeekFromCron(cron) : 1,
-    advancedCron: preset === 'custom',
+    kind: schedule.timing.type,
+    runAt: schedule.timing.type === 'once' ? localDateTimeValue(schedule.timing.runAt) : '',
+    originalRunAt: schedule.timing.type === 'once' ? schedule.timing.runAt : null,
+    preset: timing.preset === 'custom' ? 'daily' : timing.preset,
+    cron: timing.cron,
+    timeOfDay: timeOfDayFromCron(timing.cron),
+    dayOfWeek: timing.preset === 'weekly' ? dayOfWeekFromCron(timing.cron) : 1,
+    advancedCron: timing.preset === 'custom',
     mode: schedule.mode,
-    enabled: schedule.enabled,
+    enabled: schedule.lifecycle.state === 'active' && schedule.lifecycle.enabled,
   }
 }
 
@@ -107,10 +108,22 @@ function localDateTimeValue(timestamp: number): string {
 
 export function schedulesWithinOneOffRetention(schedules: TaskSchedule[], now = Date.now()): TaskSchedule[] {
   return schedules.filter((schedule) => {
-    if (schedule.kind !== 'once') return true
-    const terminalAt = schedule.cancelledAt ?? schedule.lastFireAt
+    if (schedule.timing.type !== 'once') return true
+    const terminalAt = schedule.lifecycle.state === 'cancelled'
+      ? schedule.lifecycle.cancelledAt
+      : schedule.lifecycle.state === 'completed'
+        ? schedule.lifecycle.completedAt
+        : null
     return terminalAt === null || now - terminalAt < TERMINAL_ONE_OFF_RETENTION_MS
   })
+}
+
+export function isScheduleEnabled(schedule: TaskSchedule): boolean {
+  return schedule.lifecycle.state === 'active' && schedule.lifecycle.enabled
+}
+
+export function nextScheduleFireAt(schedule: TaskSchedule): number | null {
+  return schedule.lifecycle.state === 'active' ? schedule.lifecycle.nextFireAt : null
 }
 
 export function visibleSchedules(
@@ -120,8 +133,8 @@ export function visibleSchedules(
   sortDirection: SortDirection,
 ): TaskSchedule[] {
   const filtered = schedules.filter((schedule) => {
-    if (filter === 'enabled' && !schedule.enabled) return false
-    if (filter === 'paused' && schedule.enabled) return false
+    if (filter === 'enabled' && !isScheduleEnabled(schedule)) return false
+    if (filter === 'paused' && (schedule.lifecycle.state !== 'active' || schedule.lifecycle.enabled)) return false
     return true
   })
   return [...filtered].sort((a, b) => compareSchedules(a, b, sortKey, sortDirection))
@@ -137,35 +150,35 @@ function compareSchedules(
   if (sortKey === 'title') comparison = a.title.localeCompare(b.title)
   else if (sortKey === 'cadence') comparison = cadenceLabel(a).localeCompare(cadenceLabel(b))
   else if (sortKey === 'mode') comparison = a.mode.localeCompare(b.mode)
-  else if (sortKey === 'nextFireAt') comparison = (a.nextFireAt ?? Number.MAX_SAFE_INTEGER) - (b.nextFireAt ?? Number.MAX_SAFE_INTEGER)
+  else if (sortKey === 'nextFireAt') comparison = (nextScheduleFireAt(a) ?? Number.MAX_SAFE_INTEGER) - (nextScheduleFireAt(b) ?? Number.MAX_SAFE_INTEGER)
   else if (sortKey === 'lastResult') comparison = (a.history.at(-1)?.firedAt ?? 0) - (b.history.at(-1)?.firedAt ?? 0)
-  else comparison = Number(b.enabled) - Number(a.enabled)
+  else comparison = Number(isScheduleEnabled(b)) - Number(isScheduleEnabled(a))
   if (comparison === 0) comparison = a.title.localeCompare(b.title)
   return sortDirection === 'ascending' ? comparison : -comparison
 }
 
 export function cadenceLabel(schedule: TaskSchedule): string {
-  if (schedule.kind === 'once') return 'One time'
-  if (schedule.preset === 'custom') return 'Custom'
-  const cron = schedule.cron ?? '0 9 * * *'
-  const time = timeOfDayFromCron(cron)
-  if (schedule.preset === 'weekly') {
-    const day = DAY_OF_WEEK_OPTIONS.find((option) => option.value === dayOfWeekFromCron(cron))?.label ?? 'Weekly'
+  const timing = schedule.timing
+  if (timing.type === 'once') return 'One time'
+  if (timing.preset === 'custom') return 'Custom'
+  const time = timeOfDayFromCron(timing.cron)
+  if (timing.preset === 'weekly') {
+    const day = DAY_OF_WEEK_OPTIONS.find((option) => option.value === dayOfWeekFromCron(timing.cron))?.label ?? 'Weekly'
     return `${day} · ${time}`
   }
-  if (schedule.preset === 'monthly') return `Monthly · ${time}`
+  if (timing.preset === 'monthly') return `Monthly · ${time}`
   return `Daily · ${time}`
 }
 
 export function cadenceDescription(schedule: TaskSchedule): string | null {
-  if (schedule.kind === 'once') return schedule.runAt === null ? null : `Runs once on ${formatScheduleDate(schedule.runAt)}`
-  return schedule.preset === 'custom' && schedule.cron ? describeCronExpression(schedule.cron) : null
+  if (schedule.timing.type === 'once') return `Runs once on ${formatScheduleDate(schedule.timing.runAt)}`
+  return schedule.timing.preset === 'custom' ? describeCronExpression(schedule.timing.cron) : null
 }
 
 export function scheduleStatusLabel(schedule: TaskSchedule): 'Enabled' | 'Paused' | 'Completed' | 'Cancelled' {
-  if (schedule.cancelledAt !== null) return 'Cancelled'
-  if (schedule.kind === 'once' && schedule.lastFireAt !== null) return 'Completed'
-  return schedule.enabled ? 'Enabled' : 'Paused'
+  if (schedule.lifecycle.state === 'cancelled') return 'Cancelled'
+  if (schedule.lifecycle.state === 'completed') return 'Completed'
+  return schedule.lifecycle.enabled ? 'Enabled' : 'Paused'
 }
 
 export function formatScheduleDate(value: number | null): string {

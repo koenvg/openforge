@@ -29,11 +29,8 @@ describe('TaskSchedulesView composer and actions', () => {
     const oneOff = makeSchedule({
       id: 'schedule-future-once',
       title: 'Future dependency retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: new Date(initialRunAtValue).getTime(),
-      nextFireAt: new Date(initialRunAtValue).getTime(),
+      timing: { type: 'once', runAt: new Date(initialRunAtValue).getTime() },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: new Date(initialRunAtValue).getTime() },
     })
     mockBackend([oneOff])
     renderView()
@@ -66,11 +63,8 @@ describe('TaskSchedulesView composer and actions', () => {
     const oneOff = makeSchedule({
       id: 'schedule-exact-once',
       title: 'Exact dependency retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: exactRunAt,
-      nextFireAt: exactRunAt,
+      timing: { type: 'once', runAt: exactRunAt },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: exactRunAt },
     })
     mockBackend([oneOff])
     renderView()

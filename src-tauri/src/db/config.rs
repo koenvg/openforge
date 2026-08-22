@@ -3,7 +3,7 @@ use rusqlite::Result;
 impl super::Database {
     /// Get a config value by key
     pub fn get_config(&self, key: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT value FROM config WHERE key = ?1")?;
         let mut rows = stmt.query([key])?;
 
@@ -16,7 +16,7 @@ impl super::Database {
 
     /// Set a config value
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
             [key, value],

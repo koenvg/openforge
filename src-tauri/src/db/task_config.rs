@@ -4,7 +4,7 @@ use std::collections::HashMap;
 impl super::Database {
     /// Get a task-scoped config value.
     pub fn get_task_config(&self, task_id: &str, key: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt =
             conn.prepare("SELECT value FROM task_config WHERE task_id = ?1 AND key = ?2")?;
         let mut rows = stmt.query([task_id, key])?;
@@ -17,7 +17,7 @@ impl super::Database {
 
     /// Set a task-scoped config value (upsert).
     pub fn set_task_config(&self, task_id: &str, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
             [task_id, key, value],
@@ -27,7 +27,7 @@ impl super::Database {
 
     /// Get all task-scoped config values for a task.
     pub fn get_all_task_config(&self, task_id: &str) -> Result<HashMap<String, String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT key, value FROM task_config WHERE task_id = ?1")?;
         let rows = stmt.query_map([task_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
         let mut result = HashMap::new();
@@ -40,7 +40,7 @@ impl super::Database {
 
     /// Return the project_id for a task, if any.
     pub fn get_task_project_id(&self, task_id: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT project_id FROM tasks WHERE id = ?1")?;
         let mut rows = stmt.query([task_id])?;
         if let Some(row) = rows.next()? {

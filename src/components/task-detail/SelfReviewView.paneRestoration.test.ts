@@ -2,9 +2,10 @@ import {
 	baseDiff,
 	baseTask,
 	InlineDiffWorker,
+	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
 import {
@@ -19,7 +20,6 @@ import {
 	getTaskReviewPaneState,
 	markTaskReviewFileReviewed,
 } from "../../lib/taskReviewPaneState";
-import SelfReviewView from "./SelfReviewView.svelte";
 
 setupSelfReviewViewTestSuite();
 
@@ -37,9 +37,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskCommits).mockResolvedValue([commit]);
 		vi.mocked(getCommitDiff).mockResolvedValue([commitDiff]);
 
-		const firstRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const firstRender = renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByTitle(commit.message)).toBeTruthy();
@@ -55,9 +53,7 @@ describe("SelfReviewView pane restoration", () => {
 		firstRender.unmount();
 		vi.mocked(getCommitDiff).mockClear();
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByText("Show all changes")).toBeTruthy();
@@ -69,9 +65,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
-		const firstRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const firstRender = renderSelfReviewView();
 
 		let scrollArea!: HTMLElement;
 		await waitFor(() => {
@@ -83,9 +77,7 @@ describe("SelfReviewView pane restoration", () => {
 
 		firstRender.unmount();
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const restoredScrollArea = requireElement(screen.getByRole("region", { name: "Diff scroll area" }), HTMLElement);
@@ -97,9 +89,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		const checkbox = requireElement(await screen.findByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 		expect(checkbox.checked).toBe(false);
@@ -142,9 +132,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskFileContents).mockResolvedValue(["base content\n", "reviewed content\n"]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["base content\n", "changed content\n"]]);
 
-		const firstRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const firstRender = renderSelfReviewView();
 
 		const checkbox = requireElement(await screen.findByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
 		await fireEvent.click(checkbox);
@@ -161,9 +149,7 @@ describe("SelfReviewView pane restoration", () => {
 
 		firstRender.unmount();
 
-		const currentRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const currentRender = renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(currentRender.container.textContent).toContain("changed content");
@@ -228,9 +214,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockRejectedValue(new Error("content load failed"));
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await fireEvent.click(await screen.findByRole("button", {
 			name: "Compare src/main.rs with Reviewed File Snapshot",
@@ -247,17 +231,13 @@ describe("SelfReviewView pane restoration", () => {
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 
-		const firstRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const firstRender = renderSelfReviewView();
 
 		await screen.findByLabelText("Mark src/main.rs reviewed");
 		markTaskReviewFileReviewed(baseTask.id, baseDiff);
 		firstRender.unmount();
 
-		const secondRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const secondRender = renderSelfReviewView();
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
@@ -270,9 +250,7 @@ describe("SelfReviewView pane restoration", () => {
 		secondRender.unmount();
 		mockGetTaskDiff.mockResolvedValue([{ ...baseDiff, sha: "changed-sha" }]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
@@ -288,9 +266,7 @@ describe("SelfReviewView pane restoration", () => {
 		const emptyShaDiff = { ...baseDiff, sha: "" };
 		mockGetTaskDiff.mockResolvedValue([emptyShaDiff]);
 
-		const firstRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const firstRender = renderSelfReviewView();
 
 		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
 
@@ -304,9 +280,7 @@ describe("SelfReviewView pane restoration", () => {
 
 		firstRender.unmount();
 
-		const secondRender = render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		const secondRender = renderSelfReviewView();
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
@@ -326,9 +300,7 @@ describe("SelfReviewView pane restoration", () => {
 			},
 		]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const checkbox = requireElement(screen.getByLabelText("Mark src/main.rs reviewed"), HTMLInputElement);
@@ -343,9 +315,7 @@ describe("SelfReviewView pane restoration", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await fireEvent.click(await screen.findByLabelText("Mark src/main.rs reviewed"));
 
@@ -377,9 +347,7 @@ describe("SelfReviewView pane restoration", () => {
 		mockGetTaskDiff.mockResolvedValueOnce([baseDiff]).mockResolvedValueOnce([]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await screen.findByText("src/main.rs");
 		await fireEvent.click(screen.getByTitle("Hide file tree"));

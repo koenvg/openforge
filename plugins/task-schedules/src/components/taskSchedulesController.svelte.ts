@@ -5,6 +5,8 @@ import {
   CRON_HELP_TEXT,
   DAY_OF_WEEK_OPTIONS,
   formatScheduleDate,
+  isScheduleEnabled,
+  nextScheduleFireAt,
   TIME_OPTIONS,
   visibleSchedules,
 } from '../lib/taskSchedulesViewModel'
@@ -34,9 +36,12 @@ export function useTaskSchedulesController(options: TaskSchedulesControllerOptio
   })
 
   const selectedSchedule = $derived(actionState.schedules.find((schedule) => schedule.id === composerState.selectedScheduleId) ?? null)
-  const enabledCount = $derived(actionState.schedules.filter((schedule) => schedule.enabled).length)
+  const enabledCount = $derived(actionState.schedules.filter(isScheduleEnabled).length)
   const nextRunAt = $derived.by(() => {
-    const enabledRuns = actionState.schedules.flatMap((schedule) => schedule.enabled && schedule.nextFireAt !== null ? [schedule.nextFireAt] : [])
+    const enabledRuns = actionState.schedules.flatMap((schedule) => {
+      const nextFireAt = nextScheduleFireAt(schedule)
+      return isScheduleEnabled(schedule) && nextFireAt !== null ? [nextFireAt] : []
+    })
     return enabledRuns.length > 0 ? Math.min(...enabledRuns) : null
   })
   const filteredSchedules = $derived(visibleSchedules(

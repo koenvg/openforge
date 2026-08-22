@@ -26,7 +26,7 @@ pub(super) fn enqueue_plugin_purge_if_present(conn: &Connection, plugin_id: &str
 
 impl super::Database {
     pub fn list_browser_session_purge_intents(&self) -> Result<Vec<BrowserSessionPurgeIntentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut statement = conn.prepare(
             "SELECT id, scope, owner_id, created_at
              FROM browser_session_purge_intents
@@ -44,7 +44,7 @@ impl super::Database {
     }
 
     pub fn acknowledge_browser_session_purge_intent(&self, intent_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "DELETE FROM browser_session_purge_intents WHERE id = ?1",
             [intent_id],

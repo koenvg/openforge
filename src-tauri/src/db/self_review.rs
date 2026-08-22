@@ -25,7 +25,7 @@ impl super::Database {
         line_number: Option<i32>,
         body: &str,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         // Determine round: if there are active comments, use their round; otherwise use max archived round + 1
@@ -61,7 +61,7 @@ impl super::Database {
         &self,
         task_id: &str,
     ) -> Result<Vec<SelfReviewCommentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, task_id, round, comment_type, file_path, line_number, body, created_at, archived_at
              FROM self_review_comments
@@ -95,7 +95,7 @@ impl super::Database {
         &self,
         task_id: &str,
     ) -> Result<Vec<SelfReviewCommentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, task_id, round, comment_type, file_path, line_number, body, created_at, archived_at
              FROM self_review_comments
@@ -127,7 +127,7 @@ impl super::Database {
 
     /// Delete a self review comment by ID.
     pub fn delete_self_review_comment(&self, comment_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "DELETE FROM self_review_comments WHERE id = ?1",
             [comment_id],
@@ -137,7 +137,7 @@ impl super::Database {
 
     /// Archive all active comments for a task by setting archived_at to current time.
     pub fn archive_self_review_comments(&self, task_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         conn.execute(

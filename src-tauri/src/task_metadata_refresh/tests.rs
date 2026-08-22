@@ -407,6 +407,48 @@ fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
 }
 
 #[tokio::test]
+async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock() {
+    let (db, path) = make_test_db("metadata_refresh_ai_title_poisoned_database_lock");
+    let task = db
+        .create_task("Vague OpenCode activity", "doing", None, None, None)
+        .expect("create task");
+    let db = Arc::new(Mutex::new(db));
+
+    let database = Arc::clone(&db);
+    let poison_result = std::thread::spawn(move || {
+        let _database = database.lock().expect("lock healthy test database");
+        panic!("poison test database lock");
+    })
+    .join();
+    assert!(poison_result.is_err());
+
+    let queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(r#"{"type":"message.updated","message":"Recover queued title refresh"}"#.to_string()),
+    );
+    let refreshed = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        queued,
+        Duration::ZERO,
+        |_job, _prompt| async { Ok(Some("Recovered Title Refresh".to_string())) },
+    )
+    .await
+    .expect("refresh title through poisoned database lock");
+
+    assert!(refreshed);
+    let updated = crate::db::acquire_db(&db)
+        .get_task(&task.id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(updated.title.as_deref(), Some("Recovered Title Refresh"));
+    assert_eq!(updated.title_source.as_deref(), Some("generated"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
 async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_snapshot() {
     let (db, path) = make_test_db("metadata_refresh_ai_title_debounce");
     let task = db

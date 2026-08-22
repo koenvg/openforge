@@ -67,7 +67,10 @@ describe('TaskSchedulesView project-switch stale completions', () => {
     const projectBInspector = await selectSchedule('Project B schedule')
     expect((within(projectBInspector).getByRole('button', { name: 'Pause' }) as HTMLButtonElement).disabled).toBe(false)
 
-    pendingToggle.resolve(makeSchedule({ title: 'Project A schedule', enabled: false }))
+    pendingToggle.resolve(makeSchedule({
+      title: 'Project A schedule',
+      lifecycle: { state: 'active', enabled: false, nextFireAt: Date.UTC(2026, 0, 2, 9) },
+    }))
     await pendingToggle.promise
     await new Promise((resolve) => setTimeout(resolve, 20))
 
