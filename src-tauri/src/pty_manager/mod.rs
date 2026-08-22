@@ -25,9 +25,10 @@ use commands::resolve_shell_path;
 pub(crate) use commands::{build_claude_args, get_shell_path};
 #[cfg(test)]
 use events::{
-    finalize_pty_exit, find_utf8_boundary, read_pty_output_loop, spawn_batched_pty_event_emitter,
-    PtyEventEmitterConfig, PtyExitAction, PtyExitCleanupContext, PtyOutputBatcher, RingBuffer,
-    CLAUDE_BUFFER_CAPACITY,
+    finalize_pty_exit, find_utf8_boundary, pty_output_channel, read_pty_output_loop,
+    spawn_batched_pty_event_emitter, PtyEventEmitterConfig, PtyExitAction, PtyExitCleanupContext,
+    PtyOutputBatcher, PtyOutputReceiver, RingBuffer, CLAUDE_BUFFER_CAPACITY,
+    PTY_OUTPUT_QUEUE_CAPACITY, PTY_READ_BUFFER_SIZE,
 };
 #[cfg(test)]
 use managed_process::ManagedProcessIdentity;
@@ -171,7 +172,7 @@ mod tests {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
     use std::io::{self, Read};
     use std::path::Path;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::Arc;
 
     #[test]
@@ -285,10 +286,127 @@ mod tests {
         }
     }
 
+    struct RepeatingReader {
+        remaining_reads: usize,
+        byte: u8,
+    }
+
+    impl Read for RepeatingReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.remaining_reads == 0 {
+                return Ok(0);
+            }
+
+            buf.fill(self.byte);
+            self.remaining_reads -= 1;
+            Ok(buf.len())
+        }
+    }
+
+    fn spawn_repeating_reader(
+        read_count: usize,
+        byte: u8,
+        session_key: &'static str,
+    ) -> (
+        PtyOutputReceiver,
+        Arc<AtomicBool>,
+        std::thread::JoinHandle<()>,
+    ) {
+        let (tx, rx) = pty_output_channel();
+        let reader_finished = Arc::new(AtomicBool::new(false));
+        let finished = Arc::clone(&reader_finished);
+        let reader_thread = std::thread::spawn(move || {
+            let mut reader = RepeatingReader {
+                remaining_reads: read_count,
+                byte,
+            };
+            read_pty_output_loop(&mut reader, tx, session_key, None, None);
+            finished.store(true, Ordering::Release);
+        });
+
+        (rx, reader_finished, reader_thread)
+    }
+
+    fn assert_reader_is_backpressured(
+        rx: &PtyOutputReceiver,
+        reader_finished: &AtomicBool,
+        message: &str,
+    ) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while rx.len() < PTY_OUTPUT_QUEUE_CAPACITY && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+
+        assert_eq!(rx.len(), PTY_OUTPUT_QUEUE_CAPACITY);
+        assert!(!reader_finished.load(Ordering::Acquire), "{message}");
+    }
+
+    #[test]
+    fn test_pty_output_queue_bounds_sustained_output_and_preserves_exit() {
+        const READ_COUNT: usize = 4_096;
+
+        let (mut rx, reader_finished, reader_thread) =
+            spawn_repeating_reader(READ_COUNT, b'x', "stress-reader");
+        assert_reader_is_backpressured(
+            &rx,
+            &reader_finished,
+            "the reader should backpressure instead of buffering all sustained output",
+        );
+
+        let mut received_reads = 0;
+        let mut received_bytes = 0;
+        let mut max_queue_len = rx.len();
+        loop {
+            max_queue_len = max_queue_len.max(rx.len());
+            match rx
+                .blocking_recv()
+                .expect("reader should deliver an exit signal")
+            {
+                Some(output) => {
+                    assert!(output.bytes().all(|byte| byte == b'x'));
+                    received_reads += 1;
+                    received_bytes += output.len();
+                }
+                None => break,
+            }
+        }
+        reader_thread.join().expect("reader thread should finish");
+
+        assert!(max_queue_len <= PTY_OUTPUT_QUEUE_CAPACITY);
+        assert_eq!(received_reads, READ_COUNT);
+        assert_eq!(received_bytes, READ_COUNT * PTY_READ_BUFFER_SIZE);
+        assert!(reader_finished.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn test_pty_output_queue_bounds_sustained_malformed_utf8() {
+        const READ_COUNT: usize = 1_024;
+
+        let (mut rx, reader_finished, reader_thread) =
+            spawn_repeating_reader(READ_COUNT, 0xff, "malformed-stress-reader");
+        assert_reader_is_backpressured(
+            &rx,
+            &reader_finished,
+            "malformed output should remain bounded by the same backpressure",
+        );
+
+        let mut received_reads = 0;
+        while let Some(message) = rx.blocking_recv() {
+            let Some(output) = message else {
+                break;
+            };
+            assert_eq!(output.len(), PTY_READ_BUFFER_SIZE * 3);
+            assert!(output.chars().all(|character| character == '\u{fffd}'));
+            received_reads += 1;
+        }
+        reader_thread.join().expect("reader thread should finish");
+
+        assert_eq!(received_reads, READ_COUNT);
+    }
     #[test]
     fn test_read_pty_output_loop_preserves_utf8_split_across_reads() {
         let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = pty_output_channel();
 
         read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
 
@@ -298,11 +416,26 @@ mod tests {
     }
 
     #[test]
+    fn test_read_pty_output_loop_flushes_incomplete_utf8_before_exit() {
+        let mut reader = ChunkedReader::new(vec![b"hello \xC3"]);
+        let (tx, mut rx) = pty_output_channel();
+
+        read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
+
+        assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
+        assert_eq!(
+            rx.blocking_recv(),
+            Some(Some(char::REPLACEMENT_CHARACTER.to_string())),
+        );
+        assert_eq!(rx.blocking_recv(), Some(None));
+    }
+
+    #[test]
     fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
         let hub = Arc::new(PtyAttachmentHub::new(1, 1024, 8));
         let (_, mut companion_events) = hub.attach();
         let mut reader = ChunkedReader::new(vec![b"desktop", &[0xff], b"tail"]);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = pty_output_channel();
 
         read_pty_output_loop(&mut reader, tx, "task-reader", None, Some(Arc::clone(&hub)));
 
@@ -318,15 +451,17 @@ mod tests {
         assert!(companion_events.try_recv().is_err());
         assert_eq!(
             rx.blocking_recv(),
-            Some(None),
-            "desktop keeps its existing lossy-reader behavior and reaches EOF",
+            Some(Some(char::REPLACEMENT_CHARACTER.to_string())),
+            "desktop output should replace malformed UTF-8 without retaining it",
         );
+        assert_eq!(rx.blocking_recv(), Some(Some("tail".to_string())));
+        assert_eq!(rx.blocking_recv(), Some(None));
     }
 
     #[test]
     fn test_read_pty_output_loop_updates_last_output_time() {
         let mut reader = ChunkedReader::new(vec![b"output"]);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = pty_output_channel();
         let last_output = Arc::new(AtomicU64::new(0));
 
         read_pty_output_loop(
@@ -898,7 +1033,7 @@ mod tests {
             bus.clone(),
         )));
         let mut events = bus.subscribe(None).expect("subscribe should work");
-        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (output_tx, output_rx) = pty_output_channel();
         let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
 
@@ -924,7 +1059,7 @@ mod tests {
         );
 
         output_tx
-            .send(Some("deduped live output".to_string()))
+            .try_send(Some("deduped live output".to_string()))
             .expect("output should send");
 
         let crate::app_events::AppEventFrame::Event(received) =
@@ -1039,7 +1174,7 @@ mod tests {
             bus.clone(),
         )));
         let mut events = bus.subscribe(None).expect("subscribe should work");
-        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (output_tx, output_rx) = pty_output_channel();
         let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
 
@@ -1064,7 +1199,7 @@ mod tests {
             },
         );
 
-        output_tx.send(None).expect("exit signal should send");
+        output_tx.try_send(None).expect("exit signal should send");
         let received = collect_bus_events_until_quiet(&mut events).await;
 
         assert_eq!(
@@ -1093,7 +1228,7 @@ mod tests {
             bus.clone(),
         )));
         let mut events = bus.subscribe(None).expect("subscribe should work");
-        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (output_tx, output_rx) = pty_output_channel();
         let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
 
@@ -1118,7 +1253,7 @@ mod tests {
             },
         );
 
-        output_tx.send(None).expect("exit signal should send");
+        output_tx.try_send(None).expect("exit signal should send");
         let received = collect_bus_events_until_quiet(&mut events).await;
 
         assert_eq!(
@@ -1144,7 +1279,7 @@ mod tests {
         let manager = PtyManager::new();
         let app = crate::backend_runtime::AppHandle::new();
         let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
-        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (output_tx, output_rx) = pty_output_channel();
         let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
 
@@ -1169,7 +1304,7 @@ mod tests {
             },
         );
 
-        output_tx.send(None).expect("exit signal should send");
+        output_tx.try_send(None).expect("exit signal should send");
         let received = collect_sender_events_until_quiet(&mut app_event_rx).await;
 
         assert_eq!(
@@ -1253,7 +1388,7 @@ mod tests {
         let pid_file = tmp_dir.path().join("task-1-shell-0.pid");
         write_test_session_metadata(&manager, key, &pid_file).await;
 
-        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (output_tx, output_rx) = pty_output_channel();
         let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
         spawn_batched_pty_event_emitter(
             output_rx,
@@ -1276,7 +1411,7 @@ mod tests {
             },
         );
 
-        output_tx.send(None).expect("exit signal should send");
+        output_tx.try_send(None).expect("exit signal should send");
         let exit_event =
             tokio::time::timeout(tokio::time::Duration::from_secs(1), app_event_rx.recv())
                 .await

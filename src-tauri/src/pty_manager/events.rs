@@ -118,13 +118,20 @@ pub(super) type SharedRingBuffer = Arc<std::sync::Mutex<RingBuffer>>;
 // PTY Output Reader and Event Batching
 // ============================================================================
 
-const PTY_READ_BUFFER_SIZE: usize = 8192;
+pub(super) const PTY_READ_BUFFER_SIZE: usize = 8192;
 const PTY_FLUSH_INTERVAL_MS: u64 = 16;
 const PTY_MAX_BATCH_SIZE: usize = 65_536;
+// Each message comes from one 8 KiB read plus at most three carried UTF-8 bytes.
+// Even with worst-case lossy UTF-8 expansion, queued string payload stays below 769 KiB.
+pub(super) const PTY_OUTPUT_QUEUE_CAPACITY: usize = 32;
 
 type PtyOutputMessage = Option<String>;
-type PtyOutputSender = tokio::sync::mpsc::UnboundedSender<PtyOutputMessage>;
-pub(super) type PtyOutputReceiver = tokio::sync::mpsc::UnboundedReceiver<PtyOutputMessage>;
+type PtyOutputSender = tokio::sync::mpsc::Sender<PtyOutputMessage>;
+pub(super) type PtyOutputReceiver = tokio::sync::mpsc::Receiver<PtyOutputMessage>;
+
+pub(super) fn pty_output_channel() -> (PtyOutputSender, PtyOutputReceiver) {
+    tokio::sync::mpsc::channel(PTY_OUTPUT_QUEUE_CAPACITY)
+}
 type PtyEmitResult = Result<(), String>;
 
 fn now_ms() -> u64 {
@@ -132,6 +139,49 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn decode_pty_output(bytes: &[u8], incomplete_utf8: &mut Vec<u8>) -> String {
+    let mut combined = std::mem::take(incomplete_utf8);
+    combined.extend_from_slice(bytes);
+    let mut remaining = combined.as_slice();
+    let mut output = String::with_capacity(combined.len());
+
+    loop {
+        match std::str::from_utf8(remaining) {
+            Ok(valid) => {
+                output.push_str(valid);
+                break;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                let valid = std::str::from_utf8(&remaining[..valid_up_to])
+                    .expect("Utf8Error::valid_up_to must delimit valid UTF-8");
+                output.push_str(valid);
+
+                let Some(error_len) = error.error_len() else {
+                    incomplete_utf8.extend_from_slice(&remaining[valid_up_to..]);
+                    break;
+                };
+                output.push(char::REPLACEMENT_CHARACTER);
+                remaining = &remaining[valid_up_to + error_len..];
+            }
+        }
+    }
+
+    debug_assert!(incomplete_utf8.len() < 4);
+    output
+}
+
+fn finish_pty_output(tx: &PtyOutputSender, incomplete_utf8: &mut Vec<u8>) {
+    if !incomplete_utf8.is_empty() {
+        let trailing = String::from_utf8_lossy(incomplete_utf8).into_owned();
+        incomplete_utf8.clear();
+        if tx.blocking_send(Some(trailing)).is_err() {
+            return;
+        }
+    }
+    let _ = tx.blocking_send(None);
 }
 
 pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
@@ -148,7 +198,7 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
         match reader.read(&mut buffer) {
             Ok(0) => {
                 info!("[PTY] key={} closed (EOF)", session_key);
-                let _ = tx.send(None);
+                finish_pty_output(&tx, &mut incomplete_utf8);
                 break;
             }
             Ok(n) => {
@@ -159,31 +209,15 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
                     last_output.store(now_ms(), Ordering::Relaxed);
                 }
 
-                let mut data = if incomplete_utf8.is_empty() {
-                    buffer[..n].to_vec()
-                } else {
-                    let mut combined = std::mem::take(&mut incomplete_utf8);
-                    combined.extend_from_slice(&buffer[..n]);
-                    combined
-                };
-
-                let valid_up_to = find_utf8_boundary(&data);
-                if valid_up_to < data.len() {
-                    incomplete_utf8 = data[valid_up_to..].to_vec();
-                    data.truncate(valid_up_to);
-                }
-
-                if !data.is_empty() {
-                    let text = String::from_utf8_lossy(&data).to_string();
-                    if tx.send(Some(text)).is_err() {
-                        info!("[PTY] key={} channel closed, reader exiting", session_key);
-                        break;
-                    }
+                let text = decode_pty_output(&buffer[..n], &mut incomplete_utf8);
+                if !text.is_empty() && tx.blocking_send(Some(text)).is_err() {
+                    info!("[PTY] key={} channel closed, reader exiting", session_key);
+                    break;
                 }
             }
             Err(e) => {
                 info!("[PTY] key={} read error: {}", session_key, e);
-                let _ = tx.send(None);
+                finish_pty_output(&tx, &mut incomplete_utf8);
                 break;
             }
         }
@@ -196,7 +230,7 @@ pub(super) fn spawn_pty_output_reader(
     last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
 ) -> PtyOutputReceiver {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let (tx, rx) = pty_output_channel();
     tokio::task::spawn_blocking(move || {
         read_pty_output_loop(&mut reader, tx, &session_key, last_output, attachment_hub);
     });
@@ -388,6 +422,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
 // UTF-8 Boundary Detection
 // ============================================================================
 
+#[cfg(test)]
 /// Finds the last valid UTF-8 boundary in a byte slice.
 /// Returns the index up to which bytes are valid UTF-8.
 /// If the buffer ends with an incomplete multi-byte sequence, returns the index before it.
