@@ -2,7 +2,7 @@
   import { ArrowDown, ArrowUp, CheckCircle2, CirclePause, CircleX, Clock3, TriangleAlert } from '@lucide/svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import type { TaskSchedule } from '../lib/types'
-  import { scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
+  import { nextScheduleFireAt, scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
   import type { ScheduleSortKey, SortDirection } from '../lib/viewTypes'
 
   interface Props {
@@ -128,12 +128,12 @@
               </td>
               <td class="text-sm">
                 <span class="font-medium">{cadenceLabel(schedule)}</span>
-                {#if schedule.kind === 'recurring' && schedule.preset === 'custom' && schedule.cron}
-                  <span class="mt-0.5 block max-w-40 truncate font-mono text-xs text-secondary">{schedule.cron}</span>
+                {#if schedule.timing.type === 'recurring' && schedule.timing.preset === 'custom'}
+                  <span class="mt-0.5 block max-w-40 truncate font-mono text-xs text-secondary">{schedule.timing.cron}</span>
                 {/if}
               </td>
               <td class="text-sm">{schedule.mode === 'create-and-start' ? 'Create + start' : 'Create only'}</td>
-              <td class="whitespace-nowrap text-sm tabular-nums">{formatDate(schedule.nextFireAt)}</td>
+              <td class="whitespace-nowrap text-sm tabular-nums">{formatDate(nextScheduleFireAt(schedule))}</td>
               <td class="text-sm">
                 <span class="inline-flex items-center gap-1.5 font-medium">
                   {#if !outcome}

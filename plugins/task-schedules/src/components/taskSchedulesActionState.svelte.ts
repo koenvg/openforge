@@ -4,6 +4,7 @@ import {
   draftFromSchedule,
   draftToPayload,
   isCronError,
+  isScheduleEnabled,
   messageForAsyncError,
   runStateFromOutcome,
   schedulesWithinOneOffRetention,
@@ -123,18 +124,18 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
 
   async function toggleSchedule(schedule: TaskSchedule): Promise<void> {
     const activeProjectId = projectId
-    if (!activeProjectId || updatingScheduleId) return
+    if (!activeProjectId || updatingScheduleId || schedule.lifecycle.state !== 'active') return
     updatingScheduleId = schedule.id
     error = null
     try {
       const saved = await ipc.save(activeProjectId, {
         ...draftToPayload(draftFromSchedule(schedule)),
-        runAt: schedule.runAt,
-        enabled: !schedule.enabled,
+        runAt: schedule.timing.type === 'once' ? schedule.timing.runAt : null,
+        enabled: !schedule.lifecycle.enabled,
       })
       if (!isCurrentProject(activeProjectId)) return
       schedules = schedules.map((candidate) => candidate.id === saved.id ? saved : candidate)
-      announcement = `${saved.title} ${saved.enabled ? 'enabled' : 'paused'}`
+      announcement = `${saved.title} ${isScheduleEnabled(saved) ? 'enabled' : 'paused'}`
     } catch (cause) {
       if (!isCurrentProject(activeProjectId)) return
       error = messageForAsyncError(cause)

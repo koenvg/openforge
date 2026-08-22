@@ -13,25 +13,56 @@ export interface ScheduledFireOutcome {
   message: string
 }
 
-export interface TaskSchedule {
+export interface TaskScheduleBase {
   id: string
   title: string
   prompt: string
-  kind: TaskScheduleKind
-  preset: SchedulePreset | null
-  cron: string | null
-  runAt: number | null
   mode: TaskScheduleMode
-  enabled: boolean
   createdAt: number
   updatedAt: number
-  nextFireAt: number | null
-  lastFireAt: number | null
   lastTaskId: string | null
-  cancelledAt: number | null
   idempotencyKey: string | null
   history: ScheduledFireOutcome[]
 }
+
+export type TaskScheduleTiming =
+  | { type: 'recurring'; preset: SchedulePreset; cron: string }
+  | { type: 'once'; runAt: number }
+
+export type ActiveTaskScheduleLifecycle = {
+  state: 'active'
+  enabled: boolean
+  nextFireAt: number
+  lastFireAt?: number
+}
+
+export type CompletedTaskScheduleLifecycle = {
+  state: 'completed'
+  completedAt: number
+}
+
+export type CancelledTaskScheduleLifecycle = {
+  state: 'cancelled'
+  cancelledAt: number
+  lastFireAt?: number
+}
+
+export type ActiveTaskSchedule = TaskScheduleBase & {
+  timing: TaskScheduleTiming
+  lifecycle: ActiveTaskScheduleLifecycle
+}
+
+export type CompletedTaskSchedule = TaskScheduleBase & {
+  timing: { type: 'once'; runAt: number }
+  lifecycle: CompletedTaskScheduleLifecycle
+}
+
+export type CancelledTaskSchedule = TaskScheduleBase & {
+  timing: TaskScheduleTiming
+  lifecycle: CancelledTaskScheduleLifecycle
+}
+
+export type TaskSchedule = ActiveTaskSchedule | CompletedTaskSchedule | CancelledTaskSchedule
 
 export interface TaskScheduleDraft {
   id?: string | null

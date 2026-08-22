@@ -1,11 +1,11 @@
 import type { Task } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, BackgroundServiceRegistration } from '@openforge-app/plugin-sdk/backend'
 import { getNextScheduledFireAt } from '../lib/cron'
-import type { ScheduledFireOutcome, TaskSchedule } from '../lib/types'
+import type { ActiveTaskSchedule, ScheduledFireOutcome, TaskSchedule } from '../lib/types'
 import type { ScheduleIdRequest } from './schedulePersistence'
 import { readSchedules, writeSchedules } from './schedulePersistence'
 import { createId } from './ids'
-import { isTerminalOneOff, requireRecurringCron } from './scheduleValidation'
+import { completeOneOffSchedule, isActiveTaskSchedule } from './scheduleValidation'
 
 const BACKGROUND_POLL_MS = 60_000
 const HISTORY_LIMIT = 5
@@ -86,7 +86,7 @@ export async function runScheduleNow(
   const schedules = await readSchedules(openforge, request.projectId)
   const schedule = schedules.find((candidate) => candidate.id === request.scheduleId)
   if (!schedule) throw new Error('Task Schedule not found')
-  if (isTerminalOneOff(schedule)) throw new Error('Completed or cancelled one-off Task Schedules cannot be run')
+  if (!isActiveTaskSchedule(schedule)) throw new Error('Completed or cancelled Task Schedules cannot be run')
 
   const { updatedSchedule, outcome } = await performScheduledFire(
     openforge,
@@ -96,8 +96,8 @@ export async function runScheduleNow(
     now,
     isCancellationRequested,
   )
-  const savedSchedule = updatedSchedule.kind === 'once' && outcome.taskId !== undefined
-    ? { ...updatedSchedule, enabled: false, lastFireAt: now, nextFireAt: null }
+  const savedSchedule = updatedSchedule.timing.type === 'once' && outcome.taskId !== undefined
+    ? completeOneOffSchedule(updatedSchedule, now)
     : updatedSchedule
   await writeSchedules(openforge, request.projectId, schedules.map((candidate) => candidate.id === schedule.id ? savedSchedule : candidate))
   return outcome
@@ -126,24 +126,22 @@ export async function processDueSchedules(
 
   const updatedSchedules: TaskSchedule[] = []
   for (const schedule of schedules) {
-    if (!schedule.enabled || schedule.nextFireAt === null || schedule.nextFireAt > now) {
+    if (!isActiveTaskSchedule(schedule) || !schedule.lifecycle.enabled || schedule.lifecycle.nextFireAt > now) {
       updatedSchedules.push(schedule)
       continue
     }
 
     const { updatedSchedule, outcome } = await performScheduledFire(openforge, projectId, schedule, 'scheduled', now)
     outcomes.push(outcome)
-    updatedSchedules.push(updatedSchedule.kind === 'once'
-      ? {
-          ...updatedSchedule,
-          enabled: false,
-          lastFireAt: now,
-          nextFireAt: null,
-        }
+    updatedSchedules.push(updatedSchedule.timing.type === 'once'
+      ? completeOneOffSchedule(updatedSchedule, now)
       : {
           ...updatedSchedule,
-          lastFireAt: now,
-          nextFireAt: getNextScheduledFireAt(requireRecurringCron(updatedSchedule), now),
+          lifecycle: {
+            ...updatedSchedule.lifecycle,
+            lastFireAt: now,
+            nextFireAt: getNextScheduledFireAt(updatedSchedule.timing.cron, now),
+          },
         })
     changed = true
   }
@@ -158,11 +156,11 @@ export async function processDueSchedules(
 async function performScheduledFire(
   openforge: BackendOpenForgeAPI,
   projectId: string,
-  schedule: TaskSchedule,
+  schedule: ActiveTaskSchedule,
   trigger: ScheduledFireOutcome['trigger'],
   now: number,
   isCancellationRequested: () => boolean = () => false,
-): Promise<{ updatedSchedule: TaskSchedule; outcome: ScheduledFireOutcome }> {
+): Promise<{ updatedSchedule: ActiveTaskSchedule; outcome: ScheduledFireOutcome }> {
   const outcome = await computeFireOutcome(openforge, projectId, schedule, trigger, now, isCancellationRequested)
   return { updatedSchedule: withOutcome(schedule, outcome), outcome }
 }
@@ -170,7 +168,7 @@ async function performScheduledFire(
 async function computeFireOutcome(
   openforge: BackendOpenForgeAPI,
   projectId: string,
-  schedule: TaskSchedule,
+  schedule: ActiveTaskSchedule,
   trigger: ScheduledFireOutcome['trigger'],
   now: number,
   isCancellationRequested: () => boolean,
@@ -246,7 +244,7 @@ function createOutcome(
   }
 }
 
-function withOutcome(schedule: TaskSchedule, outcome: ScheduledFireOutcome): TaskSchedule {
+function withOutcome(schedule: ActiveTaskSchedule, outcome: ScheduledFireOutcome): ActiveTaskSchedule {
   return {
     ...schedule,
     // A fire that touched a Task (created/started, or created-then-failed-to-start)

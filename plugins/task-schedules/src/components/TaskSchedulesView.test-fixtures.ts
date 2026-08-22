@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { vi } from 'vitest'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
-import type { ScheduledFireOutcome, TaskSchedule } from '../lib/types'
+import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleBase, TaskScheduleTiming } from '../lib/types'
 import TaskSchedulesView from './TaskSchedulesView.svelte'
 
 export const whenReady = vi.fn()
@@ -36,27 +36,31 @@ const context: OpenForgeContextSnapshot = {
   projectId: 'project-1',
 }
 
-export function makeSchedule(overrides: Partial<TaskSchedule> = {}): TaskSchedule {
+type ScheduleOverrides = Partial<TaskScheduleBase> & {
+  timing?: TaskScheduleTiming
+  lifecycle?: TaskSchedule['lifecycle']
+}
+
+export function makeSchedule(overrides: ScheduleOverrides = {}): TaskSchedule {
+  const {
+    timing = { type: 'recurring', preset: 'daily', cron: '0 9 * * *' },
+    lifecycle = { state: 'active', enabled: true, nextFireAt: Date.UTC(2026, 0, 2, 9) },
+    ...baseOverrides
+  } = overrides
   return {
     id: 'schedule-1',
     title: 'Daily dependency triage',
     prompt: 'Review dependency update tasks and create follow-up work.',
-    kind: 'recurring',
-    preset: 'daily',
-    cron: '0 9 * * *',
-    runAt: null,
     mode: 'create-and-start',
-    enabled: true,
     createdAt: Date.UTC(2026, 0, 1, 8),
     updatedAt: Date.UTC(2026, 0, 1, 8),
-    nextFireAt: Date.UTC(2026, 0, 2, 9),
-    lastFireAt: null,
     lastTaskId: null,
-    cancelledAt: null,
     idempotencyKey: null,
     history: [],
-    ...overrides,
-  }
+    ...baseOverrides,
+    timing,
+    lifecycle,
+  } as TaskSchedule
 }
 
 export const enabledSchedule = makeSchedule()
@@ -64,8 +68,7 @@ export const pausedSchedule = makeSchedule({
   id: 'schedule-2',
   title: 'Dormant cleanup review',
   prompt: 'Check stale cleanup tasks but do not run automatically yet.',
-  enabled: false,
-  nextFireAt: Date.UTC(2026, 0, 3, 9),
+  lifecycle: { state: 'active', enabled: false, nextFireAt: Date.UTC(2026, 0, 3, 9) },
 })
 
 export function renderView(props: { projectId?: string | null; projectName?: string } = {}) {
@@ -86,18 +89,25 @@ export function mockBackend(initialSchedules: TaskSchedule[]) {
     if (method === 'saveSchedule') {
       const input = payload?.schedule ?? {}
       const existing = schedules.find((schedule) => schedule.id === input.id)
+      const kind = input.kind ?? existing?.timing.type ?? 'recurring'
+      const existingCron = existing?.timing.type === 'recurring' ? existing.timing.cron : '0 9 * * *'
+      const runAt = input.runAt ?? (existing?.timing.type === 'once' ? existing.timing.runAt : null)
+      const nextFireAt = kind === 'once'
+        ? runAt
+        : existing?.lifecycle.state === 'active'
+          ? existing.lifecycle.nextFireAt
+          : Date.UTC(2026, 0, 2, 9)
+      const timing: TaskScheduleTiming = kind === 'once'
+        ? { type: 'once', runAt }
+        : { type: 'recurring', preset: input.preset, cron: input.cron ?? existingCron }
       const saved = makeSchedule({
         ...existing,
         id: input.id ?? 'saved-schedule',
         title: input.title,
         prompt: input.prompt,
-        kind: input.kind ?? existing?.kind ?? 'recurring',
-        preset: input.preset,
-        cron: input.kind === 'once' ? null : input.cron ?? existing?.cron ?? '0 9 * * *',
-        runAt: input.runAt ?? existing?.runAt ?? null,
-        nextFireAt: input.kind === 'once' ? input.runAt : existing?.nextFireAt ?? Date.UTC(2026, 0, 2, 9),
+        timing,
         mode: input.mode,
-        enabled: input.enabled,
+        lifecycle: { state: 'active', enabled: input.enabled, nextFireAt },
       })
       schedules = existing
         ? schedules.map((schedule) => schedule.id === saved.id ? saved : schedule)

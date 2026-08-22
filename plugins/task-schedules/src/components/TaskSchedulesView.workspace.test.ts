@@ -52,13 +52,8 @@ describe('TaskSchedulesView workspace', () => {
     const oneOff = makeSchedule({
       id: 'schedule-once',
       title: 'Resume dependency upgrade',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      enabled: false,
-      nextFireAt: null,
-      lastFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'completed', completedAt: runAt },
       history: [{ id: 'run-once', firedAt: runAt, trigger: 'scheduled', status: 'started', taskId: 'KVG-4000', message: 'Started KVG-4000' }],
     })
     mockBackend([oneOff])
@@ -82,13 +77,8 @@ describe('TaskSchedulesView workspace', () => {
     const cancelled = makeSchedule({
       id: 'schedule-cancelled',
       title: 'Cancelled dependency retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      enabled: false,
-      nextFireAt: runAt,
-      cancelledAt: now - 24 * 60 * 60 * 1_000,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'cancelled', cancelledAt: now - 24 * 60 * 60 * 1_000 },
     })
     mockBackend([cancelled])
 
@@ -106,49 +96,31 @@ describe('TaskSchedulesView workspace', () => {
     const expiredCompleted = makeSchedule({
       id: 'schedule-expired-completed',
       title: 'Expired completed retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: now - 7 * day,
-      enabled: false,
-      nextFireAt: null,
-      lastFireAt: now - 7 * day,
+      timing: { type: 'once', runAt: now - 7 * day },
+      lifecycle: { state: 'completed', completedAt: now - 7 * day },
     })
     const expiredCancelled = makeSchedule({
       id: 'schedule-expired-cancelled',
       title: 'Expired cancelled retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: now - 7 * day,
-      enabled: false,
-      nextFireAt: null,
-      cancelledAt: now - 7 * day,
+      timing: { type: 'once', runAt: now - 7 * day },
+      lifecycle: { state: 'cancelled', cancelledAt: now - 7 * day },
     })
     const recentCompleted = makeSchedule({
       id: 'schedule-recent-completed',
       title: 'Recent completed retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: now - 6 * day,
-      enabled: false,
-      nextFireAt: null,
-      lastFireAt: now - 6 * day,
+      timing: { type: 'once', runAt: now - 6 * day },
+      lifecycle: { state: 'completed', completedAt: now - 6 * day },
     })
     const oldNonTerminal = makeSchedule({
       id: 'schedule-old-pending',
       title: 'Old pending one-off',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt: now - 30 * day,
-      nextFireAt: now - 30 * day,
+      timing: { type: 'once', runAt: now - 30 * day },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: now - 30 * day },
     })
     const recurring = makeSchedule({
       id: 'schedule-recurring-history',
       title: 'Recurring with old history',
-      lastFireAt: now - 30 * day,
+      lifecycle: { state: 'active', enabled: true, nextFireAt: Date.UTC(2026, 0, 2, 9), lastFireAt: now - 30 * day },
     })
     mockBackend([expiredCompleted, expiredCancelled, recentCompleted, oldNonTerminal, recurring])
 
@@ -172,11 +144,8 @@ describe('TaskSchedulesView workspace', () => {
     backend.setSchedules([makeSchedule({
       id: 'schedule-agent',
       title: 'Agent-created retry',
-      kind: 'once',
-      preset: null,
-      cron: null,
-      runAt,
-      nextFireAt: runAt,
+      timing: { type: 'once', runAt },
+      lifecycle: { state: 'active', enabled: true, nextFireAt: runAt },
     })])
     window.dispatchEvent(new Event('focus'))
 

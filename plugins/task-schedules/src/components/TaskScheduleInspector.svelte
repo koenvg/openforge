@@ -12,7 +12,7 @@
     X,
   } from '@lucide/svelte'
   import type { TaskSchedule } from '../lib/types'
-  import { scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
+  import { nextScheduleFireAt, scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
   import type { ScheduleRunState } from '../lib/viewTypes'
 
   interface Props {
@@ -52,7 +52,7 @@
   let busy = $derived(updating || runState?.phase === 'running' || runState?.phase === 'cancelling')
   let history = $derived([...schedule.history].reverse())
   let status = $derived(scheduleStatusLabel(schedule))
-  let terminalOneOff = $derived(schedule.kind === 'once' && (schedule.lastFireAt !== null || schedule.cancelledAt !== null))
+  let terminal = $derived(schedule.lifecycle.state !== 'active')
   function resultLabel(status: string): string {
     if (status === 'started') return 'Succeeded'
     if (status === 'created') return 'Created'
@@ -109,7 +109,7 @@
           <div class="flex justify-between gap-4"><dt class="text-secondary">Details</dt><dd class="max-w-52 text-right">{cadenceDescription(schedule)}</dd></div>
         {/if}
         <div class="flex justify-between gap-4"><dt class="text-secondary">Timezone</dt><dd class="text-right font-medium">{timezone}</dd></div>
-        <div class="flex justify-between gap-4"><dt class="text-secondary">Next run</dt><dd class="text-right font-medium tabular-nums">{formatDate(schedule.nextFireAt)}</dd></div>
+        <div class="flex justify-between gap-4"><dt class="text-secondary">Next run</dt><dd class="text-right font-medium tabular-nums">{formatDate(nextScheduleFireAt(schedule))}</dd></div>
       </dl>
     </section>
 
@@ -160,7 +160,7 @@
   </div>
 
   <footer class="border-t border-base-300 p-4">
-    {#if !terminalOneOff}
+    {#if !terminal}
       <div class="grid grid-cols-3 gap-2">
       <button class="btn btn-primary min-h-10" type="button" disabled={busy} onclick={() => onRunNow(schedule.id)}>
         <Play class="size-4" aria-hidden="true" /> Run now
@@ -169,7 +169,7 @@
         <Pencil class="size-4" aria-hidden="true" /> Edit
       </button>
       <button class="btn min-h-10" type="button" disabled={busy} onclick={() => onToggleEnabled(schedule)}>
-        {#if updating}<span class="loading loading-spinner loading-xs" aria-hidden="true"></span> Updating…{:else if schedule.enabled}<CirclePause class="size-4" aria-hidden="true" /> Pause{:else}<CheckCircle2 class="size-4" aria-hidden="true" /> Enable{/if}
+        {#if updating}<span class="loading loading-spinner loading-xs" aria-hidden="true"></span> Updating…{:else if schedule.lifecycle.state === 'active' && schedule.lifecycle.enabled}<CirclePause class="size-4" aria-hidden="true" /> Pause{:else}<CheckCircle2 class="size-4" aria-hidden="true" /> Enable{/if}
       </button>
       </div>
     {/if}
