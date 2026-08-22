@@ -96,7 +96,7 @@ export interface OpenForgePackageMetadata {
   apiVersion: SupportedOpenForgeApiVersion
   displayName: string
   description: string
-  icon?: string
+  icon?: PluginIcon
   frontend?: string
   frontendStyles?: string[]
   backend?: string

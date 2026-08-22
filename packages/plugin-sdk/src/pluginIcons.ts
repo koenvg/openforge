@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify'
 
-import type { PluginIcon, PluginSvgIcon } from './types'
+import { isPluginSvgIcon } from './pluginIconContract'
+import type { PluginIcon } from './types'
 
 export const MAX_PLUGIN_SVG_ICON_CHARACTERS = 10_000
 
@@ -38,12 +39,6 @@ const ALLOWED_SVG_ATTRIBUTES = [
 ]
 const SAFE_PAINT_VALUE = /^(?:none|currentColor|transparent|#[0-9a-f]{3,8}|[a-z]+|(?:rgb|rgba|hsl|hsla)\([\d\s.,%+\-/]+\))$/iu
 
-function isPluginSvgIcon(value: unknown): value is PluginSvgIcon {
-  return value !== null
-    && typeof value === 'object'
-    && (value as Record<string, unknown>).type === 'svg'
-    && typeof (value as Record<string, unknown>).svg === 'string'
-}
 
 function parseSvgRoot(markup: string): SVGSVGElement {
   const template = document.createElement('template')

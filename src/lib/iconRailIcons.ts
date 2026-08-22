@@ -1,4 +1,4 @@
-import { Boxes, Clock, Code, FileText, FolderOpen, GitPullRequest, Kanban, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
+import { Boxes, ChartColumnBig, Clock, Code, FileText, FolderOpen, GitPullRequest, Kanban, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from '@lucide/svelte'
 import { sanitizePluginIcon } from '@openforge-app/plugin-sdk/pluginIcons'
 import type { PluginIcon } from '@openforge-app/plugin-sdk'
 
@@ -22,6 +22,7 @@ const iconRegistry: Record<string, IconComponent> = {
   boxes: Boxes,
   wrench: Wrench,
   clock: Clock,
+  'chart-column-big': ChartColumnBig,
   kanban: Kanban,
 }
 

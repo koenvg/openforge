@@ -21,6 +21,14 @@ describe('plugin icon contract', () => {
     expect(typeof icon === 'object' ? icon.svg : '').not.toMatch(/aria-label|focusable|onclick|script|style|title|width="48"|height="48"/i)
   })
 
+  it('rejects SVG icon fields outside the public contract', () => {
+    expect(() => sanitizePluginIcon({
+      type: 'svg',
+      svg: '<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>',
+      extra: true,
+    })).toThrow('Plugin icons must be a non-empty name or { type: "svg", svg }')
+  })
+
   it('rejects oversized custom SVG markup before rendering', () => {
     expect(() => sanitizePluginIcon({
       type: 'svg',

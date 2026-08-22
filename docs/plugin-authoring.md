@@ -51,6 +51,7 @@ Metadata rules:
 
 - `openforge.id` must be unique app-wide. Runtime contribution IDs are local to the plugin and are auto-qualified with the plugin id.
 - `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
+- `icon` uses the same `PluginIcon` contract as view navigation: a supported Lucide name such as `chart-column-big`, or `{ "type": "svg", "svg": "<svg ...>...</svg>" }`.
 - `frontend` and `backend` are optional, independent built JavaScript artifacts.
 - `frontendStyles` optionally lists one or more built CSS artifacts for a frontend plugin. Paths are package-relative, must end in `.css`, and are validated during installation.
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
@@ -115,9 +116,9 @@ export default defineFrontendPlugin({
 })
 ```
 
-### View icons
+### Plugin icons
 
-`openforge.views.register(...)` accepts either an existing host icon name or an inline SVG icon:
+`package.json#openforge.icon` and `openforge.views.register(...)#icon` both use `PluginIcon`: a supported Lucide icon name or an inline SVG icon.
 
 ```ts
 const acmeIcon = {
@@ -134,7 +135,7 @@ context.subscriptions.add(openforge.views.register({
 }))
 ```
 
-The string form remains backward compatible. OpenForge resolves registered names such as `layout-dashboard`; an unknown name keeps the existing generic Plug fallback.
+The string form uses kebab-case Lucide names. OpenForge resolves supported names such as `layout-dashboard` and `chart-column-big`; an unsupported name renders the generic Plug icon.
 
 Custom SVG icons use this authoring contract:
 
@@ -143,9 +144,9 @@ Custom SVG icons use this authoring contract:
 - OpenForge owns sizing: 24px in the icon rail and 18px in the sidebar. Root `width` and `height` are stripped. Authors own the `viewBox` and geometry.
 - Authors own paint. Prefer `currentColor` so active, inactive, hover, and theme colors continue to come from the host. Safe literal colors are retained but do not participate in host navigation states.
 - OpenForge owns accessibility. The navigation button uses the registered view `title` as its accessible name, and the icon is decorative. SVG `title`, `desc`, ARIA, focus, and event attributes are stripped.
-- Registration rejects an empty icon, malformed SVG, a missing/invalid `viewBox`, an oversized SVG, or SVG with no visible geometry. `sanitizePluginIcon(...)` from `@openforge-app/plugin-sdk/pluginIcons` is available for optional frontend author-side preflight; the host still validates at registration and before rendering.
+- Package installation validates the `PluginIcon` JSON shape without executing or rendering SVG markup. Before rendering an SVG from package metadata or a view registration, the host applies the same sanitizer. It rejects an empty icon, malformed SVG, a missing or invalid `viewBox`, an oversized SVG, or SVG with no visible geometry. `sanitizePluginIcon(...)` from `@openforge-app/plugin-sdk/pluginIcons` is available for optional frontend author-side preflight.
 
-This custom SVG form currently applies to view navigation icons. Other contribution icon fields continue to use their documented named-icon strings.
+The custom SVG form applies to package icons and view navigation icons. Other contribution icon fields continue to use their documented named-icon strings.
 
 Frontend-only registries and helpers:
 
