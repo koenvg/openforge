@@ -1,4 +1,5 @@
 import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateCronCadence, validateFiveFieldCron } from './cron'
+import { isTerminalOneOffTaskSchedule, isTerminalTaskSchedule } from './taskScheduleLifecycle'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft } from './types'
 import type { ScheduleDraft, ScheduleFilter, ScheduleRunState, ScheduleSortKey, SortDirection } from './viewTypes'
 
@@ -108,13 +109,11 @@ function localDateTimeValue(timestamp: number): string {
 
 export function schedulesWithinOneOffRetention(schedules: TaskSchedule[], now = Date.now()): TaskSchedule[] {
   return schedules.filter((schedule) => {
-    if (schedule.timing.type !== 'once') return true
-    const terminalAt = schedule.lifecycle.state === 'cancelled'
-      ? schedule.lifecycle.cancelledAt
-      : schedule.lifecycle.state === 'completed'
-        ? schedule.lifecycle.completedAt
-        : null
-    return terminalAt === null || now - terminalAt < TERMINAL_ONE_OFF_RETENTION_MS
+    if (!isTerminalOneOffTaskSchedule(schedule)) return true
+    const terminalAt = schedule.lifecycle.state === 'completed'
+      ? schedule.lifecycle.completedAt
+      : schedule.lifecycle.cancelledAt
+    return now - terminalAt < TERMINAL_ONE_OFF_RETENTION_MS
   })
 }
 
@@ -134,7 +133,7 @@ export function visibleSchedules(
 ): TaskSchedule[] {
   const filtered = schedules.filter((schedule) => {
     if (filter === 'enabled' && !isScheduleEnabled(schedule)) return false
-    if (filter === 'paused' && (schedule.lifecycle.state !== 'active' || schedule.lifecycle.enabled)) return false
+    if (filter === 'paused' && (isTerminalTaskSchedule(schedule) || schedule.lifecycle.enabled)) return false
     return true
   })
   return [...filtered].sort((a, b) => compareSchedules(a, b, sortKey, sortDirection))

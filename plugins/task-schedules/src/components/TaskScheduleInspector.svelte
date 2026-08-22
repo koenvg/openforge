@@ -11,6 +11,7 @@
     TriangleAlert,
     X,
   } from '@lucide/svelte'
+  import { isTerminalTaskSchedule } from '../lib/taskScheduleLifecycle'
   import type { TaskSchedule } from '../lib/types'
   import { nextScheduleFireAt, scheduleStatusLabel } from '../lib/taskSchedulesViewModel'
   import type { ScheduleRunState } from '../lib/viewTypes'
@@ -52,7 +53,7 @@
   let busy = $derived(updating || runState?.phase === 'running' || runState?.phase === 'cancelling')
   let history = $derived([...schedule.history].reverse())
   let status = $derived(scheduleStatusLabel(schedule))
-  let terminal = $derived(schedule.lifecycle.state !== 'active')
+  let terminal = $derived(isTerminalTaskSchedule(schedule))
   function resultLabel(status: string): string {
     if (status === 'started') return 'Succeeded'
     if (status === 'created') return 'Created'

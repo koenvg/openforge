@@ -1,5 +1,6 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import { createTaskSchedulesIpc } from '../lib/ipc'
+import { isTerminalTaskSchedule } from '../lib/taskScheduleLifecycle'
 import {
   draftFromSchedule,
   draftToPayload,
@@ -124,7 +125,7 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
 
   async function toggleSchedule(schedule: TaskSchedule): Promise<void> {
     const activeProjectId = projectId
-    if (!activeProjectId || updatingScheduleId || schedule.lifecycle.state !== 'active') return
+    if (!activeProjectId || updatingScheduleId || isTerminalTaskSchedule(schedule)) return
     updatingScheduleId = schedule.id
     error = null
     try {

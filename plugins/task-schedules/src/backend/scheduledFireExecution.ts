@@ -1,11 +1,12 @@
 import type { Task } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, BackgroundServiceRegistration } from '@openforge-app/plugin-sdk/backend'
 import { getNextScheduledFireAt } from '../lib/cron'
+import { isTerminalTaskSchedule } from '../lib/taskScheduleLifecycle'
 import type { ActiveTaskSchedule, ScheduledFireOutcome, TaskSchedule } from '../lib/types'
 import type { ScheduleIdRequest } from './schedulePersistence'
 import { readSchedules, writeSchedules } from './schedulePersistence'
 import { createId } from './ids'
-import { completeOneOffSchedule, isActiveTaskSchedule } from './scheduleValidation'
+import { completeOneOffSchedule } from './scheduleValidation'
 
 const BACKGROUND_POLL_MS = 60_000
 const HISTORY_LIMIT = 5
@@ -86,7 +87,7 @@ export async function runScheduleNow(
   const schedules = await readSchedules(openforge, request.projectId)
   const schedule = schedules.find((candidate) => candidate.id === request.scheduleId)
   if (!schedule) throw new Error('Task Schedule not found')
-  if (!isActiveTaskSchedule(schedule)) throw new Error('Completed or cancelled Task Schedules cannot be run')
+  if (isTerminalTaskSchedule(schedule)) throw new Error('Completed or cancelled Task Schedules cannot be run')
 
   const { updatedSchedule, outcome } = await performScheduledFire(
     openforge,
@@ -126,7 +127,7 @@ export async function processDueSchedules(
 
   const updatedSchedules: TaskSchedule[] = []
   for (const schedule of schedules) {
-    if (!isActiveTaskSchedule(schedule) || !schedule.lifecycle.enabled || schedule.lifecycle.nextFireAt > now) {
+    if (isTerminalTaskSchedule(schedule) || !schedule.lifecycle.enabled || schedule.lifecycle.nextFireAt > now) {
       updatedSchedules.push(schedule)
       continue
     }

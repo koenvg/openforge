@@ -1,7 +1,8 @@
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
+import { isTerminalTaskSchedule } from '../lib/taskScheduleLifecycle'
 import type { ScheduleCommandInput, TaskSchedule, TaskScheduleDraft, UpdateScheduleCommandInput } from '../lib/types'
 import { readSchedules, saveTaskSchedule, writeSchedules } from './schedulePersistence'
-import { isActiveTaskSchedule, optionalTrimmedString, parseFutureRunAt } from './scheduleValidation'
+import { optionalTrimmedString, parseFutureRunAt } from './scheduleValidation'
 
 export function createAgentScheduleRunner(openforge: BackendOpenForgeAPI) {
   const pendingByIdempotencyKey = new Map<string, Promise<TaskSchedule>>()
@@ -76,7 +77,7 @@ export async function updateScheduleFromCommand(
   const schedules = await readSchedules(openforge, projectId)
   const existing = schedules.find((schedule) => schedule.id === input.scheduleId)
   if (!existing) throw new Error('Task Schedule not found')
-  if (!isActiveTaskSchedule(existing)) {
+  if (isTerminalTaskSchedule(existing)) {
     throw new Error('Completed or cancelled Task Schedules cannot be updated')
   }
   if (input.timing && input.timing.type !== existing.timing.type) {
@@ -112,7 +113,7 @@ export async function cancelScheduleFromCommand(
   const schedules = await readSchedules(openforge, projectId)
   const existing = schedules.find((schedule) => schedule.id === scheduleId)
   if (!existing) throw new Error('Task Schedule not found')
-  if (!isActiveTaskSchedule(existing)) return existing
+  if (isTerminalTaskSchedule(existing)) return existing
   const cancelled: TaskSchedule = {
     ...existing,
     updatedAt: now,
