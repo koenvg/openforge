@@ -70,7 +70,7 @@
   }
 </script>
 
-<aside class="h-full min-h-0 overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Schedule details">
+<aside class="h-full min-h-0 overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Task Schedule details">
   <header class="flex min-h-16 items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
     <div class="flex min-w-0 items-start gap-3">
       <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><CalendarDays class="size-4" aria-hidden="true" /></span>
@@ -89,7 +89,7 @@
         </span>
       </div>
     </div>
-    <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close schedule details" onclick={onClose}>
+    <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close Task Schedule details" onclick={onClose}>
       <X class="size-4" aria-hidden="true" />
     </button>
   </header>
@@ -102,7 +102,7 @@
 
     <section class="mt-6 border-t border-base-300 pt-5" aria-labelledby="schedule-cadence-heading">
       <h3 id="schedule-cadence-heading" class="flex items-center gap-2 text-sm font-semibold">
-        <CalendarDays class="size-4 text-secondary" aria-hidden="true" /> Schedule
+        <CalendarDays class="size-4 text-secondary" aria-hidden="true" /> Task Schedule
       </h3>
       <dl class="mt-3 space-y-2 text-sm">
         <div class="flex justify-between gap-4"><dt class="text-secondary">Cadence</dt><dd class="text-right font-medium">{cadenceLabel(schedule)}</dd></div>
@@ -119,8 +119,8 @@
       <p class="mt-3 text-sm font-medium">{schedule.mode === 'create-and-start' ? 'Create + start' : 'Create only'}</p>
       <p class="mt-1 text-xs leading-5 text-secondary">
         {schedule.mode === 'create-and-start'
-          ? 'Creates a board task and starts implementation when no previous scheduled task is still open.'
-          : 'Creates a board task in the backlog for a manual start.'}
+          ? 'Creates a board Task and starts implementation when no previous scheduled Task is still open.'
+          : 'Creates a board Task in the backlog for a manual start.'}
       </p>
     </section>
 
@@ -136,7 +136,7 @@
                 {#if outcome.taskId}
                   <button class="rounded font-semibold text-primary hover:underline" type="button" onclick={() => onOpenTask(outcome.taskId!)}>{outcome.taskId}</button>
                 {:else}
-                  <span class="font-semibold">No task created</span>
+                  <span class="font-semibold">No Task created</span>
                 {/if}
                 <p class="mt-0.5 truncate text-secondary" title={outcome.message}>{outcome.message}</p>
               </div>
@@ -199,7 +199,7 @@
 
     <div class="mt-4 border-t border-base-300 pt-3">
       <button class="btn btn-ghost min-h-10 w-full justify-start text-error" type="button" disabled={busy} onclick={() => onRequestDelete(schedule)}>
-        <Trash2 class="size-4" aria-hidden="true" /> Delete schedule
+        <Trash2 class="size-4" aria-hidden="true" /> Delete Task Schedule
       </button>
     </div>
   </footer>

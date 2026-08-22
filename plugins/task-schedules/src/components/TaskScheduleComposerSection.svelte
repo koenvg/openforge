@@ -79,13 +79,13 @@
   }
 </script>
 
-<aside class="flex h-full min-h-0 flex-col border-l border-base-300 bg-base-100" aria-label="Schedule form">
+<aside class="flex h-full min-h-0 flex-col border-l border-base-300 bg-base-100" aria-label="Task Schedule form">
   <header class="flex min-h-16 items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
     <div>
       <h2 class="text-lg font-semibold">{composerTitle}</h2>
       <p class="mt-1 text-xs text-secondary">Create a Task once or on a recurring cadence.</p>
     </div>
-    <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close schedule form" disabled={saving} onclick={onClose}>
+    <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close Task Schedule form" disabled={saving} onclick={onClose}>
       <X class="size-4" aria-hidden="true" />
     </button>
   </header>
@@ -99,12 +99,12 @@
 
       <label class="form-control flex w-full flex-col gap-1.5">
         <span class="text-sm font-medium">Prompt <span class="text-error" aria-hidden="true">*</span></span>
-        <textarea class="textarea textarea-bordered min-h-36 w-full resize-y leading-relaxed" value={draft.prompt} oninput={(event) => onDraftChange({ ...draft, prompt: event.currentTarget.value })} placeholder="Describe the task created on each run" required></textarea>
-        <span class="text-xs text-secondary">This becomes the task prompt for every scheduled run.</span>
+        <textarea class="textarea textarea-bordered min-h-36 w-full resize-y leading-relaxed" value={draft.prompt} oninput={(event) => onDraftChange({ ...draft, prompt: event.currentTarget.value })} placeholder="Describe the Task created on each run" required></textarea>
+        <span class="text-xs text-secondary">This becomes the Task prompt for every scheduled run.</span>
       </label>
 
       <fieldset class="space-y-2">
-        <legend class="text-sm font-medium">Schedule type</legend>
+        <legend class="text-sm font-medium">Task Schedule type</legend>
         <div class="grid gap-2 sm:grid-cols-2">
           <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
             <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="recurring" checked={draft.timing.type === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
@@ -115,7 +115,7 @@
             <span><span class="block font-medium">One time</span><span class="block text-xs text-secondary">Run once at a future date</span></span>
           </label>
         </div>
-        {#if draft.id}<p class="text-xs text-secondary">Schedule type can’t be changed after creation.</p>{/if}
+        {#if draft.id}<p class="text-xs text-secondary">Task Schedule type can’t be changed after creation.</p>{/if}
       </fieldset>
 
       <fieldset class="space-y-3">
@@ -204,15 +204,15 @@
         </select>
         <span id="schedule-mode-help" class="text-xs leading-5 text-secondary">
           {draft.mode === 'create-and-start'
-            ? 'Creates a task and starts implementation when the previous scheduled task is closed.'
-            : 'Creates a task in the backlog for a manual start.'}
+            ? 'Creates a Task and starts implementation when the previous scheduled Task is closed.'
+            : 'Creates a Task in the backlog for a manual start.'}
         </span>
       </div>
 
       <label class="flex min-h-11 items-center justify-between gap-3 rounded-box border border-base-300 px-3 text-sm">
         <span>
           <span class="block font-medium">{enabledToggleLabel}</span>
-          <span class="block text-xs text-secondary">Paused schedules can still be run manually.</span>
+          <span class="block text-xs text-secondary">Paused Task Schedules can still be run manually.</span>
         </span>
         <input class="toggle toggle-primary" type="checkbox" checked={draft.enabled} onchange={(event) => onDraftChange({ ...draft, enabled: event.currentTarget.checked })} />
       </label>
@@ -222,7 +222,7 @@
       <button class="btn min-h-10" type="button" disabled={saving} onclick={onClose}>Cancel</button>
       <button class="btn btn-primary min-h-10" type="submit" disabled={saving}>
         {#if saving}<span class="loading loading-spinner loading-xs" aria-hidden="true"></span>{:else}<CheckCircle2 class="size-4" aria-hidden="true" />{/if}
-        {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create schedule'}
+        {saving ? 'Saving…' : draft.id ? 'Save changes' : 'Create Task Schedule'}
       </button>
     </footer>
   </form>
