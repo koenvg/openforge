@@ -1,3 +1,4 @@
+import { createInitialSelfReviewContextLoader } from '../../lib/initialSelfReviewContextLoader.svelte'
 import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
 import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
 import type { SelfReviewContext } from '../../lib/selfReviewFileContentLoader'
@@ -12,10 +13,12 @@ export function createSelfReviewDiffController(options: SelfReviewDiffController
   let includeCommitted = $state(true)
   let includeUncommitted = $state(true)
 
+  const initialReviewContext = createInitialSelfReviewContextLoader()
   const diffLoader = createDiffLoader({
     getTaskId: options.getTaskId,
     getIncludeCommitted: () => includeCommitted,
     getIncludeUncommitted: () => includeUncommitted,
+    initialReviewContext,
     initialSelectedCommitSha: getTaskReviewPaneState(options.getTaskId()).selectedCommitSha,
     onSelectedCommitShaChange: (selectedCommitSha) => {
       updateTaskReviewPaneState(options.getTaskId(), { selectedCommitSha })
@@ -56,8 +59,8 @@ export function createSelfReviewDiffController(options: SelfReviewDiffController
     get error() { return diffLoader.error },
     get commits() { return diffLoader.commits },
     get selectedCommitSha() { return diffLoader.selectedCommitSha },
-    get linkedPr() { return diffLoader.linkedPr },
-    get prComments() { return diffLoader.prComments },
+    get linkedPr() { return initialReviewContext.linkedPr },
+    get prComments() { return initialReviewContext.prComments },
     getReviewContext,
     load,
     refresh: diffLoader.refresh,

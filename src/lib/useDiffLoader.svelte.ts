@@ -1,21 +1,7 @@
-import { get } from "svelte/store";
-import {
-	getActiveSelfReviewComments,
-	getArchivedSelfReviewComments,
-	getCommitDiff,
-	getPrComments,
-	getTaskCommits,
-	getTaskDiff,
-} from "./ipc";
-import { ticketPrs } from "./stores";
-import {
-	mergePendingSelfReviewComments,
-	resetLoadedSelfReviewState,
-	setSelfReviewArchivedComments,
-	setSelfReviewDiffFiles,
-	setSelfReviewGeneralComments,
-} from "./taskScopedSelfReviewState";
-import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
+import { getCommitDiff, getTaskCommits, getTaskDiff } from "./ipc";
+import { setSelfReviewDiffFiles } from "./taskScopedSelfReviewState";
+import type { CommitInfo } from "./types";
+import type { InitialSelfReviewContextLoader } from "./initialSelfReviewContextLoader.svelte";
 
 // ============================================================================
 // Interface
@@ -24,8 +10,6 @@ import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
 export interface DiffLoaderState {
 	readonly isLoading: boolean;
 	readonly error: string | null;
-	readonly prComments: PrComment[];
-	readonly linkedPr: PullRequestInfo | null;
 	readonly commits: CommitInfo[];
 	readonly selectedCommitSha: string | null;
 	loadDiff(): Promise<void>;
@@ -44,14 +28,16 @@ export function createDiffLoader(deps: {
 	/** Whether committed changes (merge-base..HEAD) are part of the diff. Defaults to true. */
 	getIncludeCommitted?: () => boolean;
 	getIncludeUncommitted: () => boolean;
+	initialReviewContext?: Pick<
+		InitialSelfReviewContextLoader,
+		"hydrate" | "invalidate" | "cleanup"
+	>;
 	initialSelectedCommitSha?: string | null;
 	onSelectedCommitShaChange?: (sha: string | null) => void;
 }): DiffLoaderState {
 	const getIncludeCommitted = deps.getIncludeCommitted ?? (() => true);
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
-	let prComments = $state<PrComment[]>([]);
-	let linkedPr = $state<PullRequestInfo | null>(null);
 	let commits = $state<CommitInfo[]>([]);
 	let selectedCommitSha = $state<string | null>(deps.initialSelectedCommitSha ?? null);
 	let loadGeneration = 0;
@@ -59,6 +45,7 @@ export function createDiffLoader(deps: {
 
 	function beginLoad(): number {
 		const generation = ++loadGeneration;
+		deps.initialReviewContext?.invalidate();
 		isLoading = true;
 		error = null;
 		return generation;
@@ -94,48 +81,13 @@ export function createDiffLoader(deps: {
 			if (isStale(generation)) return;
 			setSelfReviewDiffFiles(taskId, diffs);
 
-			if (options.loadInitialReviewData && selectedCommitSha === null) {
-				const activeComments = await getActiveSelfReviewComments(taskId);
+			if (
+				options.loadInitialReviewData &&
+				selectedCommitSha === null &&
+				deps.initialReviewContext
+			) {
+				await deps.initialReviewContext.hydrate(taskId);
 				if (isStale(generation)) return;
-				setSelfReviewGeneralComments(
-					taskId,
-					activeComments.filter((c) => c.comment_type === "general"),
-				);
-
-				const archivedComments = await getArchivedSelfReviewComments(taskId);
-				if (isStale(generation)) return;
-				setSelfReviewArchivedComments(
-					taskId,
-					archivedComments.filter((c) => c.comment_type === "general"),
-				);
-
-				const activeInlineComments = activeComments
-					.filter((c) => c.comment_type === "inline")
-					.map((c) => ({
-						path: c.file_path!,
-						line: c.line_number!,
-						body: c.body,
-						side: "RIGHT",
-					}));
-				mergePendingSelfReviewComments(taskId, activeInlineComments);
-
-				const taskPrs = get(ticketPrs).get(taskId) || [];
-				const openPrs = taskPrs
-					.filter((pr) => pr.state === "open")
-					.sort((a, b) => b.updated_at - a.updated_at);
-				if (openPrs.length > 0) {
-					const pr = openPrs[0];
-					linkedPr = pr;
-					try {
-						const nextPrComments = await getPrComments(pr.id);
-						if (isStale(generation)) return;
-						prComments = nextPrComments;
-					} catch (e) {
-						if (isStale(generation)) return;
-						console.error(`Failed to load comments for PR ${pr.id}:`, e);
-						prComments = [];
-					}
-				}
 			}
 		} catch (e) {
 			if (isStale(generation)) return;
@@ -189,9 +141,8 @@ export function createDiffLoader(deps: {
 		commitLoadGeneration += 1;
 		isLoading = false;
 		error = null;
-		prComments = [];
-		linkedPr = null;
-		resetLoadedSelfReviewState(deps.getTaskId());
+		deps.initialReviewContext?.cleanup(deps.getTaskId());
+		setSelfReviewDiffFiles(deps.getTaskId(), []);
 		selectedCommitSha = null;
 		commits = [];
 	}
@@ -202,12 +153,6 @@ export function createDiffLoader(deps: {
 		},
 		get error() {
 			return error;
-		},
-		get prComments() {
-			return prComments;
-		},
-		get linkedPr() {
-			return linkedPr;
 		},
 		get commits() {
 			return commits;
