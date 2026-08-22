@@ -62,6 +62,8 @@ export function createInitialPluginState(pluginId: string, storage: PluginStorag
     state: 'missing',
     error: null,
     activationPromise: null,
+    deactivationPromise: null,
+    activationGeneration: 0,
     importGeneration: 0,
     module: null,
     methods: new Map(),

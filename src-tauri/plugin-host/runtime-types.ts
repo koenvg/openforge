@@ -125,6 +125,8 @@ export type RuntimePluginState = {
   state: BackendReadyState
   error: Error | null
   activationPromise: Promise<void> | null
+  deactivationPromise: Promise<void> | null
+  activationGeneration: number
   importGeneration: number
   module: Record<string, unknown> | null
   methods: Map<string, RuntimeBackendMethod>
