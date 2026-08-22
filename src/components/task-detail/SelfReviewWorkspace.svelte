@@ -19,26 +19,7 @@
     {#if controller.fileTreeVisible}
       <SelfReviewChangedFilesPanel
         bind:this={changedFilesPanel}
-        files={controller.treeFiles}
-        reviewedFileShas={controller.reviewedFileShas}
-        getFileReviewIdentity={controller.getVisibleFileReviewIdentity}
-        onToggleFileReviewed={controller.toggleFileReviewed}
-        includeNonApplicationFiles={controller.includeNonApplicationFiles}
-        nonApplicationFileCount={controller.nonApplicationFileCount}
-        onToggleNonApplicationFiles={controller.setIncludeNonApplicationFiles}
-        commits={controller.commits}
-        selectedCommitSha={controller.selectedCommitSha}
-        includeCommitted={controller.includeCommitted}
-        includeUncommitted={controller.includeUncommitted}
-        committedLocked={controller.committedLocked}
-        uncommittedLocked={controller.uncommittedLocked}
-        lockedScopeTooltip={controller.lockedScopeTooltip}
-        onIncludeCommittedChange={controller.setIncludeCommitted}
-        onIncludeUncommittedChange={controller.setIncludeUncommitted}
-        onSelectCommit={controller.selectCommit}
-        onSelectFile={controller.selectFile}
-        onCollapse={() => controller.setFileTreeVisible(false)}
-        onRequestFocusDiff={controller.focusDiff}
+        pane={controller.changedFilesPane}
       />
     {/if}
     <SelfReviewDiffPanel
