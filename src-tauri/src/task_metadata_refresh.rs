@@ -12,4 +12,5 @@ mod tests;
 
 pub(crate) use refresh::{
     queue_task_display_title_refresh, refresh_queued_task_display_title_with_ai_once,
+    QueuedTaskDisplayTitleRefresh,
 };

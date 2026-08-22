@@ -58,9 +58,9 @@ pub use server_lifecycle::{create_router, electron_sidecar_app_handle, start_htt
 use internal_transport::app_event_sse_data;
 #[cfg(test)]
 use legacy_transport::{
-    bounded_claude_activity_snapshot, map_hook_to_status, opencode_status_from_event,
-    record_agent_lifecycle_notification, resolve_project_id,
-    should_start_task_display_title_refresh,
+    bounded_claude_activity_snapshot, handle_agent_lifecycle_notification_with_refresh,
+    map_hook_to_status, opencode_status_from_event, record_agent_lifecycle_notification,
+    resolve_project_id, should_start_task_display_title_refresh,
 };
 #[cfg(test)]
 use server_lifecycle::{
