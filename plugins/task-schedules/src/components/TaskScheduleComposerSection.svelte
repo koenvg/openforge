@@ -2,7 +2,13 @@
   import { CheckCircle2, Clock3, X } from '@lucide/svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import type { SchedulePreset, TaskScheduleMode } from '../lib/types'
-  import type { ScheduleDraft, ScheduleFieldErrors } from '../lib/viewTypes'
+  import { emptyScheduleDraftTiming, emptyScheduleFieldErrors } from '../lib/taskSchedulesViewModel'
+  import type {
+    OneOffScheduleDraftTiming,
+    RecurringScheduleDraftTiming,
+    ScheduleDraft,
+    ScheduleFieldErrors,
+  } from '../lib/viewTypes'
 
   interface Props {
     draft: ScheduleDraft
@@ -43,6 +49,8 @@
   let titleInput = $state<HTMLInputElement | null>(null)
   let cronInput = $state<HTMLInputElement | null>(null)
   let runAtInput = $state<HTMLInputElement | null>(null)
+  let recurringTiming = $state<RecurringScheduleDraftTiming>(emptyScheduleDraftTiming())
+  let oneOffTiming = $state<OneOffScheduleDraftTiming>(emptyScheduleDraftTiming('once'))
   let previousFocusRequest = $state(0)
   let previousErrorFocusRequest = $state(0)
 
@@ -59,9 +67,15 @@
     else cronInput?.focus()
   })
 
-  function changeKind(kind: ScheduleDraft['kind']): void {
-    onDraftChange({ ...draft, kind })
-    onFieldErrorsChange({ cron: null, runAt: null })
+  $effect(() => {
+    const { timing } = draft
+    if (timing.type === 'recurring') recurringTiming = timing
+    else oneOffTiming = timing
+  })
+
+  function changeKind(kind: ScheduleDraft['timing']['type']): void {
+    onDraftChange({ ...draft, timing: kind === 'recurring' ? recurringTiming : oneOffTiming })
+    onFieldErrorsChange(emptyScheduleFieldErrors())
   }
 </script>
 
@@ -93,11 +107,11 @@
         <legend class="text-sm font-medium">Schedule type</legend>
         <div class="grid gap-2 sm:grid-cols-2">
           <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
-            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="recurring" checked={draft.kind === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
+            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="recurring" checked={draft.timing.type === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
             <span><span class="block font-medium">Recurring</span><span class="block text-xs text-secondary">Run on a repeating cadence</span></span>
           </label>
           <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
-            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="once" checked={draft.kind === 'once'} disabled={draft.id !== null} onclick={() => changeKind('once')} />
+            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="once" checked={draft.timing.type === 'once'} disabled={draft.id !== null} onclick={() => changeKind('once')} />
             <span><span class="block font-medium">One time</span><span class="block text-xs text-secondary">Run once at a future date</span></span>
           </label>
         </div>
@@ -106,7 +120,7 @@
 
       <fieldset class="space-y-3">
         <legend class="text-sm font-semibold">Cadence</legend>
-        {#if draft.kind === 'once'}
+        {#if draft.timing.type === 'once'}
           <div class="form-control flex w-full flex-col gap-1.5">
             <label for="schedule-run-at" class="text-sm font-medium">Run on <span class="text-error" aria-hidden="true">*</span></label>
             <input
@@ -114,14 +128,14 @@
               id="schedule-run-at"
               type="datetime-local"
               class="input input-bordered min-h-10 w-full {fieldErrors.runAt ? 'input-error' : ''}"
-              value={draft.runAt}
+              value={draft.timing.runAt}
               oninput={(event) => {
-                onDraftChange({ ...draft, runAt: event.currentTarget.value })
+                onDraftChange({ ...draft, timing: { ...draft.timing, runAt: event.currentTarget.value } })
                 onFieldErrorsChange({ ...fieldErrors, runAt: null })
               }}
               aria-describedby="run-at-help"
               aria-invalid={fieldErrors.runAt ? 'true' : 'false'}
-              onblur={() => { if (draft.runAt) onValidateDraft() }}
+              onblur={() => { if (draft.timing.type === 'once' && draft.timing.runAt) onValidateDraft() }}
               required
             />
             <span id="run-at-help" class="text-xs {fieldErrors.runAt ? 'text-error' : 'text-secondary'}" role={fieldErrors.runAt ? 'alert' : undefined}>
@@ -129,19 +143,19 @@
             </span>
           </div>
         {:else}
-          {#if draft.advancedCron}
+          {#if draft.timing.advancedCron}
           <div class="form-control flex w-full flex-col gap-1.5">
             <label for="cron-expression" class="text-sm font-medium">Cron expression</label>
             <input
               bind:this={cronInput}
               id="cron-expression"
               class="input input-bordered min-h-10 w-full font-mono {fieldErrors.cron ? 'input-error' : ''}"
-              value={draft.cron}
-              oninput={(event) => { onDraftChange({ ...draft, cron: event.currentTarget.value }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }}
+              value={draft.timing.cron}
+              oninput={(event) => { onDraftChange({ ...draft, timing: { ...draft.timing, cron: event.currentTarget.value } }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }}
               placeholder="0 9 * * 1-5"
               aria-describedby="cron-help"
               aria-invalid={fieldErrors.cron ? 'true' : 'false'}
-              onblur={() => { if (draft.advancedCron && draft.cron.trim()) onValidateDraft() }}
+              onblur={() => { if (draft.timing.type === 'recurring' && draft.timing.advancedCron && draft.timing.cron.trim()) onValidateDraft() }}
             />
             <span id="cron-help" class="text-xs {fieldErrors.cron ? 'text-error' : 'text-secondary'}" role={fieldErrors.cron ? 'alert' : undefined}>{fieldErrors.cron ?? cronHelpText}</span>
           </div>
@@ -149,7 +163,7 @@
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="form-control flex w-full flex-col gap-1.5">
               <span class="text-sm font-medium">Frequency</span>
-              <select class="select select-bordered min-h-10 w-full" value={draft.preset} onchange={(event) => onDraftChange({ ...draft, preset: event.currentTarget.value as SchedulePreset })}>
+              <select class="select select-bordered min-h-10 w-full" value={draft.timing.preset} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, preset: event.currentTarget.value as SchedulePreset } })}>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
@@ -158,15 +172,15 @@
 
             <label class="form-control flex w-full flex-col gap-1.5">
               <span class="text-sm font-medium">Run at</span>
-              <select class="select select-bordered min-h-10 w-full" value={draft.timeOfDay} onchange={(event) => onDraftChange({ ...draft, timeOfDay: event.currentTarget.value })}>
+              <select class="select select-bordered min-h-10 w-full" value={draft.timing.timeOfDay} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, timeOfDay: event.currentTarget.value } })}>
                 {#each timeOptions as time}<option value={time}>{time}</option>{/each}
               </select>
             </label>
 
-            {#if draft.preset === 'weekly'}
+            {#if draft.timing.preset === 'weekly'}
               <label class="form-control flex w-full flex-col gap-1.5">
                 <span class="text-sm font-medium">Day</span>
-                <select class="select select-bordered min-h-10 w-full" value={draft.dayOfWeek} onchange={(event) => onDraftChange({ ...draft, dayOfWeek: Number(event.currentTarget.value) })}>
+                <select class="select select-bordered min-h-10 w-full" value={draft.timing.dayOfWeek} onchange={(event) => onDraftChange({ ...draft, timing: { ...draft.timing, dayOfWeek: Number(event.currentTarget.value) } })}>
                   {#each dayOfWeekOptions as day}<option value={day.value}>{day.label}</option>{/each}
                 </select>
               </label>
@@ -175,7 +189,7 @@
         {/if}
 
         <label class="flex min-h-10 items-center gap-3 rounded-box border border-base-300 px-3 text-sm">
-          <Checkbox checked={draft.advancedCron} onchange={(event) => { onDraftChange({ ...draft, advancedCron: event.currentTarget.checked }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }} />
+          <Checkbox checked={draft.timing.advancedCron} onchange={(event) => { onDraftChange({ ...draft, timing: { ...draft.timing, advancedCron: event.currentTarget.checked } }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }} />
           <span>Use a custom cron expression</span>
         </label>
         {/if}

@@ -4,6 +4,7 @@ import {
   draftRunAtError,
   draftFromSchedule,
   emptyScheduleDraft,
+  emptyScheduleFieldErrors,
 } from '../lib/taskSchedulesViewModel'
 import type { TaskSchedule } from '../lib/types'
 import type {
@@ -23,7 +24,7 @@ interface TaskSchedulesComposerStateOptions {
 
 export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStateOptions) {
   let draft = $state<ScheduleDraft>(emptyScheduleDraft())
-  let fieldErrors = $state<ScheduleFieldErrors>({ cron: null, runAt: null })
+  let fieldErrors = $state<ScheduleFieldErrors>(emptyScheduleFieldErrors())
   let selectedScheduleId = $state<string | null>(null)
   let panelMode = $state<SchedulePanelMode>(null)
   let filter = $state<ScheduleFilter>('all')
@@ -40,12 +41,16 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   const composerTitle = $derived(draft.id ? 'Edit schedule' : 'New schedule')
   const enabledToggleLabel = $derived(draft.id ? (draft.enabled ? 'Schedule enabled' : 'Schedule paused') : 'Enable after creation')
 
+  function resetDraftState(nextDraft: ScheduleDraft = emptyScheduleDraft()): void {
+    draft = nextDraft
+    fieldErrors = emptyScheduleFieldErrors()
+    draftDirty = false
+  }
+
   function resetWorkspace(): void {
     selectedScheduleId = null
     panelMode = null
-    draft = emptyScheduleDraft()
-    draftDirty = false
-    fieldErrors = { cron: null, runAt: null }
+    resetDraftState()
     filter = 'all'
     schedulePendingDelete = null
     showDiscardConfirmation = false
@@ -78,9 +83,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
 
   function openNewSchedule(): void {
     requestPanelChange(() => {
-      draft = emptyScheduleDraft()
-      fieldErrors = { cron: null, runAt: null }
-      draftDirty = false
+      resetDraftState()
       panelMode = 'form'
       titleFocusRequest += 1
       options.announce('New schedule form opened')
@@ -88,9 +91,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   }
 
   function editSchedule(schedule: TaskSchedule): void {
-    draft = draftFromSchedule(schedule)
-    fieldErrors = { cron: null, runAt: null }
-    draftDirty = false
+    resetDraftState(draftFromSchedule(schedule))
     panelMode = 'form'
     titleFocusRequest += 1
     options.announce(`Editing ${schedule.title}`)
@@ -108,8 +109,7 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   function requestClosePanel(): void {
     requestPanelChange(() => {
       panelMode = null
-      draft = emptyScheduleDraft()
-      draftDirty = false
+      resetDraftState()
       newScheduleFocusRequest += 1
     })
   }
@@ -147,20 +147,19 @@ export function useTaskSchedulesComposerState(options: TaskSchedulesComposerStat
   }
 
   function prepareDraftForSave(): ScheduleDraft | null {
-    fieldErrors = { cron: null, runAt: null }
+    fieldErrors = emptyScheduleFieldErrors()
     return validateDraft(true) ? draft : null
   }
 
   function handleCronSaveError(): void {
-    fieldErrors = { cron: CRON_HELP_TEXT, runAt: null }
+    fieldErrors = { ...emptyScheduleFieldErrors(), cron: CRON_HELP_TEXT }
     errorFocusRequest += 1
   }
 
   function completeSave(saved: TaskSchedule): void {
     selectedScheduleId = saved.id
     panelMode = 'details'
-    draft = emptyScheduleDraft()
-    draftDirty = false
+    resetDraftState()
   }
 
   function requestDelete(schedule: TaskSchedule): void {
