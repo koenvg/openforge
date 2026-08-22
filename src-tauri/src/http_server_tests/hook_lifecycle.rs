@@ -45,12 +45,20 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
 }
 
 #[tokio::test]
-async fn pi_agent_start_handler_recovers_from_poisoned_database_lock() {
+async fn pi_agent_start_handler_preserves_project_id_after_database_lock_poisoning() {
     let (state, path) = test_state("http_pi_agent_start_poisoned_database_lock");
-    let task_id = {
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+    let (task_id, project_id) = {
         let db = state.db.lock().expect("lock healthy test database");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
         let task = db
-            .create_task("Pi task", "doing", None, None, None)
+            .create_task("Pi task", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-poisoned-lock",
@@ -63,7 +71,7 @@ async fn pi_agent_start_handler_recovers_from_poisoned_database_lock() {
         .expect("create session");
         db.set_agent_session_pty_instance_id("ses-pi-poisoned-lock", 42)
             .expect("set pty instance");
-        task.id
+        (task.id, project.id)
     };
 
     let database = Arc::clone(&state.db);
@@ -89,6 +97,10 @@ async fn pi_agent_start_handler_recovers_from_poisoned_database_lock() {
         .expect("request should return a controlled response");
 
     assert_eq!(response.status(), StatusCode::OK);
+    let event = events.recv().await.expect("app event");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["project_id"], project_id);
     let session = crate::db::acquire_db(&state.db)
         .get_agent_session("ses-pi-poisoned-lock")
         .expect("get session")
