@@ -9,8 +9,10 @@ export interface SelfReviewContext {
   includeUncommitted: boolean
 }
 
+export type SelfReviewFileContentContext = SelfReviewContext
+
 export interface SelfReviewFileContentLoaderOptions {
-  getContext: () => SelfReviewContext
+  getContext: () => SelfReviewFileContentContext
   getComparisonContents: (filename: string) => FileContents | undefined
   getTaskFileContents: (
     taskId: string,
@@ -47,7 +49,7 @@ interface FileContentSource {
 
 function createFileContentSource(
   options: SelfReviewFileContentLoaderOptions,
-  context: SelfReviewContext,
+  context: SelfReviewFileContentContext,
 ): FileContentSource {
   const { selectedCommitSha } = context
   if (selectedCommitSha !== null) {
