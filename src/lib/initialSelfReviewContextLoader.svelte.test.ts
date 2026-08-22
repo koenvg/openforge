@@ -179,6 +179,32 @@ describe("createInitialSelfReviewContextLoader", () => {
 		expect(mockGetPrComments).toHaveBeenCalledWith(newestOpenPr.id);
 	});
 
+	it("loads self-review comments before linked pull request comments", async () => {
+		const calls: string[] = [];
+		mockGetActiveSelfReviewComments.mockImplementation(async () => {
+			calls.push("active self-review comments");
+			return [];
+		});
+		mockGetArchivedSelfReviewComments.mockImplementation(async () => {
+			calls.push("archived self-review comments");
+			return [];
+		});
+		mockGetPrComments.mockImplementation(async () => {
+			calls.push("linked pull request comments");
+			return [];
+		});
+		ticketPrs.set(new Map([["task-1", [newestOpenPr]]]));
+		const loader = createInitialSelfReviewContextLoader();
+
+		await loader.hydrate("task-1");
+
+		expect(calls).toEqual([
+			"active self-review comments",
+			"archived self-review comments",
+			"linked pull request comments",
+		]);
+	});
+
 	it("ignores an earlier hydration after a later request starts", async () => {
 		let resolveFirst!: (comments: SelfReviewComment[]) => void;
 		mockGetActiveSelfReviewComments
