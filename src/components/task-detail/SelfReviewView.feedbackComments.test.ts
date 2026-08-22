@@ -5,7 +5,6 @@ import {
 } from "./SelfReviewView.testUtils";
 import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requireElement } from "../../test-utils/dom";
 import type { PrComment, PullRequestInfo } from "../../lib/types";
 import {
 	getPrComments,
@@ -154,7 +153,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		// Find and click the toggle button
 		const toggleButton = screen.getByText(/Show 1 addressed/);
 		expect(toggleButton).toBeTruthy();
-		toggleButton.click();
+		await fireEvent.click(toggleButton);
 
 		await waitFor(() => {
 			// Now addressed comment should be visible
@@ -205,7 +204,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		});
 	});
 
-	it("feedback panel renders inside a resizable 380px panel", async () => {
+	it("feedback panel supports keyboard resizing", async () => {
 		const comments = [
 			makeComment(1, 0), // unaddressed — triggers auto-open
 		];
@@ -220,12 +219,11 @@ describe("SelfReviewView — hide addressed comments", () => {
 			expect(screen.getByText("Comment 1")).toBeTruthy();
 		});
 
-		const prCommentsTab = screen.getByText("PR Comments");
-		const resizablePanel = requireElement(
-			prCommentsTab.closest('[data-testid="resizable-panel"]'),
-			HTMLElement,
-		);
-		expect(resizablePanel).toBeTruthy();
-		expect(resizablePanel.style.width).toBe('380px');
+		const resizeHandle = screen.getByRole("separator", { name: "Resize Feedback panel" });
+		const initialWidth = Number(resizeHandle.getAttribute("aria-valuenow"));
+
+		await fireEvent.keyDown(resizeHandle, { key: "ArrowLeft" });
+
+		expect(Number(resizeHandle.getAttribute("aria-valuenow"))).toBe(initialWidth + 10);
 	});
 });

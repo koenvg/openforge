@@ -83,8 +83,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 
 		// Uncommitted is on by default; unchecking it leaves committed-only.
 		const cb = requireElement(screen.getByLabelText("Include uncommitted changes"), HTMLInputElement);
-		cb.click();
-		cb.dispatchEvent(new Event("change", { bubbles: true }));
+		await fireEvent.click(cb);
 
 		await waitFor(() => {
 			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, false);
@@ -110,8 +109,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		mockGetTaskDiff.mockClear();
 
 		// Uncheck committed → only uncommitted remains selected.
-		committed.click();
-		committed.dispatchEvent(new Event("change", { bubbles: true }));
+		await fireEvent.click(committed);
 
 		await waitFor(() => {
 			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false, true);
