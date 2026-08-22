@@ -449,6 +449,63 @@ async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock(
 }
 
 #[tokio::test]
+async fn queued_task_display_title_refresh_coalesces_after_pending_lock_is_poisoned() {
+    let (db, path) = make_test_db("metadata_refresh_ai_title_poisoned_pending_lock");
+    let task = db
+        .create_task("Vague OpenCode activity", "doing", None, None, None)
+        .expect("create task");
+    let db = Arc::new(Mutex::new(db));
+
+    super::refresh::poison_pending_task_display_title_refreshes_for_test();
+
+    let first_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(r#"{"type":"session.status","status":"running"}"#.to_string()),
+    );
+    let second_queued = queue_task_display_title_refresh(
+        task.id.clone(),
+        "opencode".to_string(),
+        None,
+        Some(r#"{"type":"message.updated","message":"Recover poisoned queue state"}"#.to_string()),
+    );
+
+    let first_result = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        first_queued,
+        Duration::ZERO,
+        |_job, _prompt| async { panic!("superseded refresh must not call provider") },
+    )
+    .await
+    .expect("first refresh result");
+    assert!(!first_result);
+
+    let second_result = refresh_queued_task_display_title_with_ai_once_after(
+        Arc::clone(&db),
+        second_queued,
+        Duration::ZERO,
+        |_job, prompt| async move {
+            assert!(prompt.contains("message.updated"));
+            assert!(prompt.contains("Recover poisoned queue state"));
+            assert!(!prompt.contains("session.status"));
+            Ok(Some("Recovered Queue Coalescing".to_string()))
+        },
+    )
+    .await
+    .expect("second refresh result");
+
+    assert!(second_result);
+    let updated = crate::db::acquire_db(&db)
+        .get_task(&task.id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(updated.title.as_deref(), Some("Recovered Queue Coalescing"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
 async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_snapshot() {
     let (db, path) = make_test_db("metadata_refresh_ai_title_debounce");
     let task = db

@@ -33,6 +33,23 @@ static PENDING_TASK_DISPLAY_TITLE_REFRESHES: LazyLock<
     Mutex<HashMap<String, PendingTaskDisplayTitleRefresh>>,
 > = LazyLock::new(|| Mutex::new(HashMap::new()));
 
+fn lock_pending_task_display_title_refreshes(
+) -> std::sync::MutexGuard<'static, HashMap<String, PendingTaskDisplayTitleRefresh>> {
+    PENDING_TASK_DISPLAY_TITLE_REFRESHES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+pub(crate) fn poison_pending_task_display_title_refreshes_for_test() {
+    let poison_result = std::thread::spawn(|| {
+        let _pending = lock_pending_task_display_title_refreshes();
+        panic!("poison pending task display title refreshes lock");
+    })
+    .join();
+
+    assert!(poison_result.is_err());
+}
 pub(crate) fn queue_task_display_title_refresh(
     task_id: String,
     provider: String,
@@ -41,7 +58,7 @@ pub(crate) fn queue_task_display_title_refresh(
 ) -> QueuedTaskDisplayTitleRefresh {
     let transcript_path_present = transcript_path.is_some();
     let activity_snapshot_bytes = activity_snapshot.as_ref().map_or(0, String::len);
-    let mut pending = PENDING_TASK_DISPLAY_TITLE_REFRESHES.lock().unwrap();
+    let mut pending = lock_pending_task_display_title_refreshes();
     let generation = pending
         .get(&task_id)
         .map_or(1, |refresh| refresh.generation.saturating_add(1));
@@ -72,7 +89,7 @@ fn latest_task_display_title_refresh(
     task_id: &str,
     generation: u64,
 ) -> Option<PendingTaskDisplayTitleRefresh> {
-    let pending = PENDING_TASK_DISPLAY_TITLE_REFRESHES.lock().unwrap();
+    let pending = lock_pending_task_display_title_refreshes();
     match pending.get(task_id) {
         Some(refresh) if refresh.generation == generation => Some(refresh.clone()),
         _ => None,
@@ -80,7 +97,7 @@ fn latest_task_display_title_refresh(
 }
 
 fn finish_task_display_title_refresh_if_latest(task_id: &str, generation: u64) -> bool {
-    let mut pending = PENDING_TASK_DISPLAY_TITLE_REFRESHES.lock().unwrap();
+    let mut pending = lock_pending_task_display_title_refreshes();
     match pending.get(task_id) {
         Some(refresh) if refresh.generation == generation => {
             pending.remove(task_id);
