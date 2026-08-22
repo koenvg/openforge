@@ -136,34 +136,45 @@ fn require_task_project(conn: &rusqlite::Connection, task_id: &str) -> TaskLabel
     }
 }
 
-fn create_task_label_on_connection(
+fn create_or_load_task_labels<S: AsRef<str>>(
     conn: &rusqlite::Connection,
     project_id: &str,
-    name: &str,
-) -> TaskLabelResult<TaskLabelRow> {
-    let name = normalize_label_name(name)?;
-    let key = name.to_lowercase();
+    label_names: &[S],
+) -> TaskLabelResult<Vec<TaskLabelRow>> {
+    let mut labels = Vec::new();
+    let mut seen = Vec::new();
+    for label_name in label_names {
+        let name = normalize_label_name(label_name.as_ref())?;
+        let key = name.to_lowercase();
+        if seen.iter().any(|existing| existing == &key) {
+            continue;
+        }
 
-    if let Some(existing) = conn
-        .query_row(
-            "SELECT id FROM task_labels WHERE project_id = ?1 AND name_normalized = ?2",
-            rusqlite::params![project_id, key],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?
-    {
-        return query_task_label_by_id(conn, existing)?
-            .ok_or(TaskLabelPersistenceError::LabelNotFound(existing));
+        let label_id = if let Some(existing) = conn
+            .query_row(
+                "SELECT id FROM task_labels WHERE project_id = ?1 AND name_normalized = ?2",
+                rusqlite::params![project_id, &key],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+        {
+            existing
+        } else {
+            let now = super::current_unix_timestamp()?;
+            conn.execute(
+                "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![project_id, &name, &key, now, now],
+            )?;
+            conn.last_insert_rowid()
+        };
+
+        labels.push(
+            query_task_label_by_id(conn, label_id)?
+                .ok_or(TaskLabelPersistenceError::LabelNotFound(label_id))?,
+        );
+        seen.push(key);
     }
-
-    let now = super::current_unix_timestamp()?;
-    conn.execute(
-        "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![project_id, name, key, now, now],
-    )?;
-    let label_id = conn.last_insert_rowid();
-    query_task_label_by_id(conn, label_id)?
-        .ok_or(TaskLabelPersistenceError::LabelNotFound(label_id))
+    Ok(labels)
 }
 
 pub(super) fn persist_new_task_labels(
@@ -174,20 +185,7 @@ pub(super) fn persist_new_task_labels(
 ) -> TaskLabelResult<Vec<TaskLabelRow>> {
     let project_id = require_task_project(conn, task_id)?;
 
-    let mut labels = Vec::new();
-    let mut seen = Vec::new();
-    for label_name in label_names {
-        let key = normalized_label_key(label_name)?;
-        if seen.iter().any(|existing| existing == &key) {
-            continue;
-        }
-        seen.push(key);
-        labels.push(create_task_label_on_connection(
-            conn,
-            &project_id,
-            label_name,
-        )?);
-    }
+    let labels = create_or_load_task_labels(conn, &project_id, label_names)?;
 
     for label in &labels {
         conn.execute(
@@ -202,10 +200,6 @@ pub(super) fn persist_new_task_labels(
         )?;
     }
     Ok(labels)
-}
-
-fn normalized_label_key(name: &str) -> TaskLabelResult<String> {
-    Ok(normalize_label_name(name)?.to_lowercase())
 }
 
 fn query_task_label_by_id(
@@ -248,7 +242,10 @@ impl Database {
 
     pub fn create_task_label(&self, project_id: &str, name: &str) -> TaskLabelResult<TaskLabelRow> {
         let conn = self.lock_conn()?;
-        create_task_label_on_connection(&conn, project_id, name)
+        Ok(create_or_load_task_labels(&conn, project_id, &[name])?
+            .into_iter()
+            .next()
+            .expect("one label name yields one label"))
     }
 
     pub fn add_task_label(&self, task_id: &str, label_name: &str) -> TaskLabelResult<TaskLabelRow> {
@@ -330,20 +327,7 @@ impl Database {
         let tx = conn.transaction()?;
         let project_id = require_task_project(&tx, task_id)?;
 
-        let mut labels = Vec::new();
-        let mut seen = Vec::new();
-        for label_name in label_names {
-            let key = normalized_label_key(label_name)?;
-            if seen.iter().any(|existing| existing == &key) {
-                continue;
-            }
-            seen.push(key);
-            labels.push(create_task_label_on_connection(
-                &tx,
-                &project_id,
-                label_name,
-            )?);
-        }
+        let labels = create_or_load_task_labels(&tx, &project_id, label_names)?;
 
         tx.execute(
             "DELETE FROM task_label_assignments WHERE task_id = ?1",
@@ -431,6 +415,48 @@ mod tests {
         assert_eq!(retrieved.labels, vec![bug]);
         let all_labels = db.get_project_task_labels(&project.id).expect("all labels");
         assert!(all_labels.iter().any(|label| label.id == ui.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_set_task_labels_normalizes_and_deduplicates_label_names() {
+        let (db, path) = make_test_db("set_task_labels_normalized");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("A", "/tmp/set-task-labels-normalized")
+            .expect("create project");
+        let existing = db
+            .create_task_label(&project.id, "Bug")
+            .expect("create existing label");
+        let task = db
+            .create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        let labels = [
+            "  Bug  ".to_string(),
+            "bug".to_string(),
+            "BUG".to_string(),
+            " UI ".to_string(),
+            "ui".to_string(),
+        ];
+
+        let assigned = db
+            .set_task_labels(&task.id, &labels)
+            .expect("set task labels");
+
+        assert_eq!(
+            assigned
+                .iter()
+                .map(|label| label.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Bug", "UI"]
+        );
+        assert_eq!(assigned[0].id, existing.id);
+        assert_eq!(
+            db.get_task(&task.id).expect("get task").unwrap().labels,
+            assigned
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);

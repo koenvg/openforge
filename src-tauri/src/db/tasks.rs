@@ -1172,6 +1172,66 @@ mod tests {
     }
 
     #[test]
+    fn test_create_task_with_metadata_normalizes_and_deduplicates_label_names() {
+        let (db, path) = make_test_db("create_task_with_normalized_labels");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("Project", "/tmp/create-task-with-normalized-labels")
+            .expect("create project");
+        let existing = db
+            .create_task_label(&project.id, "Bug")
+            .expect("create existing label");
+        let labels = [
+            "  Bug  ".to_string(),
+            "bug".to_string(),
+            "BUG".to_string(),
+            " feature ".to_string(),
+        ];
+
+        let task = db
+            .create_task_with_metadata(
+                super::NewTaskOptions {
+                    initial_prompt: "Task with labels",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: None,
+                    task_display_title_updates_enabled: None,
+                    ai_provider: None,
+                },
+                &[],
+                &labels,
+            )
+            .expect("create task with labels");
+
+        assert_eq!(
+            task.labels
+                .iter()
+                .map(|label| label.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Bug", "feature"]
+        );
+        assert_eq!(task.labels[0].id, existing.id);
+        assert_eq!(
+            db.get_task(&task.id).expect("get task").unwrap().labels,
+            task.labels
+        );
+        assert_eq!(
+            db.get_project_task_labels(&project.id)
+                .expect("get project labels"),
+            task.labels
+        );
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_update_task_initial_prompt_replaces_prompt_atomically_and_preserves_relationships() {
         let (db, path) = make_test_db("update_task_initial_prompt_preserves_metadata");
         let project = db
