@@ -323,6 +323,41 @@ describe("createDiffLoader", () => {
 		});
 	});
 
+	it("keeps the latest diff when an earlier refresh resolves late", async () => {
+		let resolveFirst!: (value: PrFileDiff[]) => void;
+		let resolveSecond!: (value: PrFileDiff[]) => void;
+		const firstDiff = [{ ...baseDiff, filename: "src/first.rs" }];
+		const secondDiff = [{ ...baseDiff, filename: "src/second.rs" }];
+
+		mockGetTaskDiff
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveFirst = resolve;
+				}),
+			)
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveSecond = resolve;
+				}),
+			);
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		const firstRefresh = loader.refresh();
+		const secondRefresh = loader.refresh();
+
+		resolveSecond(secondDiff);
+		await secondRefresh;
+		expect(getSelfReviewDiffFiles("task-1")).toEqual(secondDiff);
+
+		resolveFirst(firstDiff);
+		await firstRefresh;
+		expect(getSelfReviewDiffFiles("task-1")).toEqual(secondDiff);
+		expect(loader.isLoading).toBe(false);
+	});
+
 	it("preserves pending inline comments across review tab unmount and remount", async () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 		mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment]);
