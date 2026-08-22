@@ -230,13 +230,13 @@ fn session_provider_id<'a>(session: &'a AgentSessionRow, provider: &str) -> Opti
     }
 }
 
-fn provider_session_id_belongs_to_other_active_session(
+fn provider_session_id_is_claimed_elsewhere(
     db: &db::Database,
     current_session: &AgentSessionRow,
     provider: &str,
     provider_session_id: &str,
 ) -> Result<bool, String> {
-    if provider != "claude-code" {
+    if !matches!(provider, "claude-code" | "pi") {
         return Ok(false);
     }
 
@@ -244,11 +244,24 @@ fn provider_session_id_belongs_to_other_active_session(
         .get_sessions_by_provider(provider)
         .map_err(|e| format!("failed to load provider sessions: {e}"))?;
 
-    Ok(sessions.iter().any(|session| {
-        session.id != current_session.id
-            && matches!(session.status.as_str(), "running" | "paused")
-            && session_provider_id(session, provider) == Some(provider_session_id)
-    }))
+    for session in sessions {
+        if session.id == current_session.id
+            || session_provider_id(&session, provider) != Some(provider_session_id)
+        {
+            continue;
+        }
+
+        let claimed_elsewhere = match provider {
+            "claude-code" => matches!(session.status.as_str(), "running" | "paused"),
+            "pi" => session.ticket_id != current_session.ticket_id,
+            _ => false,
+        };
+        if claimed_elsewhere {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 pub fn apply_agent_lifecycle_notification(
@@ -281,19 +294,22 @@ pub fn apply_agent_lifecycle_notification(
         .filter(|id| !id.is_empty())
         .filter(|id| provider_session_id_is_persistable(&notification.provider, id))
     {
-        let already_attached = provider_session_id_belongs_to_other_active_session(
-            db,
-            &session,
-            &notification.provider,
-            provider_session_id,
-        )?;
-        if !already_attached {
-            db.set_agent_session_provider_id(
-                &session.id,
+        let may_persist = notification.provider != "pi" || session.pi_session_id.is_none();
+        if may_persist {
+            let claimed_elsewhere = provider_session_id_is_claimed_elsewhere(
+                db,
+                &session,
                 &notification.provider,
                 provider_session_id,
-            )
-            .map_err(|e| format!("failed to persist provider session id: {e}"))?;
+            )?;
+            if !claimed_elsewhere {
+                db.set_agent_session_provider_id(
+                    &session.id,
+                    &notification.provider,
+                    provider_session_id,
+                )
+                .map_err(|e| format!("failed to persist provider session id: {e}"))?;
+            }
         }
     }
 
@@ -968,6 +984,115 @@ mod tests {
             Some("claude-shared")
         );
         assert_eq!(second_session.claude_session_id, None);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn pi_lifecycle_does_not_attach_one_provider_session_to_two_active_tasks() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("pi_lifecycle_provider_id_unique");
+        let first_task = db
+            .create_task("First Pi task", "done", None, None, None)
+            .expect("create first task");
+        let second_task = db
+            .create_task("Second Pi task", "doing", None, None, None)
+            .expect("create second task");
+        db.create_agent_session(
+            "ses-pi-first",
+            &first_task.id,
+            None,
+            "implementing",
+            "completed",
+            "pi",
+        )
+        .expect("create first session");
+        db.set_agent_session_pty_instance_id("ses-pi-first", 101)
+            .expect("store first pty instance");
+        db.set_agent_session_pi_id("ses-pi-first", "pi-shared")
+            .expect("store first Pi session id");
+        db.create_agent_session(
+            "ses-pi-second",
+            &second_task.id,
+            None,
+            "implementing",
+            "running",
+            "pi",
+        )
+        .expect("create second session");
+        db.set_agent_session_pty_instance_id("ses-pi-second", 202)
+            .expect("store second pty instance");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "pi".to_string(),
+                task_id: second_task.id.clone(),
+                pty_instance_id: Some(202),
+                provider_session_id: Some("pi-shared".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("user_prompt".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("Pi lifecycle should apply")
+        .expect("Pi lifecycle should publish status");
+
+        let first_session = db
+            .get_agent_session("ses-pi-first")
+            .expect("get first session")
+            .expect("first session exists");
+        let second_session = db
+            .get_agent_session("ses-pi-second")
+            .expect("get second session")
+            .expect("second session exists");
+        assert_eq!(first_session.pi_session_id.as_deref(), Some("pi-shared"));
+        assert_eq!(second_session.pi_session_id, None);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn pi_lifecycle_does_not_replace_an_existing_provider_session_id() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("pi_lifecycle_preserves_provider_id");
+        let task = db
+            .create_task("Pi task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-pi-existing",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "pi",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("ses-pi-existing", 303)
+            .expect("store pty instance");
+        db.set_agent_session_pi_id("ses-pi-existing", "pi-authoritative")
+            .expect("store Pi session id");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "pi".to_string(),
+                task_id: task.id,
+                pty_instance_id: Some(303),
+                provider_session_id: Some("pi-mismatched".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("user_prompt".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("Pi lifecycle should apply")
+        .expect("Pi lifecycle should publish status");
+
+        let session = db
+            .get_agent_session("ses-pi-existing")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.pi_session_id.as_deref(), Some("pi-authoritative"));
 
         let _ = std::fs::remove_file(path);
     }

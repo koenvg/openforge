@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::super::commands::{
     build_claude_args, build_codex_args, build_grok_args, build_opencode_tui_args, build_pi_args,
+    PiSessionTarget,
 };
 use super::super::PtyError;
 use super::invalid_workspace_cwd;
@@ -225,8 +226,7 @@ type PiNodeCwdPreflight = fn(&Path, &HashMap<String, String>) -> Result<(), Stri
 
 pub(super) struct PiPtyAdapter {
     prompt: String,
-    resume_session_id: Option<String>,
-    continue_session: bool,
+    session_target: PiSessionTarget,
     extension_path: Option<PathBuf>,
     node_cwd_preflight: PiNodeCwdPreflight,
 }
@@ -234,14 +234,12 @@ pub(super) struct PiPtyAdapter {
 impl PiPtyAdapter {
     pub(super) fn new(
         prompt: &str,
-        resume_session_id: Option<&str>,
-        continue_session: bool,
+        session_target: PiSessionTarget,
         extension_path: Option<PathBuf>,
     ) -> Self {
         Self {
             prompt: prompt.to_string(),
-            resume_session_id: resume_session_id.map(str::to_string),
-            continue_session,
+            session_target,
             extension_path,
             node_cwd_preflight: run_pi_node_cwd_preflight,
         }
@@ -260,8 +258,7 @@ impl AgentPtyProviderAdapter for PiPtyAdapter {
     fn command_args(&self) -> Vec<String> {
         build_pi_args(
             &self.prompt,
-            self.resume_session_id.as_deref(),
-            self.continue_session,
+            &self.session_target,
             self.extension_path.as_deref(),
         )
     }
@@ -581,8 +578,7 @@ mod tests {
     fn pi_adapter_owns_provider_specific_spawn_details() {
         let adapter = PiPtyAdapter::new(
             "continue work",
-            Some("pi-session"),
-            true,
+            PiSessionTarget::Existing("pi-session".to_string()),
             Some(PathBuf::from("/tmp/openforge-pi-extension")),
         );
 
@@ -649,8 +645,7 @@ mod tests {
         PREFLIGHT_CALLED.store(false, Ordering::SeqCst);
         let mut adapter = PiPtyAdapter {
             prompt: String::new(),
-            resume_session_id: None,
-            continue_session: false,
+            session_target: PiSessionTarget::ContinueLatest,
             extension_path: Some(PathBuf::from("/tmp/openforge-pi-extension")),
             node_cwd_preflight: recording_preflight,
         };
@@ -670,8 +665,7 @@ mod tests {
 
         let mut adapter = PiPtyAdapter {
             prompt: String::new(),
-            resume_session_id: None,
-            continue_session: false,
+            session_target: PiSessionTarget::ContinueLatest,
             extension_path: None,
             node_cwd_preflight: failing_preflight,
         };
