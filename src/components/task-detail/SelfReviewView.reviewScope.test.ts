@@ -1,5 +1,6 @@
 import {
 	baseDiff,
+	baseTask,
 	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
@@ -142,7 +143,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		await fireEvent.click(await screen.findByTitle(commit.message));
 
 		await waitFor(() => {
-			expect(mockGetCommitDiff).toHaveBeenCalledWith("task-1", commit.sha);
+			expect(mockGetCommitDiff).toHaveBeenCalledWith(baseTask.id, commit.sha);
 			expect(screen.queryByLabelText("Include uncommitted changes")).toBeNull();
 			expect(screen.getByText("Show all changes")).toBeTruthy();
 		});
