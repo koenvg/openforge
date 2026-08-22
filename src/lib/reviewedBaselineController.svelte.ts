@@ -1,6 +1,7 @@
 import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 import { buildReviewedBaselineComparison } from './reviewedBaselineDiff'
 import type { ReviewedFileSnapshot } from './taskReviewPaneState'
+import type { SelfReviewContext } from './selfReviewFileContentLoader'
 import type { PrFileDiff } from './types'
 
 interface ReviewedBaselineComparison {
@@ -11,7 +12,7 @@ interface ReviewedBaselineComparison {
 export interface ReviewedBaselineControllerOptions {
   getReviewFiles: () => PrFileDiff[]
   getSnapshots: () => Map<string, ReviewedFileSnapshot>
-  getSelectedCommitSha: () => string | null
+  getReviewContext: () => SelfReviewContext
   getFileIdentity: (file: PrFileDiff) => string | null
   fetchCurrentContents: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
 }
@@ -24,15 +25,39 @@ export interface ReviewedBaselineController {
   getComparisonContents(filename: string): FileContents | undefined
   mapFiles(files: PrFileDiff[]): PrFileDiff[]
   hasReviewedBaselineChange(file: PrFileDiff): boolean
+  syncReviewContext(): void
   showChangesSinceReviewed(file: PrFileDiff): Promise<boolean>
   restoreFile(filename: string): void
   restoreAll(): void
+}
+
+function getReviewContextIdentity(context: SelfReviewContext): string {
+  return JSON.stringify([
+    context.taskId,
+    context.selectedCommitSha,
+    context.includeCommitted,
+    context.includeUncommitted,
+  ])
 }
 
 export function createReviewedBaselineController(
   options: ReviewedBaselineControllerOptions,
 ): ReviewedBaselineController {
   let comparisonByFilename = $state<Map<string, ReviewedBaselineComparison>>(new Map())
+  let reviewContextIdentity = getReviewContextIdentity(options.getReviewContext())
+  let comparisonGeneration = 0
+
+  function invalidateComparisons(): void {
+    comparisonGeneration += 1
+    comparisonByFilename = new Map()
+  }
+
+  function syncReviewContext(): void {
+    const nextIdentity = getReviewContextIdentity(options.getReviewContext())
+    if (nextIdentity === reviewContextIdentity) return
+    reviewContextIdentity = nextIdentity
+    invalidateComparisons()
+  }
 
   function reviewFileFor(file: PrFileDiff): PrFileDiff {
     return options.getReviewFiles().find((candidate) => candidate.filename === file.filename) ?? file
@@ -55,7 +80,7 @@ export function createReviewedBaselineController(
   }
 
   function hasReviewedBaselineChange(file: PrFileDiff): boolean {
-    if (options.getSelectedCommitSha() !== null) return false
+    if (options.getReviewContext().selectedCommitSha !== null) return false
     const reviewFile = reviewFileFor(file)
     const snapshot = options.getSnapshots().get(reviewFile.filename)
     const currentIdentity = options.getFileIdentity(reviewFile)
@@ -63,6 +88,9 @@ export function createReviewedBaselineController(
   }
 
   async function showChangesSinceReviewed(file: PrFileDiff): Promise<boolean> {
+    syncReviewContext()
+    const requestContextIdentity = reviewContextIdentity
+    const requestGeneration = comparisonGeneration
     const reviewFile = reviewFileFor(file)
     const result = await buildReviewedBaselineComparison({
       files: [reviewFile],
@@ -70,6 +98,11 @@ export function createReviewedBaselineController(
       getFileIdentity: options.getFileIdentity,
       fetchCurrentContents: options.fetchCurrentContents,
     })
+    if (
+      requestContextIdentity !== getReviewContextIdentity(options.getReviewContext())
+      || requestGeneration !== comparisonGeneration
+    ) return false
+
     const comparisonFile = result.files[0]
     const comparisonContents = result.contents.get(reviewFile.filename)
     if (comparisonFile === undefined || comparisonContents === undefined) return false
@@ -89,7 +122,7 @@ export function createReviewedBaselineController(
   }
 
   function restoreAll(): void {
-    comparisonByFilename = new Map()
+    invalidateComparisons()
   }
 
   return {
@@ -100,6 +133,7 @@ export function createReviewedBaselineController(
     getComparisonContents,
     mapFiles,
     hasReviewedBaselineChange,
+    syncReviewContext,
     showChangesSinceReviewed,
     restoreFile,
     restoreAll,

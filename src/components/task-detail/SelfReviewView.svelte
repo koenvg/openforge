@@ -8,7 +8,10 @@
   import { prCommentsToReviewComments } from '@openforge-app/pr-review-ui/diffComments'
   import { countNonApplicationFiles, filterApplicationFiles } from '@openforge-app/pr-review-ui/applicationFiles'
   import { createReviewedBaselineController } from '../../lib/reviewedBaselineController.svelte'
-  import { createSelfReviewFileContentLoader } from '../../lib/selfReviewFileContentLoader'
+  import {
+    createSelfReviewFileContentLoader,
+    type SelfReviewContext,
+  } from '../../lib/selfReviewFileContentLoader'
   import {
     getTaskReviewFileIdentity,
     getTaskReviewPaneState,
@@ -76,6 +79,15 @@
     },
   })
 
+  function getReviewContext(): SelfReviewContext {
+    return {
+      taskId: task.id,
+      selectedCommitSha: diffLoader.selectedCommitSha,
+      includeCommitted,
+      includeUncommitted,
+    }
+  }
+
   const commentSelection = createCommentSelection({
     getPrComments: () => diffLoader.prComments,
   })
@@ -86,18 +98,13 @@
   const reviewedBaseline = createReviewedBaselineController({
     getReviewFiles: () => selfReviewDiffFiles,
     getSnapshots: () => reviewedFileSnapshots,
-    getSelectedCommitSha: () => diffLoader.selectedCommitSha,
+    getReviewContext,
     getFileIdentity: getTaskReviewFileIdentity,
     fetchCurrentContents: (files) => fileContentLoader.fetchCurrentBatch(files),
   })
 
   const fileContentLoader = createSelfReviewFileContentLoader({
-    getContext: () => ({
-      taskId: task.id,
-      selectedCommitSha: diffLoader.selectedCommitSha,
-      includeCommitted,
-      includeUncommitted,
-    }),
+    getContext: getReviewContext,
     getComparisonContents: reviewedBaseline.getComparisonContents,
     getTaskFileContents: (...args) => getTaskFileContents(...args),
     getTaskBatchFileContents: (...args) => getTaskBatchFileContents(...args),
@@ -117,6 +124,9 @@
   let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(diffLoader.linkedPr))
 
   let hasAutoOpened = false
+  $effect(() => {
+    reviewedBaseline.syncReviewContext()
+  })
   $effect(() => {
     const taskId = task.id
     reviewedFileShas = getTaskReviewReviewedFileShas(taskId)
@@ -148,18 +158,15 @@
 
   function handleIncludeCommittedChange(value: boolean) {
     includeCommitted = value
-    reviewedBaseline.restoreAll()
     void diffLoader.refresh()
   }
 
   function handleIncludeUncommittedChange(value: boolean) {
     includeUncommitted = value
-    reviewedBaseline.restoreAll()
     void diffLoader.refresh()
   }
 
   async function handleCommitSelect(sha: string | null) {
-    reviewedBaseline.restoreAll()
     await diffLoader.selectCommit(sha)
   }
 

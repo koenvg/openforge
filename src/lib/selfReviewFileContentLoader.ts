@@ -2,7 +2,7 @@ import { getImagePreviewDataUrl, type FileContents } from '@openforge-app/pr-rev
 import type { FileContentRequest } from './ipc'
 import type { PrFileDiff } from './types'
 
-export interface SelfReviewFileContentContext {
+export interface SelfReviewContext {
   taskId: string
   selectedCommitSha: string | null
   includeCommitted: boolean
@@ -10,7 +10,7 @@ export interface SelfReviewFileContentContext {
 }
 
 export interface SelfReviewFileContentLoaderOptions {
-  getContext: () => SelfReviewFileContentContext
+  getContext: () => SelfReviewContext
   getComparisonContents: (filename: string) => FileContents | undefined
   getTaskFileContents: (
     taskId: string,
