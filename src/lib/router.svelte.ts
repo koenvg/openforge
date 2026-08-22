@@ -4,6 +4,7 @@ import { get } from 'svelte/store'
 import {
   activeProjectId,
   currentView,
+  focusBoardFilters,
   lastViewedTaskId,
   pendingManualComments,
   prFileDiffs,
@@ -72,6 +73,19 @@ export function pushNavState(): void {
   if (backStack.length > MAX_HISTORY) {
     backStack.shift()
   }
+}
+
+// Force a project's remembered board filter tab to Focus. Used when the board is
+// re-invoked while it's already showing — re-clicking the active project's sidebar row,
+// or clicking the Board icon — so a repeat click always lands back on Focus, the tab
+// needing attention, instead of leaving whatever tab was last selected.
+export function selectFocusBoardTab(projectId: string | null): void {
+  if (!projectId) return
+  const filters = get(focusBoardFilters)
+  if (filters.get(projectId) === 'focus') return
+  const next = new Map(filters)
+  next.set(projectId, 'focus')
+  focusBoardFilters.set(next)
 }
 
 export function resetToBoard(): void {
@@ -219,6 +233,11 @@ export function useAppRouter() {
 
   function navigate(view: AppView) {
     if (view === 'board') {
+      // Re-invoking the board (the icon rail's Board button) while it's already showing
+      // is otherwise a no-op — jump back to Focus so a repeat click always has an effect.
+      if (get(currentView) === 'board') {
+        selectFocusBoardTab(get(activeProjectId))
+      }
       resetToBoardRoute()
       currentViewState = 'board'
       notifyViewInvoked(view)

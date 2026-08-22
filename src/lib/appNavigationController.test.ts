@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, pendingTask, projects, selectedTaskId, tasks } from './stores'
+import { activeProjectId, currentView, focusBoardFilters, pendingTask, projects, selectedTaskId, tasks } from './stores'
 import type { Project, Task } from './types'
 import { createAppNavigationController } from './appNavigationController'
 
@@ -26,6 +26,7 @@ describe('App navigation controller', () => {
     selectedTaskId.set(null)
     pendingTask.set(null)
     tasks.set([])
+    focusBoardFilters.set(new Map())
   })
 
   it('restores a remembered task after the target project tasks load', async () => {
@@ -158,6 +159,25 @@ describe('App navigation controller', () => {
     selectedTask = null
     await controller.cycleActiveProject('next', { boardOnly: true })
     expect(get(activeProjectId)).toBe(projectTwo.id)
+  })
+
+  it('re-clicking the active project while already on its board jumps to Focus without resetting', async () => {
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+    })
+    focusBoardFilters.set(new Map([[projectOne.id, 'backlog']]))
+
+    await controller.switchToProject(projectOne.id)
+
+    expect(get(focusBoardFilters).get(projectOne.id)).toBe('focus')
+    // Must not reset — that would wipe an open task detail, which also renders on the
+    // board view.
+    expect(router.resetToBoard).not.toHaveBeenCalled()
   })
 
 })

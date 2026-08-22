@@ -357,6 +357,9 @@ export const mockRouterRestoreProjectView = vi.fn((_projectId: string) => {
 })
 export const mockRouterNavigate = vi.fn((view: string) => {
   if (view === 'board') {
+    if (get(mockCurrentViewStore) === 'board') {
+      mockSelectFocusBoardTab(get(mockActiveProjectIdStore))
+    }
     mockRouterResetToBoard()
     return
   }
@@ -365,11 +368,13 @@ export const mockRouterNavigate = vi.fn((view: string) => {
     mockSelectedTaskIdStore.set(null)
   }
 })
+export const mockSelectFocusBoardTab = vi.fn((_projectId: string | null) => {})
 
 vi.mock('./lib/router.svelte', () => ({
   pushNavState: mockRouterPushNavState,
   resetToBoard: mockRouterResetToBoard,
   restoreProjectView: mockRouterRestoreProjectView,
+  selectFocusBoardTab: mockSelectFocusBoardTab,
   useAppRouter: () => ({
     navigate: mockRouterNavigate,
     navigateToTask: mockRouterNavigateToTask,
