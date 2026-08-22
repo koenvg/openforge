@@ -1,0 +1,247 @@
+import { get } from 'svelte/store'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { finalizeAgentSession, getLatestSession } from '../ipc'
+import { activeSessions, checkpointNotification, taskRuntimeInfo } from '../stores'
+import { getShellLifecycleState, release, updateShellLifecycleState } from '../terminalPool'
+import { createTaskSessionEventListeners } from './taskSessionEventListeners'
+import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
+
+vi.mock('../terminalPool', () => ({
+  getShellLifecycleState: vi.fn().mockReturnValue({
+    ptyActive: true,
+    shellExited: false,
+    currentPtyInstance: null,
+    hasOutput: false,
+  }),
+  release: vi.fn(),
+  updateShellLifecycleState: vi.fn(),
+}))
+
+vi.mock('../ipc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ipc')>()
+  return {
+    ...actual,
+    getLatestSession: vi.fn(),
+    finalizeAgentSession: vi.fn(),
+    getTaskDetail: vi.fn(),
+  }
+})
+
+describe('createTaskSessionEventListeners', () => {
+  beforeEach(() => {
+    activeSessions.set(new Map())
+    checkpointNotification.set(null)
+    taskRuntimeInfo.set(new Map())
+    vi.clearAllMocks()
+    vi.mocked(getShellLifecycleState).mockReturnValue({
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: null,
+      hasOutput: false,
+    })
+  })
+
+  it('marks action-complete sessions completed and clears checkpoint notification', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession()]]))
+    checkpointNotification.set({
+      ticketId: 'task-1',
+      ticketKey: 'task-1',
+      sessionId: 'session-1',
+      stage: 'running',
+      message: 'Agent needs input',
+      timestamp: 123,
+    })
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('action-complete')?.({ payload: { task_id: 'task-1' } })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('completed')
+    expect(get(activeSessions).get('task-1')?.checkpoint_data).toBeNull()
+    expect(get(checkpointNotification)).toBeNull()
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('applies sidecar-forwarded OpenCode checkpoint events to active sessions', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: null })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-event')?.({
+      payload: {
+        task_id: 'task-1',
+        event_type: 'permission.asked',
+        data: '{"properties":{"description":"Allow file write?"}}',
+        timestamp: 123,
+      },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(activeSessions).get('task-1')?.checkpoint_data).toBe('{"properties":{"description":"Allow file write?"}}')
+    expect(get(checkpointNotification)?.ticketId).toBe('task-1')
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('records runtime info and latest session on session-resumed without legacy OpenCode server port state', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    vi.mocked(getLatestSession).mockResolvedValue(createSession({ id: 'session-resumed' }))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('session-resumed')?.({
+      payload: { task_id: 'task-1', workspace_path: '/tmp/work' },
+    })
+
+    expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work' })
+    expect(get(activeSessions).get('task-1')?.id).toBe('session-resumed')
+  })
+
+  it('hydrates terminalPool with current PTY instance metadata from provider-neutral status events', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'running', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('task-1', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 42,
+      hasOutput: false,
+    })
+    expect(get(activeSessions).get('task-1')?.status).toBe('running')
+  })
+
+  it('refreshes project attention even when a provider-neutral status event leaves local session state unchanged', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'running', kind: 'became_busy' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('running')
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('raises a permission notification for provider-neutral paused permission events', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ provider: 'claude-code', status: 'running' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(checkpointNotification)).toMatchObject({
+      ticketId: 'task-1',
+      sessionId: 'session-1',
+      stage: 'running',
+      message: 'Agent needs permission',
+    })
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('raises a permission notification when fetching an already-paused latest session', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    vi.mocked(getLatestSession).mockResolvedValue(createSession({ provider: 'claude-code', status: 'paused' }))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(checkpointNotification)).toMatchObject({
+      ticketId: 'task-1',
+      sessionId: 'session-1',
+      message: 'Agent needs permission',
+    })
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('does not spam duplicate permission notifications for unchanged paused sessions', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ provider: 'claude-code', status: 'paused' })]]))
+    checkpointNotification.set({
+      ticketId: 'task-1',
+      ticketKey: 'task-1',
+      sessionId: 'session-1',
+      stage: 'running',
+      message: 'Agent needs permission',
+      timestamp: 123,
+    })
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(checkpointNotification)?.timestamp).toBe(123)
+  })
+
+  it('marks active sessions failed from provider-neutral failed status events', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: '{"pending":true}' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'failed', kind: 'failed', pty_instance_id: 42 },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('failed')
+    expect(get(activeSessions).get('task-1')?.checkpoint_data).toBeNull()
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('does not reactivate an exited PTY from completed status metadata', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    vi.mocked(getShellLifecycleState).mockReturnValue({
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 42,
+      hasOutput: false,
+    })
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'completed', kind: 'ended', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).not.toHaveBeenCalled()
+    expect(get(activeSessions).get('task-1')?.status).toBe('completed')
+  })
+
+  it('finalizes agent PTY exits through the provider-neutral IPC wrapper', async () => {
+    vi.useFakeTimers()
+    const { deps, handlers } = createAppDesktopEventHarness()
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('agent-pty-exited')?.({
+      payload: { task_id: 'task-1', success: true, instance_id: 42 },
+    })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true, 42)
+    vi.useRealTimers()
+  })
+
+  it('clears active session and releases terminal when task is deleted', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    activeSessions.set(new Map([['task-1', createSession()]]))
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('task-changed')?.({ payload: { action: 'deleted', task_id: 'task-1' } })
+
+    expect(get(activeSessions).has('task-1')).toBe(false)
+    expect(release).toHaveBeenCalledWith('task-1')
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+})
