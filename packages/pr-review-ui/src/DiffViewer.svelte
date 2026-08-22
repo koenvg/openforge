@@ -11,6 +11,7 @@
   import { createVirtualizer } from './useVirtualizer.svelte'
   import { createInlineCommentDrafts } from './useInlineCommentDrafts.svelte'
   import { createDiffViewerNavigation } from './useDiffViewerNavigation.svelte'
+  import { createDiffFileCollapse } from './useDiffFileCollapse.svelte'
   import { sortFilesAsTree } from './fileSort'
   import { loadDiffViewWrap, saveDiffViewWrap } from './diffViewPreferences'
   import { getDiffFileSectionInputKey } from './diffFileSectionIdentity'
@@ -68,10 +69,7 @@
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(loadDiffViewWrap())
   let richDiffSectionKeys = $state(new Set<string>())
-  let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
-  let hasAutoCollapsed = false
-  let previousReviewedFileIdentities = new Map<string, string>()
   const inlineCommentDrafts = createInlineCommentDrafts({
     getPendingComments: () => pendingComments,
     getOnPendingCommentsChange: () => onPendingCommentsChange,
@@ -87,6 +85,12 @@
     getFetchFileContents: () => fetchFileContents,
     getBatchFetchFileContents: () => batchFetchFileContents,
   })
+  const fileCollapse = createDiffFileCollapse({
+    getFiles: () => files,
+    getReviewedFileIdentities: () => reviewedFileShas,
+    getFileReviewIdentity: file => getFileReviewIdentity(file),
+    getOnToggleFileReviewed: () => onToggleFileReviewed,
+  })
   function resolveDiffTheme(): 'light' | 'dark' {
     if (diffTheme) return diffTheme
     if (typeof document !== 'undefined') {
@@ -97,27 +101,11 @@
     return 'light'
   }
 
-
   const diffWorker = createDiffWorker({
     getFiles: () => files,
     getFileContentsMap: () => fileContentsFetcher.fileContentsMap,
     getDiffTheme: resolveDiffTheme,
   })
-  function toggleCollapse(filename: string) {
-    const next = new Set(collapsedFiles)
-    if (next.has(filename)) {
-      next.delete(filename)
-    } else {
-      next.add(filename)
-    }
-    collapsedFiles = next
-  }
-
-  function uncollapseFile(filename: string) {
-    const next = new Set(collapsedFiles)
-    next.delete(filename)
-    collapsedFiles = next
-  }
 
   function supportsRichDiff(file: PrFileDiff): boolean {
     return getFileLanguage(file.filename) === 'markdown' && file.status !== 'removed' && file.status !== 'deleted'
@@ -155,77 +143,6 @@
     richDiffSectionKeys = next
   }
 
-  function getReviewIdentity(file: PrFileDiff): string | null {
-    return getFileReviewIdentity(file)
-  }
-
-  function isFileReviewed(file: PrFileDiff): boolean {
-    const identity = getReviewIdentity(file)
-    return identity !== null && reviewedFileShas.get(file.filename) === identity
-  }
-
-  function getCurrentReviewedFileIdentities(): Map<string, string> {
-    const reviewedIdentities = new Map<string, string>()
-    for (const file of files) {
-      const identity = getReviewIdentity(file)
-      if (identity !== null && reviewedFileShas.get(file.filename) === identity) {
-        reviewedIdentities.set(file.filename, identity)
-      }
-    }
-    return reviewedIdentities
-  }
-
-  function handleReviewedChange(file: PrFileDiff, reviewed: boolean) {
-    onToggleFileReviewed?.(file, reviewed)
-    const next = new Set(collapsedFiles)
-    if (reviewed) {
-      next.add(file.filename)
-    } else {
-      next.delete(file.filename)
-    }
-    collapsedFiles = next
-  }
-
-  // Auto-collapse large files on initial load
-  $effect(() => {
-    if (hasAutoCollapsed) return
-    if (files.length === 0) return
-
-    const largeFiles = new Set<string>()
-    for (const file of files) {
-      if (file.additions + file.deletions > 500 || file.is_truncated === true) {
-        largeFiles.add(file.filename)
-      }
-    }
-    collapsedFiles = largeFiles
-    hasAutoCollapsed = true
-  })
-
-  $effect(() => {
-    const currentReviewedFileIdentities = getCurrentReviewedFileIdentities()
-    const next = new Set(collapsedFiles)
-    let changed = false
-
-    for (const [filename, identity] of currentReviewedFileIdentities.entries()) {
-      if (previousReviewedFileIdentities.get(filename) !== identity) {
-        next.add(filename)
-        changed = true
-      }
-    }
-
-    for (const filename of previousReviewedFileIdentities.keys()) {
-      if (!currentReviewedFileIdentities.has(filename)) {
-        next.delete(filename)
-        changed = true
-      }
-    }
-
-    previousReviewedFileIdentities = currentReviewedFileIdentities
-    if (changed) {
-      collapsedFiles = next
-    }
-  })
-
   export function focusDiff() {
     navigation.focusDiff()
   }
@@ -250,17 +167,14 @@
     return navigation.scrollToComment(filename, lineNumber)
   }
 
-
-
   function setVisibleAgentComments(comments: AgentReviewComment[]) {
     onAgentCommentsChange?.(comments)
   }
 
-
   // Large diff warning banner calculations
   const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
   const totalFiles = $derived(files.length)
-  const collapsedCount = $derived(collapsedFiles.size)
+  const collapsedCount = $derived(fileCollapse.collapsedFiles.size)
   const showLargeDiffWarning = $derived(totalChanges > 5000)
   const sortedFiles = $derived(sortFilesAsTree(files))
 
@@ -270,7 +184,7 @@
     estimateSize: (index) => {
       const file = sortedFiles[index]
       if (!file) return 300
-      if (collapsedFiles.has(file.filename)) return 60
+      if (fileCollapse.collapsedFiles.has(file.filename)) return 60
       if (isImageFileDiff(file)) return 360
       const lineCount = file.patch_line_count ?? (file.additions + file.deletions) * 2
       return 62 + Math.min(lineCount, 200) * 20
@@ -280,23 +194,23 @@
   })
   const navigation = createDiffViewerNavigation({
     getFiles: () => sortedFiles,
-    getCollapsedFiles: () => collapsedFiles,
+    getCollapsedFiles: () => fileCollapse.collapsedFiles,
     getScrollContainer: () => scrollContainerEl,
     getInitialScrollTop: () => initialScrollTop,
-    isFileReviewed,
-    onUncollapseFile: uncollapseFile,
+    isFileReviewed: fileCollapse.isFileReviewed,
+    onUncollapseFile: fileCollapse.uncollapseFile,
     scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
     getOnRequestFocusFileTree: () => onRequestFocusFileTree,
   })
   const search = createDiffSearch({
     isSplitMode: () => diffViewMode === DiffModeEnum.Split,
     getDiffViewWrap: () => diffViewWrap,
-    getCollapsedFiles: () => collapsedFiles,
+    getCollapsedFiles: () => fileCollapse.collapsedFiles,
     getSortedFiles: () => sortedFiles,
     getScrollContainer: () => scrollContainerEl,
     getVisibleItems: () => virtualizer.virtualItems,
     scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
-    onUncollapseFile: uncollapseFile,
+    onUncollapseFile: fileCollapse.uncollapseFile,
   })
 </script>
 
@@ -434,10 +348,10 @@
           >
             <DiffFileSection
               {file}
-              collapsed={collapsedFiles.has(file.filename)}
+              collapsed={fileCollapse.collapsedFiles.has(file.filename)}
               richDiffSupported={supportsRichDiff(file)}
               richDiffActive={isRichDiffActive(file)}
-              reviewed={isFileReviewed(file)}
+              reviewed={fileCollapse.isFileReviewed(file)}
               fileContents={fileContentsFetcher.fileContentsMap.get(file.filename)}
               fileContentError={fileContentsFetcher.fileContentErrors.get(file.filename)}
               onRetryFileContents={() => fileContentsFetcher.retryFileContents(file.filename)}
@@ -463,9 +377,9 @@
               onAgentCommentsChange={setVisibleAgentComments}
               {onUpdateAgentCommentStatus}
               {fileHeaderExtra}
-              onToggleCollapse={() => toggleCollapse(file.filename)}
+              onToggleCollapse={() => fileCollapse.toggleCollapse(file.filename)}
               onSetRichDiffActive={(active) => setRichDiffActive(file, active)}
-              onReviewedChange={onToggleFileReviewed ? (reviewed) => handleReviewedChange(file, reviewed) : undefined}
+              onReviewedChange={onToggleFileReviewed ? (reviewed) => fileCollapse.handleReviewedChange(file, reviewed) : undefined}
               {aiThreads}
               {onAskAgent}
               {onCommentNow}
