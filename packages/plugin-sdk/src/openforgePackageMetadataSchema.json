@@ -48,9 +48,27 @@
       "minLength": 1
     },
     "icon": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Semantic OpenForge icon key or package asset reference."
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "svg"],
+          "properties": {
+            "type": { "const": "svg" },
+            "svg": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          }
+        }
+      ],
+      "description": "Lucide icon name in kebab-case or inline SVG geometry using the PluginIcon contract."
     },
     "frontend": {
       "type": "string",

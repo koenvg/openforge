@@ -60,9 +60,24 @@ var openforgePackageMetadataSchema_default = {
 			"minLength": 1
 		},
 		"icon": {
-			"type": "string",
-			"minLength": 1,
-			"description": "Semantic OpenForge icon key or package asset reference."
+			"oneOf": [{
+				"type": "string",
+				"minLength": 1,
+				"pattern": "\\S"
+			}, {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["type", "svg"],
+				"properties": {
+					"type": { "const": "svg" },
+					"svg": {
+						"type": "string",
+						"minLength": 1,
+						"pattern": "\\S"
+					}
+				}
+			}],
+			"description": "Lucide icon name in kebab-case or inline SVG geometry using the PluginIcon contract."
 		},
 		"frontend": {
 			"type": "string",
@@ -117,6 +132,16 @@ var openforgePackageMetadataSchema_default = {
 		}
 	}
 };
+//#endregion
+//#region packages/plugin-sdk/src/pluginIconContract.ts
+function isPluginIconName(value) {
+	return typeof value === "string" && value.trim().length > 0;
+}
+function isPluginSvgIcon(value) {
+	if (value === null || typeof value !== "object") return false;
+	const icon = value;
+	return Object.keys(icon).length === 2 && icon.type === "svg" && typeof icon.svg === "string" && icon.svg.trim().length > 0;
+}
 //#endregion
 //#region packages/plugin-sdk/src/types.ts
 function readSupportedOpenForgeApiVersions() {
@@ -210,6 +235,13 @@ function validateOptionalString(value, path) {
 	}];
 	return [];
 }
+function validatePluginIcon(value) {
+	if (value === void 0 || isPluginIconName(value) || isPluginSvgIcon(value)) return [];
+	return [{
+		path: "icon",
+		message: "Must be a non-empty Lucide icon name or { type: \"svg\", svg }"
+	}];
+}
 function validateFrontendStyles(value) {
 	if (value === void 0) return [];
 	if (!Array.isArray(value)) return [{
@@ -286,7 +318,7 @@ function validateOpenForgePackageMetadata(data) {
 	errors.push(...validateApiVersion(data.apiVersion));
 	errors.push(...validateRequiredString(data.displayName, "displayName"));
 	errors.push(...validateRequiredString(data.description, "description"));
-	errors.push(...validateOptionalString(data.icon, "icon"));
+	errors.push(...validatePluginIcon(data.icon));
 	errors.push(...validateOptionalString(data.frontend, "frontend"));
 	errors.push(...validateFrontendStyles(data.frontendStyles));
 	if (data.frontendStyles !== void 0 && !isNonEmptyString(data.frontend)) errors.push({

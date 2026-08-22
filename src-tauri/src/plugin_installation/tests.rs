@@ -200,7 +200,7 @@ fn install_local_svelte_package_preserves_declared_frontend_styles() {
     .expect("frontend stylesheet should write");
     write_package_json(
         source.path(),
-        r#"{"id":"acme.local","apiVersion":1,"displayName":"Local Plugin","description":"A local plugin","frontend":"dist/frontend.js","frontendStyles":["dist/plugin-local.css"],"requires":["views"]}"#,
+        r#"{"id":"acme.local","apiVersion":1,"displayName":"Local Plugin","description":"A local plugin","icon":{"type":"svg","svg":"<svg viewBox=\"0 0 24 24\"><rect x=\"15\" y=\"5\" width=\"4\" height=\"12\"/><rect x=\"7\" y=\"8\" width=\"4\" height=\"9\"/></svg>"},"frontend":"dist/frontend.js","frontendStyles":["dist/plugin-local.css"],"requires":["views"]}"#,
     );
 
     let row =
@@ -219,8 +219,29 @@ fn install_local_svelte_package_preserves_declared_frontend_styles() {
     let metadata: Value =
         serde_json::from_str(&row.package_metadata).expect("stored package metadata should parse");
     assert_eq!(metadata["displayName"], "Local Plugin");
+    assert_eq!(metadata["icon"]["type"], "svg");
     assert_eq!(metadata["frontendStyles"][0], "dist/plugin-local.css");
     assert!(metadata.get("openforge").is_none());
+}
+
+#[test]
+fn install_package_source_rejects_malformed_plugin_icon() {
+    let source = tempdir().expect("source tempdir should create");
+    let managed = tempdir().expect("managed tempdir should create");
+    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+    fs::write(source.path().join("dist/frontend.js"), "export default {};")
+        .expect("frontend should write");
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.bad-icon","apiVersion":1,"displayName":"Bad Icon","description":"Bad icon","icon":{"type":"svg","svg":""},"frontend":"dist/frontend.js"}"#,
+    );
+
+    let error =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect_err("install should fail");
+
+    assert!(error
+        .contains("openforge.icon must be a non-empty Lucide icon name or { type: \"svg\", svg }"));
 }
 
 #[test]

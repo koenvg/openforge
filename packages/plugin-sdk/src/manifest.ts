@@ -1,4 +1,5 @@
 import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
+import { isPluginIconName, isPluginSvgIcon } from './pluginIconContract'
 import type { OpenForgePackageMetadata, OpenForgePluginCapability, ValidationError } from './types'
 import { SUPPORTED_OPENFORGE_API_VERSIONS } from './types'
 
@@ -35,6 +36,13 @@ function validateOptionalString(value: unknown, path: string): ValidationError[]
     return [{ path, message: 'Must be a non-empty string' }]
   }
   return []
+}
+
+function validatePluginIcon(value: unknown): ValidationError[] {
+  if (value === undefined || isPluginIconName(value) || isPluginSvgIcon(value)) {
+    return []
+  }
+  return [{ path: 'icon', message: 'Must be a non-empty Lucide icon name or { type: "svg", svg }' }]
 }
 
 function validateFrontendStyles(value: unknown): ValidationError[] {
@@ -117,7 +125,7 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   errors.push(...validateApiVersion(data.apiVersion))
   errors.push(...validateRequiredString(data.displayName, 'displayName'))
   errors.push(...validateRequiredString(data.description, 'description'))
-  errors.push(...validateOptionalString(data.icon, 'icon'))
+  errors.push(...validatePluginIcon(data.icon))
   errors.push(...validateOptionalString(data.frontend, 'frontend'))
   errors.push(...validateFrontendStyles(data.frontendStyles))
   if (data.frontendStyles !== undefined && !isNonEmptyString(data.frontend)) {

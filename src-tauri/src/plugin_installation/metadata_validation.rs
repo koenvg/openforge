@@ -31,8 +31,6 @@ pub(super) struct OpenForgePackageMetadata {
     api_version: i64,
     display_name: String,
     description: String,
-    #[serde(default, rename = "icon")]
-    _icon: Option<String>,
     #[serde(default)]
     frontend: Option<String>,
     #[serde(default)]
@@ -170,6 +168,10 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
                 &format!("package.json openforge.{key}"),
             )?;
         }
+    }
+
+    if let Some(icon) = openforge.get("icon") {
+        validate_plugin_icon(icon)?;
     }
 
     match openforge.get("apiVersion").and_then(Value::as_i64) {
@@ -495,6 +497,24 @@ fn package_metadata_json(value: &Value) -> Result<String, String> {
     })?;
     serde_json::to_string(metadata)
         .map_err(|error| format!("failed to serialize OpenForge package metadata: {error}"))
+}
+
+fn validate_plugin_icon(value: &Value) -> Result<(), String> {
+    let valid_name = value.as_str().is_some_and(|name| !name.trim().is_empty());
+    let valid_svg = value.as_object().is_some_and(|icon| {
+        icon.len() == 2
+            && icon.get("type").and_then(Value::as_str) == Some("svg")
+            && icon
+                .get("svg")
+                .and_then(Value::as_str)
+                .is_some_and(|svg| !svg.trim().is_empty())
+    });
+
+    if valid_name || valid_svg {
+        return Ok(());
+    }
+
+    Err("package.json openforge.icon must be a non-empty Lucide icon name or { type: \"svg\", svg }".to_string())
 }
 
 fn validate_non_empty_json_string(

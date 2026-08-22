@@ -49,6 +49,7 @@ vi.mock('@lucide/svelte', () => {
     ChevronLeft: stub,
     ChevronRight: stub,
     ChevronDown: stub,
+    ChartColumnBig: stub,
     Clock: stub,
     Code: stub,
     FileText: stub,

@@ -41,6 +41,24 @@ describe('package.json#openforge metadata contract', () => {
     expect(isOpenForgePackageMetadata(validMetadata())).toBe(true)
   })
 
+  it('accepts the public SVG icon contract in package metadata', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      icon: {
+        type: 'svg',
+        svg: '<svg viewBox="0 0 24 24"><rect x="15" y="5" width="4" height="12"/><rect x="7" y="8" width="4" height="9"/></svg>',
+      },
+    }))).toEqual([])
+  })
+
+  it('rejects malformed package icon values', () => {
+    for (const icon of ['', '   ', { type: 'svg', svg: '' }, { type: 'svg', svg: '   ' }, { type: 'png', svg: '<svg></svg>' }, { type: 'svg', svg: '<svg></svg>', extra: true }]) {
+      expect(validateOpenForgePackageMetadata(validMetadata({ icon }))).toContainEqual({
+        path: 'icon',
+        message: 'Must be a non-empty Lucide icon name or { type: "svg", svg }',
+      })
+    }
+  })
+
   it('accepts clipboard writing as a declared trusted-plugin capability', () => {
     expect(validateOpenForgePackageMetadata(validMetadata({
       requires: ['system.writeClipboardText'],
@@ -176,6 +194,20 @@ describe('package.json#openforge metadata contract', () => {
       required: ['id', 'apiVersion', 'displayName', 'description'],
     })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties).not.toHaveProperty('contributes')
+    expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.icon).toMatchObject({
+      oneOf: [
+        { type: 'string', minLength: 1 },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['type', 'svg'],
+          properties: {
+            type: { const: 'svg' },
+            svg: { type: 'string', minLength: 1 },
+          },
+        },
+      ],
+    })
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.frontendStyles).toMatchObject({
       type: 'array',
       uniqueItems: true,
