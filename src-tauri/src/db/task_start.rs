@@ -18,7 +18,6 @@ pub(crate) struct TaskStartFinalization<'a> {
 pub(crate) enum FinalizeTaskStartError {
     StaleState,
     InvalidPtyInstance(u64),
-    LockPoisoned,
     Database(rusqlite::Error),
 }
 
@@ -29,7 +28,6 @@ impl fmt::Display for FinalizeTaskStartError {
             Self::InvalidPtyInstance(instance_id) => {
                 write!(f, "PTY instance ID {instance_id} exceeds SQLite range")
             }
-            Self::LockPoisoned => write!(f, "Task Start database lock is poisoned"),
             Self::Database(error) => write!(f, "Failed to finalize Task Start: {error}"),
         }
     }
@@ -57,10 +55,7 @@ impl super::Database {
                     .map_err(|_| FinalizeTaskStartError::InvalidPtyInstance(instance_id))
             })
             .transpose()?;
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|_| FinalizeTaskStartError::LockPoisoned)?;
+        let mut conn = self.lock_conn()?;
         let transaction = conn.transaction()?;
         let now = super::current_unix_timestamp()?;
 
@@ -120,5 +115,50 @@ impl super::Database {
 
         transaction.commit()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FinalizeTaskStartError, TaskStartFinalization};
+
+    #[test]
+    fn finalize_task_start_returns_database_error_when_connection_mutex_is_poisoned() {
+        let (db, db_path) =
+            crate::db::test_helpers::make_test_db("finalize_task_start_connection_poisoned");
+        let conn = db.connection();
+        let poisoner = std::thread::spawn(move || {
+            let _guard = conn.lock().expect("connection mutex should start healthy");
+            panic!("poison database connection mutex");
+        });
+        assert!(poisoner.join().is_err());
+
+        let result = db.finalize_task_start(TaskStartFinalization {
+            task_id: "T-poisoned",
+            project_id: "P-poisoned",
+            workspace_path: "/tmp/workspace",
+            repo_path: "/tmp/repo",
+            workspace_kind: "worktree",
+            branch_name: Some("feature/poisoned"),
+            provider_name: "test-provider",
+            agent_session_id: "session-poisoned",
+            opencode_session_id: None,
+            pi_session_id: None,
+            pty_instance_id: None,
+        });
+
+        let error = match result {
+            Err(FinalizeTaskStartError::Database(rusqlite::Error::ToSqlConversionFailure(
+                error,
+            ))) => error,
+            Err(error) => panic!("unexpected finalization error: {error}"),
+            Ok(()) => panic!("poisoned connection lock unexpectedly succeeded"),
+        };
+        assert!(error
+            .downcast_ref::<super::super::ConnectionMutexPoisoned>()
+            .is_some());
+
+        drop(db);
+        let _ = std::fs::remove_file(db_path);
     }
 }
