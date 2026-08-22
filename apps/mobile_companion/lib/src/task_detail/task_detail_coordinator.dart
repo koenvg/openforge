@@ -53,10 +53,17 @@ final class TaskDetailCoordinator {
     unawaited(openTask(taskId));
   }
 
-  Future<void> openTask(String taskId) async {
+  void openRelatedTask(String taskId, String projectId) {
+    unawaited(openTask(taskId, projectId: projectId));
+  }
+
+  Future<void> openTask(String taskId, {String? projectId}) async {
     final factory = _controllerFactory;
     final navigator = _navigatorKey.currentState;
     if (factory == null || navigator == null) return;
+    if (projectId != null) {
+      await _projectBoardController?.selectProject(projectId);
+    }
     final controller = factory(taskId);
     final terminalSurface = _terminalSurfaceFactory?.call(taskId);
     final previousController = _openTaskController;
@@ -69,7 +76,7 @@ final class TaskDetailCoordinator {
             terminalSurface: terminalSurface,
             actionPaletteController: _actionPaletteController,
             onRefresh: () => refreshTaskAndBoard(controller),
-            onOpenTask: openTaskFromSelection,
+            onOpenTask: openRelatedTask,
             onCompleted: refreshBoard,
             onDeleteSucceeded: refreshBoard,
             onDeleteNeedsRefresh: refreshBoard,

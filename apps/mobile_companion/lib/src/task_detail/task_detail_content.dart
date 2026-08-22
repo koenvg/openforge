@@ -14,7 +14,7 @@ class _TaskDetailBody extends StatelessWidget {
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
   final bool deleteBusy;
   final bool deleteAvailable;
   final Future<void> Function(TaskDetail detail) onDelete;
@@ -78,7 +78,7 @@ class _LoadedTaskDetail extends StatelessWidget {
   });
 
   final TaskDetail detail;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
   final bool deletePending;
   final String? deleteMessage;
   final bool deleteAvailable;
@@ -152,6 +152,7 @@ class _LoadedTaskDetail extends StatelessWidget {
             const SizedBox(height: 16),
             _TaskRelationshipsCard.dependencies(
               relationships: detail.dependencies,
+              currentProjectId: detail.projectId,
               onOpenTask: onOpenTask,
             ),
           ],
@@ -159,6 +160,7 @@ class _LoadedTaskDetail extends StatelessWidget {
             const SizedBox(height: 16),
             _TaskRelationshipsCard.dependents(
               relationships: detail.dependentTasks,
+              currentProjectId: detail.projectId,
               onOpenTask: onOpenTask,
             ),
           ],

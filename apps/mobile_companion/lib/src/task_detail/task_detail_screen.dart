@@ -36,7 +36,7 @@ class TaskDetailScreen extends StatefulWidget {
   final AgentTerminalSurface? terminalSurface;
   final MobileActionPaletteController? actionPaletteController;
   final Future<void> Function()? onRefresh;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
   final Future<void> Function()? onCompleted;
   final Future<void> Function()? onDeleteSucceeded;
   final Future<void> Function()? onDeleteNeedsRefresh;
@@ -121,7 +121,7 @@ class TaskDetailView extends StatefulWidget {
 
   final TaskDetailViewState state;
   final Future<void> Function() onRefresh;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
   final Future<TaskCompleteAttempt> Function()? onComplete;
   final Future<void> Function()? onCompleted;
   final Future<TaskDeleteResult> Function()? onDelete;

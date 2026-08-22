@@ -55,6 +55,8 @@ describe('task dependency summaries', () => {
         title: 'Prepare the API',
         displayTitle: 'Prepare the API',
         tooltipTitle: 'Prepare the API',
+        projectId: 'project-1',
+        projectName: null,
       },
       {
         id: 'T-missing',
@@ -62,6 +64,8 @@ describe('task dependency summaries', () => {
         title: 'T-missing',
         displayTitle: null,
         tooltipTitle: 'T-missing',
+        projectId: null,
+        projectName: null,
       },
     ])
   })
@@ -94,6 +98,8 @@ describe('task dependency summaries', () => {
         title: 'Start after current task',
         displayTitle: 'Start after current task',
         tooltipTitle: 'Start after current task',
+        projectId: 'project-1',
+        projectName: null,
         remainingDependencyCountAfterCurrentDone: 0,
       },
       {
@@ -102,6 +108,8 @@ describe('task dependency summaries', () => {
         title: 'Needs more prerequisites',
         displayTitle: 'Needs more prerequisites',
         tooltipTitle: 'Needs more prerequisites',
+        projectId: 'project-1',
+        projectName: null,
         remainingDependencyCountAfterCurrentDone: 2,
       },
     ])

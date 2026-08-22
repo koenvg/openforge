@@ -46,7 +46,7 @@ pub enum TaskDependencyPersistenceError {
     SelfDependency(String),
     TaskNotFound(String),
     DependencyNotFound(String),
-    CrossProject {
+    AssignmentMismatch {
         task_id: String,
         dependency_id: String,
     },
@@ -75,12 +75,12 @@ impl fmt::Display for TaskDependencyPersistenceError {
             Self::DependencyNotFound(dependency_id) => {
                 write!(formatter, "dependency task {dependency_id} does not exist")
             }
-            Self::CrossProject {
+            Self::AssignmentMismatch {
                 task_id,
                 dependency_id,
             } => write!(
                 formatter,
-                "dependency task {dependency_id} must belong to the same project as {task_id}"
+                "dependency task {dependency_id} and {task_id} must both belong to projects or both be unassigned"
             ),
             Self::Cycle {
                 task_id,
@@ -104,7 +104,7 @@ impl std::error::Error for TaskDependencyPersistenceError {
             Self::SelfDependency(_)
             | Self::TaskNotFound(_)
             | Self::DependencyNotFound(_)
-            | Self::CrossProject { .. }
+            | Self::AssignmentMismatch { .. }
             | Self::Cycle { .. }
             | Self::ChainTooShort => None,
         }
@@ -348,8 +348,8 @@ fn validate_dependency(
         TaskDependencyPersistenceError::DependencyNotFound(depends_on_task_id.to_string())
     })?;
 
-    if task_project != dependency_project {
-        return Err(TaskDependencyPersistenceError::CrossProject {
+    if task_project.is_some() != dependency_project.is_some() {
+        return Err(TaskDependencyPersistenceError::AssignmentMismatch {
             task_id: task_id.to_string(),
             dependency_id: depends_on_task_id.to_string(),
         });
@@ -2001,7 +2001,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_dependency_error_identifies_cross_project_dependency() {
+    fn test_task_dependency_accepts_cross_project_dependency() {
         let (db, path) = make_test_db("task_dependency_cross_project");
         db.set_config("task_id_prefix", "T").unwrap();
         let project_a = db.create_project("A", "/tmp/a").expect("create project a");
@@ -2013,23 +2013,54 @@ mod tests {
             .create_task("Dependency", "backlog", Some(&project_b.id), None, None)
             .expect("create dependency");
 
+        db.add_task_dependency(&task.id, &dependency.id)
+            .expect("cross-project dependency should succeed");
+        let persisted = db.get_task(&task.id).expect("get task").expect("task");
+        assert_eq!(persisted.depends_on, vec![dependency.id]);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependency_error_identifies_assignment_mismatch() {
+        let (db, path) = make_test_db("task_dependency_assignment_mismatch");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db.create_project("A", "/tmp/a").expect("create project");
+        let assigned = db
+            .create_task("Assigned", "backlog", Some(&project.id), None, None)
+            .expect("create assigned task");
+        let unassigned = db
+            .create_task("Unassigned", "backlog", None, None, None)
+            .expect("create unassigned task");
+
         let error = db
-            .add_task_dependency(&task.id, &dependency.id)
-            .expect_err("cross-project dependency should fail");
+            .add_task_dependency(&assigned.id, &unassigned.id)
+            .expect_err("mixed assignment should fail");
         assert_eq!(
             error.to_string(),
             format!(
-                "dependency task {} must belong to the same project as {}",
-                dependency.id, task.id
+                "dependency task {} and {} must both belong to projects or both be unassigned",
+                unassigned.id, assigned.id
             )
         );
-
         assert!(matches!(
             error,
-            TaskDependencyPersistenceError::CrossProject {
+            TaskDependencyPersistenceError::AssignmentMismatch {
                 task_id,
                 dependency_id,
-            } if task_id == task.id && dependency_id == dependency.id
+            } if task_id == assigned.id && dependency_id == unassigned.id
+        ));
+
+        let reverse_error = db
+            .add_task_dependency(&unassigned.id, &assigned.id)
+            .expect_err("reverse mixed assignment should fail");
+        assert!(matches!(
+            reverse_error,
+            TaskDependencyPersistenceError::AssignmentMismatch {
+                task_id,
+                dependency_id,
+            } if task_id == unassigned.id && dependency_id == assigned.id
         ));
 
         drop(db);
@@ -2109,13 +2140,12 @@ mod tests {
         let (db, path) = make_test_db("task_dependency_chain_rollback");
         db.set_config("task_id_prefix", "T").unwrap();
         let project_a = db.create_project("A", "/tmp/a").expect("create project a");
-        let project_b = db.create_project("B", "/tmp/b").expect("create project b");
         db.create_task("First", "backlog", Some(&project_a.id), None, None)
             .expect("create first");
         let second = db
             .create_task("Second", "backlog", Some(&project_a.id), None, None)
             .expect("create second");
-        db.create_task("Third", "backlog", Some(&project_b.id), None, None)
+        db.create_task("Third", "backlog", None, None, None)
             .expect("create third");
 
         assert!(db

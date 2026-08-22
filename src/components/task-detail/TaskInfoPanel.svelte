@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, TaskLabel } from '../../lib/types'
-  import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks as allTasks } from '../../lib/stores'
+  import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks as allTasks } from '../../lib/stores'
   import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
@@ -22,20 +22,21 @@
     surface?: 'default' | 'transparent'
     density?: 'default' | 'inspector'
     onEditPrompt?: () => void
-    onOpenDependentTask?: (taskId: string) => void
+    onOpenRelatedTask?: (taskId: string, projectId: string | null) => void
   }
 
-  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', density = 'default', onEditPrompt, onOpenDependentTask }: Props = $props()
+  let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', density = 'default', onEditPrompt, onOpenRelatedTask }: Props = $props()
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
   let previousTaskLabelSignature = ''
 
   let activeTaskList = $derived(allTasksOverride ?? $allTasks)
-  let dependencyTaskList = $derived([...activeTaskList, ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks)])
-  let dependencies = $derived(getTaskDependencySummaries(task, dependencyTaskList))
-  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, dependencyTaskList))
-  let dependents = $derived(getTaskDependentSummaries(task, activeTaskList, dependencyTaskList))
+  let relationshipTaskList = $derived([...activeTaskList, ...(dependencyReferenceTasksOverride ?? $dependencyReferenceTasks)])
+  let projectNames = $derived(new Map($projects.map((project) => [project.id, project.name])))
+  let dependencies = $derived(getTaskDependencySummaries(task, relationshipTaskList, projectNames))
+  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, relationshipTaskList))
+  let dependents = $derived(getTaskDependentSummaries(task, relationshipTaskList, relationshipTaskList, projectNames))
   let panelClass = $derived(density === 'inspector'
     ? 'gap-0 p-0 bg-base-100'
     : `gap-3 p-3 ${surface === 'transparent' ? 'bg-transparent' : 'bg-base-200'}`)
@@ -132,13 +133,14 @@
     items={dependencies}
     {waitingDependencyCount}
     density="full"
+    {onOpenRelatedTask}
   />
 
   <TaskRelationshipDetailSection
     kind="dependents"
     items={dependents}
     density="full"
-    {onOpenDependentTask}
+    {onOpenRelatedTask}
   />
 
   {#if workspacePath !== null}

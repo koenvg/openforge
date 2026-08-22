@@ -438,6 +438,8 @@ void main() {
               taskId: 'T-2',
               title: 'Related Task',
               boardStatus: 'backlog',
+              projectId: 'P-1',
+              projectName: 'OpenForge',
               remainingDependencyCount: 0,
             ),
           ],

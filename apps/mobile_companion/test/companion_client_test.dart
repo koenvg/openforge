@@ -289,7 +289,11 @@ void main() {
       expect(detail.labels, <String>['mobile', 'review']);
       expect(detail.dependencies.single.taskId, 'KVG-2944');
       expect(detail.dependencies.single.boardStatus, 'done');
+      expect(detail.dependencies.single.projectId, 'P-5');
+      expect(detail.dependencies.single.projectName, 'Release Tools');
       expect(detail.dependentTasks.single.taskId, 'KVG-2947');
+      expect(detail.dependentTasks.single.projectId, 'P-5');
+      expect(detail.dependentTasks.single.projectName, 'Release Tools');
       expect(detail.dependentTasks.single.remainingDependencyCount, 1);
       expect(completed.taskId, 'KVG-2946');
       expect(completed.boardStatus, 'done');

@@ -28,7 +28,7 @@
     ticketPrs: Map<string, PullRequestInfo[]>
     attentionRows?: TaskAttentionRow[]
     attentionRowsLoaded?: boolean
-    onOpenTask: (taskId: string) => void
+    onOpenTask: (taskId: string, projectId?: string | null) => void | Promise<void>
     onEditTask?: (taskId: string) => void
     onTaskUpdated?: () => void | Promise<void>
     onProjectAttentionChanged?: () => void | Promise<void>

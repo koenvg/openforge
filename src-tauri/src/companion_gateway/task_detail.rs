@@ -9,6 +9,8 @@ pub(crate) struct CompanionTaskRelationship {
     pub(crate) task_id: String,
     pub(crate) title: String,
     pub(crate) board_status: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +18,8 @@ pub(crate) struct CompanionDependentTask {
     pub(crate) task_id: String,
     pub(crate) title: String,
     pub(crate) board_status: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
     pub(crate) remaining_dependency_count: usize,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,17 +59,29 @@ fn task_display_title(task: &crate::db::TaskRow) -> String {
     crate::task_attention::task_display_title(&task.id, task.title.as_deref(), &task.initial_prompt)
 }
 
-fn task_relationship(task: &crate::db::TaskRow) -> Result<CompanionTaskRelationship, String> {
+fn task_relationship(
+    task: &crate::db::TaskRow,
+    projects_by_id: &HashMap<&str, &crate::db::ProjectRow>,
+) -> Result<CompanionTaskRelationship, String> {
     let board_status = task.status.parse::<BoardStatus>().map_err(|_| {
         format!(
             "Companion related Task {} has an invalid Board Status",
             task.id
         )
     })?;
+    let project_id = task
+        .project_id
+        .as_deref()
+        .ok_or_else(|| format!("Companion related Task {} has no Project", task.id))?;
+    let project = projects_by_id
+        .get(project_id)
+        .ok_or_else(|| format!("Companion related Task {} Project was not found", task.id))?;
     Ok(CompanionTaskRelationship {
         task_id: task.id.clone(),
         title: task_display_title(task),
         board_status: board_status.as_str().to_string(),
+        project_id: project.id.clone(),
+        project_name: project.name.clone(),
     })
 }
 impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
@@ -84,9 +100,15 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             .project_id
             .as_deref()
             .ok_or_else(|| "Companion Task has no Project".to_string())?;
-        let project = database
-            .get_project(project_id)
-            .map_err(|error| format!("failed to read Companion Task Project: {error}"))?
+        let all_projects = database
+            .get_all_projects()
+            .map_err(|error| format!("failed to read Companion Projects: {error}"))?;
+        let projects_by_id = all_projects
+            .iter()
+            .map(|related_project| (related_project.id.as_str(), related_project))
+            .collect::<HashMap<_, _>>();
+        let project = projects_by_id
+            .get(project_id)
             .ok_or_else(|| "Companion Task Project was not found".to_string())?;
         let board_status = task
             .status
@@ -104,10 +126,10 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
                 )
             });
 
-        let project_tasks = database
-            .get_tasks_for_project(project_id)
+        let all_tasks = database
+            .get_all_tasks()
             .map_err(|error| format!("failed to read Companion related Tasks: {error}"))?;
-        let tasks_by_id = project_tasks
+        let tasks_by_id = all_tasks
             .iter()
             .map(|related_task| (related_task.id.as_str(), related_task))
             .collect::<HashMap<_, _>>();
@@ -115,15 +137,15 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             .depends_on
             .iter()
             .filter_map(|dependency_id| tasks_by_id.get(dependency_id.as_str()).copied())
-            .map(task_relationship)
+            .map(|dependency| task_relationship(dependency, &projects_by_id))
             .collect::<Result<Vec<_>, _>>()?;
-        let dependent_tasks = project_tasks
+        let dependent_tasks = all_tasks
             .iter()
             .filter(|related_task| {
                 related_task.id != task.id && related_task.depends_on.contains(&task.id)
             })
             .map(|dependent_task| {
-                let relationship = task_relationship(dependent_task)?;
+                let relationship = task_relationship(dependent_task, &projects_by_id)?;
                 let remaining_dependency_count = dependent_task
                     .depends_on
                     .iter()
@@ -138,6 +160,8 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
                     task_id: relationship.task_id,
                     title: relationship.title,
                     board_status: relationship.board_status,
+                    project_id: relationship.project_id,
+                    project_name: relationship.project_name,
                     remaining_dependency_count,
                 })
             })
@@ -146,8 +170,8 @@ impl CompanionTaskDetailSource for DatabaseCompanionTaskDetailSource {
             task_id: task.id.clone(),
             initial_prompt: task.initial_prompt.clone(),
             title: task_display_title(&task),
-            project_id: project.id,
-            project_name: project.name,
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
             board_status: board_status.as_str().to_string(),
             agent_state: agent_state.to_string(),
             agent_error_summary,

@@ -443,7 +443,7 @@
             task={selectedTask}
             onRunAction={handleRunAction}
             onEdit={taskCreation.openEditTask}
-            onOpenTask={navigation.openTask}
+            onOpenTask={navigation.openTaskInProject}
             onTaskUpdated={async () => { await appData.loadTasks() }}
             onRunAppRegistrationChange={handleRunAppRegistrationChange}
           />
@@ -464,7 +464,7 @@
                 ticketPrs={$ticketPrs}
                 attentionRows={$taskAttentionRows}
                 attentionRowsLoaded={$taskAttentionLoaded}
-                onOpenTask={navigation.openTask}
+                onOpenTask={navigation.openTaskInProject}
                 onEditTask={taskCreation.openEditTask}
                 onTaskUpdated={async () => { await appData.loadTasks() }}
                 onProjectAttentionChanged={appData.loadProjectAttention}

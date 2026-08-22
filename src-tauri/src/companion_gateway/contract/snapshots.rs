@@ -302,6 +302,8 @@ async fn task_detail_handler(
                 task_id: dependency.task_id,
                 title: dependency.title,
                 board_status: dependency.board_status,
+                project_id: dependency.project_id,
+                project_name: dependency.project_name,
             })
             .collect(),
         dependent_tasks: detail
@@ -311,6 +313,8 @@ async fn task_detail_handler(
                 task_id: dependent.task_id,
                 title: dependent.title,
                 board_status: dependent.board_status,
+                project_id: dependent.project_id,
+                project_name: dependent.project_name,
                 remaining_dependency_count: dependent.remaining_dependency_count,
             })
             .collect(),

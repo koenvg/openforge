@@ -3,8 +3,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task, PullRequestInfo, TaskLabel, AgentSession } from '../../lib/types'
-import { activeSessions, dependencyReferenceTasks, mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
+import type { Task, Project, PullRequestInfo, TaskLabel, AgentSession } from '../../lib/types'
+import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks, ticketPrs } from '../../lib/stores'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
@@ -15,6 +15,7 @@ vi.mock('../../lib/stores', () => ({
   activeProjectId: writable(null),
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
+  projects: writable([]),
   tasks: writable([]),
   dependencyReferenceTasks: writable([]),
   activeSessions: writable(new Map()),
@@ -95,6 +96,7 @@ describe('TaskInfoPanel', () => {
     activeSessions.set(new Map())
     ticketPrs.set(new Map())
     mergingTaskIds.set(new Set())
+    projects.set([])
     tasks.set([])
     dependencyReferenceTasks.set([])
     installedPlugins.set(new Map())
@@ -442,6 +444,45 @@ describe('TaskInfoPanel', () => {
     expect(dependenciesSection.textContent).toContain('Waiting on 2 dependencies')
   })
 
+  it('shows and opens cross-project dependencies and dependents', async () => {
+    const selectedTask = { ...baseTask, depends_on: ['T-dependency'] }
+    const crossProjectDependency = {
+      ...baseTask,
+      id: 'T-dependency',
+      project_id: 'proj-2',
+      initial_prompt: 'Prepare release tooling',
+    }
+    const crossProjectDependent = {
+      ...baseTask,
+      id: 'T-dependent',
+      project_id: 'proj-2',
+      initial_prompt: 'Ship the release',
+      depends_on: [selectedTask.id],
+    }
+    const onOpenRelatedTask = vi.fn()
+    projects.set([
+      { id: 'proj-1', name: 'OpenForge', path: '/openforge' } as Project,
+      { id: 'proj-2', name: 'Release Tools', path: '/release-tools' } as Project,
+    ])
+    tasks.set([selectedTask])
+    dependencyReferenceTasks.set([crossProjectDependency, crossProjectDependent])
+
+    render(TaskInfoPanel, {
+      props: { task: selectedTask, workspacePath: null, onOpenRelatedTask },
+    })
+
+    const dependenciesSection = screen.getByLabelText('Dependencies')
+    const dependentsSection = screen.getByLabelText('Dependent tasks')
+    expect(within(dependenciesSection).getByText('Release Tools')).toBeTruthy()
+    expect(within(dependentsSection).getByText('Release Tools')).toBeTruthy()
+
+    await fireEvent.click(within(dependenciesSection).getByRole('button', { name: /T-dependency/ }))
+    await fireEvent.click(within(dependentsSection).getByRole('button', { name: /T-dependent/ }))
+
+    expect(onOpenRelatedTask).toHaveBeenNthCalledWith(1, 'T-dependency', 'proj-2')
+    expect(onOpenRelatedTask).toHaveBeenNthCalledWith(2, 'T-dependent', 'proj-2')
+  })
+
   it('resolves completed dependencies from dependency-only reference tasks', () => {
     const completedDependencyTitle = 'Completed setup task'
     const parentTask: Task = {
@@ -507,7 +548,7 @@ describe('TaskInfoPanel', () => {
     tasks.set([selectedTask, readyDependent])
     dependencyReferenceTasks.set([completedHiddenPrerequisite])
 
-    render(TaskInfoPanel, { props: { task: selectedTask, workspacePath: null, onOpenDependentTask: vi.fn() } })
+    render(TaskInfoPanel, { props: { task: selectedTask, workspacePath: null, onOpenRelatedTask: vi.fn() } })
 
     const dependentsSection = screen.getByLabelText('Dependent tasks')
     expect(dependentsSection.textContent).toContain('T-50')

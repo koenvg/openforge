@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, projects, selectedTaskId, tasks } from './stores'
+import { activeProjectId, currentView, pendingTask, projects, selectedTaskId, tasks } from './stores'
+import { getTaskDetail } from './ipc'
 import { isCrossProjectView } from './views'
 import { pushNavState, restoreProjectView } from './router.svelte'
 import type { AppView, Task } from './types'
@@ -20,6 +21,7 @@ interface AppNavigationHistory {
 interface AppNavigationControllerOptions {
   router: AppRouter
   loadTasks(): Promise<void>
+  loadTaskDetail?(taskId: string): Promise<Task>
   getSelectedTask(): Task | null
   getSidebarPluginViewKeys(): ReadonlySet<string>
   closeAttentionOverview(): void
@@ -31,12 +33,24 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     push: pushNavState,
     restoreProject: restoreProjectView,
   }
+  const loadTaskDetail = options.loadTaskDetail ?? getTaskDetail
 
   function navigate(view: AppView): void {
     options.router.navigate(view)
   }
 
   function openTask(taskId: string): void {
+    options.router.navigateToTask(taskId)
+  }
+
+  async function openTaskInProject(taskId: string, projectId: string | null = null): Promise<void> {
+    if (projectId && projectId !== get(activeProjectId)) {
+      activeProjectId.set(projectId)
+      await options.loadTasks()
+    }
+    if (!get(tasks).some((task) => task.id === taskId)) {
+      pendingTask.set(await loadTaskDetail(taskId))
+    }
     options.router.navigateToTask(taskId)
   }
 
@@ -64,11 +78,7 @@ export function createAppNavigationController(options: AppNavigationControllerOp
 
   async function openTaskFromOverview(task: Task): Promise<void> {
     options.closeAttentionOverview()
-    if (task.project_id && task.project_id !== get(activeProjectId)) {
-      activeProjectId.set(task.project_id)
-      await options.loadTasks()
-    }
-    options.router.navigateToTask(task.id)
+    await openTaskInProject(task.id, task.project_id)
   }
 
   async function historyNavigate(move: () => boolean): Promise<void> {
@@ -117,6 +127,7 @@ export function createAppNavigationController(options: AppNavigationControllerOp
   return {
     navigate,
     openTask,
+    openTaskInProject,
     switchToProject,
     openTaskFromOverview,
     goBack,

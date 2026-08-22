@@ -7,28 +7,42 @@ export interface TaskDependencySummary {
   title: string
   displayTitle: string | null
   tooltipTitle: string
+  projectId: string | null
+  projectName: string | null
 }
 
 export interface TaskDependentSummary extends TaskDependencySummary {
   remainingDependencyCountAfterCurrentDone: number
 }
 
-export function getTaskDependencySummaries(task: Task, allTasks: Task[]): TaskDependencySummary[] {
+export function getTaskDependencySummaries(
+  task: Task,
+  allTasks: Task[],
+  projectNames: ReadonlyMap<string, string> = new Map(),
+): TaskDependencySummary[] {
   const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
   return task.depends_on.map((dependencyId) => {
     const dependencyTask = tasksById.get(dependencyId)
     const displayTitle = dependencyTask ? getTaskTitle(dependencyTask) : null
+    const projectId = dependencyTask?.project_id ?? null
     return {
       id: dependencyId,
       status: dependencyTask?.status ?? null,
       title: displayTitle ?? dependencyId,
       displayTitle,
       tooltipTitle: displayTitle ?? dependencyId,
+      projectId,
+      projectName: projectId && projectId !== task.project_id ? projectNames.get(projectId) ?? projectId : null,
     }
   })
 }
 
-export function getTaskDependentSummaries(task: Task, allTasks: Task[], dependencyResolutionTasks: Task[] = allTasks): TaskDependentSummary[] {
+export function getTaskDependentSummaries(
+  task: Task,
+  allTasks: Task[],
+  dependencyResolutionTasks: Task[] = allTasks,
+  projectNames: ReadonlyMap<string, string> = new Map(),
+): TaskDependentSummary[] {
   const tasksById = new Map(dependencyResolutionTasks.map((knownTask) => [knownTask.id, knownTask]))
 
   return allTasks
@@ -46,6 +60,10 @@ export function getTaskDependentSummaries(task: Task, allTasks: Task[], dependen
         title: displayTitle,
         displayTitle,
         tooltipTitle: displayTitle,
+        projectId: dependentTask.project_id,
+        projectName: dependentTask.project_id && dependentTask.project_id !== task.project_id
+          ? projectNames.get(dependentTask.project_id) ?? dependentTask.project_id
+          : null,
         remainingDependencyCountAfterCurrentDone,
       }
     })

@@ -11,7 +11,7 @@
     allTasks?: Task[]
     dependencyReferenceTasks?: Task[]
     onOpenFullView?: () => void
-    onOpenLinkedTask?: (taskId: string) => void
+    onOpenLinkedTask?: (taskId: string, projectId: string | null) => void
     onEditTask?: (taskId: string) => void
   }
 
@@ -63,7 +63,7 @@
       surface="transparent"
       density="inspector"
       onEditPrompt={onEditTask ? () => onEditTask?.(task.id) : undefined}
-      onOpenDependentTask={onOpenLinkedTask}
+      onOpenRelatedTask={onOpenLinkedTask}
     />
   </aside>
 {/if}

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, projects, selectedTaskId, tasks } from './stores'
+import { activeProjectId, currentView, pendingTask, projects, selectedTaskId, tasks } from './stores'
 import type { Project, Task } from './types'
 import { createAppNavigationController } from './appNavigationController'
 
@@ -24,6 +24,7 @@ describe('App navigation controller', () => {
     currentView.set('board')
     projects.set([projectOne, projectTwo])
     selectedTaskId.set(null)
+    pendingTask.set(null)
     tasks.set([])
   })
 
@@ -53,6 +54,46 @@ describe('App navigation controller', () => {
     expect(calls).toEqual(['push', 'restore', 'load'])
     expect(get(activeProjectId)).toBe(projectTwo.id)
     expect(get(selectedTaskId)).toBe(rememberedTask.id)
+  })
+
+  it('loads a related task project before opening the task', async () => {
+    const calls: string[] = []
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(async () => {
+        calls.push('load')
+        tasks.set([rememberedTask])
+      }),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+    })
+
+    await controller.openTaskInProject(rememberedTask.id, projectTwo.id)
+
+    expect(calls).toEqual(['load'])
+    expect(get(activeProjectId)).toBe(projectTwo.id)
+    expect(router.navigateToTask).toHaveBeenCalledWith(rememberedTask.id)
+  })
+
+  it('keeps a completed related task available after switching projects', async () => {
+    const completedTask = { ...rememberedTask, status: 'done' } as Task
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(async () => { tasks.set([]) }),
+      loadTaskDetail: vi.fn(async () => completedTask),
+      getSelectedTask: () => null,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+    })
+
+    await controller.openTaskInProject(completedTask.id, projectTwo.id)
+
+    expect(get(activeProjectId)).toBe(projectTwo.id)
+    expect(get(pendingTask)).toBe(completedTask)
+    expect(router.navigateToTask).toHaveBeenCalledWith(completedTask.id)
   })
 
   it('loads a task project before opening a task from the attention overview', async () => {
