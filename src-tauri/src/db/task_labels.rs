@@ -1,4 +1,4 @@
-use super::{tasks::task_project_id, Database};
+use super::{task_project_id, Database};
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 use std::fmt;

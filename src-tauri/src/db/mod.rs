@@ -1,5 +1,5 @@
 use log::warn;
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -19,6 +19,7 @@ mod self_review;
 mod settings_reset;
 mod task_attention;
 mod task_config;
+mod task_dependencies;
 mod task_labels;
 mod task_start;
 mod task_workspaces;
@@ -47,7 +48,7 @@ pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::TaskWorktreeOptions;
 // This is part of the Database API even though production callers currently only format it.
 #[allow(unused_imports)]
-pub use tasks::TaskDependencyPersistenceError;
+pub use task_dependencies::TaskDependencyPersistenceError;
 pub use tasks::{
     CompactTaskRow, CompleteTaskWriteOutcome, NewTaskOptions, TaskCreationError,
     TaskInitialPromptUpdateError, TaskRow,
@@ -78,6 +79,15 @@ pub(crate) fn serialize_labels_column(labels: &[PrLabel]) -> Option<String> {
     } else {
         serde_json::to_string(labels).ok()
     }
+}
+
+pub(super) fn task_project_id(conn: &Connection, task_id: &str) -> Result<Option<Option<String>>> {
+    conn.query_row(
+        "SELECT project_id FROM tasks WHERE id = ?1",
+        [task_id],
+        |row| row.get(0),
+    )
+    .optional()
 }
 
 pub(crate) fn current_unix_timestamp() -> Result<i64> {
