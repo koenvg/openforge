@@ -38,7 +38,9 @@ use pids::{
 };
 #[cfg(test)]
 use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};
-use session::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessions};
+use session::{
+    AgentSpawnGenerations, LastOutputTimes, LifecycleLockRegistry, PtyOutputBuffers, PtySessions,
+};
 
 // ============================================================================
 // Error Types
@@ -92,7 +94,7 @@ pub struct PtyManager {
     output_buffers: PtyOutputBuffers,
     attachment_hubs: PtyAttachmentHubs,
     agent_spawn_generations: AgentSpawnGenerations,
-    lifecycle_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    lifecycle_locks: LifecycleLockRegistry,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
 }
 
@@ -145,7 +147,7 @@ impl PtyManager {
             output_buffers: Arc::new(Mutex::new(HashMap::new())),
             attachment_hubs: Arc::new(Mutex::new(HashMap::new())),
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
-            lifecycle_locks: Arc::new(Mutex::new(HashMap::new())),
+            lifecycle_locks: LifecycleLockRegistry::default(),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
         }
     }
@@ -916,7 +918,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
-                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                     pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
                     emit_agent_exit: false,
                 },
@@ -1057,7 +1059,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
-                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                     pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
                     emit_agent_exit: false,
                 },
@@ -1111,7 +1113,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
-                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                     pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
                     emit_agent_exit: true,
                 },
@@ -1162,7 +1164,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
-                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                     pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
                     emit_agent_exit: true,
                 },
@@ -1269,7 +1271,7 @@ mod tests {
                     sessions: Arc::clone(&manager.sessions),
                     last_output: Arc::clone(&manager.last_output),
                     output_buffers: Arc::clone(&manager.output_buffers),
-                    lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+                    lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                     pid_file: pid_file.clone(),
                     emit_agent_exit: false,
                 },
@@ -1378,7 +1380,7 @@ mod tests {
 
         let pid_file = tmp_dir.path().join("agent-task-1-pty.pid");
         write_test_session_metadata(&manager, key, &pid_file).await;
-        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let lifecycle_lock = LifecycleLockRegistry::default().lock_for("test-session");
 
         let success = finalize_pty_exit(
             PtyExitCleanupContext {
@@ -1419,7 +1421,7 @@ mod tests {
             .insert(key.to_string(), test_agent_pty_session(key));
         let pid_file = tmp_dir.path().join(format!("{key}-pty.pid"));
         write_test_session_metadata(&manager, key, &pid_file).await;
-        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let lifecycle_lock = LifecycleLockRegistry::default().lock_for("test-session");
 
         let success = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -1510,7 +1512,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let pid_file = tmp_dir.path().join("task-1-pty.pid");
         std::fs::write(&pid_file, "1234").expect("pid file should write");
-        let lifecycle_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let lifecycle_lock = LifecycleLockRegistry::default().lock_for("test-session");
 
         let success = finalize_pty_exit(
             PtyExitCleanupContext {

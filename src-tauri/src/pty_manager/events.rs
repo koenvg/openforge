@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use super::attachment::{PtyAttachmentHub, PtyAttachmentHubs};
 use super::pids::terminate_and_remove_managed_process;
-use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
+use super::session::{LastOutputTimes, LifecycleLockLease, PtyOutputBuffers, PtySessions};
 
 pub(super) struct PtyExitCleanupContext<'a> {
     pub(super) sessions: &'a PtySessions,
     pub(super) last_output: &'a LastOutputTimes,
     pub(super) output_buffers: &'a PtyOutputBuffers,
-    pub(super) lifecycle_lock: &'a Arc<tokio::sync::Mutex<()>>,
+    pub(super) lifecycle_lock: &'a tokio::sync::Mutex<()>,
     pub(super) pid_file: &'a Path,
 }
 
@@ -270,7 +270,7 @@ pub(super) enum PtyExitAction {
         sessions: PtySessions,
         last_output: LastOutputTimes,
         output_buffers: PtyOutputBuffers,
-        lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
+        lifecycle_lock: LifecycleLockLease,
         pid_file: PathBuf,
         emit_agent_exit: bool,
     },
