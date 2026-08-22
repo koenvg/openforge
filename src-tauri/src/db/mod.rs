@@ -40,7 +40,7 @@ pub(crate) use pull_request_readiness::{
 };
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
-pub use task_labels::TaskLabelRow;
+pub use task_labels::{TaskLabelPersistenceError, TaskLabelRow};
 pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]

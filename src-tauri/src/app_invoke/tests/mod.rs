@@ -10,4 +10,5 @@ mod lifecycle;
 mod plugins;
 mod pty;
 mod runtime;
+mod task_labels;
 mod whisper;

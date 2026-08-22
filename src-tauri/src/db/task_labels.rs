@@ -1,6 +1,7 @@
 use super::{tasks::task_project_id, Database};
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
+use std::fmt;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
@@ -8,6 +9,80 @@ pub struct TaskLabelRow {
     pub project_id: String,
     pub name: String,
 }
+
+const MAX_TASK_LABEL_NAME_CHARS: usize = 40;
+
+#[derive(Debug)]
+pub enum TaskLabelPersistenceError {
+    BlankName,
+    NameTooLong {
+        max_chars: usize,
+        actual_chars: usize,
+    },
+    TaskNotFound(String),
+    TaskProjectRequired(String),
+    LabelNotFound(i64),
+    CrossProjectAssignment {
+        task_id: String,
+        label_id: i64,
+    },
+    Storage(rusqlite::Error),
+}
+
+impl TaskLabelPersistenceError {
+    pub(crate) fn into_database_error(self) -> rusqlite::Error {
+        match self {
+            Self::Storage(error) => error,
+            domain_error => rusqlite::Error::ToSqlConversionFailure(Box::new(domain_error)),
+        }
+    }
+}
+
+impl fmt::Display for TaskLabelPersistenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BlankName => formatter.write_str("label name is required"),
+            Self::NameTooLong { max_chars, .. } => {
+                write!(
+                    formatter,
+                    "label names must be {max_chars} characters or fewer"
+                )
+            }
+            Self::TaskNotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
+            Self::TaskProjectRequired(task_id) => write!(
+                formatter,
+                "task {task_id} must belong to a project before labels can be assigned"
+            ),
+            Self::LabelNotFound(label_id) => write!(formatter, "label {label_id} does not exist"),
+            Self::CrossProjectAssignment { .. } => {
+                formatter.write_str("label must belong to the same project as the task")
+            }
+            Self::Storage(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for TaskLabelPersistenceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Storage(error) => Some(error),
+            Self::BlankName
+            | Self::NameTooLong { .. }
+            | Self::TaskNotFound(_)
+            | Self::TaskProjectRequired(_)
+            | Self::LabelNotFound(_)
+            | Self::CrossProjectAssignment { .. } => None,
+        }
+    }
+}
+
+impl From<rusqlite::Error> for TaskLabelPersistenceError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Storage(error)
+    }
+}
+
+type TaskLabelResult<T> = std::result::Result<T, TaskLabelPersistenceError>;
 
 pub(super) fn load_task_labels(
     conn: &rusqlite::Connection,
@@ -36,26 +111,36 @@ ORDER BY l.name COLLATE NOCASE ASC, l.id ASC
     Ok(result)
 }
 
-fn normalize_label_name(name: &str) -> Result<String> {
+fn normalize_label_name(name: &str) -> TaskLabelResult<String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(rusqlite::Error::InvalidParameterName(
-            "label name is required".to_string(),
-        ));
+        return Err(TaskLabelPersistenceError::BlankName);
     }
-    if trimmed.chars().count() > 40 {
-        return Err(rusqlite::Error::InvalidParameterName(
-            "label names must be 40 characters or fewer".to_string(),
-        ));
+    let actual_chars = trimmed.chars().count();
+    if actual_chars > MAX_TASK_LABEL_NAME_CHARS {
+        return Err(TaskLabelPersistenceError::NameTooLong {
+            max_chars: MAX_TASK_LABEL_NAME_CHARS,
+            actual_chars,
+        });
     }
     Ok(trimmed.to_string())
+}
+
+fn require_task_project(conn: &rusqlite::Connection, task_id: &str) -> TaskLabelResult<String> {
+    match task_project_id(conn, task_id)? {
+        Some(Some(project_id)) => Ok(project_id),
+        Some(None) => Err(TaskLabelPersistenceError::TaskProjectRequired(
+            task_id.to_string(),
+        )),
+        None => Err(TaskLabelPersistenceError::TaskNotFound(task_id.to_string())),
+    }
 }
 
 fn create_task_label_on_connection(
     conn: &rusqlite::Connection,
     project_id: &str,
     name: &str,
-) -> Result<TaskLabelRow> {
+) -> TaskLabelResult<TaskLabelRow> {
     let name = normalize_label_name(name)?;
     let key = name.to_lowercase();
 
@@ -67,9 +152,8 @@ fn create_task_label_on_connection(
         )
         .optional()?
     {
-        return query_task_label_by_id(conn, existing)?.ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!("label {existing} does not exist"))
-        });
+        return query_task_label_by_id(conn, existing)?
+            .ok_or(TaskLabelPersistenceError::LabelNotFound(existing));
     }
 
     let now = super::current_unix_timestamp()?;
@@ -78,9 +162,8 @@ fn create_task_label_on_connection(
         rusqlite::params![project_id, name, key, now, now],
     )?;
     let label_id = conn.last_insert_rowid();
-    query_task_label_by_id(conn, label_id)?.ok_or_else(|| {
-        rusqlite::Error::InvalidParameterName(format!("label {label_id} does not exist"))
-    })
+    query_task_label_by_id(conn, label_id)?
+        .ok_or(TaskLabelPersistenceError::LabelNotFound(label_id))
 }
 
 pub(super) fn persist_new_task_labels(
@@ -88,12 +171,8 @@ pub(super) fn persist_new_task_labels(
     task_id: &str,
     label_names: &[String],
     now: i64,
-) -> Result<Vec<TaskLabelRow>> {
-    let project_id = task_project_id(conn, task_id)?.flatten().ok_or_else(|| {
-        rusqlite::Error::InvalidParameterName(format!(
-            "task {task_id} must belong to a project before labels can be assigned"
-        ))
-    })?;
+) -> TaskLabelResult<Vec<TaskLabelRow>> {
+    let project_id = require_task_project(conn, task_id)?;
 
     let mut labels = Vec::new();
     let mut seen = Vec::new();
@@ -125,7 +204,7 @@ pub(super) fn persist_new_task_labels(
     Ok(labels)
 }
 
-fn normalized_label_key(name: &str) -> Result<String> {
+fn normalized_label_key(name: &str) -> TaskLabelResult<String> {
     Ok(normalize_label_name(name)?.to_lowercase())
 }
 
@@ -167,35 +246,24 @@ impl Database {
         Ok(result)
     }
 
-    pub fn create_task_label(&self, project_id: &str, name: &str) -> Result<TaskLabelRow> {
+    pub fn create_task_label(&self, project_id: &str, name: &str) -> TaskLabelResult<TaskLabelRow> {
         let conn = self.lock_conn()?;
         create_task_label_on_connection(&conn, project_id, name)
     }
 
-    pub fn add_task_label(&self, task_id: &str, label_name: &str) -> Result<TaskLabelRow> {
+    pub fn add_task_label(&self, task_id: &str, label_name: &str) -> TaskLabelResult<TaskLabelRow> {
         let conn = self.lock_conn()?;
-        let project_id = task_project_id(&conn, task_id)?
-            .ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
-            })?
-            .ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(format!(
-                    "task {task_id} must belong to a project before labels can be assigned"
-                ))
-            })?;
+        let project_id = require_task_project(&conn, task_id)?;
         drop(conn);
 
         let label = self.create_task_label(&project_id, label_name)?;
         let conn = self.lock_conn()?;
-        let task_project = task_project_id(&conn, task_id)?.flatten().ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!(
-                "task {task_id} must belong to a project before labels can be assigned"
-            ))
-        })?;
+        let task_project = require_task_project(&conn, task_id)?;
         if task_project != label.project_id {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "label must belong to the same project as the task".to_string(),
-            ));
+            return Err(TaskLabelPersistenceError::CrossProjectAssignment {
+                task_id: task_id.to_string(),
+                label_id: label.id,
+            });
         }
         let now = super::current_unix_timestamp()?;
         conn.execute(
@@ -209,11 +277,11 @@ impl Database {
         Ok(label)
     }
 
-    pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> Result<()> {
+    pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> TaskLabelResult<()> {
         let conn = self.lock_conn()?;
-        task_project_id(&conn, task_id)?.ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
-        })?;
+        if task_project_id(&conn, task_id)?.is_none() {
+            return Err(TaskLabelPersistenceError::TaskNotFound(task_id.to_string()));
+        }
         conn.execute(
             "DELETE FROM task_label_assignments WHERE task_id = ?1 AND label_id = ?2",
             rusqlite::params![task_id, label_id],
@@ -226,7 +294,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn delete_task_label(&self, label_id: i64) -> Result<Vec<String>> {
+    pub fn delete_task_label(&self, label_id: i64) -> TaskLabelResult<Vec<String>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT task_id FROM task_label_assignments WHERE label_id = ?1 ORDER BY task_id ASC",
@@ -248,9 +316,7 @@ impl Database {
 
         let deleted = conn.execute("DELETE FROM task_labels WHERE id = ?1", [label_id])?;
         if deleted == 0 {
-            return Err(rusqlite::Error::InvalidParameterName(format!(
-                "label {label_id} does not exist"
-            )));
+            return Err(TaskLabelPersistenceError::LabelNotFound(label_id));
         }
         Ok(affected_task_ids)
     }
@@ -259,18 +325,10 @@ impl Database {
         &self,
         task_id: &str,
         label_names: &[String],
-    ) -> Result<Vec<TaskLabelRow>> {
+    ) -> TaskLabelResult<Vec<TaskLabelRow>> {
         let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
-        let project_id = task_project_id(&tx, task_id)?
-            .ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
-            })?
-            .ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(format!(
-                    "task {task_id} must belong to a project before labels can be assigned"
-                ))
-            })?;
+        let project_id = require_task_project(&tx, task_id)?;
 
         let mut labels = Vec::new();
         let mut seen = Vec::new();
@@ -309,7 +367,7 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::test_helpers::*;
+    use crate::db::{test_helpers::*, TaskLabelPersistenceError};
     use std::fs;
 
     #[test]
@@ -402,7 +460,10 @@ mod tests {
             )
             .expect("create failure trigger");
 
-        assert!(db.set_task_labels(&task.id, &["new".to_string()]).is_err());
+        assert!(matches!(
+            db.set_task_labels(&task.id, &["new".to_string()]),
+            Err(TaskLabelPersistenceError::Storage(_))
+        ));
 
         let task_after_failure = db.get_task(&task.id).expect("get task").unwrap();
         assert_eq!(task_after_failure.labels, vec![existing.clone()]);
@@ -455,7 +516,10 @@ mod tests {
                 .labels,
             vec![ui]
         );
-        assert!(db.delete_task_label(bug.id).is_err());
+        assert!(matches!(
+            db.delete_task_label(bug.id),
+            Err(TaskLabelPersistenceError::LabelNotFound(label_id)) if label_id == bug.id
+        ));
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -471,10 +535,27 @@ mod tests {
             .create_project("A", "/tmp/labels-validation")
             .expect("create project");
 
-        assert!(db.create_task_label(&project.id, "   ").is_err());
-        assert!(db.create_task_label(&project.id, &"x".repeat(41)).is_err());
-        assert!(db.add_task_label(&projectless.id, "bug").is_err());
-
+        assert!(matches!(
+            db.create_task_label(&project.id, "   "),
+            Err(TaskLabelPersistenceError::BlankName)
+        ));
+        assert!(matches!(
+            db.create_task_label(&project.id, &"x".repeat(41)),
+            Err(TaskLabelPersistenceError::NameTooLong {
+                max_chars: 40,
+                actual_chars: 41,
+            })
+        ));
+        assert!(matches!(
+            db.add_task_label(&projectless.id, "bug"),
+            Err(TaskLabelPersistenceError::TaskProjectRequired(task_id))
+                if task_id == projectless.id
+        ));
+        assert!(matches!(
+            db.add_task_label("T-missing", "bug"),
+            Err(TaskLabelPersistenceError::TaskNotFound(task_id))
+                if task_id == "T-missing"
+        ));
         drop(db);
         let _ = fs::remove_file(&path);
     }
@@ -483,8 +564,49 @@ mod tests {
     fn test_remove_task_label_rejects_missing_task() {
         let (db, path) = make_test_db("remove_task_label_missing_task");
 
-        assert!(db.remove_task_label("T-missing", 1).is_err());
+        assert!(matches!(
+            db.remove_task_label("T-missing", 1),
+            Err(TaskLabelPersistenceError::TaskNotFound(task_id))
+                if task_id == "T-missing"
+        ));
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 
+    #[test]
+    fn test_add_task_label_rejects_cross_project_assignment() {
+        let (db, path) = make_test_db("task_label_cross_project_assignment");
+        let project_a = db
+            .create_project("A", "/tmp/labels-cross-project-a")
+            .expect("create project a");
+        let project_b = db
+            .create_project("B", "/tmp/labels-cross-project-b")
+            .expect("create project b");
+        let task = db
+            .create_task("Task", "backlog", Some(&project_a.id), None, None)
+            .expect("create task");
+        let conn = db.connection();
+        conn.lock()
+            .unwrap()
+            .execute_batch(&format!(
+                "CREATE TRIGGER move_task_to_other_project
+                 AFTER INSERT ON task_labels
+                 BEGIN
+                     UPDATE tasks SET project_id = '{}' WHERE id = '{}';
+                 END;",
+                project_b.id, task.id
+            ))
+            .expect("create project-change trigger");
+
+        assert!(matches!(
+            db.add_task_label(&task.id, "bug"),
+            Err(TaskLabelPersistenceError::CrossProjectAssignment {
+                task_id,
+                label_id: _,
+            }) if task_id == task.id
+        ));
+
+        drop(conn);
         drop(db);
         let _ = fs::remove_file(&path);
     }

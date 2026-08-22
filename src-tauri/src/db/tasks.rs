@@ -1,4 +1,7 @@
-use super::task_labels::{load_task_labels, persist_new_task_labels, TaskLabelRow};
+use super::{
+    task_labels::{load_task_labels, persist_new_task_labels, TaskLabelRow},
+    TaskLabelPersistenceError,
+};
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 use std::fmt;
@@ -42,7 +45,7 @@ impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
 pub enum TaskCreationError {
     Storage(rusqlite::Error),
     Dependencies(rusqlite::Error),
-    Labels(rusqlite::Error),
+    Labels(TaskLabelPersistenceError),
 }
 
 impl TaskCreationError {
@@ -54,17 +57,17 @@ impl TaskCreationError {
         }
     }
 
-    fn labels(error: rusqlite::Error) -> Self {
-        if matches!(&error, rusqlite::Error::InvalidParameterName(_)) {
-            Self::Labels(error)
-        } else {
-            Self::Storage(error)
+    fn labels(error: TaskLabelPersistenceError) -> Self {
+        match error {
+            TaskLabelPersistenceError::Storage(error) => Self::Storage(error),
+            domain_error => Self::Labels(domain_error),
         }
     }
 
     fn into_database_error(self) -> rusqlite::Error {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => error,
+            Self::Storage(error) | Self::Dependencies(error) => error,
+            Self::Labels(error) => error.into_database_error(),
         }
     }
 }
@@ -72,9 +75,8 @@ impl TaskCreationError {
 impl fmt::Display for TaskCreationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => {
-                error.fmt(formatter)
-            }
+            Self::Storage(error) | Self::Dependencies(error) => error.fmt(formatter),
+            Self::Labels(error) => error.fmt(formatter),
         }
     }
 }
@@ -82,7 +84,8 @@ impl fmt::Display for TaskCreationError {
 impl std::error::Error for TaskCreationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) | Self::Labels(error) => Some(error),
+            Self::Storage(error) | Self::Dependencies(error) => Some(error),
+            Self::Labels(error) => Some(error),
         }
     }
 }
