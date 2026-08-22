@@ -1,4 +1,5 @@
 import { getImagePreviewDataUrl, type FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
+import type { FileContentRequest } from './ipc'
 import type { PrFileDiff } from './types'
 
 export interface SelfReviewFileContentContext {
@@ -21,7 +22,7 @@ export interface SelfReviewFileContentLoaderOptions {
   ) => Promise<[string, string]>
   getTaskBatchFileContents: (
     taskId: string,
-    files: Array<{ path: string; oldPath: string | null; status: string }>,
+    files: FileContentRequest[],
     includeCommitted: boolean,
     includeUncommitted: boolean,
   ) => Promise<Array<[string, string]>>
@@ -35,8 +36,53 @@ export interface SelfReviewFileContentLoaderOptions {
   getCommitBatchFileContents: (
     taskId: string,
     commitSha: string,
-    files: Array<{ path: string; oldPath: string | null; status: string }>,
+    files: FileContentRequest[],
   ) => Promise<Array<[string, string]>>
+}
+
+interface FileContentSource {
+  fetch(request: FileContentRequest): Promise<[string, string]>
+  fetchBatch(requests: FileContentRequest[]): Promise<Array<[string, string]>>
+}
+
+function createFileContentSource(
+  options: SelfReviewFileContentLoaderOptions,
+  context: SelfReviewFileContentContext,
+): FileContentSource {
+  const { selectedCommitSha } = context
+  if (selectedCommitSha !== null) {
+    return {
+      fetch: (request) => options.getCommitFileContents(
+        context.taskId,
+        selectedCommitSha,
+        request.path,
+        request.oldPath,
+        request.status,
+      ),
+      fetchBatch: (requests) => options.getCommitBatchFileContents(
+        context.taskId,
+        selectedCommitSha,
+        requests,
+      ),
+    }
+  }
+
+  return {
+    fetch: (request) => options.getTaskFileContents(
+      context.taskId,
+      request.path,
+      request.oldPath,
+      request.status,
+      context.includeCommitted,
+      context.includeUncommitted,
+    ),
+    fetchBatch: (requests) => options.getTaskBatchFileContents(
+      context.taskId,
+      requests,
+      context.includeCommitted,
+      context.includeUncommitted,
+    ),
+  }
 }
 
 export interface SelfReviewFileContentLoader {
@@ -55,41 +101,23 @@ export function createSelfReviewFileContentLoader(
   }
 
   async function fetchCurrent(file: PrFileDiff): Promise<FileContents> {
-    const context = options.getContext()
-    const [oldContent, newContent] = context.selectedCommitSha !== null
-      ? await options.getCommitFileContents(
-          context.taskId,
-          context.selectedCommitSha,
-          file.filename,
-          file.previous_filename,
-          file.status,
-        )
-      : await options.getTaskFileContents(
-          context.taskId,
-          file.filename,
-          file.previous_filename,
-          file.status,
-          context.includeCommitted,
-          context.includeUncommitted,
-        )
+    const source = createFileContentSource(options, options.getContext())
+    const [oldContent, newContent] = await source.fetch({
+      path: file.filename,
+      oldPath: file.previous_filename ?? null,
+      status: file.status,
+    })
     return { oldContent, newContent }
   }
 
   async function fetchCurrentBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
-    const context = options.getContext()
-    const requests = files.map((file) => ({
+    const source = createFileContentSource(options, options.getContext())
+    const requests: FileContentRequest[] = files.map((file) => ({
       path: file.filename,
       oldPath: file.previous_filename ?? null,
       status: file.status,
     }))
-    const results = context.selectedCommitSha !== null
-      ? await options.getCommitBatchFileContents(context.taskId, context.selectedCommitSha, requests)
-      : await options.getTaskBatchFileContents(
-          context.taskId,
-          requests,
-          context.includeCommitted,
-          context.includeUncommitted,
-        )
+    const results = await source.fetchBatch(requests)
 
     return new Map(files.map((file, index) => {
       const [oldContent, newContent] = results[index]!
@@ -118,23 +146,12 @@ export function createSelfReviewFileContentLoader(
   }
 
   async function resolveRepositoryImage(repositoryPath: string): Promise<string | null> {
-    const context = options.getContext()
-    const [, content] = context.selectedCommitSha !== null
-      ? await options.getCommitFileContents(
-          context.taskId,
-          context.selectedCommitSha,
-          repositoryPath,
-          null,
-          'modified',
-        )
-      : await options.getTaskFileContents(
-          context.taskId,
-          repositoryPath,
-          null,
-          'modified',
-          context.includeCommitted,
-          context.includeUncommitted,
-        )
+    const source = createFileContentSource(options, options.getContext())
+    const [, content] = await source.fetch({
+      path: repositoryPath,
+      oldPath: null,
+      status: 'modified',
+    })
     return getImagePreviewDataUrl(repositoryPath, content)
   }
 
