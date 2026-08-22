@@ -62,6 +62,7 @@
   let showAddressed = $state(false)
   let reviewedFileShas = $state<Map<string, string>>(new Map())
   let reviewedFileSnapshots = $state<Map<string, ReviewedFileSnapshot>>(new Map())
+  let reviewedBaselineError = $state<string | null>(null)
 
   let hasRestoredScroll = false
 
@@ -187,6 +188,16 @@
     reviewedFileSnapshots = getTaskReviewReviewedFileSnapshots(task.id)
   }
 
+  async function handleShowChangesSinceReviewed(file: PrFileDiff): Promise<void> {
+    reviewedBaselineError = null
+    try {
+      await reviewedBaseline.showChangesSinceReviewed(file)
+    } catch (error) {
+      console.error(`[SelfReviewView] Failed to load Reviewed File Snapshot comparison for ${file.filename}:`, error)
+      reviewedBaselineError = `Couldn't compare ${file.filename} with its Reviewed File Snapshot. Try the Since reviewed action again.`
+    }
+  }
+
   async function handleToggleFileReviewed(file: PrFileDiff, reviewed: boolean) {
     if (reviewed) {
       const reviewFile = reviewedBaseline.getReviewFile(file)
@@ -271,6 +282,12 @@
       />
     {/if}
     <section class="flex min-w-0 flex-1 flex-col overflow-hidden bg-base-100" aria-label="Code diff panel">
+      {#if reviewedBaselineError}
+        <div class="alert alert-error rounded-none border-x-0 border-t-0 py-2 text-sm" role="alert">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>{reviewedBaselineError}</span>
+        </div>
+      {/if}
       {#if diffLoader.isLoading}
         <div class="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-base-content/60" role="status" aria-live="polite">
           <span class="loading loading-spinner loading-md text-primary"></span>
@@ -351,7 +368,7 @@
                     title={comparisonActive ? 'Show the normal diff for this file' : 'Compare this file with the last version you marked reviewed'}
                     onclick={() => comparisonActive
                       ? reviewedBaseline.restoreFile(file.filename)
-                      : reviewedBaseline.showChangesSinceReviewed(file)}
+                      : handleShowChangesSinceReviewed(file)}
                   >
                     {comparisonActive ? 'Current diff' : 'Since reviewed'}
                   </button>

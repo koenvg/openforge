@@ -778,6 +778,29 @@ describe("SelfReviewView pane restoration", () => {
 		});
 	}, 15_000);
 
+	it("shows an error when the Reviewed File Snapshot comparison cannot be loaded", async () => {
+		markTaskReviewFileReviewed(
+			baseTask.id,
+			{ ...baseDiff, sha: "reviewed-sha" },
+			{ newContent: "reviewed content\n" },
+		);
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+		vi.mocked(getTaskBatchFileContents).mockRejectedValue(new Error("content load failed"));
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await fireEvent.click(await screen.findByRole("button", {
+			name: "Compare src/main.rs with Reviewed File Snapshot",
+		}));
+
+		await waitFor(() => {
+			expect(screen.getByRole("alert").textContent).toContain(
+				"Couldn't compare src/main.rs with its Reviewed File Snapshot. Try the Since reviewed action again.",
+			);
+		});
+	});
 	it("remembers reviewed files across remounts until their sha changes", async () => {
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
