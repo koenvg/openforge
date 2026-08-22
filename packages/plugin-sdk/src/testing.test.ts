@@ -52,6 +52,44 @@ describe('plugin SDK testing utilities', () => {
     expect(registry.snapshot.views).toEqual([])
     await expect(registry.frontendApi.commands.invoke('refresh', { force: true })).rejects.toThrow('Unknown command: github.refresh')
   })
+  it('supports app-enabled fixture packages with custom sidebar navigation through the public registry', async () => {
+    const Navigation = (() => null) as never
+    const registry = createOpenForgeRegistryFake({
+      pluginId: 'usage',
+      projectId: null,
+      packageMetadata: {
+        id: 'usage',
+        apiVersion: 1,
+        displayName: 'Usage',
+        description: 'Account usage',
+        enablement: 'app',
+        frontend: './frontend.js',
+        requires: ['views', 'appEnablement', 'customSidebarNavigation'],
+      },
+    })
+    const plugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'account',
+          title: 'Account usage',
+          icon: 'chart-column-big',
+          placement: 'sidebar',
+          component: Component,
+          navigationComponent: Navigation,
+        }))
+      },
+    })
+
+    await registry.activateFrontend(plugin)
+
+    expect(registry.packageMetadata.enablement).toBe('app')
+    expect(registry.snapshot.views).toMatchObject([{
+      id: 'account',
+      placement: 'sidebar',
+      navigationComponent: Navigation,
+      projectId: null,
+    }])
+  })
 
   it('records canonical task UI tabs and sections while preserving the deprecated task pane tab alias', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'planner', projectId: 'P-1' })

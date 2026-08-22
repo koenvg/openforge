@@ -434,7 +434,7 @@ impl TaskStartService {
                 .owner_plugin_id
                 .as_deref()
                 .is_none_or(|plugin_id| {
-                    db.is_plugin_enabled(&project_id, plugin_id)
+                    db.is_plugin_active_for_project(&project_id, plugin_id)
                         .unwrap_or(false)
                 })
         });

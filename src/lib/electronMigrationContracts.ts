@@ -186,6 +186,8 @@ export const ipcCommandContracts = [
   { functionName: 'listPlugins', ipcCommand: 'list_plugins', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setPluginEnabled', ipcCommand: 'set_plugin_enabled', payloadKeys: ['projectId', 'pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getEnabledPlugins', ipcCommand: 'get_enabled_plugins', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'setAppPluginEnabled', ipcCommand: 'set_app_plugin_enabled', payloadKeys: ['pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'getEnabledAppPlugins', ipcCommand: 'get_enabled_app_plugins', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setGlobalPluginDefault', ipcCommand: 'set_global_plugin_default', payloadKeys: ['pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getGlobalPluginDefaults', ipcCommand: 'get_global_plugin_defaults', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getPluginStorage', ipcCommand: 'get_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
@@ -193,7 +195,7 @@ export const ipcCommandContracts = [
   { functionName: 'deletePluginStorage', ipcCommand: 'delete_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginInvoke', ipcCommand: 'plugin_invoke', payloadKeys: ['pluginId', 'command', 'payload'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginBackendDeactivate', ipcCommand: 'plugin_backend_deactivate', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
-  { functionName: 'pluginBackendWhenReady', ipcCommand: 'plugin_backend_when_ready', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'pluginBackendWhenReady', ipcCommand: 'plugin_backend_when_ready', payloadKeys: ['pluginId', 'projectId', 'preserveActivation'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly IpcCommandContract[]
 

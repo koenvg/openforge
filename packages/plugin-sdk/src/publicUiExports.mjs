@@ -8,6 +8,7 @@ const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'Modal',
   'PluginPageHeader',
   'PluginViewState',
+  'PluginSidebarLink',
   'FileTypeIcon',
 ])
 

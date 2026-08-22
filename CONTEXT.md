@@ -136,12 +136,16 @@ The temporary binding between a **Task Browser Surface** and the visible plugin-
 _Avoid_: Raw bounds, WebContentsView mount, permanent surface placement
 
 **Plugin Installation**:
-Recording a **Trusted Plugin** as available app-wide in OpenForge, without making it active for any **Project**.
-_Avoid_: Project plugin install, global enablement
+Recording a **Trusted Plugin** as available app-wide in OpenForge without activating it.
+_Avoid_: Project plugin install, Plugin Enablement
 
 **Project Plugin Enablement**:
 A project-owned choice that makes an installed **Trusted Plugin** active or inactive for one **Project**.
 _Avoid_: Plugin installation, global plugin toggle
+
+**App Plugin Enablement**:
+An app-owned choice that makes an installed **Trusted Plugin** active throughout OpenForge, independent of the active **Project**.
+_Avoid_: Plugin Installation, global project default, sentinel Project
 
 **Agent-facing Plugin Management**:
 A host-mediated way for an **Agent Session** to request **Plugin Installation** or **Project Plugin Enablement** without relying on settings UI navigation.
@@ -373,12 +377,13 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - `getOrCreate` communicates that requesting an existing **Task Browser Surface** returns control of that live surface; an initial URL applies only when no live surface exists.
 - Attaching a **Task Browser Surface** to a new element atomically replaces its previous attachment; releasing an older attachment cannot detach a newer one.
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
-- **Plugin Installation** makes a **Trusted Plugin** available app-wide; **Project Plugin Enablement** decides whether it contributes in a specific **Project**.
-- **Plugin Installation** does not automatically imply **Project Plugin Enablement**.
-- Newly installed non-built-in **Trusted Plugins** start disabled for every **Project** until explicitly enabled.
-- Built-in **Trusted Plugins** may be enabled by default for projects, while still allowing explicit **Project Plugin Enablement** disablement.
-- Global plugin settings manage the **Plugin Installation** inventory; project plugin settings manage **Project Plugin Enablement** for the active project.
-- A completed **Plugin Installation** may offer a convenience action to enable the plugin for the active project, but that action is still **Project Plugin Enablement** and must be explicit.
+- **Plugin Installation** makes a **Trusted Plugin** available without activating it.
+- A **Trusted Plugin** uses either **App Plugin Enablement** or **Project Plugin Enablement** as declared by its package.
+- **Plugin Installation** does not automatically imply either form of enablement.
+- Newly installed non-built-in **Trusted Plugins** start disabled until explicitly enabled.
+- Built-in project-enabled **Trusted Plugins** may be enabled by default for projects, while still allowing explicit **Project Plugin Enablement** disablement.
+- Global plugin settings manage the **Plugin Installation** inventory and **App Plugin Enablement**; project plugin settings manage **Project Plugin Enablement** for the active project.
+- A completed **Plugin Installation** may offer the matching enablement action, but enablement remains explicit.
 - The agent-facing plugin management surface keeps **Plugin Installation** and **Project Plugin Enablement** as separate requests and does not provide an install-and-enable shortcut.
 - **Plugin Reload** uses the artifacts already recorded by **Plugin Installation**; rebuilding a plugin package is external development work that must happen before the reload request.
 - Initial agent-facing **Plugin Installation** accepts local plugin sources only; npm and git plugin package sources remain outside the initial agent-facing plugin management surface.
@@ -468,12 +473,12 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Worktree branch names were considered for prompt-derived descriptions — resolved: **Task Branches** should be stable task identifiers because they are visible as PR source branches.
 - "Codex thread title" was used for a short generated task label — resolved: use **Task Display Title** because the label belongs to the **Task** and may be generated from any provider's **Agent Session**.
 - "Skill" was considered as a core OpenForge platform concept because one built-in plugin manages skills — resolved: skill discovery and editing are a **Plugin-owned Domain** unless multiple plugins need a shared platform contract.
-- "Install plugin globally" could mean enabling a plugin everywhere — resolved: use **Plugin Installation** for app-wide availability and **Project Plugin Enablement** for per-project activation.
+- "Install plugin globally" could mean availability or activation — resolved: use **Plugin Installation** for availability, **App Plugin Enablement** for app-owned activation, and **Project Plugin Enablement** for per-project activation.
 - "Agent installs a plugin" could mean only app-wide availability or also project activation — resolved: **Agent-facing Plugin Management** may request both **Plugin Installation** and **Project Plugin Enablement**, but they remain separate actions with no install-and-enable shortcut.
 - "Reload plugin" could mean watching source files, rebuilding, reinstalling, or reactivating — resolved: **Plugin Reload** means explicit reactivation of installed artifacts only; it does not watch source files or rebuild plugin packages.
 - "Local plugin install" could mean project-scoped enablement or a local package source — resolved: use **Local Plugin Source** for filesystem package paths, and keep npm and git plugin package sources out of the initial agent-facing scope.
-- Plugin defaults could make newly installed plugins active everywhere — resolved: newly installed non-built-in **Trusted Plugins** start disabled for projects; built-ins may keep their default-enabled project behavior.
-- Plugin UI migration sounded like a data migration — resolved: the existing persisted model already separates app-wide **Plugin Installation** from **Project Plugin Enablement**, so the change is UI responsibility and wording.
+- Plugin defaults could make newly installed plugins active automatically — resolved: newly installed non-built-in **Trusted Plugins** start disabled; built-in project-enabled packages may keep their per-project default behavior.
+- App-owned activation could have reused a sentinel Project — resolved: **App Plugin Enablement** is a separate choice from **Project Plugin Enablement**.
 - `src-tauri` was used to describe both a historical directory and the active Rust process — resolved: use **Rust Sidecar** for the supervised runtime process and **Backend Crate** for the Rust package that builds it.
 - "Codex update" was used as shorthand for a visible in-app app update button — resolved: use **App Update** for the OpenForge desktop update flow.
 - "Terminal pooling" was used for plugin UI, shell process state, and reusable terminal lifecycle — resolved: **Terminal Surface** names the UI, while **Terminal Runtime** names the shared lifecycle owner.

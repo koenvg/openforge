@@ -24,6 +24,14 @@ pub(super) struct PackageJsonFile {
     pub(super) openforge: OpenForgePackageMetadata,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum PluginEnablement {
+    App,
+    #[default]
+    Project,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct OpenForgePackageMetadata {
@@ -31,6 +39,8 @@ pub(super) struct OpenForgePackageMetadata {
     api_version: i64,
     display_name: String,
     description: String,
+    #[serde(default)]
+    _enablement: PluginEnablement,
     #[serde(default)]
     frontend: Option<String>,
     #[serde(default)]
@@ -170,6 +180,13 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
         }
     }
 
+    if openforge
+        .get("enablement")
+        .is_some_and(|value| !matches!(value.as_str(), Some("app" | "project")))
+    {
+        return Err("package.json openforge.enablement must be \"app\" or \"project\"".to_string());
+    }
+
     if let Some(icon) = openforge.get("icon") {
         validate_plugin_icon(icon)?;
     }
@@ -234,6 +251,23 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
                     "package.json openforge.requires[{index}] has unknown capability \"{capability}\""
                 ));
             }
+        }
+    }
+
+    if openforge.get("enablement").and_then(Value::as_str) == Some("app") {
+        let has_capability = openforge
+            .get("requires")
+            .and_then(Value::as_array)
+            .is_some_and(|requires| {
+                requires
+                    .iter()
+                    .any(|value| value.as_str() == Some("appEnablement"))
+            });
+        if !has_capability {
+            return Err(
+                "package.json openforge.enablement \"app\" requires the appEnablement capability"
+                    .to_string(),
+            );
         }
     }
 

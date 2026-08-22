@@ -117,7 +117,15 @@ export class RuntimeCommonApiRegistry {
       },
       storage: this.services.storage,
       context: {
-        getSnapshot: () => ({ pluginId: this.services.pluginId, projectId: this.services.projectId }),
+        getSnapshot: () => {
+          const navigation = this.services.host.getNavigation?.()
+          const taskId = navigation?.selectedTaskId ?? null
+          return {
+            pluginId: this.services.pluginId,
+            projectId: navigation ? navigation.activeProjectId : this.services.projectId,
+            ...(taskId === null ? {} : { taskId }),
+          }
+        },
       },
       tasks: {
         list: async (request) => this.services.host.listTasks ? this.services.host.listTasks(request) : unavailableCapability('tasks.list'),

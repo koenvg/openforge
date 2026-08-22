@@ -285,6 +285,22 @@ impl<'a> PluginPlatform<'a> {
             .map_err(|error| format!("Failed to get enabled plugins: {error}"))
     }
 
+    pub(crate) fn set_app_plugin_enabled(
+        &self,
+        plugin_id: &str,
+        enabled: bool,
+    ) -> Result<(), String> {
+        let db = db::acquire_db(self.db);
+        db.set_app_plugin_enabled(plugin_id, enabled)
+            .map_err(|error| format!("Failed to set app plugin enabled: {error}"))
+    }
+
+    pub(crate) fn enabled_app_plugins(&self) -> Result<Vec<db::PluginRow>, String> {
+        let db = db::acquire_db(self.db);
+        db.get_enabled_app_plugins()
+            .map_err(|error| format!("Failed to get enabled app plugins: {error}"))
+    }
+
     pub(crate) fn plugin_storage(
         &self,
         plugin_id: &str,
@@ -361,14 +377,28 @@ impl<'a> PluginPlatform<'a> {
             .await
     }
 
-    pub(crate) async fn backend_when_ready(&self, plugin_id: &str) -> Result<Value, String> {
+    pub(crate) async fn backend_when_ready(
+        &self,
+        plugin_id: &str,
+        project_id: Option<&str>,
+        preserve_activation: bool,
+    ) -> Result<Value, String> {
         let backend_path = self.resolve_installed_backend_path(plugin_id)?;
+        let package_metadata = self
+            .plugin(plugin_id)?
+            .and_then(|plugin| serde_json::from_str::<Value>(&plugin.package_metadata).ok());
         let plugin_host = self
             .plugin_host
             .ok_or_else(|| "plugin host state is not available".to_string())?;
 
         plugin_host
-            .when_backend_ready(plugin_id, &backend_path)
+            .when_backend_ready(
+                plugin_id,
+                &backend_path,
+                project_id,
+                preserve_activation,
+                package_metadata.as_ref(),
+            )
             .await
     }
 

@@ -196,6 +196,7 @@ type RuntimeRegistryServicesOptions = RuntimeOptions & {
 export class RuntimeRegistryServices {
   readonly pluginId: string
   readonly projectId: string | null
+  readonly packageMetadata: RuntimeOptions['packageMetadata']
   readonly host: RuntimeHostBridge
   readonly storage: PluginStorage
   readonly claims: RuntimeContributionClaims
@@ -205,6 +206,7 @@ export class RuntimeRegistryServices {
     assertLocalId('backend', options.pluginId)
     this.pluginId = options.pluginId
     this.projectId = options.projectId
+    this.packageMetadata = options.packageMetadata
     this.host = options.host ?? {}
     this.storage = options.storage ?? createMemoryStorage()
     this.claims = options.claims ?? new RuntimeContributionClaims()

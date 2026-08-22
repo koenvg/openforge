@@ -198,7 +198,7 @@ describe('pluginRegistry reload lifecycle', () => {
 
     expect(pluginBackendDeactivateMock).toHaveBeenCalledWith('reload-plugin')
     expect(pluginBackendDeactivateMock.mock.invocationCallOrder[0]).toBeLessThan(getPluginIpcMock.mock.invocationCallOrder[0])
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('reload-plugin')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('reload-plugin', 'project-1')
   })
 
   it('reloadPluginForProject releases live browser resources even when backend deactivation fails', async () => {

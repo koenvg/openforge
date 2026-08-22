@@ -179,6 +179,8 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'list_plugins',
   'set_plugin_enabled',
   'get_enabled_plugins',
+  'set_app_plugin_enabled',
+  'get_enabled_app_plugins',
   'set_global_plugin_default',
   'get_global_plugin_defaults',
   'get_plugin_storage',

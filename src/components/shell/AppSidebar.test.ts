@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setConfig } from '../../lib/ipc'
 import { activeProjectId, attentionCountByProject, hiddenProjectIds, projects, reviewRequestCountByProject } from '../../lib/stores'
 import type { AppView, Project } from '../../lib/types'
-import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
+import type { IconRailPluginNavItem, SidebarPluginNavItem } from '../../lib/iconRailNav'
 import AppSidebar from './AppSidebar.svelte'
+import CustomPluginSidebarNavigation from './test-fixtures/CustomPluginSidebarNavigation.svelte'
 
 // Production counts are derived; this suite mocks stores with writables to drive badges directly.
 const reviewCountByProject = reviewRequestCountByProject as unknown as Writable<Map<string, number>>
@@ -81,6 +82,24 @@ const globalPrNavItem: IconRailPluginNavItem = {
   shortcut: null,
 }
 
+const customNavItem: SidebarPluginNavItem = {
+  ...globalPrNavItem,
+  navigation: {
+    component: CustomPluginSidebarNavigation,
+    props: {
+      api: {} as never,
+      context: { pluginId: 'com.openforge.github-sync', projectId: 'proj-1' },
+      view: {
+        pluginId: 'com.openforge.github-sync',
+        id: 'pr_review_global',
+        qualifiedId: 'com.openforge.github-sync:pr_review_global',
+        title: 'All Pull Requests',
+        icon: 'boxes',
+      },
+    },
+  },
+}
+
 const sampleProjects: Project[] = [
   { id: 'proj-1', name: 'Alpha Project', path: '/users/alice/alpha', created_at: 0, updated_at: 0 },
   { id: 'proj-2', name: 'Beta Project', path: '/users/bob/beta', created_at: 0, updated_at: 0 },
@@ -94,7 +113,7 @@ const mockSelectProject = vi.fn((projectId: string) => {
   activeProjectId.set(projectId)
 })
 
-function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; onSelectProject: (projectId: string) => void; onOpenAttentionOverview: () => void; pluginNavItems: typeof globalPrNavItem[]; reviewRequestCount: number }>) {
+function renderSidebar(props?: Partial<{ collapsed: boolean; currentView: AppView; onToggleCollapse: () => void; onNewProject?: () => void; onNavigate: (view: AppView) => void; onSelectProject: (projectId: string) => void; onOpenAttentionOverview: () => void; pluginNavItems: SidebarPluginNavItem[]; reviewRequestCount: number }>) {
   const defaultProps = {
     collapsed: false,
     currentView: 'board' as AppView,
@@ -356,6 +375,39 @@ describe('AppSidebar', () => {
     it('marks the sidebar plugin nav item current when its view is active', () => {
       renderSidebar({ pluginNavItems: [globalPrNavItem], currentView: GLOBAL_PR_VIEW_KEY as AppView })
       expect(screen.getByRole('button', { name: /all pull requests/i }).getAttribute('aria-current')).toBe('page')
+    })
+
+    it('renders custom sidebar navigation with host state, context, and activation behavior', async () => {
+      const onNavigate = vi.fn()
+      renderSidebar({
+        pluginNavItems: [customNavItem],
+        currentView: GLOBAL_PR_VIEW_KEY as AppView,
+        collapsed: true,
+        onNavigate,
+      })
+
+      const customNavigation = await screen.findByRole('button', { name: 'Custom All Pull Requests' })
+      expect(customNavigation.getAttribute('aria-current')).toBe('page')
+      expect(customNavigation.getAttribute('data-collapsed')).toBe('true')
+      expect(customNavigation.getAttribute('data-project-id')).toBe('proj-1')
+
+      await fireEvent.click(customNavigation)
+      expect(onNavigate).toHaveBeenCalledWith(GLOBAL_PR_VIEW_KEY)
+    })
+
+    it('falls back to static navigation when a custom component fails to load', async () => {
+      const failingItem: SidebarPluginNavItem = {
+        ...customNavItem,
+        navigation: {
+          ...customNavItem.navigation!,
+          component: async () => { throw new Error('broken navigation') },
+        },
+      }
+
+      renderSidebar({ pluginNavItems: [failingItem] })
+
+      expect(await screen.findByRole('button', { name: /all pull requests/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /global settings/i })).toBeTruthy()
     })
 
     it('shows the review request count badge on the all-repos item', () => {

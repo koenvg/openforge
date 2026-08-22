@@ -19,7 +19,9 @@ export interface AppDesktopEventDeps {
   refreshPrCounts(): Promise<void> | void
   getActiveProjectId?(): string | null
   reloadInstalledPluginMetadata?(pluginId: string): Promise<boolean> | boolean
+  reloadPluginForApp?(pluginId: string): Promise<boolean> | boolean
   reloadPluginForProject?(projectId: string, pluginId: string): Promise<boolean> | boolean
+  loadEnabledPluginsForApp?(): Promise<void> | void
   loadEnabledPluginsForProject?(projectId: string): Promise<void> | void
   listen?: AppEventListen
 }

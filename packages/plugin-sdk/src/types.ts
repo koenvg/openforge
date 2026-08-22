@@ -70,6 +70,8 @@ const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
   'projectConfig',
   'browserSurfaces',
   'taskLinks',
+  'appEnablement',
+  'customSidebarNavigation',
 ] as const
 
 export type OpenForgePluginCapability = (typeof OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS)[number]
@@ -96,6 +98,8 @@ export interface OpenForgePackageMetadata {
   apiVersion: SupportedOpenForgeApiVersion
   displayName: string
   description: string
+  /** Defaults to project-owned lifecycle when omitted. */
+  enablement?: 'app' | 'project'
   icon?: PluginIcon
   frontend?: string
   frontendStyles?: string[]
@@ -287,6 +291,23 @@ export interface PluginViewProps extends Record<string, unknown> {
   context: OpenForgeContextSnapshot
 }
 
+export interface PluginSidebarViewIdentity {
+  pluginId: string
+  id: string
+  qualifiedId: string
+  title: string
+  icon: PluginIcon
+}
+
+export interface PluginSidebarNavigationProps extends Record<string, unknown> {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  active: boolean
+  collapsed: boolean
+  view: PluginSidebarViewIdentity
+  onActivate: () => void
+}
+
 export interface PluginTaskPaneProps extends Record<string, unknown> {
   api: FrontendOpenForgeAPI
   context: OpenForgeContextSnapshot
@@ -334,6 +355,10 @@ export interface PluginViewRegistration {
   order?: number
   shortcut?: string
   component: PluginComponentLoader<PluginViewProps> | PluginComponent<PluginViewProps>
+  /** Custom content for a sidebar-placed View's host-owned navigation slot. */
+  navigationComponent?:
+    | PluginComponentLoader<PluginSidebarNavigationProps>
+    | PluginComponent<PluginSidebarNavigationProps>
 }
 
 export interface PluginTaskPaneTabRegistration {

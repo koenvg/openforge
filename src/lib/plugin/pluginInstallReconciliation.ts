@@ -3,16 +3,22 @@ import {
   getPlugin as getPluginIpc,
   uninstallPlugin as uninstallPluginIpc,
 } from '../ipc'
+import { activeProjectId } from '../stores'
 import {
   enabledPluginIds,
+  disableAppPlugin as disableAppPluginInStore,
   disablePlugin as disablePluginInStore,
+  enableAppPlugin as enableAppPluginInStore,
   enablePlugin as enablePluginInStore,
   installedPlugins,
+  loadEnabledAppPluginIds,
   loadEnabledPluginIdsForProject,
 } from './pluginStore'
 import { activatePlugin, deactivatePluginById } from './pluginActivationLifecycle'
 import { installFromLocal, setPluginRuntimeError, upsertInstalledPlugin } from './pluginInstallState'
-import { ensurePluginBackendReady } from './pluginHostCommands'
+import { ensurePluginBackendReady, updatePluginBackendContext } from './pluginHostCommands'
+
+const manualLifecyclePluginIds = new Set<string>()
 
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   await deactivatePluginById(pluginId)
@@ -24,15 +30,35 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
   })
 }
 
-async function activateEnabledPlugin(pluginId: string): Promise<boolean> {
+export async function deactivateAllPlugins(): Promise<void> {
+  const activePluginIds = Array.from(get(installedPlugins).entries())
+    .filter(([, entry]) => entry.state === 'active')
+    .map(([pluginId]) => pluginId)
+    .reverse()
+  let firstError: unknown = null
+  for (const pluginId of activePluginIds) {
+    try {
+      await deactivatePluginById(pluginId)
+    } catch (error) {
+      firstError ??= error
+    }
+  }
+  if (firstError) throw firstError
+}
+
+async function activateEnabledPlugin(
+  pluginId: string,
+  projectId: string | null,
+): Promise<boolean> {
+  const wasActive = get(installedPlugins).get(pluginId)?.state === 'active'
   const activated = await activatePlugin(pluginId)
   if (!activated) return false
 
   const entry = get(installedPlugins).get(pluginId)
-  if (!entry?.manifest.backend) return true
+  if (wasActive || !entry?.manifest.backend) return true
 
   try {
-    await ensurePluginBackendReady(pluginId)
+    await ensurePluginBackendReady(pluginId, projectId)
     return true
   } catch (error) {
     setPluginRuntimeError(pluginId, error)
@@ -43,17 +69,67 @@ async function activateEnabledPlugin(pluginId: string): Promise<boolean> {
 export async function loadEnabledForProject(projectId: string): Promise<void> {
   await loadEnabledPluginIdsForProject(projectId)
 
-  await Promise.all(Array.from(get(enabledPluginIds)).map(activateEnabledPlugin))
+  await Promise.all(Array.from(get(enabledPluginIds)).map((pluginId) =>
+    activateEnabledPlugin(pluginId, projectId)))
+}
+
+export async function loadEnabledForApp(): Promise<void> {
+  await loadEnabledAppPluginIds()
+  const appPluginIds = Array.from(get(enabledPluginIds)).filter((pluginId) =>
+    get(installedPlugins).get(pluginId)?.packageMetadata?.enablement === 'app')
+  await Promise.all(appPluginIds.map((pluginId) =>
+    activateEnabledPlugin(pluginId, get(activeProjectId))))
+}
+
+export async function updateAppPluginContexts(projectId: string | null): Promise<void> {
+  const appBackendPluginIds = Array.from(get(installedPlugins).entries())
+    .filter(([, entry]) =>
+      entry.state === 'active'
+      && entry.packageMetadata?.enablement === 'app'
+      && entry.manifest.backend)
+    .map(([pluginId]) => pluginId)
+  await Promise.all(appBackendPluginIds.map((pluginId) =>
+    updatePluginBackendContext(pluginId, projectId)))
+}
+
+export async function enablePluginForApp(pluginId: string): Promise<boolean> {
+  const plugin = get(installedPlugins).get(pluginId)
+  if (plugin?.packageMetadata?.enablement !== 'app') {
+    throw new Error(`Plugin ${pluginId} does not use app enablement`)
+  }
+  await enableAppPluginInStore(pluginId)
+  return activateEnabledPlugin(pluginId, get(activeProjectId))
+}
+
+export async function disablePluginForApp(pluginId: string): Promise<void> {
+  manualLifecyclePluginIds.add(pluginId)
+  try {
+    await disableAppPluginInStore(pluginId)
+    if (!get(enabledPluginIds).has(pluginId)) {
+      await deactivatePluginById(pluginId)
+    }
+  } finally {
+    manualLifecyclePluginIds.delete(pluginId)
+    scheduleReconcile()
+  }
 }
 
 export async function enablePluginForProject(projectId: string, pluginId: string): Promise<boolean> {
   await enablePluginInStore(projectId, pluginId)
-  return activateEnabledPlugin(pluginId)
+  return activateEnabledPlugin(pluginId, projectId)
 }
 
 export async function disablePluginForProject(projectId: string, pluginId: string): Promise<void> {
-  await disablePluginInStore(projectId, pluginId)
-  await deactivatePluginById(pluginId)
+  manualLifecyclePluginIds.add(pluginId)
+  try {
+    await disablePluginInStore(projectId, pluginId)
+    if (!get(enabledPluginIds).has(pluginId)) {
+      await deactivatePluginById(pluginId)
+    }
+  } finally {
+    manualLifecyclePluginIds.delete(pluginId)
+    scheduleReconcile()
+  }
 }
 
 async function refreshInstalledPluginMetadata(pluginId: string): Promise<boolean> {
@@ -88,6 +164,14 @@ export async function reloadInstalledPluginMetadata(pluginId: string): Promise<b
   return refreshInstalledPluginMetadata(pluginId)
 }
 
+export async function reloadPluginForApp(pluginId: string): Promise<boolean> {
+  await deactivatePluginById(pluginId)
+  const refreshed = await refreshInstalledPluginMetadata(pluginId)
+  await loadEnabledAppPluginIds()
+  if (!refreshed || !get(enabledPluginIds).has(pluginId)) return false
+  return activateEnabledPlugin(pluginId, get(activeProjectId))
+}
+
 export async function reloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
   await deactivatePluginById(pluginId)
 
@@ -103,7 +187,7 @@ export async function reloadPluginForProject(projectId: string, pluginId: string
     return false
   }
 
-  return activateEnabledPlugin(pluginId)
+  return activateEnabledPlugin(pluginId, projectId)
 }
 
 /**
@@ -127,6 +211,11 @@ export async function reloadLocalPluginFromDisk(
 ): Promise<void> {
   await installFromLocal(sourcePath, '')
 
+  if (get(installedPlugins).get(pluginId)?.packageMetadata?.enablement === 'app') {
+    await reloadPluginForApp(pluginId)
+    return
+  }
+
   if (!projectId) {
     await deactivatePluginById(pluginId)
     return
@@ -143,6 +232,7 @@ async function reconcileLoadedPlugins(): Promise<void> {
     .map(([pluginId]) => pluginId)
 
   for (const pluginId of loadedPluginIds) {
+    if (manualLifecyclePluginIds.has(pluginId)) continue
     if (!enabled.has(pluginId) || !installed.has(pluginId)) {
       await deactivatePluginById(pluginId)
     }

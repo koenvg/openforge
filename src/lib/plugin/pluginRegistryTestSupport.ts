@@ -10,6 +10,8 @@ const {
   installPluginFromNpmIpcMock,
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
+  getEnabledAppPluginsMock,
+  setAppPluginEnabledMock,
   pluginInvokeMock,
   pluginBackendDeactivateMock,
   pluginBackendWhenReadyMock,
@@ -37,6 +39,8 @@ const {
   installPluginFromNpmIpcMock: vi.fn(),
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
+  getEnabledAppPluginsMock: vi.fn(),
+  setAppPluginEnabledMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
   pluginBackendDeactivateMock: vi.fn(),
   pluginBackendWhenReadyMock: vi.fn(),
@@ -61,6 +65,8 @@ vi.mock('../ipc', () => ({
   registerBuiltinPlugin: installPluginMock,
   uninstallPlugin: uninstallPluginIpcMock,
   getEnabledPlugins: getEnabledPluginsMock,
+  getEnabledAppPlugins: getEnabledAppPluginsMock,
+  setAppPluginEnabled: setAppPluginEnabledMock,
   getPlugin: getPluginIpcMock,
   listPlugins: listPluginsMock,
   setPluginEnabled: vi.fn(),
@@ -141,8 +147,10 @@ const { get } = await import('svelte/store')
 const {
   activatePlugin,
   deactivatePluginById,
+  disablePluginForApp,
   disablePluginForProject,
   emitPluginHostEvent,
+  enablePluginForApp,
   enablePluginForProject,
   executePluginCommand,
   getPluginRenderProps,
@@ -151,13 +159,15 @@ const {
   installPluginFromGit,
   installPluginFromManifest,
   installPluginFromNpm,
+  loadEnabledForApp: registryLoadEnabledForApp,
   loadEnabledForProject: registryLoadEnabledForProject,
   reloadInstalledPluginMetadata,
   reloadLocalPluginFromDisk,
   reloadPluginForProject,
   uninstallPlugin,
+  updateAppPluginContexts,
 } = await import('./pluginRegistry')
-const { installedPlugins, enabledPluginIds, runtimeContributionSources } = await import('./pluginStore')
+const { appEnabledPluginIds, installedPlugins, enabledPluginIds, projectEnabledPluginIds, runtimeContributionSources } = await import('./pluginStore')
 const { _resetPluginActivationLifecycleForTests } = await import('./pluginActivationLifecycle')
 const {
   clearComponentRegistry,
@@ -215,6 +225,11 @@ export function resetPluginRegistryTestState(): void {
   installPluginFromNpmIpcMock.mockReset()
   uninstallPluginIpcMock.mockReset()
   getEnabledPluginsMock.mockReset()
+  getEnabledPluginsMock.mockResolvedValue([])
+  getEnabledAppPluginsMock.mockReset()
+  getEnabledAppPluginsMock.mockResolvedValue([])
+  setAppPluginEnabledMock.mockReset()
+  setAppPluginEnabledMock.mockResolvedValue(undefined)
   pluginInvokeMock.mockReset()
   pluginInvokeMock.mockResolvedValue(undefined)
   pluginBackendDeactivateMock.mockReset()
@@ -249,6 +264,8 @@ export function resetPluginRegistryTestState(): void {
   getBuiltinPluginModuleMock.mockReset()
   _resetPluginActivationLifecycleForTests()
   installedPlugins.set(new Map())
+  appEnabledPluginIds.set(new Set())
+  projectEnabledPluginIds.set(new Set())
   enabledPluginIds.set(new Set())
   runtimeContributionSources.set(new Map())
   clearComponentRegistry()
@@ -258,15 +275,18 @@ export function resetPluginRegistryTestState(): void {
 export {
   activatePlugin,
   activatePluginLoaderMock,
+  appEnabledPluginIds,
   applyRuntimeSnapshotContributions,
   clearLoadedPluginMock,
   deactivatePluginById,
   deactivatePluginLoaderMock,
+  disablePluginForApp,
   defineFrontendPlugin,
   deletePluginStorageMock,
   desktopEventHandlers,
   disablePluginForProject,
   emitPluginHostEvent,
+  enablePluginForApp,
   enablePluginForProject,
   enabledPluginIds,
   executePluginCommand,
@@ -278,6 +298,7 @@ export {
   get,
   getBuiltinPluginModuleMock,
   getConfigMock,
+  getEnabledAppPluginsMock,
   getEnabledPluginsMock,
   getPluginCommandHandler,
   getPluginIpcMock,
@@ -306,16 +327,19 @@ export {
   pluginBackendDeactivateMock,
   pluginBackendWhenReadyMock,
   pluginInvokeMock,
+  registryLoadEnabledForApp,
   registryLoadEnabledForProject,
   reloadInstalledPluginMetadata,
   reloadLocalPluginFromDisk,
   reloadPluginForProject,
   runtimeContributionSources,
+  setAppPluginEnabledMock,
   setConfigMock,
   setPluginStorageMock,
   setProjectConfigMock,
   spawnShellPtyMock,
   uninstallPlugin,
+  updateAppPluginContexts,
   uninstallPluginIpcMock,
   writeClipboardTextMock,
 }

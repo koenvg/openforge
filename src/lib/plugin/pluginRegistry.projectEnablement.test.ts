@@ -54,7 +54,7 @@ describe('pluginRegistry project enablement', () => {
     await registryLoadEnabledForProject('P-1')
 
     expect(loadPluginFrontendMock).toHaveBeenCalledWith('scheduler-plugin', 'plugin://scheduler-plugin/index.js')
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('scheduler-plugin')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('scheduler-plugin', 'P-1')
     expect(get(installedPlugins).get('scheduler-plugin')).toMatchObject({ state: 'active', error: null })
   })
 
@@ -102,7 +102,7 @@ describe('pluginRegistry project enablement', () => {
     await expect(enablePluginForProject('P-1', 'enabled-backend-plugin')).resolves.toBe(true)
 
     expect(get(enabledPluginIds)).toEqual(new Set(['enabled-backend-plugin']))
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('enabled-backend-plugin')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('enabled-backend-plugin', 'P-1')
   })
 
   it('records backend readiness failures in the existing plugin runtime error state', async () => {
@@ -126,7 +126,7 @@ describe('pluginRegistry project enablement', () => {
 
     await registryLoadEnabledForProject('P-1')
 
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('failing-backend-plugin')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('failing-backend-plugin', 'P-1')
     expect(get(installedPlugins).get('failing-backend-plugin')).toMatchObject({ state: 'error', error: 'backend failed' })
   })
 

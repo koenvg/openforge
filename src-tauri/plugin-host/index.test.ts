@@ -655,6 +655,47 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('worker')).toMatchObject({ state: 'missing' })
   })
 
+  it('updates backend context across Project changes without restarting app-owned services', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          globalThis.__contextActivationCount = (globalThis.__contextActivationCount ?? 0) + 1
+          context.subscriptions.add(openforge.background.register({
+            id: 'usage',
+            scope: 'global',
+            start() { globalThis.__contextStarts = (globalThis.__contextStarts ?? 0) + 1 },
+            stop() { globalThis.__contextStops = (globalThis.__contextStops ?? 0) + 1 }
+          }))
+          context.subscriptions.add(openforge.backend.registerMethod('snapshot', {
+            handler() {
+              return {
+                context: openforge.context.getSnapshot(),
+                activations: globalThis.__contextActivationCount,
+                starts: globalThis.__contextStarts,
+                stops: globalThis.__contextStops ?? 0
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await runtime.handleJsonRpcRequest({ jsonrpc: '2.0', id: 1, method: 'plugin.backend.whenReady', params: { pluginId: 'usage-context', backendPath, projectId: null } })
+    await runtime.handleJsonRpcRequest({ jsonrpc: '2.0', id: 2, method: 'plugin.backend.whenReady', params: { pluginId: 'usage-context', backendPath, projectId: 'P-2', preserveActivation: true } })
+    const response = await runtime.handleJsonRpcRequest({ jsonrpc: '2.0', id: 3, method: 'usage-context.snapshot', params: { pluginId: 'usage-context', backendPath, projectId: 'P-2', command: 'snapshot' } })
+
+    expect(response).toMatchObject({ result: {
+      context: { pluginId: 'usage-context', projectId: 'P-2' },
+      activations: 1,
+      starts: 1,
+      stops: 0,
+    } })
+
+    await runtime.deactivateBackend('usage-context')
+    expect((globalThis as typeof globalThis & { __contextStops?: number }).__contextStops).toBe(1)
+  })
+
   it('imports changed backend methods after deactivation without restarting the plugin host', async () => {
     const backendPath = await writeBackendModule(`
       export default {

@@ -817,6 +817,15 @@ export async function getEnabledPlugins(projectId: string): Promise<NormalizedPl
   return rows.map(normalizePluginRow);
 }
 
+export async function setAppPluginEnabled(pluginId: string, enabled: boolean): Promise<void> {
+  return invoke('set_app_plugin_enabled', { pluginId, enabled })
+}
+
+export async function getEnabledAppPlugins(): Promise<NormalizedPluginRow[]> {
+  const rows = await invoke<PluginRowSnake[]>('get_enabled_app_plugins', {})
+  return rows.map(normalizePluginRow)
+}
+
 export async function setGlobalPluginDefault(pluginId: string, enabled: boolean): Promise<void> {
   return invoke("set_global_plugin_default", { pluginId, enabled });
 }
@@ -843,8 +852,12 @@ export async function pluginInvoke(pluginId: string, command: string, payload: u
   return invoke("plugin_invoke", { pluginId, command, payload: payload ?? null })
 }
 
-export async function pluginBackendWhenReady(pluginId: string): Promise<void> {
-  await invoke('plugin_backend_when_ready', { pluginId })
+export async function pluginBackendWhenReady(
+  pluginId: string,
+  projectId: string | null = null,
+  preserveActivation = false,
+): Promise<void> {
+  await invoke('plugin_backend_when_ready', { pluginId, projectId, preserveActivation })
 }
 
 export async function pluginBackendDeactivate(pluginId: string): Promise<void> {

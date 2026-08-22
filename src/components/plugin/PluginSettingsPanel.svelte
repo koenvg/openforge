@@ -28,7 +28,7 @@
   let searchQuery = $state('')
   let activeFilter = $state<PluginFilter>('all')
 
-  let pluginsList = $derived(Array.from($installedPlugins.values()))
+  let pluginsList = $derived(Array.from($installedPlugins.values()).filter((plugin) => plugin.packageMetadata?.enablement !== 'app'))
   let enabledCount = $derived(pluginsList.filter((plugin) => $enabledPluginIds.has(plugin.manifest.id)).length)
   let disabledCount = $derived(pluginsList.length - enabledCount)
   let attentionCount = $derived(pluginsList.filter(hasPluginAttention).length)
@@ -140,7 +140,7 @@
 
     {#if pluginsList.length === 0}
       <div class="text-sm text-base-content/50 text-center py-8 border border-dashed border-base-300 rounded-lg">
-        No plugins installed app-wide
+        No project-enabled plugins installed
       </div>
     {:else if filteredPlugins.length === 0}
       <div class="text-sm text-base-content/50 text-center py-8 border border-dashed border-base-300 rounded-lg">

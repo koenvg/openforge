@@ -23,6 +23,7 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Svelte Markdown rendering component. |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Svelte resizable panel component. |
+| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation content. |
 
 ## Frontend plugins
 
@@ -68,6 +69,65 @@ Frontend-specific API areas are:
 Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
 
 Package metadata and view registrations use `PluginIcon` for `icon`: either a supported kebab-case Lucide name or `{ type: 'svg', svg: string }`. Custom SVGs are limited to static, self-contained geometry with one positive `viewBox` root and a 10,000-character maximum. The host sanitizes them, owns rail/sidebar sizing and decorative accessibility, and uses the view title as the navigation label. Plugins own geometry and paint; use `currentColor` for host theme and active-state colors. Invalid custom SVG registrations are rejected. Unsupported names render the generic Plug fallback. See [Plugin icons](../plugin-authoring.md#plugin-icons) for the exact allowed subset and an example.
+
+### Custom sidebar navigation
+
+A sidebar-placed View may add `navigationComponent` when its package declares `customSidebarNavigation` in `openforge.requires`:
+
+```ts
+interface PluginViewRegistration {
+  id: string
+  title: string
+  icon: PluginIcon
+  placement: 'rail' | 'sidebar'
+  order?: number
+  shortcut?: string
+  component: PluginComponentLoader<PluginViewProps> | PluginComponent<PluginViewProps>
+  navigationComponent?:
+    | PluginComponentLoader<PluginSidebarNavigationProps>
+    | PluginComponent<PluginSidebarNavigationProps>
+}
+
+interface PluginSidebarNavigationProps {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  active: boolean
+  collapsed: boolean
+  view: {
+    pluginId: string
+    id: string
+    qualifiedId: string
+    title: string
+    icon: PluginIcon
+  }
+  onActivate(): void
+}
+```
+
+The host allocates and orders the slot. The component owns its DOM, controls, and styling. Call `onActivate()` to open the registered View rather than building a private route. The host updates `context.projectId` as the active Project changes. A load or render failure logs the owning package id and restores the static title-and-icon link.
+
+Use `PluginSidebarLink` for the standard row:
+
+```svelte
+<script lang="ts">
+  import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
+  import type { PluginSidebarNavigationProps } from '@openforge-app/plugin-sdk'
+  let { active, collapsed, onActivate }: PluginSidebarNavigationProps = $props()
+</script>
+
+<PluginSidebarLink
+  accessibleName="Account usage"
+  {active}
+  {collapsed}
+  {onActivate}
+>
+  {#snippet leading()}...{/snippet}
+  {#snippet label()}Account usage{/snippet}
+  {#snippet trailing()}...{/snippet}
+</PluginSidebarLink>
+```
+
+`PluginSidebarLink` uses a native button, reports `aria-current="page"` while active, stays keyboard focusable, and uses `accessibleName` as its collapsed tooltip and accessible name. It renders leading content in both sidebar states and label/trailing content while expanded.
 
 ## Backend plugins
 
@@ -184,6 +244,8 @@ Plugin packages declare OpenForge metadata in `package.json#openforge`:
 }
 ```
 
+`openforge.enablement` is `'project'` when omitted. Project-enabled packages keep their existing per-Project lifecycle. Set it to `'app'` and include `'appEnablement'` in `requires` for one app-runtime activation managed in Global Settings. App-owned frontend and backend entries stay active while Projects change or no Project is selected. Context snapshots still report the current Project when one is active. Disabling, reloading, uninstalling, activation rollback, and app shutdown dispose package contributions and background services.
+
 The root export provides these metadata helpers:
 
 - `OPENFORGE_PACKAGE_METADATA_SCHEMA`: the schema object bundled from `openforgePackageMetadataSchema.json`.
@@ -224,6 +286,8 @@ export type OpenForgePluginCapability =
   | 'projectConfig'
   | 'browserSurfaces'
   | 'taskLinks'
+  | 'appEnablement'
+  | 'customSidebarNavigation'
 ```
 
 Manifest contribution arrays are not supported. `validateOpenForgePackageMetadata` rejects a `contributes` field with the message that contribution arrays are not supported; register contributions at runtime in `activate()` instead.
@@ -320,11 +384,12 @@ It also exports related host-runtime and alias record types.
 
 ## UI component exports
 
-The package exposes two Svelte component subpaths:
+The package exposes plugin-safe Svelte component subpaths, including:
 
 ```ts
 import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
 import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte'
 ```
 
-These are the supported component import paths. Do not import component files through SDK internals.
+Use only component paths declared in the package exports. Do not import renderer-private components or SDK source/dist internals.

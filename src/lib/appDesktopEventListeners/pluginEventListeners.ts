@@ -1,4 +1,6 @@
-import { loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForProject } from '../plugin/pluginRegistry'
+import { get } from 'svelte/store'
+import { loadEnabledForApp, loadEnabledForProject, reloadInstalledPluginMetadata, reloadPluginForApp, reloadPluginForProject } from '../plugin/pluginRegistry'
+import { installedPlugins } from '../plugin/pluginStore'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
 
@@ -6,7 +8,9 @@ type PluginEventDeps = Pick<
   AppDesktopEventDeps,
   | 'getActiveProjectId'
   | 'reloadInstalledPluginMetadata'
+  | 'reloadPluginForApp'
   | 'reloadPluginForProject'
+  | 'loadEnabledPluginsForApp'
   | 'loadEnabledPluginsForProject'
 >
 
@@ -23,6 +27,17 @@ export function createPluginEventListeners(deps: PluginEventDeps) {
         }
       },
     ),
+
+    appPluginEnablementChanged: defineDesktopEventListener<{
+      plugin_id: string
+      enabled: boolean
+    }>('app-plugin-enablement-changed', async (event) => {
+      try {
+        await (deps.loadEnabledPluginsForApp ?? loadEnabledForApp)()
+      } catch (error) {
+        console.error('[plugins] Failed to refresh app plugin enablement from sidecar event:', event.payload.plugin_id, error)
+      }
+    }),
 
     projectPluginEnablementChanged: defineDesktopEventListener<{
       plugin_id: string
@@ -45,7 +60,9 @@ export function createPluginEventListeners(deps: PluginEventDeps) {
       const pluginId = event.payload.plugin_id
       const projectId = deps.getActiveProjectId?.() ?? null
       try {
-        if (projectId) {
+        if (get(installedPlugins).get(pluginId)?.packageMetadata?.enablement === 'app') {
+          await (deps.reloadPluginForApp ?? reloadPluginForApp)(pluginId)
+        } else if (projectId) {
           await (deps.reloadPluginForProject ?? reloadPluginForProject)(projectId, pluginId)
         } else {
           await (deps.reloadInstalledPluginMetadata ?? reloadInstalledPluginMetadata)(pluginId)

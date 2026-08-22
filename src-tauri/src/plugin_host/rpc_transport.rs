@@ -46,11 +46,17 @@ impl PluginHost {
         &self,
         plugin_id: &str,
         backend_path: &std::path::Path,
+        project_id: Option<&str>,
+        preserve_activation: bool,
+        package_metadata: Option<&Value>,
     ) -> Result<Value, String> {
         let backend_path = backend_path.to_string_lossy().into_owned();
         let params = json!({
             "pluginId": plugin_id,
             "backendPath": backend_path,
+            "projectId": project_id,
+            "preserveActivation": preserve_activation,
+            "packageMetadata": package_metadata,
         });
         let (request_id, request) =
             crate::plugin_rpc::format_request("plugin", "backend.whenReady", params);

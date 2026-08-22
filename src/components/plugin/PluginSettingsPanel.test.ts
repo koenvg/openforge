@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
 import GlobalPluginSettingsPanel from './GlobalPluginSettingsPanel.svelte'
 import PluginSettingsPanel from './PluginSettingsPanel.svelte'
-import { installedPlugins, enabledPluginIds, error as pluginLoadError } from '../../lib/plugin/pluginStore'
+import { appEnabledPluginIds, installedPlugins, enabledPluginIds, error as pluginLoadError } from '../../lib/plugin/pluginStore'
 import {
+  disablePluginForApp,
   disablePluginForProject,
+  enablePluginForApp,
   enablePluginForProject,
   installFromLocal,
   installPluginFromGit,
@@ -21,6 +23,8 @@ vi.mock('../../lib/plugin/pluginStore', () => {
   return {
     installedPlugins: writable(new Map()),
     enabledPluginIds: writable(new Set()),
+    appEnabledPluginIds: writable(new Set()),
+    projectEnabledPluginIds: writable(new Set()),
     runtimeContributionSources: writable(new Map()),
     error: writable(null),
   }
@@ -28,12 +32,15 @@ vi.mock('../../lib/plugin/pluginStore', () => {
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
   activatePlugin: vi.fn(),
+  enablePluginForApp: vi.fn(),
+  disablePluginForApp: vi.fn(),
   enablePluginForProject: vi.fn(),
   disablePluginForProject: vi.fn(),
   installFromLocal: vi.fn(),
   installPluginFromGit: vi.fn(),
   installPluginFromNpm: vi.fn(),
   reloadInstalledPluginMetadata: vi.fn(),
+  reloadPluginForApp: vi.fn(),
   reloadPluginForProject: vi.fn(),
   uninstallPlugin: vi.fn(),
 }))
@@ -68,14 +75,15 @@ describe('PluginSettingsPanel', () => {
 
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    appEnabledPluginIds.set(new Set())
     pluginLoadError.set(null)
   })
 
-  it('renders project empty state when no app-wide plugins are installed', () => {
+  it('renders the project empty state when no project-enabled plugins are installed', () => {
     render(PluginSettingsPanel, { projectId: 'proj-1' })
     expect(screen.getByText('Project plugins')).toBeTruthy()
     expect(screen.getByText('Enable installed plugins for this project.')).toBeTruthy()
-    expect(screen.getByText('No plugins installed app-wide')).toBeTruthy()
+    expect(screen.getByText('No project-enabled plugins installed')).toBeTruthy()
   })
 
   it('clarifies that plugin enablement inherits global defaults and applies to this project only', () => {
@@ -162,6 +170,25 @@ describe('PluginSettingsPanel', () => {
     expect(screen.getByText('Built-in registration missing: com.openforge.browser')).toBeTruthy()
     expect(screen.queryByText('Terminal')).toBeNull()
   })
+  it('does not list app-enabled packages in Project Settings', () => {
+    const appPlugin: PluginEntry = {
+      ...mockPlugin,
+      packageMetadata: {
+        id: 'test-plugin',
+        apiVersion: 1,
+        displayName: 'Test Plugin',
+        description: 'App-wide plugin',
+        enablement: 'app',
+        frontend: './index.js',
+        requires: ['appEnablement'],
+      },
+    }
+    installedPlugins.set(new Map([['test-plugin', appPlugin]]))
+
+    render(PluginSettingsPanel, { projectId: 'proj-1' })
+
+    expect(screen.queryByText('Test Plugin')).toBeNull()
+  })
 })
 
 describe('GlobalPluginSettingsPanel', () => {
@@ -171,6 +198,7 @@ describe('GlobalPluginSettingsPanel', () => {
 
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    appEnabledPluginIds.set(new Set())
     pluginLoadError.set(null)
   })
 
@@ -193,6 +221,32 @@ describe('GlobalPluginSettingsPanel', () => {
     expect(screen.getByText('npm:@acme/test-plugin@1.0.0')).toBeTruthy()
     expect(screen.queryByText('test-plugin')).toBeNull()
     expect(screen.getByText('read:files')).toBeTruthy()
+  })
+
+  it('enables and disables app-owned plugins once from Global Settings', async () => {
+    const appPlugin: PluginEntry = {
+      ...mockPlugin,
+      packageMetadata: {
+        id: 'test-plugin',
+        apiVersion: 1,
+        displayName: 'Test Plugin',
+        description: 'App-wide plugin',
+        enablement: 'app',
+        frontend: './index.js',
+        requires: ['appEnablement'],
+      },
+    }
+    installedPlugins.set(new Map([['test-plugin', appPlugin]]))
+
+    const first = render(GlobalPluginSettingsPanel)
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enabled throughout OpenForge: Test Plugin' }))
+    expect(enablePluginForApp).toHaveBeenCalledWith('test-plugin')
+
+    first.unmount()
+    appEnabledPluginIds.set(new Set(['test-plugin']))
+    render(GlobalPluginSettingsPanel)
+    await fireEvent.click(screen.getByRole('switch', { name: 'Enabled throughout OpenForge: Test Plugin' }))
+    expect(disablePluginForApp).toHaveBeenCalledWith('test-plugin')
   })
 
   it('does not render a separate raw plugin id when the source already identifies the package', () => {

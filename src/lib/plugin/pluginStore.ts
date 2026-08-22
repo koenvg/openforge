@@ -16,6 +16,15 @@ function getOptionalIpcMethod<T>(resolve: () => T): T | undefined {
 
 export const installedPlugins = writable<Map<string, PluginEntry>>(new Map())
 export const enabledPluginIds = writable<Set<string>>(new Set())
+export const appEnabledPluginIds = writable<Set<string>>(new Set())
+export const projectEnabledPluginIds = writable<Set<string>>(new Set())
+
+function updateEffectiveEnabledPluginIds(): void {
+  enabledPluginIds.set(new Set([
+    ...get(appEnabledPluginIds),
+    ...get(projectEnabledPluginIds),
+  ]))
+}
 export const runtimeContributionSources = writable<Map<string, RuntimeContributionSource>>(new Map())
 export const loading = writable<boolean>(false)
 export const error = writable<string | null>(null)
@@ -96,11 +105,12 @@ export async function enablePlugin(projectId: string, pluginId: string): Promise
   }
 
   await setPluginEnabled(projectId, pluginId, true)
-  enabledPluginIds.update(set => {
+  projectEnabledPluginIds.update(set => {
     const next = new Set(set)
     next.add(pluginId)
     return next
   })
+  updateEffectiveEnabledPluginIds()
 }
 
 export async function disablePlugin(projectId: string, pluginId: string): Promise<void> {
@@ -110,11 +120,34 @@ export async function disablePlugin(projectId: string, pluginId: string): Promis
   }
 
   await setPluginEnabled(projectId, pluginId, false)
-  enabledPluginIds.update(set => {
+  projectEnabledPluginIds.update(set => {
     const next = new Set(set)
     next.delete(pluginId)
     return next
   })
+  updateEffectiveEnabledPluginIds()
+}
+
+export async function enableAppPlugin(pluginId: string): Promise<void> {
+  const setAppPluginEnabled = getOptionalIpcMethod(() => ipc.setAppPluginEnabled)
+  if (!setAppPluginEnabled) return
+
+  await setAppPluginEnabled(pluginId, true)
+  appEnabledPluginIds.update(set => new Set(set).add(pluginId))
+  updateEffectiveEnabledPluginIds()
+}
+
+export async function disableAppPlugin(pluginId: string): Promise<void> {
+  const setAppPluginEnabled = getOptionalIpcMethod(() => ipc.setAppPluginEnabled)
+  if (!setAppPluginEnabled) return
+
+  await setAppPluginEnabled(pluginId, false)
+  appEnabledPluginIds.update(set => {
+    const next = new Set(set)
+    next.delete(pluginId)
+    return next
+  })
+  updateEffectiveEnabledPluginIds()
 }
 
 export function isPluginEnabled(pluginId: string): boolean {
@@ -150,10 +183,36 @@ export function getContributions(contributionType: string): unknown[] {
 export async function loadEnabledPluginIdsForProject(projectId: string): Promise<void> {
   const getEnabledPlugins = getOptionalIpcMethod(() => ipc.getEnabledPlugins)
   if (!getEnabledPlugins) {
-    enabledPluginIds.set(new Set())
+    projectEnabledPluginIds.set(new Set())
+    updateEffectiveEnabledPluginIds()
     return
   }
 
   const rows = await getEnabledPlugins(projectId)
-  enabledPluginIds.set(new Set(rows.map(r => r.id)))
+  const projectPluginIds = rows
+    .filter(row => manifestFromPluginRow(row).packageMetadata?.enablement !== 'app')
+    .map(row => row.id)
+  projectEnabledPluginIds.set(new Set(projectPluginIds))
+  updateEffectiveEnabledPluginIds()
+}
+
+export function clearProjectEnabledPluginIds(): void {
+  projectEnabledPluginIds.set(new Set())
+  updateEffectiveEnabledPluginIds()
+}
+
+export async function loadEnabledAppPluginIds(): Promise<void> {
+  const getEnabledAppPlugins = getOptionalIpcMethod(() => ipc.getEnabledAppPlugins)
+  if (!getEnabledAppPlugins) {
+    appEnabledPluginIds.set(new Set())
+    updateEffectiveEnabledPluginIds()
+    return
+  }
+
+  const rows = await getEnabledAppPlugins()
+  const appPluginIds = rows
+    .filter(row => manifestFromPluginRow(row).packageMetadata?.enablement === 'app')
+    .map(row => row.id)
+  appEnabledPluginIds.set(new Set(appPluginIds))
+  updateEffectiveEnabledPluginIds()
 }

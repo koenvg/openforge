@@ -94,6 +94,8 @@ export type {
   PluginComponentModule,
   PluginEntry,
   PluginIcon,
+  PluginSidebarNavigationProps,
+  PluginSidebarViewIdentity,
   PluginInjectionPointProps,
   PluginSettingsSectionProps,
   PluginState,

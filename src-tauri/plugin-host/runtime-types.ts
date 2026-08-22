@@ -22,6 +22,7 @@ export type JsonRpcRequest = {
     commandId?: string
     backendPath?: string
     projectId?: string | null
+    preserveActivation?: boolean
     packageMetadata?: OpenForgePackageMetadata
     payload?: unknown
     input?: unknown
@@ -77,6 +78,7 @@ export type ReadyBackendInput = {
   pluginId: string
   backendPath?: string
   projectId?: string | null
+  preserveActivation?: boolean
   packageMetadata?: OpenForgePackageMetadata
 }
 

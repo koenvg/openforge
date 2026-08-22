@@ -27,9 +27,9 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import { clearProjectEnabledPluginIds, enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
-  import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
+  import { activatePlugin, deactivateAllPlugins, executePluginCommand, getPluginRenderProps, initializePluginRuntime, loadEnabledForApp, loadEnabledForProject, updateAppPluginContexts } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
@@ -148,12 +148,32 @@
     [...resolvedPluginContributions.views]
       .filter((view) => view.showInSidebar)
       .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
-      .map((view) => ({
-        viewKey: makePluginViewKey(view.pluginId, view.contributionId),
-        icon: view.icon,
-        title: view.title,
-        shortcut: view.shortcut,
-      }))
+      .map((view) => {
+        const item = {
+          viewKey: makePluginViewKey(view.pluginId, view.contributionId),
+          icon: view.icon,
+          title: view.title,
+          shortcut: view.shortcut,
+        }
+        if (!view.navigationComponent) return item
+
+        return {
+          ...item,
+          navigation: {
+            component: view.navigationComponent,
+            props: {
+              ...getPluginRenderProps(view.pluginId, { projectId: $activeProjectId }),
+              view: {
+                pluginId: view.pluginId,
+                id: view.contributionId,
+                qualifiedId: view.namespacedId,
+                title: view.title,
+                icon: view.icon,
+              },
+            },
+          },
+        }
+      })
   )
   let sidebarPluginViewKeySet = $derived(new Set(sidebarPluginNavItems.map((item) => item.viewKey)))
   // Mirror the sidebar (cross-project) plugin view keys into the store so the router's
@@ -210,7 +230,13 @@
     if (projectId && projectId !== previousPluginProjectId) {
       void loadEnabledForProject(projectId)
     } else if (!projectId && previousPluginProjectId !== null) {
-      enabledPluginIds.set(new Set())
+      clearProjectEnabledPluginIds()
+    }
+
+    if (projectId !== previousPluginProjectId) {
+      void updateAppPluginContexts(projectId).catch((error) => {
+        console.error('[plugins] Failed to update app plugin context:', error)
+      })
     }
 
     previousPluginProjectId = projectId
@@ -355,7 +381,10 @@
     }),
     resumeStartupSessions,
     loadStartupData: () => loadAppStartupData({
-      initializePluginRuntime,
+      initializePluginRuntime: async () => {
+        await initializePluginRuntime()
+        await loadEnabledForApp()
+      },
       loadProjects: appData.loadProjects,
       getAppMode,
       getConfig,
@@ -378,6 +407,9 @@
       }
     }
 
+    void deactivateAllPlugins().catch((error) => {
+      console.error('[plugins] Failed to deactivate all plugins during app teardown:', error)
+    })
     lifecycle.dispose()
   })
 </script>

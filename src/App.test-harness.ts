@@ -102,14 +102,16 @@ export const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,
   mockExecutePluginCommand,
+  mockLoadEnabledForApp,
   mockLoadEnabledForProject,
 } = vi.hoisted(() => ({
   mockActivatePlugin: vi.fn<(pluginId: string) => Promise<boolean>>(async () => true),
   mockExecutePluginCommand: vi.fn(async (_pluginId: string, _commandId: string) => true),
+  mockLoadEnabledForApp: vi.fn<() => Promise<void>>(async () => undefined),
   mockLoadEnabledForProject: vi.fn<(projectId: string) => Promise<void>>(async () => undefined),
 }))
 
-export { mockActivatePlugin, mockExecutePluginCommand, mockLoadEnabledForProject }
+export { mockActivatePlugin, mockExecutePluginCommand, mockLoadEnabledForApp, mockLoadEnabledForProject }
 
 vi.mock('./lib/desktopIpc', () => ({
   invokeDesktopCommand: vi.fn(),
@@ -133,8 +135,11 @@ vi.mock('./lib/plugin/pluginRegistry', async () => {
   return {
     ...actual,
     activatePlugin: mockActivatePlugin,
+    deactivateAllPlugins: vi.fn(async () => undefined),
     executePluginCommand: mockExecutePluginCommand,
+    loadEnabledForApp: mockLoadEnabledForApp,
     loadEnabledForProject: mockLoadEnabledForProject,
+    updateAppPluginContexts: vi.fn(async () => undefined),
   }
 })
 
@@ -415,6 +420,8 @@ export function installAppTestLifecycle() {
     vi.clearAllMocks()
     const pluginStore = await import('./lib/plugin/pluginStore')
     pluginStore.installedPlugins.set(new Map())
+    pluginStore.appEnabledPluginIds.set(new Set())
+    pluginStore.projectEnabledPluginIds.set(new Set())
     pluginStore.enabledPluginIds.set(new Set())
     pluginStore.runtimeContributionSources.set(new Map())
     pluginStore.loading.set(false)

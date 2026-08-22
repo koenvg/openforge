@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  loadEnabledForApp,
   loadEnabledForProject,
   reloadInstalledPluginMetadata,
   reloadPluginForProject,
@@ -8,8 +9,10 @@ import { createPluginEventListeners } from './pluginEventListeners'
 import { createAppDesktopEventHarness, registerEventListenerGroup } from './testUtils'
 
 vi.mock('../plugin/pluginRegistry', () => ({
+  loadEnabledForApp: vi.fn(async () => undefined),
   loadEnabledForProject: vi.fn(async () => undefined),
   reloadInstalledPluginMetadata: vi.fn(async () => true),
+  reloadPluginForApp: vi.fn(async () => true),
   reloadPluginForProject: vi.fn(async () => true),
 }))
 
@@ -26,6 +29,9 @@ describe('createPluginEventListeners', () => {
     await registerEventListenerGroup(createPluginEventListeners(defaultDeps), deps.listen!)
 
     await handlers.get('plugin-installation-changed')?.({ payload: { plugin_id: 'review-helper' } })
+    await handlers.get('app-plugin-enablement-changed')?.({
+      payload: { plugin_id: 'review-helper', enabled: true },
+    })
     await handlers.get('project-plugin-enablement-changed')?.({
       payload: { plugin_id: 'review-helper', project_id: 'P-1', enabled: true },
     })
@@ -34,6 +40,7 @@ describe('createPluginEventListeners', () => {
     })
 
     expect(reloadInstalledPluginMetadata).toHaveBeenCalledWith('review-helper')
+    expect(loadEnabledForApp).toHaveBeenCalledOnce()
     expect(loadEnabledForProject).toHaveBeenCalledWith('P-1')
     expect(reloadPluginForProject).toHaveBeenCalledWith('P-1', 'review-helper')
   })

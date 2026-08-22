@@ -72,10 +72,11 @@ function createFrontendRuntimeRegistryForPlugin(
   pluginId: string,
   manifest: PluginManifest,
 ): RuntimeContributionRegistryInstance {
+  const packageMetadata = getPackageMetadataForPlugin(pluginId, manifest)
   return createRuntimeContributionRegistry({
     pluginId,
-    projectId: get(activeProjectId),
-    packageMetadata: getPackageMetadataForPlugin(pluginId, manifest),
+    projectId: packageMetadata.enablement === 'app' ? null : get(activeProjectId),
+    packageMetadata,
     storage: createIpcPluginStorage(pluginId),
     host: createPluginRuntimeHost(pluginId),
   })

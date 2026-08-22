@@ -107,6 +107,16 @@ export class BackendLifecycle {
 
     if (
       state.state === 'ready'
+      && input.preserveActivation === true
+      && input.backendPath
+      && state.backendPath === input.backendPath
+    ) {
+      state.projectId = input.projectId ?? null
+      return this.snapshot(input.pluginId)
+    }
+
+    if (
+      state.state === 'ready'
       && (!input.backendPath || (
         state.backendPath === input.backendPath
         && state.projectId === (input.projectId ?? null)
