@@ -104,6 +104,26 @@ describe('TaskSchedulesView composer and actions', () => {
     expect(invoke).not.toHaveBeenCalledWith('saveSchedule', expect.anything())
   })
 
+  it('preserves timing fields while changing the new schedule type', async () => {
+    mockBackend([])
+    renderView()
+    await screen.findByText('No schedules found')
+    const form = await openNewSchedule()
+    const cronValue = '0 8 * * 1'
+    const runAtValue = '2099-08-26T13:45'
+
+    await fireEvent.click(within(form).getByLabelText('Use a custom cron expression'))
+    await fireEvent.input(within(form).getByLabelText('Cron expression'), { target: { value: cronValue } })
+    await fireEvent.click(within(form).getByRole('radio', { name: /One time/i }))
+    await fireEvent.input(within(form).getByLabelText(/^Run on/i), { target: { value: runAtValue } })
+
+    await fireEvent.click(within(form).getByRole('radio', { name: /Recurring/i }))
+    expect((within(form).getByLabelText('Cron expression') as HTMLInputElement).value).toBe(cronValue)
+
+    await fireEvent.click(within(form).getByRole('radio', { name: /One time/i }))
+    expect((within(form).getByLabelText(/^Run on/i) as HTMLInputElement).value).toBe(runAtValue)
+  })
+
   it('protects unsaved changes and returns focus to New schedule after dismissal', async () => {
     mockBackend([])
     renderView()

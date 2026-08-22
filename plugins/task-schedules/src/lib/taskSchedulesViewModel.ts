@@ -1,6 +1,16 @@
 import { dayOfWeekFromCron, describeCronExpression, timeOfDayFromCron, validateCronCadence, validateFiveFieldCron } from './cron'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft } from './types'
-import type { ScheduleDraft, ScheduleFilter, ScheduleRunState, ScheduleSortKey, SortDirection } from './viewTypes'
+import type {
+  OneOffScheduleDraftTiming,
+  RecurringScheduleDraftTiming,
+  ScheduleDraft,
+  ScheduleDraftTiming,
+  ScheduleFieldErrors,
+  ScheduleFilter,
+  ScheduleRunState,
+  ScheduleSortKey,
+  SortDirection,
+} from './viewTypes'
 
 export const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week. Runs at most once every 5 minutes.'
 export const TERMINAL_ONE_OFF_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
@@ -21,77 +31,95 @@ export const DAY_OF_WEEK_OPTIONS = [
   { value: 0, label: 'Sunday' },
 ]
 
-export function emptyScheduleDraft(): ScheduleDraft {
+export function emptyScheduleDraftTiming(): RecurringScheduleDraftTiming
+export function emptyScheduleDraftTiming(type: 'recurring'): RecurringScheduleDraftTiming
+export function emptyScheduleDraftTiming(type: 'once'): OneOffScheduleDraftTiming
+export function emptyScheduleDraftTiming(type: ScheduleDraftTiming['type'] = 'recurring'): ScheduleDraftTiming {
+  if (type === 'once') return { type, runAt: '', originalRunAt: null }
   return {
-    id: null,
-    title: '',
-    prompt: '',
-    kind: 'recurring',
-    runAt: '',
-    originalRunAt: null,
+    type,
     preset: 'daily',
     cron: '0 9 * * *',
     timeOfDay: '09:00',
     dayOfWeek: 1,
     advancedCron: false,
+  }
+}
+
+export function emptyScheduleDraft(): ScheduleDraft {
+  return {
+    id: null,
+    title: '',
+    prompt: '',
+    timing: emptyScheduleDraftTiming(),
     mode: 'create-and-start',
     enabled: true,
   }
 }
 
+export function emptyScheduleFieldErrors(): ScheduleFieldErrors {
+  return { cron: null, runAt: null }
+}
+
 export function draftFromSchedule(schedule: TaskSchedule): ScheduleDraft {
-  const timing = schedule.timing.type === 'recurring'
-    ? schedule.timing
-    : { type: 'recurring' as const, preset: 'daily' as const, cron: '0 9 * * *' }
+  const timing: ScheduleDraftTiming = schedule.timing.type === 'recurring'
+    ? {
+        ...schedule.timing,
+        preset: schedule.timing.preset === 'custom' ? 'daily' : schedule.timing.preset,
+        timeOfDay: timeOfDayFromCron(schedule.timing.cron),
+        dayOfWeek: schedule.timing.preset === 'weekly' ? dayOfWeekFromCron(schedule.timing.cron) : 1,
+        advancedCron: schedule.timing.preset === 'custom',
+      }
+    : {
+        type: 'once',
+        runAt: localDateTimeValue(schedule.timing.runAt),
+        originalRunAt: schedule.timing.runAt,
+      }
   return {
     id: schedule.id,
     title: schedule.title,
     prompt: schedule.prompt,
-    kind: schedule.timing.type,
-    runAt: schedule.timing.type === 'once' ? localDateTimeValue(schedule.timing.runAt) : '',
-    originalRunAt: schedule.timing.type === 'once' ? schedule.timing.runAt : null,
-    preset: timing.preset === 'custom' ? 'daily' : timing.preset,
-    cron: timing.cron,
-    timeOfDay: timeOfDayFromCron(timing.cron),
-    dayOfWeek: timing.preset === 'weekly' ? dayOfWeekFromCron(timing.cron) : 1,
-    advancedCron: timing.preset === 'custom',
+    timing,
     mode: schedule.mode,
     enabled: schedule.lifecycle.state === 'active' && schedule.lifecycle.enabled,
   }
 }
 
 export function draftToPayload(draft: ScheduleDraft): TaskScheduleDraft {
-  const runAt = draft.kind !== 'once'
+  const { timing } = draft
+  const runAt = timing.type !== 'once'
     ? null
-    : draft.originalRunAt !== null && draft.runAt === localDateTimeValue(draft.originalRunAt)
-      ? draft.originalRunAt
-      : new Date(draft.runAt).getTime()
+    : timing.originalRunAt !== null && timing.runAt === localDateTimeValue(timing.originalRunAt)
+      ? timing.originalRunAt
+      : new Date(timing.runAt).getTime()
   return {
     id: draft.id,
     title: draft.title,
     prompt: draft.prompt,
-    kind: draft.kind,
+    kind: timing.type,
     runAt,
-    preset: draft.kind === 'recurring' ? (draft.advancedCron ? 'custom' : draft.preset) : null,
-    cron: draft.kind === 'recurring' && draft.advancedCron ? draft.cron : null,
-    timeOfDay: draft.kind === 'recurring' && !draft.advancedCron ? draft.timeOfDay : null,
-    dayOfWeek: draft.kind === 'recurring' && !draft.advancedCron && draft.preset === 'weekly' ? draft.dayOfWeek : null,
+    preset: timing.type === 'recurring' ? (timing.advancedCron ? 'custom' : timing.preset) : null,
+    cron: timing.type === 'recurring' && timing.advancedCron ? timing.cron : null,
+    timeOfDay: timing.type === 'recurring' && !timing.advancedCron ? timing.timeOfDay : null,
+    dayOfWeek: timing.type === 'recurring' && !timing.advancedCron && timing.preset === 'weekly' ? timing.dayOfWeek : null,
     mode: draft.mode,
     enabled: draft.enabled,
   }
 }
 
 export function draftCronError(draft: ScheduleDraft, now = Date.now()): string | null {
-  if (draft.kind !== 'recurring' || !draft.advancedCron) return null
-  if (!validateFiveFieldCron(draft.cron).valid) return CRON_HELP_TEXT
-  const cadence = validateCronCadence(draft.cron, now)
+  const { timing } = draft
+  if (timing.type !== 'recurring' || !timing.advancedCron) return null
+  if (!validateFiveFieldCron(timing.cron).valid) return CRON_HELP_TEXT
+  const cadence = validateCronCadence(timing.cron, now)
   return cadence.valid ? null : cadence.error
 }
 
 export function draftRunAtError(draft: ScheduleDraft, now = Date.now()): string | null {
-  if (draft.kind !== 'once') return null
-  if (!draft.runAt.trim()) return 'Choose when this Task Schedule should run.'
-  const runAt = new Date(draft.runAt).getTime()
+  const { timing } = draft
+  if (timing.type !== 'once') return null
+  if (!timing.runAt.trim()) return 'Choose when this Task Schedule should run.'
+  const runAt = new Date(timing.runAt).getTime()
   if (!Number.isFinite(runAt)) return 'Enter a valid date and time.'
   return runAt > now ? null : 'Choose a date and time in the future.'
 }

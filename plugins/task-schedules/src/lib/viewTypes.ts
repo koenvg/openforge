@@ -1,17 +1,23 @@
-import type { SchedulePreset, TaskScheduleKind, TaskScheduleMode } from './types'
+import type { TaskScheduleMode, TaskScheduleTiming } from './types'
+
+export type RecurringScheduleDraftTiming = Extract<TaskScheduleTiming, { type: 'recurring' }> & {
+  timeOfDay: string
+  dayOfWeek: number
+  advancedCron: boolean
+}
+
+export type OneOffScheduleDraftTiming = Omit<Extract<TaskScheduleTiming, { type: 'once' }>, 'runAt'> & {
+  runAt: string
+  originalRunAt: number | null
+}
+
+export type ScheduleDraftTiming = RecurringScheduleDraftTiming | OneOffScheduleDraftTiming
 
 export type ScheduleDraft = {
   id: string | null
   title: string
   prompt: string
-  kind: TaskScheduleKind
-  runAt: string
-  originalRunAt: number | null
-  preset: SchedulePreset
-  cron: string
-  timeOfDay: string
-  dayOfWeek: number
-  advancedCron: boolean
+  timing: ScheduleDraftTiming
   mode: TaskScheduleMode
   enabled: boolean
 }
