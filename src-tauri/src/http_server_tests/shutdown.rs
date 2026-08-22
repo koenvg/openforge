@@ -72,11 +72,12 @@ async fn coordinated_sidecar_shutdown_closes_the_companion_gateway_within_budget
 async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
     let (state, _path) = test_state("sidecar_runtime_shutdown_live_shell");
     let workspace = tempfile::tempdir().expect("workspace temp dir");
+    let task_id = format!("T-shutdown-{}", uuid::Uuid::new_v4());
     let pty_manager = state.pty_manager.as_ref().expect("PTY manager");
     pty_manager
         .spawn_shell_pty(
             crate::pty_manager::PtySpawnContext {
-                task_id: "T-shutdown",
+                task_id: &task_id,
                 cwd: workspace.path(),
                 cols: 80,
                 rows: 24,
@@ -90,7 +91,7 @@ async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
         .expect("shutdown test shell should spawn");
     assert_eq!(
         pty_manager.get_session_keys().await,
-        vec!["T-shutdown-shell-1".to_string()]
+        vec![format!("{task_id}-shell-1")]
     );
 
     shutdown_sidecar_runtime(&state, None).await;
