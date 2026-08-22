@@ -249,13 +249,14 @@ impl Database {
     }
 
     pub fn add_task_label(&self, task_id: &str, label_name: &str) -> TaskLabelResult<TaskLabelRow> {
-        let conn = self.lock_conn()?;
-        let project_id = require_task_project(&conn, task_id)?;
-        drop(conn);
-
-        let label = self.create_task_label(&project_id, label_name)?;
-        let conn = self.lock_conn()?;
-        let task_project = require_task_project(&conn, task_id)?;
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        let project_id = require_task_project(&tx, task_id)?;
+        let label = create_or_load_task_labels(&tx, &project_id, &[label_name])?
+            .into_iter()
+            .next()
+            .expect("one label name yields one label");
+        let task_project = require_task_project(&tx, task_id)?;
         if task_project != label.project_id {
             return Err(TaskLabelPersistenceError::CrossProjectAssignment {
                 task_id: task_id.to_string(),
@@ -263,14 +264,15 @@ impl Database {
             });
         }
         let now = super::current_unix_timestamp()?;
-        conn.execute(
+        tx.execute(
             "INSERT OR IGNORE INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![task_id, label.id, now],
         )?;
-        conn.execute(
+        tx.execute(
             "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
             rusqlite::params![now, task_id],
         )?;
+        tx.commit()?;
         Ok(label)
     }
 
@@ -582,6 +584,39 @@ mod tests {
             Err(TaskLabelPersistenceError::TaskNotFound(task_id))
                 if task_id == "T-missing"
         ));
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_add_task_label_rolls_back_new_label_when_assignment_fails() {
+        let (db, path) = make_test_db("add_task_label_assignment_failure");
+        let project = db
+            .create_project("A", "/tmp/add-label-assignment-failure")
+            .expect("create project");
+        let task = db
+            .create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        let conn = db.connection();
+        conn.lock()
+            .expect("lock database connection")
+            .execute_batch(
+                "CREATE TRIGGER fail_add_task_label_assignment
+                 BEFORE INSERT ON task_label_assignments
+                 BEGIN SELECT RAISE(ABORT, 'forced assignment failure'); END;",
+            )
+            .expect("create failure trigger");
+
+        assert!(matches!(
+            db.add_task_label(&task.id, "new"),
+            Err(TaskLabelPersistenceError::Storage(_))
+        ));
+        assert!(db
+            .get_project_task_labels(&project.id)
+            .expect("get project labels")
+            .is_empty());
+
+        drop(conn);
         drop(db);
         let _ = fs::remove_file(&path);
     }
