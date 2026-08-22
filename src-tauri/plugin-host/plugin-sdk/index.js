@@ -366,6 +366,11 @@ function createTestingCalls() {
 		taskStatusUpdates: [],
 		configWrites: [],
 		fsWrites: [],
+		fsUserDataReadDirs: [],
+		fsUserDataReads: [],
+		fsUserDataWrites: [],
+		fsExternalReadDirs: [],
+		fsExternalReads: [],
 		shellSpawns: [],
 		shellWrites: [],
 		shellResizes: [],
@@ -811,6 +816,38 @@ var TestingCommonApiFake = class {
 			}
 		};
 		return api;
+	}
+	createBackendApi() {
+		const api = this.createApi();
+		return {
+			...api,
+			fs: {
+				...api.fs,
+				userData: {
+					readDir: async (request = {}) => {
+						this.services.calls.fsUserDataReadDirs.push(request);
+						return [];
+					},
+					readTextFile: async (request) => {
+						this.services.calls.fsUserDataReads.push(request);
+						return "";
+					},
+					writeTextFile: async (request) => {
+						this.services.calls.fsUserDataWrites.push(request);
+					}
+				},
+				external: {
+					readDir: async (request) => {
+						this.services.calls.fsExternalReadDirs.push(request);
+						return [];
+					},
+					readTextFile: async (request) => {
+						this.services.calls.fsExternalReads.push(request);
+						return "";
+					}
+				}
+			}
+		};
 	}
 	getSnapshot() {
 		return {
@@ -1429,7 +1466,7 @@ var TestingOpenForgeRegistryFake = class {
 	createBackendApi() {
 		if (this.cachedBackendApi) return this.cachedBackendApi;
 		const api = {
-			...this.commonApi.createApi(),
+			...this.commonApi.createBackendApi(),
 			...this.backendServices.createApi(),
 			__testing: {
 				calls: this.calls,

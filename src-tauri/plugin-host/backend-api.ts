@@ -51,6 +51,9 @@ function objectCallbackParams(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
+function pluginFileCallbackParams(pluginId: string, request?: unknown): Record<string, unknown> {
+  return { ...objectCallbackParams(request), pluginId }
+}
 export type BackendApiRuntime = {
   hostCallbacks: HostCallbackHandler | null
   invokeCommand(input: InvokeBackendInput): Promise<unknown>
@@ -118,6 +121,15 @@ export function createBackendApi(
       readFile: async request => await hostCallback<FileContent>('openforge.fs.readFile', objectCallbackParams(request)),
       writeFile: async request => { await hostCallback<void>('openforge.fs.writeFile', objectCallbackParams(request)) },
       searchFiles: async request => await hostCallback<string[]>('openforge.fs.searchFiles', objectCallbackParams(request)),
+      userData: {
+        readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.userData.readDir', pluginFileCallbackParams(state.pluginId, request)),
+        readTextFile: async request => await hostCallback<string>('openforge.fs.userData.readTextFile', pluginFileCallbackParams(state.pluginId, request)),
+        writeTextFile: async request => { await hostCallback<void>('openforge.fs.userData.writeTextFile', pluginFileCallbackParams(state.pluginId, request)) },
+      },
+      external: {
+        readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.external.readDir', pluginFileCallbackParams(state.pluginId, request)),
+        readTextFile: async request => await hostCallback<string>('openforge.fs.external.readTextFile', pluginFileCallbackParams(state.pluginId, request)),
+      },
     },
     shell: {
       spawn: async request => await hostCallback<number>('openforge.shell.spawn', objectCallbackParams(request)),

@@ -8,6 +8,7 @@ import type {
   OpenForgeCommonAPI,
   PluginCommandInvocationContext,
 } from '@openforge-app/plugin-sdk'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import {
   assertHandler,
@@ -25,6 +26,7 @@ import type {
 } from './runtimeContributionTypes'
 
 export type RuntimeCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, 'navigation'>
+export type RuntimeBackendCommonApi = RuntimeCommonApi & Pick<BackendOpenForgeAPI, 'fs'>
 
 const globalCommands = new Map<string, RuntimeCommandContribution>()
 const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
@@ -174,6 +176,25 @@ export class RuntimeCommonApiRegistry {
     }
 
     return api
+  }
+
+  createBackendApi(): RuntimeBackendCommonApi {
+    const api = this.createApi()
+    return {
+      ...api,
+      fs: {
+        ...api.fs,
+        userData: {
+          readDir: async () => unavailableCapability('fs.userData.readDir'),
+          readTextFile: async () => unavailableCapability('fs.userData.readTextFile'),
+          writeTextFile: async () => unavailableCapability('fs.userData.writeTextFile'),
+        },
+        external: {
+          readDir: async () => unavailableCapability('fs.external.readDir'),
+          readTextFile: async () => unavailableCapability('fs.external.readTextFile'),
+        },
+      },
+    }
   }
 
   getSnapshot(): {

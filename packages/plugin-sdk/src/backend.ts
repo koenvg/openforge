@@ -1,4 +1,5 @@
 import type {
+  BackendFileSystemAPI,
   BackendMethodRegistration,
   BackendMethodRegistry,
   BackendOpenForgeAPI,
@@ -11,6 +12,13 @@ import type {
   CommandRegistration,
   CommandShortcutMetadata,
   Disposable,
+  ExternalReadDirectoryRequest,
+  ExternalReadFileRequest,
+  ExternalReadFileSystemAPI,
+  UserDataDirectoryRequest,
+  UserDataFileRequest,
+  UserDataFileSystemAPI,
+  UserDataFileWriteRequest,
   NavigationAPI,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
@@ -22,6 +30,7 @@ export function defineBackendPlugin<const TPlugin extends BackendPlugin>(plugin:
 }
 
 export type {
+  BackendFileSystemAPI,
   BackendMethodRegistration,
   BackendMethodRegistry,
   BackendOpenForgeAPI,
@@ -34,6 +43,13 @@ export type {
   CommandRegistration,
   CommandShortcutMetadata,
   Disposable,
+  ExternalReadDirectoryRequest,
+  ExternalReadFileRequest,
+  ExternalReadFileSystemAPI,
+  UserDataDirectoryRequest,
+  UserDataFileRequest,
+  UserDataFileSystemAPI,
+  UserDataFileWriteRequest,
   NavigationAPI,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
