@@ -228,16 +228,16 @@ Recording a new project-owned backlog **Task** from a prompt, without choosing h
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
 
 **Task Schedule**:
-A project-owned recurring rule that performs **Task Creation** from a prompt and may also request a new **Implementation Run** for the created **Task**.
+A project-owned one-off or recurring rule that performs **Task Creation** from a prompt and may also request a new **Implementation Run** for the created **Task**.
 _Avoid_: Cronjob, task reuse, implementation input schedule
 
 **Scheduled Fire**:
-One due occurrence of a **Task Schedule**, including an on-time occurrence while OpenForge is open or a single catch-up occurrence after OpenForge restarts.
+One due or manually requested occurrence of a **Task Schedule**. A due fire may happen at a one-off schedule's exact time, at a recurring schedule's cadence, or as a catch-up after OpenForge restarts.
 _Avoid_: Job run, background daemon run, reused task
 
 **Schedule Preset**:
-A simple user-facing cadence choice for a **Task Schedule**, such as daily, weekly, monthly, or custom cron.
-_Avoid_: Timezone policy, provider automation type, project selector
+A simple user-facing cadence choice for a recurring **Task Schedule**, such as daily, weekly, monthly, or custom cron.
+_Avoid_: One-off timestamp, timezone policy, provider automation type, project selector
 
 **Task Branch**:
 A PR-visible Git branch OpenForge creates for a **Task** workspace.
@@ -313,14 +313,16 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task Label** may be created while assigning labels to a **Task**; removing a label from one **Task** is separate from deleting the reusable **Task Label** from the project.
 - **Project Task Creation Settings** provide defaults for **Task Creation** while still allowing a specific new **Task** to override them before it is saved.
 - A **Task Schedule** creates a new normal board **Task** for each **Scheduled Fire** rather than mutating or reusing an existing **Task**.
-- A **Task Schedule** belongs to the active project context where it is configured; it is not selected globally from inside the schedule composer.
+- A **Task Schedule** has either one exact future fire time or a recurring cadence. Agent-facing scheduling commands support both kinds; the desktop composer provides recurring presets and custom five-field cron.
+- A **Task Schedule** belongs to one project. The desktop composer uses the active project, while agent-facing commands use their host-resolved project context and do not add a dependency on the invoking **Task**.
 - A **Task Schedule** may request an **Implementation Run** only after the scheduled **Task Creation** succeeds.
-- If multiple **Scheduled Fires** are missed while OpenForge is closed, they collapse into at most one catch-up **Scheduled Fire** after OpenForge restarts.
-- A **Task Schedule** skips a due **Scheduled Fire** when its previously created **Task** is still not done.
+- A one-off **Task Schedule** has one due **Scheduled Fire**. If OpenForge is closed at its fire time, it gets one catch-up fire after restart, then remains stored as a completed record.
+- If a recurring **Task Schedule** misses multiple **Scheduled Fires** while OpenForge is closed, they collapse into at most one catch-up fire after OpenForge restarts.
+- A recurring **Task Schedule** skips a due **Scheduled Fire** when its previously created **Task** is still not done.
 - A **Schedule Preset** may compile to simple five-field cron syntax for custom cadence without making cron syntax the primary user-facing path.
 - A **Task Schedule** uses plain prompt text rather than template variables, scripts, loops, conditionals, or starter prompt templates.
-- A **Task Schedule** can be manually fired for testing, using the same behavior and overlap rules as a due **Scheduled Fire**.
-- A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis.
+- A **Task Schedule** can be manually fired for testing, using the same behavior and overlap rules as a due **Scheduled Fire**. A completed or cancelled one-off schedule cannot fire again, and a manual fire that creates a **Task** consumes its one occurrence.
+- A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis. Completed and cancelled schedules remain records rather than being deleted.
 - **Scheduled Fires** do not create a separate automation inbox, auto-archive workflow, or scheduler-specific notification flow; resulting **Tasks** follow the normal OpenForge board and review lifecycle.
 - The normal board tab order is **Focus**, **In-Flight Tasks**, **Out of Focus**, then backlog, keeping started/current work together before not-started work.
 - **Focus** contains **Tasks** needing user attention now unless they are **Out of Focus**.
@@ -458,7 +460,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 
 ## Flagged ambiguities
 
-- "Cronjob" was used for scheduled task automation — resolved: use **Task Schedule** for the project-owned recurring rule; cron syntax can be a configuration format, not the domain term.
+- "Cronjob" was used for scheduled task automation. Use **Task Schedule** for the project-owned one-off or recurring rule; cron syntax configures recurring schedules but is not the domain term.
 - "Resume" was used to mean both reattaching a detached session and sending a new prompt to an active session — resolved: **Session Reattachment** means reconnect only, while **Implementation Input** is the prompt/message.
 - `agent` and `permissionMode` were considered for plugin **Task Creation** — resolved: task creation records work only; execution policy belongs to **Project Agent Settings**.
 - Task status was considered for plugin **Task Creation** — resolved: plugin-created tasks always enter the backlog.
