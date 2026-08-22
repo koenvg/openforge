@@ -431,7 +431,50 @@ Behavior and limits:
 
 ## Files, shell, notifications, and links
 
-- Use `openforge.fs` for project-scoped file reads/writes/searches.
+Project file methods are available to frontend and backend plugins:
+
+- `openforge.fs.readDir(...)`, `readFile(...)`, `writeFile(...)`, and `searchFiles(...)` stay inside the requested OpenForge Project.
+
+Backend plugins also receive two user-scoped file APIs under the same `fs` capability:
+
+- `openforge.fs.userData` reads and writes files in a host-owned directory namespaced by plugin id. Paths are relative to that directory. Use this for durable plugin files that do not fit JSON `storage`, such as telemetry logs or cached indexes.
+- `openforge.fs.external` reads from an absolute root chosen by the plugin or user. Every call includes the root, and the nested `path` remains relative to it. This API has `readDir(...)` and `readTextFile(...)`, but no write method.
+
+```ts
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+const piSessionsRoot = join(homedir(), '.pi', 'agent', 'sessions')
+const years = await openforge.fs.external.readDir({ root: piSessionsRoot })
+const session = await openforge.fs.external.readTextFile({
+  root: piSessionsRoot,
+  path: '2026/session.jsonl'
+})
+
+await openforge.fs.userData.writeTextFile({
+  path: 'telemetry/usage.json',
+  content: JSON.stringify({ sessionCount: years.length })
+})
+```
+
+The host creates parent directories for `userData.writeTextFile(...)`. `readTextFile(...)` returns the complete UTF-8 file rather than the Project preview format or its 1 MiB text limit; invalid UTF-8 fails the call. The host canonicalizes roots and existing read targets, rejects absolute child paths, relative external roots, `..` traversal, symlink traversal outside the selected root, and writes through a symlink target. It does not expand `~`.
+
+This is a scope boundary, not an installation permission prompt. Trusted Plugins are not sandboxed, and `package.json#openforge.requires` remains declarative. The user-data directory persists when a plugin is disabled or uninstalled so an update or reinstall can recover its state.
+
+### Migrating backend plugins from `node:fs`
+
+Backend entries run as trusted Node code, so Node built-ins and npm dependencies are available. Direct `node:fs` calls still bypass OpenForge's namespacing, root checks, testing fakes, and future host portability. They are not the supported integration contract for user data or user-selected external files.
+
+Migrate direct filesystem code as follows:
+
+1. Replace writes to a plugin-created directory under the home directory with `openforge.fs.userData.writeTextFile(...)`. Store a relative path, not an absolute home path.
+2. Replace reads from a configured directory such as `~/.pi/agent/sessions` with `openforge.fs.external.readDir(...)` and `readTextFile(...)`. Resolve the absolute root once with `node:os` and `node:path`, then pass relative child paths to the API.
+3. Keep `node:fs` only when a Node dependency or package-local implementation detail requires it. Do not use it to access OpenForge app data, Project files, or another plugin's user-data directory.
+
+Frontend plugins cannot use `fs.userData`, `fs.external`, or `node:fs`. Put this work in the backend entry and expose only the needed result through a backend method.
+
+Other host-mediated capabilities in this area:
+
 - Use `openforge.shell` for task terminal sessions keyed by `{ taskId, terminalIndex }`.
 - Use `openforge.notifications.notify(...)` for host-mediated user notifications.
 - Use `openforge.system.openUrl(url)` for links that must always open externally.
@@ -445,7 +488,7 @@ The current SDK does not expose:
 - arbitrary provider/model/permission overrides for Implementation Runs
 - raw Electron, preload, Rust sidecar, SQLite, or app-store access
 - direct OpenForge CLI execution as a plugin integration contract
-- unscoped file-system access outside host-provided project file APIs
+- unscoped filesystem APIs in frontend plugins or host-mediated writes outside Project and plugin user-data roots
 - frontend registration APIs from backend plugins
 - backend method/background registration APIs from frontend plugins
 - sandbox isolation for untrusted third-party code
@@ -474,7 +517,7 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs` and `fsExternalReads`.
 
 ## Authoring checklist
 

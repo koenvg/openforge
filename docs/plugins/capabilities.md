@@ -48,7 +48,7 @@ These capabilities are exposed through `OpenForgeCommonAPI`, so plugin code can 
 | `context` | `openforge.context` | Read the current plugin/project/task context snapshot. |
 | `tasks` | `openforge.tasks` | List/get/create tasks, update task summaries/statuses, configure start-prompt contributions, start implementation runs, and inspect task workspace/session state. |
 | `projects` | `openforge.projects` | List projects or get a project by id. |
-| `fs` | `openforge.fs` | Read directories/files, write files, and search files within an OpenForge project workspace. |
+| `fs` | `openforge.fs` | Read directories/files, write files, and search files within an OpenForge Project. Backend entries also receive the user-scoped APIs documented below. |
 | `shell` | `openforge.shell` | Spawn, write, resize, kill, and read buffers for task shell sessions. |
 | `notifications` | `openforge.notifications` | Ask OpenForge to show user-facing notifications. |
 | `attention` | `openforge.attention` | Read project attention signals. |
@@ -77,6 +77,8 @@ Backend plugins are loaded with `defineBackendPlugin(...)` in the trusted shared
 | Capability | API area | What it means |
 | --- | --- | --- |
 | `background` | `openforge.background` | Register background services with `global`, `project`, or `task` scope. OpenForge starts newly registered services after backend activation. |
+| `fs` | `openforge.fs.userData` | Read directories and complete UTF-8 files, and write UTF-8 files at relative paths in the host-owned user-data directory for the calling plugin. Parent directories are created for writes. |
+| `fs` | `openforge.fs.external` | Read directories and complete UTF-8 files at relative paths under an absolute external root supplied on each call. The host rejects relative roots and traversal outside the canonical root. This API cannot write external files. |
 
 ### Frontend/backend bridge capability
 
@@ -108,5 +110,7 @@ Unavailable or non-goal APIs include:
 - Provider/model/permission-mode/branch/worktree control for Implementation Runs. Use `openforge.tasks.startImplementation()` and let OpenForge own the native task workflow.
 - A sandbox or OS-level permission system. Plugins are Trusted Plugins; `requires` documents intent and supports validation/review, but it is not currently an enforcement mechanism.
 - Arbitrary filesystem, process, network, or environment access through the frontend SDK. Use documented project file, shell, backend, notification, system URL, and config APIs.
+
+Trusted backend entries run in Node and may load Node built-ins, but direct `node:fs` access is not the host filesystem contract. Use `fs.userData` for plugin-owned durable files and `fs.external` for configured read roots so namespacing, traversal checks, testing fakes, and host portability remain intact. See [OpenForge plugin authoring](../plugin-authoring.md#migrating-backend-plugins-from-nodefs) for migration guidance.
 
 If a needed integration is not represented by `OpenForgePluginCapability` and an SDK API type, file a platform request instead of reaching into internals.
