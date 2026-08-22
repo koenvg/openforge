@@ -47,7 +47,7 @@ interface FileContentSource {
 
 function createFileContentSource(
   options: SelfReviewFileContentLoaderOptions,
-  context: SelfReviewFileContentContext,
+  context: SelfReviewContext,
 ): FileContentSource {
   const { selectedCommitSha } = context
   if (selectedCommitSha !== null) {
@@ -111,13 +111,22 @@ export function createSelfReviewFileContentLoader(
   }
 
   async function fetchCurrentBatch(files: PrFileDiff[]): Promise<Map<string, FileContents>> {
-    const source = createFileContentSource(options, options.getContext())
+    const context = options.getContext()
+    const source = createFileContentSource(options, context)
     const requests: FileContentRequest[] = files.map((file) => ({
       path: file.filename,
       oldPath: file.previous_filename ?? null,
       status: file.status,
     }))
+    const batchSource = context.selectedCommitSha !== null
+      ? 'getCommitBatchFileContents'
+      : 'getTaskBatchFileContents'
     const results = await source.fetchBatch(requests)
+    if (results.length !== requests.length) {
+      throw new Error(
+        `${batchSource} response count mismatch: requestCount=${requests.length}, resultCount=${results.length}`,
+      )
+    }
 
     return new Map(files.map((file, index) => {
       const [oldContent, newContent] = results[index]!
