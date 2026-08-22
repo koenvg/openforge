@@ -6,6 +6,7 @@ import type { Project } from '../../lib/types'
 
 vi.mock('../../lib/ipc', () => ({
   createProject: vi.fn(),
+  getConfig: vi.fn().mockResolvedValue(null),
   selectDirectory: vi.fn(),
 }))
 
