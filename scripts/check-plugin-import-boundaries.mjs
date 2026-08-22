@@ -3,76 +3,37 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
-import { OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS } from '../packages/plugin-sdk/src/publicUiExports.mjs'
 
 const DEFAULT_PLUGIN_SOURCE_ROOT = 'plugins'
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.svelte'])
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'target', '.svelte-kit', 'coverage'])
-const FALLBACK_OPENFORGE_PACKAGE_EXPORTS = new Map([
-  [
-    '@openforge-app/plugin-sdk',
-    new Set([
-      '',
-      '/frontend',
-      '/backend',
-      '/testing',
-      '/vite',
-      '/package-metadata-schema.json',
-      '/domain',
-      '/prStatusPresentation',
-      '/projectFileTree',
-      '/markdown',
-      '/numberParsing',
-      '/sanitize',
-      '/pluginIcons',
-      ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ packageSubpath }) => packageSubpath.slice(1)),
-    ]),
-  ],
-  [
-    '@openforge-app/terminal-runtime',
-    new Set([
-      '',
-      '/terminalRuntime',
-      '/terminalOptions',
-      '/theme',
-      '/shortcuts',
-      '/shortcutController',
-      '/TerminalTabsShell',
-      '/xterm.css',
-    ]),
-  ],
-  [
-    '@openforge-app/pr-review-ui',
-    new Set([
-      '/AuthoredPrCard.svelte',
-      '/ReviewPrCard.svelte',
-      '/PrStatusChip.svelte',
-      '/FileTree.svelte',
-      '/ReviewSubmitPanel.svelte',
-      '/PrOverviewTab.svelte',
-      '/DiffViewer.svelte',
-      '/NonApplicationFilesToggle.svelte',
-      '/applicationFiles',
-      '/diffAdapter',
-      '/diffComments',
-      '/diffHighlightConfig',
-      '/diffHighlighter',
-      '/diffSearch',
-      '/diffWorker',
-      '/fileSort',
-      '/useDiffSearch.svelte',
-      '/useDiffWorker.svelte',
-      '/useFileContentsFetcher.svelte',
-      '/useVirtualizer.svelte',
-      '/fileStatus',
-      '/githubMarkdown',
-      '/prSort',
-      '/prStatusPresentation',
-      '/reviewFileIdentity',
-      '/timeAgo',
-    ]),
-  ],
+export const PLUGIN_IMPORT_PACKAGE_MANIFEST_PATHS = Object.freeze([
+  'packages/plugin-sdk/package.json',
+  'packages/terminal-runtime/package.json',
+  'packages/pr-review-ui/package.json',
 ])
+
+function readDocumentedPackageExports(workspaceRoot, manifestPath) {
+  const absoluteManifestPath = path.join(workspaceRoot, manifestPath)
+  const manifest = JSON.parse(readFileSync(absoluteManifestPath, 'utf8'))
+
+  if (typeof manifest.name !== 'string' || !manifest.exports || typeof manifest.exports !== 'object') {
+    throw new Error(`${absoluteManifestPath} must declare a package name and exports object`)
+  }
+
+  const documentedExports = Object.entries(manifest.exports)
+    .filter(([subpath]) => subpath === '.' || subpath.startsWith('./'))
+    .map(([subpath, target]) => [subpath.slice(1), target])
+
+  return [manifest.name, new Map(documentedExports)]
+}
+
+function readAllowedOpenForgePackageExports(workspaceRoot) {
+  return new Map(
+    PLUGIN_IMPORT_PACKAGE_MANIFEST_PATHS.map((manifestPath) =>
+      readDocumentedPackageExports(workspaceRoot, manifestPath)),
+  )
+}
 
 const APP_PRIVATE_SOURCE_MESSAGE =
   'Plugins must not import app-private source under src/**; use documented SDK or host-shared package exports instead.'
@@ -104,19 +65,44 @@ function getOpenForgePackageName(importPath) {
   return `${parts[0]}/${parts[1]}`
 }
 
-function getAllowedOpenForgePackageSubpaths(packageName) {
-  return FALLBACK_OPENFORGE_PACKAGE_EXPORTS.get(packageName)
+function isDocumentedPackageSubpath(subpath, documentedExports) {
+  if (documentedExports.has(subpath)) return documentedExports.get(subpath) !== null
+
+  let bestMatch = null
+  for (const [documentedSubpath, target] of documentedExports) {
+    const wildcardIndex = documentedSubpath.indexOf('*')
+    if (wildcardIndex === -1) continue
+
+    const prefix = documentedSubpath.slice(0, wildcardIndex)
+    const suffix = documentedSubpath.slice(wildcardIndex + 1)
+    const matches = subpath.length >= prefix.length + suffix.length
+      && subpath.startsWith(prefix)
+      && subpath.endsWith(suffix)
+    if (!matches) continue
+
+    if (!bestMatch
+      || prefix.length > bestMatch.prefixLength
+      || (prefix.length === bestMatch.prefixLength && documentedSubpath.length > bestMatch.subpathLength)) {
+      bestMatch = {
+        prefixLength: prefix.length,
+        subpathLength: documentedSubpath.length,
+        target,
+      }
+    }
+  }
+
+  return bestMatch !== null && bestMatch.target !== null
 }
 
-function getOpenForgeImportMessage(importPath) {
+function getOpenForgeImportMessage(importPath, allowedOpenForgePackageExports) {
   const packageName = getOpenForgePackageName(importPath)
   if (!packageName) return null
 
-  const allowedSubpaths = getAllowedOpenForgePackageSubpaths(packageName)
+  const allowedSubpaths = allowedOpenForgePackageExports.get(packageName)
   if (!allowedSubpaths) return PRIVATE_OPENFORGE_PACKAGE_MESSAGE
 
   const subpath = importPath.slice(packageName.length)
-  if (allowedSubpaths.has(subpath)) return null
+  if (isDocumentedPackageSubpath(subpath, allowedSubpaths)) return null
 
   return `Plugins may only import documented exports from ${packageName}.`
 }
@@ -209,12 +195,12 @@ function isBarePackageSourceImport(importPath) {
   return parts[0] === 'packages' && parts.length >= 3 && parts[2] === 'src'
 }
 
-function getViolationMessage({ importPath, filePath, repoRoot }) {
+function getViolationMessage({ importPath, filePath, repoRoot, allowedOpenForgePackageExports }) {
   if (isBareAppPrivateSourceImport(importPath)) return APP_PRIVATE_SOURCE_MESSAGE
   if (isBareRustSidecarSourceImport(importPath)) return RUST_SIDECAR_SOURCE_MESSAGE
   if (isBarePackageSourceImport(importPath)) return PACKAGE_SOURCE_MESSAGE
 
-  const openForgeImportMessage = getOpenForgeImportMessage(importPath)
+  const openForgeImportMessage = getOpenForgeImportMessage(importPath, allowedOpenForgePackageExports)
   if (openForgeImportMessage) return openForgeImportMessage
 
   const targetPath = resolveRelativeImport(filePath, importPath)
@@ -258,6 +244,7 @@ export function collectPluginSourceFiles(repoRoot) {
 
 export function findPluginImportBoundaryViolations({ files, repoRoot }) {
   const normalizedRepoRoot = path.resolve(repoRoot)
+  const allowedOpenForgePackageExports = readAllowedOpenForgePackageExports(normalizedRepoRoot)
   const violations = []
 
   for (const [filePath, source] of files.entries()) {
@@ -269,6 +256,7 @@ export function findPluginImportBoundaryViolations({ files, repoRoot }) {
         importPath: specifier.importPath,
         filePath: normalizedFilePath,
         repoRoot: normalizedRepoRoot,
+        allowedOpenForgePackageExports,
       })
       if (!message) continue
 
