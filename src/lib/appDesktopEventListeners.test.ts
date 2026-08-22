@@ -116,6 +116,22 @@ describe('registerAppDesktopEventListeners', () => {
     expect(unlisteners).toEqual([closeUnlistener, ...eventUnlisteners])
   })
 
+  it('rolls back registered listeners when a later registration fails and preserves the error', async () => {
+    const { deps, closeUnlistener, listen } = createHarness()
+    const precedingUnlisteners: DesktopUnlistenFn[] = [vi.fn(), vi.fn()]
+    const registrationError = new Error('desktop event registration failed')
+    listen
+      .mockResolvedValueOnce(precedingUnlisteners[0])
+      .mockResolvedValueOnce(precedingUnlisteners[1])
+      .mockRejectedValueOnce(registrationError)
+
+    await expect(registerAppDesktopEventListeners(deps)).rejects.toBe(registrationError)
+
+    expect(closeUnlistener).toHaveBeenCalledOnce()
+    expect(precedingUnlisteners[0]).toHaveBeenCalledOnce()
+    expect(precedingUnlisteners[1]).toHaveBeenCalledOnce()
+  })
+
   it('marks action-complete sessions completed and clears checkpoint notification', async () => {
     const { deps, handlers } = createHarness()
     activeSessions.set(new Map([['task-1', createSession()]]))

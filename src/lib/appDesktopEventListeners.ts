@@ -53,9 +53,21 @@ export async function registerAppDesktopEventListeners(
     taskSessionListeners.taskChanged,
   ]
 
-  const unlisteners = [await deps.appWindow.onCloseRequested(deps.onCloseRequested)]
-  for (const registration of eventListenerRegistrations) {
-    unlisteners.push(await registration.register(listen))
+  const unlisteners: DesktopUnlistenFn[] = []
+  try {
+    unlisteners.push(await deps.appWindow.onCloseRequested(deps.onCloseRequested))
+    for (const registration of eventListenerRegistrations) {
+      unlisteners.push(await registration.register(listen))
+    }
+  } catch (registrationError) {
+    for (const unlisten of unlisteners.reverse()) {
+      try {
+        unlisten()
+      } catch {
+        // Preserve the registration error while attempting the rest of the rollback.
+      }
+    }
+    throw registrationError
   }
 
   return unlisteners
