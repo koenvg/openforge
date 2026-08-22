@@ -1,4 +1,7 @@
-use super::callbacks::{optional_param_string, optional_param_usize, required_param_string};
+use super::callbacks::{
+    optional_param_string, optional_param_usize, required_param_string,
+    required_param_string_allow_empty,
+};
 use super::PluginHost;
 use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
@@ -49,7 +52,7 @@ impl PluginHost {
     ) -> Result<Value, String> {
         let project_id = required_param_string(params, "projectId")?;
         let path = required_param_string(params, "path")?;
-        let content = required_param_string(params, "content")?;
+        let content = required_param_string_allow_empty(params, "content")?;
         let project_root = self.project_root_for_host(&project_id)?;
         crate::project_fs::write_file(&project_root, &path, &content)
             .await
@@ -87,7 +90,7 @@ impl PluginHost {
         params: &Value,
     ) -> Result<Value, String> {
         let path = required_param_string(params, "path")?;
-        let content = required_param_string(params, "content")?;
+        let content = required_param_string_allow_empty(params, "content")?;
         let root = self.plugin_user_data_root_for_host(params).await?;
         crate::project_fs::write_file(&root, &path, &content)
             .await

@@ -80,6 +80,19 @@ pub(super) fn required_param_string(params: &Value, key: &str) -> Result<String,
         .ok_or_else(|| format!("plugin host callback missing string param: {key}"))
 }
 
+pub(super) fn required_param_string_allow_empty(
+    params: &Value,
+    key: &str,
+) -> Result<String, String> {
+    match params.get(key) {
+        None => Err(format!("plugin host callback missing string param: {key}")),
+        Some(Value::String(value)) => Ok(value.clone()),
+        Some(_) => Err(format!(
+            "plugin host callback param must be a string: {key}"
+        )),
+    }
+}
+
 pub(super) fn optional_param_string(params: &Value, key: &str) -> Result<Option<String>, String> {
     match params.get(key) {
         None | Some(Value::Null) => Ok(None),
