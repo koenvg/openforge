@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import { vi } from 'vitest'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
 import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleBase, TaskScheduleTiming } from '../lib/types'
@@ -80,6 +81,55 @@ export function renderView(props: { projectId?: string | null; projectName?: str
       projectName: props.projectName ?? 'Project One',
     },
   })
+}
+
+type ProjectSchedules = TaskSchedule[] | Promise<TaskSchedule[]>
+
+type ProjectSwitchOptions = {
+  projectASchedules?: ProjectSchedules
+  projectBSchedules?: ProjectSchedules
+  backendResponses?: Record<string, unknown>
+}
+
+export const projectA = {
+  id: 'project-a',
+  name: 'Project A',
+  scheduleTitle: 'Project A schedule',
+} as const
+
+export const projectB = {
+  id: 'project-b',
+  name: 'Project B',
+  scheduleTitle: 'Project B schedule',
+} as const
+
+export function renderProjectSwitchView(options: ProjectSwitchOptions = {}) {
+  const projectASchedules = options.projectASchedules ?? [makeSchedule({ title: projectA.scheduleTitle })]
+  const projectBSchedules = options.projectBSchedules ?? [makeSchedule({ id: 'schedule-b', title: projectB.scheduleTitle })]
+  const backendResponses = options.backendResponses ?? {}
+  invoke.mockImplementation((method: string, payload?: Record<string, unknown>) => {
+    if (method === 'listSchedules') {
+      return Promise.resolve(payload?.projectId === projectB.id ? projectBSchedules : projectASchedules)
+    }
+    if (Object.hasOwn(backendResponses, method)) return backendResponses[method]
+    throw new Error(`Unexpected backend method: ${method}`)
+  })
+
+  const view = renderView({ projectId: projectA.id, projectName: projectA.name })
+  return {
+    ...view,
+    switchToProjectB: () => view.rerender({ projectId: projectB.id, projectName: projectB.name }),
+  }
+}
+
+export async function settleAsyncWork(completion: Promise<unknown>) {
+  await completion
+  await tick()
+}
+
+export async function settleRejectedAsyncWork(completion: Promise<unknown>) {
+  await completion.catch(() => undefined)
+  await tick()
 }
 
 export function mockBackend(initialSchedules: TaskSchedule[]) {
