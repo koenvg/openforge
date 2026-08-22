@@ -45,6 +45,9 @@ pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]
 pub use tasks::TaskWorktreeOptions;
+// This is part of the Database API even though production callers currently only format it.
+#[allow(unused_imports)]
+pub use tasks::TaskDependencyPersistenceError;
 pub use tasks::{
     CompactTaskRow, CompleteTaskWriteOutcome, NewTaskOptions, TaskCreationError,
     TaskInitialPromptUpdateError, TaskRow,

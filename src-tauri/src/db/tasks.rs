@@ -42,18 +42,95 @@ impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
 }
 
 #[derive(Debug)]
+pub enum TaskDependencyPersistenceError {
+    SelfDependency(String),
+    TaskNotFound(String),
+    DependencyNotFound(String),
+    CrossProject {
+        task_id: String,
+        dependency_id: String,
+    },
+    Cycle {
+        task_id: String,
+        dependency_id: String,
+    },
+    ChainTooShort,
+    Storage(rusqlite::Error),
+}
+
+impl TaskDependencyPersistenceError {
+    fn into_database_error(self) -> rusqlite::Error {
+        match self {
+            Self::Storage(error) => error,
+            domain_error => rusqlite::Error::ToSqlConversionFailure(Box::new(domain_error)),
+        }
+    }
+}
+
+impl fmt::Display for TaskDependencyPersistenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SelfDependency(_) => formatter.write_str("task cannot depend on itself"),
+            Self::TaskNotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
+            Self::DependencyNotFound(dependency_id) => {
+                write!(formatter, "dependency task {dependency_id} does not exist")
+            }
+            Self::CrossProject {
+                task_id,
+                dependency_id,
+            } => write!(
+                formatter,
+                "dependency task {dependency_id} must belong to the same project as {task_id}"
+            ),
+            Self::Cycle {
+                task_id,
+                dependency_id,
+            } => write!(
+                formatter,
+                "dependency task {dependency_id} would create a cycle with {task_id}"
+            ),
+            Self::ChainTooShort => {
+                formatter.write_str("task chain must contain at least two task ids")
+            }
+            Self::Storage(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for TaskDependencyPersistenceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Storage(error) => Some(error),
+            Self::SelfDependency(_)
+            | Self::TaskNotFound(_)
+            | Self::DependencyNotFound(_)
+            | Self::CrossProject { .. }
+            | Self::Cycle { .. }
+            | Self::ChainTooShort => None,
+        }
+    }
+}
+
+impl From<rusqlite::Error> for TaskDependencyPersistenceError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Storage(error)
+    }
+}
+
+type TaskDependencyResult<T> = std::result::Result<T, TaskDependencyPersistenceError>;
+
+#[derive(Debug)]
 pub enum TaskCreationError {
     Storage(rusqlite::Error),
-    Dependencies(rusqlite::Error),
+    Dependencies(TaskDependencyPersistenceError),
     Labels(TaskLabelPersistenceError),
 }
 
 impl TaskCreationError {
-    fn dependencies(error: rusqlite::Error) -> Self {
-        if matches!(&error, rusqlite::Error::InvalidParameterName(_)) {
-            Self::Dependencies(error)
-        } else {
-            Self::Storage(error)
+    fn dependencies(error: TaskDependencyPersistenceError) -> Self {
+        match error {
+            TaskDependencyPersistenceError::Storage(error) => Self::Storage(error),
+            domain_error => Self::Dependencies(domain_error),
         }
     }
 
@@ -66,7 +143,8 @@ impl TaskCreationError {
 
     fn into_database_error(self) -> rusqlite::Error {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) => error,
+            Self::Storage(error) => error,
+            Self::Dependencies(error) => error.into_database_error(),
             Self::Labels(error) => error.into_database_error(),
         }
     }
@@ -75,7 +153,8 @@ impl TaskCreationError {
 impl fmt::Display for TaskCreationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) => error.fmt(formatter),
+            Self::Storage(error) => error.fmt(formatter),
+            Self::Dependencies(error) => error.fmt(formatter),
             Self::Labels(error) => error.fmt(formatter),
         }
     }
@@ -84,7 +163,8 @@ impl fmt::Display for TaskCreationError {
 impl std::error::Error for TaskCreationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Storage(error) | Self::Dependencies(error) => Some(error),
+            Self::Storage(error) => Some(error),
+            Self::Dependencies(error) => Some(error),
             Self::Labels(error) => Some(error),
         }
     }
@@ -197,7 +277,7 @@ fn persist_new_task_dependencies(
     task_id: &str,
     dependency_ids: &[String],
     now: i64,
-) -> Result<Vec<String>> {
+) -> TaskDependencyResult<Vec<String>> {
     let dependency_ids = dedupe_dependency_ids(dependency_ids);
     for dependency_id in &dependency_ids {
         validate_dependency(conn, task_id, dependency_id)?;
@@ -255,32 +335,31 @@ fn validate_dependency(
     conn: &rusqlite::Connection,
     task_id: &str,
     depends_on_task_id: &str,
-) -> Result<()> {
+) -> TaskDependencyResult<()> {
     if task_id == depends_on_task_id {
-        return Err(rusqlite::Error::InvalidParameterName(
-            "task cannot depend on itself".to_string(),
+        return Err(TaskDependencyPersistenceError::SelfDependency(
+            task_id.to_string(),
         ));
     }
 
-    let task_project = task_project_id(conn, task_id)?.ok_or_else(|| {
-        rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
-    })?;
+    let task_project = task_project_id(conn, task_id)?
+        .ok_or_else(|| TaskDependencyPersistenceError::TaskNotFound(task_id.to_string()))?;
     let dependency_project = task_project_id(conn, depends_on_task_id)?.ok_or_else(|| {
-        rusqlite::Error::InvalidParameterName(format!(
-            "dependency task {depends_on_task_id} does not exist"
-        ))
+        TaskDependencyPersistenceError::DependencyNotFound(depends_on_task_id.to_string())
     })?;
 
     if task_project != dependency_project {
-        return Err(rusqlite::Error::InvalidParameterName(format!(
-            "dependency task {depends_on_task_id} must belong to the same project as {task_id}"
-        )));
+        return Err(TaskDependencyPersistenceError::CrossProject {
+            task_id: task_id.to_string(),
+            dependency_id: depends_on_task_id.to_string(),
+        });
     }
 
     if dependency_path_exists(conn, depends_on_task_id, task_id)? {
-        return Err(rusqlite::Error::InvalidParameterName(format!(
-            "dependency task {depends_on_task_id} would create a cycle with {task_id}"
-        )));
+        return Err(TaskDependencyPersistenceError::Cycle {
+            task_id: task_id.to_string(),
+            dependency_id: depends_on_task_id.to_string(),
+        });
     }
 
     Ok(())
@@ -877,7 +956,11 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn add_task_dependency(&self, task_id: &str, depends_on_task_id: &str) -> Result<()> {
+    pub fn add_task_dependency(
+        &self,
+        task_id: &str,
+        depends_on_task_id: &str,
+    ) -> TaskDependencyResult<()> {
         let conn = self.lock_conn()?;
         validate_dependency(&conn, task_id, depends_on_task_id)?;
         let now = super::current_unix_timestamp()?;
@@ -892,11 +975,14 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn set_task_dependencies(&self, task_id: &str, dependency_ids: &[String]) -> Result<()> {
+    pub fn set_task_dependencies(
+        &self,
+        task_id: &str,
+        dependency_ids: &[String],
+    ) -> TaskDependencyResult<()> {
         let mut conn = self.lock_conn()?;
-        task_project_id(&conn, task_id)?.ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
-        })?;
+        task_project_id(&conn, task_id)?
+            .ok_or_else(|| TaskDependencyPersistenceError::TaskNotFound(task_id.to_string()))?;
         let dependency_ids = dedupe_dependency_ids(dependency_ids);
         for dependency_id in &dependency_ids {
             validate_dependency(&conn, task_id, dependency_id)?;
@@ -921,11 +1007,12 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn link_task_chain(&self, task_ids: &[String]) -> Result<Vec<(String, String)>> {
+    pub fn link_task_chain(
+        &self,
+        task_ids: &[String],
+    ) -> TaskDependencyResult<Vec<(String, String)>> {
         if task_ids.len() < 2 {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "task chain must contain at least two task ids".to_string(),
-            ));
+            return Err(TaskDependencyPersistenceError::ChainTooShort);
         }
 
         let mut conn = self.lock_conn()?;
@@ -1125,7 +1212,7 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::test_helpers::*;
+    use crate::db::{test_helpers::*, TaskDependencyPersistenceError};
     use std::{
         fs,
         sync::{Arc, Barrier},
@@ -1859,21 +1946,91 @@ mod tests {
     }
 
     #[test]
-    fn test_task_dependency_validation_rejects_self_unknown_and_cross_project() {
-        let (db, path) = make_test_db("task_dependency_validation");
+    fn test_task_dependency_error_identifies_self_dependency() {
+        let (db, path) = make_test_db("task_dependency_self");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let task = db
+            .create_task("Task", "backlog", None, None, None)
+            .expect("create task");
+
+        let error = db
+            .add_task_dependency(&task.id, &task.id)
+            .expect_err("self-dependency should fail");
+        assert_eq!(error.to_string(), "task cannot depend on itself");
+
+        assert!(matches!(
+            error,
+            TaskDependencyPersistenceError::SelfDependency(task_id) if task_id == task.id
+        ));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependency_error_identifies_missing_tasks() {
+        let (db, path) = make_test_db("task_dependency_missing_tasks");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let task = db
+            .create_task("Task", "backlog", None, None, None)
+            .expect("create task");
+
+        let missing_task = db
+            .add_task_dependency("T-404", &task.id)
+            .expect_err("missing task should fail");
+        assert_eq!(missing_task.to_string(), "task T-404 does not exist");
+        assert!(matches!(
+            missing_task,
+            TaskDependencyPersistenceError::TaskNotFound(task_id) if task_id == "T-404"
+        ));
+
+        let missing_dependency = db
+            .add_task_dependency(&task.id, "T-404")
+            .expect_err("missing dependency should fail");
+        assert_eq!(
+            missing_dependency.to_string(),
+            "dependency task T-404 does not exist"
+        );
+        assert!(matches!(
+            missing_dependency,
+            TaskDependencyPersistenceError::DependencyNotFound(task_id) if task_id == "T-404"
+        ));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependency_error_identifies_cross_project_dependency() {
+        let (db, path) = make_test_db("task_dependency_cross_project");
         db.set_config("task_id_prefix", "T").unwrap();
         let project_a = db.create_project("A", "/tmp/a").expect("create project a");
         let project_b = db.create_project("B", "/tmp/b").expect("create project b");
-        let first = db
-            .create_task("First", "backlog", Some(&project_a.id), None, None)
-            .expect("create first");
-        let second = db
-            .create_task("Second", "backlog", Some(&project_b.id), None, None)
-            .expect("create second");
+        let task = db
+            .create_task("Task", "backlog", Some(&project_a.id), None, None)
+            .expect("create task");
+        let dependency = db
+            .create_task("Dependency", "backlog", Some(&project_b.id), None, None)
+            .expect("create dependency");
 
-        assert!(db.add_task_dependency(&first.id, &first.id).is_err());
-        assert!(db.add_task_dependency(&first.id, "T-999").is_err());
-        assert!(db.add_task_dependency(&first.id, &second.id).is_err());
+        let error = db
+            .add_task_dependency(&task.id, &dependency.id)
+            .expect_err("cross-project dependency should fail");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "dependency task {} must belong to the same project as {}",
+                dependency.id, task.id
+            )
+        );
+
+        assert!(matches!(
+            error,
+            TaskDependencyPersistenceError::CrossProject {
+                task_id,
+                dependency_id,
+            } if task_id == task.id && dependency_id == dependency.id
+        ));
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -1883,14 +2040,20 @@ mod tests {
     fn test_set_task_dependencies_rejects_unknown_task_even_when_empty() {
         let (db, path) = make_test_db("task_dependency_unknown_empty");
 
-        assert!(db.set_task_dependencies("T-404", &[]).is_err());
+        let error = db
+            .set_task_dependencies("T-404", &[])
+            .expect_err("missing task should fail");
+        assert!(matches!(
+            error,
+            TaskDependencyPersistenceError::TaskNotFound(task_id) if task_id == "T-404"
+        ));
 
         drop(db);
         let _ = fs::remove_file(&path);
     }
 
     #[test]
-    fn test_task_dependency_validation_rejects_cycles() {
+    fn test_task_dependency_error_identifies_cycles() {
         let (db, path) = make_test_db("task_dependency_cycles");
         db.set_config("task_id_prefix", "T").unwrap();
         let first = db
@@ -1908,10 +2071,34 @@ mod tests {
         db.add_task_dependency(&third.id, &second.id)
             .expect("third depends on second");
 
-        assert!(db.add_task_dependency(&first.id, &third.id).is_err());
-        assert!(db
+        let add_error = db
+            .add_task_dependency(&first.id, &third.id)
+            .expect_err("cycle should fail");
+        assert_eq!(
+            add_error.to_string(),
+            format!(
+                "dependency task {} would create a cycle with {}",
+                third.id, first.id
+            )
+        );
+        assert!(matches!(
+            add_error,
+            TaskDependencyPersistenceError::Cycle {
+                task_id,
+                dependency_id,
+            } if task_id == first.id && dependency_id == third.id
+        ));
+
+        let set_error = db
             .set_task_dependencies(&first.id, std::slice::from_ref(&third.id))
-            .is_err());
+            .expect_err("cycle should fail");
+        assert!(matches!(
+            set_error,
+            TaskDependencyPersistenceError::Cycle {
+                task_id,
+                dependency_id,
+            } if task_id == first.id && dependency_id == third.id
+        ));
 
         drop(db);
         let _ = fs::remove_file(&path);
