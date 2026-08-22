@@ -93,6 +93,29 @@ async fn host_filesystem_callbacks_route_to_project_services() {
         std::fs::read_to_string(project_dir.path().join("generated.txt")).expect("generated"),
         "hello"
     );
+
+    host.handle_host_callback(
+        "openforge.fs.writeFile",
+        &json!({ "projectId": project.id, "path": "generated.txt", "content": "" }),
+    )
+    .await
+    .expect("clear project file");
+    assert_eq!(
+        std::fs::read_to_string(project_dir.path().join("generated.txt")).expect("cleared file"),
+        ""
+    );
+
+    let missing_content = host
+        .handle_host_callback(
+            "openforge.fs.writeFile",
+            &json!({ "projectId": project.id, "path": "generated.txt" }),
+        )
+        .await
+        .expect_err("missing project file content should fail");
+    assert_eq!(
+        missing_content,
+        "plugin host callback missing string param: content"
+    );
 }
 
 #[tokio::test]
@@ -143,6 +166,34 @@ async fn host_filesystem_callbacks_scope_user_data_and_external_reads() {
         .await
         .expect("read plugin user data");
     assert_eq!(user_data, json!("{\"runs\":1}"));
+
+    host.handle_host_callback(
+        "openforge.fs.userData.writeTextFile",
+        &json!({ "pluginId": "skill-usage", "path": "telemetry/usage.json", "content": "" }),
+    )
+    .await
+    .expect("clear plugin user data");
+    assert_eq!(
+        std::fs::read_to_string(
+            app_data_dir
+                .path()
+                .join("plugin-data/skill-usage/telemetry/usage.json")
+        )
+        .expect("cleared plugin data"),
+        ""
+    );
+
+    let non_string_content = host
+        .handle_host_callback(
+            "openforge.fs.userData.writeTextFile",
+            &json!({ "pluginId": "skill-usage", "path": "telemetry/usage.json", "content": 0 }),
+        )
+        .await
+        .expect_err("non-string plugin user data content should fail");
+    assert_eq!(
+        non_string_content,
+        "plugin host callback param must be a string: content"
+    );
 
     let external_dir = host
         .handle_host_callback(
