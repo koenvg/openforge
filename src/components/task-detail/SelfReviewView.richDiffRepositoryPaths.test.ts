@@ -3,9 +3,10 @@ import {
 	baseTask,
 	InlineDiffWorker,
 	navigateMock,
+	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileDiff } from "../../lib/types";
 import {
@@ -17,7 +18,6 @@ import {
 	FILE_VIEWER_VIEW_KEY,
 	revealFileInFileViewer,
 } from "../../lib/fileViewerPlugin";
-import SelfReviewView from "./SelfReviewView.svelte";
 
 setupSelfReviewViewTestSuite();
 
@@ -34,9 +34,7 @@ describe('SelfReviewView Rich Diff repository paths', () => {
     ]]);
     vi.mocked(getTaskFileContents).mockResolvedValue(['', 'base64-diagram']);
 
-    render(SelfReviewView, {
-      props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-    });
+    renderSelfReviewView();
 
     await fireEvent.click(await screen.findByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }));
 

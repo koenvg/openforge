@@ -1,14 +1,13 @@
 import {
 	baseDiff,
-	baseTask,
+	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
 import type { PrFileDiff } from "../../lib/types";
 import { getTaskBatchFileContents, getTaskDiff } from "../../lib/ipc";
-import SelfReviewView from "./SelfReviewView.svelte";
 
 setupSelfReviewViewTestSuite();
 
@@ -25,9 +24,7 @@ describe("SelfReviewView — non-application file filter", () => {
 	it("shows every file by default and hides non-application files when the toggle is deselected", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([appFile, docFile]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		// Both files are shown by default; the file-tree toggle is selected.
 		await screen.findByLabelText("Mark src/main.rs reviewed");
@@ -51,9 +48,7 @@ describe("SelfReviewView — non-application file filter", () => {
 	it("offers a reveal action once deselecting hides every changed file", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([docFile, mdxFile]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		// Both non-application files show by default.
 		await screen.findByLabelText("Mark README.md reviewed");

@@ -1,9 +1,9 @@
 import {
 	baseDiff,
-	baseTask,
+	renderSelfReviewView,
 	setupSelfReviewViewTestSuite,
 } from "./SelfReviewView.testUtils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { createVirtualizer } from "@openforge-app/pr-review-ui/useVirtualizer.svelte";
 import { describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
@@ -15,7 +15,6 @@ import {
 	getTaskCommits,
 	getTaskDiff,
 } from "../../lib/ipc";
-import SelfReviewView from "./SelfReviewView.svelte";
 
 setupSelfReviewViewTestSuite();
 
@@ -23,13 +22,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 	it("defaults to both committed and uncommitted checked", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
@@ -42,13 +35,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 	it("leaves both checkboxes unlocked when both scopes are selected by default", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const committed = requireElement(screen.getByLabelText("Include committed changes"), HTMLInputElement);
@@ -64,13 +51,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", true, true);
@@ -80,13 +61,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 	it("toggle visible even with no diff files (empty state)", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			const checkbox = screen.getByLabelText("Include uncommitted changes");
@@ -100,13 +75,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await screen.findByLabelText("Include uncommitted changes");
 		mockGetTaskDiff.mockClear();
@@ -130,13 +99,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		// Both scopes are on by default, so the committed checkbox is unlocked.
 		const committed = requireElement(
@@ -169,13 +132,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 		mockGetCommitDiff.mockResolvedValue([commitDiff]);
 
-		render(SelfReviewView, {
-			props: {
-				task: baseTask,
-				agentStatus: null,
-				onSendToAgent: vi.fn(),
-			},
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByLabelText("Include uncommitted changes")).toBeTruthy();
@@ -195,9 +152,7 @@ describe('SelfReviewView review workspace', () => {
 	it('presents Changed files, Code diff, and Feedback as the primary review regions', async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		expect(await screen.findByRole('region', { name: 'Changed files panel' })).toBeTruthy();
 		expect(screen.getByRole('region', { name: 'Code diff panel' })).toBeTruthy();
@@ -209,9 +164,7 @@ describe('SelfReviewView review workspace', () => {
 	it('moves keyboard focus between the Review File Tree and diff with Tab and Shift+Tab', async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		const tree = await screen.findByRole('tree', { name: 'Changed files' });
 		const diff = await screen.findByRole('region', { name: 'Diff scroll area' });
@@ -226,9 +179,7 @@ describe('SelfReviewView review workspace', () => {
 	it('keeps mark-reviewed controls on diff file sections without a duplicate selected-file bar', async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		expect(await screen.findByLabelText('Mark src/main.rs reviewed')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Mark selected file reviewed' })).toBeNull();
@@ -245,9 +196,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 		});
 		vi.mocked(getTaskDiff).mockReturnValue(diffPromise);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		// Wait for the loading spinner to appear
 		await screen.findByText("Loading diff...");
@@ -266,9 +215,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 			.mocked(getTaskDiff)
 			.mockResolvedValue([baseDiff]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(mockGetTaskDiff).toHaveBeenCalledTimes(1);
@@ -280,9 +227,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		const mockGetActiveComments = vi.mocked(getActiveSelfReviewComments);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(mockGetActiveComments).toHaveBeenCalledTimes(1);
@@ -294,9 +239,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByTitle("Search (\u2318F)")).toBeTruthy();
@@ -351,9 +294,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 			return [];
 		});
 
-		render(SelfReviewView, {
-			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
-		});
+		renderSelfReviewView();
 
 		await waitFor(() => {
 			expect(screen.getByTitle(firstCommit.message)).toBeTruthy();
