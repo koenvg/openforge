@@ -154,7 +154,7 @@ class RuntimeContributionRegistry {
   getBackendApi(): BackendOpenForgeAPI {
     if (!this.backendApi) {
       this.backendApi = {
-        ...this.commonApi.createApi(),
+        ...this.commonApi.createBackendApi(),
         ...this.backendServices.createApi(),
       }
     }

@@ -89,7 +89,7 @@ export class TestingOpenForgeRegistryFake {
     if (this.cachedBackendApi) return this.cachedBackendApi
 
     const api = {
-      ...this.commonApi.createApi(),
+      ...this.commonApi.createBackendApi(),
       ...this.backendServices.createApi(),
       __testing: {
         calls: this.calls,

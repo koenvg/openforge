@@ -25,6 +25,11 @@ import type {
   StartTaskImplementationRequest,
   TaskLinkOpenRequest,
   TaskStartPrefixContext,
+  ExternalReadDirectoryRequest,
+  ExternalReadFileRequest,
+  UserDataDirectoryRequest,
+  UserDataFileRequest,
+  UserDataFileWriteRequest,
 } from '../types'
 import type { Task } from '../domain'
 
@@ -70,6 +75,11 @@ export interface TestingOpenForgeApiCalls {
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>
+  fsUserDataReadDirs: UserDataDirectoryRequest[]
+  fsUserDataReads: UserDataFileRequest[]
+  fsUserDataWrites: UserDataFileWriteRequest[]
+  fsExternalReadDirs: ExternalReadDirectoryRequest[]
+  fsExternalReads: ExternalReadFileRequest[]
   shellSpawns: ShellSpawnRequest[]
   shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>
   shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>

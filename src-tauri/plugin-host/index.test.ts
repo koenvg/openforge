@@ -311,6 +311,44 @@ describe('plugin-host backend runtime', () => {
       )
     })
   })
+  it('routes backend user data and external read roots through host callbacks with plugin identity', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('filesystemApis', {
+            async handler() {
+              const userData = await openforge.fs.userData.readTextFile({ path: 'telemetry/usage.json' })
+              await openforge.fs.userData.writeTextFile({ path: 'telemetry/usage.json', content: '{"runs":2}' })
+              const sessions = await openforge.fs.external.readDir({ root: '/Users/test/.pi/agent/sessions', path: '2026' })
+              const session = await openforge.fs.external.readTextFile({ root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' })
+              return { userData, sessions, session }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.fs.userData.readTextFile') return '{"runs":1}'
+      if (request.method === 'openforge.fs.userData.writeTextFile') return null
+      if (request.method === 'openforge.fs.external.readDir') return [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }]
+      if (request.method === 'openforge.fs.external.readTextFile') return '{}\n'
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'skill-usage', backendPath, command: 'filesystemApis' })).resolves.toEqual({
+      userData: '{"runs":1}',
+      sessions: [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }],
+      session: '{}\n',
+    })
+    expect(calls).toEqual([
+      { method: 'openforge.fs.userData.readTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json' } },
+      { method: 'openforge.fs.userData.writeTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json', content: '{"runs":2}' } },
+      { method: 'openforge.fs.external.readDir', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026' } },
+      { method: 'openforge.fs.external.readTextFile', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' } },
+    ])
+  })
 
   it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {
     const backendPath = await writeBackendModule(`

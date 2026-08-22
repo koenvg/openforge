@@ -1,4 +1,5 @@
 import type {
+  BackendOpenForgeAPI,
   CommandRegistration,
   Disposable,
   FrontendOpenForgeAPI,
@@ -204,6 +205,39 @@ export class TestingCommonApiFake {
     }
 
     return api
+  }
+
+  createBackendApi(): TestingCommonApi & Pick<BackendOpenForgeAPI, 'fs'> {
+    const api = this.createApi()
+    return {
+      ...api,
+      fs: {
+        ...api.fs,
+        userData: {
+          readDir: async (request = {}) => {
+            this.services.calls.fsUserDataReadDirs.push(request)
+            return []
+          },
+          readTextFile: async (request) => {
+            this.services.calls.fsUserDataReads.push(request)
+            return ''
+          },
+          writeTextFile: async (request) => {
+            this.services.calls.fsUserDataWrites.push(request)
+          },
+        },
+        external: {
+          readDir: async (request) => {
+            this.services.calls.fsExternalReadDirs.push(request)
+            return []
+          },
+          readTextFile: async (request) => {
+            this.services.calls.fsExternalReads.push(request)
+            return ''
+          },
+        },
+      },
+    }
   }
 
   getSnapshot(): {

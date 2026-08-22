@@ -474,6 +474,44 @@ export interface FileSystemAPI {
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
 }
 
+export interface UserDataDirectoryRequest {
+  path?: string | null
+}
+
+export interface UserDataFileRequest {
+  path: string
+}
+
+export interface UserDataFileWriteRequest extends UserDataFileRequest {
+  content: string
+}
+
+export interface ExternalReadDirectoryRequest {
+  root: string
+  path?: string | null
+}
+
+export interface ExternalReadFileRequest {
+  root: string
+  path: string
+}
+
+export interface UserDataFileSystemAPI {
+  readDir(request?: UserDataDirectoryRequest): Promise<FileEntry[]>
+  readTextFile(request: UserDataFileRequest): Promise<string>
+  writeTextFile(request: UserDataFileWriteRequest): Promise<void>
+}
+
+export interface ExternalReadFileSystemAPI {
+  readDir(request: ExternalReadDirectoryRequest): Promise<FileEntry[]>
+  readTextFile(request: ExternalReadFileRequest): Promise<string>
+}
+
+export interface BackendFileSystemAPI extends FileSystemAPI {
+  userData: UserDataFileSystemAPI
+  external: ExternalReadFileSystemAPI
+}
+
 export type TerminalImageProtocol = 'iterm2'
 
 export interface ShellSessionRequest {
@@ -667,6 +705,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
 }
 
 export interface BackendOpenForgeAPI extends OpenForgeCommonAPI {
+  fs: BackendFileSystemAPI
   backend: BackendMethodRegistry
   background: BackgroundServiceRegistry
 }

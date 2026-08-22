@@ -198,7 +198,13 @@ pub(crate) fn resolve_existing_path(
 ) -> ProjectFsResult<PathBuf> {
     let resolved = match sub_path {
         None | Some("") => project_root.to_path_buf(),
-        Some(path) => project_root.join(path),
+        Some(path) => {
+            let requested_path = Path::new(path);
+            if requested_path.is_absolute() {
+                return Err(ProjectFsError::bad_request("file path must be relative"));
+            }
+            project_root.join(requested_path)
+        }
     };
     let canonical_root = canonical_project_root(project_root)?;
     let canonical_resolved = std::fs::canonicalize(&resolved).map_err(|error| {
@@ -235,6 +241,11 @@ pub(crate) fn resolve_write_path(project_root: &Path, sub_path: &str) -> Project
     let canonical_root = canonical_project_root(project_root)?;
     let target = canonical_root.join(requested_path);
     if !target.starts_with(&canonical_root) {
+        return Err(ProjectFsError::forbidden(
+            "Path traversal detected: access denied",
+        ));
+    }
+    if std::fs::symlink_metadata(&target).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(ProjectFsError::forbidden(
             "Path traversal detected: access denied",
         ));
@@ -472,6 +483,25 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn write_file_rejects_symlinked_target_escape() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let outside_dir = tempfile::tempdir().expect("outside dir");
+        let outside_file = outside_dir.path().join("outside.txt");
+        std::fs::write(&outside_file, "original").expect("outside file");
+        std::os::unix::fs::symlink(&outside_file, temp_dir.path().join("linked.txt"))
+            .expect("symlink target");
+
+        let error = write_file(temp_dir.path(), "linked.txt", "escaped")
+            .await
+            .expect_err("symlinked target write rejected");
+        let outside_contents = std::fs::read_to_string(outside_file).expect("outside file remains");
+
+        assert_eq!(error.kind(), ProjectFsErrorKind::Forbidden);
+        assert_eq!(outside_contents, "original");
+    }
+
     #[test]
     fn resolve_existing_path_rejects_traversal() {
         let temp_dir = tempfile::tempdir().expect("project root");
@@ -489,6 +519,15 @@ mod tests {
         let traversal = resolve_existing_path(temp_dir.path(), Some(&format!("../{outside_name}")))
             .expect_err("traversal rejected");
         assert_eq!(traversal.kind(), ProjectFsErrorKind::Forbidden);
+
+        let inside_file = temp_dir.path().join("inside.txt");
+        std::fs::write(&inside_file, "inside").expect("inside file");
+        let absolute = resolve_existing_path(
+            temp_dir.path(),
+            Some(inside_file.to_str().expect("UTF-8 fixture path")),
+        )
+        .expect_err("absolute path rejected");
+        assert_eq!(absolute.kind(), ProjectFsErrorKind::BadRequest);
 
         std::fs::remove_file(parent_file).ok();
     }
