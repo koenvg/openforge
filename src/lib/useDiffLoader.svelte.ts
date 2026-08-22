@@ -72,23 +72,29 @@ export function createDiffLoader(deps: {
 		return generation !== commitLoadGeneration || taskId !== deps.getTaskId();
 	}
 
-	async function loadDiff(): Promise<void> {
+	async function fetchDiff(taskId: string) {
+		return selectedCommitSha !== null
+			? getCommitDiff(taskId, selectedCommitSha)
+			: getTaskDiff(
+					taskId,
+					getIncludeCommitted(),
+					deps.getIncludeUncommitted(),
+				);
+	}
+
+	async function requestDiff(options: {
+		loadInitialReviewData: boolean;
+		failureLog: string;
+		failureMessage: string;
+	}): Promise<void> {
 		const generation = beginLoad();
 		try {
 			const taskId = deps.getTaskId();
-
-			const diffs =
-				selectedCommitSha !== null
-					? await getCommitDiff(taskId, selectedCommitSha)
-					: await getTaskDiff(
-							taskId,
-							getIncludeCommitted(),
-							deps.getIncludeUncommitted(),
-						);
+			const diffs = await fetchDiff(taskId);
 			if (isStale(generation)) return;
 			setSelfReviewDiffFiles(taskId, diffs);
 
-			if (selectedCommitSha === null) {
+			if (options.loadInitialReviewData && selectedCommitSha === null) {
 				const activeComments = await getActiveSelfReviewComments(taskId);
 				if (isStale(generation)) return;
 				setSelfReviewGeneralComments(
@@ -133,13 +139,21 @@ export function createDiffLoader(deps: {
 			}
 		} catch (e) {
 			if (isStale(generation)) return;
-			console.error("Failed to load self-review data:", e);
-			error = "Failed to load diff. Please try again.";
+			console.error(options.failureLog, e);
+			error = options.failureMessage;
 		} finally {
 			if (!isStale(generation)) {
 				isLoading = false;
 			}
 		}
+	}
+
+	async function loadDiff(): Promise<void> {
+		await requestDiff({
+			loadInitialReviewData: true,
+			failureLog: "Failed to load self-review data:",
+			failureMessage: "Failed to load diff. Please try again.",
+		});
 	}
 
 	async function loadCommits(): Promise<void> {
@@ -163,28 +177,11 @@ export function createDiffLoader(deps: {
 	}
 
 	async function refresh(): Promise<void> {
-		const generation = beginLoad();
-		try {
-			const taskId = deps.getTaskId();
-			const diffs =
-				selectedCommitSha !== null
-					? await getCommitDiff(taskId, selectedCommitSha)
-					: await getTaskDiff(
-							taskId,
-							getIncludeCommitted(),
-							deps.getIncludeUncommitted(),
-						);
-			if (isStale(generation)) return;
-			setSelfReviewDiffFiles(taskId, diffs);
-		} catch (e) {
-			if (isStale(generation)) return;
-			console.error("Failed to refresh diff:", e);
-			error = "Failed to refresh diff.";
-		} finally {
-			if (!isStale(generation)) {
-				isLoading = false;
-			}
-		}
+		await requestDiff({
+			loadInitialReviewData: false,
+			failureLog: "Failed to refresh diff:",
+			failureMessage: "Failed to refresh diff.",
+		});
 	}
 
 	function cleanup(): void {
