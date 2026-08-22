@@ -179,7 +179,7 @@ describe('TaskSchedulesView workspace', () => {
   })
 
   it('shows agent-created one-off schedules and keeps completed runs inspectable', async () => {
-    const runAt = Date.UTC(2026, 7, 26, 13, 46)
+    const runAt = Date.now() - 24 * 60 * 60 * 1_000
     const oneOff = makeSchedule({
       id: 'schedule-once',
       title: 'Resume dependency upgrade',
@@ -208,7 +208,8 @@ describe('TaskSchedulesView workspace', () => {
   })
 
   it('keeps cancelled one-off schedules visible without runnable actions', async () => {
-    const runAt = Date.UTC(2026, 7, 26, 13, 46)
+    const now = Date.now()
+    const runAt = now + 24 * 60 * 60 * 1_000
     const cancelled = makeSchedule({
       id: 'schedule-cancelled',
       title: 'Cancelled dependency retry',
@@ -218,7 +219,7 @@ describe('TaskSchedulesView workspace', () => {
       runAt,
       enabled: false,
       nextFireAt: runAt,
-      cancelledAt: Date.UTC(2026, 7, 22, 9),
+      cancelledAt: now - 24 * 60 * 60 * 1_000,
     })
     mockBackend([cancelled])
 
@@ -228,6 +229,68 @@ describe('TaskSchedulesView workspace', () => {
     expect(within(inspector).getByText('Cancelled')).toBeTruthy()
     expect(within(inspector).getByText('One time')).toBeTruthy()
     expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+  })
+
+  it('removes terminal one-off schedules from the table after seven days', async () => {
+    const day = 24 * 60 * 60 * 1_000
+    const now = Date.now()
+    const expiredCompleted = makeSchedule({
+      id: 'schedule-expired-completed',
+      title: 'Expired completed retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: now - 7 * day,
+      enabled: false,
+      nextFireAt: null,
+      lastFireAt: now - 7 * day,
+    })
+    const expiredCancelled = makeSchedule({
+      id: 'schedule-expired-cancelled',
+      title: 'Expired cancelled retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: now - 7 * day,
+      enabled: false,
+      nextFireAt: null,
+      cancelledAt: now - 7 * day,
+    })
+    const recentCompleted = makeSchedule({
+      id: 'schedule-recent-completed',
+      title: 'Recent completed retry',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: now - 6 * day,
+      enabled: false,
+      nextFireAt: null,
+      lastFireAt: now - 6 * day,
+    })
+    const oldNonTerminal = makeSchedule({
+      id: 'schedule-old-pending',
+      title: 'Old pending one-off',
+      kind: 'once',
+      preset: null,
+      cron: null,
+      runAt: now - 30 * day,
+      nextFireAt: now - 30 * day,
+    })
+    const recurring = makeSchedule({
+      id: 'schedule-recurring-history',
+      title: 'Recurring with old history',
+      lastFireAt: now - 30 * day,
+    })
+    mockBackend([expiredCompleted, expiredCancelled, recentCompleted, oldNonTerminal, recurring])
+
+    renderView()
+
+    expect(await screen.findByRole('button', { name: 'Recent completed retry' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Old pending one-off' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Recurring with old history' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Expired completed retry' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Expired cancelled retry' })).toBeNull()
+    expect(screen.getByLabelText('Schedule summary').textContent).toMatch(/3\s*schedules/i)
   })
 
   it('edits the date and time of a future one-off schedule', async () => {

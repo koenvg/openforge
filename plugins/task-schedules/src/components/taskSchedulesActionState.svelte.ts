@@ -6,6 +6,7 @@ import {
   isCronError,
   messageForAsyncError,
   runStateFromOutcome,
+  schedulesWithinOneOffRetention,
 } from '../lib/taskSchedulesViewModel'
 import type { TaskSchedule } from '../lib/types'
 import type { ScheduleDraft, ScheduleRunState } from '../lib/viewTypes'
@@ -70,8 +71,9 @@ export function useTaskSchedulesActionState(options: TaskSchedulesActionStateOpt
     try {
       const loadedSchedules = await ipc.list(activeProjectId)
       if (!isCurrentLoad(activeProjectId, requestId)) return
-      schedules = loadedSchedules
-      options.onSchedulesLoaded(loadedSchedules)
+      const retainedSchedules = schedulesWithinOneOffRetention(loadedSchedules)
+      schedules = retainedSchedules
+      options.onSchedulesLoaded(retainedSchedules)
     } catch (cause) {
       if (!isCurrentLoad(activeProjectId, requestId)) return
       error = messageForAsyncError(cause)

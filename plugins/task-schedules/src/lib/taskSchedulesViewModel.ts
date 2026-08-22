@@ -3,6 +3,7 @@ import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft } from './ty
 import type { ScheduleDraft, ScheduleFilter, ScheduleRunState, ScheduleSortKey, SortDirection } from './viewTypes'
 
 export const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week. Runs at most once every 5 minutes.'
+export const TERMINAL_ONE_OFF_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
 
 export const TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const hour = Math.floor(index / 4)
@@ -102,6 +103,14 @@ function localDateTimeValue(timestamp: number): string {
   const hour = String(date.getHours()).padStart(2, '0')
   const minute = String(date.getMinutes()).padStart(2, '0')
   return `${year}-${month}-${day}T${hour}:${minute}`
+}
+
+export function schedulesWithinOneOffRetention(schedules: TaskSchedule[], now = Date.now()): TaskSchedule[] {
+  return schedules.filter((schedule) => {
+    if (schedule.kind !== 'once') return true
+    const terminalAt = schedule.cancelledAt ?? schedule.lastFireAt
+    return terminalAt === null || now - terminalAt < TERMINAL_ONE_OFF_RETENTION_MS
+  })
 }
 
 export function visibleSchedules(
