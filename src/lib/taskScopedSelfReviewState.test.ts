@@ -2,7 +2,6 @@ import { get } from "svelte/store";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PrFileDiff, ReviewSubmissionComment, SelfReviewComment } from "./types";
 import {
-	appendPendingSelfReviewComment,
 	clearPendingSelfReviewComments,
 	getPendingSelfReviewComments,
 	getSelfReviewArchivedComments,
@@ -10,7 +9,6 @@ import {
 	getSelfReviewDiffFiles,
 	getSelfReviewGeneralComments,
 	pendingSelfReviewCommentsByTask,
-	resetLoadedSelfReviewState,
 	selfReviewStateByTask,
 	setPendingSelfReviewComments,
 	setSelfReviewArchivedComments,
@@ -153,17 +151,4 @@ describe("task-scoped self-review state", () => {
 		expect(getPendingSelfReviewComments("task-2")).toEqual([taskTwoComment]);
 	});
 
-	it("resets loaded review data for one task without losing pending inline feedback", () => {
-		setSelfReviewDiffFiles("task-1", [taskOneDiff]);
-		setSelfReviewGeneralComments("task-1", [taskOneGeneralComment]);
-		setSelfReviewArchivedComments("task-1", [taskOneGeneralComment]);
-		appendPendingSelfReviewComment("task-1", taskOneComment);
-
-		resetLoadedSelfReviewState("task-1");
-
-		expect(getSelfReviewDiffFiles("task-1")).toEqual([]);
-		expect(getSelfReviewGeneralComments("task-1")).toEqual([]);
-		expect(getSelfReviewArchivedComments("task-1")).toEqual([]);
-		expect(getPendingSelfReviewComments("task-1")).toEqual([taskOneComment]);
-	});
 });

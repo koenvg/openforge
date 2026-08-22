@@ -1,20 +1,10 @@
-import { writable } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-	CommitInfo,
-	PrComment,
-	PrFileDiff,
-	PullRequestInfo,
-	SelfReviewComment,
-} from "./types";
+import type { CommitInfo, PrFileDiff } from "./types";
 
 // ============================================================================
 // Module Mocks
 // ============================================================================
 
-vi.mock("./stores", () => ({
-	ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
-}));
 
 vi.mock("./ipc", () => ({
 	getTaskDiff:
@@ -28,20 +18,12 @@ vi.mock("./ipc", () => ({
 	getTaskCommits: vi.fn<(taskId: string) => Promise<CommitInfo[]>>(),
 	getCommitDiff:
 		vi.fn<(taskId: string, commitSha: string) => Promise<PrFileDiff[]>>(),
-	getActiveSelfReviewComments:
-		vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
-	getArchivedSelfReviewComments:
-		vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
-	getPrComments: vi.fn<(prId: number) => Promise<PrComment[]>>(),
 }));
 
 import * as ipc from "./ipc";
-import { ticketPrs } from "./stores";
 import {
 	getPendingSelfReviewComments,
-	getSelfReviewArchivedComments,
 	getSelfReviewDiffFiles,
-	getSelfReviewGeneralComments,
 	selfReviewStateByTask,
 	setPendingSelfReviewComments,
 } from "./taskScopedSelfReviewState";
@@ -50,13 +32,6 @@ import { createDiffLoader } from "./useDiffLoader.svelte";
 const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff);
 const mockGetTaskCommits = vi.mocked(ipc.getTaskCommits);
 const mockGetCommitDiff = vi.mocked(ipc.getCommitDiff);
-const mockGetActiveSelfReviewComments = vi.mocked(
-	ipc.getActiveSelfReviewComments,
-);
-const mockGetArchivedSelfReviewComments = vi.mocked(
-	ipc.getArchivedSelfReviewComments,
-);
-const mockGetPrComments = vi.mocked(ipc.getPrComments);
 
 async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
 	const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -84,64 +59,6 @@ const baseDiff: PrFileDiff = {
 	patch_line_count: null,
 };
 
-const basePrComment: PrComment = {
-	id: 1,
-	pr_id: 10,
-	author: "reviewer",
-	body: "Fix this",
-	comment_type: "inline",
-	file_path: "src/main.rs",
-	line_number: 5,
-	addressed: 0,
-	outdated: 0,
-	created_at: 1700000000,
-};
-
-const baseLinkedPr: PullRequestInfo = {
-	id: 10,
-	pr_number: 10,
-	ticket_id: "task-1",
-	repo_owner: "org",
-	repo_name: "repo",
-	title: "My PR",
-	url: "https://github.com/org/repo/pull/1",
-	state: "open",
-	head_sha: "abc",
-	ci_status: null,
-	ci_check_runs: null,
-	review_status: null,
-	mergeable: null,
-	mergeable_state: null,
-	merged_at: null,
-	created_at: 1700000000,
-	updated_at: 1700000000,
-	draft: false,
-	is_queued: false,
-	unaddressed_comment_count: 1,
-	merge_readiness_status: null,
-	merge_readiness_action: null,
-	merge_readiness_blockers: null,
-	merge_readiness_warnings: null,
-	readiness_source_head_sha: null,
-	merge_group_sha: null,
-	required_checks_policy_known: null,
-	required_reviews_policy_known: null,
-	merge_queue_required: null,
-	merge_queue_state: null,
-	readiness_updated_at: null,
-};
-
-const baseSelfReviewComment: SelfReviewComment = {
-	id: 1,
-	task_id: "task-1",
-	round: 1,
-	comment_type: "general",
-	file_path: null,
-	line_number: null,
-	body: "General note",
-	created_at: 1700000000,
-	archived_at: null,
-};
 
 // ============================================================================
 // Tests
@@ -159,14 +76,9 @@ describe("createDiffLoader", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		selfReviewStateByTask.set(new Map());
-		ticketPrs.set(new Map());
-
 		mockGetTaskDiff.mockResolvedValue([]);
 		mockGetTaskCommits.mockResolvedValue([]);
 		mockGetCommitDiff.mockResolvedValue([]);
-		mockGetActiveSelfReviewComments.mockResolvedValue([]);
-		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
-		mockGetPrComments.mockResolvedValue([]);
 	});
 
 	it("starts with isLoading=false and error=null", () => {
@@ -177,8 +89,6 @@ describe("createDiffLoader", () => {
 
 		expect(loader.isLoading).toBe(false);
 		expect(loader.error).toBeNull();
-		expect(loader.prComments).toEqual([]);
-		expect(loader.linkedPr).toBeNull();
 	});
 
 	it("loadDiff sets isLoading=true during execution", async () => {
@@ -216,23 +126,35 @@ describe("createDiffLoader", () => {
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
-	it("loadDiff populates prComments from linked PR", async () => {
+	it("invalidates in-flight initial review context without rehydrating on refresh", async () => {
+		let resolveHydration!: () => void;
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
-		mockGetActiveSelfReviewComments.mockResolvedValue([]);
-		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
-		mockGetPrComments.mockResolvedValue([basePrComment]);
-		ticketPrs.set(new Map([["task-1", [baseLinkedPr]]]));
-
+		const initialReviewContext = {
+			hydrate: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						resolveHydration = resolve;
+					}),
+			),
+			invalidate: vi.fn(),
+			cleanup: vi.fn(),
+		};
 		const loader = createDiffLoader({
 			getTaskId: () => "task-1",
 			getIncludeUncommitted: () => false,
+			initialReviewContext,
 		});
 
-		await loader.loadDiff();
+		const initialLoad = loader.loadDiff();
+		await vi.waitFor(() => {
+			expect(initialReviewContext.hydrate).toHaveBeenCalledWith("task-1");
+		});
+		await loader.refresh();
+		resolveHydration();
+		await initialLoad;
 
-		expect(loader.linkedPr).toEqual(baseLinkedPr);
-		expect(loader.prComments).toEqual([basePrComment]);
-		expect(mockGetPrComments).toHaveBeenCalledWith(baseLinkedPr.id);
+		expect(initialReviewContext.hydrate).toHaveBeenCalledTimes(1);
+		expect(initialReviewContext.invalidate).toHaveBeenCalledTimes(2);
 	});
 
 	it("loadDiff sets human-readable error on failure", async () => {
@@ -263,7 +185,6 @@ describe("createDiffLoader", () => {
 		await loader.loadDiff();
 
 		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-42", true, true);
-		expect(mockGetActiveSelfReviewComments).toHaveBeenCalledWith("task-42");
 	});
 
 	it("loadDiff forwards getIncludeCommitted=false for uncommitted-only review", async () => {
@@ -358,69 +279,6 @@ describe("createDiffLoader", () => {
 		expect(loader.isLoading).toBe(false);
 	});
 
-	it("preserves pending inline comments across review tab unmount and remount", async () => {
-		mockGetTaskDiff.mockResolvedValue([baseDiff]);
-		mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment]);
-		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
-		const pendingInlineComment = {
-			path: "src/main.rs",
-			line: 42,
-			side: "RIGHT",
-			body: "Please double-check this before sending to the agent",
-		};
-
-		const loader = createDiffLoader({
-			getTaskId: () => "task-1",
-			getIncludeUncommitted: () => false,
-		});
-
-		await loader.loadDiff();
-		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
-		setPendingSelfReviewComments("task-1", [pendingInlineComment]);
-
-		loader.cleanup();
-
-		expect(getSelfReviewDiffFiles("task-1")).toEqual([]);
-		expect(getSelfReviewGeneralComments("task-1")).toEqual([]);
-		expect(getSelfReviewArchivedComments("task-1")).toEqual([]);
-		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
-
-		const remountedLoader = createDiffLoader({
-			getTaskId: () => "task-1",
-			getIncludeUncommitted: () => false,
-		});
-		await remountedLoader.loadDiff();
-
-		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
-	});
-
-	it("keeps pending inline comments isolated when switching between tasks", async () => {
-		mockGetTaskDiff.mockResolvedValue([baseDiff]);
-		const taskOneComment = {
-			path: "src/task-one.ts",
-			line: 12,
-			side: "RIGHT",
-			body: "task one feedback",
-		};
-		const taskTwoComment = {
-			path: "src/task-two.ts",
-			line: 34,
-			side: "RIGHT",
-			body: "task two feedback",
-		};
-		setPendingSelfReviewComments("task-1", [taskOneComment]);
-		setPendingSelfReviewComments("task-2", [taskTwoComment]);
-
-		const taskTwoLoader = createDiffLoader({
-			getTaskId: () => "task-2",
-			getIncludeUncommitted: () => false,
-		});
-		await taskTwoLoader.loadDiff();
-		taskTwoLoader.cleanup();
-
-		expect(getPendingSelfReviewComments("task-1")).toEqual([taskOneComment]);
-		expect(getPendingSelfReviewComments("task-2")).toEqual([taskTwoComment]);
-	});
 
 	it("preserves pending inline comments when remounting a selected commit diff", async () => {
 		mockGetCommitDiff.mockResolvedValue([baseDiff]);
@@ -739,41 +597,4 @@ describe("createDiffLoader", () => {
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([]);
 	});
 
-	it("loadDiff populates scoped general and archived comments", async () => {
-		const generalComment = {
-			...baseSelfReviewComment,
-			comment_type: "general",
-		};
-		const inlineComment: SelfReviewComment = {
-			...baseSelfReviewComment,
-			id: 2,
-			comment_type: "inline",
-			file_path: "src/main.rs",
-			line_number: 5,
-		};
-		mockGetTaskDiff.mockResolvedValue([]);
-		mockGetActiveSelfReviewComments.mockResolvedValue([
-			generalComment,
-			inlineComment,
-		]);
-		mockGetArchivedSelfReviewComments.mockResolvedValue([generalComment]);
-
-		const loader = createDiffLoader({
-			getTaskId: () => "task-1",
-			getIncludeUncommitted: () => false,
-		});
-
-		await loader.loadDiff();
-
-		expect(getSelfReviewGeneralComments("task-1")).toEqual([generalComment]);
-		expect(getSelfReviewArchivedComments("task-1")).toEqual([generalComment]);
-		expect(getPendingSelfReviewComments("task-1")).toEqual([
-			{
-				path: "src/main.rs",
-				line: 5,
-				body: "General note",
-				side: "RIGHT",
-			},
-		]);
-	});
 });

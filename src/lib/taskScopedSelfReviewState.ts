@@ -248,16 +248,3 @@ export function mergePendingSelfReviewComments(
 		mergeReviewSubmissionComments(comments, getPendingSelfReviewComments(taskId)),
 	);
 }
-
-/**
- * Clear loaded data owned by a diff-loader instance while preserving pending
- * inline feedback that the user may have drafted before navigating away.
- */
-export function resetLoadedSelfReviewState(taskId: string): void {
-	updateSelfReviewState(taskId, (state) => ({
-		...state,
-		diffFiles: [],
-		generalComments: [],
-		archivedComments: [],
-	}));
-}
