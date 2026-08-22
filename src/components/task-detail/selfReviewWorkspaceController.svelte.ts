@@ -1,6 +1,7 @@
 import { get } from 'svelte/store'
 import { selfReviewStateByTask } from '../../lib/taskScopedSelfReviewState'
 import type { PrFileDiff } from '../../lib/types'
+import { createSelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
 import {
   createSelfReviewCommentController,
 } from './selfReviewCommentController.svelte'
@@ -53,6 +54,12 @@ export function createSelfReviewWorkspaceController(
     openExternalUrl: options.openExternalUrl,
   })
 
+  const changedFilesPane = createSelfReviewChangedFilesPane({
+    diff: diffController,
+    files: fileStateController,
+    navigation: navigationController,
+  })
+
   const commentController = createSelfReviewCommentController({
     getTaskId: options.getTaskId,
     getState: () => selfReviewState,
@@ -88,6 +95,7 @@ export function createSelfReviewWorkspaceController(
 
   return {
     get taskId() { return options.getTaskId() },
+    changedFilesPane,
     get fileTreeVisible() { return navigationController.fileTreeVisible },
     get includeCommitted() { return diffController.includeCommitted },
     get includeUncommitted() { return diffController.includeUncommitted },

@@ -1,55 +1,25 @@
 <script lang="ts">
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import type { CommitInfo, PrFileDiff } from '../../lib/types'
+  import type { SelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
   import ResizableBottomPanel from '../shared/ui/ResizableBottomPanel.svelte'
   import FileTree from '../review/shared/FileTree.svelte'
 
   interface Props {
-    files: PrFileDiff[]
-    reviewedFileShas: Map<string, string>
-    getFileReviewIdentity: (file: PrFileDiff) => string | null
-    onToggleFileReviewed: (file: PrFileDiff, reviewed: boolean) => void | Promise<void>
-    includeNonApplicationFiles: boolean
-    nonApplicationFileCount: number
-    onToggleNonApplicationFiles: (value: boolean) => void
-    commits: CommitInfo[]
-    selectedCommitSha: string | null
-    includeCommitted: boolean
-    includeUncommitted: boolean
-    committedLocked: boolean
-    uncommittedLocked: boolean
-    lockedScopeTooltip: string
-    onIncludeCommittedChange: (value: boolean) => void
-    onIncludeUncommittedChange: (value: boolean) => void
-    onSelectCommit: (sha: string | null) => void | Promise<void>
-    onSelectFile: (filename: string) => void
-    onCollapse: () => void
-    onRequestFocusDiff: () => void
+    pane: SelfReviewChangedFilesPane
   }
 
-  let {
-    files,
-    reviewedFileShas,
-    getFileReviewIdentity,
-    onToggleFileReviewed,
-    includeNonApplicationFiles,
-    nonApplicationFileCount,
-    onToggleNonApplicationFiles,
-    commits,
-    selectedCommitSha,
-    includeCommitted,
-    includeUncommitted,
-    committedLocked,
-    uncommittedLocked,
-    lockedScopeTooltip,
-    onIncludeCommittedChange,
-    onIncludeUncommittedChange,
-    onSelectCommit,
-    onSelectFile,
-    onCollapse,
-    onRequestFocusDiff,
-  }: Props = $props()
+  let { pane }: Props = $props()
+  let commits = $derived(pane.scope.commits)
+  let selectedCommitSha = $derived(pane.scope.selectedCommitSha)
+  let includeCommitted = $derived(pane.scope.includeCommitted)
+  let includeUncommitted = $derived(pane.scope.includeUncommitted)
+  let committedLocked = $derived(pane.scope.committedLocked)
+  let uncommittedLocked = $derived(pane.scope.uncommittedLocked)
+  let lockedScopeTooltip = $derived(pane.scope.lockedScopeTooltip)
+  let onIncludeCommittedChange = $derived(pane.scope.onIncludeCommittedChange)
+  let onIncludeUncommittedChange = $derived(pane.scope.onIncludeUncommittedChange)
+  let onSelectCommit = $derived(pane.scope.onSelectCommit)
 
   let fileTree = $state<FileTree>()
 
@@ -63,16 +33,16 @@
     <div class="flex-1 overflow-hidden">
       <FileTree
         bind:this={fileTree}
-        {files}
-        onSelectFile={onSelectFile}
-        {onCollapse}
-        {onRequestFocusDiff}
-        {reviewedFileShas}
-        {getFileReviewIdentity}
-        {onToggleFileReviewed}
-        {includeNonApplicationFiles}
-        {nonApplicationFileCount}
-        {onToggleNonApplicationFiles}
+        files={pane.fileTree.files}
+        onSelectFile={pane.fileTree.onSelectFile}
+        onCollapse={pane.fileTree.onCollapse}
+        onRequestFocusDiff={pane.fileTree.onRequestFocusDiff}
+        reviewedFileShas={pane.fileTree.reviewedFileShas}
+        getFileReviewIdentity={pane.fileTree.getFileReviewIdentity}
+        onToggleFileReviewed={pane.fileTree.onToggleFileReviewed}
+        includeNonApplicationFiles={pane.fileTree.includeNonApplicationFiles}
+        nonApplicationFileCount={pane.fileTree.nonApplicationFileCount}
+        onToggleNonApplicationFiles={pane.fileTree.onToggleNonApplicationFiles}
       />
     </div>
     <ResizableBottomPanel
