@@ -34,7 +34,7 @@ impl super::Database {
         opencode_session_id: Option<&str>,
         raw_agent_output: Option<&str>,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         conn.execute(
@@ -51,7 +51,7 @@ impl super::Database {
         &self,
         review_pr_id: i64,
     ) -> Result<Vec<AgentReviewCommentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, review_pr_id, review_session_key, comment_type, file_path, line_number, side, body, status, opencode_session_id, raw_agent_output, created_at, updated_at
              FROM agent_review_comments
@@ -86,7 +86,7 @@ impl super::Database {
 
     /// Update the status of an agent review comment
     pub fn update_agent_review_comment_status(&self, comment_id: i64, status: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         conn.execute(
@@ -99,7 +99,7 @@ impl super::Database {
 
     /// Delete all agent review comments for a PR
     pub fn delete_agent_review_comments_for_pr(&self, review_pr_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "DELETE FROM agent_review_comments WHERE review_pr_id = ?1",
             [review_pr_id],
@@ -113,7 +113,7 @@ impl super::Database {
         &self,
         review_pr_id: i64,
     ) -> Result<Option<AgentReviewCommentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, review_pr_id, review_session_key, comment_type, file_path, line_number, side, body, status, opencode_session_id, raw_agent_output, created_at, updated_at
              FROM agent_review_comments

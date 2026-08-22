@@ -29,7 +29,7 @@ impl super::Database {
         provider_name: &str,
         status: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         conn.execute(
@@ -61,7 +61,7 @@ impl super::Database {
         branch_name: Option<&str>,
         provider_name: &str,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
 
         conn.execute(
@@ -74,7 +74,7 @@ impl super::Database {
     }
 
     pub fn get_task_workspace_for_task(&self, task_id: &str) -> Result<Option<TaskWorkspaceRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, created_at, updated_at
              FROM task_workspaces WHERE task_id = ?1",
@@ -106,7 +106,7 @@ impl super::Database {
         provider_name: &str,
         status: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE task_workspaces
@@ -118,7 +118,7 @@ impl super::Database {
     }
 
     pub fn update_task_workspace_status(&self, task_id: &str, status: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE task_workspaces SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
@@ -128,7 +128,7 @@ impl super::Database {
     }
 
     pub fn get_resumable_task_workspaces(&self) -> Result<Vec<TaskWorkspaceRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT DISTINCT tw.id, tw.task_id, tw.project_id, tw.workspace_path, tw.repo_path,
                     tw.kind, tw.branch_name, tw.provider_name, tw.status,
@@ -182,7 +182,7 @@ impl super::Database {
     }
 
     pub fn get_project_for_workspace(&self, workspace_path: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn
             .prepare("SELECT project_id FROM task_workspaces WHERE workspace_path = ?1 LIMIT 1")?;
         let mut rows = stmt.query([workspace_path])?;

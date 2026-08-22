@@ -96,7 +96,7 @@ pub struct PrCommentRow {
 impl super::Database {
     /// Get all open pull requests from the database
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
@@ -116,7 +116,7 @@ impl super::Database {
     }
 
     fn query_pull_requests(&self, task_id: Option<&str>) -> Result<Vec<PrRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let task_filter = if task_id.is_some() {
             " WHERE ticket_id = ?1"
         } else {
@@ -161,7 +161,7 @@ impl super::Database {
         addressed: bool,
         created_at: i64,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -219,7 +219,7 @@ impl super::Database {
         updated_at: i64,
         draft: bool,
     ) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
         tx.execute(
             "INSERT INTO pull_requests (id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
@@ -277,7 +277,7 @@ impl super::Database {
 
     /// Update the head SHA for a pull request
     pub fn update_pr_head_sha(&self, pr_id: i64, sha: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET head_sha = ?1 WHERE id = ?2",
             rusqlite::params![sha, pr_id],
@@ -286,7 +286,7 @@ impl super::Database {
     }
 
     pub fn update_pr_github_node_id(&self, pr_id: i64, github_node_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET github_node_id = ?1 WHERE id = ?2",
             rusqlite::params![github_node_id, pr_id],
@@ -302,7 +302,7 @@ impl super::Database {
         ci_status: &str,
         ci_check_runs: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET head_sha = ?1, ci_status = ?2, ci_check_runs = ?3 WHERE id = ?4",
             rusqlite::params![head_sha, ci_status, ci_check_runs, pr_id],
@@ -312,7 +312,7 @@ impl super::Database {
 
     /// Get CI status for a pull request
     pub fn get_pr_ci_status(&self, pr_id: i64) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT ci_status FROM pull_requests WHERE id = ?1")?;
         let mut rows = stmt.query([pr_id])?;
         if let Some(row) = rows.next()? {
@@ -324,7 +324,7 @@ impl super::Database {
 
     /// Get review status for a pull request
     pub fn get_pr_review_status(&self, pr_id: i64) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT review_status FROM pull_requests WHERE id = ?1")?;
         let mut rows = stmt.query([pr_id])?;
         if let Some(row) = rows.next()? {
@@ -340,7 +340,7 @@ impl super::Database {
         mergeable: Option<bool>,
         mergeable_state: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
             rusqlite::params![mergeable, mergeable_state, pr_id],
@@ -349,7 +349,7 @@ impl super::Database {
     }
 
     pub fn get_task_id_for_pr(&self, pr_id: i64) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT ticket_id FROM pull_requests WHERE id = ?1")?;
         let mut rows = stmt.query([pr_id])?;
         if let Some(row) = rows.next()? {
@@ -360,7 +360,7 @@ impl super::Database {
     }
 
     pub fn update_pr_review_status(&self, pr_id: i64, review_status: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET review_status = ?1 WHERE id = ?2",
             rusqlite::params![review_status, pr_id],
@@ -373,7 +373,7 @@ impl super::Database {
     }
 
     pub fn update_pr_merged_state(&self, id: i64, merged_at: Option<i64>) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET
                 state = 'merged',
@@ -399,7 +399,7 @@ impl super::Database {
     }
 
     pub fn update_pr_closed(&self, id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET
                 state = 'closed',
@@ -421,7 +421,7 @@ impl super::Database {
     }
 
     pub fn update_pr_is_queued(&self, pr_id: i64, is_queued: bool) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET is_queued = ?1 WHERE id = ?2",
             rusqlite::params![is_queued as i32, pr_id],
@@ -430,7 +430,7 @@ impl super::Database {
     }
 
     pub fn update_pr_queued(&self, pr_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET
                 is_queued = 1,
@@ -449,7 +449,7 @@ impl super::Database {
 
     /// Get existing comment IDs for a PR as a HashSet for efficient batch lookups
     pub fn get_existing_comment_ids(&self, pr_id: i64) -> Result<HashSet<i64>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT id FROM pr_comments WHERE pr_id = ?1")?;
         let ids = stmt.query_map([pr_id], |row| row.get(0))?;
         let mut result = HashSet::new();
@@ -461,7 +461,7 @@ impl super::Database {
 
     /// Get the last polled timestamp for a PR, or None if PR doesn't exist
     pub fn get_pr_last_polled(&self, pr_id: i64) -> Result<Option<i64>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare("SELECT last_polled_at FROM pull_requests WHERE id = ?1")?;
         let mut rows = stmt.query([pr_id])?;
         if let Some(row) = rows.next()? {
@@ -473,7 +473,7 @@ impl super::Database {
 
     /// Set the last polled timestamp for a PR
     pub fn set_pr_last_polled(&self, pr_id: i64, timestamp: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pull_requests SET last_polled_at = ?1 WHERE id = ?2",
             rusqlite::params![timestamp, pr_id],
@@ -483,7 +483,7 @@ impl super::Database {
 
     /// Get all comments for a specific PR
     pub fn get_comments_for_pr(&self, pr_id: i64) -> Result<Vec<PrCommentRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at
              FROM pr_comments
@@ -514,7 +514,7 @@ impl super::Database {
     }
 
     pub fn mark_comment_addressed(&self, id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute("UPDATE pr_comments SET addressed = 1 WHERE id = ?1", [id])?;
         Ok(())
     }
@@ -523,7 +523,7 @@ impl super::Database {
     /// `addressed` state. Used by the poller when re-reading comments from
     /// GitHub, so an addressed comment stays addressed even as it goes outdated.
     pub fn update_comment_outdated(&self, id: i64, outdated: bool) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE pr_comments SET outdated = ?2 WHERE id = ?1",
             rusqlite::params![id, if outdated { 1 } else { 0 }],
@@ -535,7 +535,7 @@ impl super::Database {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let placeholders: Vec<String> = ids
             .iter()
             .enumerate()
@@ -577,7 +577,7 @@ impl super::Database {
         if ids.is_empty() {
             return Ok(());
         }
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let placeholders: Vec<String> = ids
             .iter()
             .enumerate()

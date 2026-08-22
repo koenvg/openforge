@@ -15,7 +15,7 @@ pub const HIERARCHY_PROJECT_CONFIG_KEYS: &[&str] = &[
 impl super::Database {
     /// Clear this project's overrides for the unified settings so it re-inherits global.
     pub fn reset_project_settings_to_global(&self, project_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         for key in HIERARCHY_PROJECT_CONFIG_KEYS {
             conn.execute(
                 "DELETE FROM project_config WHERE project_id = ?1 AND key = ?2",

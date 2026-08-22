@@ -90,6 +90,17 @@ fn unix_timestamp_from_elapsed(
     i64::try_from(seconds).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 
+#[derive(Debug)]
+struct ConnectionMutexPoisoned;
+
+impl std::fmt::Display for ConnectionMutexPoisoned {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("database connection mutex poisoned")
+    }
+}
+
+impl std::error::Error for ConnectionMutexPoisoned {}
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -131,6 +142,12 @@ impl Database {
         };
 
         Ok(db)
+    }
+
+    pub(crate) fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
+        self.conn
+            .lock()
+            .map_err(|_| rusqlite::Error::ToSqlConversionFailure(Box::new(ConnectionMutexPoisoned)))
     }
 
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
@@ -182,6 +199,37 @@ mod tests {
         assert!(guard.get_config("app_mode").is_ok());
         drop(guard);
         drop(mutex);
+        let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn database_operations_return_storage_error_when_connection_mutex_is_poisoned() {
+        let (db, db_path) = super::test_helpers::make_test_db("connection_mutex_poisoned");
+        let conn = db.connection();
+        let poisoner = std::thread::spawn(move || {
+            let _guard = conn.lock().expect("connection mutex should start healthy");
+            panic!("poison database connection mutex");
+        });
+        assert!(poisoner.join().is_err());
+
+        let result = db.get_config("app_mode");
+
+        let error = match result {
+            Err(rusqlite::Error::ToSqlConversionFailure(error)) => error,
+            Err(error) => panic!("unexpected storage error: {error}"),
+            Ok(_) => panic!("poisoned connection lock unexpectedly succeeded"),
+        };
+        assert!(error
+            .downcast_ref::<super::ConnectionMutexPoisoned>()
+            .is_some());
+        let custom_result = db.update_task_initial_prompt("T-missing", "updated prompt");
+        assert!(matches!(
+            custom_result,
+            Err(super::TaskInitialPromptUpdateError::Database(
+                rusqlite::Error::ToSqlConversionFailure(_)
+            ))
+        ));
+        drop(db);
         let _ = fs::remove_file(&db_path);
     }
 

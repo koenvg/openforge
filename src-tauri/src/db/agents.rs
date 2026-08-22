@@ -53,7 +53,7 @@ impl super::Database {
         status: &str,
         provider: &str,
     ) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         let tx = conn.transaction()?;
         tx.execute(
@@ -90,7 +90,7 @@ impl super::Database {
         checkpoint_data: Option<&str>,
         error_message: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE agent_sessions SET stage = ?1, status = ?2, checkpoint_data = ?3, error_message = ?4, updated_at = ?5 WHERE id = ?6",
@@ -100,7 +100,7 @@ impl super::Database {
     }
 
     pub fn set_agent_session_opencode_id(&self, id: &str, opencode_session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE agent_sessions SET opencode_session_id = ?1 WHERE id = ?2",
             [opencode_session_id, id],
@@ -109,7 +109,7 @@ impl super::Database {
     }
 
     pub fn set_agent_session_claude_id(&self, id: &str, claude_session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE agent_sessions SET claude_session_id = ?1 WHERE id = ?2",
             [claude_session_id, id],
@@ -118,7 +118,7 @@ impl super::Database {
     }
 
     pub fn set_agent_session_pi_id(&self, id: &str, pi_session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE agent_sessions SET pi_session_id = ?1 WHERE id = ?2",
             [pi_session_id, id],
@@ -127,7 +127,7 @@ impl super::Database {
     }
 
     pub fn set_agent_session_grok_id(&self, id: &str, grok_session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE agent_sessions SET grok_session_id = ?1 WHERE id = ?2",
             [grok_session_id, id],
@@ -138,7 +138,7 @@ impl super::Database {
     pub fn set_agent_session_pty_instance_id(&self, id: &str, pty_instance_id: u64) -> Result<()> {
         let pty_instance_id = i64::try_from(pty_instance_id)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         conn.execute(
             "UPDATE agent_sessions SET pty_instance_id = ?1 WHERE id = ?2",
             rusqlite::params![pty_instance_id, id],
@@ -162,7 +162,7 @@ impl super::Database {
     }
 
     pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE id = ?1"
         ))?;
@@ -178,7 +178,7 @@ impl super::Database {
         &self,
         ticket_id: &str,
     ) -> Result<Option<AgentSessionRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1"
         ))?;
@@ -197,7 +197,7 @@ impl super::Database {
         if ticket_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let placeholders: Vec<String> = ticket_ids
             .iter()
             .enumerate()
@@ -241,7 +241,7 @@ impl super::Database {
         if ticket_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let placeholders: Vec<String> = ticket_ids
             .iter()
             .enumerate()
@@ -265,7 +265,7 @@ impl super::Database {
     }
 
     pub fn get_sessions_by_provider(&self, provider: &str) -> Result<Vec<AgentSessionRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE provider = ?1 ORDER BY created_at DESC"
         ))?;
@@ -278,7 +278,7 @@ impl super::Database {
     }
 
     pub fn get_running_claude_sessions(&self) -> Result<Vec<AgentSessionRow>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(&format!(
             "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE provider = 'claude-code' AND status = 'running' ORDER BY created_at DESC"
         ))?;
@@ -298,7 +298,7 @@ impl super::Database {
         &self,
         cutoff_updated_at: i64,
     ) -> Result<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn()?;
         let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running' AND updated_at < ?2",
