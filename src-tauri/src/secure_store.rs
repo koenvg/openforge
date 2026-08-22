@@ -131,7 +131,24 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
 {
-    let admission_guard = Arc::clone(async_keychain_access_lock()).lock_owned().await;
+    spawn_blocking_secret_store_operation_with_admission(
+        Arc::clone(async_keychain_access_lock()),
+        operation_name,
+        operation,
+    )
+    .await
+}
+
+async fn spawn_blocking_secret_store_operation_with_admission<T, F>(
+    admission_lock: Arc<tokio::sync::Mutex<()>>,
+    operation_name: &'static str,
+    operation: F,
+) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let admission_guard = admission_lock.lock_owned().await;
     tokio::task::spawn_blocking(move || {
         let _admission_guard = admission_guard;
         operation()
@@ -539,9 +556,11 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn async_secret_store_admission_is_held_until_blocking_work_finishes() {
+        let admission_lock = Arc::new(tokio::sync::Mutex::new(()));
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = mpsc::channel();
-        let operation = tokio::spawn(spawn_blocking_secret_store_operation(
+        let operation = tokio::spawn(spawn_blocking_secret_store_operation_with_admission(
+            Arc::clone(&admission_lock),
             "test secret access",
             move || {
                 let _ = started_tx.send(());
@@ -552,10 +571,11 @@ mod tests {
 
         started_rx.await.expect("blocking operation should start");
 
-        let next_operation =
-            spawn_blocking_secret_store_operation("next test secret access", || {
-                Ok::<(), String>(())
-            });
+        let next_operation = spawn_blocking_secret_store_operation_with_admission(
+            Arc::clone(&admission_lock),
+            "next test secret access",
+            || Ok::<(), String>(()),
+        );
         tokio::pin!(next_operation);
         assert!(
             futures::poll!(next_operation.as_mut()).is_pending(),
