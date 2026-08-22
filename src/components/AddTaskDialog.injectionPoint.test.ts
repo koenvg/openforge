@@ -37,6 +37,7 @@ vi.mock('../lib/ipc', () => ({
   }),
   updateTaskInitialPrompt: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue(null),
+  getConfig: vi.fn().mockResolvedValue(null),
   getResolvedAiProvider: vi.fn().mockResolvedValue('claude-code'),
   listGitBranches: vi.fn().mockResolvedValue([]),
   repoHasCommits: vi.fn().mockResolvedValue(true),
