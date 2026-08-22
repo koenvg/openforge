@@ -52,6 +52,20 @@ describe('Scheduled Fire execution', () => {
     expect(api.__testing.calls.taskCreations).toEqual([])
   })
 
+  it('rejects Run now for a cancelled recurring Task Schedule', async () => {
+    const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
+    const cancelled = makeSchedule({
+      lifecycle: { state: 'cancelled', cancelledAt: Date.UTC(2026, 0, 1, 9) },
+    })
+    await setStoredSchedules(api, [cancelled])
+
+    await expect(
+      runScheduleNow(api, { projectId, scheduleId: cancelled.id }, Date.UTC(2026, 0, 1, 10)),
+    ).rejects.toThrow('Completed or cancelled Task Schedules cannot be run')
+    expect(api.__testing.calls.taskCreations).toEqual([])
+    await expect(listTaskSchedules(api, { projectId })).resolves.toEqual([cancelled])
+  })
+
   it('Run now creates a normal Task with the scheduled label and starts implementation by default', async () => {
     const api = createMockBackendOpenForgeApi({ pluginId: 'com.openforge.task-schedules', projectId })
     await setStoredSchedules(api, [makeSchedule()])

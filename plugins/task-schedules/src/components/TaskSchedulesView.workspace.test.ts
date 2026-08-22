@@ -95,6 +95,24 @@ describe('TaskSchedulesView workspace', () => {
     expect(within(inspector).queryByRole('button', { name: /Pause|Enable/ })).toBeNull()
   })
 
+  it('keeps cancelled recurring schedules inspectable without runnable actions', async () => {
+    const cancelled = makeSchedule({
+      id: 'schedule-cancelled-recurring',
+      title: 'Cancelled recurring dependency retry',
+      lifecycle: { state: 'cancelled', cancelledAt: Date.now() - 24 * 60 * 60 * 1_000 },
+    })
+    mockBackend([cancelled])
+
+    renderView()
+    const inspector = await selectSchedule('Cancelled recurring dependency retry')
+
+    expect(within(inspector).getByText('Cancelled')).toBeTruthy()
+    expect(within(inspector).getByText('Daily · 09:00')).toBeTruthy()
+    expect(within(inspector).queryByRole('button', { name: 'Run now' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(within(inspector).queryByRole('button', { name: /Pause|Enable/ })).toBeNull()
+  })
+
   it('removes terminal one-off schedules from the table after seven days', async () => {
     const day = 24 * 60 * 60 * 1_000
     const now = Date.now()
