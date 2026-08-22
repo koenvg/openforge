@@ -152,6 +152,43 @@ async fn rejects_legacy_coordinate_only_pull_request_commands() {
 }
 
 #[tokio::test]
+async fn create_task_dependency_domain_errors_keep_the_existing_bad_request_contract() {
+    let (state, path) = test_state("app_invoke_create_task_dependency_error");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Dependency Project", "path": "/tmp/dependency-project" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+
+    let error = invoke(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Blocked task",
+            "status": "backlog",
+            "projectId": project_id,
+            "dependsOn": ["T-404"],
+        }),
+    )
+    .await
+    .expect_err("missing dependency should fail");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        error.1,
+        "Failed to set task dependencies: dependency task T-404 does not exist"
+    );
+    assert!(crate::db::acquire_db(&state.db)
+        .get_all_tasks()
+        .expect("list tasks")
+        .is_empty());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn delete_project_conflicts_with_an_in_progress_task_start() {
     let (state, path) = test_state("app_invoke_delete_project_claim");
     let project = invoke_ok(
