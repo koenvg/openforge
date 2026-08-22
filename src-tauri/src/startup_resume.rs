@@ -475,10 +475,15 @@ mod tests {
 
     #[test]
     fn latest_session_allows_startup_resume_for_reopenable_statuses() {
-        for status in ["running", "paused", "interrupted", "completed"] {
+        for status in ["running", "paused", "interrupted"] {
             let session = test_agent_session_with_status(status);
             assert!(latest_session_allows_startup_resume(Some(&session)));
         }
+        let completed_session = test_agent_session_with_status("completed");
+        assert!(
+            !latest_session_allows_startup_resume(Some(&completed_session)),
+            "completed Agent Sessions restart only when they receive follow-up input"
+        );
 
         let failed_session = test_agent_session_with_status("failed");
         assert!(!latest_session_allows_startup_resume(Some(&failed_session)));

@@ -1538,9 +1538,8 @@ CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
         }
         Ok(())
     }),
-    // Adds the grok_session_id column for the Grok provider. Appended last so it
-    // takes the highest user_version. Guarded/idempotent (checks table + column
-    // existence) so it heals partially-migrated databases, matching the sibling
+    // Adds the grok_session_id column for the Grok provider. Guarded/idempotent
+    // so it heals partially migrated databases, matching the sibling
     // provider-session-id column migrations.
     M::up_with_hook("", |tx| {
         let table_exists: bool = tx
@@ -1580,6 +1579,25 @@ CREATE TABLE IF NOT EXISTS app_plugins (
     enabled INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
+        "#,
+    ),
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_terminal_replays (
+    session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    replay TEXT NOT NULL,
+    captured_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_terminal_replays_task
+    ON agent_terminal_replays(task_id, captured_at DESC);
+INSERT OR IGNORE INTO config (key, value)
+    VALUES ('completed_session_idle_timeout_seconds', '600');
         "#,
     ),
 );
@@ -2514,19 +2532,19 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 18, "All 18 tables should be created");
+        assert_eq!(table_count, 19, "All 19 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
             .expect("Failed to count config rows");
 
-        assert_eq!(config_count, 7, "Default config values should be inserted");
+        assert_eq!(config_count, 8, "Default config values should be inserted");
 
         let jira_columns: i32 = conn
             .query_row(

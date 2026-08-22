@@ -137,6 +137,14 @@ where
 
     if let Some(change) = status_change {
         emit_agent_status_changed(&state, &change);
+        if change.status == "completed" {
+            state
+                .completed_session_reaper
+                .completed(&change.task_id)
+                .await;
+        } else {
+            state.completed_session_reaper.active(&change.task_id).await;
+        }
         if should_start_task_display_title_refresh(&state, &notification) {
             let refresh_state = state.clone();
             let db = Arc::clone(&refresh_state.db);

@@ -12,6 +12,7 @@ mod cli_installer;
 mod codex_hooks;
 pub mod command_discovery;
 mod companion_gateway;
+mod completed_session_reaper;
 mod data_identity;
 mod db;
 mod diff_parser;

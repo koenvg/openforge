@@ -293,6 +293,41 @@ impl PtyManager {
         Ok(())
     }
 
+    /// Stops a completed Agent Session PTY while retaining its replay buffer.
+    pub async fn reclaim_agent_pty(&self, task_id: &str) -> Result<(), PtyError> {
+        self.agent_spawn_generations.lock().await.remove(task_id);
+        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+
+        let session = self.sessions.lock().await.remove(task_id);
+        let Some(mut session) = session else {
+            return Ok(());
+        };
+        if !matches!(session.kind, PtySessionKind::Agent) {
+            self.sessions
+                .lock()
+                .await
+                .insert(task_id.to_string(), session);
+            return Err(PtyError::ProcessNotFound(task_id.to_string()));
+        }
+
+        info!(
+            "Reclaiming completed Agent Session PTY for task {}",
+            task_id
+        );
+        if let Err(error) = self.terminate_session_process(task_id, &mut session).await {
+            self.sessions
+                .lock()
+                .await
+                .entry(task_id.to_string())
+                .or_insert(session);
+            return Err(error);
+        }
+        self.last_output.lock().await.remove(task_id);
+        info!("Completed Agent Session PTY for task {} reclaimed", task_id);
+        Ok(())
+    }
+
     /// Kills the PTY process for the given task_id
     ///
     /// # Arguments
