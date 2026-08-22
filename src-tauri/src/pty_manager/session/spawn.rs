@@ -625,7 +625,7 @@ impl PtyManager {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
                     output_buffers: Arc::clone(&self.output_buffers),
-                    lifecycle_lock: Arc::clone(&lifecycle_lock),
+                    lifecycle_lock: lifecycle_lock.clone(),
                     pid_file,
                     emit_agent_exit: true,
                 },
@@ -836,7 +836,7 @@ impl PtyManager {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
                     output_buffers: Arc::clone(&self.output_buffers),
-                    lifecycle_lock: Arc::clone(&lifecycle_lock),
+                    lifecycle_lock: lifecycle_lock.clone(),
                     pid_file,
                     emit_agent_exit: false,
                 },
@@ -1344,6 +1344,14 @@ mod tests {
             .await
             .contains_key(&session_key));
         assert!(!manager.last_output.lock().await.contains_key(&session_key));
+        drop(lifecycle_lock);
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while manager.lifecycle_locks.contains_key(&session_key) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("session teardown should evict its lifecycle lock");
     }
 
     #[tokio::test]

@@ -9,7 +9,10 @@ mod spawn;
 pub(super) use lifecycle::PtySessionKind;
 #[cfg(test)]
 pub(super) use lifecycle::{frozen_seconds, PtySession, NEXT_INSTANCE_ID};
-pub(super) use lifecycle::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessions};
+pub(super) use lifecycle::{
+    AgentSpawnGenerations, LastOutputTimes, LifecycleLockLease, LifecycleLockRegistry,
+    PtyOutputBuffers, PtySessions,
+};
 
 fn invalid_workspace_cwd(cwd: &Path, reason: impl ToString) -> PtyError {
     PtyError::InvalidWorkspaceCwd {
