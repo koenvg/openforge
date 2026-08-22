@@ -551,8 +551,14 @@ mod tests {
         ));
 
         started_rx.await.expect("blocking operation should start");
+
+        let next_operation =
+            spawn_blocking_secret_store_operation("next test secret access", || {
+                Ok::<(), String>(())
+            });
+        tokio::pin!(next_operation);
         assert!(
-            async_keychain_access_lock().try_lock().is_err(),
+            futures::poll!(next_operation.as_mut()).is_pending(),
             "async admission must remain held by blocking work"
         );
 
@@ -562,8 +568,8 @@ mod tests {
             .expect("secret-store task should join")
             .expect("secret-store operation should succeed");
 
-        let _available = async_keychain_access_lock()
-            .try_lock()
+        next_operation
+            .await
             .expect("async admission should be released after blocking work");
     }
 }
