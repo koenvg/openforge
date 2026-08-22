@@ -133,14 +133,20 @@ impl DatabaseCompanionDeviceStore {
             .map(|database| database.connection())
             .map_err(|_| "Companion device database lock was poisoned".to_string())
     }
+
+    fn lock_connection(
+        connection: &Arc<Mutex<rusqlite::Connection>>,
+    ) -> Result<std::sync::MutexGuard<'_, rusqlite::Connection>, String> {
+        connection
+            .lock()
+            .map_err(|_| "Companion device connection lock was poisoned".to_string())
+    }
 }
 
 impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
     fn save(&self, record: &CompanionDeviceRecord) -> Result<(), String> {
         let connection = self.connection()?;
-        let connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let connection = Self::lock_connection(&connection)?;
         connection
             .execute(
                 "INSERT INTO companion_devices (
@@ -163,9 +169,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
 
     fn list(&self) -> Result<Vec<CompanionDeviceRecord>, String> {
         let connection = self.connection()?;
-        let connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let connection = Self::lock_connection(&connection)?;
         read_records(&connection)
     }
 
@@ -175,9 +179,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
         seen_at: i64,
     ) -> Result<CompanionDeviceAuthentication, String> {
         let connection = self.connection()?;
-        let connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let connection = Self::lock_connection(&connection)?;
         let records = read_records(&connection)?;
         let matched = records.iter().fold(None, |matched, record| {
             if bool::from(record.credential_verifier.ct_eq(credential_verifier)) {
@@ -206,9 +208,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
 
     fn revoke(&self, device_id: &str, revoked_at: i64) -> Result<bool, String> {
         let connection = self.connection()?;
-        let connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let connection = Self::lock_connection(&connection)?;
         connection
             .execute(
                 "UPDATE companion_devices
@@ -222,9 +222,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
 
     fn remove_revoked(&self, device_id: &str) -> Result<CompanionDeviceRemoval, String> {
         let connection = self.connection()?;
-        let connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let connection = Self::lock_connection(&connection)?;
         let removed = connection
             .execute(
                 "DELETE FROM companion_devices WHERE device_id = ?1 AND revoked_at IS NOT NULL",
@@ -250,9 +248,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
 
     fn revoke_all(&self, revoked_at: i64) -> Result<CompanionDeviceRevocationBatch, String> {
         let connection = self.connection()?;
-        let mut connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let mut connection = Self::lock_connection(&connection)?;
         let transaction = connection
             .transaction()
             .map_err(|error| format!("failed to start Companion device revocation: {error}"))?;
@@ -285,9 +281,7 @@ impl CompanionDeviceStore for DatabaseCompanionDeviceStore {
 
     fn rollback_revoke_all(&self, batch: &CompanionDeviceRevocationBatch) -> Result<(), String> {
         let connection = self.connection()?;
-        let mut connection = connection
-            .lock()
-            .map_err(|_| "Companion device connection lock was poisoned".to_string())?;
+        let mut connection = Self::lock_connection(&connection)?;
         let transaction = connection
             .transaction()
             .map_err(|error| format!("failed to start Companion revocation rollback: {error}"))?;
@@ -452,5 +446,47 @@ impl CompanionDeviceStore for InMemoryCompanionDeviceStore {
             record.revoked_at = None;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DatabaseCompanionDeviceStore;
+    use std::sync::{Arc, Mutex};
+
+    fn connection() -> Arc<Mutex<rusqlite::Connection>> {
+        Arc::new(Mutex::new(
+            rusqlite::Connection::open_in_memory().expect("test connection should open"),
+        ))
+    }
+
+    #[test]
+    fn connection_lock_helper_returns_guard_for_healthy_connection() {
+        let connection = connection();
+
+        let guard = DatabaseCompanionDeviceStore::lock_connection(&connection)
+            .expect("healthy connection lock should succeed");
+
+        assert!(guard.is_autocommit());
+    }
+
+    #[test]
+    fn connection_lock_helper_returns_consistent_error_for_poisoned_connection() {
+        let connection = connection();
+        let poisoned_connection = Arc::clone(&connection);
+        let poisoner = std::thread::spawn(move || {
+            let _guard = poisoned_connection
+                .lock()
+                .expect("connection lock should start healthy");
+            panic!("poison connection lock");
+        });
+        assert!(poisoner.join().is_err());
+
+        let error = DatabaseCompanionDeviceStore::lock_connection(&connection).err();
+
+        assert_eq!(
+            error.as_deref(),
+            Some("Companion device connection lock was poisoned")
+        );
     }
 }
