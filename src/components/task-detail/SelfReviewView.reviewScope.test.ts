@@ -162,11 +162,20 @@ describe("SelfReviewView uncommitted toggle", () => {
 	});
 
 	it("specific commit mode hides uncommitted checkbox and shows recovery action", async () => {
+		const commit = {
+			sha: "commit-sha",
+			short_sha: "commit",
+			message: "Review this commit",
+			author: "dev",
+			date: "2025-01-01T00:00:00Z",
+		};
 		const commitDiff = { ...baseDiff, filename: "src/only-commit.rs" };
 		const mockGetTaskDiff = vi.mocked(getTaskDiff);
+		const mockGetTaskCommits = vi.mocked(getTaskCommits);
 		const mockGetCommitDiff = vi.mocked(getCommitDiff);
 
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+		mockGetTaskCommits.mockResolvedValue([commit]);
 		mockGetCommitDiff.mockResolvedValue([commitDiff]);
 
 		render(SelfReviewView, {
@@ -177,16 +186,12 @@ describe("SelfReviewView uncommitted toggle", () => {
 			},
 		});
 
-		await waitFor(() => {
-			expect(screen.getByLabelText("Include uncommitted changes")).toBeTruthy();
-		});
-
-		const commitButton = screen.getByText("All changes");
-		commitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		await fireEvent.click(await screen.findByTitle(commit.message));
 
 		await waitFor(() => {
-			expect(screen.queryByLabelText("Include uncommitted changes")).toBeTruthy();
-			expect(screen.queryByText("Show all changes")).toBeNull();
+			expect(mockGetCommitDiff).toHaveBeenCalledWith(baseTask.id, commit.sha);
+			expect(screen.queryByLabelText("Include uncommitted changes")).toBeNull();
+			expect(screen.getByText("Show all changes")).toBeTruthy();
 		});
 	});
 });
