@@ -145,6 +145,44 @@ fn install_package_source_accepts_schema_declared_capabilities() {
 }
 
 #[test]
+fn install_package_source_enforces_app_enablement_contract() {
+    let source = tempdir().expect("source tempdir should create");
+    let managed = tempdir().expect("managed tempdir should create");
+    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+    fs::write(source.path().join("dist/frontend.js"), "export default {};")
+        .expect("frontend should write");
+
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js","requires":["appEnablement"]}"#,
+    );
+    let row =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect("app-enabled package should install with capability gating");
+    let metadata: Value =
+        serde_json::from_str(&row.package_metadata).expect("stored package metadata should parse");
+    assert_eq!(metadata["enablement"], "app");
+
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js"}"#,
+    );
+    let missing_capability =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect_err("app enablement without capability should fail");
+    assert!(missing_capability.contains("requires the appEnablement capability"));
+
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"workspace","frontend":"dist/frontend.js"}"#,
+    );
+    let invalid =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect_err("invalid enablement should fail");
+    assert!(invalid.contains("enablement must be \"app\" or \"project\""));
+}
+
+#[test]
 fn install_package_source_rejects_unknown_openforge_property() {
     let source = tempdir().expect("source tempdir should create");
     let managed = tempdir().expect("managed tempdir should create");

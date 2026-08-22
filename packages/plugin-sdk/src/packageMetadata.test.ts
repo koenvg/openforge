@@ -35,6 +35,38 @@ describe('package.json#openforge metadata contract', () => {
     vi.doUnmock('./openforgePackageMetadataSchema.json')
     vi.resetModules()
   })
+  it('defaults omitted enablement to project ownership', () => {
+    const metadata = validMetadata()
+
+    expect(validateOpenForgePackageMetadata(metadata)).toEqual([])
+    expect(metadata).not.toHaveProperty('enablement')
+  })
+
+  it('accepts explicit app enablement with its required host capability', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      enablement: 'app',
+      requires: ['appEnablement'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('appEnablement')
+  })
+
+  it('rejects invalid enablement values and app enablement without capability gating', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({ enablement: 'workspace' }))).toContainEqual({
+      path: 'enablement',
+      message: 'Must be "app" or "project"',
+    })
+    expect(validateOpenForgePackageMetadata(validMetadata({ enablement: 'app' }))).toContainEqual({
+      path: 'requires',
+      message: 'App enablement requires the appEnablement capability',
+    })
+  })
+
+  it('accepts custom sidebar navigation as an explicit host capability', () => {
+    expect(validateOpenForgePackageMetadata(validMetadata({
+      requires: ['customSidebarNavigation'],
+    }))).toEqual([])
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('customSidebarNavigation')
+  })
 
   it('validates ADR package metadata without manifest contributions', () => {
     expect(validateOpenForgePackageMetadata(validMetadata())).toEqual([])

@@ -50,12 +50,15 @@ Each plugin declares OpenForge metadata in `package.json#openforge` and ships al
 Metadata rules:
 
 - `openforge.id` must be unique app-wide. Runtime contribution IDs are local to the plugin and are auto-qualified with the plugin id.
+- `openforge.enablement` accepts `project` or `app`. Omission means `project`. App enablement requires `appEnablement` in `requires` and is managed once from Global Settings.
 - `openforge.apiVersion` is the compatibility gate. The current SDK supports API version `1`.
 - `icon` uses the same `PluginIcon` contract as view navigation: a supported Lucide name such as `chart-column-big`, or `{ "type": "svg", "svg": "<svg ...>...</svg>" }`.
 - `frontend` and `backend` are optional, independent built JavaScript artifacts.
 - `frontendStyles` optionally lists one or more built CSS artifacts for a frontend plugin. Paths are package-relative, must end in `.css`, and are validated during installation.
 - `requires` should list the host capabilities the package expects. Metadata validation rejects unknown capability names; runtime capability availability is still determined by the active OpenForge host.
 - Installed packages should include their built `dist/` artifacts.
+
+Project-enabled packages activate for the active Project and deactivate when that Project changes or clears. App-enabled packages activate once, remain available with or without an active Project, and receive current Project changes through `openforge.context.getSnapshot()` and component context props. Disabling, reloading, uninstalling, activation rollback, and app shutdown stop both entry points and registered background services.
 
 ## SDK package and host API versions
 
@@ -92,6 +95,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, and close-disabled behavior |
 | `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Shared plugin page heading and description component |
 | `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Shared loading, empty, and error state component |
+| `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
 Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge UI component layer boundaries](./ui-component-boundaries.md).
@@ -115,6 +119,23 @@ export default defineFrontendPlugin({
   }
 })
 ```
+
+A sidebar View may own its allocated navigation slot. Declare `customSidebarNavigation`, set `placement: 'sidebar'`, and add a `navigationComponent` loader:
+
+```ts
+context.subscriptions.add(openforge.views.register({
+  id: 'usage',
+  title: 'Account usage',
+  icon: 'chart-column-big',
+  placement: 'sidebar',
+  component: () => import('./UsageView.svelte'),
+  navigationComponent: () => import('./UsageNavigation.svelte')
+}))
+```
+
+The navigation component receives `api`, the current `context`, `active`, `collapsed`, View identity/display metadata, and `onActivate`. It owns the DOM inside the slot, so do not nest the whole component in another button. Call `onActivate` to open the View. OpenForge owns ordering, width, mounting, cleanup, and error isolation. If loading or rendering fails, OpenForge logs the package id and restores the static title-and-icon entry.
+
+For a standard row, import `PluginSidebarLink.svelte` from the SDK UI layer. Pass `accessibleName`, `active`, `collapsed`, and `onActivate`, then provide optional `leading`, `label`, and `trailing` snippets. It uses native button focus/keyboard behavior, `aria-current`, and a collapsed tooltip. Custom components may ignore this shared link when they need richer trusted controls.
 
 ### Plugin icons
 
@@ -175,7 +196,7 @@ Frontend plugins share the host's Svelte runtime. Declare `svelte` as both a pee
 }
 ```
 
-OpenForge validates the JavaScript and CSS artifacts during installation, serves them through `plugin://<plugin-id>/...`, attaches stylesheets before importing the frontend entry, and removes them when the plugin is disabled, reloaded, or uninstalled. Reload cache-busting applies to both JavaScript and CSS. Package-relative URLs inside the CSS continue to resolve through the same plugin asset protocol.
+OpenForge validates the JavaScript and CSS artifacts during installation, serves them through `plugin://<plugin-id>/...`, attaches stylesheets before importing the frontend entry, and removes them when the plugin is disabled, reloaded, or uninstalled. Reload cache-busting applies to both JavaScript and CSS. Package-relative URLs inside the CSS continue to resolve through the same plugin asset protocol. Custom sidebar navigation components use this same Svelte/CSS build contract; importing a `.svelte` loader does not make component CSS available unless the build emits and declares it.
 
 ## Backend entry point
 
@@ -282,7 +303,7 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 
 Current declared capability names are:
 
-`commands`, `events`, `views`, `taskPane`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`.
+`commands`, `events`, `views`, `injectionPoints`, `taskPane`, `taskStart`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`, `appEnablement`, `customSidebarNavigation`.
 
 ## Task links
 

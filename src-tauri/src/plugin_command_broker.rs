@@ -288,7 +288,7 @@ where
                 return Err(PluginCommandDiscoveryError::PluginNotInstalled { plugin_id });
             };
             if !database
-                .is_plugin_enabled(&project_id, &plugin.id)
+                .is_plugin_active_for_project(&project_id, &plugin.id)
                 .map_err(|error| {
                     PluginCommandDiscoveryError::Database(format!(
                         "Failed to get plugin enablement: {error}"

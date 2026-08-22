@@ -71,6 +71,7 @@
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
     "./ui/PluginPageHeader.svelte": "./dist/ui/PluginPageHeader.svelte",
     "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte",
+    "./ui/PluginSidebarLink.svelte": "./dist/ui/PluginSidebarLink.svelte",
     "./ui/FileTypeIcon.svelte": "./dist/ui/FileTypeIcon.svelte"
   },
   "files": [

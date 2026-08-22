@@ -38,6 +38,13 @@ function validateOptionalString(value: unknown, path: string): ValidationError[]
   return []
 }
 
+function validateEnablement(value: unknown): ValidationError[] {
+  if (value === undefined || value === 'app' || value === 'project') {
+    return []
+  }
+  return [{ path: 'enablement', message: 'Must be "app" or "project"' }]
+}
+
 function validatePluginIcon(value: unknown): ValidationError[] {
   if (value === undefined || isPluginIconName(value) || isPluginSvgIcon(value)) {
     return []
@@ -125,6 +132,7 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   errors.push(...validateApiVersion(data.apiVersion))
   errors.push(...validateRequiredString(data.displayName, 'displayName'))
   errors.push(...validateRequiredString(data.description, 'description'))
+  errors.push(...validateEnablement(data.enablement))
   errors.push(...validatePluginIcon(data.icon))
   errors.push(...validateOptionalString(data.frontend, 'frontend'))
   errors.push(...validateFrontendStyles(data.frontendStyles))
@@ -133,6 +141,9 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   }
   errors.push(...validateOptionalString(data.backend, 'backend'))
   errors.push(...validateRequires(data.requires))
+  if (data.enablement === 'app' && (!Array.isArray(data.requires) || !data.requires.includes('appEnablement'))) {
+    errors.push({ path: 'requires', message: 'App enablement requires the appEnablement capability' })
+  }
   if (Array.isArray(data.requires) && data.requires.includes('browserSurfaces') && !isNonEmptyString(data.frontend)) {
     errors.push({ path: 'requires', message: 'browserSurfaces capability requires a frontend entry' })
   }

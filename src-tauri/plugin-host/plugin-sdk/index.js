@@ -30,19 +30,32 @@ var openforgePackageMetadataSchema_default = {
 		"description"
 	],
 	dependentRequired: { "frontendStyles": ["frontend"] },
-	allOf: [{
-		"if": {
-			"properties": { "requires": { "contains": { "const": "browserSurfaces" } } },
-			"required": ["requires"]
+	allOf: [
+		{
+			"if": {
+				"properties": { "requires": { "contains": { "const": "browserSurfaces" } } },
+				"required": ["requires"]
+			},
+			"then": { "required": ["frontend"] }
 		},
-		"then": { "required": ["frontend"] }
-	}, {
-		"if": {
-			"properties": { "requires": { "contains": { "const": "taskLinks" } } },
-			"required": ["requires"]
+		{
+			"if": {
+				"properties": { "requires": { "contains": { "const": "taskLinks" } } },
+				"required": ["requires"]
+			},
+			"then": { "required": ["frontend"] }
 		},
-		"then": { "required": ["frontend"] }
-	}],
+		{
+			"if": {
+				"properties": { "enablement": { "const": "app" } },
+				"required": ["enablement"]
+			},
+			"then": {
+				"properties": { "requires": { "contains": { "const": "appEnablement" } } },
+				"required": ["requires"]
+			}
+		}
+	],
 	properties: {
 		"id": {
 			"type": "string",
@@ -58,6 +71,11 @@ var openforgePackageMetadataSchema_default = {
 		"description": {
 			"type": "string",
 			"minLength": 1
+		},
+		"enablement": {
+			"enum": ["app", "project"],
+			"default": "project",
+			"description": "Lifecycle ownership for this plugin package. Omission means project-owned enablement."
 		},
 		"icon": {
 			"oneOf": [{
@@ -127,7 +145,9 @@ var openforgePackageMetadataSchema_default = {
 				"config",
 				"projectConfig",
 				"browserSurfaces",
-				"taskLinks"
+				"taskLinks",
+				"appEnablement",
+				"customSidebarNavigation"
 			] }
 		}
 	}
@@ -177,7 +197,9 @@ var OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
 	"config",
 	"projectConfig",
 	"browserSurfaces",
-	"taskLinks"
+	"taskLinks",
+	"appEnablement",
+	"customSidebarNavigation"
 ];
 function assertOpenForgePluginCapabilitiesMatchSchema() {
 	const schemaCapabilities = openforgePackageMetadataSchema_default.properties.requires.items.enum;
@@ -234,6 +256,13 @@ function validateOptionalString(value, path) {
 		message: "Must be a non-empty string"
 	}];
 	return [];
+}
+function validateEnablement(value) {
+	if (value === void 0 || value === "app" || value === "project") return [];
+	return [{
+		path: "enablement",
+		message: "Must be \"app\" or \"project\""
+	}];
 }
 function validatePluginIcon(value) {
 	if (value === void 0 || isPluginIconName(value) || isPluginSvgIcon(value)) return [];
@@ -318,6 +347,7 @@ function validateOpenForgePackageMetadata(data) {
 	errors.push(...validateApiVersion(data.apiVersion));
 	errors.push(...validateRequiredString(data.displayName, "displayName"));
 	errors.push(...validateRequiredString(data.description, "description"));
+	errors.push(...validateEnablement(data.enablement));
 	errors.push(...validatePluginIcon(data.icon));
 	errors.push(...validateOptionalString(data.frontend, "frontend"));
 	errors.push(...validateFrontendStyles(data.frontendStyles));
@@ -327,6 +357,10 @@ function validateOpenForgePackageMetadata(data) {
 	});
 	errors.push(...validateOptionalString(data.backend, "backend"));
 	errors.push(...validateRequires(data.requires));
+	if (data.enablement === "app" && (!Array.isArray(data.requires) || !data.requires.includes("appEnablement"))) errors.push({
+		path: "requires",
+		message: "App enablement requires the appEnablement capability"
+	});
 	if (Array.isArray(data.requires) && data.requires.includes("browserSurfaces") && !isNonEmptyString(data.frontend)) errors.push({
 		path: "requires",
 		message: "browserSurfaces capability requires a frontend entry"
@@ -1351,6 +1385,11 @@ var TestingFrontendContributionFake = class {
 		const qualifiedId = this.services.localQualifiedId("views", registration.id);
 		assertTitle("views", registration.title);
 		assertFunction("views", "component", registration.component);
+		if (registration.navigationComponent !== void 0) {
+			assertFunction("views", "navigationComponent", registration.navigationComponent);
+			if (registration.placement !== "sidebar") throw new Error("views registration custom navigation requires sidebar placement");
+			if (!this.services.packageMetadata.requires?.includes("customSidebarNavigation")) throw new Error("views registration custom navigation requires the customSidebarNavigation capability");
+		}
 		this.services.claims.claim("views", qualifiedId);
 		const contribution = {
 			...registration,

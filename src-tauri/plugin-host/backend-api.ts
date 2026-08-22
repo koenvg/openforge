@@ -17,7 +17,7 @@ import type {
   TaskWorkspaceInfo,
   WritableBoardStatus,
 } from '@openforge-app/plugin-sdk'
-import type { BackendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/backend'
+import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { ContributionRegistry } from './contribution-registry'
 import type { HostCallbackHandler, InvokeBackendInput, RuntimeEventHandler, RuntimePluginState } from './runtime-types'
 
@@ -66,10 +66,6 @@ export function createBackendApi(
   runtime: BackendApiRuntime,
   contributions: ContributionRegistry,
 ): BackendOpenForgeAPI {
-  const contextSnapshot: OpenForgeContextSnapshot = {
-    pluginId: state.pluginId,
-    projectId: state.projectId,
-  }
   const hostCallback = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
     if (!runtime.hostCallbacks) {
       throw new Error(`OpenForge host capability is unavailable: ${method}`)
@@ -97,7 +93,7 @@ export function createBackendApi(
     },
     storage: state.storage,
     context: {
-      getSnapshot: () => ({ ...contextSnapshot }),
+      getSnapshot: () => ({ pluginId: state.pluginId, projectId: state.projectId }),
     },
     tasks: {
       list: async request => await hostCallback<Task[]>('openforge.tasks.list', taskListCallbackParams(request)),

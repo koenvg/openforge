@@ -21,6 +21,7 @@ describe('plugin-sdk public UI exports', () => {
       'Modal',
       'PluginPageHeader',
       'PluginViewState',
+      'PluginSidebarLink',
       'FileTypeIcon',
     ])
 

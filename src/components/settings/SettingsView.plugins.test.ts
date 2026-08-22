@@ -143,7 +143,7 @@ describe('SettingsView plugin integration', () => {
       expect(screen.getByRole('button', { name: /install package/i })).toBeTruthy()
       expect(screen.getAllByText('Global Plugin').length).toBeGreaterThan(0)
     })
-    expect(screen.getByText('Install plugins app-wide. Projects enable installed plugins explicitly.')).toBeTruthy()
+    expect(screen.getByText('Install packages here. App-owned plugins are enabled once; project-owned plugins are enabled per Project.')).toBeTruthy()
     expect(screen.getByRole('button', { name: /reload plugin: global plugin/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /uninstall plugin: global plugin/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /enable for this project: global plugin/i })).toBeNull()

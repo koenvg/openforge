@@ -187,6 +187,19 @@ pub(super) async fn handle_app_plugin_command(
                     .map_err(map_plugin_platform_error)?,
             )?
         }
+        "set_app_plugin_enabled" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let enabled = payload_bool(&request.payload, "enabled")?;
+            plugin_platform(state, false)?
+                .set_app_plugin_enabled(&plugin_id, enabled)
+                .map_err(map_plugin_platform_error)?;
+            serde_json::Value::Null
+        }
+        "get_enabled_app_plugins" => json_value(
+            plugin_platform(state, false)?
+                .enabled_app_plugins()
+                .map_err(map_plugin_platform_error)?,
+        )?,
         "set_global_plugin_default" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let enabled = request
@@ -290,8 +303,14 @@ pub(super) async fn handle_app_plugin_command(
         }
         "plugin_backend_when_ready" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let project_id = payload_optional_string(&request.payload, "projectId")?;
+            let preserve_activation = request
+                .payload
+                .get("preserveActivation")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
             plugin_platform(state, false)?
-                .backend_when_ready(&plugin_id)
+                .backend_when_ready(&plugin_id, project_id.as_deref(), preserve_activation)
                 .await
                 .map_err(map_plugin_platform_error)?
         }

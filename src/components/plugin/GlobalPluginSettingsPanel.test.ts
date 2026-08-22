@@ -16,12 +16,15 @@ const { activatePluginMock } = vi.hoisted(() => ({
 // section component's props.
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
   activatePlugin: activatePluginMock,
+  enablePluginForApp: vi.fn(),
+  disablePluginForApp: vi.fn(),
   getPluginRenderProps: () => ({ api: {}, context: {} }),
   enablePluginForProject: vi.fn(),
   installFromLocal: vi.fn(),
   installPluginFromGit: vi.fn(),
   installPluginFromNpm: vi.fn(),
   reloadInstalledPluginMetadata: vi.fn(),
+  reloadPluginForApp: vi.fn(),
   reloadPluginForProject: vi.fn(),
   uninstallPlugin: vi.fn(),
 }))
@@ -75,12 +78,12 @@ describe('GlobalPluginSettingsPanel', () => {
     })
   })
 
-  it('activates installed plugins so their global sections can surface', async () => {
+  it('does not activate a project-enabled plugin merely because Global Settings is open', () => {
     installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
 
     render(GlobalPluginSettingsPanel, { props: {} })
 
-    await waitFor(() => expect(activatePluginMock).toHaveBeenCalledWith('plugin.notes'))
+    expect(activatePluginMock).not.toHaveBeenCalled()
   })
 
   it('renders a plugin global-scoped settings section inside its card', async () => {

@@ -2,17 +2,20 @@
   import { Blocks, AlertCircle } from '@lucide/svelte'
   import {
     installedPlugins,
+    appEnabledPluginIds,
     enabledPluginIds,
     error as pluginLoadError,
     runtimeContributionSources,
   } from '../../lib/plugin/pluginStore'
   import {
-    activatePlugin,
+    disablePluginForApp,
+    enablePluginForApp,
     enablePluginForProject,
     installFromLocal,
     installPluginFromGit,
     installPluginFromNpm,
     reloadInstalledPluginMetadata,
+    reloadPluginForApp,
     reloadPluginForProject,
     uninstallPlugin,
   } from '../../lib/plugin/pluginRegistry'
@@ -52,17 +55,6 @@
 
   let pluginsList = $derived(Array.from($installedPlugins.values()))
 
-  // A plugin's settings sections are only registered once its frontend activates, and
-  // activation is otherwise driven by per-project enablement — which the global page
-  // isn't tied to. Activate installed, non-errored plugins here so any global-scoped
-  // sections they declare become discoverable. Activation is idempotent for plugins
-  // already active.
-  $effect(() => {
-    for (const plugin of pluginsList) {
-      if (plugin.state !== 'error') void activatePlugin(plugin.manifest.id)
-    }
-  })
-
   // Global-scoped settings sections, grouped by the plugin that owns them, so each
   // renders inside that plugin's card. Project-scoped sections are left to the
   // per-project settings page.
@@ -77,7 +69,9 @@
     return map
   })
   let installedPluginToEnable = $derived(installedPluginToEnableId ? $installedPlugins.get(installedPluginToEnableId) : null)
-  let canEnableInstalledPluginForActiveProject = $derived(!!activeProjectId && !!installedPluginToEnableId && !$enabledPluginIds.has(installedPluginToEnableId))
+  let installedPluginUsesAppEnablement = $derived(installedPluginToEnable?.packageMetadata?.enablement === 'app')
+  let canEnableInstalledPluginForApp = $derived(installedPluginUsesAppEnablement && !!installedPluginToEnableId && !$appEnabledPluginIds.has(installedPluginToEnableId))
+  let canEnableInstalledPluginForActiveProject = $derived(!installedPluginUsesAppEnablement && !!activeProjectId && !!installedPluginToEnableId && !$enabledPluginIds.has(installedPluginToEnableId))
   let sourcePlaceholder = $derived(sourceType === 'npm'
     ? '@acme/openforge-github@1.2.0'
     : sourceType === 'git'
@@ -121,12 +115,26 @@
 
       const installedPluginId = Array.from($installedPlugins.keys()).find((pluginId) => !beforePluginIds.has(pluginId)) ?? null
       installedPluginToEnableId = installedPluginId
-      installMessage = 'Installed app-wide. Enable it explicitly in each project when ready.'
+      installMessage = installedPluginToEnable?.packageMetadata?.enablement === 'app'
+        ? 'Installed. Enable it once to use it throughout OpenForge.'
+        : 'Installed app-wide. Enable it explicitly in each project when ready.'
       sourceInput = ''
     } catch (error) {
       installError = errorMessage(error)
     } finally {
       isInstalling = false
+    }
+  }
+
+  async function handleEnableForApp() {
+    if (disabled || !installedPluginToEnableId) return
+
+    actionError = null
+    try {
+      await enablePluginForApp(installedPluginToEnableId)
+      installMessage = 'Installed and enabled throughout OpenForge.'
+    } catch (error) {
+      actionError = errorMessage(error)
     }
   }
 
@@ -142,12 +150,26 @@
     }
   }
 
+  async function handleAppToggle(pluginId: string, enabled: boolean) {
+    if (disabled) return
+
+    actionError = null
+    try {
+      if (enabled) await enablePluginForApp(pluginId)
+      else await disablePluginForApp(pluginId)
+    } catch (error) {
+      actionError = errorMessage(error)
+    }
+  }
+
   async function handleReload(pluginId: string) {
     if (disabled) return
 
     actionError = null
     try {
-      if (activeProjectId) {
+      if ($installedPlugins.get(pluginId)?.packageMetadata?.enablement === 'app') {
+        await reloadPluginForApp(pluginId)
+      } else if (activeProjectId) {
         await reloadPluginForProject(activeProjectId, pluginId)
       } else {
         await reloadInstalledPluginMetadata(pluginId)
@@ -185,6 +207,8 @@
       version: plugin.manifest.version,
       apiVersion: plugin.manifest.apiVersion,
       state: plugin.state,
+      enablement: plugin.packageMetadata?.enablement ?? 'project',
+      enabledForApp: $appEnabledPluginIds.has(plugin.manifest.id),
       enabledForActiveProject: $enabledPluginIds.has(plugin.manifest.id),
       activeProjectId,
       sourceKind: plugin.sourceKind ?? (plugin.isBuiltin ? 'builtin' : 'unknown'),
@@ -217,7 +241,7 @@
     <form class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg bg-base-200/30" onsubmit={handleInstall}>
       <div class="flex flex-col gap-1">
         <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Install package</span>
-        <p class="text-xs text-base-content/60 m-0">Install plugins app-wide. Projects enable installed plugins explicitly.</p>
+        <p class="text-xs text-base-content/60 m-0">Install packages here. App-owned plugins are enabled once; project-owned plugins are enabled per Project.</p>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-[10rem_1fr_auto] gap-3 items-end">
@@ -248,6 +272,11 @@
       {#if installMessage}
         <div class="text-xs text-success bg-success/10 p-2 rounded flex flex-col gap-2">
           <span>{installMessage}</span>
+          {#if canEnableInstalledPluginForApp && installedPluginToEnable}
+            <Button class="self-start" size="xs" type="button" onclick={handleEnableForApp} disabled={disabled}>
+              Enable throughout OpenForge: {installedPluginToEnable.manifest.name}
+            </Button>
+          {/if}
           {#if canEnableInstalledPluginForActiveProject && installedPluginToEnable}
             <Button class="self-start" size="xs" type="button" onclick={handleEnableForActiveProject} disabled={disabled}>
               Enable for active project: {installedPluginToEnable.manifest.name}
@@ -317,19 +346,34 @@
                 </div>
 
                 <div class="flex flex-col items-end gap-2 shrink-0">
-                  <label class="flex items-center gap-2 cursor-pointer">
-                    <span class="text-xs text-base-content/70">Enable by default</span>
-                    <input
-                      type="checkbox"
-                      class="toggle toggle-primary toggle-sm"
-                      role="switch"
-                      aria-label="Enable by default: {plugin.manifest.name}"
-                      data-testid="plugin-default-{plugin.manifest.id}"
-                      checked={pluginDefaults.get(plugin.manifest.id) ?? false}
-                      disabled={disabled}
-                      onchange={(e) => onToggleDefault?.(plugin.manifest.id, e.currentTarget.checked)}
-                    />
-                  </label>
+                  {#if plugin.packageMetadata?.enablement === 'app'}
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <span class="text-xs text-base-content/70">Enabled throughout OpenForge</span>
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-primary toggle-sm"
+                        role="switch"
+                        aria-label="Enabled throughout OpenForge: {plugin.manifest.name}"
+                        checked={$appEnabledPluginIds.has(plugin.manifest.id)}
+                        disabled={disabled}
+                        onchange={(event) => handleAppToggle(plugin.manifest.id, event.currentTarget.checked)}
+                      />
+                    </label>
+                  {:else}
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <span class="text-xs text-base-content/70">Enable by default</span>
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-primary toggle-sm"
+                        role="switch"
+                        aria-label="Enable by default: {plugin.manifest.name}"
+                        data-testid="plugin-default-{plugin.manifest.id}"
+                        checked={pluginDefaults.get(plugin.manifest.id) ?? false}
+                        disabled={disabled}
+                        onchange={(event) => onToggleDefault?.(plugin.manifest.id, event.currentTarget.checked)}
+                      />
+                    </label>
+                  {/if}
                   <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleReload(plugin.manifest.id)}>Reload plugin</button>
                   {#if !isBuiltIn}
                     <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" disabled={disabled} onclick={() => handleUninstall(plugin.manifest.id)}>Uninstall plugin</button>

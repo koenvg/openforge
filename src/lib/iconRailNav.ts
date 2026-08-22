@@ -1,4 +1,5 @@
-import type { PluginIcon } from '@openforge-app/plugin-sdk'
+import type { PluginIcon, PluginSidebarNavigationProps } from '@openforge-app/plugin-sdk'
+import type { PluginViewRegistration } from '@openforge-app/plugin-sdk/frontend'
 import type { AppView } from './types'
 
 export interface IconRailPluginNavItem {
@@ -6,6 +7,15 @@ export interface IconRailPluginNavItem {
   icon: PluginIcon
   title: string
   shortcut: string | null
+}
+
+export interface SidebarPluginNavigation {
+  component: NonNullable<PluginViewRegistration['navigationComponent']>
+  props: Pick<PluginSidebarNavigationProps, 'api' | 'context' | 'view'>
+}
+
+export interface SidebarPluginNavItem extends IconRailPluginNavItem {
+  navigation?: SidebarPluginNavigation
 }
 
 export interface IconRailNavItem {

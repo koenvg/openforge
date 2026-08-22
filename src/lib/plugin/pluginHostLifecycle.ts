@@ -5,6 +5,7 @@ import {
   pluginBackendWhenReady,
   pluginInvoke,
 } from '../ipc'
+import { activeProjectId } from '../stores'
 import {
   ensurePluginHostStoreSubscriptions,
   subscribeToPluginHostEvent,
@@ -37,7 +38,10 @@ export async function deactivatePluginBackend(pluginId: string): Promise<void> {
   clearPluginRuntimeHostState(pluginId)
 }
 
-export async function ensurePluginBackendReady(pluginId: string): Promise<void> {
+export async function ensurePluginBackendReady(
+  pluginId: string,
+  projectId: string | null = get(activeProjectId),
+): Promise<void> {
   const entry = get(installedPlugins).get(pluginId)
   if (!entry?.manifest.backend) {
     throw new Error(`Plugin backend is unavailable for ${pluginId}`)
@@ -48,12 +52,20 @@ export async function ensurePluginBackendReady(pluginId: string): Promise<void> 
   }
 
   try {
-    await pluginBackendWhenReady(pluginId)
+    await pluginBackendWhenReady(pluginId, projectId)
     pluginBackendReadyStates.set(pluginId, 'ready')
   } catch (error) {
     pluginBackendReadyStates.set(pluginId, 'error')
     throw error
   }
+}
+
+export async function updatePluginBackendContext(
+  pluginId: string,
+  projectId: string | null,
+): Promise<void> {
+  await pluginBackendWhenReady(pluginId, projectId, true)
+  pluginBackendReadyStates.set(pluginId, 'ready')
 }
 
 export function createPluginLifecycleHostCapabilities(
@@ -84,7 +96,7 @@ export function createPluginLifecycleHostCapabilities(
         if (pluginBackendReadyStates.get(pluginId) !== 'ready') {
           pluginBackendReadyStates.set(pluginId, 'starting')
         }
-        pluginBackendWhenReady(pluginId).then(() => {
+        pluginBackendWhenReady(pluginId, get(activeProjectId)).then(() => {
           pluginBackendReadyStates.set(pluginId, 'ready')
           if (!disposed) handler()
         }).catch(() => {

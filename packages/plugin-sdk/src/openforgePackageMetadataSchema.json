@@ -27,6 +27,18 @@
         "required": ["requires"]
       },
       "then": { "required": ["frontend"] }
+    },
+    {
+      "if": {
+        "properties": { "enablement": { "const": "app" } },
+        "required": ["enablement"]
+      },
+      "then": {
+        "properties": {
+          "requires": { "contains": { "const": "appEnablement" } }
+        },
+        "required": ["requires"]
+      }
     }
   ],
   "properties": {
@@ -46,6 +58,11 @@
     "description": {
       "type": "string",
       "minLength": 1
+    },
+    "enablement": {
+      "enum": ["app", "project"],
+      "default": "project",
+      "description": "Lifecycle ownership for this plugin package. Omission means project-owned enablement."
     },
     "icon": {
       "oneOf": [
@@ -119,7 +136,9 @@
           "config",
           "projectConfig",
           "browserSurfaces",
-          "taskLinks"
+          "taskLinks",
+          "appEnablement",
+          "customSidebarNavigation"
         ]
       }
     }

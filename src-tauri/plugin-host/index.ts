@@ -210,6 +210,7 @@ export class PluginHostRuntime {
       pluginId: this.requirePluginId(params),
       backendPath: params?.backendPath,
       projectId: params?.projectId,
+      preserveActivation: params?.preserveActivation === true,
       packageMetadata: params?.packageMetadata,
     }
   }

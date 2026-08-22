@@ -8,11 +8,10 @@
     moveVisibleProject,
     saveHiddenProjectIds,
   } from '../../lib/projectVisibility'
-  import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import { isCrossProjectView } from '../../lib/views'
-  import type { IconRailPluginNavItem } from '../../lib/iconRailNav'
+  import type { SidebarPluginNavItem } from '../../lib/iconRailNav'
   import type { AppView } from '../../lib/types'
-  import PluginNavigationIcon from './PluginNavigationIcon.svelte'
+  import PluginSidebarNavigationSlot from './PluginSidebarNavigationSlot.svelte'
 
   interface Props {
     collapsed: boolean
@@ -23,7 +22,7 @@
     onNavigate: (view: AppView) => void
     onSelectProject: (projectId: string) => void
     onOpenAttentionOverview: () => void
-    pluginNavItems?: IconRailPluginNavItem[]
+    pluginNavItems?: SidebarPluginNavItem[]
     reviewRequestCount?: number
   }
 
@@ -333,32 +332,14 @@
   </div>
 
   <div class="border-t border-base-300/50 py-2">
-    {#each pluginNavItems as { viewKey, icon, title }}
-      {@const isActive = currentView === viewKey}
-      <button
-        type="button"
-        class="relative mx-2 flex min-h-11 w-auto items-center rounded-lg {collapsed ? 'justify-center px-0' : 'px-3'} gap-3 py-2.5 cursor-pointer transition-colors {isActive ? 'bg-primary/10 text-primary' : 'text-base-content/55 hover:bg-base-200 hover:text-base-content'}"
-        title={collapsed ? title : undefined}
-        aria-label={title}
-        aria-current={isActive ? 'page' : undefined}
-        onclick={() => onNavigate(viewKey)}
-      >
-        <span class="relative shrink-0">
-          <PluginNavigationIcon {icon} size={18} />
-          <!-- When collapsed there is no text label, so the counts overlay the icon. -->
-          {#if collapsed && viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
-            <span class="badge badge-error badge-xs absolute -top-2 -right-2 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
-          {/if}
-        </span>
-        {#if !collapsed}
-          <span class="text-sm font-medium">{title}</span>
-          {#if viewKey === GITHUB_SYNC_GLOBAL_VIEW_KEY && reviewRequestCount > 0}
-            <span class="ml-auto flex items-center gap-1 shrink-0">
-              <span class="badge badge-error badge-xs text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
-            </span>
-          {/if}
-        {/if}
-      </button>
+    {#each pluginNavItems as item (item.viewKey)}
+      <PluginSidebarNavigationSlot
+        {item}
+        active={currentView === item.viewKey}
+        {collapsed}
+        {reviewRequestCount}
+        onActivate={() => onNavigate(item.viewKey)}
+      />
     {/each}
     {#each bottomNavItems as { view, Icon, label }}
       {@const isActive = currentView === view}

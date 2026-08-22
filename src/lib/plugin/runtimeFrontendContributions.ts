@@ -10,6 +10,7 @@ import type {
 } from '@openforge-app/plugin-sdk/frontend'
 import type { Disposable, InjectionPointLocation } from '@openforge-app/plugin-sdk'
 import {
+  RuntimeValidationError,
   assertComponent,
   assertTitle,
   createDisposable,
@@ -139,6 +140,15 @@ export class RuntimeFrontendContributionRegistry {
     const qualifiedId = this.services.qualifiedId('views', registration?.id)
     assertTitle('views', registration?.title)
     assertComponent('views', registration?.component)
+    if (registration?.navigationComponent !== undefined) {
+      assertComponent('views', registration.navigationComponent)
+      if (registration.placement !== 'sidebar') {
+        throw new RuntimeValidationError('views', 'custom navigation requires sidebar placement')
+      }
+      if (!this.services.packageMetadata?.requires?.includes('customSidebarNavigation')) {
+        throw new RuntimeValidationError('views', 'custom navigation requires the customSidebarNavigation capability')
+      }
+    }
     const icon = sanitizeViewIcon(registration?.icon)
     this.services.claims.claim('views', qualifiedId)
 

@@ -169,6 +169,10 @@ class RuntimeContributionRegistry {
     return this.frontendContributions.listTaskStartPrefixProviders()
   }
 
+  getPackageMetadata(): OpenForgePackageMetadata {
+    return this.packageMetadata
+  }
+
   getContextSnapshot(): OpenForgeContextSnapshot {
     return { ...this.contextSnapshot }
   }

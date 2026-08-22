@@ -27,6 +27,7 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       shortcut: view.shortcut,
       placement: view.placement,
       order: view.order,
+      navigationComponent: view.navigationComponent,
     })),
     taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
       id: tab.id,

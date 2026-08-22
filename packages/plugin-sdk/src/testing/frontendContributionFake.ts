@@ -146,6 +146,15 @@ export class TestingFrontendContributionFake {
     const qualifiedId = this.services.localQualifiedId('views', registration.id)
     assertTitle('views', registration.title)
     assertFunction('views', 'component', registration.component)
+    if (registration.navigationComponent !== undefined) {
+      assertFunction('views', 'navigationComponent', registration.navigationComponent)
+      if (registration.placement !== 'sidebar') {
+        throw new Error('views registration custom navigation requires sidebar placement')
+      }
+      if (!this.services.packageMetadata.requires?.includes('customSidebarNavigation')) {
+        throw new Error('views registration custom navigation requires the customSidebarNavigation capability')
+      }
+    }
     this.services.claims.claim('views', qualifiedId)
 
     const contribution: TestingViewContribution = {

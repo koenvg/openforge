@@ -16,11 +16,17 @@ export {
   installPluginFromNpm,
 } from './pluginInstallState'
 export {
+  deactivateAllPlugins,
+  disablePluginForApp,
   disablePluginForProject,
+  enablePluginForApp,
   enablePluginForProject,
+  loadEnabledForApp,
   loadEnabledForProject,
   reloadInstalledPluginMetadata,
   reloadLocalPluginFromDisk,
+  reloadPluginForApp,
   reloadPluginForProject,
   uninstallPlugin,
+  updateAppPluginContexts,
 } from './pluginInstallReconciliation'

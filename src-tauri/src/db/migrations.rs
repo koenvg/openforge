@@ -1573,6 +1573,15 @@ CREATE INDEX IF NOT EXISTS idx_companion_devices_paired_at
 
         Ok(())
     }),
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS app_plugins (
+    plugin_id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+);
+        "#,
+    ),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2084,6 +2093,10 @@ CREATE TABLE IF NOT EXISTS task_config (
 CREATE TABLE IF NOT EXISTS global_plugins (
     plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
     enabled INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS app_plugins (
+    plugin_id TEXT PRIMARY KEY REFERENCES plugins(id) ON DELETE CASCADE,
+    enabled INTEGER NOT NULL DEFAULT 0
 );
         "#,
     )?;

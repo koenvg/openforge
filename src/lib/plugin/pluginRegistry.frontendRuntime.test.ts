@@ -176,7 +176,7 @@ describe('pluginRegistry frontend runtime', () => {
     await api.backend.whenReady()
     expect(api.backend.state).toBe('ready')
     await expect(api.backend.invoke('syncProject', { projectId: 'P-1' })).resolves.toBeUndefined()
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, null)
     expect(pluginInvokeMock).toHaveBeenCalledWith(RUNTIME_PLUGIN_ID, 'syncProject', { projectId: 'P-1' })
   })
 

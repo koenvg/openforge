@@ -153,6 +153,43 @@ impl super::Database {
         Ok(result)
     }
 
+    /// Persist app-owned plugin enablement independently of project choices.
+    pub fn set_app_plugin_enabled(&self, plugin_id: &str, enabled: bool) -> Result<()> {
+        let conn = self.lock_conn()?;
+        let changed = conn.execute(
+            "INSERT INTO app_plugins (plugin_id, enabled)
+             SELECT id, ?2 FROM plugins
+             WHERE id = ?1 AND json_extract(package_metadata, '$.enablement') = 'app'
+             ON CONFLICT(plugin_id) DO UPDATE SET enabled = excluded.enabled",
+            rusqlite::params![plugin_id, enabled as i64],
+        )?;
+        if changed == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Ok(())
+    }
+
+    /// Return installed plugins whose app-owned lifecycle is enabled.
+    pub fn get_enabled_app_plugins(&self) -> Result<Vec<PluginRow>> {
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT p.id, p.name, p.version, p.api_version, p.description, p.permissions,
+                    p.contributes, p.frontend_entry, p.backend_entry, p.install_path,
+                    p.source_kind, p.source_spec, p.package_metadata, p.installed_at, p.is_builtin
+             FROM plugins p
+             INNER JOIN app_plugins ap ON ap.plugin_id = p.id
+             WHERE ap.enabled = 1
+               AND json_extract(p.package_metadata, '$.enablement') = 'app'
+             ORDER BY p.name ASC",
+        )?;
+        let rows = stmt.query_map([], row_to_plugin)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Return all plugins that are enabled for the given project.
     ///
     /// Enablement layers `project_plugins.enabled ?? global_plugins.enabled ??
@@ -167,7 +204,8 @@ impl super::Database {
              FROM plugins p
              LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
              LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
-             WHERE COALESCE(pp.enabled, gp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END) = 1
+             WHERE COALESCE(json_extract(p.package_metadata, '$.enablement'), 'project') <> 'app'
+               AND COALESCE(pp.enabled, gp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END) = 1
              ORDER BY p.name ASC",
         )?;
         let rows = stmt.query_map([project_id], row_to_plugin)?;
@@ -191,6 +229,29 @@ impl super::Database {
                         gp.enabled,
                         CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
                  FROM plugins p
+                 LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
+                 LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
+                 WHERE p.id = ?2",
+                rusqlite::params![project_id, plugin_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        Ok(enabled)
+    }
+
+    /// Resolve lifecycle ownership before checking whether a plugin is active in Project context.
+    pub fn is_plugin_active_for_project(&self, project_id: &str, plugin_id: &str) -> Result<bool> {
+        let conn = self.lock_conn()?;
+        let enabled = conn
+            .query_row(
+                "SELECT CASE
+                    WHEN json_extract(p.package_metadata, '$.enablement') = 'app'
+                    THEN COALESCE(ap.enabled, 0)
+                    ELSE COALESCE(pp.enabled, gp.enabled, CASE WHEN p.is_builtin = 1 THEN 1 ELSE 0 END)
+                 END
+                 FROM plugins p
+                 LEFT JOIN app_plugins ap ON ap.plugin_id = p.id
                  LEFT JOIN project_plugins pp ON pp.plugin_id = p.id AND pp.project_id = ?1
                  LEFT JOIN global_plugins gp ON gp.plugin_id = p.id
                  WHERE p.id = ?2",
@@ -343,6 +404,29 @@ mod tests {
 
         drop(db);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn app_plugin_enablement_is_independent_of_projects() {
+        let (db, _tmp) = make_test_db("app_plugin_enablement");
+        let mut plugin = sample_plugin("account-usage");
+        plugin.package_metadata = r#"{"id":"account-usage","enablement":"app"}"#.to_string();
+        db.install_plugin(&plugin).unwrap();
+
+        assert!(db.get_enabled_app_plugins().unwrap().is_empty());
+
+        db.set_app_plugin_enabled("account-usage", true).unwrap();
+        let enabled = db.get_enabled_app_plugins().unwrap();
+        assert_eq!(enabled.len(), 1);
+        assert_eq!(enabled[0].id, "account-usage");
+        assert!(!db.is_plugin_enabled("project-1", "account-usage").unwrap());
+        assert!(db
+            .is_plugin_active_for_project("project-1", "account-usage")
+            .unwrap());
+        assert!(db.get_enabled_plugins("project-1").unwrap().is_empty());
+
+        db.set_app_plugin_enabled("account-usage", false).unwrap();
+        assert!(db.get_enabled_app_plugins().unwrap().is_empty());
     }
 
     #[test]

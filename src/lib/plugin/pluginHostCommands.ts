@@ -6,6 +6,7 @@ import {
   createPluginLifecycleHostCapabilities,
   deactivatePluginBackend,
   ensurePluginBackendReady,
+  updatePluginBackendContext,
 } from './pluginHostLifecycle'
 import {
   createPluginNavigationHostCapabilities,
@@ -21,6 +22,7 @@ export {
   deactivatePluginBackend,
   destroyPluginBrowserSurfaces,
   ensurePluginBackendReady,
+  updatePluginBackendContext,
 }
 export { composeTaskFromPluginRequest } from './pluginHostTasks'
 

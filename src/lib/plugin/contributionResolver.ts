@@ -10,7 +10,7 @@ import type {
   RuntimeViewContribution,
 } from './runtimeContributionRegistry'
 
-type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
+type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut' | 'navigationComponent'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
@@ -24,6 +24,7 @@ export interface ResolvedView {
   title: string
   icon: PluginIcon
   shortcut: string | null
+  navigationComponent: RuntimeViewContribution['navigationComponent']
   showInRail: boolean
   showInSidebar: boolean
   railOrder: number
@@ -149,7 +150,7 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     return null
   }
 
-  const { id, title, icon, shortcut, placement, order } = item
+  const { id, title, icon, shortcut, placement, order, navigationComponent } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -168,6 +169,9 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     title,
     icon: sanitizedIcon,
     shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
+    navigationComponent: typeof navigationComponent === 'function'
+      ? navigationComponent as NonNullable<RuntimeViewContribution['navigationComponent']>
+      : undefined,
     showInRail: placement === undefined || placement === 'rail',
     showInSidebar: placement === 'sidebar',
     railOrder: isNumber(order) ? order : 100,

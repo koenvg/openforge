@@ -25,7 +25,10 @@ function activeFrontendRegistry(
   if (!registry) {
     throw new Error(`Frontend runtime for Plugin ${pluginId} is unavailable`)
   }
-  if (registry.getContextSnapshot().projectId !== projectId) {
+  if (
+    registry.getPackageMetadata().enablement !== 'app'
+    && registry.getContextSnapshot().projectId !== projectId
+  ) {
     throw new Error(
       `Frontend runtime for Plugin ${pluginId} is unavailable for Project ${projectId}`,
     )

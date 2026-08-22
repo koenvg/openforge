@@ -33,6 +33,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       { find: '@openforge-app/plugin-sdk/ui/Modal.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/Modal.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginPageHeader.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/PluginViewState.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte' },
+      { find: '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginSidebarLink.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte' },
       { find: '@openforge-app/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
     ])
@@ -66,6 +67,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       '@openforge-app/plugin-sdk/ui/Modal.svelte': '/repo/packages/plugin-sdk/src/ui/Modal.svelte',
       '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte': '/repo/packages/plugin-sdk/src/ui/PluginPageHeader.svelte',
       '@openforge-app/plugin-sdk/ui/PluginViewState.svelte': '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte',
+      '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte': '/repo/packages/plugin-sdk/src/ui/PluginSidebarLink.svelte',
       '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte': '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte',
       '@openforge-app/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
     })
