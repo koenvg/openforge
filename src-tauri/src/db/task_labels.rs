@@ -1,7 +1,7 @@
 use super::{tasks::task_project_id, Database};
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
-use std::fmt;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TaskLabelRow {
@@ -12,21 +12,26 @@ pub struct TaskLabelRow {
 
 const MAX_TASK_LABEL_NAME_CHARS: usize = 40;
 
-#[derive(Debug)]
+/// Errors returned by task label persistence operations.
+#[derive(Debug, Error)]
 pub enum TaskLabelPersistenceError {
+    #[error("label name is required")]
     BlankName,
+    #[error("label names must be {max_chars} characters or fewer")]
     NameTooLong {
         max_chars: usize,
         actual_chars: usize,
     },
+    #[error("task {0} does not exist")]
     TaskNotFound(String),
+    #[error("task {0} must belong to a project before labels can be assigned")]
     TaskProjectRequired(String),
+    #[error("label {0} does not exist")]
     LabelNotFound(i64),
-    CrossProjectAssignment {
-        task_id: String,
-        label_id: i64,
-    },
-    Storage(rusqlite::Error),
+    #[error("label must belong to the same project as the task")]
+    CrossProjectAssignment { task_id: String, label_id: i64 },
+    #[error(transparent)]
+    Storage(#[from] rusqlite::Error),
 }
 
 impl TaskLabelPersistenceError {
@@ -38,51 +43,15 @@ impl TaskLabelPersistenceError {
     }
 }
 
-impl fmt::Display for TaskLabelPersistenceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::BlankName => formatter.write_str("label name is required"),
-            Self::NameTooLong { max_chars, .. } => {
-                write!(
-                    formatter,
-                    "label names must be {max_chars} characters or fewer"
-                )
-            }
-            Self::TaskNotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
-            Self::TaskProjectRequired(task_id) => write!(
-                formatter,
-                "task {task_id} must belong to a project before labels can be assigned"
-            ),
-            Self::LabelNotFound(label_id) => write!(formatter, "label {label_id} does not exist"),
-            Self::CrossProjectAssignment { .. } => {
-                formatter.write_str("label must belong to the same project as the task")
-            }
-            Self::Storage(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for TaskLabelPersistenceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Storage(error) => Some(error),
-            Self::BlankName
-            | Self::NameTooLong { .. }
-            | Self::TaskNotFound(_)
-            | Self::TaskProjectRequired(_)
-            | Self::LabelNotFound(_)
-            | Self::CrossProjectAssignment { .. } => None,
-        }
-    }
-}
-
-impl From<rusqlite::Error> for TaskLabelPersistenceError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Storage(error)
-    }
-}
-
 type TaskLabelResult<T> = std::result::Result<T, TaskLabelPersistenceError>;
+
+fn decode_task_label(row: &rusqlite::Row<'_>) -> Result<TaskLabelRow> {
+    Ok(TaskLabelRow {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        name: row.get(2)?,
+    })
+}
 
 pub(super) fn load_task_labels(
     conn: &rusqlite::Connection,
@@ -97,13 +66,7 @@ WHERE tla.task_id = ?1
 ORDER BY l.name COLLATE NOCASE ASC, l.id ASC
         "#,
     )?;
-    let rows = stmt.query_map([task_id], |row| {
-        Ok(TaskLabelRow {
-            id: row.get(0)?,
-            project_id: row.get(1)?,
-            name: row.get(2)?,
-        })
-    })?;
+    let rows = stmt.query_map([task_id], decode_task_label)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -209,30 +172,23 @@ fn query_task_label_by_id(
     conn.query_row(
         "SELECT id, project_id, name FROM task_labels WHERE id = ?1",
         [label_id],
-        |row| {
-            Ok(TaskLabelRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                name: row.get(2)?,
-            })
-        },
+        decode_task_label,
     )
     .optional()
 }
 
 impl Database {
+    /// Lists the labels defined for a project.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error if the connection cannot be locked or the labels cannot be read.
     pub fn get_project_task_labels(&self, project_id: &str) -> Result<Vec<TaskLabelRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, project_id, name FROM task_labels WHERE project_id = ?1 ORDER BY name COLLATE NOCASE ASC, id ASC",
         )?;
-        let rows = stmt.query_map([project_id], |row| {
-            Ok(TaskLabelRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                name: row.get(2)?,
-            })
-        })?;
+        let rows = stmt.query_map([project_id], decode_task_label)?;
         let mut result = Vec::new();
         for row in rows {
             result.push(row?);
@@ -240,6 +196,17 @@ impl Database {
         Ok(result)
     }
 
+    /// Creates a project label or returns the existing case-insensitive match.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `name` is blank or longer than the supported limit, or if the
+    /// database operation fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal label creation routine returns no label for the single requested
+    /// name.
     pub fn create_task_label(&self, project_id: &str, name: &str) -> TaskLabelResult<TaskLabelRow> {
         let conn = self.lock_conn()?;
         Ok(create_or_load_task_labels(&conn, project_id, &[name])?
@@ -248,6 +215,17 @@ impl Database {
             .expect("one label name yields one label"))
     }
 
+    /// Creates or finds a label in the task's project and assigns it to the task.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task is missing or has no project, the label name is invalid,
+    /// the task and label projects differ, or the database operation fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal label creation routine returns no label for the single requested
+    /// name.
     pub fn add_task_label(&self, task_id: &str, label_name: &str) -> TaskLabelResult<TaskLabelRow> {
         let mut conn = self.lock_conn()?;
         let tx = conn.transaction()?;
@@ -276,6 +254,11 @@ impl Database {
         Ok(label)
     }
 
+    /// Removes a label assignment from a task.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or the database operation fails.
     pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> TaskLabelResult<()> {
         let conn = self.lock_conn()?;
         if task_project_id(&conn, task_id)?.is_none() {
@@ -293,6 +276,13 @@ impl Database {
         Ok(())
     }
 
+    /// Deletes a project label and all of its task assignments.
+    ///
+    /// Returns the IDs of tasks whose assignments were removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the label does not exist or the database operation fails.
     pub fn delete_task_label(&self, label_id: i64) -> TaskLabelResult<Vec<String>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
@@ -320,6 +310,14 @@ impl Database {
         Ok(affected_task_ids)
     }
 
+    /// Replaces all label assignments for a task.
+    ///
+    /// Label names are normalized and matched case-insensitively within the task's project.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task is missing or has no project, a label name is invalid, or
+    /// the database operation fails.
     pub fn set_task_labels(
         &self,
         task_id: &str,
@@ -359,7 +357,8 @@ mod tests {
     #[test]
     fn test_task_labels_are_project_scoped_case_insensitive_and_return_with_tasks() {
         let (db, path) = make_test_db("task_labels_round_trip");
-        db.set_config("task_id_prefix", "T").unwrap();
+        db.set_config("task_id_prefix", "T")
+            .expect("set task id prefix");
         let project_a = db
             .create_project("A", "/tmp/labels-a")
             .expect("create project a");
@@ -385,7 +384,10 @@ mod tests {
         assert_eq!(first.name, "Bug");
         assert_ne!(first.id, other_project.id);
 
-        let retrieved = db.get_task(&task_a.id).expect("get task").unwrap();
+        let retrieved = db
+            .get_task(&task_a.id)
+            .expect("get task")
+            .expect("task should exist");
         assert_eq!(retrieved.labels, vec![first.clone()]);
 
         let project_a_labels = db
@@ -400,7 +402,8 @@ mod tests {
     #[test]
     fn test_set_task_labels_replaces_assignments_but_keeps_unused_labels() {
         let (db, path) = make_test_db("task_labels_replace");
-        db.set_config("task_id_prefix", "T").unwrap();
+        db.set_config("task_id_prefix", "T")
+            .expect("set task id prefix");
         let project = db
             .create_project("A", "/tmp/labels-replace")
             .expect("create project");
@@ -413,7 +416,10 @@ mod tests {
         db.set_task_labels(&task.id, &["bug".to_string()])
             .expect("replace labels");
 
-        let retrieved = db.get_task(&task.id).expect("get task").unwrap();
+        let retrieved = db
+            .get_task(&task.id)
+            .expect("get task")
+            .expect("task should exist");
         assert_eq!(retrieved.labels, vec![bug]);
         let all_labels = db.get_project_task_labels(&project.id).expect("all labels");
         assert!(all_labels.iter().any(|label| label.id == ui.id));
@@ -425,7 +431,8 @@ mod tests {
     #[test]
     fn test_set_task_labels_normalizes_and_deduplicates_label_names() {
         let (db, path) = make_test_db("set_task_labels_normalized");
-        db.set_config("task_id_prefix", "T").unwrap();
+        db.set_config("task_id_prefix", "T")
+            .expect("set task id prefix");
         let project = db
             .create_project("A", "/tmp/set-task-labels-normalized")
             .expect("create project");
@@ -456,7 +463,10 @@ mod tests {
         );
         assert_eq!(assigned[0].id, existing.id);
         assert_eq!(
-            db.get_task(&task.id).expect("get task").unwrap().labels,
+            db.get_task(&task.id)
+                .expect("get task")
+                .expect("task should exist")
+                .labels,
             assigned
         );
 
@@ -467,7 +477,8 @@ mod tests {
     #[test]
     fn test_set_task_labels_rolls_back_new_labels_when_assignment_fails() {
         let (db, path) = make_test_db("task_labels_assignment_failure");
-        db.set_config("task_id_prefix", "T").unwrap();
+        db.set_config("task_id_prefix", "T")
+            .expect("set task id prefix");
         let project = db
             .create_project("A", "/tmp/labels-assignment-failure")
             .expect("create project");
@@ -480,7 +491,7 @@ mod tests {
 
         let conn = db.connection();
         conn.lock()
-            .unwrap()
+            .expect("lock database connection")
             .execute_batch(
                 "CREATE TRIGGER fail_task_label_assignment
                  BEFORE INSERT ON task_label_assignments
@@ -493,7 +504,10 @@ mod tests {
             Err(TaskLabelPersistenceError::Storage(_))
         ));
 
-        let task_after_failure = db.get_task(&task.id).expect("get task").unwrap();
+        let task_after_failure = db
+            .get_task(&task.id)
+            .expect("get task")
+            .expect("task should exist");
         assert_eq!(task_after_failure.labels, vec![existing.clone()]);
         assert_eq!(
             db.get_project_task_labels(&project.id)
@@ -509,7 +523,8 @@ mod tests {
     #[test]
     fn test_delete_task_label_removes_project_label_and_all_assignments() {
         let (db, path) = make_test_db("task_labels_delete");
-        db.set_config("task_id_prefix", "T").unwrap();
+        db.set_config("task_id_prefix", "T")
+            .expect("set task id prefix");
         let project = db
             .create_project("A", "/tmp/labels-delete")
             .expect("create project");
@@ -534,13 +549,13 @@ mod tests {
         assert!(db
             .get_task(&first_task.id)
             .expect("get first task")
-            .unwrap()
+            .expect("first task should exist")
             .labels
             .is_empty());
         assert_eq!(
             db.get_task(&second_task.id)
                 .expect("get second task")
-                .unwrap()
+                .expect("second task should exist")
                 .labels,
             vec![ui]
         );
@@ -648,7 +663,7 @@ mod tests {
             .expect("create task");
         let conn = db.connection();
         conn.lock()
-            .unwrap()
+            .expect("lock database connection")
             .execute_batch(&format!(
                 "CREATE TRIGGER move_task_to_other_project
                  AFTER INSERT ON task_labels

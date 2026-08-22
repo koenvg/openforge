@@ -44,6 +44,7 @@ sysinfo = "0.37.2"
 subtle = "2.6.1"
 mdns-sd = "0.17.1"
 tempfile = "3"
+thiserror = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
