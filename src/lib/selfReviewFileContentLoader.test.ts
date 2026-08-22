@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createSelfReviewFileContentLoader } from './selfReviewFileContentLoader'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import {
+  createSelfReviewFileContentLoader,
+  type SelfReviewFileContentContext,
+} from './selfReviewFileContentLoader'
 import type { PrFileDiff } from './types'
 
 const file: PrFileDiff = {
@@ -16,6 +19,15 @@ const file: PrFileDiff = {
 }
 
 describe('createSelfReviewFileContentLoader', () => {
+  it('exports the file content context contract', () => {
+    expectTypeOf<SelfReviewFileContentContext>().toEqualTypeOf<{
+      taskId: string
+      selectedCommitSha: string | null
+      includeCommitted: boolean
+      includeUncommitted: boolean
+    }>()
+  })
+
   it('uses task-scoped content for single files, batches, and repository images', async () => {
     const getTaskFileContents = vi.fn()
       .mockResolvedValueOnce(['old', 'new'])
