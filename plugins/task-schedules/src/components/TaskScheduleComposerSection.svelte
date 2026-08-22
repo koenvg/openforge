@@ -42,6 +42,7 @@
 
   let titleInput = $state<HTMLInputElement | null>(null)
   let cronInput = $state<HTMLInputElement | null>(null)
+  let runAtInput = $state<HTMLInputElement | null>(null)
   let previousFocusRequest = $state(0)
   let previousErrorFocusRequest = $state(0)
 
@@ -54,15 +55,21 @@
   $effect(() => {
     if (errorFocusRequest === previousErrorFocusRequest) return
     previousErrorFocusRequest = errorFocusRequest
-    cronInput?.focus()
+    if (fieldErrors.runAt) runAtInput?.focus()
+    else cronInput?.focus()
   })
+
+  function changeKind(kind: ScheduleDraft['kind']): void {
+    onDraftChange({ ...draft, kind })
+    onFieldErrorsChange({ cron: null, runAt: null })
+  }
 </script>
 
 <aside class="flex h-full min-h-0 flex-col border-l border-base-300 bg-base-100" aria-label="Schedule form">
   <header class="flex min-h-16 items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
     <div>
       <h2 class="text-lg font-semibold">{composerTitle}</h2>
-      <p class="mt-1 text-xs text-secondary">Create recurring project tasks with a clear cadence.</p>
+      <p class="mt-1 text-xs text-secondary">Create a Task once or on a recurring cadence.</p>
     </div>
     <button class="btn btn-ghost btn-sm btn-square min-h-10 min-w-10" type="button" aria-label="Close schedule form" disabled={saving} onclick={onClose}>
       <X class="size-4" aria-hidden="true" />
@@ -82,9 +89,47 @@
         <span class="text-xs text-secondary">This becomes the task prompt for every scheduled run.</span>
       </label>
 
+      <fieldset class="space-y-2">
+        <legend class="text-sm font-medium">Schedule type</legend>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
+            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="recurring" checked={draft.kind === 'recurring'} disabled={draft.id !== null} onclick={() => changeKind('recurring')} />
+            <span><span class="block font-medium">Recurring</span><span class="block text-xs text-secondary">Run on a repeating cadence</span></span>
+          </label>
+          <label class="flex min-h-12 items-start gap-3 rounded-box border border-base-300 px-3 py-2.5 text-sm">
+            <input class="radio radio-primary radio-sm mt-0.5" type="radio" name="schedule-kind" value="once" checked={draft.kind === 'once'} disabled={draft.id !== null} onclick={() => changeKind('once')} />
+            <span><span class="block font-medium">One time</span><span class="block text-xs text-secondary">Run once at a future date</span></span>
+          </label>
+        </div>
+        {#if draft.id}<p class="text-xs text-secondary">Schedule type can’t be changed after creation.</p>{/if}
+      </fieldset>
+
       <fieldset class="space-y-3">
         <legend class="text-sm font-semibold">Cadence</legend>
-        {#if draft.advancedCron}
+        {#if draft.kind === 'once'}
+          <div class="form-control flex w-full flex-col gap-1.5">
+            <label for="schedule-run-at" class="text-sm font-medium">Run on <span class="text-error" aria-hidden="true">*</span></label>
+            <input
+              bind:this={runAtInput}
+              id="schedule-run-at"
+              type="datetime-local"
+              class="input input-bordered min-h-10 w-full {fieldErrors.runAt ? 'input-error' : ''}"
+              value={draft.runAt}
+              oninput={(event) => {
+                onDraftChange({ ...draft, runAt: event.currentTarget.value })
+                onFieldErrorsChange({ ...fieldErrors, runAt: null })
+              }}
+              aria-describedby="run-at-help"
+              aria-invalid={fieldErrors.runAt ? 'true' : 'false'}
+              onblur={() => { if (draft.runAt) onValidateDraft() }}
+              required
+            />
+            <span id="run-at-help" class="text-xs {fieldErrors.runAt ? 'text-error' : 'text-secondary'}" role={fieldErrors.runAt ? 'alert' : undefined}>
+              {fieldErrors.runAt ?? 'This Task Schedule runs once at the selected local date and time.'}
+            </span>
+          </div>
+        {:else}
+          {#if draft.advancedCron}
           <div class="form-control flex w-full flex-col gap-1.5">
             <label for="cron-expression" class="text-sm font-medium">Cron expression</label>
             <input
@@ -130,9 +175,10 @@
         {/if}
 
         <label class="flex min-h-10 items-center gap-3 rounded-box border border-base-300 px-3 text-sm">
-          <Checkbox checked={draft.advancedCron} onchange={(event) => { onDraftChange({ ...draft, advancedCron: event.currentTarget.checked }); onFieldErrorsChange({ cron: null }) }} />
+          <Checkbox checked={draft.advancedCron} onchange={(event) => { onDraftChange({ ...draft, advancedCron: event.currentTarget.checked }); onFieldErrorsChange({ ...fieldErrors, cron: null }) }} />
           <span>Use a custom cron expression</span>
         </label>
+        {/if}
         <p class="flex items-center gap-1.5 text-xs text-secondary"><Clock3 class="size-3.5" aria-hidden="true" /> Times use {Intl.DateTimeFormat().resolvedOptions().timeZone || 'your local timezone'}.</p>
       </fieldset>
 

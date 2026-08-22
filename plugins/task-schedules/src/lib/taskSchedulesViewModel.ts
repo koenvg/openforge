@@ -3,6 +3,7 @@ import type { ScheduledFireOutcome, TaskSchedule, TaskScheduleDraft } from './ty
 import type { ScheduleDraft, ScheduleFilter, ScheduleRunState, ScheduleSortKey, SortDirection } from './viewTypes'
 
 export const CRON_HELP_TEXT = 'Use five fields: minute hour day-of-month month day-of-week. Runs at most once every 5 minutes.'
+export const TERMINAL_ONE_OFF_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
 
 export const TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const hour = Math.floor(index / 4)
@@ -25,6 +26,9 @@ export function emptyScheduleDraft(): ScheduleDraft {
     id: null,
     title: '',
     prompt: '',
+    kind: 'recurring',
+    runAt: '',
+    originalRunAt: null,
     preset: 'daily',
     cron: '0 9 * * *',
     timeOfDay: '09:00',
@@ -42,6 +46,9 @@ export function draftFromSchedule(schedule: TaskSchedule): ScheduleDraft {
     id: schedule.id,
     title: schedule.title,
     prompt: schedule.prompt,
+    kind: schedule.kind,
+    runAt: schedule.runAt === null ? '' : localDateTimeValue(schedule.runAt),
+    originalRunAt: schedule.runAt,
     preset: preset === 'custom' ? 'daily' : preset,
     cron,
     timeOfDay: timeOfDayFromCron(cron),
@@ -53,24 +60,57 @@ export function draftFromSchedule(schedule: TaskSchedule): ScheduleDraft {
 }
 
 export function draftToPayload(draft: ScheduleDraft): TaskScheduleDraft {
+  const runAt = draft.kind !== 'once'
+    ? null
+    : draft.originalRunAt !== null && draft.runAt === localDateTimeValue(draft.originalRunAt)
+      ? draft.originalRunAt
+      : new Date(draft.runAt).getTime()
   return {
     id: draft.id,
     title: draft.title,
     prompt: draft.prompt,
-    preset: draft.advancedCron ? 'custom' : draft.preset,
-    cron: draft.advancedCron ? draft.cron : null,
-    timeOfDay: draft.advancedCron ? null : draft.timeOfDay,
-    dayOfWeek: !draft.advancedCron && draft.preset === 'weekly' ? draft.dayOfWeek : null,
+    kind: draft.kind,
+    runAt,
+    preset: draft.kind === 'recurring' ? (draft.advancedCron ? 'custom' : draft.preset) : null,
+    cron: draft.kind === 'recurring' && draft.advancedCron ? draft.cron : null,
+    timeOfDay: draft.kind === 'recurring' && !draft.advancedCron ? draft.timeOfDay : null,
+    dayOfWeek: draft.kind === 'recurring' && !draft.advancedCron && draft.preset === 'weekly' ? draft.dayOfWeek : null,
     mode: draft.mode,
     enabled: draft.enabled,
   }
 }
 
 export function draftCronError(draft: ScheduleDraft, now = Date.now()): string | null {
-  if (!draft.advancedCron) return null
+  if (draft.kind !== 'recurring' || !draft.advancedCron) return null
   if (!validateFiveFieldCron(draft.cron).valid) return CRON_HELP_TEXT
   const cadence = validateCronCadence(draft.cron, now)
   return cadence.valid ? null : cadence.error
+}
+
+export function draftRunAtError(draft: ScheduleDraft, now = Date.now()): string | null {
+  if (draft.kind !== 'once') return null
+  if (!draft.runAt.trim()) return 'Choose when this Task Schedule should run.'
+  const runAt = new Date(draft.runAt).getTime()
+  if (!Number.isFinite(runAt)) return 'Enter a valid date and time.'
+  return runAt > now ? null : 'Choose a date and time in the future.'
+}
+
+function localDateTimeValue(timestamp: number): string {
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hour}:${minute}`
+}
+
+export function schedulesWithinOneOffRetention(schedules: TaskSchedule[], now = Date.now()): TaskSchedule[] {
+  return schedules.filter((schedule) => {
+    if (schedule.kind !== 'once') return true
+    const terminalAt = schedule.cancelledAt ?? schedule.lastFireAt
+    return terminalAt === null || now - terminalAt < TERMINAL_ONE_OFF_RETENTION_MS
+  })
 }
 
 export function visibleSchedules(

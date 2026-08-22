@@ -78,7 +78,7 @@
       <div class="max-w-sm text-center">
         <Clock3 class="mx-auto size-8 text-secondary" aria-hidden="true" />
         <h3 class="mt-3 text-base font-semibold">No schedules found</h3>
-        <p class="mt-1 text-sm text-secondary">Use New schedule to create a recurring project task, or adjust your search and filters.</p>
+        <p class="mt-1 text-sm text-secondary">Use New schedule to create a one-off or recurring Task Schedule.</p>
       </div>
     </div>
   {:else}
