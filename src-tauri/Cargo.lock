@@ -1705,6 +1705,7 @@ dependencies = [
  "subtle",
  "sysinfo",
  "tempfile",
+ "thiserror 2.0.20",
  "tokio",
  "tokio-stream",
  "tokio-tungstenite",
