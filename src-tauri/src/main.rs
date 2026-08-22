@@ -25,6 +25,7 @@ mod github_runtime;
 mod grok_hooks;
 mod http_bridge_port_contract;
 mod http_server;
+mod idle_resource;
 mod migration;
 mod opencode_client;
 mod opencode_plugin;
@@ -221,6 +222,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(async move {
+            whisper_manager.start_idle_reaper();
             if let Err(error) = pty_manager.cleanup_stale_pids().await {
                 warn!("[startup] Managed PTY recovery was incomplete: {}", error);
             }

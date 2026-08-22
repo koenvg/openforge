@@ -309,6 +309,8 @@ describe('SettingsView rendering and navigation', () => {
     await vi.waitFor(() => {
       expect(screen.queryAllByText(/tiny/i).length).toBeGreaterThan(0)
     })
+    expect(screen.getByText(/keeps the model in memory for five minutes/i)).toBeTruthy()
+    expect(screen.getByText(/next dictation reloads the model and may start more slowly/i)).toBeTruthy()
   })
 
   it('renders a Delete Project button in the danger zone', async () => {
