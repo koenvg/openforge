@@ -316,13 +316,13 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task Schedule** has either one exact future fire time or a recurring cadence. Agent-facing scheduling commands support both kinds; the desktop composer provides recurring presets and custom five-field cron.
 - A **Task Schedule** belongs to one project. The desktop composer uses the active project, while agent-facing commands use their host-resolved project context and do not add a dependency on the invoking **Task**.
 - A **Task Schedule** may request an **Implementation Run** only after the scheduled **Task Creation** succeeds.
-- A one-off **Task Schedule** has one due **Scheduled Fire**. If OpenForge is closed at its fire time, it gets one catch-up fire after restart, then remains stored as a completed record.
+- A one-off **Task Schedule** has one due **Scheduled Fire**. If OpenForge is closed at its fire time, it gets one catch-up fire after restart, then remains stored as a completed record. The Task Schedules UI shows completed and cancelled one-off records for seven days after completion or cancellation.
 - If a recurring **Task Schedule** misses multiple **Scheduled Fires** while OpenForge is closed, they collapse into at most one catch-up fire after OpenForge restarts.
 - A recurring **Task Schedule** skips a due **Scheduled Fire** when its previously created **Task** is still not done.
 - A **Schedule Preset** may compile to simple five-field cron syntax for custom cadence without making cron syntax the primary user-facing path.
 - A **Task Schedule** uses plain prompt text rather than template variables, scripts, loops, conditionals, or starter prompt templates.
 - A **Task Schedule** can be manually fired for testing, using the same behavior and overlap rules as a due **Scheduled Fire**. A completed or cancelled one-off schedule cannot fire again, and a manual fire that creates a **Task** consumes its one occurrence.
-- A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis. Completed and cancelled schedules remain records rather than being deleted.
+- A **Task Schedule** keeps a minimal history of its five most recent outcomes for diagnosis. Completed and cancelled schedules remain stored rather than being deleted. For one-off schedules, the seven-day Task Schedules UI window changes only visibility, not storage.
 - **Scheduled Fires** do not create a separate automation inbox, auto-archive workflow, or scheduler-specific notification flow; resulting **Tasks** follow the normal OpenForge board and review lifecycle.
 - The normal board tab order is **Focus**, **In-Flight Tasks**, **Out of Focus**, then backlog, keeping started/current work together before not-started work.
 - **Focus** contains **Tasks** needing user attention now unless they are **Out of Focus**.
