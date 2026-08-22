@@ -228,6 +228,30 @@ describe("createDiffLoader", () => {
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
+	it("loads diff files before hydrating the initial review context", async () => {
+		const calls: string[] = [];
+		mockGetTaskDiff.mockImplementation(async () => {
+			calls.push("diff");
+			return [baseDiff];
+		});
+		const initialReviewContext = {
+			hydrate: vi.fn(async () => {
+				calls.push("initial review context");
+			}),
+			invalidate: vi.fn(),
+			cleanup: vi.fn(),
+		};
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+			initialReviewContext,
+		});
+
+		await loader.loadDiff();
+
+		expect(calls).toEqual(["diff", "initial review context"]);
+	});
+
 	it("refresh sets human-readable error on failure", async () => {
 		await withSuppressedExpectedConsoleError(async () => {
 			mockGetTaskDiff.mockRejectedValue(new Error("network error"));

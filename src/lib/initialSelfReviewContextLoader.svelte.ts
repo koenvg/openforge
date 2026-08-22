@@ -33,19 +33,19 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 		return requestGeneration !== generation;
 	}
 
-	async function hydrate(taskId: string): Promise<void> {
-		const requestGeneration = ++generation;
-		linkedPr = null;
-		prComments = [];
+	async function loadSelfReviewComments(
+		taskId: string,
+		requestGeneration: number,
+	): Promise<boolean> {
 		const activeComments = await getActiveSelfReviewComments(taskId);
-		if (isStale(requestGeneration)) return;
+		if (isStale(requestGeneration)) return false;
 		setSelfReviewGeneralComments(
 			taskId,
 			activeComments.filter((comment) => comment.comment_type === "general"),
 		);
 
 		const archivedComments = await getArchivedSelfReviewComments(taskId);
-		if (isStale(requestGeneration)) return;
+		if (isStale(requestGeneration)) return false;
 		setSelfReviewArchivedComments(
 			taskId,
 			archivedComments.filter((comment) => comment.comment_type === "general"),
@@ -62,7 +62,14 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 					side: "RIGHT",
 				})),
 		);
+		return true;
+	}
 
+	async function loadLinkedPrComments(
+		taskId: string,
+		requestGeneration: number,
+	): Promise<void> {
+		if (isStale(requestGeneration)) return;
 		const openPrs = (get(ticketPrs).get(taskId) ?? [])
 			.filter((pr) => pr.state === "open")
 			.sort((a, b) => b.updated_at - a.updated_at);
@@ -79,6 +86,18 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 			console.error(`Failed to load comments for PR ${pr.id}:`, error);
 			prComments = [];
 		}
+	}
+
+	async function hydrate(taskId: string): Promise<void> {
+		const requestGeneration = ++generation;
+		linkedPr = null;
+		prComments = [];
+		const selfReviewCommentsLoaded = await loadSelfReviewComments(
+			taskId,
+			requestGeneration,
+		);
+		if (!selfReviewCommentsLoaded) return;
+		await loadLinkedPrComments(taskId, requestGeneration);
 	}
 
 	function cleanup(taskId: string): void {

@@ -69,6 +69,16 @@ export function createDiffLoader(deps: {
 				);
 	}
 
+	async function loadDiffFiles(
+		taskId: string,
+		generation: number,
+	): Promise<boolean> {
+		const diffs = await fetchDiff(taskId);
+		if (isStale(generation)) return false;
+		setSelfReviewDiffFiles(taskId, diffs);
+		return true;
+	}
+
 	async function requestDiff(options: {
 		loadInitialReviewData: boolean;
 		failureLog: string;
@@ -77,9 +87,8 @@ export function createDiffLoader(deps: {
 		const generation = beginLoad();
 		try {
 			const taskId = deps.getTaskId();
-			const diffs = await fetchDiff(taskId);
-			if (isStale(generation)) return;
-			setSelfReviewDiffFiles(taskId, diffs);
+			const diffLoaded = await loadDiffFiles(taskId, generation);
+			if (!diffLoaded) return;
 
 			if (
 				options.loadInitialReviewData &&
