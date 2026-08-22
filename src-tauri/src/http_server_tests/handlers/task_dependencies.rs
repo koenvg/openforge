@@ -1,17 +1,27 @@
 use super::*;
 
 #[tokio::test]
-async fn test_create_task_handler_persists_dependency_ids() {
-    let (state, path) = test_state("http_create_task_handler_dependencies");
+async fn create_task_handler_accepts_dependency_from_another_project() {
+    let (state, path) = test_state("http_create_task_handler_cross_project_dependency");
     {
         let db = state.db.lock().expect("lock db");
-        let project = db
-            .create_project("Project", "/tmp/project")
-            .expect("create project");
+        let dependent_project = db
+            .create_project("Dependent Project", "/tmp/dependent-project")
+            .expect("create dependent project");
+        let prerequisite_project = db
+            .create_project("Prerequisite Project", "/tmp/prerequisite-project")
+            .expect("create prerequisite project");
         db.set_config("task_id_prefix", "T")
             .expect("set task prefix");
-        db.create_task("Prerequisite", "done", Some(&project.id), None, None)
-            .expect("create prerequisite");
+        db.create_task(
+            "Prerequisite",
+            "done",
+            Some(&prerequisite_project.id),
+            None,
+            None,
+        )
+        .expect("create prerequisite");
+        assert_ne!(dependent_project.id, prerequisite_project.id);
     }
 
     let router = create_router(state.clone());

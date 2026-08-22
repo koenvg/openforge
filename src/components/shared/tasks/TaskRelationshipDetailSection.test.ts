@@ -12,6 +12,8 @@ describe('TaskRelationshipDetailSection', () => {
         title: 'Finish schema changes',
         displayTitle: 'Finish schema changes',
         tooltipTitle: 'Finish schema changes',
+        projectId: 'P-1',
+        projectName: null,
       },
       {
         id: 'T-missing',
@@ -19,6 +21,8 @@ describe('TaskRelationshipDetailSection', () => {
         title: 'T-missing',
         displayTitle: null,
         tooltipTitle: 'T-missing',
+        projectId: null,
+        projectName: null,
       },
     ]
 
@@ -50,6 +54,8 @@ describe('TaskRelationshipDetailSection', () => {
       title: 'Begin rollout',
       displayTitle: 'Begin rollout',
       tooltipTitle: 'Begin rollout',
+      projectId: 'P-2',
+      projectName: 'Release Tools',
       remainingDependencyCountAfterCurrentDone: 0,
     },
     {
@@ -58,6 +64,8 @@ describe('TaskRelationshipDetailSection', () => {
       title: 'Deploy after second prerequisite',
       displayTitle: 'Deploy after second prerequisite',
       tooltipTitle: 'Deploy after second prerequisite',
+      projectId: 'P-1',
+      projectName: null,
       remainingDependencyCountAfterCurrentDone: 1,
     },
   ]
@@ -83,21 +91,21 @@ describe('TaskRelationshipDetailSection', () => {
     expect(section.querySelector('[title="Begin rollout"]')).toBeTruthy()
   })
 
-  it('calls the dependent task navigation callback when a dependent task is clicked', async () => {
-    const onOpenDependentTask = vi.fn()
+  it('calls the related task navigation callback when a relationship is clicked', async () => {
+    const onOpenRelatedTask = vi.fn()
 
     render(TaskRelationshipDetailSection, {
       props: {
         kind: 'dependents',
         items: dependentSummaries,
         density: 'full',
-        onOpenDependentTask,
+        onOpenRelatedTask,
       },
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /T-2/ }))
 
-    expect(onOpenDependentTask).toHaveBeenCalledWith('T-2')
-    expect(onOpenDependentTask).toHaveBeenCalledTimes(1)
+    expect(onOpenRelatedTask).toHaveBeenCalledWith('T-2', 'P-2')
+    expect(onOpenRelatedTask).toHaveBeenCalledTimes(1)
   })
 })

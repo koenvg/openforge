@@ -36,7 +36,7 @@
     task: Task
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
     onEdit?: (taskId: string) => void
-    onOpenTask?: (taskId: string) => void
+    onOpenTask?: (taskId: string, projectId?: string | null) => void | Promise<void>
     onTaskUpdated?: () => void | Promise<void>
     onRunAppRegistrationChange?: (registration: TaskRunAppRegistration | null) => void
   }

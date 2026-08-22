@@ -1131,10 +1131,12 @@
     "TaskRelationship": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["taskId", "title", "boardStatus"],
+      "required": ["taskId", "title", "boardStatus", "projectId", "projectName"],
       "properties": {
         "taskId": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "projectName": { "type": "string", "minLength": 1 },
         "boardStatus": {
           "type": "string",
           "enum": ["backlog", "doing", "done"]
@@ -1144,10 +1146,12 @@
     "DependentTask": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["taskId", "title", "boardStatus", "remainingDependencyCount"],
+      "required": ["taskId", "title", "boardStatus", "projectId", "projectName", "remainingDependencyCount"],
       "properties": {
         "taskId": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "projectName": { "type": "string", "minLength": 1 },
         "boardStatus": {
           "type": "string",
           "enum": ["backlog", "doing", "done"]

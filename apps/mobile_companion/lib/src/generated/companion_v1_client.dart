@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '214b6f4d77e24f2276747a4ee16cc3075f45efabb256ed345d9933f324d7f4aa';
+    '3dabc0853692fa280f72247bdd3f4abf8e38a85daf5d5674e039759e854d6ee8';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '2';
 
@@ -845,14 +845,18 @@ final class TaskRelationship {
   const TaskRelationship({
     required this.taskId,
     required this.title,
+    required this.projectId,
+    required this.projectName,
     required this.boardStatus,
   });
 
   factory TaskRelationship.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'boardStatus'});
+    _expectOnly(json, const <String>{'taskId', 'title', 'projectId', 'projectName', 'boardStatus'});
     final model = TaskRelationship(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
+      projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
+      projectName: _required(json, 'projectName', (value) => _asString(value, 'projectName', minLength: 1)),
       boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', allowed: const <String>{'backlog', 'doing', 'done'})),
     );
     return model;
@@ -861,11 +865,15 @@ final class TaskRelationship {
   Map<String, Object?> toJson() => <String, Object?>{
       'taskId': taskId,
       'title': title,
+      'projectId': projectId,
+      'projectName': projectName,
       'boardStatus': boardStatus,
   };
 
   final String taskId;
   final String title;
+  final String projectId;
+  final String projectName;
   final String boardStatus;
 }
 
@@ -873,15 +881,19 @@ final class DependentTask {
   const DependentTask({
     required this.taskId,
     required this.title,
+    required this.projectId,
+    required this.projectName,
     required this.boardStatus,
     required this.remainingDependencyCount,
   });
 
   factory DependentTask.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'taskId', 'title', 'boardStatus', 'remainingDependencyCount'});
+    _expectOnly(json, const <String>{'taskId', 'title', 'projectId', 'projectName', 'boardStatus', 'remainingDependencyCount'});
     final model = DependentTask(
       taskId: _required(json, 'taskId', (value) => _asString(value, 'taskId', minLength: 1)),
       title: _required(json, 'title', (value) => _asString(value, 'title', minLength: 1)),
+      projectId: _required(json, 'projectId', (value) => _asString(value, 'projectId', minLength: 1)),
+      projectName: _required(json, 'projectName', (value) => _asString(value, 'projectName', minLength: 1)),
       boardStatus: _required(json, 'boardStatus', (value) => _asString(value, 'boardStatus', allowed: const <String>{'backlog', 'doing', 'done'})),
       remainingDependencyCount: _required(json, 'remainingDependencyCount', (value) => _asInt(value, 'remainingDependencyCount', minimum: 0)),
     );
@@ -891,12 +903,16 @@ final class DependentTask {
   Map<String, Object?> toJson() => <String, Object?>{
       'taskId': taskId,
       'title': title,
+      'projectId': projectId,
+      'projectName': projectName,
       'boardStatus': boardStatus,
       'remainingDependencyCount': remainingDependencyCount,
   };
 
   final String taskId;
   final String title;
+  final String projectId;
+  final String projectName;
   final String boardStatus;
   final int remainingDependencyCount;
 }

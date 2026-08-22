@@ -12,7 +12,7 @@ vi.mock('./ipc', () => ({
   getProjects: vi.fn(),
   getPullRequests: vi.fn(),
   getReviewPrs: vi.fn(),
-  getTaskDetail: vi.fn(),
+  getAllTasks: vi.fn(),
   getTasksForProject: vi.fn(),
 }))
 
@@ -49,7 +49,7 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
-  getTaskDetail,
+  getAllTasks,
   getTasksForProject,
 } from './ipc'
 
@@ -147,31 +147,40 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(getProjects).mockResolvedValue([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(getReviewPrs).mockResolvedValue([])
-    vi.mocked(getTaskDetail).mockRejectedValue(new Error('not found'))
+    vi.mocked(getAllTasks).mockResolvedValue([])
     vi.mocked(getTasksForProject).mockResolvedValue([])
     vi.mocked(forceGithubSync).mockResolvedValue({} as any)
   })
 
-  it('loads completed dependency tasks into dependency-only references without adding them to active tasks', async () => {
+  it('loads cross-project dependencies and active dependents as relationship references', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     activeProjectId.set('proj-1')
-    const completedDependency = makeTask('T-done', 'proj-1')
-    completedDependency.status = 'done'
-    completedDependency.initial_prompt = 'Completed prerequisite'
+    const crossProjectDependency = makeTask('T-dependency', 'proj-2')
+    crossProjectDependency.status = 'done'
     const visibleDependency = makeTask('T-visible', 'proj-1')
-    const dependent = makeTask('T-child', 'proj-1')
-    dependent.depends_on = [completedDependency.id, visibleDependency.id, 'T-missing']
+    const selectedTask = makeTask('T-child', 'proj-1')
+    selectedTask.depends_on = [crossProjectDependency.id, visibleDependency.id, 'T-missing']
+    const crossProjectDependent = makeTask('T-dependent', 'proj-2')
+    crossProjectDependent.status = 'backlog'
+    crossProjectDependent.depends_on = [selectedTask.id]
+    const unrelatedTask = makeTask('T-unrelated', 'proj-2')
 
-    vi.mocked(getTasksForProject).mockResolvedValue([dependent, visibleDependency])
-    vi.mocked(getTaskDetail).mockImplementation(async (taskId: string) => {
-      if (taskId === completedDependency.id) return completedDependency
-      throw new Error('not found')
-    })
+    vi.mocked(getTasksForProject).mockResolvedValue([selectedTask, visibleDependency])
+    vi.mocked(getAllTasks).mockResolvedValue([
+      selectedTask,
+      visibleDependency,
+      crossProjectDependency,
+      crossProjectDependent,
+      unrelatedTask,
+    ])
 
     await orchestrator.loadTasks()
 
     expect(get(tasks).map((task) => task.id)).toEqual(['T-child', 'T-visible'])
-    expect(get(dependencyReferenceTasks).map((task) => task.id)).toEqual(['T-done'])
+    expect(get(dependencyReferenceTasks).map((task) => task.id)).toEqual([
+      'T-dependency',
+      'T-dependent',
+    ])
     expect(getLatestSessions).toHaveBeenCalledWith(['T-child', 'T-visible'])
   })
 

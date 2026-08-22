@@ -32,14 +32,17 @@ void main() {
         onOpenTaskChanged: (controller) => owners.add(controller?.taskId),
       );
       addTearDown(board.dispose);
+      await board.refresh();
+      expect(board.selectedProjectId, 'P-1');
 
       unawaited(coordinator.openTask('T-1'));
       await tester.pumpAndSettle();
       expect(find.text('Task T-1'), findsOneWidget);
 
-      unawaited(coordinator.openTask('T-2'));
+      coordinator.openRelatedTask('T-2', 'P-2');
       await tester.pumpAndSettle();
       expect(find.text('Task T-2'), findsOneWidget);
+      expect(board.selectedProjectId, 'P-2');
 
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -48,7 +51,7 @@ void main() {
 
       final detail = coordinator.openTaskController!;
       await coordinator.refreshTaskAndBoard(detail);
-      expect(client.boardCalls, 1);
+      expect(client.boardCalls, 3);
       expect(client.detailCalls['T-1'], 2);
 
       await tester.pageBack();
@@ -69,6 +72,7 @@ final class _TaskClient implements CompanionClient {
     snapshotAt: DateTime.utc(2026, 1, 1),
     projects: <ProjectCatalogItem>[
       const ProjectCatalogItem(projectId: 'P-1', name: 'OpenForge'),
+      const ProjectCatalogItem(projectId: 'P-2', name: 'Release Tools'),
     ],
   );
 

@@ -34,18 +34,23 @@ final class _TaskRelationshipItem {
     required this.taskId,
     required this.title,
     required this.boardStatus,
+    required this.projectId,
+    required this.projectName,
     required this.readiness,
   });
 
   final String taskId;
   final String title;
   final String boardStatus;
+  final String projectId;
+  final String? projectName;
   final String? readiness;
 }
 
 final class _TaskRelationshipsCard extends StatelessWidget {
   _TaskRelationshipsCard.dependencies({
     required List<TaskRelationship> relationships,
+    required String currentProjectId,
     required this.onOpenTask,
   }) : title = 'Dependencies',
        kind = _TaskRelationshipKind.dependency,
@@ -55,12 +60,17 @@ final class _TaskRelationshipsCard extends StatelessWidget {
              taskId: relationship.taskId,
              title: relationship.title,
              boardStatus: relationship.boardStatus,
+             projectId: relationship.projectId,
+             projectName: relationship.projectId == currentProjectId
+                 ? null
+                 : relationship.projectName,
              readiness: null,
            ),
        ];
 
   _TaskRelationshipsCard.dependents({
     required List<DependentTask> relationships,
+    required String currentProjectId,
     required this.onOpenTask,
   }) : title = 'Dependent tasks',
        kind = _TaskRelationshipKind.dependent,
@@ -70,6 +80,10 @@ final class _TaskRelationshipsCard extends StatelessWidget {
              taskId: relationship.taskId,
              title: relationship.title,
              boardStatus: relationship.boardStatus,
+             projectId: relationship.projectId,
+             projectName: relationship.projectId == currentProjectId
+                 ? null
+                 : relationship.projectName,
              readiness: relationship.remainingDependencyCount == 0
                  ? 'Ready after this'
                  : 'Still waits on ${relationship.remainingDependencyCount} '
@@ -80,7 +94,7 @@ final class _TaskRelationshipsCard extends StatelessWidget {
   final String title;
   final _TaskRelationshipKind kind;
   final List<_TaskRelationshipItem> items;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +141,7 @@ final class _TaskRelationshipRow extends StatelessWidget {
 
   final _TaskRelationshipItem item;
   final _TaskRelationshipKind kind;
-  final void Function(String taskId)? onOpenTask;
+  final void Function(String taskId, String projectId)? onOpenTask;
 
   @override
   Widget build(BuildContext context) {
@@ -137,22 +151,28 @@ final class _TaskRelationshipRow extends StatelessWidget {
       _TaskRelationshipKind.dependent => 'Dependent Task',
     };
     final readiness = item.readiness == null ? '' : ' ${item.readiness}.';
+    final project = item.projectName == null
+        ? ''
+        : ' Project ${item.projectName}.';
+    final metadata = <String>[
+      item.taskId,
+      if (item.projectName != null) item.projectName!,
+      if (item.readiness != null) item.readiness!,
+    ].join(' · ');
 
     return Semantics(
       button: onOpenTask != null,
       label:
-          '$relationship ${item.taskId}. ${item.title}. Status $status.$readiness',
+          '$relationship ${item.taskId}. ${item.title}.$project Status $status.$readiness',
       child: ExcludeSemantics(
         child: ListTile(
           contentPadding: EdgeInsets.zero,
           minVerticalPadding: 12,
-          onTap: onOpenTask == null ? null : () => onOpenTask!(item.taskId),
+          onTap: onOpenTask == null
+              ? null
+              : () => onOpenTask!(item.taskId, item.projectId),
           title: Text(item.title),
-          subtitle: Text(
-            item.readiness == null
-                ? item.taskId
-                : '${item.taskId} · ${item.readiness}',
-          ),
+          subtitle: Text(metadata),
           trailing: Chip(label: Text(status)),
         ),
       ),

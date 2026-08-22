@@ -81,11 +81,15 @@ fn detail() -> CompanionTaskDetail {
             task_id: "KVG-2944".to_string(),
             title: "Prepare companion contract".to_string(),
             board_status: "done".to_string(),
+            project_id: "P-2".to_string(),
+            project_name: "Release Tools".to_string(),
         }],
         dependent_tasks: vec![super::task_detail::CompanionDependentTask {
             task_id: "KVG-2947".to_string(),
             title: "Ship companion release".to_string(),
             board_status: "backlog".to_string(),
+            project_id: "P-2".to_string(),
+            project_name: "Release Tools".to_string(),
             remaining_dependency_count: 1,
         }],
         created_at: 1_754_000_000,
@@ -128,7 +132,11 @@ async fn authenticated_task_detail_returns_only_the_approved_read_model() {
     assert_eq!(json["labels"], serde_json::json!(["mobile", "review"]));
     assert_eq!(json["dependencies"][0]["taskId"], "KVG-2944");
     assert_eq!(json["dependencies"][0]["boardStatus"], "done");
+    assert_eq!(json["dependencies"][0]["projectId"], "P-2");
+    assert_eq!(json["dependencies"][0]["projectName"], "Release Tools");
     assert_eq!(json["dependentTasks"][0]["taskId"], "KVG-2947");
+    assert_eq!(json["dependentTasks"][0]["projectId"], "P-2");
+    assert_eq!(json["dependentTasks"][0]["projectName"], "Release Tools");
     assert_eq!(json["dependentTasks"][0]["remainingDependencyCount"], 1);
     assert_eq!(
         json.as_object()
@@ -210,6 +218,9 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
     let project = database
         .create_project("OpenForge", "/Users/secret/repository")
         .expect("project");
+    let relationship_project = database
+        .create_project("Release Tools", "/Users/secret/release-tools")
+        .expect("relationship project");
     let task = database
         .create_task(
             "\n[image#1]: data:image/png;base64,cHJvbXB0LXNlY3JldA==\nPrompt-derived title",
@@ -223,7 +234,7 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         .create_task(
             "Prepare companion contract",
             "done",
-            Some(&project.id),
+            Some(&relationship_project.id),
             None,
             None,
         )
@@ -232,7 +243,7 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         .create_task(
             "Finish release notes",
             "backlog",
-            Some(&project.id),
+            Some(&relationship_project.id),
             None,
             None,
         )
@@ -241,7 +252,7 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         .create_task(
             "Ship companion release",
             "backlog",
-            Some(&project.id),
+            Some(&relationship_project.id),
             None,
             None,
         )
@@ -317,9 +328,19 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
         "Prepare companion contract"
     );
     assert_eq!(json["dependencies"][0]["boardStatus"], "done");
+    assert_eq!(
+        json["dependencies"][0]["projectId"],
+        relationship_project.id
+    );
+    assert_eq!(json["dependencies"][0]["projectName"], "Release Tools");
     assert_eq!(json["dependentTasks"][0]["taskId"], dependent.id);
     assert_eq!(json["dependentTasks"][0]["title"], "Ship companion release");
     assert_eq!(json["dependentTasks"][0]["boardStatus"], "backlog");
+    assert_eq!(
+        json["dependentTasks"][0]["projectId"],
+        relationship_project.id
+    );
+    assert_eq!(json["dependentTasks"][0]["projectName"], "Release Tools");
     assert_eq!(json["dependentTasks"][0]["remainingDependencyCount"], 1);
     let encoded = json.to_string();
     for forbidden in [

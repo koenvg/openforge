@@ -102,7 +102,7 @@ void main() {
   testWidgets(
     'Task detail shows labels and related Tasks and opens either relationship',
     (tester) async {
-      final openedTaskIds = <String>[];
+      final openedTasks = <String>[];
       await tester.pumpWidget(
         MaterialApp(
           home: TaskDetailView(
@@ -114,11 +114,15 @@ void main() {
                     taskId: 'KVG-2944',
                     title: 'Prepare companion contract',
                     boardStatus: 'done',
+                    projectId: 'P-4',
+                    projectName: 'OpenForge',
                   ),
                   TaskRelationship(
                     taskId: 'KVG-2945',
                     title: 'Approve release notes',
                     boardStatus: 'backlog',
+                    projectId: 'P-5',
+                    projectName: 'Release Tools',
                   ),
                 ],
                 dependentTasks: const <DependentTask>[
@@ -126,13 +130,16 @@ void main() {
                     taskId: 'KVG-2947',
                     title: 'Ship companion release',
                     boardStatus: 'backlog',
+                    projectId: 'P-5',
+                    projectName: 'Release Tools',
                     remainingDependencyCount: 1,
                   ),
                 ],
               ),
             ),
             onRefresh: () async {},
-            onOpenTask: openedTaskIds.add,
+            onOpenTask: (taskId, projectId) =>
+                openedTasks.add('$taskId@$projectId'),
           ),
         ),
       );
@@ -146,6 +153,7 @@ void main() {
       expect(find.text('Dependencies'), findsOneWidget);
       expect(find.text('Prepare companion contract'), findsOneWidget);
       expect(find.text('Approve release notes'), findsOneWidget);
+      expect(find.textContaining('Release Tools'), findsOneWidget);
       expect(find.text('Waiting on 1 dependency'), findsOneWidget);
       await tester.ensureVisible(find.text('Prepare companion contract'));
       await tester.pump();
@@ -154,13 +162,14 @@ void main() {
       await tester.scrollUntilVisible(find.text('Dependent tasks'), 200);
       expect(find.text('Dependent tasks'), findsOneWidget);
       expect(find.text('Ship companion release'), findsOneWidget);
+      expect(find.textContaining('Release Tools'), findsNWidgets(2));
       expect(
         find.textContaining('Still waits on 1 dependency'),
         findsOneWidget,
       );
       await tester.tap(find.text('Ship companion release'));
 
-      expect(openedTaskIds, <String>['KVG-2944', 'KVG-2947']);
+      expect(openedTasks, <String>['KVG-2944@P-4', 'KVG-2947@P-5']);
     },
   );
 

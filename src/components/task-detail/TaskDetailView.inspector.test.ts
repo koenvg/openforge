@@ -68,7 +68,7 @@ describe('TaskDetailView — inspector', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /T-99/ }))
 
-    expect(onOpenTask).toHaveBeenCalledWith('T-99')
+    expect(onOpenTask).toHaveBeenCalledWith('T-99', null)
     expect(onOpenTask).toHaveBeenCalledTimes(1)
   })
 

@@ -27,7 +27,7 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
-  getTaskDetail,
+  getAllTasks,
   getTasksForProject,
 } from './ipc'
 import { applyProjectOrder } from './projectOrder'
@@ -50,29 +50,15 @@ function defaultLogError(message: string, errorValue: unknown): void {
   console.error(message, errorValue)
 }
 
-function findMissingDependencyIds(activeTasks: Task[]): string[] {
+function findTaskRelationshipReferences(activeTasks: Task[], allTasks: Task[]): Task[] {
   const activeTaskIds = new Set(activeTasks.map((task) => task.id))
-  const missingDependencyIds: string[] = []
-  for (const task of activeTasks) {
-    for (const dependencyId of task.depends_on) {
-      if (activeTaskIds.has(dependencyId) || missingDependencyIds.includes(dependencyId)) continue
-      missingDependencyIds.push(dependencyId)
-    }
-  }
-  return missingDependencyIds
-}
+  const dependencyIds = new Set(activeTasks.flatMap((task) => task.depends_on))
 
-async function loadCompletedDependencyReferenceTasks(activeTasks: Task[]): Promise<Task[]> {
-  const missingDependencyIds = findMissingDependencyIds(activeTasks)
-  const referenceTasks = await Promise.all(missingDependencyIds.map(async (dependencyId) => {
-    try {
-      const dependencyTask = await getTaskDetail(dependencyId)
-      return dependencyTask.status === 'done' ? dependencyTask : null
-    } catch {
-      return null
-    }
-  }))
-  return referenceTasks.filter((task): task is Task => task !== null)
+  return allTasks.filter((task) => {
+    if (activeTaskIds.has(task.id)) return false
+    if (dependencyIds.has(task.id)) return true
+    return task.status !== 'done' && task.depends_on.some((dependencyId) => activeTaskIds.has(dependencyId))
+  })
 }
 
 async function loadGlobalExcludedRepos(): Promise<Set<string>> {
@@ -159,7 +145,10 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
     isLoading.set(true)
     try {
-      const activeTasks = await getTasksForProject(projectId)
+      const [activeTasks, allTasks] = await Promise.all([
+        getTasksForProject(projectId),
+        getAllTasks(),
+      ])
       // A newer project switch may have started while this fetch was in flight (e.g.
       // rapid ⌘-cycling or a sidebar switch, each of which also kicks off a load).
       // Don't clobber the tasks store with a stale project's data — the newer load
@@ -168,7 +157,7 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
         return
       }
       tasks.set(activeTasks)
-      dependencyReferenceTasks.set(await loadCompletedDependencyReferenceTasks(activeTasks))
+      dependencyReferenceTasks.set(findTaskRelationshipReferences(activeTasks, allTasks))
       await loadSessions()
     } catch (e) {
       dependencyReferenceTasks.set([])

@@ -46,7 +46,9 @@
       {
         "taskId": "KVG-2944",
         "title": "Prepare companion contract",
-        "boardStatus": "done"
+        "boardStatus": "done",
+        "projectId": "P-5",
+        "projectName": "Release Tools"
       }
     ],
     "dependentTasks": [
@@ -54,6 +56,8 @@
         "taskId": "KVG-2947",
         "title": "Ship companion release",
         "boardStatus": "backlog",
+        "projectId": "P-5",
+        "projectName": "Release Tools",
         "remainingDependencyCount": 1
       }
     ],

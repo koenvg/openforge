@@ -7,6 +7,7 @@ import TaskInspectorPanel from './TaskInspectorPanel.svelte'
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
+  projects: writable([]),
   tasks: writable([]),
   dependencyReferenceTasks: writable([]),
   activeSessions: writable(new Map()),
@@ -62,6 +63,7 @@ describe('TaskInspectorPanel', () => {
     const stores = await import('../../lib/stores')
     stores.ticketPrs.set(new Map())
     stores.mergingTaskIds.set(new Set())
+    stores.projects.set([])
     stores.tasks.set([])
     stores.activeSessions.set(new Map())
   })
@@ -150,7 +152,7 @@ describe('TaskInspectorPanel', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: /T-900/ }))
 
-    expect(onOpenLinkedTask).toHaveBeenCalledWith('T-900')
+    expect(onOpenLinkedTask).toHaveBeenCalledWith('T-900', 'project-1')
     expect(onOpenLinkedTask).toHaveBeenCalledTimes(1)
   })
 

@@ -206,6 +206,8 @@ pub(crate) struct CompanionTaskRelationshipResponse {
     pub(crate) task_id: String,
     pub(crate) title: String,
     pub(crate) board_status: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -214,6 +216,8 @@ pub(crate) struct CompanionDependentTaskResponse {
     pub(crate) task_id: String,
     pub(crate) title: String,
     pub(crate) board_status: String,
+    pub(crate) project_id: String,
+    pub(crate) project_name: String,
     pub(crate) remaining_dependency_count: usize,
 }
 
