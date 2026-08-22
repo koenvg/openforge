@@ -102,6 +102,38 @@ pub(super) async fn handle_agent_lifecycle_notification(
     transcript_path: Option<String>,
     activity_snapshot: Option<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_agent_lifecycle_notification_with_refresh(
+        state,
+        notification,
+        transcript_path,
+        activity_snapshot,
+        |db, queued_refresh| async move {
+            crate::task_metadata_refresh::refresh_queued_task_display_title_with_ai_once(
+                db,
+                queued_refresh,
+            )
+            .await
+        },
+    )
+    .await
+}
+
+pub(in crate::http_server) async fn handle_agent_lifecycle_notification_with_refresh<F, Fut>(
+    state: AppState,
+    notification: crate::agent_lifecycle::AgentLifecycleNotification,
+    transcript_path: Option<String>,
+    activity_snapshot: Option<String>,
+    title_refresh: F,
+) -> Result<Json<serde_json::Value>, StatusCode>
+where
+    F: FnOnce(
+            Arc<std::sync::Mutex<crate::db::Database>>,
+            crate::task_metadata_refresh::QueuedTaskDisplayTitleRefresh,
+        ) -> Fut
+        + Send
+        + 'static,
+    Fut: std::future::Future<Output = Result<bool, String>> + Send + 'static,
+{
     let status_change = record_agent_lifecycle_notification(&state, &notification);
 
     if let Some(change) = status_change {
@@ -120,12 +152,7 @@ pub(super) async fn handle_agent_lifecycle_notification(
                 activity_snapshot,
             );
             tokio::spawn(async move {
-                match crate::task_metadata_refresh::refresh_queued_task_display_title_with_ai_once(
-                    db,
-                    queued_refresh,
-                )
-                .await
-                {
+                match title_refresh(db, queued_refresh).await {
                     Ok(true) => {
                         let project_id = crate::db::acquire_db(&refresh_state.db)
                             .get_task(&task_id)
