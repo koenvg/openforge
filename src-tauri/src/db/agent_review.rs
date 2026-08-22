@@ -35,10 +35,7 @@ impl super::Database {
         raw_agent_output: Option<&str>,
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "INSERT INTO agent_review_comments (review_pr_id, review_session_key, comment_type, file_path, line_number, side, body, status, opencode_session_id, raw_agent_output, created_at, updated_at)
@@ -90,10 +87,7 @@ impl super::Database {
     /// Update the status of an agent review comment
     pub fn update_agent_review_comment_status(&self, comment_id: i64, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "UPDATE agent_review_comments SET status = ?1, updated_at = ?2 WHERE id = ?3",

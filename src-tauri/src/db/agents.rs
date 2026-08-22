@@ -54,10 +54,7 @@ impl super::Database {
         provider: &str,
     ) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let tx = conn.transaction()?;
         tx.execute(
             "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, provider, claude_session_id, pi_session_id, created_at, updated_at)
@@ -94,10 +91,7 @@ impl super::Database {
         error_message: Option<&str>,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE agent_sessions SET stage = ?1, status = ?2, checkpoint_data = ?3, error_message = ?4, updated_at = ?5 WHERE id = ?6",
             rusqlite::params![stage, status, checkpoint_data, error_message, now, id],
@@ -305,10 +299,7 @@ impl super::Database {
         cutoff_updated_at: i64,
     ) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running' AND updated_at < ?2",
             rusqlite::params![now, cutoff_updated_at],

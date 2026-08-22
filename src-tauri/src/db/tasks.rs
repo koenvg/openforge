@@ -254,10 +254,7 @@ fn create_task_label_on_connection(
         });
     }
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_secs() as i64;
+    let now = super::current_unix_timestamp()?;
     conn.execute(
         "INSERT INTO task_labels (project_id, name, name_normalized, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![project_id, name, key, now, now],
@@ -780,10 +777,7 @@ impl super::Database {
             [&(next_id + 1).to_string()],
         )?;
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         // Default prompt to initial_prompt if not provided (backward compat). A task
         // created outside backlog has already entered its execution lifecycle.
@@ -952,10 +946,7 @@ impl super::Database {
                 "label must belong to the same project as the task".to_string(),
             ));
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "INSERT OR IGNORE INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![task_id, label.id, now],
@@ -976,10 +967,7 @@ impl super::Database {
             "DELETE FROM task_label_assignments WHERE task_id = ?1 AND label_id = ?2",
             rusqlite::params![task_id, label_id],
         )?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
             rusqlite::params![now, task_id],
@@ -999,10 +987,7 @@ impl super::Database {
         }
         drop(stmt);
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         for task_id in &affected_task_ids {
             conn.execute(
                 "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
@@ -1055,10 +1040,7 @@ impl super::Database {
             "DELETE FROM task_label_assignments WHERE task_id = ?1",
             rusqlite::params![task_id],
         )?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         for label in &labels {
             tx.execute(
                 "INSERT INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
@@ -1085,10 +1067,7 @@ impl super::Database {
         initial_prompt: &str,
     ) -> std::result::Result<(), TaskInitialPromptUpdateError> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let changed = conn.execute(
             "UPDATE tasks
              SET initial_prompt = ?1, prompt = ?1, updated_at = ?2
@@ -1120,10 +1099,7 @@ impl super::Database {
     /// so the UI falls back to the prompt-derived title.
     pub fn update_task_title(&self, id: &str, title: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let trimmed = title.trim();
         let (stored_title, title_source): (Option<&str>, Option<&str>) = if trimmed.is_empty() {
             (None, None)
@@ -1142,10 +1118,7 @@ impl super::Database {
     /// or `None` value clears it back to `NULL` so the UI shows nothing.
     pub fn update_task_source_ticket_url(&self, id: &str, url: Option<&str>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         // Normalize a blank link to NULL, matching creation (see create_task_with_options).
         let stored_url: Option<&str> = url.map(str::trim).filter(|value| !value.is_empty());
         conn.execute(
@@ -1165,10 +1138,7 @@ impl super::Database {
         }
 
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let changed = conn.execute(
             "UPDATE tasks
              SET title = ?1, title_source = 'generated', title_generated_at = ?2, updated_at = ?2
@@ -1183,10 +1153,7 @@ impl super::Database {
 
     pub fn update_task_status(&self, id: &str, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE tasks
              SET status = ?1,
@@ -1204,10 +1171,7 @@ impl super::Database {
     pub fn add_task_dependency(&self, task_id: &str, depends_on_task_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         validate_dependency(&conn, task_id, depends_on_task_id)?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![task_id, depends_on_task_id, now],
@@ -1228,10 +1192,7 @@ impl super::Database {
         for dependency_id in &dependency_ids {
             validate_dependency(&conn, task_id, dependency_id)?;
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let tx = conn.transaction()?;
         tx.execute(
             "DELETE FROM task_dependencies WHERE task_id = ?1",
@@ -1259,10 +1220,7 @@ impl super::Database {
         }
 
         let mut conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         let tx = conn.transaction()?;
         let mut links = Vec::new();
         for pair in task_ids.windows(2) {
@@ -1421,10 +1379,7 @@ impl super::Database {
                 "DELETE FROM worktrees WHERE task_id = ?1",
                 rusqlite::params![id],
             )?;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_secs() as i64;
+            let now = super::current_unix_timestamp()?;
             conn.execute(
                 "UPDATE tasks
                  SET status = 'done',

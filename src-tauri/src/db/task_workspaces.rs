@@ -30,10 +30,7 @@ impl super::Database {
         status: &str,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, created_at, updated_at)
@@ -65,10 +62,7 @@ impl super::Database {
         provider_name: &str,
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
 
         conn.execute(
             "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, created_at, updated_at)
@@ -113,10 +107,7 @@ impl super::Database {
         status: &str,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE task_workspaces
              SET workspace_path = ?1, provider_name = ?2, status = ?3, updated_at = ?4
@@ -128,10 +119,7 @@ impl super::Database {
 
     pub fn update_task_workspace_status(&self, task_id: &str, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
+        let now = super::current_unix_timestamp()?;
         conn.execute(
             "UPDATE task_workspaces SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
             rusqlite::params![status, now, task_id],

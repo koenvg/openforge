@@ -41,13 +41,6 @@ pub struct PrRow {
     pub unaddressed_comment_count: i64,
 }
 
-fn current_unix_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
     Ok(PrRow {
         id: row.get(0)?,
@@ -398,7 +391,7 @@ impl super::Database {
                     "already_merged",
                     "Pull request is already merged."
                 ),
-                current_unix_timestamp(),
+                super::current_unix_timestamp()?,
                 id
             ],
         )?;
@@ -420,7 +413,7 @@ impl super::Database {
              WHERE id = ?3",
             rusqlite::params![
                 terminal_readiness_blockers_json("pull_request_closed", "Pull request is closed."),
-                current_unix_timestamp(),
+                super::current_unix_timestamp()?,
                 id
             ],
         )?;
@@ -449,7 +442,7 @@ impl super::Database {
                 merge_queue_state = 'QUEUED',
                 readiness_updated_at = ?1
              WHERE id = ?2",
-            rusqlite::params![current_unix_timestamp(), pr_id],
+            rusqlite::params![super::current_unix_timestamp()?, pr_id],
         )?;
         Ok(())
     }

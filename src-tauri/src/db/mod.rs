@@ -75,6 +75,19 @@ pub(crate) fn serialize_labels_column(labels: &[PrLabel]) -> Option<String> {
     }
 }
 
+pub(crate) fn current_unix_timestamp() -> Result<i64> {
+    unix_timestamp_from_elapsed(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH))
+}
+
+fn unix_timestamp_from_elapsed(
+    elapsed: std::result::Result<std::time::Duration, std::time::SystemTimeError>,
+) -> Result<i64> {
+    let seconds = elapsed
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?
+        .as_secs();
+    i64::try_from(seconds).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
 /// Database connection wrapper for thread-safe access
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -168,5 +181,28 @@ mod tests {
         drop(guard);
         drop(mutex);
         let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn timestamp_conversion_rejects_times_before_unix_epoch() {
+        let before_epoch = std::time::UNIX_EPOCH
+            .checked_sub(std::time::Duration::from_secs(1))
+            .expect("one second before the Unix epoch should be representable")
+            .duration_since(std::time::UNIX_EPOCH);
+
+        assert!(matches!(
+            super::unix_timestamp_from_elapsed(before_epoch),
+            Err(rusqlite::Error::ToSqlConversionFailure(_))
+        ));
+    }
+
+    #[test]
+    fn timestamp_conversion_rejects_seconds_outside_sqlite_integer_range() {
+        let overflow = std::time::Duration::from_secs(i64::MAX as u64 + 1);
+
+        assert!(matches!(
+            super::unix_timestamp_from_elapsed(Ok(overflow)),
+            Err(rusqlite::Error::ToSqlConversionFailure(_))
+        ));
     }
 }
