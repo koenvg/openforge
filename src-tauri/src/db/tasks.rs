@@ -1024,8 +1024,9 @@ impl super::Database {
         task_id: &str,
         label_names: &[String],
     ) -> Result<Vec<TaskLabelRow>> {
-        let conn = self.conn.lock().unwrap();
-        let project_id = task_project_id(&conn, task_id)?
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let project_id = task_project_id(&tx, task_id)?
             .ok_or_else(|| {
                 rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
             })?
@@ -1034,7 +1035,6 @@ impl super::Database {
                     "task {task_id} must belong to a project before labels can be assigned"
                 ))
             })?;
-        drop(conn);
 
         let mut labels = Vec::new();
         let mut seen = Vec::new();
@@ -1044,11 +1044,13 @@ impl super::Database {
                 continue;
             }
             seen.push(key);
-            labels.push(self.create_task_label(&project_id, label_name)?);
+            labels.push(create_task_label_on_connection(
+                &tx,
+                &project_id,
+                label_name,
+            )?);
         }
 
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
         tx.execute(
             "DELETE FROM task_label_assignments WHERE task_id = ?1",
             rusqlite::params![task_id],
@@ -2122,6 +2124,45 @@ mod tests {
         let all_labels = db.get_project_task_labels(&project.id).expect("all labels");
         assert!(all_labels.iter().any(|label| label.id == ui.id));
 
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_set_task_labels_rolls_back_new_labels_when_assignment_fails() {
+        let (db, path) = make_test_db("task_labels_assignment_failure");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("A", "/tmp/labels-assignment-failure")
+            .expect("create project");
+        let task = db
+            .create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+        let existing = db
+            .add_task_label(&task.id, "existing")
+            .expect("add existing label");
+
+        let conn = db.connection();
+        conn.lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER fail_task_label_assignment
+                 BEFORE INSERT ON task_label_assignments
+                 BEGIN SELECT RAISE(ABORT, 'forced assignment failure'); END;",
+            )
+            .expect("create failure trigger");
+
+        assert!(db.set_task_labels(&task.id, &["new".to_string()]).is_err());
+
+        let task_after_failure = db.get_task(&task.id).expect("get task").unwrap();
+        assert_eq!(task_after_failure.labels, vec![existing.clone()]);
+        assert_eq!(
+            db.get_project_task_labels(&project.id)
+                .expect("get project labels"),
+            vec![existing]
+        );
+
+        drop(conn);
         drop(db);
         let _ = fs::remove_file(&path);
     }
