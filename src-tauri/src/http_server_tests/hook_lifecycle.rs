@@ -45,6 +45,60 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
 }
 
 #[tokio::test]
+async fn pi_agent_start_handler_recovers_from_poisoned_database_lock() {
+    let (state, path) = test_state("http_pi_agent_start_poisoned_database_lock");
+    let task_id = {
+        let db = state.db.lock().expect("lock healthy test database");
+        let task = db
+            .create_task("Pi task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-pi-poisoned-lock",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "pi",
+        )
+        .expect("create session");
+        db.set_agent_session_pty_instance_id("ses-pi-poisoned-lock", 42)
+            .expect("set pty instance");
+        task.id
+    };
+
+    let database = Arc::clone(&state.db);
+    let poison_result = std::thread::spawn(move || {
+        let _database = database.lock().expect("lock healthy test database");
+        panic!("poison test database lock");
+    })
+    .join();
+    assert!(poison_result.is_err());
+
+    let response = create_router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/hooks/pi-agent-start")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"task_id":"{task_id}","pty_instance_id":42}}"#
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should return a controlled response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = crate::db::acquire_db(&state.db)
+        .get_agent_session("ses-pi-poisoned-lock")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
     let (state, path) = test_state("http_pi_agent_end_completed");
     let task_id = {

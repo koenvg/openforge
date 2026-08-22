@@ -83,7 +83,7 @@ pub(in crate::http_server) fn record_agent_lifecycle_notification(
     state: &AppState,
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
 ) -> Option<crate::agent_lifecycle::AgentLifecycleStatusChange> {
-    let db = state.db.lock().unwrap();
+    let db = crate::db::acquire_db(&state.db);
     match crate::agent_lifecycle::apply_agent_lifecycle_notification(&db, notification) {
         Ok(status_change) => status_change,
         Err(error) => {
@@ -127,10 +127,7 @@ pub(super) async fn handle_agent_lifecycle_notification(
                 .await
                 {
                     Ok(true) => {
-                        let project_id = refresh_state
-                            .db
-                            .lock()
-                            .unwrap()
+                        let project_id = crate::db::acquire_db(&refresh_state.db)
                             .get_task(&task_id)
                             .ok()
                             .flatten()
@@ -156,7 +153,7 @@ pub(super) async fn handle_agent_lifecycle_notification(
 }
 
 fn task_display_title_metadata_updates_enabled(state: &AppState, task_id: &str) -> bool {
-    state.db.lock().unwrap().resolve_task_bool(
+    crate::db::acquire_db(&state.db).resolve_task_bool(
         task_id,
         TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
         false,
