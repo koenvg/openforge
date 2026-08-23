@@ -73,7 +73,9 @@ fn is_startup_resumable_session_status(status: &str) -> bool {
 }
 
 fn latest_session_allows_startup_resume(latest_session: Option<&db::AgentSessionRow>) -> bool {
-    latest_session.is_some_and(|session| is_startup_resumable_session_status(&session.status))
+    latest_session.is_some_and(|session| {
+        is_startup_resumable_session_status(&session.status) || session.status == "completed"
+    })
 }
 
 pub(crate) fn persist_resumed_session_state(
@@ -105,6 +107,25 @@ pub(crate) fn persist_resumed_session_state(
         provider_name,
         provider_result.pty_instance_id,
     );
+}
+
+async fn schedule_completed_session_recovery(
+    app: &crate::backend_runtime::AppHandle,
+    session: &db::AgentSessionRow,
+) {
+    if session.status != "completed" {
+        return;
+    }
+
+    let Some(reaper) = app.try_state::<crate::completed_session_reaper::CompletedSessionReaper>()
+    else {
+        warn!(
+            "[startup] Completed Agent Session {} for task {} reattached without replay capture",
+            session.id, session.ticket_id
+        );
+        return;
+    };
+    reaper.completed(&session.ticket_id).await;
 }
 
 pub(crate) async fn resume_task_sessions(
@@ -273,6 +294,8 @@ pub(crate) async fn resume_task_sessions(
                         }
                     };
                 }
+
+                schedule_completed_session_recovery(&app, session_ref).await;
 
                 let _ = app.emit(
                     "session-resumed",
@@ -446,7 +469,8 @@ pub(crate) fn restore_resumed_session_state(
 mod tests {
     use super::{
         latest_session_allows_startup_resume, load_resume_targets, persist_resumed_session_state,
-        restore_resumed_session_state, resume_task_sessions, ResumeTarget,
+        restore_resumed_session_state, resume_task_sessions, schedule_completed_session_recovery,
+        ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db;
@@ -481,14 +505,65 @@ mod tests {
         }
         let completed_session = test_agent_session_with_status("completed");
         assert!(
-            !latest_session_allows_startup_resume(Some(&completed_session)),
-            "completed Agent Sessions restart only when they receive follow-up input"
+            latest_session_allows_startup_resume(Some(&completed_session)),
+            "completed Agent Sessions loaded for missing replay recovery must reattach"
         );
 
         let failed_session = test_agent_session_with_status("failed");
         assert!(!latest_session_allows_startup_resume(Some(&failed_session)));
 
         assert!(!latest_session_allows_startup_resume(None));
+    }
+
+    #[tokio::test]
+    async fn completed_replay_recovery_is_handed_to_idle_reaper() {
+        let (database, path) = make_test_db("completed_replay_recovery_reaper");
+        let project = database
+            .create_project("Replay recovery", "/tmp/replay-recovery")
+            .expect("create project");
+        let task = database
+            .create_task("Recover replay", "doing", Some(&project.id), None, None)
+            .expect("create task");
+        database
+            .create_agent_session(
+                "ses-replay-recovery",
+                &task.id,
+                None,
+                "implement",
+                "completed",
+                "pi",
+            )
+            .expect("create completed Agent Session");
+
+        let database = Arc::new(Mutex::new(database));
+        let app = crate::backend_runtime::AppHandle::new();
+        app.manage(
+            crate::completed_session_reaper::CompletedSessionReaper::new(
+                Arc::clone(&database),
+                crate::pty_manager::PtyManager::new(),
+            ),
+        );
+        let session = database
+            .lock()
+            .expect("database lock")
+            .get_latest_session_for_ticket(&task.id)
+            .expect("load latest Agent Session")
+            .expect("latest Agent Session missing");
+
+        schedule_completed_session_recovery(&app, &session).await;
+
+        assert_eq!(
+            database
+                .lock()
+                .expect("database lock")
+                .get_latest_agent_terminal_replay(&task.id)
+                .expect("load recovered replay")
+                .as_deref(),
+            Some("")
+        );
+
+        drop(database);
+        let _ = fs::remove_file(path);
     }
 
     #[derive(Default)]
@@ -943,6 +1018,75 @@ mod tests {
             .iter()
             .any(|target| target.task_id == task_with_legacy_worktree.id
                 && target.workspace_path == "/tmp/test-repo/.worktrees/legacy"));
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn load_resume_targets_recovers_completed_sessions_without_terminal_replay() {
+        let (db, path) = make_test_db("load_completed_resume_targets");
+        let project = db
+            .create_project("Replay recovery", "/tmp/replay-recovery")
+            .expect("create project failed");
+
+        let missing_replay = db
+            .create_task("Missing replay", "doing", Some(&project.id), None, None)
+            .expect("create missing-replay task");
+        let empty_replay = db
+            .create_task("Empty replay", "doing", Some(&project.id), None, None)
+            .expect("create empty-replay task");
+        let captured_replay = db
+            .create_task("Captured replay", "doing", Some(&project.id), None, None)
+            .expect("create captured-replay task");
+
+        for task in [&missing_replay, &captured_replay] {
+            db.upsert_task_workspace_record(
+                &task.id,
+                &project.id,
+                "/tmp/replay-recovery",
+                "/tmp/replay-recovery",
+                "project_dir",
+                None,
+                "pi",
+                "active",
+            )
+            .expect("create task workspace");
+        }
+        db.create_worktree_record(
+            &empty_replay.id,
+            &project.id,
+            "/tmp/replay-recovery",
+            "/tmp/replay-recovery/.worktrees/empty",
+            "empty",
+        )
+        .expect("create legacy worktree");
+
+        for (session_id, task_id) in [
+            ("ses-missing-replay", missing_replay.id.as_str()),
+            ("ses-empty-replay", empty_replay.id.as_str()),
+            ("ses-captured-replay", captured_replay.id.as_str()),
+        ] {
+            db.create_agent_session(session_id, task_id, None, "implement", "completed", "pi")
+                .expect("create completed Agent Session");
+        }
+        assert!(db
+            .save_completed_agent_terminal_replay(&empty_replay.id, "")
+            .expect("save empty replay"));
+        assert!(db
+            .save_completed_agent_terminal_replay(&captured_replay.id, "captured output")
+            .expect("save captured replay"));
+
+        let mut recovered_task_ids: Vec<_> = load_resume_targets(&db)
+            .expect("load replay recovery targets")
+            .into_iter()
+            .map(|target| target.task_id)
+            .collect();
+        recovered_task_ids.sort();
+        let mut expected_task_ids = vec![missing_replay.id.clone(), empty_replay.id.clone()];
+        expected_task_ids.sort();
+
+        assert_eq!(recovered_task_ids, expected_task_ids);
 
         drop(db);
         let _ = fs::remove_file(path);

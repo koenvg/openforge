@@ -127,6 +127,8 @@ impl super::Database {
         Ok(())
     }
 
+    /// Returns active Task workspaces whose latest Agent Session needs startup reattachment.
+    /// Completed sessions remain eligible until OpenForge captures a non-empty Terminal Replay.
     pub fn get_resumable_task_workspaces(&self) -> Result<Vec<TaskWorkspaceRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
@@ -146,7 +148,18 @@ impl super::Database {
               )
              WHERE tw.status = 'active'
                AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3)
+               AND (
+                 latest_session.status IN (?1, ?2, ?3)
+                 OR (
+                   latest_session.status = 'completed'
+                   AND NOT EXISTS (
+                     SELECT 1
+                       FROM agent_terminal_replays replay
+                      WHERE replay.session_id = latest_session.id
+                        AND LENGTH(replay.replay) > 0
+                   )
+                 )
+               )
              ORDER BY tw.updated_at DESC",
         )?;
 
@@ -356,6 +369,8 @@ mod tests {
             "opencode",
         )
         .expect("create latest completed session failed");
+        db.save_completed_agent_terminal_replay(&completed_task.id, "captured output")
+            .expect("save completed terminal replay");
         db.create_agent_session(
             "ses-failed-old",
             &failed_task.id,
@@ -380,7 +395,7 @@ mod tests {
             .expect("get resumable failed");
         assert!(
             resumable.is_empty(),
-            "completed and failed Agent Sessions must not restart at startup"
+            "completed Agent Sessions with replay and failed Agent Sessions must not restart"
         );
 
         drop(db);

@@ -153,9 +153,8 @@ impl super::Database {
         Ok(result)
     }
 
-    /// Get worktrees that need provider resume on app startup.
-    /// Returns active worktrees for non-done tasks that have at least one agent session
-    /// (i.e., tasks that previously had agent work in progress).
+    /// Returns active legacy worktrees whose latest Agent Session needs startup reattachment.
+    /// Completed sessions remain eligible until OpenForge captures a non-empty Terminal Replay.
     pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
@@ -174,7 +173,18 @@ impl super::Database {
               )
              WHERE w.status = 'active'
                AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3)
+               AND (
+                 latest_session.status IN (?1, ?2, ?3)
+                 OR (
+                   latest_session.status = 'completed'
+                   AND NOT EXISTS (
+                     SELECT 1
+                       FROM agent_terminal_replays replay
+                      WHERE replay.session_id = latest_session.id
+                        AND LENGTH(replay.replay) > 0
+                   )
+                 )
+               )
              ORDER BY w.updated_at DESC",
         )?;
 
@@ -400,6 +410,8 @@ mod tests {
             "claude-code",
         )
         .expect("create latest completed session failed");
+        db.save_completed_agent_terminal_replay(&completed_task.id, "captured output")
+            .expect("save completed terminal replay");
         db.create_agent_session(
             "sess-failed-old",
             &failed_task.id,
@@ -422,7 +434,7 @@ mod tests {
         let resumable = db.get_resumable_worktrees().expect("get resumable");
         assert!(
             resumable.is_empty(),
-            "completed and failed Agent Sessions must not restart at startup"
+            "completed Agent Sessions with replay and failed Agent Sessions must not restart"
         );
 
         drop(db);
