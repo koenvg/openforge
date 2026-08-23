@@ -17,30 +17,21 @@ import type {
   RuntimeTaskStartPrefixProviderContribution,
 } from './runtimeContributionRegistry'
 
-function activeFrontendRegistry(
-  pluginId: string,
-  projectId: string,
-): RuntimeContributionRegistryInstance {
+function activeFrontendRegistry(pluginId: string): RuntimeContributionRegistryInstance {
   const registry = getActivePluginRuntimeRegistry(pluginId)
   if (!registry) {
     throw new Error(`Frontend runtime for Plugin ${pluginId} is unavailable`)
   }
-  if (
-    registry.getPackageMetadata().enablement !== 'app'
-    && registry.getContextSnapshot().projectId !== projectId
-  ) {
-    throw new Error(
-      `Frontend runtime for Plugin ${pluginId} is unavailable for Project ${projectId}`,
-    )
-  }
   return registry
 }
 
+// The Sidecar authorizes the target Project before forwarding these requests. The renderer
+// must keep using its current runtime so a background Task cannot change the visible Project.
 export async function listFrontendAgentCommands(
   pluginId: string,
-  projectId: string,
+  _projectId: string,
 ): Promise<AgentCommandDescriptor[]> {
-  return activeFrontendRegistry(pluginId, projectId).listFrontendAgentCommands()
+  return activeFrontendRegistry(pluginId).listFrontendAgentCommands()
 }
 
 export async function invokeFrontendAgentCommand(
@@ -55,7 +46,7 @@ export async function invokeFrontendAgentCommand(
       `Frontend Plugin Command ${commandId} received conflicting Project context`,
     )
   }
-  return activeFrontendRegistry(pluginId, projectId).invokeFrontendAgentCommand(
+  return activeFrontendRegistry(pluginId).invokeFrontendAgentCommand(
     commandId,
     input,
     context,
