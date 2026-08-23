@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
 import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
+import { terminalLogMessage } from './terminalLogging'
 import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
 import type { TerminalImageProtocol } from './terminalImages'
 import {
@@ -79,7 +80,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       event.stopPropagation()
       if (event.type === 'keydown' && entry.ptyActive) {
         host.writePty(entry.taskId, '\n').catch(error => {
-          console.error('[terminalPool] write failed:', error)
+          console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
         })
       }
       return false
@@ -104,7 +105,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       shellLifecycle.notify(entry.taskId)
       if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
     } catch (error) {
-      console.error('[terminalPool] Failed to replay PTY buffer after app event reconnect:', error)
+      console.error(terminalLogMessage(host.loggerName, 'Failed to replay PTY buffer after app event reconnect:'), error)
     }
   }
 
@@ -146,7 +147,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       try {
         unlisten()
       } catch (error) {
-        console.warn('[terminalPool] Failed to remove terminal event listener:', error)
+        console.warn(terminalLogMessage(host.loggerName, 'Failed to remove terminal event listener:'), error)
       }
     }
 
@@ -193,7 +194,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
         entry.hasOutput = true
       }
     } catch (error) {
-      console.error('[terminalPool] Failed to get PTY buffer:', error)
+      console.error(terminalLogMessage(host.loggerName, 'Failed to get PTY buffer:'), error)
     }
     if (disposeReleasedAcquisition(acquisition)) return entry
 
@@ -232,7 +233,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.terminal.onData((data: string) => {
       if (entry.ptyActive) {
         host.writePty(terminalKey, data).catch(error => {
-          console.error('[terminalPool] write failed:', error)
+          console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
         })
       }
     })
@@ -256,7 +257,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     try {
       disposeTerminalEntry(entry)
     } catch (cleanupError) {
-      console.warn('[terminalPool] Failed to fully dispose terminal after initialization failure:', cleanupError)
+      console.warn(terminalLogMessage(host.loggerName, 'Failed to fully dispose terminal after initialization failure:'), cleanupError)
     } finally {
       releaseAppEventsReconnectListenerIfIdle()
     }

@@ -206,6 +206,28 @@ describe('terminal runtime acquisition', () => {
     expect(host.openLink).toHaveBeenCalledWith('T-1-shell-2', 'https://openforge.dev/docs')
   })
 
+  it('uses the configured logger name for runtime diagnostics', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    const error = new Error('buffer unavailable')
+    host.loggerName = 'terminalPluginPool'
+    vi.spyOn(host, 'getPtyBuffer').mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const runtime = createTerminalRuntime(host)
+      await runtime.acquire(terminalKey)
+
+      expect(consoleError).toHaveBeenCalledWith(
+        '[terminalPluginPool] Failed to get PTY buffer:',
+        error,
+      )
+      runtime.release(terminalKey)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   it('defers xterm opening and WebGL setup until the first DOM attachment', async () => {
     const terminalKey = 'T-1-shell-0'
     const host = createHost()
@@ -645,16 +667,26 @@ describe('terminal runtime inline image lifecycle', () => {
     expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
   })
 
-  it('does not advertise image support when the addon cannot initialize', async () => {
+  it('uses the configured logger name when image fallback initialization fails', async () => {
     terminalMocks.failImageAddon = true
-    const runtime = createTerminalRuntime(createHost())
+    const host = createHost()
+    const error = new Error('image addon unavailable')
+    host.loggerName = 'terminalPluginPool'
+    const runtime = createTerminalRuntime(host)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const entry = await runtime.acquire('T-1')
+    try {
+      const entry = await runtime.acquire('T-1')
 
-    expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
-    expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
-    warn.mockRestore()
+      expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
+      expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
+      expect(warn).toHaveBeenCalledWith(
+        '[terminalPluginPool] Inline images unavailable; keeping text fallbacks:',
+        error,
+      )
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('disposes image rendering when compatibility validation cannot initialize', async () => {

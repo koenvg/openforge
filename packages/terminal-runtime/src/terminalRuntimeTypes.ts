@@ -35,6 +35,7 @@ export interface TerminalRuntimeHost {
 
 export interface PoolEntry {
   taskId: string
+  loggerName: string | undefined
   terminal: Terminal
   fitAddon: FitAddon
   hostDiv: HTMLDivElement
