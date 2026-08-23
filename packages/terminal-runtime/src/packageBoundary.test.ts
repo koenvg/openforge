@@ -31,6 +31,15 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     }
   })
 
+  it('keeps xterm rendering and addon setup outside the runtime lifecycle module', () => {
+    const runtimeSource = readFileSync(join(process.cwd(), 'packages/terminal-runtime/src/terminalRuntime.ts'), 'utf8')
+
+    expect(runtimeSource).not.toMatch(/from ['"]@xterm\/addon-/)
+    expect(runtimeSource).not.toContain('new Terminal(')
+    expect(runtimeSource).not.toContain('new ResizeObserver(')
+    expect(runtimeSource).not.toContain('new IntersectionObserver(')
+  })
+
   it('keeps Svelte as a host-shared peer dependency', async () => {
     const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'packages/terminal-runtime/package.json'), 'utf8'))
 

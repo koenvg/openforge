@@ -206,6 +206,64 @@ describe('terminal runtime acquisition', () => {
     expect(host.openLink).toHaveBeenCalledWith('T-1-shell-2', 'https://openforge.dev/docs')
   })
 
+  it('defers xterm opening and WebGL setup until the first DOM attachment', async () => {
+    const terminalKey = 'T-1-shell-0'
+    const host = createHost()
+    host.setBuffer(terminalKey, '')
+    const resizePty = vi.spyOn(host, 'resizePty')
+    const runtime = createTerminalRuntime(host)
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    })
+    vi.stubGlobal('IntersectionObserver', class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return [] }
+      readonly root = null
+      readonly rootMargin = ''
+      readonly thresholds = [0]
+    })
+
+    try {
+      const entry = await runtime.acquire(terminalKey)
+      const terminal = terminalMocks.instances[0]
+      Object.defineProperties(entry.hostDiv, {
+        clientWidth: { configurable: true, value: 640 },
+        clientHeight: { configurable: true, value: 480 },
+      })
+
+      expect(terminal.open).not.toHaveBeenCalled()
+      expect(entry.webglAddon).toBeNull()
+
+      const wrapper = document.createElement('div')
+      await runtime.attach(entry, wrapper)
+      const firstWebglAddon = entry.webglAddon
+
+      expect(terminal.open).toHaveBeenCalledOnce()
+      expect(terminal.open).toHaveBeenCalledWith(entry.hostDiv)
+      expect(firstWebglAddon).not.toBeNull()
+      expect(entry.fitAddon.fit).toHaveBeenCalled()
+      expect(resizePty).toHaveBeenCalledWith(terminalKey, 80, 24)
+
+      runtime.detach(entry)
+      await runtime.attach(entry, wrapper)
+
+      expect(terminal.open).toHaveBeenCalledOnce()
+      expect(entry.webglAddon).toBe(firstWebglAddon)
+    } finally {
+      runtime.release(terminalKey)
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('deduplicates concurrent acquisitions for one terminal key', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
@@ -376,6 +434,34 @@ describe('terminal runtime acquisition', () => {
     expect(host.getListenerCount(outputEvent)).toBe(1)
     expect(host.getListenerCount(exitEvent)).toBe(1)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
+  })
+})
+
+describe('terminal runtime tab sessions', () => {
+  it('creates, retains, and clears task-scoped shell tab state', () => {
+    const runtime = createTerminalRuntime(createHost())
+    const initial = runtime.getTaskTerminalTabsSession('T-1')
+
+    expect(initial).toEqual({
+      tabs: [{ index: 0, key: 'T-1-shell-0', label: 'Shell 1' }],
+      activeTabIndex: 0,
+      nextIndex: 1,
+    })
+
+    const updated = {
+      tabs: [...initial.tabs, { index: 1, key: 'T-1-shell-1', label: 'Shell 2' }],
+      activeTabIndex: 1,
+      nextIndex: 2,
+    }
+    runtime.updateTaskTerminalTabsSession('T-1', updated)
+
+    expect(runtime.getTaskTerminalTabsSession('T-1')).toBe(updated)
+
+    runtime.clearTaskTerminalTabsSession('T-1')
+
+    const restored = runtime.getTaskTerminalTabsSession('T-1')
+    expect(restored).not.toBe(updated)
+    expect(restored.tabs).toEqual([{ index: 0, key: 'T-1-shell-0', label: 'Shell 1' }])
   })
 })
 
