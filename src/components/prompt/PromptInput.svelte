@@ -3,6 +3,9 @@
   import PaletteListbox from '../shared/ui/PaletteListbox.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
   import type { CommandTrigger } from '../../lib/useAutocomplete.svelte'
+  import { findImageMarkerAtPosition, insertImageMarker } from './imageMarkerEditing'
+  import type { TextSelectionSnapshot } from './imageMarkerEditing'
+  import { InsertRequestCoordinator } from './insertRequestCoordinator'
 
   interface Props {
     value?: string
@@ -57,14 +60,8 @@
   let textValue = $state(getInitialTextValue())
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
-  let lastImageMarkerInsertRequestId = 0
-  let lastInjectableInsertRequestId = 0
-
-  interface TextSelectionSnapshot {
-    text: string
-    selectionStart: number
-    selectionEnd: number
-  }
+  const imageMarkerInsertRequests = new InsertRequestCoordinator<{ id: number, marker: string }>()
+  const injectableInsertRequests = new InsertRequestCoordinator<{ id: number, text: string }>()
 
   function updateTextValue(nextValue: string) {
     textValue = nextValue
@@ -98,57 +95,37 @@
       autoGrow()
     }, 0)
   }
-  function imageMarkerInsertionText(marker: string, before: string, after: string): string {
-    const prefix = before.length > 0 && !/\s$/.test(before) ? ' ' : ''
-    const suffix = after.length === 0 || !/^\s/.test(after) ? ' ' : ''
-    return `${prefix}${marker}${suffix}`
-  }
-
   function insertImageMarkerAtCursor(marker: string, selectionSnapshot: TextSelectionSnapshot | null = null) {
-    if (!textareaEl || !marker.trim()) return
+    if (!textareaEl) return
 
     const sourceText = selectionSnapshot?.text ?? textValue
     const selectionStart = selectionSnapshot?.selectionStart ?? textareaEl.selectionStart ?? sourceText.length
-    const selectionEnd = selectionSnapshot?.selectionEnd ?? selectionStart
-    const before = sourceText.slice(0, selectionStart)
-    const after = sourceText.slice(selectionEnd)
-    const insertion = imageMarkerInsertionText(marker.trim(), before, after)
-    updateTextValue(`${before}${insertion}${after}`)
-    const nextCursorPos = before.length + insertion.length
+    const insertion = insertImageMarker(marker, selectionSnapshot ?? {
+      text: sourceText,
+      selectionStart,
+      selectionEnd: selectionStart,
+    })
+    if (!insertion) return
 
+    updateTextValue(insertion.text)
     setTimeout(() => {
       textareaEl?.focus()
-      textareaEl?.setSelectionRange(nextCursorPos, nextCursorPos)
+      textareaEl?.setSelectionRange(insertion.cursorPosition, insertion.cursorPosition)
       autoGrow()
     }, 0)
   }
 
-  function imageMarkerAtPosition(text: string, position: number): string | null {
-    const markerPattern = /\[image#\d+\]/g
-    let match: RegExpExecArray | null
-
-    while ((match = markerPattern.exec(text)) !== null) {
-      const start = match.index
-      const end = start + match[0].length
-      if (position >= start && position < end) return match[0]
-    }
-
-    return null
-  }
-
   $effect(() => {
-    const request = imageMarkerInsertRequest
-    if (!request || request.id === lastImageMarkerInsertRequestId || !textareaEl) return
+    const request = imageMarkerInsertRequests.takeNewReadyRequest(imageMarkerInsertRequest, textareaEl !== null)
+    if (!request) return
 
-    lastImageMarkerInsertRequestId = request.id
     insertImageMarkerAtCursor(request.marker)
   })
 
   $effect(() => {
-    const request = injectableInsertRequest
-    if (!request || request.id === lastInjectableInsertRequestId || !textareaEl) return
+    const request = injectableInsertRequests.takeNewReadyRequest(injectableInsertRequest, textareaEl !== null)
+    if (!request) return
 
-    lastInjectableInsertRequestId = request.id
     insertText(request.text)
   })
 
@@ -193,7 +170,7 @@
     if (!onImageMarkerClick || !textareaEl) return
     if (textareaEl.selectionStart !== textareaEl.selectionEnd) return
 
-    const marker = imageMarkerAtPosition(textValue, textareaEl.selectionStart ?? 0)
+    const marker = findImageMarkerAtPosition(textValue, textareaEl.selectionStart ?? 0)
     if (marker) onImageMarkerClick(marker)
   }
 
