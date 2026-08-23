@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { registerAppDesktopEventListeners } from './appDesktopEventListeners'
 import { createAppDesktopEventHarness } from './appDesktopEventListeners/testUtils'
 import type { DesktopUnlistenFn } from './desktopIpc'
-import { appShellEventContracts } from './electronMigrationContracts'
+import { appDesktopEventContracts } from './desktopIpcContract'
 
 describe('registerAppDesktopEventListeners', () => {
   it('registers every listener in contract order and returns its unlistener in the same order', async () => {
@@ -12,7 +12,7 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(onCloseRequested).toHaveBeenCalledWith(deps.onCloseRequested)
     expect(listen.mock.calls.map(([eventName]) => eventName)).toEqual(
-      appShellEventContracts.map(contract => contract.eventName),
+      appDesktopEventContracts.map(contract => contract.eventName),
     )
     expect(unlisteners).toEqual([closeUnlistener, ...eventUnlisteners])
   })

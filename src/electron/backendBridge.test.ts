@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { handleElectronInvoke, isSidecarBackedCommand } from './backendBridge'
-import { ipcCommandContracts } from '../lib/electronMigrationContracts'
+import { desktopCommandContracts } from '../lib/desktopIpcContract'
 import type { SidecarLaunchConfig } from './sidecar'
 
 function sidecarConfig(): SidecarLaunchConfig {
@@ -365,9 +365,9 @@ describe('Electron backend bridge command forwarding', () => {
     })
   })
 
-  it('declares every Rust-owned renderer IPC command as sidecar-backed after the Electron cutover', () => {
-    const missing = ipcCommandContracts
-      .filter(contract => contract.targetOwner === 'rust-sidecar')
+  it('routes every Rust-owned desktop command to the sidecar', () => {
+    const missing = desktopCommandContracts
+      .filter(contract => contract.owner === 'rust-sidecar')
       .map(contract => contract.ipcCommand)
       .filter(command => !isSidecarBackedCommand(command))
 
