@@ -261,13 +261,38 @@ async fn wait_for_managed_exit(
     identity: &ManagedProcessIdentity,
     tracked: &mut HashMap<i32, u64>,
     timeout: Duration,
+    root_reaper: &mut impl FnMut(),
+) -> Result<Vec<ProcessSnapshot>, String> {
+    wait_for_managed_exit_with_snapshot(
+        identity,
+        tracked,
+        timeout,
+        root_reaper,
+        &mut process_snapshot,
+    )
+    .await
+}
+
+async fn wait_for_managed_exit_with_snapshot(
+    identity: &ManagedProcessIdentity,
+    tracked: &mut HashMap<i32, u64>,
+    timeout: Duration,
+    root_reaper: &mut impl FnMut(),
+    snapshot_processes: &mut impl FnMut() -> HashMap<i32, ProcessSnapshot>,
 ) -> Result<Vec<ProcessSnapshot>, String> {
     let deadline = Instant::now() + timeout;
     loop {
-        let processes = process_snapshot();
+        root_reaper();
+        let processes = snapshot_processes();
         let remaining = collect_managed_processes(identity, &processes, tracked)?;
-        if remaining.is_empty() || Instant::now() >= deadline {
+        if remaining.is_empty() {
+            root_reaper();
             return Ok(remaining);
+        }
+        if Instant::now() >= deadline {
+            root_reaper();
+            let processes = snapshot_processes();
+            return collect_managed_processes(identity, &processes, tracked);
         }
         tokio::time::sleep(PROCESS_POLL_INTERVAL).await;
     }
@@ -277,7 +302,16 @@ pub(super) async fn terminate_managed_process_tree(
     identity: &ManagedProcessIdentity,
     term_timeout: Duration,
 ) -> Result<(), String> {
+    terminate_managed_process_tree_with_root_reaper(identity, term_timeout, || {}).await
+}
+
+pub(super) async fn terminate_managed_process_tree_with_root_reaper(
+    identity: &ManagedProcessIdentity,
+    term_timeout: Duration,
+    mut root_reaper: impl FnMut(),
+) -> Result<(), String> {
     identity.validate()?;
+    root_reaper();
     let processes = process_snapshot();
     let mut tracked = HashMap::from([(identity.root_pid, identity.root_start_time)]);
     let managed = collect_managed_processes(identity, &processes, &mut tracked)?;
@@ -286,14 +320,20 @@ pub(super) async fn terminate_managed_process_tree(
     }
 
     signal_processes(&managed, libc::SIGTERM)?;
-    let remaining = wait_for_managed_exit(identity, &mut tracked, term_timeout).await?;
+    let remaining =
+        wait_for_managed_exit(identity, &mut tracked, term_timeout, &mut root_reaper).await?;
     if remaining.is_empty() {
         return Ok(());
     }
 
     signal_processes(&remaining, libc::SIGKILL)?;
-    let remaining =
-        wait_for_managed_exit(identity, &mut tracked, KILL_CONFIRMATION_TIMEOUT).await?;
+    let remaining = wait_for_managed_exit(
+        identity,
+        &mut tracked,
+        KILL_CONFIRMATION_TIMEOUT,
+        &mut root_reaper,
+    )
+    .await?;
     if remaining.is_empty() {
         Ok(())
     } else {
@@ -384,6 +424,93 @@ mod tests {
         assert!(
             !process_is_alive(descendant_pid),
             "descendant process survived cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn deadline_rechecks_processes_after_root_reaping() {
+        let pid = 4_242;
+        let identity = ManagedProcessIdentity {
+            version: PROCESS_IDENTITY_VERSION,
+            root_pid: pid,
+            process_group_id: pid,
+            session_id: pid,
+            root_start_time: 7,
+        };
+        let live_root = ProcessSnapshot {
+            pid,
+            parent_pid: None,
+            process_group_id: pid,
+            session_id: Some(pid),
+            start_time: identity.root_start_time,
+            terminated: false,
+        };
+        let root_reaper_calls = std::cell::Cell::new(0);
+        let root_reaped = std::cell::Cell::new(false);
+        let mut root_reaper = || {
+            root_reaper_calls.set(root_reaper_calls.get() + 1);
+            if root_reaper_calls.get() == 2 {
+                root_reaped.set(true);
+            }
+        };
+        let mut snapshot_processes = || {
+            if root_reaped.get() {
+                HashMap::new()
+            } else {
+                HashMap::from([(pid, live_root.clone())])
+            }
+        };
+        let mut tracked = HashMap::from([(pid, identity.root_start_time)]);
+
+        let remaining = wait_for_managed_exit_with_snapshot(
+            &identity,
+            &mut tracked,
+            Duration::ZERO,
+            &mut root_reaper,
+            &mut snapshot_processes,
+        )
+        .await
+        .expect("managed process observation should succeed");
+
+        assert!(
+            remaining.is_empty(),
+            "a root reaped at the deadline must not be reported from the stale snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn cleanup_reaps_signaled_root_while_confirming_tree_exit() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let descendant_pid_file = temp_dir.path().join("descendant.pid");
+        let mut root = spawn_forking_root(&descendant_pid_file);
+        assert!(
+            wait_for_file(&descendant_pid_file),
+            "child PID file was not created"
+        );
+        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let mut root_reaped = false;
+
+        let result = terminate_managed_process_tree_with_root_reaper(
+            &identity,
+            Duration::from_millis(100),
+            || {
+                if root.try_wait().ok().flatten().is_some() {
+                    root_reaped = true;
+                }
+            },
+        )
+        .await;
+        if result.is_err() {
+            unsafe {
+                libc::kill(-identity.process_group_id, libc::SIGKILL);
+            }
+        }
+        let _ = root.wait();
+
+        assert!(result.is_ok(), "cleanup failed: {result:?}");
+        assert!(
+            root_reaped,
+            "cleanup should reap the signaled root before reporting tree exit"
         );
     }
 
