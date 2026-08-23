@@ -54,3 +54,54 @@ impl FromStr for BoardStatus {
         Self::normalize(value).ok_or_else(|| format!("Invalid board status: {value}"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::BoardStatus;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_board_status_parses_canonical_and_legacy_values() {
+        assert_eq!(
+            BoardStatus::from_str("backlog").unwrap(),
+            BoardStatus::Backlog
+        );
+        assert_eq!(BoardStatus::from_str("todo").unwrap(), BoardStatus::Backlog);
+        assert_eq!(BoardStatus::from_str("doing").unwrap(), BoardStatus::Doing);
+        assert_eq!(
+            BoardStatus::from_str("in_progress").unwrap(),
+            BoardStatus::Doing
+        );
+        assert_eq!(BoardStatus::from_str("done").unwrap(), BoardStatus::Done);
+    }
+
+    #[test]
+    fn test_board_status_rejects_unknown_values() {
+        assert!(BoardStatus::from_str("wat").is_err());
+    }
+
+    #[test]
+    fn test_board_status_done_is_not_writable() {
+        // 'done' still parses so legacy rows remain readable...
+        assert!(BoardStatus::Backlog.is_writable());
+        assert!(BoardStatus::Doing.is_writable());
+        // ...but it can never be assigned as a new status (AVIV-118 black hole).
+        assert!(!BoardStatus::Done.is_writable());
+    }
+
+    #[test]
+    fn test_board_status_serializes_to_canonical_lowercase_strings() {
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Backlog).unwrap(),
+            "\"backlog\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Doing).unwrap(),
+            "\"doing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Done).unwrap(),
+            "\"done\""
+        );
+    }
+}
