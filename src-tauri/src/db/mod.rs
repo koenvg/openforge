@@ -22,6 +22,7 @@ mod task_attention;
 mod task_config;
 mod task_dependencies;
 mod task_labels;
+mod task_lifecycle;
 mod task_start;
 mod task_workspaces;
 mod tasks;
@@ -43,6 +44,7 @@ pub(crate) use pull_request_readiness::{
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use task_labels::{TaskLabelPersistenceError, TaskLabelRow};
+pub use task_lifecycle::CompleteTaskWriteOutcome;
 pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 #[cfg(test)]
@@ -51,8 +53,7 @@ pub use tasks::TaskWorktreeOptions;
 #[allow(unused_imports)]
 pub use task_dependencies::TaskDependencyPersistenceError;
 pub use tasks::{
-    CompactTaskRow, CompleteTaskWriteOutcome, NewTaskOptions, TaskCreationError,
-    TaskInitialPromptUpdateError, TaskRow,
+    CompactTaskRow, NewTaskOptions, TaskCreationError, TaskInitialPromptUpdateError, TaskRow,
 };
 pub use worktrees::WorktreeRow;
 
