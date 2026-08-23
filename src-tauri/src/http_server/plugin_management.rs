@@ -38,6 +38,19 @@ pub struct SetPluginEnabledResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetAppPluginEnabledRequest {
+    pub plugin_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SetAppPluginEnabledResponse {
+    pub plugin_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReloadPluginRequest {
     pub plugin_id: String,
     pub project_id: Option<String>,
@@ -82,6 +95,10 @@ pub(super) fn router() -> Router<AppState> {
             post(install_plugin_from_local_handler),
         )
         .route("/set_plugin_enabled", post(set_plugin_enabled_handler))
+        .route(
+            "/set_app_plugin_enabled",
+            post(set_app_plugin_enabled_handler),
+        )
         .route("/reload_plugin", post(reload_plugin_handler))
         .route("/plugin_commands/list", post(list_plugin_commands_handler))
         .route(
@@ -239,6 +256,25 @@ async fn set_plugin_enabled_handler(
         project_id: request.project_id,
         enabled: request.enabled,
     }))
+}
+
+async fn set_app_plugin_enabled_handler(
+    State(state): State<AppState>,
+    Json(request): Json<SetAppPluginEnabledRequest>,
+) -> Result<Json<SetAppPluginEnabledResponse>, (StatusCode, String)> {
+    let SetAppPluginEnabledRequest { plugin_id, enabled } = request;
+    http_plugin_platform(&state, false)?
+        .set_app_plugin_enabled(&plugin_id, enabled)
+        .map_err(map_http_plugin_error)?;
+
+    let payload = serde_json::json!({ "plugin_id": plugin_id.clone(), "enabled": enabled });
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "app-plugin-enablement-changed",
+        &payload,
+    );
+    Ok(Json(SetAppPluginEnabledResponse { plugin_id, enabled }))
 }
 
 async fn reload_plugin_handler(

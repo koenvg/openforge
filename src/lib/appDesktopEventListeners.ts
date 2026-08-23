@@ -48,6 +48,7 @@ export async function registerAppDesktopEventListeners(
     pluginSystemListeners.openUrl,
     pluginSystemListeners.writeClipboardText,
     pluginListeners.pluginInstallationChanged,
+    pluginListeners.appPluginEnablementChanged,
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,
     taskSessionListeners.taskChanged,
