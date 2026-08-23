@@ -115,12 +115,14 @@ fn parse_yaml_bool(val: &str) -> Option<bool> {
 pub const GENERIC_SKILLS_SOURCE_DIR: &str = ".agents";
 pub const PI_SKILLS_SOURCE_DIR: &str = ".pi";
 pub const CODEX_SKILLS_SOURCE_DIR: &str = ".codex";
-pub const SKILL_SOURCE_DIRS: [&str; 5] = [
+pub const GROK_SKILLS_SOURCE_DIR: &str = ".grok";
+pub const SKILL_SOURCE_DIRS: [&str; 6] = [
     GENERIC_SKILLS_SOURCE_DIR,
     ".claude",
     ".opencode",
     CODEX_SKILLS_SOURCE_DIR,
     PI_SKILLS_SOURCE_DIR,
+    GROK_SKILLS_SOURCE_DIR,
 ];
 
 pub fn generic_skills_dir(root: &Path) -> PathBuf {
@@ -554,6 +556,79 @@ pub fn resolve_active_plugins(home_dir: &Path) -> Vec<ActivePlugin> {
     result
 }
 
+/// "manual-only" when the skill disables model auto-invocation, else "auto+manual".
+pub fn trigger_for(disable_model_invocation: Option<bool>) -> &'static str {
+    if disable_model_invocation == Some(true) {
+        "manual-only"
+    } else {
+        "auto+manual"
+    }
+}
+
+/// Attach injectable-picker enrichment onto a CommandInfo via its flattened `extra` map,
+/// so it serializes as top-level camelCase keys without changing the shared struct. Shared
+/// by every provider's `list_commands` so the picker's origin/trigger/source metadata is
+/// consistent no matter which tool the command was discovered from.
+pub fn enrich_command(
+    cmd: &mut crate::opencode_client::CommandInfo,
+    origin: &str,
+    trigger_mode: &str,
+    source_dir: Option<&str>,
+    source_path: Option<&str>,
+    user_invocable: Option<bool>,
+) {
+    use serde_json::Value;
+    cmd.extra.insert("origin".to_string(), Value::from(origin));
+    cmd.extra
+        .insert("triggerMode".to_string(), Value::from(trigger_mode));
+    cmd.extra.insert(
+        "sourceDir".to_string(),
+        source_dir.map(Value::from).unwrap_or(Value::Null),
+    );
+    cmd.extra.insert(
+        "sourcePath".to_string(),
+        source_path.map(Value::from).unwrap_or(Value::Null),
+    );
+    cmd.extra.insert(
+        "userInvocable".to_string(),
+        user_invocable.map(Value::from).unwrap_or(Value::Null),
+    );
+}
+
+/// Resolve a provider's installed plugins by listing the subdirectories of one plugins
+/// root (e.g. `<project>/.grok/plugins` or `~/.grok/plugins`). Unlike Claude Code — which
+/// gates on a separate installed/enabled registry (`resolve_active_plugins`) — some
+/// providers (Grok Build among them) load any plugin folder present on disk, with no
+/// separate activation step. `marketplaces` is skipped: it is a nested registry of
+/// not-yet-installed plugins, not an installed plugin itself. Scanning installs nested
+/// under `marketplaces/<marketplace>/<plugin>/` is a follow-up.
+/// Returns an empty vec when the directory does not exist.
+pub fn resolve_installed_plugins_from_dir(plugins_dir: &Path) -> Vec<ActivePlugin> {
+    let entries = match std::fs::read_dir(plugins_dir) {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    let mut result = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if name == "marketplaces" {
+            continue;
+        }
+        result.push(ActivePlugin {
+            name,
+            cache_dir: path,
+        });
+    }
+    result
+}
+
 /// Returns a static curated list of built-in Pi slash commands.
 pub fn builtin_pi_commands() -> Vec<crate::opencode_client::CommandInfo> {
     let commands = [
@@ -618,6 +693,117 @@ pub fn builtin_claude_commands() -> Vec<crate::opencode_client::CommandInfo> {
         ),
         ("login", "Login to your Anthropic account"),
         ("logout", "Logout from your Anthropic account"),
+    ];
+    commands
+        .iter()
+        .map(|(name, desc)| crate::opencode_client::CommandInfo {
+            name: name.to_string(),
+            description: Some(desc.to_string()),
+            source: Some("builtin".to_string()),
+            agent: None,
+            extra: serde_json::Map::new(),
+        })
+        .collect()
+}
+
+/// Returns a static curated list of built-in Grok Build slash commands (source:
+/// docs.x.ai/build/modes-and-commands). One representative name per row — aliases like
+/// `/exit` for `/quit` or `/clear` for `/new` are dropped, matching how the Claude/Pi
+/// lists above pick a single name per concept.
+pub fn builtin_grok_commands() -> Vec<crate::opencode_client::CommandInfo> {
+    let commands = [
+        ("quit", "Quit the application"),
+        ("help", "Browse commands and keyboard shortcuts"),
+        ("home", "Return to the welcome screen"),
+        ("new", "Start a new session"),
+        ("resume", "Resume a previous session"),
+        ("sessions", "Switch, rename, or close active sessions"),
+        ("fork", "Branch the current session into a peer agent"),
+        ("rename", "Rename the current session"),
+        ("share", "Share the current session via URL"),
+        ("session-info", "Show session info"),
+        ("context", "View context usage"),
+        ("compact", "Compact conversation history"),
+        ("rewind", "Rewind to a previous turn"),
+        ("export", "Export the conversation to a file or clipboard"),
+        (
+            "copy",
+            "Copy the last (or Nth-latest) response to clipboard",
+        ),
+        ("find", "Search the conversation scrollback"),
+        ("transcript", "View the full transcript in your pager"),
+        ("model", "Switch the active model"),
+        ("effort", "Set reasoning effort for the current model"),
+        ("always-approve", "Toggle always-approve mode"),
+        (
+            "auto",
+            "Toggle auto mode (classifier; when feature enabled)",
+        ),
+        ("plan", "Enter plan mode"),
+        ("view-plan", "View the current plan"),
+        ("btw", "Ask a side question without interrupting"),
+        ("loop", "Run a prompt on a recurring interval"),
+        ("imagine", "Generate an image from a text description"),
+        ("imagine-video", "Generate a video from a text description"),
+        (
+            "tasks",
+            "List background tasks, subagents, and scheduled tasks",
+        ),
+        ("create-workflow", "Author and save a new workflow"),
+        (
+            "workflow",
+            "Launch a saved workflow, or pause/resume/stop/save a run",
+        ),
+        (
+            "workflows",
+            "Open the live workflow run dashboard (fullscreen)",
+        ),
+        ("deep-research", "Run a background research workflow"),
+        ("queue", "List the prompts queued behind the running turn"),
+        ("dashboard", "Open the Agent Dashboard"),
+        ("settings", "Open the settings modal"),
+        ("theme", "Switch the color theme"),
+        ("compact-mode", "Toggle denser UI layout"),
+        ("multiline", "Toggle multiline input"),
+        ("vim-mode", "Toggle vim-style scrollback keybindings"),
+        ("timestamps", "Toggle message timestamps"),
+        ("terminal-setup", "Check terminal and clipboard setup"),
+        ("config-agents", "Manage agent definitions"),
+        ("personas", "Manage personas"),
+        ("remember", "Save a memory note"),
+        ("import-claude", "Open the Claude settings import modal"),
+        ("feedback", "Send feedback about the current session"),
+        (
+            "release-notes",
+            "View release notes for the current version",
+        ),
+        ("usage", "View credit usage or manage billing"),
+        (
+            "privacy",
+            "Show or toggle privacy and data-retention status",
+        ),
+        ("login", "Sign in to your account"),
+        ("logout", "Sign out of the current account"),
+        (
+            "hooks",
+            "Open the unified extensions modal at the Hooks tab",
+        ),
+        (
+            "plugins",
+            "Open the unified extensions modal at the Plugins tab",
+        ),
+        (
+            "marketplace",
+            "Open the unified extensions modal at the Marketplace tab",
+        ),
+        (
+            "skills",
+            "Open the unified extensions modal at the Skills tab",
+        ),
+        ("mcps", "Open the unified extensions modal at the MCP tab"),
+        ("flush", "Flush conversation memory to disk now"),
+        ("memory", "Browse, view, and manage your memories"),
+        ("dream", "Run memory consolidation"),
     ];
     commands
         .iter()

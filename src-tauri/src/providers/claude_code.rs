@@ -2,49 +2,13 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use super::{ProviderError, ProviderSessionResult, ProviderStartContext};
+use crate::command_discovery::{enrich_command, trigger_for};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
 pub struct ClaudeCodeProvider {
     pub pty_mgr: PtyManager,
     pub discovery_cache: Arc<Mutex<Option<crate::command_discovery::CachedDiscovery>>>,
-}
-
-/// "manual-only" when the skill disables model auto-invocation, else "auto+manual".
-fn trigger_for(disable_model_invocation: Option<bool>) -> &'static str {
-    if disable_model_invocation == Some(true) {
-        "manual-only"
-    } else {
-        "auto+manual"
-    }
-}
-
-/// Attach injectable-picker enrichment onto a CommandInfo via its flattened `extra` map,
-/// so it serializes as top-level camelCase keys without changing the shared struct.
-fn enrich_command(
-    cmd: &mut crate::opencode_client::CommandInfo,
-    origin: &str,
-    trigger_mode: &str,
-    source_dir: Option<&str>,
-    source_path: Option<&str>,
-    user_invocable: Option<bool>,
-) {
-    use serde_json::Value;
-    cmd.extra.insert("origin".to_string(), Value::from(origin));
-    cmd.extra
-        .insert("triggerMode".to_string(), Value::from(trigger_mode));
-    cmd.extra.insert(
-        "sourceDir".to_string(),
-        source_dir.map(Value::from).unwrap_or(Value::Null),
-    );
-    cmd.extra.insert(
-        "sourcePath".to_string(),
-        source_path.map(Value::from).unwrap_or(Value::Null),
-    );
-    cmd.extra.insert(
-        "userInvocable".to_string(),
-        user_invocable.map(Value::from).unwrap_or(Value::Null),
-    );
 }
 
 impl ClaudeCodeProvider {

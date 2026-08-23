@@ -57,7 +57,7 @@ pub struct SkillInfo {
     pub agent: Option<String>,
     pub template: Option<String>,
     pub level: String,             // "project" or "user"
-    pub source_dir: String,        // ".agents", ".claude", ".opencode", or ".pi"
+    pub source_dir: String,        // ".agents", ".claude", ".opencode", ".codex", ".pi", or ".grok"
     pub source_path: String,       // stable folder/file identity under the source skills directory
     pub file_name: Option<String>, // direct root markdown file name for provider-specific skills
     #[serde(rename = "disableModelInvocation")]
