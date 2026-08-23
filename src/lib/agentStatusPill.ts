@@ -1,6 +1,6 @@
 import type { AgentSession } from './types'
 import type { AgentPanelStatus } from './agentPanelSessionSync'
-import { getAgentStatusText } from './agentTerminalPanel'
+import { getAgentStatusText } from './agentPanelStatusPresentation'
 import { parseCheckpointQuestion } from './parseCheckpoint'
 
 export interface AgentProviderConfig {

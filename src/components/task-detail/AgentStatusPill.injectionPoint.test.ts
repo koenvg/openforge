@@ -40,9 +40,6 @@ vi.mock('../plugin/InjectionPointSlot.svelte', () => ({
 const writeSpy = vi.fn()
 vi.mock('../../lib/agentTerminalPanel', () => ({
   writeAgentTerminalTranscription: (...args: unknown[]) => writeSpy(...args),
-  getAgentStatusText: (_status: string, runningText: string) => runningText,
-  getAgentStageLabel: (stage: string) => stage,
-  getAgentSessionStatusBadgeClass: () => '',
   hydrateAgentTerminalPtyInstance: () => {},
 }))
 
