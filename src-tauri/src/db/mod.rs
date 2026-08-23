@@ -21,6 +21,7 @@ mod settings_reset;
 mod startup_resume_eligibility;
 mod task_attention;
 mod task_config;
+mod task_creation;
 mod task_dependencies;
 mod task_labels;
 mod task_lifecycle;
@@ -44,18 +45,17 @@ pub(crate) use pull_request_readiness::{
 };
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
+#[cfg(test)]
+pub use task_creation::TaskWorktreeOptions;
+pub use task_creation::{NewTaskOptions, TaskCreationError};
 pub use task_labels::{TaskLabelPersistenceError, TaskLabelRow};
 pub use task_lifecycle::CompleteTaskWriteOutcome;
 pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
-#[cfg(test)]
-pub use tasks::TaskWorktreeOptions;
 // This is part of the Database API even though production callers currently only format it.
 #[allow(unused_imports)]
 pub use task_dependencies::TaskDependencyPersistenceError;
-pub use tasks::{
-    CompactTaskRow, NewTaskOptions, TaskCreationError, TaskInitialPromptUpdateError, TaskRow,
-};
+pub use tasks::{CompactTaskRow, TaskInitialPromptUpdateError, TaskRow};
 pub use worktrees::WorktreeRow;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =
