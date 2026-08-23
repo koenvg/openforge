@@ -1,90 +1,38 @@
-import { FitAddon } from '@xterm/addon-fit'
-import { ImageAddon } from '@xterm/addon-image'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import { WebglAddon } from '@xterm/addon-webgl'
-import { Terminal, type IDisposable, type ILinkHandler } from '@xterm/xterm'
-import { get, type Readable } from 'svelte/store'
+import { get } from 'svelte/store'
+import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
+import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
+import type { TerminalImageProtocol } from './terminalImages'
 import {
-  TERMINAL_IMAGE_PAYLOAD_LIMIT_BYTES,
-  TERMINAL_IMAGE_PIXEL_LIMIT,
-  TERMINAL_IMAGE_STORAGE_LIMIT_MB,
-  createItermImageCompatibilityAddon,
-  type TerminalImageProtocol,
-} from './terminalImages'
-import { getTerminalOptions, preloadTerminalFonts } from './terminalOptions'
-import { getTerminalTheme, themeMode as defaultThemeMode, type ThemeMode } from './theme'
-
-export type TerminalRuntimeUnlistenFn = () => void
+  createTerminalEntry,
+  disposeWebglContextLossListener,
+  resetTerminal,
+} from './terminalRendering'
+import type {
+  PoolEntry,
+  PtyEvent,
+  ShellLifecycleListener,
+  ShellLifecycleState,
+  TaskTerminalTabsSession,
+  TerminalRuntimeHost,
+  TerminalRuntimeUnlistenFn,
+} from './terminalRuntimeTypes'
+import { createTerminalShellLifecycleStore } from './terminalShellLifecycle'
+import { applyTerminalTheme } from './terminalThemePropagation'
+import { preloadTerminalFonts } from './terminalOptions'
+import { themeMode as defaultThemeMode } from './theme'
 
 export type { TerminalImageProtocol } from './terminalImages'
-
-export interface TerminalRuntimeEvent<TPayload> {
-  payload: TPayload
-}
-
-export interface PtyEvent {
-  data?: string | null
-  instance_id?: number | null
-}
-
-export interface PtyBufferState {
-  buffer: string | null
-  isLive: boolean
-}
-
-export interface TerminalRuntimeHost {
-  listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void): Promise<TerminalRuntimeUnlistenFn>
-  getPtyBuffer(taskId: string): Promise<PtyBufferState>
-  writePty(taskId: string, data: string): Promise<void>
-  resizePty(taskId: string, cols: number, rows: number): Promise<void>
-  openLink(terminalKey: string, url: string): Promise<void>
-  themeMode?: Readable<ThemeMode>
-  loggerName?: string
-  enableImages?: boolean
-}
-
-export interface PoolEntry {
-  taskId: string
-  terminal: Terminal
-  fitAddon: FitAddon
-  hostDiv: HTMLDivElement
-  ptyActive: boolean
-  needsClear: boolean
-  unlisteners: TerminalRuntimeUnlistenFn[]
-  resizeObserver: ResizeObserver | null
-  visibilityObserver: IntersectionObserver | null
-  resizeTimeout: ReturnType<typeof setTimeout> | null
-  attached: boolean
-  spawnPending: boolean
-  currentPtyInstance: number | null
-  hasOutput: boolean
-  imageAddon: ImageAddon | null
-  imageProtocol: TerminalImageProtocol | null
-  webglAddon: WebglAddon | null
-  webglContextLossDisposable: IDisposable | null
-  webglUnavailable: boolean
-}
-
-export interface TerminalTab {
-  index: number
-  key: string
-  label: string
-}
-
-export interface TaskTerminalTabsSession {
-  tabs: TerminalTab[]
-  activeTabIndex: number
-  nextIndex: number
-}
-
-export interface ShellLifecycleState {
-  ptyActive: boolean
-  shellExited: boolean
-  currentPtyInstance: number | null
-  hasOutput: boolean
-}
-
-type ShellLifecycleListener = (state: ShellLifecycleState) => void
+export type {
+  PoolEntry,
+  PtyBufferState,
+  PtyEvent,
+  ShellLifecycleState,
+  TaskTerminalTabsSession,
+  TerminalRuntimeEvent,
+  TerminalRuntimeHost,
+  TerminalRuntimeUnlistenFn,
+  TerminalTab,
+} from './terminalRuntimeTypes'
 
 interface TerminalAcquisition {
   released: boolean
@@ -100,283 +48,52 @@ export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 export function createTerminalRuntime(host: TerminalRuntimeHost) {
   const activeThemeMode = host.themeMode ?? defaultThemeMode
-
   const pool = new Map<string, PoolEntry>()
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
-  const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
-  const shellLifecycleListeners = new Map<string, Set<ShellLifecycleListener>>()
   const pendingPtyInstances = new Map<string, number>()
-  const openedTerminals = new WeakSet<Terminal>()
+  const taskTabSessions = createTaskTerminalTabsSessionStore()
+  const shellLifecycle = createTerminalShellLifecycleStore(key => pool.get(key))
+  const attachments = createTerminalAttachmentController(host)
   let appEventsReconnectUnlisten: TerminalRuntimeUnlistenFn | null = null
   let appEventsReconnectListenerPending: Promise<void> | null = null
-  
-  function createDefaultTaskTabsSession(taskId: string): TaskTerminalTabsSession {
-    return {
-      tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
-      activeTabIndex: 0,
-      nextIndex: 1,
-    }
-  }
-  
-  function createHostDiv(): HTMLDivElement {
-    const div = document.createElement('div')
-    div.style.width = '100%'
-    div.style.height = '100%'
-    return div
-  }
-  
-  function isModalOpen(): boolean {
-    return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
-  }
-  
-  function isValidTerminalDimensions(dimensions: { cols: unknown; rows: unknown } | null | undefined): dimensions is { cols: number; rows: number } {
-    if (!dimensions) return false
-    if (typeof dimensions.cols !== 'number' || typeof dimensions.rows !== 'number') return false
-    return !Number.isNaN(dimensions.cols) && !Number.isNaN(dimensions.rows)
-  }
-  
-  function safeFit(entry: PoolEntry): boolean {
-    if (!entry.fitAddon || !entry.hostDiv) return false
-    if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return false
-    const proposed = entry.fitAddon.proposeDimensions()
-    if (!isValidTerminalDimensions(proposed)) return false
-    entry.fitAddon.fit()
-    return true
-  }
-  
-  function refreshTerminal(entry: PoolEntry): void {
-    entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
-  }
-  
-  function refreshAndFocus(entry: PoolEntry): void {
-    refreshTerminal(entry)
-    if (!isModalOpen()) entry.terminal.focus()
-  }
-  
-  function syncPtySize(entry: PoolEntry): void {
-    if (!entry.ptyActive) return
-  
-    host.resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
-      .catch(e => console.error('[terminalPool] resize failed:', e))
-  }
-  
-  function getShellLifecycleStateFromEntry(entry: PoolEntry | undefined): ShellLifecycleState {
-    return {
-      ptyActive: entry?.ptyActive ?? false,
-      shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
-      currentPtyInstance: entry?.currentPtyInstance ?? null,
-      hasOutput: entry?.hasOutput ?? false,
-    }
-  }
-  
-  function notifyShellLifecycleListeners(taskId: string): void {
-    const listeners = shellLifecycleListeners.get(taskId)
-    if (!listeners || listeners.size === 0) return
-  
-    const state = getShellLifecycleStateFromEntry(pool.get(taskId))
-    for (const listener of listeners) {
-      listener(state)
-    }
-  }
-  
+
   function markShellPtyExited(entry: PoolEntry): void {
     entry.ptyActive = false
     entry.needsClear = true
-    notifyShellLifecycleListeners(entry.taskId)
+    shellLifecycle.notify(entry.taskId)
   }
-  
-  const SHIFT_ENTER_CTRL_J_SEQUENCE = '\n'
-  
-  function isShellTerminalKey(taskId: string): boolean {
-    return /-shell-\d+$/.test(taskId)
+
+  function isShellTerminalKey(terminalKey: string): boolean {
+    return /-shell-\d+$/.test(terminalKey)
   }
-  
+
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
     if (isShellTerminalKey(entry.taskId)) return
-  
+
     entry.terminal.attachCustomKeyEventHandler((event) => {
       const isShiftEnter = event.key === 'Enter' && event.shiftKey
       const shouldConsume = isShiftEnter && (event.type === 'keydown' || event.type === 'keypress')
-      if (!shouldConsume) {
-        return true
-      }
-  
+      if (!shouldConsume) return true
+
       event.preventDefault()
       event.stopPropagation()
-  
       if (event.type === 'keydown' && entry.ptyActive) {
-        host.writePty(entry.taskId, SHIFT_ENTER_CTRL_J_SEQUENCE).catch(e => console.error('[terminalPool] write failed:', e))
+        host.writePty(entry.taskId, '\n').catch(error => {
+          console.error('[terminalPool] write failed:', error)
+        })
       }
-  
       return false
     })
   }
-  
-  function waitForInitialFit(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        if (signal?.aborted || !entry.attached) {
-          resolve()
-          return
-        }
-  
-        if (safeFit(entry)) {
-          refreshAndFocus(entry)
-          syncPtySize(entry)
-          resolve()
-          return
-        }
-  
-        void waitForInitialFit(entry, signal).then(() => resolve())
-      })
-    })
-  }
-  
-  function openTerminalLink(terminalKey: string, event: MouseEvent, uri: string): void {
-    event.preventDefault()
-    event.stopPropagation()
-    host.openLink(terminalKey, uri).catch(error => {
-      console.error('[terminalPool] Failed to open terminal link:', error)
-    })
-  }
 
-  function createTerminalLinkHandler(terminalKey: string): ILinkHandler {
-    return {
-      allowNonHttpProtocols: false,
-      activate: (event, uri) => openTerminalLink(terminalKey, event, uri),
-    }
-  }
-
-  function loadWebLinksAddon(terminalKey: string, terminal: Terminal): void {
-    const webLinksAddon = new WebLinksAddon((event, uri) => {
-      openTerminalLink(terminalKey, event, uri)
-    })
-
-    terminal.loadAddon(webLinksAddon)
-  }
-  
-  function loadImageSupport(terminal: Terminal): { imageAddon: ImageAddon | null; imageProtocol: TerminalImageProtocol | null } {
-    if (host.enableImages === false) return { imageAddon: null, imageProtocol: null }
-
-    const imageAddon = new ImageAddon({
-      enableSizeReports: true,
-      pixelLimit: TERMINAL_IMAGE_PIXEL_LIMIT,
-      storageLimit: TERMINAL_IMAGE_STORAGE_LIMIT_MB,
-      showPlaceholder: true,
-      sixelSupport: false,
-      iipSupport: true,
-      iipSizeLimit: TERMINAL_IMAGE_PAYLOAD_LIMIT_BYTES,
-    })
-
-    try {
-      terminal.loadAddon(imageAddon)
-    } catch (error) {
-      try {
-        imageAddon.dispose()
-      } catch (disposeError) {
-        console.warn('[terminalPool] Failed to dispose unavailable image addon:', disposeError)
-      }
-      console.warn('[terminalPool] Inline images unavailable; keeping text fallbacks:', error)
-      return { imageAddon: null, imageProtocol: null }
-    }
-
-    const compatibilityAddon = createItermImageCompatibilityAddon()
-    try {
-      // Register after ImageAddon: xterm checks the newest OSC handler first,
-      // allowing WebP conversion/validation before supported IIP reaches ImageAddon.
-      terminal.loadAddon(compatibilityAddon)
-      return { imageAddon, imageProtocol: 'iterm2' }
-    } catch (error) {
-      compatibilityAddon.dispose()
-      try {
-        imageAddon.dispose()
-      } catch (disposeError) {
-        console.warn('[terminalPool] Failed to dispose unvalidated image addon:', disposeError)
-      }
-      console.warn('[terminalPool] Inline image validation unavailable; keeping text fallbacks:', error)
-      return { imageAddon: null, imageProtocol: null }
-    }
-  }
-
-  function resetTerminal(entry: PoolEntry): void {
-    entry.imageAddon?.reset()
-    entry.terminal.reset()
-  }
-
-  function disposeWebglContextLossListener(entry: PoolEntry): void {
-    try {
-      entry.webglContextLossDisposable?.dispose()
-    } catch (error) {
-      console.warn('[terminalPool] Failed to dispose WebGL context loss listener:', error)
-    } finally {
-      entry.webglContextLossDisposable = null
-    }
-  }
-  
-  function disposeWebglAddon(entry: PoolEntry): void {
-    const webglAddon = entry.webglAddon
-    disposeWebglContextLossListener(entry)
-    entry.webglAddon = null
-  
-    try {
-      webglAddon?.dispose()
-    } catch (error) {
-      console.warn('[terminalPool] Failed to dispose WebGL renderer addon:', error)
-    }
-  }
-  
-  function recoverFromWebglContextLoss(entry: PoolEntry): void {
-    if (!entry.webglAddon) return
-  
-    console.warn('[terminalPool] WebGL renderer context lost; falling back to the default renderer.')
-    disposeWebglAddon(entry)
-    entry.webglUnavailable = true
-  
-    if (entry.attached) {
-      safeFit(entry)
-      refreshTerminal(entry)
-    }
-  }
-  
-  function loadWebglAddon(entry: PoolEntry): void {
-    if (entry.webglAddon || entry.webglUnavailable) return
-  
-    let webglAddon: WebglAddon | null = null
-  
-    try {
-      webglAddon = new WebglAddon()
-      entry.webglAddon = webglAddon
-      entry.webglContextLossDisposable = webglAddon.onContextLoss(() => {
-        recoverFromWebglContextLoss(entry)
-      })
-      entry.terminal.loadAddon(webglAddon)
-    } catch (error) {
-      if (!entry.webglUnavailable) {
-        if (entry.webglAddon) {
-          disposeWebglAddon(entry)
-        } else {
-          try {
-            webglAddon?.dispose()
-          } catch (disposeError) {
-            console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
-          }
-        }
-        entry.webglAddon = null
-        entry.webglContextLossDisposable = null
-        entry.webglUnavailable = true
-      }
-      console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
-    }
-  }
-  
   async function replayPtyBuffer(entry: PoolEntry): Promise<void> {
     if (entry.needsClear) return
-  
+
     try {
       const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
       entry.ptyActive = isLive
       if (!buffer) {
-        notifyShellLifecycleListeners(entry.taskId)
+        shellLifecycle.notify(entry.taskId)
         return
       }
 
@@ -384,21 +101,21 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       entry.needsClear = false
       entry.terminal.write(buffer)
       entry.hasOutput = true
-      notifyShellLifecycleListeners(entry.taskId)
-      if (entry.attached) refreshTerminal(entry)
-    } catch (e) {
-      console.error('[terminalPool] Failed to replay PTY buffer after app event reconnect:', e)
+      shellLifecycle.notify(entry.taskId)
+      if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+    } catch (error) {
+      console.error('[terminalPool] Failed to replay PTY buffer after app event reconnect:', error)
     }
   }
-  
+
   async function replayPtyBuffersForActiveTerminals(): Promise<void> {
     await Promise.all([...pool.values()].map(entry => replayPtyBuffer(entry)))
   }
-  
+
   async function ensureAppEventsReconnectListener(): Promise<void> {
     if (appEventsReconnectUnlisten) return
     if (appEventsReconnectListenerPending) return appEventsReconnectListenerPending
-  
+
     appEventsReconnectListenerPending = host.listenEvent(APP_EVENTS_RECONNECTED_EVENT, () => {
       void replayPtyBuffersForActiveTerminals()
     })
@@ -412,19 +129,33 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       .finally(() => {
         appEventsReconnectListenerPending = null
       })
-  
+
     return appEventsReconnectListenerPending
   }
-  
+
   function releaseAppEventsReconnectListenerIfIdle(): void {
     if (pool.size > 0) return
     appEventsReconnectUnlisten?.()
     appEventsReconnectUnlisten = null
   }
-  
+
+  function disposeTerminalEntry(entry: PoolEntry): void {
+    attachments.detach(entry)
+
+    for (const unlisten of entry.unlisteners.splice(0)) {
+      try {
+        unlisten()
+      } catch (error) {
+        console.warn('[terminalPool] Failed to remove terminal event listener:', error)
+      }
+    }
+
+    disposeWebglContextLossListener(entry)
+    entry.terminal.dispose()
+  }
+
   function disposeReleasedAcquisition(acquisition: TerminalAcquisition): boolean {
     if (!acquisition.released) return false
-
     if (acquisition.entry) {
       disposeTerminalEntry(acquisition.entry)
       acquisition.entry = null
@@ -442,131 +173,84 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       unlisten()
       return false
     }
-
     entry.unlisteners.push(unlisten)
     return true
   }
 
-  async function initializeTerminal(taskId: string, acquisition: TerminalAcquisition): Promise<PoolEntry> {
-    const terminal = new Terminal({
-      ...getTerminalOptions(get(activeThemeMode)),
-      linkHandler: createTerminalLinkHandler(taskId),
-    })
-  
-    const fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-    loadWebLinksAddon(taskId, terminal)
-    const imageSupport = loadImageSupport(terminal)
-  
-    const hostDiv = createHostDiv()
-  
-    // NOTE: terminal.open() is deferred to the first attach() call so that
-    // xterm.js measures character dimensions against a DOM-attached container
-    // with real pixel dimensions. Calling open() on a detached 0×0 div causes
-    // CharSizeService to produce invalid measurements, making fitAddon unable
-    // to compute proper terminal dimensions. xterm.js buffers write() calls
-    // until open() is invoked, so buffer replay and listeners work correctly.
-  
-    const entry: PoolEntry = {
-      taskId,
-      terminal,
-      fitAddon,
-      hostDiv,
-      ptyActive: false,
-      needsClear: false,
-      unlisteners: [],
-      resizeObserver: null,
-      visibilityObserver: null,
-      resizeTimeout: null,
-      attached: false,
-      spawnPending: false,
-      currentPtyInstance: null,
-      hasOutput: false,
-      imageAddon: imageSupport.imageAddon,
-      imageProtocol: imageSupport.imageProtocol,
-      webglAddon: null,
-      webglContextLossDisposable: null,
-      webglUnavailable: false,
-    }
-
+  async function initializeTerminal(terminalKey: string, acquisition: TerminalAcquisition): Promise<PoolEntry> {
+    const entry = createTerminalEntry(host, terminalKey, get(activeThemeMode))
     acquisition.entry = entry
+
+    // terminal.open() remains deferred until attach() gives xterm measurable DOM dimensions.
     await preloadTerminalFonts()
     if (disposeReleasedAcquisition(acquisition)) return entry
-  
-    // Replay buffered output from backend
+
     try {
-      const { buffer, isLive } = await host.getPtyBuffer(taskId)
+      const { buffer, isLive } = await host.getPtyBuffer(terminalKey)
       entry.ptyActive = isLive
       if (buffer) {
-        terminal.write(buffer)
+        entry.terminal.write(buffer)
         entry.hasOutput = true
       }
-    } catch (e) {
-      console.error('[terminalPool] Failed to get PTY buffer:', e)
+    } catch (error) {
+      console.error('[terminalPool] Failed to get PTY buffer:', error)
     }
     if (disposeReleasedAcquisition(acquisition)) return entry
-  
-    // Persistent PTY output listener (survives component unmount)
+
     const outputListenerRetained = await retainAcquisitionListener(
       acquisition,
       entry,
-      host.listenEvent<PtyEvent>(`pty-output-${taskId}`, (event) => {
+      host.listenEvent<PtyEvent>(`pty-output-${terminalKey}`, (event) => {
         const instanceId = event.payload.instance_id
-        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
-          return
+        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
+        if (!event.payload.data) return
+
+        if (entry.needsClear) {
+          resetTerminal(entry)
+          entry.needsClear = false
         }
-        if (event.payload.data) {
-          if (entry.needsClear) {
-            resetTerminal(entry)
-            entry.needsClear = false
-          }
-          entry.terminal.write(event.payload.data)
-          entry.ptyActive = true
-          entry.hasOutput = true
-          notifyShellLifecycleListeners(taskId)
-        }
+        entry.terminal.write(event.payload.data)
+        entry.ptyActive = true
+        entry.hasOutput = true
+        shellLifecycle.notify(terminalKey)
       }),
     )
     if (!outputListenerRetained || disposeReleasedAcquisition(acquisition)) return entry
-  
-    // Persistent PTY exit listener
+
     const exitListenerRetained = await retainAcquisitionListener(
       acquisition,
       entry,
-      host.listenEvent<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+      host.listenEvent<PtyEvent>(`pty-exit-${terminalKey}`, (event) => {
         const instanceId = event.payload.instance_id
-        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
-          return
-        }
+        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
         markShellPtyExited(entry)
       }),
     )
     if (!exitListenerRetained || disposeReleasedAcquisition(acquisition)) return entry
-  
+
     attachAgentTerminalKeyHandler(entry)
-  
-    // Terminal onData -> write to PTY (guarded by ptyActive)
-    terminal.onData((data: string) => {
+    entry.terminal.onData((data: string) => {
       if (entry.ptyActive) {
-        host.writePty(taskId, data).catch(e => console.error('[terminalPool] write failed:', e))
+        host.writePty(terminalKey, data).catch(error => {
+          console.error('[terminalPool] write failed:', error)
+        })
       }
     })
-  
-    pool.set(taskId, entry)
-    const restoredPtyInstance = pendingPtyInstances.get(taskId)
+
+    pool.set(terminalKey, entry)
+    const restoredPtyInstance = pendingPtyInstances.get(terminalKey)
     if (restoredPtyInstance !== undefined) {
-      pendingPtyInstances.delete(taskId)
+      pendingPtyInstances.delete(terminalKey)
       markShellPtyStarted(entry, restoredPtyInstance)
     }
     await ensureAppEventsReconnectListener()
     return entry
   }
 
-  function rollbackFailedAcquisition(taskId: string, acquisition: TerminalAcquisition): void {
+  function rollbackFailedAcquisition(terminalKey: string, acquisition: TerminalAcquisition): void {
     const entry = acquisition.entry
     if (!entry) return
-
-    if (pool.get(taskId) === entry) pool.delete(taskId)
+    if (pool.get(terminalKey) === entry) pool.delete(terminalKey)
     acquisition.entry = null
 
     try {
@@ -578,174 +262,73 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     }
   }
 
-  function acquire(taskId: string): Promise<PoolEntry> {
-    const pendingAcquisition = pendingAcquisitions.get(taskId)
+  function acquire(terminalKey: string): Promise<PoolEntry> {
+    const pendingAcquisition = pendingAcquisitions.get(terminalKey)
     if (pendingAcquisition) return pendingAcquisition.promise
 
-    const existing = pool.get(taskId)
+    const existing = pool.get(terminalKey)
     if (existing) return Promise.resolve(existing)
 
     const operation: TerminalAcquisition = { released: false, entry: null }
-    const promise = initializeTerminal(taskId, operation).catch((error: unknown) => {
-      rollbackFailedAcquisition(taskId, operation)
+    const promise = initializeTerminal(terminalKey, operation).catch((error: unknown) => {
+      rollbackFailedAcquisition(terminalKey, operation)
       throw error
     })
     const acquisition: PendingTerminalAcquisition = { operation, promise }
-    pendingAcquisitions.set(taskId, acquisition)
+    pendingAcquisitions.set(terminalKey, acquisition)
 
     const clearPendingAcquisition = () => {
-      if (pendingAcquisitions.get(taskId) === acquisition) {
-        pendingAcquisitions.delete(taskId)
-      }
+      if (pendingAcquisitions.get(terminalKey) === acquisition) pendingAcquisitions.delete(terminalKey)
     }
     void promise.then(clearPendingAcquisition, clearPendingAcquisition)
-
     return promise
   }
-  
-  async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
-    if (entry.attached && entry.hostDiv.parentNode === wrapperEl) return
-  
-    wrapperEl.appendChild(entry.hostDiv)
-    entry.attached = true
-  
-    // Open terminal into the now-DOM-attached hostDiv (first attach only).
-    // Deferred from acquire() so xterm.js CharSizeService measures character
-    // dimensions against a container with real pixel dimensions.
-    if (!openedTerminals.has(entry.terminal)) {
-      entry.terminal.open(entry.hostDiv)
-      openedTerminals.add(entry.terminal)
-      // Load WebGL only after xterm has opened against a DOM-attached host with
-      // preloaded fonts. The WebGL renderer builds its glyph atlas from measured
-      // font/cell metrics; loading it during acquire() can produce shifted glyphs.
-      loadWebglAddon(entry)
-    }
-  
-    // Set up ResizeObserver
-    if (!entry.resizeObserver) {
-      entry.resizeObserver = new ResizeObserver((entries) => {
-        if (!entry.hostDiv || !entry.terminal) return
-        const { width, height } = entries[0].contentRect
-        if (width === 0 || height === 0) return
-        if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
-        entry.resizeTimeout = setTimeout(() => {
-          entry.resizeTimeout = null
-          safeFit(entry)
-          syncPtySize(entry)
-        }, 100)
-      })
-      entry.resizeObserver.observe(entry.hostDiv)
-    }
-  
-    // Set up IntersectionObserver for visibility-based refresh
-    if (!entry.visibilityObserver) {
-      entry.visibilityObserver = new IntersectionObserver((entries) => {
-        const last = entries[entries.length - 1]
-        if (last.isIntersecting) {
-          requestAnimationFrame(() => {
-            safeFit(entry)
-            syncPtySize(entry)
-            refreshAndFocus(entry)
-          })
-        }
-      }, { threshold: 0 })
-      entry.visibilityObserver.observe(entry.hostDiv)
-    }
-  
-    await waitForInitialFit(entry)
-  }
-  
-  async function recoverActiveTerminal(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
-    if (!entry.attached) return
-    await waitForInitialFit(entry, signal)
-  }
-  
-  function detach(entry: PoolEntry): void {
-    if (!entry.attached) return
-  
-    if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
-    entry.resizeTimeout = null
-  
-    if (entry.resizeObserver) {
-      entry.resizeObserver.disconnect()
-      entry.resizeObserver = null
-    }
-  
-    if (entry.visibilityObserver) {
-      entry.visibilityObserver.disconnect()
-      entry.visibilityObserver = null
-    }
-  
-    // Remove host div from DOM but keep the terminal alive
-    if (entry.hostDiv.parentNode) {
-      entry.hostDiv.parentNode.removeChild(entry.hostDiv)
-    }
-  
-    entry.attached = false
-  }
-  
-  function disposeTerminalEntry(entry: PoolEntry): void {
-    detach(entry)
 
-    const unlisteners = entry.unlisteners.splice(0)
-    for (const unlisten of unlisteners) {
-      try {
-        unlisten()
-      } catch (error) {
-        console.warn('[terminalPool] Failed to remove terminal event listener:', error)
-      }
-    }
-
-    disposeWebglContextLossListener(entry)
-    entry.terminal.dispose()
-  }
-
-  function release(taskId: string): void {
-    const pendingAcquisition = pendingAcquisitions.get(taskId)
+  function release(terminalKey: string): void {
+    const pendingAcquisition = pendingAcquisitions.get(terminalKey)
     if (pendingAcquisition) {
       pendingAcquisition.operation.released = true
-      pendingAcquisitions.delete(taskId)
+      pendingAcquisitions.delete(terminalKey)
     }
 
-    const pooledEntry = pool.get(taskId)
+    const pooledEntry = pool.get(terminalKey)
     const pendingEntry = pendingAcquisition?.operation.entry ?? null
     if (pooledEntry) {
       disposeTerminalEntry(pooledEntry)
-      pool.delete(taskId)
+      pool.delete(terminalKey)
     } else if (pendingEntry) {
       disposeTerminalEntry(pendingEntry)
     }
 
     if (pendingAcquisition) pendingAcquisition.operation.entry = null
-    pendingPtyInstances.delete(taskId)
-    shellLifecycleListeners.delete(taskId)
+    pendingPtyInstances.delete(terminalKey)
+    shellLifecycle.clear(terminalKey)
     releaseAppEventsReconnectListenerIfIdle()
   }
-  
+
   function shouldSpawnPty(entry: PoolEntry): boolean {
     return !entry.ptyActive && !entry.spawnPending && !entry.needsClear
   }
-  
+
   function markPtySpawnPending(entry: PoolEntry): void {
     entry.spawnPending = true
     entry.hasOutput = false
   }
-  
+
   function clearPtySpawnPending(entry: PoolEntry): void {
     entry.spawnPending = false
   }
-  
+
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
     entry.currentPtyInstance = instanceId
   }
 
-  function restorePtyInstance(taskId: string, instanceId: number): void {
-    const entry = pool.get(taskId)
+  function restorePtyInstance(terminalKey: string, instanceId: number): void {
+    const entry = pool.get(terminalKey)
     if (!entry) {
-      pendingPtyInstances.set(taskId, instanceId)
+      pendingPtyInstances.set(terminalKey, instanceId)
       return
     }
-
     markShellPtyStarted(entry, instanceId)
   }
 
@@ -753,110 +336,76 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.currentPtyInstance = instanceId
     entry.ptyActive = true
     entry.needsClear = false
-    notifyShellLifecycleListeners(entry.taskId)
+    shellLifecycle.notify(entry.taskId)
   }
-  
-  function subscribeShellLifecycle(taskId: string, listener: ShellLifecycleListener): TerminalRuntimeUnlistenFn {
-    let listeners = shellLifecycleListeners.get(taskId)
-    if (!listeners) {
-      listeners = new Set()
-      shellLifecycleListeners.set(taskId, listeners)
-    }
-  
-    listeners.add(listener)
-  
-    return () => {
-      const current = shellLifecycleListeners.get(taskId)
-      if (!current) return
-      current.delete(listener)
-      if (current.size === 0) shellLifecycleListeners.delete(taskId)
-    }
+
+  function subscribeShellLifecycle(
+    terminalKey: string,
+    listener: ShellLifecycleListener,
+  ): TerminalRuntimeUnlistenFn {
+    return shellLifecycle.subscribe(terminalKey, listener)
   }
-  
-  function isShellExited(taskId: string): boolean {
-    const entry = pool.get(taskId)
-    if (!entry) return false
-    return !entry.ptyActive && entry.needsClear
+
+  function isShellExited(terminalKey: string): boolean {
+    const entry = pool.get(terminalKey)
+    return entry ? !entry.ptyActive && entry.needsClear : false
   }
-  
-  function getShellLifecycleState(taskId: string): ShellLifecycleState {
-    return getShellLifecycleStateFromEntry(pool.get(taskId))
+
+  function getShellLifecycleState(terminalKey: string): ShellLifecycleState {
+    return shellLifecycle.getState(terminalKey)
   }
-  
-  function updateShellLifecycleState(taskId: string, state: ShellLifecycleState): void {
-    const entry = pool.get(taskId)
+
+  function updateShellLifecycleState(terminalKey: string, state: ShellLifecycleState): void {
+    const entry = pool.get(terminalKey)
     if (!entry) return
-  
     entry.ptyActive = state.ptyActive
     entry.needsClear = state.shellExited
     entry.currentPtyInstance = state.currentPtyInstance
     entry.hasOutput = state.hasOutput
-    notifyShellLifecycleListeners(taskId)
+    shellLifecycle.notify(terminalKey)
   }
-  
+
   function getTaskTerminalTabsSession(taskId: string): TaskTerminalTabsSession {
-    const existing = taskTabSessions.get(taskId)
-    if (existing) return existing
-  
-    const session = createDefaultTaskTabsSession(taskId)
-    taskTabSessions.set(taskId, session)
-    return session
+    return taskTabSessions.get(taskId)
   }
-  
+
   function updateTaskTerminalTabsSession(taskId: string, session: TaskTerminalTabsSession): void {
-    taskTabSessions.set(taskId, session)
+    taskTabSessions.update(taskId, session)
   }
-  
+
   function clearTaskTerminalTabsSession(taskId: string): void {
-    taskTabSessions.delete(taskId)
+    taskTabSessions.clear(taskId)
   }
-  
+
   function releaseAll(): void {
     const terminalKeys = new Set([...pool.keys(), ...pendingAcquisitions.keys()])
-    for (const terminalKey of terminalKeys) {
-      release(terminalKey)
-    }
-    taskTabSessions.clear()
-    shellLifecycleListeners.clear()
+    for (const terminalKey of terminalKeys) release(terminalKey)
+    taskTabSessions.clearAll()
+    shellLifecycle.clearAll()
     releaseAppEventsReconnectListenerIfIdle()
   }
-  
+
   function releaseAllForTask(taskId: string): number {
     const keysToRelease = new Set<string>()
-
     for (const key of [...pool.keys(), ...pendingAcquisitions.keys()]) {
-      if (key.startsWith(`${taskId}-shell-`)) {
-        keysToRelease.add(key)
-      }
+      if (key.startsWith(`${taskId}-shell-`)) keysToRelease.add(key)
     }
-
-    for (const key of keysToRelease) {
-      release(key)
-    }
-
+    for (const key of keysToRelease) release(key)
     return keysToRelease.size
   }
-  
-  activeThemeMode.subscribe((mode) => {
-    const theme = getTerminalTheme(mode)
-    for (const entry of pool.values()) {
-      entry.terminal.options.theme = theme
-    }
-  })
-  
-  function focusTerminal(taskId: string): void {
-    const entry = pool.get(taskId)
-    if (entry?.attached && !isModalOpen()) {
-      entry.terminal.focus()
-    }
-  }
-  
-  function hasTerminal(taskId: string): boolean {
-    return pool.has(taskId)
+
+  activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
+
+  function focusTerminal(terminalKey: string): void {
+    attachments.focus(pool.get(terminalKey))
   }
 
-  function isPtyActive(taskId: string): boolean {
-    return pool.get(taskId)?.ptyActive ?? false
+  function hasTerminal(terminalKey: string): boolean {
+    return pool.has(terminalKey)
+  }
+
+  function isPtyActive(terminalKey: string): boolean {
+    return pool.get(terminalKey)?.ptyActive ?? false
   }
 
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
@@ -871,8 +420,8 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     isValidTerminalDimensions,
     getTerminalImageProtocol,
     acquire,
-    attach,
-    detach,
+    attach: attachments.attach,
+    detach: attachments.detach,
     release,
     resetTerminal,
     shouldSpawnPty,
@@ -893,7 +442,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     focusTerminal,
     hasTerminal,
     isPtyActive,
-    recoverActiveTerminal,
+    recoverActiveTerminal: attachments.recoverActiveTerminal,
     replayPtyBuffersForActiveTerminals,
     _getPool,
   }
