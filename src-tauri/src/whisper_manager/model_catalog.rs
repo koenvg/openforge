@@ -138,6 +138,30 @@ pub struct WhisperModelStatus {
     pub is_active: bool,
 }
 
+impl WhisperModelStatus {
+    fn new(
+        size: WhisperModelSize,
+        active: WhisperModelSize,
+        downloaded: bool,
+        model_path: Option<PathBuf>,
+        model_size_bytes: Option<u64>,
+    ) -> Self {
+        let spec = size.spec();
+
+        Self {
+            size: size.as_str().to_string(),
+            display_name: spec.display_name.to_string(),
+            downloaded,
+            model_path: model_path.map(|path| path.to_string_lossy().to_string()),
+            model_size_bytes,
+            model_name: spec.filename.to_string(),
+            disk_size_mb: spec.disk_size_mb,
+            ram_usage_mb: spec.ram_usage_mb,
+            is_active: size == active,
+        }
+    }
+}
+
 impl WhisperManager {
     /// Return the expected on-disk path for a model file of the given size.
     ///
@@ -158,47 +182,17 @@ impl WhisperManager {
 
     /// Return the status of a specific model size.
     pub fn get_model_status_for(&self, size: WhisperModelSize) -> WhisperModelStatus {
-        let spec = size.spec();
         let active = self.get_active_model();
-
-        match Self::model_file_path_for(size) {
-            None => WhisperModelStatus {
-                size: size.as_str().to_string(),
-                display_name: spec.display_name.to_string(),
-                downloaded: false,
-                model_path: None,
-                model_size_bytes: None,
-                model_name: spec.filename.to_string(),
-                disk_size_mb: spec.disk_size_mb,
-                ram_usage_mb: spec.ram_usage_mb,
-                is_active: size == active,
-            },
+        let (downloaded, model_path, model_size_bytes) = match Self::model_file_path_for(size) {
+            None => (false, None, None),
             Some(path) if path.exists() => {
                 let file_size = std::fs::metadata(&path).ok().map(|metadata| metadata.len());
-                WhisperModelStatus {
-                    size: size.as_str().to_string(),
-                    display_name: spec.display_name.to_string(),
-                    downloaded: true,
-                    model_path: Some(path.to_string_lossy().to_string()),
-                    model_size_bytes: file_size,
-                    model_name: spec.filename.to_string(),
-                    disk_size_mb: spec.disk_size_mb,
-                    ram_usage_mb: spec.ram_usage_mb,
-                    is_active: size == active,
-                }
+                (true, Some(path), file_size)
             }
-            Some(path) => WhisperModelStatus {
-                size: size.as_str().to_string(),
-                display_name: spec.display_name.to_string(),
-                downloaded: false,
-                model_path: Some(path.to_string_lossy().to_string()),
-                model_size_bytes: None,
-                model_name: spec.filename.to_string(),
-                disk_size_mb: spec.disk_size_mb,
-                ram_usage_mb: spec.ram_usage_mb,
-                is_active: size == active,
-            },
-        }
+            Some(path) => (false, Some(path), None),
+        };
+
+        WhisperModelStatus::new(size, active, downloaded, model_path, model_size_bytes)
     }
 
     /// Return the status of all available models.
