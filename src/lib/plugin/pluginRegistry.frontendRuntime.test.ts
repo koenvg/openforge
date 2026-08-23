@@ -11,7 +11,9 @@ import {
   getPluginStorageMock,
   getRegisteredComponent,
   getRegisteredRenderableComponent,
+  invokeFrontendAgentCommand,
   installedPlugins,
+  listFrontendAgentCommands,
   loadPluginFrontendMock,
   makeManifest,
   openUrlMock,
@@ -24,6 +26,7 @@ import {
   setProjectConfigMock,
   writeClipboardTextMock,
 } from './pluginRegistryTestSupport'
+import { activeProjectId } from '../stores'
 
 const RUNTIME_PLUGIN_ID = 'runtime-plugin'
 const RUNTIME_PLUGIN_URL = 'plugin://runtime-plugin/dist/frontend.js'
@@ -53,7 +56,10 @@ function installRuntimePlugin(activate: Parameters<typeof defineFrontendPlugin>[
 }
 
 describe('pluginRegistry frontend runtime', () => {
-  beforeEach(resetPluginRegistryTestState)
+  beforeEach(() => {
+    resetPluginRegistryTestState()
+    activeProjectId.set(null)
+  })
 
   it('activates defineFrontendPlugin package entries through plugin:// assets', async () => {
     const activateFrontend = vi.fn(() => undefined)
@@ -105,6 +111,42 @@ describe('pluginRegistry frontend runtime', () => {
     expect(getRegisteredRenderableComponent('settingsSections', 'runtime-plugin:prefs')).toBeDefined()
     await expect(executePluginCommand(RUNTIME_PLUGIN_ID, 'refresh', { source: 'test' })).resolves.toBe(true)
     expect(commandHandler).toHaveBeenCalledWith({ source: 'test' })
+  })
+
+  it('routes agent commands to a background Task without changing the visible Project', async () => {
+    const commandHandler = vi.fn(async () => ({ accepted: true }))
+    activeProjectId.set('P-visible')
+    installRuntimePlugin((openforge, context) => {
+      context.subscriptions.add(openforge.commands.register({
+        id: 'open',
+        title: 'Open in Task Browser',
+        agent: { description: 'Open a verified browser URL.' },
+        handler: commandHandler,
+      }))
+    })
+    await activatePlugin(RUNTIME_PLUGIN_ID)
+
+    await expect(listFrontendAgentCommands(RUNTIME_PLUGIN_ID, 'P-background')).resolves.toEqual([
+      expect.objectContaining({ qualifiedId: `${RUNTIME_PLUGIN_ID}.open` }),
+    ])
+    const invocationContext = {
+      taskId: 'T-background',
+      projectId: 'P-background',
+      source: 'agent-cli' as const,
+    }
+    await expect(invokeFrontendAgentCommand(
+      RUNTIME_PLUGIN_ID,
+      'P-background',
+      `${RUNTIME_PLUGIN_ID}.open`,
+      { url: 'http://localhost:5173/ready' },
+      invocationContext,
+    )).resolves.toEqual({ accepted: true })
+
+    expect(commandHandler).toHaveBeenCalledWith(
+      { url: 'http://localhost:5173/ready' },
+      invocationContext,
+    )
+    expect(get(activeProjectId)).toBe('P-visible')
   })
 
   it('returns stable frontend APIs with render-specific context', async () => {

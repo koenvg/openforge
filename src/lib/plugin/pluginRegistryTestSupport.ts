@@ -168,7 +168,11 @@ const {
   updateAppPluginContexts,
 } = await import('./pluginRegistry')
 const { appEnabledPluginIds, installedPlugins, enabledPluginIds, projectEnabledPluginIds, runtimeContributionSources } = await import('./pluginStore')
-const { _resetPluginActivationLifecycleForTests } = await import('./pluginActivationLifecycle')
+const {
+  _resetPluginActivationLifecycleForTests,
+  invokeFrontendAgentCommand,
+  listFrontendAgentCommands,
+} = await import('./pluginActivationLifecycle')
 const {
   clearComponentRegistry,
   getRegisteredComponent,
@@ -303,11 +307,13 @@ export {
   getPluginCommandHandler,
   getPluginIpcMock,
   getPluginRenderProps,
+  invokeFrontendAgentCommand,
   getPluginStorageMock,
   getProjectConfigMock,
   getRegisteredComponent,
   getRegisteredRenderableComponent,
   initializePluginRuntime,
+  listFrontendAgentCommands,
   installFromLocal,
   installPluginFromGit,
   installPluginFromGitIpcMock,
