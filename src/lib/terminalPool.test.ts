@@ -219,7 +219,7 @@ vi.mock("@xterm/addon-webgl", () => {
 vi.mock("./ipc", () => ({
 	writePty: vi.fn().mockResolvedValue(undefined),
 	resizePty: vi.fn().mockResolvedValue(undefined),
-	getPtyBuffer: vi.fn().mockResolvedValue(null),
+	getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
 	openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -822,9 +822,9 @@ describe("terminalPool", () => {
 
 	it("replays backend buffers for active terminals after the app event stream reconnects", async () => {
 		vi.mocked(getPtyBuffer).mockImplementation(async (taskId: string) => {
-			if (taskId === "task-reconnect-a") return "latest buffer a";
-			if (taskId === "task-reconnect-b") return "latest buffer b";
-			return null;
+			if (taskId === "task-reconnect-a") return { buffer: "latest buffer a", isLive: true };
+			if (taskId === "task-reconnect-b") return { buffer: "latest buffer b", isLive: true };
+			return { buffer: null, isLive: false };
 		});
 		const entryA = await acquire("task-reconnect-a");
 		const entryB = await acquire("task-reconnect-b");

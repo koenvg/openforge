@@ -7,7 +7,7 @@ function installShellApi() {
     write: vi.fn(async () => undefined),
     resize: vi.fn(async () => undefined),
     kill: vi.fn(async () => undefined),
-    getBuffer: vi.fn(async () => 'buffered'),
+    getBuffer: vi.fn(async () => ({ buffer: 'buffered', isLive: true })),
   }
   setTerminalOpenForgeApi({ shell } as unknown as FrontendOpenForgeAPI)
   return shell
@@ -48,7 +48,7 @@ describe('terminal plugin IPC shell callbacks', () => {
 
     await writePty('project-P-1-shell-2', 'echo hi\n')
     await resizePty('project-P-1-shell-2', 120, 40)
-    await expect(getPtyBuffer('project-P-1-shell-2')).resolves.toBe('buffered')
+    await expect(getPtyBuffer('project-P-1-shell-2')).resolves.toEqual({ buffer: 'buffered', isLive: true })
     await killPty('project-P-1-shell-2')
 
     expect(shell.write).toHaveBeenCalledWith({ taskId: 'project-P-1', terminalIndex: 2, data: 'echo hi\n' })

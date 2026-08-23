@@ -1,4 +1,4 @@
-import type { Disposable, FrontendOpenForgeAPI, TerminalImageProtocol } from '@openforge-app/plugin-sdk/frontend'
+import type { Disposable, FrontendOpenForgeAPI, PtyBufferState, TerminalImageProtocol } from '@openforge-app/plugin-sdk/frontend'
 import type { TaskWorkspaceInfo } from './types'
 
 let terminalOpenForgeApi: FrontendOpenForgeAPI | null = null
@@ -93,6 +93,6 @@ export async function killPty(taskId: string): Promise<void> {
   await getTerminalOpenForgeApi().shell.kill(parseIndexedTerminalKey(taskId))
 }
 
-export async function getPtyBuffer(taskId: string): Promise<string | null> {
+export async function getPtyBuffer(taskId: string): Promise<PtyBufferState> {
   return getTerminalOpenForgeApi().shell.getBuffer(parseIndexedTerminalKey(taskId))
 }

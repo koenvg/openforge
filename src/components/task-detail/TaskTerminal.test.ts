@@ -33,7 +33,7 @@ vi.mock('../../lib/ipc', () => ({
   killPty: vi.fn().mockResolvedValue(undefined),
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
-  getPtyBuffer: vi.fn().mockResolvedValue(null),
+  getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
   killShellsForTask: vi.fn().mockResolvedValue(undefined),
 }))
 

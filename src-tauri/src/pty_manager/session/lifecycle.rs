@@ -14,7 +14,7 @@ use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
     MANAGED_PROCESS_TERM_TIMEOUT,
 };
-use super::super::{PtyError, PtyManager, PtyProcessDiagnosticSession};
+use super::super::{PtyBufferState, PtyError, PtyManager, PtyProcessDiagnosticSession};
 
 pub(in super::super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(in super::super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
@@ -507,6 +507,14 @@ impl PtyManager {
                 .then_with(|| left.pty_instance_id.cmp(&right.pty_instance_id))
         });
         diagnostics
+    }
+
+    pub async fn pty_buffer_state(&self, task_id: &str) -> PtyBufferState {
+        let is_live = self.sessions.lock().await.contains_key(task_id);
+        PtyBufferState {
+            buffer: self.get_pty_buffer(task_id).await,
+            is_live,
+        }
     }
 
     pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {

@@ -2,6 +2,7 @@ export {
   APP_EVENTS_RECONNECTED_EVENT,
   createTerminalRuntime,
   type PoolEntry,
+  type PtyBufferState,
   type PtyEvent,
   type ShellLifecycleState,
   type TaskTerminalTabsSession,

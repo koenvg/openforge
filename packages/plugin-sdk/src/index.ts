@@ -107,6 +107,7 @@ export type {
   PluginStorageScope,
   PluginViewKey,
   ProjectsAPI,
+  PtyBufferState,
   ShellAPI,
   ShellResizeRequest,
   TaskStartPrefixContext,

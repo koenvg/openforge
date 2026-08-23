@@ -147,7 +147,8 @@ function createHost(): TestHost {
     },
     async getPtyBuffer(taskId: string) {
       await bufferReadGates.get(taskId)?.promise
-      return buffers.get(taskId) ?? null
+      const buffer = buffers.get(taskId) ?? null
+      return { buffer, isLive: buffer !== null }
     },
     async writePty() {},
     async resizePty() {},
@@ -400,12 +401,48 @@ describe('terminal runtime resumed agent input', () => {
 
     expect(writePty).toHaveBeenCalledWith('T-1', 'continue')
   })
+
+  it('accepts keyboard input when the backend reports an empty live PTY buffer', async () => {
+    const host = createHost()
+    host.setBuffer('T-2', '')
+    const writePty = vi.spyOn(host, 'writePty')
+    const runtime = createTerminalRuntime(host)
+
+    const entry = await runtime.acquire('T-2')
+    const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
+      | ((data: string) => void)
+      | undefined
+    onData?.('continue')
+
+    expect(entry.ptyActive).toBe(true)
+    expect(writePty).toHaveBeenCalledWith('T-2', 'continue')
+  })
 })
 
 describe('terminal runtime shell output lifecycle', () => {
   beforeEach(() => {
     terminalMocks.instances.length = 0
     imageAddonMocks.instances.length = 0
+  })
+
+  it('renders a persisted Terminal Replay without accepting keyboard input', async () => {
+    const host = createHost()
+    host.getPtyBuffer = vi.fn(async () => ({
+      buffer: 'completed replay',
+      isLive: false,
+    }))
+    const writePty = vi.spyOn(host, 'writePty')
+    const runtime = createTerminalRuntime(host)
+
+    const entry = await runtime.acquire('T-1')
+    const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
+      | ((data: string) => void)
+      | undefined
+    onData?.('unsafe input')
+
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('completed replay')
+    expect(entry.ptyActive).toBe(false)
+    expect(writePty).not.toHaveBeenCalled()
   })
 
   it('reports no output for a newly acquired shell without backend buffer', async () => {

@@ -98,7 +98,7 @@ vi.mock('../../lib/ipc', () => ({
   transcribeAudio: vi.fn(),
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
-  getPtyBuffer: vi.fn().mockResolvedValue(null),
+  getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
   getLatestSession: vi.fn().mockResolvedValue(null),
 }))
 

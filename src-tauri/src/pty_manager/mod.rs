@@ -99,6 +99,13 @@ pub struct PtyManager {
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PtyBufferState {
+    pub buffer: Option<String>,
+    #[serde(rename = "isLive")]
+    pub is_live: bool,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyProcessDiagnosticSession {

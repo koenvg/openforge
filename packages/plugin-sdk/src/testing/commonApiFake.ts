@@ -158,7 +158,7 @@ export class TestingCommonApiFake {
         },
         getBuffer: async (request) => {
           this.services.calls.shellBuffers.push(request)
-          return null
+          return { buffer: null, isLive: false }
         },
       },
       notifications: {

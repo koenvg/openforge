@@ -55,6 +55,7 @@ import type {
   PluginViewRegistration,
   TaskStartPrefixContext,
   TaskStartPrefixProviderRegistration,
+  PtyBufferState,
   TerminalImageProtocol,
 } from './types'
 
@@ -133,5 +134,6 @@ export type {
   PluginViewRegistration,
   TaskStartPrefixContext,
   TaskStartPrefixProviderRegistration,
+  PtyBufferState,
   TerminalImageProtocol,
 }

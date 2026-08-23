@@ -560,12 +560,17 @@ export interface ShellResizeRequest extends ShellSessionRequest {
   rows: number
 }
 
+export interface PtyBufferState {
+  buffer: string | null
+  isLive: boolean
+}
+
 export interface ShellAPI {
   spawn(request: ShellSpawnRequest): Promise<number>
   write(request: ShellWriteRequest): Promise<void>
   resize(request: ShellResizeRequest): Promise<void>
   kill(request: ShellSessionRequest): Promise<void>
-  getBuffer(request: ShellSessionRequest): Promise<string | null>
+  getBuffer(request: ShellSessionRequest): Promise<PtyBufferState>
 }
 
 export interface CreateTaskRequest {
