@@ -87,27 +87,15 @@ fn test_shell_pid_file_naming() {
 }
 
 #[test]
-fn test_spawn_shell_with_index() {
-    let task_id = "t1";
-    let key_0 = format!("{}-shell-{}", task_id, 0);
-    let key_1 = format!("{}-shell-{}", task_id, 1);
-    let key_2 = format!("{}-shell-{}", task_id, 2);
+fn test_shell_session_key() {
+    let cases = [
+        ("t1", Some(0), "t1-shell-0"),
+        ("t1", Some(1), "t1-shell-1"),
+        ("t1", Some(2), "t1-shell-2"),
+        ("my-task", None, "my-task-shell-0"),
+    ];
 
-    assert_eq!(key_0, "t1-shell-0");
-    assert_eq!(key_1, "t1-shell-1");
-    assert_eq!(key_2, "t1-shell-2");
-}
-
-#[test]
-fn test_spawn_shell_no_index() {
-    let task_id = "my-task";
-    let terminal_index: Option<u32> = None;
-
-    let key = if let Some(idx) = terminal_index {
-        format!("{}-shell-{}", task_id, idx)
-    } else {
-        format!("{}-shell-0", task_id)
-    };
-
-    assert_eq!(key, "my-task-shell-0");
+    for (task_id, terminal_index, expected) in cases {
+        assert_eq!(shell_session_key(task_id, terminal_index), expected);
+    }
 }
