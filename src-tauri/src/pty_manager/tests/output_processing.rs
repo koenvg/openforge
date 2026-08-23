@@ -1,0 +1,362 @@
+use super::*;
+
+#[test]
+fn test_ring_buffer_push_within_capacity() {
+    let mut buf = RingBuffer::new(100);
+    buf.push(b"hello");
+    buf.push(b" world");
+    assert_eq!(buf.snapshot(), "hello world");
+}
+
+#[test]
+fn test_ring_buffer_push_exceeds_capacity() {
+    let mut buf = RingBuffer::new(5);
+    buf.push(b"hello");
+    buf.push(b"world");
+    let result = buf.snapshot();
+    assert_eq!(result.len(), 5);
+    assert_eq!(result, "world");
+}
+
+#[test]
+fn test_find_utf8_boundary_complete() {
+    let data = b"Hello, world!";
+    assert_eq!(find_utf8_boundary(data), data.len());
+}
+
+#[test]
+fn test_find_utf8_boundary_incomplete() {
+    // UTF-8 sequence for "é" is [0xC3, 0xA9]
+    // If we only have the first byte, it should be detected as incomplete
+    let data = b"Hello\xC3";
+    assert_eq!(find_utf8_boundary(data), 5); // Should stop before 0xC3
+
+    // Complete sequence should be valid
+    let data = b"Hello\xC3\xA9";
+    assert_eq!(find_utf8_boundary(data), data.len());
+}
+
+#[test]
+fn test_find_utf8_boundary_three_byte() {
+    // UTF-8 sequence for "€" is [0xE2, 0x82, 0xAC]
+    let data = b"Price\xE2\x82"; // Incomplete 3-byte sequence
+    assert_eq!(find_utf8_boundary(data), 5);
+
+    let data = b"Price\xE2\x82\xAC"; // Complete
+    assert_eq!(find_utf8_boundary(data), data.len());
+}
+
+struct ChunkedReader {
+    chunks: std::collections::VecDeque<Vec<u8>>,
+}
+
+impl ChunkedReader {
+    fn new(chunks: Vec<&[u8]>) -> Self {
+        Self {
+            chunks: chunks.into_iter().map(|chunk| chunk.to_vec()).collect(),
+        }
+    }
+}
+
+impl Read for ChunkedReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let Some(chunk) = self.chunks.pop_front() else {
+            return Ok(0);
+        };
+        let len = chunk.len().min(buf.len());
+        buf[..len].copy_from_slice(&chunk[..len]);
+        Ok(len)
+    }
+}
+
+struct RepeatingReader {
+    remaining_reads: usize,
+    byte: u8,
+}
+
+impl Read for RepeatingReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.remaining_reads == 0 {
+            return Ok(0);
+        }
+
+        buf.fill(self.byte);
+        self.remaining_reads -= 1;
+        Ok(buf.len())
+    }
+}
+
+fn spawn_repeating_reader(
+    read_count: usize,
+    byte: u8,
+    session_key: &'static str,
+) -> (
+    PtyOutputReceiver,
+    Arc<AtomicBool>,
+    std::thread::JoinHandle<()>,
+) {
+    let (tx, rx) = pty_output_channel();
+    let reader_finished = Arc::new(AtomicBool::new(false));
+    let finished = Arc::clone(&reader_finished);
+    let reader_thread = std::thread::spawn(move || {
+        let mut reader = RepeatingReader {
+            remaining_reads: read_count,
+            byte,
+        };
+        read_pty_output_loop(&mut reader, tx, session_key, None, None);
+        finished.store(true, Ordering::Release);
+    });
+
+    (rx, reader_finished, reader_thread)
+}
+
+fn assert_reader_is_backpressured(
+    rx: &PtyOutputReceiver,
+    reader_finished: &AtomicBool,
+    message: &str,
+) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while rx.len() < PTY_OUTPUT_QUEUE_CAPACITY && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+
+    assert_eq!(rx.len(), PTY_OUTPUT_QUEUE_CAPACITY);
+    assert!(!reader_finished.load(Ordering::Acquire), "{message}");
+}
+
+#[test]
+fn test_pty_output_queue_bounds_sustained_output_and_preserves_exit() {
+    const READ_COUNT: usize = 4_096;
+
+    let (mut rx, reader_finished, reader_thread) =
+        spawn_repeating_reader(READ_COUNT, b'x', "stress-reader");
+    assert_reader_is_backpressured(
+        &rx,
+        &reader_finished,
+        "the reader should backpressure instead of buffering all sustained output",
+    );
+
+    let mut received_reads = 0;
+    let mut received_bytes = 0;
+    let mut max_queue_len = rx.len();
+    loop {
+        max_queue_len = max_queue_len.max(rx.len());
+        match rx
+            .blocking_recv()
+            .expect("reader should deliver an exit signal")
+        {
+            Some(output) => {
+                assert!(output.bytes().all(|byte| byte == b'x'));
+                received_reads += 1;
+                received_bytes += output.len();
+            }
+            None => break,
+        }
+    }
+    reader_thread.join().expect("reader thread should finish");
+
+    assert!(max_queue_len <= PTY_OUTPUT_QUEUE_CAPACITY);
+    assert_eq!(received_reads, READ_COUNT);
+    assert_eq!(received_bytes, READ_COUNT * PTY_READ_BUFFER_SIZE);
+    assert!(reader_finished.load(Ordering::Acquire));
+}
+
+#[test]
+fn test_pty_output_queue_bounds_sustained_malformed_utf8() {
+    const READ_COUNT: usize = 1_024;
+
+    let (mut rx, reader_finished, reader_thread) =
+        spawn_repeating_reader(READ_COUNT, 0xff, "malformed-stress-reader");
+    assert_reader_is_backpressured(
+        &rx,
+        &reader_finished,
+        "malformed output should remain bounded by the same backpressure",
+    );
+
+    let mut received_reads = 0;
+    while let Some(message) = rx.blocking_recv() {
+        let Some(output) = message else {
+            break;
+        };
+        assert_eq!(output.len(), PTY_READ_BUFFER_SIZE * 3);
+        assert!(output.chars().all(|character| character == '\u{fffd}'));
+        received_reads += 1;
+    }
+    reader_thread.join().expect("reader thread should finish");
+
+    assert_eq!(received_reads, READ_COUNT);
+}
+#[test]
+fn test_read_pty_output_loop_preserves_utf8_split_across_reads() {
+    let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
+    let (tx, mut rx) = pty_output_channel();
+
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
+
+    assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
+    assert_eq!(rx.blocking_recv(), Some(Some("é world".to_string())));
+    assert_eq!(rx.blocking_recv(), Some(None));
+}
+
+#[test]
+fn test_read_pty_output_loop_flushes_incomplete_utf8_before_exit() {
+    let mut reader = ChunkedReader::new(vec![b"hello \xC3"]);
+    let (tx, mut rx) = pty_output_channel();
+
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
+
+    assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
+    assert_eq!(
+        rx.blocking_recv(),
+        Some(Some(char::REPLACEMENT_CHARACTER.to_string())),
+    );
+    assert_eq!(rx.blocking_recv(), Some(None));
+}
+
+#[test]
+fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
+    let hub = Arc::new(PtyAttachmentHub::new(1, 1024, 8));
+    let (_, mut companion_events) = hub.attach();
+    let mut reader = ChunkedReader::new(vec![b"desktop", &[0xff], b"tail"]);
+    let (tx, mut rx) = pty_output_channel();
+
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, Some(Arc::clone(&hub)));
+
+    assert_eq!(rx.blocking_recv(), Some(Some("desktop".to_string())));
+    assert_eq!(
+        companion_events.blocking_recv().expect("safe output"),
+        AgentTerminalEvent::Output(b"desktop".to_vec())
+    );
+    assert_eq!(
+        companion_events.blocking_recv().expect("protocol failure"),
+        AgentTerminalEvent::ProtocolError
+    );
+    assert!(companion_events.try_recv().is_err());
+    assert_eq!(
+        rx.blocking_recv(),
+        Some(Some(char::REPLACEMENT_CHARACTER.to_string())),
+        "desktop output should replace malformed UTF-8 without retaining it",
+    );
+    assert_eq!(rx.blocking_recv(), Some(Some("tail".to_string())));
+    assert_eq!(rx.blocking_recv(), Some(None));
+}
+
+#[test]
+fn test_read_pty_output_loop_updates_last_output_time() {
+    let mut reader = ChunkedReader::new(vec![b"output"]);
+    let (tx, mut rx) = pty_output_channel();
+    let last_output = Arc::new(AtomicU64::new(0));
+
+    read_pty_output_loop(
+        &mut reader,
+        tx,
+        "task-reader",
+        Some(Arc::clone(&last_output)),
+        None,
+    );
+
+    assert_eq!(rx.blocking_recv(), Some(Some("output".to_string())));
+    assert!(last_output.load(Ordering::Relaxed) > 0);
+}
+
+#[test]
+fn test_pty_output_batcher_flushes_at_threshold_to_event_and_ring_buffer() {
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
+    let mut batcher = PtyOutputBatcher::new("task-batch".to_string(), 42, Arc::clone(&ring), 5);
+    let mut emitted = Vec::new();
+
+    batcher.push_output("he", &mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    });
+    assert!(
+        emitted.is_empty(),
+        "partial batch should not emit before threshold"
+    );
+
+    batcher.push_output("llo", &mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    });
+
+    assert_eq!(emitted.len(), 1);
+    assert_eq!(emitted[0].0, "pty-output-task-batch");
+    assert_eq!(emitted[0].1["task_id"], "task-batch");
+    assert_eq!(emitted[0].1["data"], "hello");
+    assert_eq!(emitted[0].1["instance_id"], 42);
+    assert_eq!(ring.lock().unwrap().snapshot(), "hello");
+}
+
+#[test]
+fn test_pty_output_batcher_flush_pending_returns_false_for_empty_buffer() {
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
+    let mut batcher = PtyOutputBatcher::new("task-empty".to_string(), 7, ring, 10);
+    let mut emitted = Vec::new();
+
+    assert!(!batcher.flush_pending(&mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    }));
+    assert!(emitted.is_empty());
+
+    batcher.push_output("data", &mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    });
+    assert!(emitted.is_empty());
+    assert!(batcher.flush_pending(&mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    }));
+    assert_eq!(emitted.len(), 1);
+    assert_eq!(emitted[0].1["data"], "data");
+}
+
+#[test]
+fn test_ring_buffer_snapshot_does_not_clear() {
+    let mut buf = RingBuffer::new(100);
+    buf.push(b"hello world");
+    let snap1 = buf.snapshot();
+    assert_eq!(snap1, "hello world");
+    let snap2 = buf.snapshot();
+    assert_eq!(snap2, "hello world", "snapshot must not clear buffer");
+}
+
+#[test]
+fn test_ring_buffer_snapshot_with_overflow() {
+    let mut buf = RingBuffer::new(10);
+    buf.push(b"abcdefghijklmno"); // 15 bytes, capacity 10
+    let snap = buf.snapshot();
+    assert_eq!(snap, "fghijklmno");
+    assert_eq!(snap.len(), 10);
+    // Original buffer still intact
+    let snap2 = buf.snapshot();
+    assert_eq!(snap2, "fghijklmno");
+}
+
+#[tokio::test]
+async fn test_spawn_pty_populates_output_buffer() {
+    let manager = PtyManager::new();
+
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+        CLAUDE_BUFFER_CAPACITY,
+    )));
+    {
+        let mut buf = ring.lock().unwrap();
+        buf.push(b"opencode output data");
+    }
+    {
+        let mut buffers = manager.output_buffers.lock().await;
+        buffers.insert("opencode-task-123".to_string(), Arc::clone(&ring));
+    }
+
+    let result = manager.get_pty_buffer("opencode-task-123").await;
+    assert_eq!(result, Some("opencode output data".to_string()));
+
+    let result2 = manager.get_pty_buffer("opencode-task-123").await;
+    assert_eq!(
+        result2,
+        Some("opencode output data".to_string()),
+        "buffer must be replayable on re-attach"
+    );
+}
