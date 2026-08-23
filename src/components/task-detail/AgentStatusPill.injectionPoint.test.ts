@@ -43,7 +43,6 @@ vi.mock('../../lib/agentTerminalPanel', () => ({
   getAgentStatusText: (_status: string, runningText: string) => runningText,
   getAgentStageLabel: (stage: string) => stage,
   getAgentSessionStatusBadgeClass: () => '',
-  syncAgentPanelStatusFromSession: () => {},
   hydrateAgentTerminalPtyInstance: () => {},
 }))
 

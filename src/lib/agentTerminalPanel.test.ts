@@ -13,7 +13,6 @@ import {
   getAgentStageLabel,
   getAgentStatusText,
   hydrateAgentTerminalPtyInstance,
-  syncAgentPanelStatusFromSession,
   writeAgentTerminalTranscription,
 } from './agentTerminalPanel'
 import { writePty } from './ipc'
@@ -47,38 +46,6 @@ describe('agent terminal panel helpers', () => {
     expect(getAgentStageLabel('implement', lowerCaseLabels)).toBe('implementing')
     expect(getAgentStageLabel('implement', titleCaseLabels)).toBe('Implementing')
     expect(getAgentStageLabel('custom_stage', lowerCaseLabels)).toBe('custom_stage')
-  })
-
-  it('syncs session statuses into panel state and terminal activity from terminalPool', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7, hasOutput: false })
-    const setStatus = vi.fn()
-    const setTerminalActive = vi.fn()
-
-    const nextStatus = syncAgentPanelStatusFromSession({
-      taskId: 'T-1',
-      sessionStatus: 'running',
-      setStatus,
-      setTerminalActive,
-    })
-
-    expect(nextStatus).toBe('running')
-    expect(setStatus).toHaveBeenCalledWith('running')
-    expect(setTerminalActive).toHaveBeenCalledWith(true)
-    expect(getShellLifecycleState).toHaveBeenCalledWith('T-1')
-  })
-
-  it('syncs paused sessions into the paused panel state', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7, hasOutput: false })
-    const setStatus = vi.fn()
-
-    const nextStatus = syncAgentPanelStatusFromSession({
-      taskId: 'T-1',
-      sessionStatus: 'paused',
-      setStatus,
-    })
-
-    expect(nextStatus).toBe('paused')
-    expect(setStatus).toHaveBeenCalledWith('paused')
   })
 
   it('writes transcription only when terminalPool reports an active PTY', async () => {

@@ -1,16 +1,9 @@
 import { writePty } from './ipc'
 import { getShellLifecycleState, restorePtyInstance } from './terminalPool'
-import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from './agentPanelSessionSync'
+import type { AgentPanelStatus } from './agentPanelSessionSync'
 
 export type AgentStageLabels = Record<string, string>
 export type AgentSessionStatusBadgeVariant = 'soft' | 'badge'
-
-interface SyncAgentPanelStatusOptions {
-  taskId: string
-  sessionStatus: string | null | undefined
-  setStatus: (status: AgentPanelStatus) => void
-  setTerminalActive?: (active: boolean) => void
-}
 
 export function getAgentStatusText(status: AgentPanelStatus, runningText: string | null): string | null {
   switch (status) {
@@ -35,20 +28,6 @@ export function getAgentSessionStatusBadgeClass(sessionStatus: string, variant: 
     case 'paused': return 'badge-warning'
     default: return 'badge-ghost'
   }
-}
-
-export function syncAgentPanelStatusFromSession({
-  taskId,
-  sessionStatus,
-  setStatus,
-  setTerminalActive,
-}: SyncAgentPanelStatusOptions): AgentPanelStatus {
-  const nextStatus = getAgentPanelStatusFromSessionStatus(sessionStatus)
-  setStatus(nextStatus)
-  if (setTerminalActive) {
-    setTerminalActive(getShellLifecycleState(taskId).ptyActive)
-  }
-  return nextStatus
 }
 
 export function hydrateAgentTerminalPtyInstance(taskId: string, currentPtyInstance: number): void {

@@ -19,7 +19,7 @@ interface AgentStatusChangedEvent {
 
 interface AgentStatusChangedHandlerOptions {
   taskId: string
-  setStatus: (status: AgentPanelStatus) => void
+  setStatus?: (status: AgentPanelStatus) => void
   onRunning?: () => void
   onPtyInstanceId?: (ptyInstanceId: number) => void
 }
@@ -67,7 +67,7 @@ export function createAgentStatusChangedHandler({
     const nextStatus = getAgentPanelStatusFromSessionStatus(event.payload.status)
     if (nextStatus === 'idle') return
 
-    setStatus(nextStatus)
+    setStatus?.(nextStatus)
     if (
       typeof event.payload.pty_instance_id === 'number' &&
       shouldHydratePtyInstanceFromAgentStatusMetadata(event.payload.status, event.payload.kind)
