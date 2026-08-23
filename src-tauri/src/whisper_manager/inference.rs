@@ -13,6 +13,19 @@ pub struct TranscriptionResult {
 }
 
 impl WhisperManager {
+    #[cfg(test)]
+    pub(crate) fn with_transcription_override_for_test<F>(
+        size: super::WhisperModelSize,
+        transcribe: F,
+    ) -> Self
+    where
+        F: Fn(&[f32]) -> Result<TranscriptionResult, WhisperError> + Send + Sync + 'static,
+    {
+        let mut manager = Self::with_active_model(size);
+        manager.transcription_override = Some(std::sync::Arc::new(transcribe));
+        manager
+    }
+
     /// Transcribe 16 kHz mono f32 PCM audio data to text.
     ///
     /// Lazily loads the active model on first use.
@@ -22,6 +35,10 @@ impl WhisperManager {
     /// - [`WhisperError::ContextLoadError`] if the context cannot be initialised.
     /// - [`WhisperError::InferenceError`] if the inference call fails.
     pub fn transcribe(&self, audio_data: &[f32]) -> Result<TranscriptionResult, WhisperError> {
+        #[cfg(test)]
+        if let Some(transcribe) = self.transcription_override.as_ref() {
+            return transcribe(audio_data);
+        }
         let loaded_context = self.acquire_context()?;
         let context = loaded_context.get().ok_or_else(|| {
             WhisperError::ContextLoadError("Context unexpectedly absent after load".to_string())

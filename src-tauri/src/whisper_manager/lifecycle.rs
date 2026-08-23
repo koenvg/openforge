@@ -21,6 +21,8 @@ impl WhisperManager {
             active_model: std::sync::RwLock::new(size),
             client: Client::new(),
             idle_reaper: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            transcription_override: None,
         }
     }
 
