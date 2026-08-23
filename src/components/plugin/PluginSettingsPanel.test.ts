@@ -386,7 +386,23 @@ describe('GlobalPluginSettingsPanel', () => {
     render(GlobalPluginSettingsPanel)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }))
+    expect(uninstallPlugin).not.toHaveBeenCalled()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm uninstall plugin: Test Plugin' }))
     expect(uninstallPlugin).toHaveBeenCalledWith('test-plugin')
+  })
+
+  it('does not uninstall when the confirmation is cancelled', async () => {
+    vi.mocked(uninstallPlugin).mockResolvedValue(undefined)
+    installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
+
+    render(GlobalPluginSettingsPanel)
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(uninstallPlugin).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' })).toBeTruthy()
   })
 
   it('surfaces uninstall errors through the existing action error message', async () => {
@@ -396,6 +412,7 @@ describe('GlobalPluginSettingsPanel', () => {
     render(GlobalPluginSettingsPanel)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Test Plugin' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm uninstall plugin: Test Plugin' }))
     expect(screen.getByText('uninstall failed')).toBeTruthy()
   })
 
