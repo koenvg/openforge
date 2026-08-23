@@ -754,7 +754,10 @@ mod cleanup_route_tests {
 
     #[test]
     fn empty_labels_route_to_backlog() {
-        assert_eq!(decide_cleanup_route(&[], "github_issues"), CleanupRoute::Backlog);
+        assert_eq!(
+            decide_cleanup_route(&[], "github_issues"),
+            CleanupRoute::Backlog
+        );
     }
 }
 

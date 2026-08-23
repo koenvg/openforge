@@ -17,7 +17,7 @@ pub async fn create_cleanup_issue(
     title: &str,
     body: &str,
 ) -> Result<String, String> {
-    let token = github_token()?;
+    let token = github_token().await?;
     let repo = get_project_repo(db, project_id)?.ok_or_else(|| {
         "Could not resolve a GitHub repository from this project's git remote".to_string()
     })?;
@@ -85,7 +85,9 @@ pub fn evaluate_issues_readiness(
         },
         Some(false) => IssuesReadiness {
             ready: false,
-            reason: Some(format!("The configured GitHub token can't access {owner}/{name}.")),
+            reason: Some(format!(
+                "The configured GitHub token can't access {owner}/{name}."
+            )),
         },
         None => IssuesReadiness {
             ready: false,
@@ -100,7 +102,7 @@ pub async fn check_github_issues_ready(
     db: &Mutex<db::Database>,
     project_id: Option<String>,
 ) -> Result<IssuesReadiness, String> {
-    let token = match github_token() {
+    let token = match github_token().await {
         Ok(t) => t,
         Err(_) => {
             return Ok(evaluate_issues_readiness(
