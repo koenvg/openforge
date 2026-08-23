@@ -179,7 +179,7 @@ export class TaskBrowserPermissionPolicy {
 
   /**
    * Decisions are remembered per plugin and origin, never per Task, because every Task shares one
-   * Plugin Browser Session. Approving a site in one Task approves it in all of them. See ADR 0012.
+   * Plugin Browser Session. Approving a site in one Task approves it in all of them.
    */
   async createSessionHandler(pluginId: string): Promise<TaskBrowserPermissionSessionHandler> {
     await this.initialize()

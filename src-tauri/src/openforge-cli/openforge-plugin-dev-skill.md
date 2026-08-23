@@ -5,7 +5,7 @@ description: Create, update, or review OpenForge plugin packages using the insta
 
 # OpenForge plugin authoring
 
-Use this skill when creating, updating, or reviewing an OpenForge plugin package. The canonical human-facing guide is `docs/plugin-authoring.md`; check `packages/plugin-sdk/src/types.ts` for exact TypeScript interfaces and `docs/adr/0002-openforge-plugin-package-runtime.md` for deeper runtime rationale.
+Use this skill when creating, updating, or reviewing an OpenForge plugin package. The canonical human-facing guide is `docs/plugin-authoring.md`; check `packages/plugin-sdk/src/types.ts` for exact TypeScript interfaces.
 
 Default to building a normal OpenForge plugin package. Only focus on scheduler-style task APIs when the plugin's product goal is to create/start OpenForge tasks on behalf of a user or background service.
 

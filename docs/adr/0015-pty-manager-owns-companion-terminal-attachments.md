@@ -1,3 +1,0 @@
-# PTY manager owns the Companion terminal attachment seam
-
-The Companion Gateway obtains terminal access through a purpose-built Rust PTY-manager attachment API that resolves a Task's running Agent Session and exposes bounded replay, live output, input, resize, and exit signals as one narrow capability. The attachment API cannot start, resume, abort, replace, or kill a session. The gateway does not reconstruct terminal state from the global App Event Bus, use generic command dispatch, or depend on Electron renderer state; the desktop terminal pool remains responsible for desktop UI lifecycle while the PTY manager remains authoritative for the underlying process and stream.

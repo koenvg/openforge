@@ -46,6 +46,5 @@ Plugins can configure project start-prompt contributions for plugin-owned workfl
 - [Plugin authoring guide](../plugin-authoring.md): package metadata, SDK import surface, frontend and backend entry points, capabilities, storage/configuration, task APIs, unavailable APIs, testing, and the authoring checklist.
 - [Plugin capabilities reference](./capabilities.md): available/unavailable capability names, `requires` metadata behavior, frontend/backend capability split, and capability error messages.
 - [Plugin SDK file content migration](../plugin-sdk-file-api-migration.md): how to handle `FileSystemAPI.readFile()` returning typed `FileContent` values for text, images, documents, binary files, and large-file placeholders.
-- [Plugin package/runtime ADR](../adr/0002-openforge-plugin-package-runtime.md): historical rationale for the trusted package runtime model. Read this only when you need design background; the authoring guide is the source for day-to-day plugin development.
 
 A useful first pass for a new plugin is: declare metadata, choose frontend/backend entry points, list the required host capabilities, add focused tests with `@openforge-app/plugin-sdk/testing`, verify licensing/package boundaries, and confirm the built package includes its `dist/` artifacts.

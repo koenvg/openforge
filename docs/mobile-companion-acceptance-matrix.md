@@ -2,20 +2,9 @@
 
 This is the release gate for privately distributed Mobile Companion v1 candidates. Complete it with the exact signed IPA/APK that will be distributed. Simulator/emulator results may supplement evidence but do not satisfy a physical-device cell.
 
-## Current gate status (KVG-3111)
+## Using this matrix
 
-| Field | Recorded value |
-| --- | --- |
-| Status | **BLOCKED — physical matrix not executed** |
-| Documentation refresh | 2026-08-10; matrix aligned with the current Mobile Project Board, prompt-only Task creation, Companion Task Authority, and interactive Agent terminal surface |
-| Candidate | No signed candidate for this revision was built, installed, or distributed during KVG-3111 |
-| Physical devices | None tested. The KVG-2952 environment assessment found no connected iOS or Android device and no tester-owned phone/tailnet pair |
-| Physical execution | None. KVG-3111 performed documentation and automated verification only |
-| Current automated evidence | `pnpm mobile:contract:check` passed for all 12 generated Companion operations; `./scripts/mobile-companion check` passed contract drift, formatting, analysis, and 216 Flutter tests; `cargo test companion_gateway` passed 96 focused Rust tests; focused Companion Settings/contract-generator/release Vitest runs passed 23 tests |
-| Automated coverage represented | Four-lane Board projection and navigation, Task detail, prompt-only Create, Start/Delete/Complete authority and confirmation, terminal attachment/recovery, credential and lifecycle boundaries, and check-before-retry recovery after uncertain mutations |
-| Blocking owner actions | Supply protected Apple/Android signing environments, full Xcode on the iOS build host, one physical iOS device, one physical Android device, and a tester-owned tailnet; build the exact release candidates and execute every applicable row below |
-
-Do not change this record to **PASS** until all required cells have evidence. Never infer a physical pass from unit tests, simulators, code inspection, or CI build success.
+The checked-in `BLOCKED` cells are an unexecuted baseline, not evidence for a release. For each candidate, copy this matrix into the release evidence, identify the exact signed artifacts and devices, and record every applicable result there. Do not infer a physical pass from unit tests, simulators, code inspection, or CI build success.
 
 ## Evidence requirements
 
@@ -50,7 +39,7 @@ Use `PASS`, `FAIL`, `BLOCKED`, or `N/A` in each platform/path cell. `N/A` requir
 | Start a Backlog Task from detail with one tap; use its saved desktop defaults, suppress duplicate taps while pending, remain on detail, and refresh Task/Board/terminal availability | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Repeat with each supported saved provider default; no mobile run-configuration inputs |
 | Trigger a branch/workspace choice that requires desktop judgment; Start refuses without side effects and shows a desktop-action-required recovery message | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm no workspace, Agent Session, or status transition was created |
 | Interrupt a Start response; do not retry or fail over automatically, clear stale state, and refetch Task detail plus Board before offering another attempt | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Resolve success/failure from authoritative current state |
-| Cancel Delete for a Backlog Task, then confirm it; cancellation sends no request, pending state blocks duplicates, and success removes it from the active Board while retaining Completed Task reference data | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Delete is detail-only and backlog-only; it is not a hard-delete path |
+| Cancel Delete for a Backlog Task, then confirm it; cancellation sends no request, pending state blocks duplicates, and success permanently removes the Task and its reference data | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Delete is detail-only and backlog-only; Complete is the path that retains reference data |
 | Cancel and then confirm Complete from Task detail in each active lane: Focus, In Flight, and Out of Focus | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirmation names the Task and discloses worktree, owned-branch, and uncommitted-work cleanup consequences |
 | Complete while an Agent terminal is active; confirmation warns that the running Agent and all Task shells stop, the terminal closes safely, and the Task leaves the active Board | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Completed Task reference data must remain available on desktop |
 | Attach the Task-scoped Terminal tab to an already-running Agent PTY; verify ready-gated UTF-8 input, output, resize, Details/Terminal switching, reconnect/retry states, exit state, and foreground suspension behavior | BLOCKED | BLOCKED | BLOCKED | BLOCKED | Confirm no ordinary shell, standalone Agent control, or terminal transcript persistence is exposed |

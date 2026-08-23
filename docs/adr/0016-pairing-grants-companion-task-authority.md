@@ -1,7 +1,0 @@
----
-status: accepted
----
-
-# Pairing grants Companion Task authority without re-approval
-
-During pre-release development, every existing and newly approved **Paired Companion Device** receives narrow authority over explicit Companion operations. A device may create a prompt-only backlog Task in a visible Project; start it using saved defaults; Delete or Complete it through the shared desktop lifecycle; Set Aside or Return to Board active Tasks; merge or enqueue the single currently eligible pull request; run the saved Project command in an active Task workspace shell; and refresh GitHub status for the Selected Project. Availability is desktop-authoritative and each mutation has its own typed endpoint—pairing never grants generic command dispatch, provider, permission, worktree, label, or dependency controls. Complete may stop a running Agent before Task workspace cleanup. Existing devices gain this authority without re-pairing because pairing already grants command-equivalent Companion terminal authority. Companion Task authority remains valid while the macOS screen is locked so away-from-desk operation still works, but action controls are presented only while the Companion app is foregrounded; gateway disablement and device revocation remain the authorization boundaries. A future distribution-readiness review may introduce narrower capabilities or renewed consent, but the pre-release protocol does not add a scope system for these actions.

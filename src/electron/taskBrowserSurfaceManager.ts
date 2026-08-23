@@ -377,8 +377,8 @@ export class TaskBrowserSurfaceManager {
   }
 
   /**
-   * Blast radius is the whole plugin: every Task loses its login, because they all share one
-   * Plugin Browser Session. See ADR 0012.
+   * Blast radius is the whole plugin: every Task loses its login because every Task shares one
+   * Plugin Browser Session.
    */
   async resetSession(pluginId: string): Promise<void> {
     if (!pluginId.trim()) {
