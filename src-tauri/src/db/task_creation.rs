@@ -482,6 +482,100 @@ mod tests {
     }
 
     #[test]
+    fn test_create_task_with_metadata_rolls_back_every_write_when_label_assignment_fails() {
+        let (db, path) = make_test_db("create_task_with_metadata_rollback");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("Project", "/tmp/create-task-with-metadata-rollback")
+            .expect("create project");
+        let dependency = db
+            .create_task("Dependency", "backlog", Some(&project.id), None, None)
+            .expect("create dependency");
+        {
+            let conn = db.connection();
+            conn.lock()
+                .expect("lock connection")
+                .execute_batch(
+                    "CREATE TRIGGER fail_blocked_task_label_assignment
+                     BEFORE INSERT ON task_label_assignments
+                     WHEN (SELECT name FROM task_labels WHERE id = NEW.label_id) = 'blocked'
+                     BEGIN
+                         SELECT RAISE(ABORT, 'forced label assignment failure');
+                     END;",
+                )
+                .expect("create failure trigger");
+        }
+        let dependency_ids = [dependency.id];
+        let label_names = ["cleanup".to_string(), "blocked".to_string()];
+        let failed_task_id = "T-2";
+
+        let error = db
+            .create_task_with_metadata(
+                super::NewTaskOptions {
+                    initial_prompt: "Atomic task",
+                    status: "backlog",
+                    project_id: Some(&project.id),
+                    prompt: None,
+                    permission_mode: None,
+                    worktree_source: None,
+                    worktree_branch: None,
+                    title: None,
+                    source_ticket_url: None,
+                    code_cleanup_enabled: Some(true),
+                    task_display_title_updates_enabled: Some(false),
+                    ai_provider: Some("opencode"),
+                },
+                &dependency_ids,
+                &label_names,
+            )
+            .expect_err("label assignment failure must abort task creation");
+
+        assert!(matches!(error, super::TaskCreationError::Storage(_)));
+        assert!(db
+            .get_task(failed_task_id)
+            .expect("get rolled-back task")
+            .is_none());
+        for key in [
+            "code_cleanup_tasks_enabled",
+            "task_display_title_metadata_updates_enabled",
+            "ai_provider",
+        ] {
+            assert_eq!(
+                db.get_task_config(failed_task_id, key)
+                    .expect("get rolled-back task config"),
+                None,
+                "task config snapshot {key} was not rolled back"
+            );
+        }
+        assert!(db
+            .get_project_task_labels(&project.id)
+            .expect("get rolled-back labels")
+            .is_empty());
+        {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock connection");
+            let (dependency_count, label_assignment_count): (i64, i64) = conn
+                .query_row(
+                    "SELECT
+                         (SELECT COUNT(*) FROM task_dependencies WHERE task_id = ?1),
+                         (SELECT COUNT(*) FROM task_label_assignments WHERE task_id = ?1)",
+                    [failed_task_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .expect("count rolled-back task metadata");
+            assert_eq!(dependency_count, 0);
+            assert_eq!(label_assignment_count, 0);
+        }
+
+        let next_task = db
+            .create_task("Next task", "backlog", Some(&project.id), None, None)
+            .expect("create next task");
+        assert_eq!(next_task.id, failed_task_id);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+    #[test]
     fn test_create_task_and_retrieve() {
         let (db, path) = make_test_db("create_task");
         db.set_config("task_id_prefix", "T").unwrap();
