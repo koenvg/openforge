@@ -124,9 +124,9 @@ export function computeEffectiveProjectSettings(
 /** Whether a setting should be shown given the current effective values.
  *  A setting with `showWhen` is visible only when values[showWhen.key] === showWhen.equals. */
 export function isSettingVisible(
-  def: HierarchicalSettingDef,
+  def: HierarchicalSettingDef | undefined,
   values: Record<string, string>,
 ): boolean {
-  if (!def.showWhen) return true
+  if (!def || !def.showWhen) return true
   return values[def.showWhen.key] === def.showWhen.equals
 }

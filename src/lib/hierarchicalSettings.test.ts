@@ -53,7 +53,8 @@ describe('isSettingVisible', () => {
   })
 
   it('always shows a setting without showWhen', () => {
-    const toggle = HIERARCHICAL_SETTINGS.find((s) => s.key === 'handoff_notes_enabled')!
+    const toggle = HIERARCHICAL_SETTINGS.find((s) => s.key === 'code_cleanup_tasks_enabled')!
+    expect(toggle).toBeDefined()
     expect(isSettingVisible(toggle, {})).toBe(true)
   })
 })
