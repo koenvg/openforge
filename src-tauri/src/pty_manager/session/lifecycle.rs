@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use super::super::events::SharedRingBuffer;
 use super::super::managed_process::{
-    terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity,
+    terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity, RootReapMode,
 };
 use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
@@ -162,8 +162,13 @@ impl PtyManager {
         terminate_managed_process_tree_with_root_reaper(
             &session.managed_process,
             MANAGED_PROCESS_TERM_TIMEOUT,
-            || {
-                let _ = session.child.try_wait();
+            |mode| match mode {
+                RootReapMode::Poll => {
+                    let _ = session.child.try_wait();
+                }
+                RootReapMode::Wait => {
+                    let _ = session.child.wait();
+                }
             },
         )
         .await

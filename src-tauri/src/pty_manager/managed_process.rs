@@ -7,6 +7,11 @@ const PROCESS_IDENTITY_VERSION: u32 = 1;
 const KILL_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(2);
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RootReapMode {
+    Poll,
+    Wait,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ManagedProcessIdentity {
@@ -261,7 +266,7 @@ async fn wait_for_managed_exit(
     identity: &ManagedProcessIdentity,
     tracked: &mut HashMap<i32, u64>,
     timeout: Duration,
-    root_reaper: &mut impl FnMut(),
+    root_reaper: &mut impl FnMut(RootReapMode),
 ) -> Result<Vec<ProcessSnapshot>, String> {
     wait_for_managed_exit_with_snapshot(
         identity,
@@ -277,20 +282,20 @@ async fn wait_for_managed_exit_with_snapshot(
     identity: &ManagedProcessIdentity,
     tracked: &mut HashMap<i32, u64>,
     timeout: Duration,
-    root_reaper: &mut impl FnMut(),
+    root_reaper: &mut impl FnMut(RootReapMode),
     snapshot_processes: &mut impl FnMut() -> HashMap<i32, ProcessSnapshot>,
 ) -> Result<Vec<ProcessSnapshot>, String> {
     let deadline = Instant::now() + timeout;
     loop {
-        root_reaper();
+        root_reaper(RootReapMode::Poll);
         let processes = snapshot_processes();
         let remaining = collect_managed_processes(identity, &processes, tracked)?;
         if remaining.is_empty() {
-            root_reaper();
+            root_reaper(RootReapMode::Poll);
             return Ok(remaining);
         }
         if Instant::now() >= deadline {
-            root_reaper();
+            root_reaper(RootReapMode::Poll);
             let processes = snapshot_processes();
             return collect_managed_processes(identity, &processes, tracked);
         }
@@ -302,16 +307,16 @@ pub(super) async fn terminate_managed_process_tree(
     identity: &ManagedProcessIdentity,
     term_timeout: Duration,
 ) -> Result<(), String> {
-    terminate_managed_process_tree_with_root_reaper(identity, term_timeout, || {}).await
+    terminate_managed_process_tree_with_root_reaper(identity, term_timeout, |_| {}).await
 }
 
 pub(super) async fn terminate_managed_process_tree_with_root_reaper(
     identity: &ManagedProcessIdentity,
     term_timeout: Duration,
-    mut root_reaper: impl FnMut(),
+    mut root_reaper: impl FnMut(RootReapMode),
 ) -> Result<(), String> {
     identity.validate()?;
-    root_reaper();
+    root_reaper(RootReapMode::Poll);
     let processes = process_snapshot();
     let mut tracked = HashMap::from([(identity.root_pid, identity.root_start_time)]);
     let managed = collect_managed_processes(identity, &processes, &mut tracked)?;
@@ -327,6 +332,7 @@ pub(super) async fn terminate_managed_process_tree_with_root_reaper(
     }
 
     signal_processes(&remaining, libc::SIGKILL)?;
+    root_reaper(RootReapMode::Wait);
     let remaining = wait_for_managed_exit(
         identity,
         &mut tracked,
@@ -447,7 +453,7 @@ mod tests {
         };
         let root_reaper_calls = std::cell::Cell::new(0);
         let root_reaped = std::cell::Cell::new(false);
-        let mut root_reaper = || {
+        let mut root_reaper = |_| {
             root_reaper_calls.set(root_reaper_calls.get() + 1);
             if root_reaper_calls.get() == 2 {
                 root_reaped.set(true);
@@ -493,8 +499,14 @@ mod tests {
         let result = terminate_managed_process_tree_with_root_reaper(
             &identity,
             Duration::from_millis(100),
-            || {
-                if root.try_wait().ok().flatten().is_some() {
+            |mode| match mode {
+                RootReapMode::Poll => {
+                    if root.try_wait().ok().flatten().is_some() {
+                        root_reaped = true;
+                    }
+                }
+                RootReapMode::Wait => {
+                    root.wait().expect("SIGKILLed root should be reaped");
                     root_reaped = true;
                 }
             },
