@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn refresh_task_github_status_selects_only_open_prs_for_requested_task() {
-    let (db, path) = make_test_db("refresh_task_github_status_selects_task_prs");
+    let (db, _temp_dir) = make_test_db("refresh_task_github_status_selects_task_prs");
     let task = db
         .create_task("Selected task", "doing", None, None, None)
         .expect("create selected task");
@@ -58,20 +58,16 @@ fn refresh_task_github_status_selects_only_open_prs_for_requested_task() {
     assert_eq!(prs.len(), 1);
     assert_eq!(prs[0].id, 101);
     assert_eq!(prs[0].ticket_id, task.id);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn refresh_task_github_status_rejects_unknown_task_before_polling() {
-    let (db, path) = make_test_db("refresh_task_github_status_unknown_task");
+    let (db, _temp_dir) = make_test_db("refresh_task_github_status_unknown_task");
     let db = Mutex::new(db);
 
     let error = get_open_prs_for_task(&db, "T-missing").expect_err("missing task");
 
     assert!(error.contains("Task not found: T-missing"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]

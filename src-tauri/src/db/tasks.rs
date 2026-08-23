@@ -188,13 +188,12 @@ impl super::Database {
 mod tests {
     use crate::db::test_helpers::*;
     use std::{
-        fs,
         sync::{Arc, Barrier},
         thread,
     };
     #[test]
     fn test_update_task_initial_prompt_replaces_prompt_atomically_and_preserves_relationships() {
-        let (db, path) = make_test_db("update_task_initial_prompt_preserves_metadata");
+        let (db, _temp_dir) = make_test_db("update_task_initial_prompt_preserves_metadata");
         let project = db
             .create_project("Project", "/tmp/update-task-initial-prompt")
             .expect("create project");
@@ -219,12 +218,11 @@ mod tests {
         assert_eq!(updated.depends_on, before.depends_on);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_initial_prompt_rejects_active_task_and_preserves_prompts() {
-        let (db, path) = make_test_db("update_task_initial_prompt_rejects_active");
+        let (db, _temp_dir) = make_test_db("update_task_initial_prompt_rejects_active");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
@@ -242,12 +240,11 @@ mod tests {
         assert_eq!(updated.prompt.as_deref(), Some("Original"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_initial_prompt_rejects_task_with_execution_history_even_if_backlog() {
-        let (db, path) = make_test_db("update_task_initial_prompt_rejects_history");
+        let (db, _temp_dir) = make_test_db("update_task_initial_prompt_rejects_history");
         let task = db
             .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
@@ -274,12 +271,11 @@ mod tests {
         assert_eq!(updated.prompt.as_deref(), Some("Original"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_initial_prompt_is_atomic_when_racing_lifecycle_transition() {
-        let (db, path) = make_test_db("update_task_initial_prompt_race");
+        let (db, _temp_dir) = make_test_db("update_task_initial_prompt_race");
         let task = db
             .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
@@ -319,12 +315,11 @@ mod tests {
         }
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_source_ticket_url_sets_changes_and_clears() {
-        let (db, path) = make_test_db("update_task_source_ticket_url");
+        let (db, _temp_dir) = make_test_db("update_task_source_ticket_url");
 
         // Starts with no source ticket (the case this feature targets: it was
         // never set at creation).
@@ -362,12 +357,11 @@ mod tests {
         assert_eq!(cleared_none.source_ticket_url, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_title_sets_title_regardless_of_status() {
-        let (db, path) = make_test_db("update_task_title_any_status");
+        let (db, _temp_dir) = make_test_db("update_task_title_any_status");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
@@ -385,12 +379,11 @@ mod tests {
         assert_eq!(updated.initial_prompt, "Original");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_task_title_empty_clears_to_null() {
-        let (db, path) = make_test_db("update_task_title_empty_clears");
+        let (db, _temp_dir) = make_test_db("update_task_title_empty_clears");
 
         let task = db
             .create_task("Original", "done", None, None, None)
@@ -409,12 +402,11 @@ mod tests {
         assert_eq!(cleared.title_source, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_generated_task_title_sets_title_once_for_unset_task() {
-        let (db, path) = make_test_db("generated_task_title_once");
+        let (db, _temp_dir) = make_test_db("generated_task_title_once");
 
         let task = db
             .create_task("Original prompt", "doing", None, None, None)
@@ -436,12 +428,11 @@ mod tests {
         assert_eq!(unchanged.title_source.as_deref(), Some("generated"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_generated_task_title_never_overwrites_manual_title() {
-        let (db, path) = make_test_db("generated_task_title_manual_guard");
+        let (db, _temp_dir) = make_test_db("generated_task_title_manual_guard");
 
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
@@ -469,6 +460,5 @@ mod tests {
         assert_eq!(unchanged.title_generated_at, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

@@ -66,12 +66,12 @@ fn bootstrap() -> PairingBootstrap {
     }
 }
 
-fn test_coordinator(name: &str, ttl: Duration) -> (Arc<PairingCoordinator>, std::path::PathBuf) {
-    let (database, path) = crate::db::test_helpers::make_test_db(name);
+fn test_coordinator(name: &str, ttl: Duration) -> (Arc<PairingCoordinator>, tempfile::TempDir) {
+    let (database, temp_dir) = crate::db::test_helpers::make_test_db(name);
     let store: Arc<dyn CompanionDeviceStore> = Arc::new(DatabaseCompanionDeviceStore::new(
         Arc::new(std::sync::Mutex::new(database)),
     ));
-    (Arc::new(PairingCoordinator::new(store, ttl)), path)
+    (Arc::new(PairingCoordinator::new(store, ttl)), temp_dir)
 }
 
 async fn submit_request(
@@ -134,8 +134,9 @@ async fn poll_request(router: &axum::Router, request_id: &str, secret: &str) -> 
 
 #[tokio::test]
 async fn approval_issues_one_device_credential_that_authenticates_status_and_can_be_revoked() {
-    let (coordinator, path) =
+    let (coordinator, temp_dir) =
         test_coordinator("companion_pairing_router_approval", Duration::from_secs(60));
+    let db_path = temp_dir.path().join("test.db");
     let session = coordinator
         .start(bootstrap())
         .expect("start pairing session");
@@ -286,7 +287,7 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
     assert_eq!(devices.len(), 1);
     assert_eq!(devices[0].device_name, "Koen's iPhone");
     assert_eq!(devices[0].platform, "ios");
-    let persisted_row = std::fs::read(&path).expect("SQLite database bytes");
+    let persisted_row = std::fs::read(&db_path).expect("SQLite database bytes");
     assert!(
         !persisted_row
             .windows(credential.len())
@@ -344,13 +345,11 @@ async fn approval_issues_one_device_credential_that_authenticates_status_and_can
     let envelope: CompanionErrorEnvelope =
         serde_json::from_value(response_json(removed).await).expect("error envelope");
     assert_eq!(envelope.error.code.as_str(), "unauthenticated");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn identical_pairing_submission_retry_returns_the_original_request() {
-    let (coordinator, path) = test_coordinator(
+    let (coordinator, _temp_dir) = test_coordinator(
         "companion_pairing_idempotent_submission",
         Duration::from_secs(60),
     );
@@ -380,13 +379,11 @@ async fn identical_pairing_submission_retry_returns_the_original_request() {
 
     let changed_platform = submit_request(&router, secret, "My Android phone", "ios").await;
     assert_eq!(changed_platform.status(), StatusCode::GONE);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn rejection_cancellation_expiry_and_secret_reuse_never_issue_credentials() {
-    let (coordinator, path) = test_coordinator(
+    let (coordinator, _temp_dir) = test_coordinator(
         "companion_pairing_router_rejection",
         Duration::from_millis(20),
     );
@@ -446,13 +443,11 @@ async fn rejection_cancellation_expiry_and_secret_reuse_never_issue_credentials(
     assert_eq!(expired.status(), StatusCode::GONE);
     assert!(response_json(expired).await.get("credential").is_none());
     assert!(coordinator.devices().expect("paired devices").is_empty());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn pairing_submission_is_rate_limited_without_echoing_secrets() {
-    let (coordinator, path) = test_coordinator(
+    let (coordinator, _temp_dir) = test_coordinator(
         "companion_pairing_router_rate_limit",
         Duration::from_secs(60),
     );
@@ -490,13 +485,11 @@ async fn pairing_submission_is_rate_limited_without_echoing_secrets() {
     )
     .await;
     assert_eq!(legitimate.status(), StatusCode::ACCEPTED);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn malformed_and_oversized_pairing_requests_use_safe_contract_errors() {
-    let (coordinator, path) = test_coordinator(
+    let (coordinator, _temp_dir) = test_coordinator(
         "companion_pairing_router_invalid_boundary",
         Duration::from_secs(60),
     );
@@ -608,6 +601,4 @@ async fn malformed_and_oversized_pairing_requests_use_safe_contract_errors() {
         limited,
         "oversized requests must consume the peer rate limit"
     );
-
-    let _ = std::fs::remove_file(path);
 }

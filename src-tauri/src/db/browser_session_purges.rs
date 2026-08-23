@@ -82,7 +82,7 @@ mod tests {
     /// never schedule a purge because that would log the user out everywhere.
     #[test]
     fn task_completion_records_no_browser_purge_intent() {
-        let (db, path) = make_test_db("browser_purge_task_completion");
+        let (db, _temp_dir) = make_test_db("browser_purge_task_completion");
         insert_test_task(&db);
 
         db.complete_task("T-100").expect("complete task");
@@ -93,12 +93,11 @@ mod tests {
             .list_browser_session_purge_intents()
             .expect("list purge intents")
             .is_empty());
-        std::fs::remove_file(path).ok();
     }
 
     #[test]
     fn hard_task_deletion_records_no_browser_purge_intent() {
-        let (db, path) = make_test_db("browser_purge_hard_task_delete");
+        let (db, _temp_dir) = make_test_db("browser_purge_hard_task_delete");
         insert_test_task(&db);
 
         db.hard_delete_task("T-100").expect("hard delete task");
@@ -107,12 +106,11 @@ mod tests {
             .list_browser_session_purge_intents()
             .expect("list purge intents")
             .is_empty());
-        std::fs::remove_file(path).ok();
     }
 
     #[test]
     fn plugin_uninstall_records_one_durable_purge_intent_transactionally() {
-        let (db, path) = make_test_db("browser_purge_plugin_uninstall");
+        let (db, _temp_dir) = make_test_db("browser_purge_plugin_uninstall");
         db.install_plugin(&plugin("browser"))
             .expect("install plugin");
 
@@ -124,12 +122,11 @@ mod tests {
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].scope, "plugin");
         assert_eq!(intents[0].owner_id, "browser");
-        std::fs::remove_file(path).ok();
     }
 
     #[test]
     fn failed_plugin_uninstall_rolls_back_its_purge_intent() {
-        let (db, path) = make_test_db("browser_purge_plugin_rollback");
+        let (db, _temp_dir) = make_test_db("browser_purge_plugin_rollback");
         db.install_plugin(&plugin("browser"))
             .expect("install plugin");
         {
@@ -148,12 +145,11 @@ mod tests {
             .list_browser_session_purge_intents()
             .expect("list purge intents")
             .is_empty());
-        std::fs::remove_file(path).ok();
     }
 
     #[test]
     fn project_deletion_records_no_browser_purge_intents_for_its_tasks() {
-        let (db, path) = make_test_db("browser_purge_project_delete");
+        let (db, _temp_dir) = make_test_db("browser_purge_project_delete");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -168,12 +164,11 @@ mod tests {
             .list_browser_session_purge_intents()
             .expect("list purge intents")
             .is_empty());
-        std::fs::remove_file(path).ok();
     }
 
     #[test]
     fn acknowledgement_is_idempotent() {
-        let (db, path) = make_test_db("browser_purge_acknowledgement");
+        let (db, _temp_dir) = make_test_db("browser_purge_acknowledgement");
         db.install_plugin(&plugin("browser"))
             .expect("install plugin");
         db.uninstall_plugin("browser").expect("uninstall plugin");
@@ -191,6 +186,5 @@ mod tests {
             .list_browser_session_purge_intents()
             .expect("list purge intents")
             .is_empty());
-        std::fs::remove_file(path).ok();
     }
 }

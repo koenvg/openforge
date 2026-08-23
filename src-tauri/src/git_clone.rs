@@ -327,35 +327,32 @@ mod tests {
 
     #[test]
     fn check_target_available_ok_for_free_path() {
-        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_target_free");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("clone_target_free");
         let parent = tempdir().unwrap();
         let target = parent.path().join("widgets");
         assert!(check_target_available(&target, &db).is_ok());
         drop(db);
-        let _ = std::fs::remove_file(&dbpath);
     }
 
     #[test]
     fn check_target_available_errors_when_dir_exists() {
-        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_target_dir_exists");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("clone_target_dir_exists");
         let parent = tempdir().unwrap();
         let target = parent.path().join("widgets");
         std::fs::create_dir(&target).unwrap();
         assert!(check_target_available(&target, &db).is_err());
         drop(db);
-        let _ = std::fs::remove_file(&dbpath);
     }
 
     #[test]
     fn check_target_available_errors_when_project_registered() {
-        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_target_registered");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("clone_target_registered");
         let parent = tempdir().unwrap();
         let target = parent.path().join("widgets");
         db.create_project("Widgets", &target.to_string_lossy())
             .expect("create project failed");
         assert!(check_target_available(&target, &db).is_err());
         drop(db);
-        let _ = std::fs::remove_file(&dbpath);
     }
 
     #[test]
@@ -500,7 +497,7 @@ mod tests {
 
     #[tokio::test]
     async fn clone_into_new_project_rejects_existing_target() {
-        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_into_existing_target");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("clone_into_existing_target");
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
         let parent = tempdir().unwrap();
         std::fs::create_dir(parent.path().join("widgets")).unwrap();
@@ -522,12 +519,11 @@ mod tests {
 
         assert!(result.is_err(), "existing target dir must be rejected");
         drop(db);
-        let _ = std::fs::remove_file(&dbpath);
     }
 
     #[tokio::test]
     async fn create_project_from_git_rejects_existing_target_before_cloning() {
-        let (db, dbpath) = crate::db::test_helpers::make_test_db("clone_orch_collision");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("clone_orch_collision");
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
         let client = crate::github_client::GitHubClient::new();
 
@@ -547,6 +543,5 @@ mod tests {
 
         assert!(result.is_err(), "existing target dir must be rejected");
         drop(db);
-        let _ = std::fs::remove_file(&dbpath);
     }
 }

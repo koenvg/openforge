@@ -222,7 +222,8 @@ async fn task_and_agent_events_expose_only_coarse_resource_invalidations() {
 
 #[tokio::test]
 async fn hidden_project_task_events_do_not_expose_resource_identifiers() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_hidden_live_events");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("companion_hidden_live_events");
     let visible = database
         .create_project("Visible", "/secret/visible")
         .expect("visible project");
@@ -279,8 +280,6 @@ async fn hidden_project_task_events_do_not_expose_resource_identifiers() {
     assert!(chunk.contains(&visible.id));
     assert!(!chunk.contains("T-hidden"));
     assert!(!chunk.contains(&hidden.id));
-
-    drop(path);
 }
 #[tokio::test]
 async fn project_events_expose_only_catalog_and_board_resource_identifiers() {

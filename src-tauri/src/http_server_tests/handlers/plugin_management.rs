@@ -105,7 +105,7 @@ async fn test_app_plugin_install_stays_disabled_and_reload_uses_installed_artifa
 
 #[tokio::test]
 async fn test_install_plugin_from_local_handler_maps_missing_app_path_state() {
-    let (state, path) = test_state("http_install_plugin_from_local_no_app_path");
+    let (state, _temp_dir) = test_state("http_install_plugin_from_local_no_app_path");
     let plugin_source = tempfile::tempdir().expect("create plugin source tempdir");
     write_local_plugin_package(plugin_source.path(), "com.example.no-app", "project");
     let mut events = state
@@ -132,13 +132,11 @@ async fn test_install_plugin_from_local_handler_maps_missing_app_path_state() {
 
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     assert_no_app_event(&mut events);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_set_plugin_enabled_handler_updates_db_with_camel_case_payload_and_publishes_events() {
-    let (state, path) = test_state("http_set_plugin_enabled_handler");
+    let (state, _temp_dir) = test_state("http_set_plugin_enabled_handler");
     {
         let db = state.db.lock().expect("lock db");
         db.create_project("Project", "/tmp/project")
@@ -218,8 +216,6 @@ async fn test_set_plugin_enabled_handler_updates_db_with_camel_case_payload_and_
     assert_eq!(disable_event.payload["project_id"], "P-1");
     assert_eq!(disable_event.payload["enabled"], false);
     assert_no_app_event(&mut events);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -361,7 +357,7 @@ async fn test_plugin_enablement_handlers_reject_the_wrong_lifecycle_scope() {
 
 #[tokio::test]
 async fn test_reload_plugin_handler_publishes_reload_event_with_camel_case_payload() {
-    let (state, path) = test_state("http_reload_plugin_handler");
+    let (state, _temp_dir) = test_state("http_reload_plugin_handler");
     seed_http_plugin(&state, "com.example.reload");
     let mut events = state
         .app_event_tx
@@ -395,13 +391,11 @@ async fn test_reload_plugin_handler_publishes_reload_event_with_camel_case_paylo
     assert_eq!(event.payload["plugin_id"], "com.example.reload");
     assert_eq!(event.payload["project_id"], "P-1");
     assert_no_app_event(&mut events);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_reload_plugin_handler_returns_not_found_for_unknown_plugin_without_event() {
-    let (state, path) = test_state("http_reload_plugin_unknown");
+    let (state, _temp_dir) = test_state("http_reload_plugin_unknown");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -425,6 +419,4 @@ async fn test_reload_plugin_handler_returns_not_found_for_unknown_plugin_without
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert_no_app_event(&mut events);
-
-    let _ = std::fs::remove_file(path);
 }

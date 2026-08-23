@@ -3,7 +3,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_plugin_command_discovery_routes_reject_missing_and_conflicting_context() {
-    let (state, path) = test_state("http_plugin_command_context");
+    let (state, _temp_dir) = test_state("http_plugin_command_context");
     let (task_id, other_project_id) = {
         let database = state.db.lock().expect("lock db");
         let project = database
@@ -74,13 +74,11 @@ async fn test_plugin_command_discovery_routes_reject_missing_and_conflicting_con
     let conflict_body = response_body_text(conflict).await;
     assert!(conflict_body.contains(&task_id));
     assert!(conflict_body.contains(&other_project_id));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_plugin_command_describe_rejects_uninstalled_and_disabled_plugins() {
-    let (state, path) = test_state("http_plugin_command_authorization");
+    let (state, _temp_dir) = test_state("http_plugin_command_authorization");
     let project_id = {
         let database = state.db.lock().expect("lock db");
         database
@@ -129,6 +127,4 @@ async fn test_plugin_command_describe_rejects_uninstalled_and_disabled_plugins()
         response_body_text(disabled).await,
         format!("Plugin com.example.disabled is not enabled for Project {project_id}")
     );
-
-    let _ = std::fs::remove_file(path);
 }

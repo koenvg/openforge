@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn host_storage_callback_round_trips_through_plugin_storage_table() {
-    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_storage_callback");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_storage_callback");
     for plugin_id in ["backend-plugin", "other-plugin"] {
         database
             .install_plugin(&crate::db::PluginRow {
@@ -100,7 +101,8 @@ async fn host_storage_callback_round_trips_through_plugin_storage_table() {
 
 #[tokio::test]
 async fn host_config_callbacks_route_to_app_services() {
-    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_config_callbacks");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_config_callbacks");
     let project = database
         .create_project("Plugin Host", "/tmp/plugin-host")
         .expect("project fixture");

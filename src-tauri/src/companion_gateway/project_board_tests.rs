@@ -93,7 +93,7 @@ fn assert_matches_openapi_schema(schema_name: &str, value: &serde_json::Value) {
 }
 #[tokio::test]
 async fn authenticated_project_catalog_is_visible_safe_and_in_desktop_order() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_project_catalog");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_project_catalog");
     let alpha = database
         .create_project("Alpha", "/secret/alpha")
         .expect("alpha");
@@ -148,13 +148,11 @@ async fn authenticated_project_catalog_is_visible_safe_and_in_desktop_order() {
         .expect("projects")
         .iter()
         .all(|project| project.as_object().expect("project").len() == 2));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_project_board");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_project_board");
     let project = database
         .create_project("OpenForge", "/secret/openforge")
         .expect("project");
@@ -318,13 +316,11 @@ async fn authenticated_project_board_returns_one_authoritative_safe_snapshot() {
     ] {
         assert!(!serialized.contains(sensitive), "leaked {sensitive}");
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn project_board_hides_authorization_visibility_and_existence() {
-    let (database, path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_project_board_safe_errors");
     let visible = database
         .create_project("Visible", "/visible")
@@ -379,13 +375,11 @@ async fn project_board_hides_authorization_visibility_and_existence() {
         response_json(denied).await["error"]["code"],
         "unauthenticated"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn hidden_projects_are_also_concealed_from_attention_and_task_detail() {
-    let (database, path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_hidden_project_surfaces");
     let hidden = database
         .create_project("Hidden", "/secret/hidden")
@@ -442,6 +436,4 @@ async fn hidden_projects_are_also_concealed_from_attention_and_task_detail() {
     let detail_json = response_json(detail).await;
     assert_eq!(detail_json["error"]["code"], "not_found");
     assert!(!detail_json.to_string().contains(&hidden.id));
-
-    let _ = std::fs::remove_file(path);
 }

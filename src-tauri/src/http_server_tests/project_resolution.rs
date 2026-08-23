@@ -2,28 +2,28 @@ use super::*;
 
 #[test]
 fn test_resolve_project_id_with_explicit_id() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_explicit");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_explicit");
     let result = resolve_project_id(&db, Some("P-1"), None);
     assert_eq!(result, Ok("P-1".to_string()));
 }
 
 #[test]
 fn test_resolve_project_id_empty_id_falls_through() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_empty_id");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_empty_id");
     let result = resolve_project_id(&db, Some(""), None);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_resolve_project_id_none_id_falls_through() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_none_id");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_none_id");
     let result = resolve_project_id(&db, None, None);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_resolve_project_id_from_worktree() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_worktree");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_worktree");
     let project = db
         .create_project("Test Project", "/tmp/test")
         .expect("create project");
@@ -37,7 +37,7 @@ fn test_resolve_project_id_from_worktree() {
 
 #[test]
 fn test_resolve_project_id_no_match_lists_available_projects() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_match");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_no_match");
     db.create_project("My Project", "/path/to/project")
         .expect("create project");
 
@@ -62,7 +62,7 @@ fn test_resolve_project_id_no_match_lists_available_projects() {
 
 #[test]
 fn test_resolve_project_id_no_projects_at_all() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_projects");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_no_projects");
     let result = resolve_project_id(&db, None, None);
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -74,7 +74,7 @@ fn test_resolve_project_id_no_projects_at_all() {
 
 #[test]
 fn test_resolve_project_id_worktree_not_found_lists_projects() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_wt_not_found");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_wt_not_found");
     db.create_project("Test", "/tmp/test")
         .expect("create project");
 
@@ -90,7 +90,7 @@ fn test_resolve_project_id_worktree_not_found_lists_projects() {
 
 #[test]
 fn test_resolve_project_id_explicit_takes_priority_over_worktree() {
-    let (db, _path) = crate::db::test_helpers::make_test_db("resolve_priority");
+    let (db, _temp_dir) = crate::db::test_helpers::make_test_db("resolve_priority");
     let project = db
         .create_project("Test Project", "/tmp/test")
         .expect("create project");

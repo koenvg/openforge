@@ -224,7 +224,8 @@ async fn attention_maps_projection_failures_to_a_safe_unavailable_error() {
 
 #[tokio::test]
 async fn sqlite_projection_flows_through_production_authorization_and_attention_contract() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_attention_integration");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("companion_attention_integration");
     let project = database
         .create_project("OpenForge", "/tmp/openforge-companion-attention")
         .expect("project");
@@ -440,6 +441,4 @@ async fn sqlite_projection_flows_through_production_authorization_and_attention_
         .expect("router response");
     assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(revoked).await["error"]["code"], "revoked");
-
-    let _ = std::fs::remove_file(path);
 }

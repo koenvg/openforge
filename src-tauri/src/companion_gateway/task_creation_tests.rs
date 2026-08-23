@@ -20,7 +20,7 @@ const HOST_ID: &str = "65d91f21-6732-45a6-9418-3dfaf4c93f52";
 
 #[tokio::test]
 async fn paired_device_creates_a_backlog_task_in_the_visible_project() {
-    let (database, path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_create_task_in_project");
     let project = database
         .create_project("OpenForge", "/private/openforge")
@@ -75,13 +75,11 @@ async fn paired_device_creates_a_backlog_task_in_the_visible_project() {
     assert_eq!(task.initial_prompt, "Investigate mobile creation");
     assert_eq!(task.status, "backlog");
     assert_eq!(task.project_id.as_deref(), Some(project.id.as_str()));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn task_creation_rejects_invalid_hidden_and_unauthenticated_requests_safely() {
-    let (database, path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_create_task_safe_rejections");
     let visible = database
         .create_project("Visible", "/private/visible")
@@ -178,6 +176,4 @@ async fn task_creation_rejects_invalid_hidden_and_unauthenticated_requests_safel
         .get_tasks_for_project(&hidden.id)
         .expect("hidden Tasks")
         .is_empty());
-
-    let _ = std::fs::remove_file(path);
 }

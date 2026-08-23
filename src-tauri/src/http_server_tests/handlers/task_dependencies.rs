@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn create_task_handler_accepts_dependency_from_another_project() {
-    let (state, path) = test_state("http_create_task_handler_cross_project_dependency");
+    let (state, _temp_dir) = test_state("http_create_task_handler_cross_project_dependency");
     {
         let db = state.db.lock().expect("lock db");
         let dependent_project = db
@@ -48,13 +48,11 @@ async fn create_task_handler_accepts_dependency_from_another_project() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.depends_on, vec!["T-1".to_string()]);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_dependency_storage_failure_is_atomic_when_cleanup_delete_would_fail() {
-    let (state, path) = test_state("http_create_task_dependency_failure_atomic");
+    let (state, _temp_dir) = test_state("http_create_task_dependency_failure_atomic");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -118,13 +116,11 @@ async fn create_task_dependency_storage_failure_is_atomic_when_cleanup_delete_wo
         .expect("count rolled-back dependencies");
     assert_eq!(dependency_count, 0);
     drop(db);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_set_task_dependencies_handler_replaces_dependencies() {
-    let (state, path) = test_state("http_set_task_dependencies_handler");
+    let (state, _temp_dir) = test_state("http_set_task_dependencies_handler");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -169,13 +165,11 @@ async fn test_set_task_dependencies_handler_replaces_dependencies() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.depends_on, vec!["T-2".to_string()]);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_add_task_dependency_handler_appends_dependency() {
-    let (state, path) = test_state("http_add_task_dependency_handler");
+    let (state, _temp_dir) = test_state("http_add_task_dependency_handler");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -211,13 +205,11 @@ async fn test_add_task_dependency_handler_appends_dependency() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.depends_on, vec!["T-1".to_string()]);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_link_task_chain_handler_links_atomically() {
-    let (state, path) = test_state("http_link_task_chain_handler");
+    let (state, _temp_dir) = test_state("http_link_task_chain_handler");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -261,6 +253,4 @@ async fn test_link_task_chain_handler_links_atomically() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.depends_on, vec!["T-2".to_string()]);
-
-    let _ = std::fs::remove_file(path);
 }

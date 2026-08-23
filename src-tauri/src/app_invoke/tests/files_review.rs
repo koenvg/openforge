@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn handles_fs_self_review_and_agent_review_db_commands() {
-    let (state, path) = test_state("app_invoke_files_self_agent_review");
+    let (state, _temp_dir) = test_state("app_invoke_files_self_agent_review");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     std::fs::write(temp_dir.path().join("README.md"), "hello electron").expect("write file");
     std::fs::create_dir_all(temp_dir.path().join("src")).expect("create src dir");
@@ -159,12 +159,11 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
         json!({ "commentId": agent_comment_id, "status": "addressed" }),
     )
     .await;
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn writes_project_files_through_the_app_invoke_boundary() {
-    let (state, path) = test_state("app_invoke_write_project_file");
+    let (state, _temp_dir) = test_state("app_invoke_write_project_file");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     let project_id = {
         let db = state.db.lock().expect("db lock");
@@ -190,12 +189,11 @@ async fn writes_project_files_through_the_app_invoke_boundary() {
             .expect("read written file"),
         "# Report\n"
     );
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn fs_read_file_treats_gitignore_dotfile_as_text() {
-    let (state, path) = test_state("app_invoke_gitignore_dotfile_text_preview");
+    let (state, _temp_dir) = test_state("app_invoke_gitignore_dotfile_text_preview");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     std::fs::write(
         temp_dir.path().join(".gitignore"),
@@ -232,13 +230,11 @@ async fn fs_read_file_treats_gitignore_dotfile_as_text() {
     assert_eq!(extensionless["type"], "binary");
     assert_eq!(extensionless["content"], "");
     assert_eq!(extensionless["mimeType"], serde_json::Value::Null);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn handles_git_workspace_extraction_commands() {
-    let (state, path) = test_state("app_invoke_git_workspace_extraction");
+    let (state, _temp_dir) = test_state("app_invoke_git_workspace_extraction");
     let repo_dir = tempfile::tempdir().expect("temp git repo");
     let repo_path = repo_dir.path();
     let run_git = |args: &[&str]| {
@@ -355,13 +351,11 @@ async fn handles_git_workspace_extraction_commands() {
         )
         .await;
     assert_eq!(commit_batch[0][0], "base\n");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn live_agent_review_commands_are_not_files_review_contracts() {
-    let (state, path) = test_state("app_invoke_files_review_removed_live_agent_review");
+    let (state, _temp_dir) = test_state("app_invoke_files_review_removed_live_agent_review");
 
     let err = invoke(&state, "start_agent_review", json!({ "reviewPrId": 88 }))
         .await
@@ -396,6 +390,4 @@ async fn live_agent_review_commands_are_not_files_review_contracts() {
     assert!(err
         .1
         .contains("is not implemented for Electron sidecar slice"));
-
-    let _ = std::fs::remove_file(path);
 }

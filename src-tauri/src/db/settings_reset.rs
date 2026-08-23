@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn test_reset_clears_project_overrides_only() {
-        let (db, path) = make_test_db("reset_settings");
+        let (db, _temp_dir) = make_test_db("reset_settings");
         let project = db.create_project("P", "/tmp/p").unwrap();
         db.set_project_config(&project.id, "code_cleanup_tasks_enabled", "true")
             .unwrap();
@@ -59,6 +59,5 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 }

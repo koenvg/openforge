@@ -206,11 +206,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_review_pr_upsert_and_retrieve() {
-        let (db, path) = make_test_db("review_pr_upsert");
+        let (db, _temp_dir) = make_test_db("review_pr_upsert");
 
         db.upsert_review_pr(
             123,
@@ -291,14 +290,13 @@ mod tests {
         assert_eq!(prs[0].updated_at, 3000);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_review_pr_labels_round_trip_and_clear() {
         use crate::github_client::PrLabel;
 
-        let (db, path) = make_test_db("review_pr_labels");
+        let (db, _temp_dir) = make_test_db("review_pr_labels");
 
         let labels = vec![
             PrLabel {
@@ -350,12 +348,11 @@ mod tests {
         assert!(prs[0].labels.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_review_pr_delete_stale() {
-        let (db, path) = make_test_db("review_pr_stale");
+        let (db, _temp_dir) = make_test_db("review_pr_stale");
 
         db.upsert_review_pr(
             100,
@@ -442,12 +439,11 @@ mod tests {
         assert_eq!(prs.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_review_pr_ordering() {
-        let (db, path) = make_test_db("review_pr_ordering");
+        let (db, _temp_dir) = make_test_db("review_pr_ordering");
 
         db.upsert_review_pr(
             1,
@@ -502,12 +498,11 @@ mod tests {
         assert_eq!(prs[1].id, 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_review_pr_viewed_null_by_default() {
-        let (db, path) = make_test_db("review_pr_viewed_null");
+        let (db, _temp_dir) = make_test_db("review_pr_viewed_null");
 
         db.upsert_review_pr(
             1,
@@ -539,12 +534,11 @@ mod tests {
         assert!(prs[0].viewed_head_sha.is_none());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_mark_review_pr_viewed() {
-        let (db, path) = make_test_db("review_pr_mark_viewed");
+        let (db, _temp_dir) = make_test_db("review_pr_mark_viewed");
 
         db.upsert_review_pr(
             1,
@@ -579,12 +573,11 @@ mod tests {
         assert_eq!(prs[0].viewed_head_sha, Some("sha1".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_mark_review_pr_unviewed() {
-        let (db, path) = make_test_db("review_pr_mark_unviewed");
+        let (db, _temp_dir) = make_test_db("review_pr_mark_unviewed");
 
         db.upsert_review_pr(
             1,
@@ -622,12 +615,11 @@ mod tests {
         assert!(prs[0].viewed_head_sha.is_none());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_upsert_preserves_viewed_when_sha_unchanged() {
-        let (db, path) = make_test_db("review_pr_preserve_viewed");
+        let (db, _temp_dir) = make_test_db("review_pr_preserve_viewed");
 
         db.upsert_review_pr(
             1,
@@ -690,12 +682,11 @@ mod tests {
         assert_eq!(prs[0].viewed_head_sha, Some("abc".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_upsert_clears_viewed_when_sha_changed() {
-        let (db, path) = make_test_db("review_pr_clear_viewed");
+        let (db, _temp_dir) = make_test_db("review_pr_clear_viewed");
 
         db.upsert_review_pr(
             1,
@@ -755,12 +746,11 @@ mod tests {
         assert!(prs[0].viewed_head_sha.is_none());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_upsert_never_viewed_stays_unviewed() {
-        let (db, path) = make_test_db("review_pr_never_viewed");
+        let (db, _temp_dir) = make_test_db("review_pr_never_viewed");
 
         db.upsert_review_pr(
             1,
@@ -817,12 +807,11 @@ mod tests {
         assert!(prs[0].viewed_head_sha.is_none());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_review_pr_viewed_sorting() {
-        let (db, path) = make_test_db("review_pr_viewed_sorting");
+        let (db, _temp_dir) = make_test_db("review_pr_viewed_sorting");
 
         // Insert 3 PRs (all unviewed initially)
         for i in 1_i64..=3 {
@@ -866,6 +855,5 @@ mod tests {
         assert_eq!(prs[2].id, 2);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

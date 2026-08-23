@@ -218,7 +218,7 @@ fn task_with_owned_start_prompt_contribution(
 
 #[test]
 fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_on_reenable() {
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_context_disabled_plugin_prompt");
     let plugin_id = "com.example.start-prompt";
     let task_id = task_with_owned_start_prompt_contribution(&state, plugin_id);
@@ -247,13 +247,12 @@ fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_
     assert_eq!(reenabled_context.start_prompt_contributions.len(), 1);
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_them_after_reinstall()
 {
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_context_uninstalled_plugin_prompt");
     let plugin_id = "com.example.start-prompt";
     let task_id = task_with_owned_start_prompt_contribution(&state, plugin_id);
@@ -285,7 +284,6 @@ fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_th
     assert_eq!(reinstalled_context.start_prompt_contributions.len(), 1);
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -301,7 +299,7 @@ fn provider_run_options_borrow_saved_task_agent_and_permission_mode() {
 
 #[test]
 fn start_context_resolves_saved_task_overrides() {
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_context_saved_overrides");
     let task_id = {
         let db = db::acquire_db(&state.db);
@@ -340,12 +338,11 @@ fn start_context_resolves_saved_task_overrides() {
     assert_eq!(context.repo_path, Path::new("/tmp/p"));
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn safe_start_creates_implementation_run_and_publishes_canonical_invalidation() {
-    let (state, path) = crate::app_invoke::test_support::test_state("task_start_success");
+    let (state, _temp_dir) = crate::app_invoke::test_support::test_state("task_start_success");
     let task_id = {
         let db = db::acquire_db(&state.db);
         let project = db
@@ -414,12 +411,11 @@ async fn safe_start_creates_implementation_run_and_publishes_canonical_invalidat
     assert_eq!(event.payload["project_id"], project_id);
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn safe_start_represents_stale_dependency_and_concurrent_outcomes() {
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_safe_validation_outcomes");
     let (stale_task_id, blocked_task_id, dependency_id, claimed_task_id) = {
         let db = db::acquire_db(&state.db);
@@ -473,7 +469,6 @@ async fn safe_start_represents_stale_dependency_and_concurrent_outcomes() {
     );
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 #[tokio::test]
 async fn safe_start_returns_desktop_action_required_without_creating_runtime_state() {
@@ -584,7 +579,7 @@ async fn failed_provider_launch_rolls_back_new_workspace_state() {
     let repo = temp.path().join("repo");
     let worktree_root = temp.path().join("worktrees");
     init_remote_backed_main(&repo);
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_provider_failure_rollback");
     let task_id = {
         let db = db::acquire_db(&state.db);
@@ -653,7 +648,6 @@ async fn failed_provider_launch_rolls_back_new_workspace_state() {
     );
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -662,7 +656,7 @@ async fn failed_start_preserves_a_reused_worktree_and_its_local_changes() {
     let repo = temp.path().join("repo");
     let worktree_root = temp.path().join("worktrees");
     init_remote_backed_main(&repo);
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_reused_worktree_rollback");
     let task_id = {
         let db = db::acquire_db(&state.db);
@@ -735,7 +729,6 @@ async fn failed_start_preserves_a_reused_worktree_and_its_local_changes() {
     );
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -744,7 +737,7 @@ async fn post_launch_finalization_failure_aborts_provider_and_rolls_back_owned_s
     let repo = temp.path().join("repo");
     let worktree_root = temp.path().join("worktrees");
     init_remote_backed_main(&repo);
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_finalization_failure_rollback");
     let task_id = {
         let db = db::acquire_db(&state.db);
@@ -810,7 +803,6 @@ async fn post_launch_finalization_failure_aborts_provider_and_rolls_back_owned_s
     assert!(!branch_output.status.success());
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -819,7 +811,7 @@ async fn worktree_record_failure_removes_new_files_but_preserves_existing_record
     let repo = temp.path().join("repo");
     let worktree_root = temp.path().join("worktrees");
     init_remote_backed_main(&repo);
-    let (state, path) =
+    let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_worktree_record_failure");
     let (task_id, project_id) = {
         let db = db::acquire_db(&state.db);
@@ -901,5 +893,4 @@ async fn worktree_record_failure_removes_new_files_but_preserves_existing_record
     assert!(!branch_output.status.success());
 
     drop(state);
-    let _ = std::fs::remove_file(path);
 }

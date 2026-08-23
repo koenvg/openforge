@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn host_command_catalog_callbacks_route_to_app_services() {
-    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_command_catalog");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_command_catalog");
     let project = database
         .create_project("Plugin Host", "/tmp/plugin-host")
         .expect("project fixture");
@@ -30,7 +31,7 @@ async fn host_command_catalog_callbacks_route_to_app_services() {
 
 #[tokio::test]
 async fn plugin_host_global_command_callback_routes_github_sync_backend_bridge() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_global_command_github_sync_bridge");
     let app = AppHandle::new();
     app.manage(Arc::new(Mutex::new(database)));

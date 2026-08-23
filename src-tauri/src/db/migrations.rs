@@ -2257,7 +2257,7 @@ mod tests {
 
     #[test]
     fn test_task_config_and_global_plugins_tables_exist() {
-        let (db, path) = crate::db::test_helpers::make_test_db("hier_tables");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("hier_tables");
         let conn = db.conn.lock().unwrap();
         let has = |name: &str| -> bool {
             conn.query_row(
@@ -2271,7 +2271,6 @@ mod tests {
         assert!(has("global_plugins"), "global_plugins table should exist");
         drop(conn);
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

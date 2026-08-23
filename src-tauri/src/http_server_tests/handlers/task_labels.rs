@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
-    let (state, path) = test_state("http_get_project_task_labels_handler_lists_labels");
+    let (state, _temp_dir) = test_state("http_get_project_task_labels_handler_lists_labels");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -46,13 +46,11 @@ async fn test_get_project_task_labels_handler_lists_existing_project_labels() {
     assert_eq!(labels[0]["name"], "Bug");
     assert_eq!(labels[1]["name"], "cleanup");
     assert!(labels.iter().all(|label| label["project_id"] == "P-1"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_create_task_handler_persists_labels() {
-    let (state, path) = test_state("http_create_task_handler_labels");
+    let (state, _temp_dir) = test_state("http_create_task_handler_labels");
     {
         let db = state.db.lock().expect("lock db");
         db.create_project("Project", "/tmp/project")
@@ -90,13 +88,11 @@ async fn test_create_task_handler_persists_labels() {
         .map(|label| label.name.as_str())
         .collect();
     assert_eq!(label_names, vec!["bug", "ui"]);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_label_storage_failure_is_atomic_when_cleanup_delete_would_fail() {
-    let (state, path) = test_state("http_create_task_label_failure_atomic");
+    let (state, _temp_dir) = test_state("http_create_task_label_failure_atomic");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -169,13 +165,11 @@ async fn create_task_label_storage_failure_is_atomic_when_cleanup_delete_would_f
         .expect("count rolled-back assignments");
     assert_eq!(assignment_count, 0);
     drop(db);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_task_label_handlers_list_add_and_remove_labels() {
-    let (state, path) = test_state("http_task_label_handlers");
+    let (state, _temp_dir) = test_state("http_task_label_handlers");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -248,6 +242,4 @@ async fn test_task_label_handlers_list_add_and_remove_labels() {
         .expect("get task")
         .expect("task exists");
     assert!(task.labels.is_empty());
-
-    let _ = std::fs::remove_file(path);
 }

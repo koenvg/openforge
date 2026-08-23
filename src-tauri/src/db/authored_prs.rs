@@ -232,11 +232,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_authored_pr_upsert_and_retrieve() {
-        let (db, path) = make_test_db("authored_pr_upsert");
+        let (db, _temp_dir) = make_test_db("authored_pr_upsert");
 
         db.upsert_authored_pr(
             123,
@@ -281,14 +280,13 @@ mod tests {
         assert_eq!(prs[0].head_sha, "abc123");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_labels_round_trip_and_clear() {
         use crate::github_client::PrLabel;
 
-        let (db, path) = make_test_db("authored_pr_labels");
+        let (db, _temp_dir) = make_test_db("authored_pr_labels");
 
         let labels = vec![
             PrLabel {
@@ -346,12 +344,11 @@ mod tests {
         assert!(prs[0].labels.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_upsert_updates() {
-        let (db, path) = make_test_db("authored_pr_upsert_updates");
+        let (db, _temp_dir) = make_test_db("authored_pr_upsert_updates");
 
         db.upsert_authored_pr(
             123,
@@ -422,12 +419,11 @@ mod tests {
         assert_eq!(prs[0].updated_at, 3000);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_delete_stale() {
-        let (db, path) = make_test_db("authored_pr_delete_stale");
+        let (db, _temp_dir) = make_test_db("authored_pr_delete_stale");
 
         for i in 1_i64..=3 {
             db.upsert_authored_pr(
@@ -476,12 +472,11 @@ mod tests {
         assert!(prs.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_ordering() {
-        let (db, path) = make_test_db("authored_pr_ordering");
+        let (db, _temp_dir) = make_test_db("authored_pr_ordering");
 
         db.upsert_authored_pr(
             1,
@@ -549,12 +544,11 @@ mod tests {
         assert_eq!(prs[1].id, 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_with_task_link() {
-        let (db, path) = make_test_db("authored_pr_task_link");
+        let (db, _temp_dir) = make_test_db("authored_pr_task_link");
 
         db.upsert_authored_pr(
             77,
@@ -590,12 +584,11 @@ mod tests {
         assert_eq!(prs[0].task_id, Some("T-100".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_authored_pr_with_ci_status() {
-        let (db, path) = make_test_db("authored_pr_ci_status");
+        let (db, _temp_dir) = make_test_db("authored_pr_ci_status");
 
         db.upsert_authored_pr(
             88,
@@ -633,6 +626,5 @@ mod tests {
         assert_eq!(db.get_authored_pr_count().expect("count failed"), 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

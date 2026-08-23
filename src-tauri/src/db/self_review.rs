@@ -152,11 +152,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_self_review_comment_insert_and_retrieve() {
-        let (db, path) = make_test_db("self_review_insert");
+        let (db, _temp_dir) = make_test_db("self_review_insert");
         insert_test_task(&db);
 
         let id1 = db
@@ -188,12 +187,11 @@ mod tests {
         assert_eq!(comments[1].line_number, Some(42));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_round_tracking() {
-        let (db, path) = make_test_db("self_review_rounds");
+        let (db, _temp_dir) = make_test_db("self_review_rounds");
         insert_test_task(&db);
 
         let _id1 = db
@@ -237,12 +235,11 @@ mod tests {
         assert_eq!(active2[0].body, "Round 2 comment 1");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_delete() {
-        let (db, path) = make_test_db("self_review_delete");
+        let (db, _temp_dir) = make_test_db("self_review_delete");
         insert_test_task(&db);
 
         let id1 = db
@@ -266,12 +263,11 @@ mod tests {
         assert_eq!(comments[0].id, id2);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_archive_flow() {
-        let (db, path) = make_test_db("self_review_archive");
+        let (db, _temp_dir) = make_test_db("self_review_archive");
         insert_test_task(&db);
 
         db.insert_self_review_comment("T-100", "general", None, None, "Comment 1")
@@ -301,12 +297,11 @@ mod tests {
         assert!(archived[1].archived_at.is_some());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_latest_archived_round_only() {
-        let (db, path) = make_test_db("self_review_latest_round");
+        let (db, _temp_dir) = make_test_db("self_review_latest_round");
         insert_test_task(&db);
 
         db.insert_self_review_comment("T-100", "general", None, None, "Round 1 comment 1")
@@ -335,12 +330,11 @@ mod tests {
         assert_eq!(archived[1].body, "Round 2 comment 2");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_empty_task() {
-        let (db, path) = make_test_db("self_review_empty");
+        let (db, _temp_dir) = make_test_db("self_review_empty");
         insert_test_task(&db);
 
         let active = db
@@ -354,12 +348,11 @@ mod tests {
         assert_eq!(archived.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_self_review_comment_multiple_tasks() {
-        let (db, path) = make_test_db("self_review_multi_task");
+        let (db, _temp_dir) = make_test_db("self_review_multi_task");
         insert_test_task(&db);
 
         let conn = db.connection();
@@ -390,6 +383,5 @@ mod tests {
         assert_eq!(comments_200[0].task_id, "T-200");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

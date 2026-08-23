@@ -273,8 +273,8 @@ mod tests {
 
     fn completed_session_fixture(
         name: &str,
-    ) -> (Arc<Mutex<db::Database>>, String, std::path::PathBuf) {
-        let (database, path) = crate::db::test_helpers::make_test_db(name);
+    ) -> (Arc<Mutex<db::Database>>, String, tempfile::TempDir) {
+        let (database, temp_dir) = crate::db::test_helpers::make_test_db(name);
         let project = database
             .create_project("Idle Project", "/tmp/idle-project")
             .expect("create project");
@@ -291,12 +291,12 @@ mod tests {
                 "pi",
             )
             .expect("create Agent Session");
-        (Arc::new(Mutex::new(database)), task.id, path)
+        (Arc::new(Mutex::new(database)), task.id, temp_dir)
     }
 
     #[test]
     fn idle_timeout_uses_the_configured_global_value() {
-        let (database, _task_id, path) = completed_session_fixture("completed_session_config");
+        let (database, _temp_dir, path) = completed_session_fixture("completed_session_config");
         database
             .lock()
             .expect("database lock")

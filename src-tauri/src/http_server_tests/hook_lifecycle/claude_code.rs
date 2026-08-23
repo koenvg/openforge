@@ -276,7 +276,7 @@ fn claude_activity_snapshot_is_bounded_and_excludes_transcript_path() {
 
 #[tokio::test]
 async fn claude_user_prompt_hook_uses_query_identity_and_payload_transcript_metadata() {
-    let (state, path) = test_state("claude_user_prompt_query_metadata");
+    let (state, _temp_dir) = test_state("claude_user_prompt_query_metadata");
     let task_id = create_agent_session_fixture(
         &state,
         AgentSessionFixture {
@@ -317,6 +317,4 @@ async fn claude_user_prompt_hook_uses_query_identity_and_payload_transcript_meta
         Some("claude-query-96")
     );
     assert_eq!(session.pty_instance_id, Some(96));
-
-    let _ = std::fs::remove_file(path);
 }

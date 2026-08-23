@@ -81,7 +81,7 @@ mod tests {
 
     #[tokio::test]
     async fn secret_config_read_and_write_transactions_do_not_interleave() {
-        let (database, path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("secure_config_transaction_serialization");
         database
             .set_config("github_token", "legacy-token")
@@ -142,13 +142,11 @@ mod tests {
                 .expect("read cleared database token"),
             Some(String::new())
         );
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
     async fn credential_wait_does_not_hold_database_lock() {
-        let (database, path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("secure_config_credential_wait_database_lock");
         database
             .set_config("github_token", "legacy-token")
@@ -176,7 +174,5 @@ mod tests {
             value.expect("database fallback"),
             Some("legacy-token".to_string())
         );
-
-        let _ = std::fs::remove_file(path);
     }
 }

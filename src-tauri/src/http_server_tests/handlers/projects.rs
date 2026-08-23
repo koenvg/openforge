@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_get_projects_handler_returns_all_projects() {
-    let (state, path) = test_state("http_get_projects_handler_returns_projects");
+    let (state, _temp_dir) = test_state("http_get_projects_handler_returns_projects");
     {
         let db = state.db.lock().expect("lock db");
         db.create_project("Project A", "/tmp/project-a")
@@ -37,13 +37,11 @@ async fn test_get_projects_handler_returns_all_projects() {
             && project["name"] == "Project B"
             && project["path"] == "/tmp/project-b"
     }));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn get_projects_handler_recovers_from_poisoned_database_lock() {
-    let (state, path) = test_state("http_get_projects_handler_poisoned_database_lock");
+    let (state, _temp_dir) = test_state("http_get_projects_handler_poisoned_database_lock");
     let database = Arc::clone(&state.db);
     let poison_result = std::thread::spawn(move || {
         let _database = database.lock().expect("lock healthy test database");
@@ -65,6 +63,4 @@ async fn get_projects_handler_recovers_from_poisoned_database_lock() {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response_body_json(response).await, serde_json::json!([]));
-
-    let _ = std::fs::remove_file(path);
 }

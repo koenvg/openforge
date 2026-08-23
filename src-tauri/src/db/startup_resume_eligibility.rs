@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn startup_resume_eligibility_matches_for_task_workspaces_and_worktrees() {
-        let (db, path) = make_test_db("shared_startup_resume_eligibility");
+        let (db, _temp_dir) = make_test_db("shared_startup_resume_eligibility");
         let project = db
             .create_project("Test Project", "/tmp/shared-resume")
             .expect("create project failed");
@@ -239,6 +239,5 @@ mod tests {
         assert_eq!(worktree_ids, expected_task_ids);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 }

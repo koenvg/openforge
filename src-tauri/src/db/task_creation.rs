@@ -379,11 +379,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_create_task_with_prompt() {
-        let (db, path) = make_test_db("create_task_with_prompt");
+        let (db, _temp_dir) = make_test_db("create_task_with_prompt");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -398,12 +397,11 @@ mod tests {
         assert_eq!(retrieved.prompt, Some("Custom prompt".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_prompt_defaults_to_title() {
-        let (db, path) = make_test_db("create_task_prompt_default");
+        let (db, _temp_dir) = make_test_db("create_task_prompt_default");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -418,12 +416,11 @@ mod tests {
         assert_eq!(retrieved.prompt, Some("My task".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_metadata_normalizes_and_deduplicates_label_names() {
-        let (db, path) = make_test_db("create_task_with_normalized_labels");
+        let (db, _temp_dir) = make_test_db("create_task_with_normalized_labels");
         db.set_config("task_id_prefix", "T").unwrap();
         let project = db
             .create_project("Project", "/tmp/create-task-with-normalized-labels")
@@ -478,12 +475,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_metadata_rolls_back_every_write_when_label_assignment_fails() {
-        let (db, path) = make_test_db("create_task_with_metadata_rollback");
+        let (db, _temp_dir) = make_test_db("create_task_with_metadata_rollback");
         db.set_config("task_id_prefix", "T").unwrap();
         let project = db
             .create_project("Project", "/tmp/create-task-with-metadata-rollback")
@@ -573,11 +569,10 @@ mod tests {
         assert_eq!(next_task.id, failed_task_id);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
     #[test]
     fn test_create_task_and_retrieve() {
-        let (db, path) = make_test_db("create_task");
+        let (db, _temp_dir) = make_test_db("create_task");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -594,12 +589,11 @@ mod tests {
         assert_eq!(tasks[0].initial_prompt, "My task");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_title_defaults_to_null() {
-        let (db, path) = make_test_db("create_task_title_null");
+        let (db, _temp_dir) = make_test_db("create_task_title_null");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
@@ -610,12 +604,11 @@ mod tests {
         assert_eq!(retrieved.title, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_options_persists_manual_title() {
-        let (db, path) = make_test_db("create_task_options_title");
+        let (db, _temp_dir) = make_test_db("create_task_options_title");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -646,12 +639,11 @@ mod tests {
         assert_eq!(retrieved.title_generated_at, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_id_prefix_prefers_project_override() {
-        let (db, path) = crate::db::test_helpers::make_test_db("prefix_override");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("prefix_override");
         let project = db.create_project("Web", "/tmp/web").unwrap();
         db.set_project_config(&project.id, "task_id_prefix", "WEB")
             .unwrap();
@@ -674,12 +666,11 @@ mod tests {
         assert!(task.id.starts_with("WEB-"), "got {}", task.id);
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_snapshots_task_config_when_provided() {
-        let (db, path) = crate::db::test_helpers::make_test_db("task_snapshot");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("task_snapshot");
         let project = db.create_project("P", "/tmp/p").unwrap();
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
@@ -717,12 +708,11 @@ mod tests {
         assert_eq!(db.resolve_ai_provider_for_task(&task.id), "opencode");
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_options_blank_title_falls_back_to_null() {
-        let (db, path) = make_test_db("create_task_options_blank_title");
+        let (db, _temp_dir) = make_test_db("create_task_options_blank_title");
 
         let task = db
             .create_task_with_options(super::NewTaskOptions {
@@ -746,12 +736,11 @@ mod tests {
         assert_eq!(retrieved.title, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_options_persists_source_ticket_url() {
-        let (db, path) = make_test_db("create_task_options_source_ticket");
+        let (db, _temp_dir) = make_test_db("create_task_options_source_ticket");
 
         let url = "https://github.com/koenvg/openforge/issues/1294";
         let task = db
@@ -783,12 +772,11 @@ mod tests {
         assert_eq!(found.source_ticket_url.as_deref(), Some(url));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_options_blank_source_ticket_url_falls_back_to_null() {
-        let (db, path) = make_test_db("create_task_options_blank_source_ticket");
+        let (db, _temp_dir) = make_test_db("create_task_options_blank_source_ticket");
 
         let task = db
             .create_task_with_options(super::NewTaskOptions {
@@ -812,12 +800,11 @@ mod tests {
         assert_eq!(retrieved.source_ticket_url, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_defaults_source_ticket_url_to_none() {
-        let (db, path) = make_test_db("create_task_source_ticket_default_none");
+        let (db, _temp_dir) = make_test_db("create_task_source_ticket_default_none");
 
         let task = db
             .create_task("Original", "backlog", None, None, None)
@@ -828,12 +815,11 @@ mod tests {
         assert_eq!(retrieved.source_ticket_url, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_autoincrement() {
-        let (db, path) = make_test_db("task_autoincrement");
+        let (db, _temp_dir) = make_test_db("task_autoincrement");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task1 = db
@@ -851,24 +837,22 @@ mod tests {
         assert_eq!(task3.id, "T-3");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_custom_prefix() {
-        let (db, path) = make_test_db("task_custom_prefix");
+        let (db, _temp_dir) = make_test_db("task_custom_prefix");
         db.set_config("task_id_prefix", "FOO").unwrap();
         let task = db
             .create_task("Custom prefix task", "backlog", None, None, None)
             .expect("create failed");
         assert_eq!(task.id, "FOO-1");
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_fallback_when_prefix_missing() {
-        let (db, path) = make_test_db("task_fallback_missing");
+        let (db, _temp_dir) = make_test_db("task_fallback_missing");
         let conn = db.connection();
         conn.lock()
             .unwrap()
@@ -884,12 +868,11 @@ mod tests {
             task.id
         );
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_fallback_when_prefix_empty() {
-        let (db, path) = make_test_db("task_fallback_empty");
+        let (db, _temp_dir) = make_test_db("task_fallback_empty");
         db.set_config("task_id_prefix", "").unwrap();
         let task = db
             .create_task("Fallback task", "backlog", None, None, None)
@@ -900,12 +883,11 @@ mod tests {
             task.id
         );
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_permission_mode_defaults_agent_to_none() {
-        let (db, path) = make_test_db("create_task_permission_mode");
+        let (db, _temp_dir) = make_test_db("create_task_permission_mode");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
@@ -927,12 +909,11 @@ mod tests {
         assert_eq!(retrieved.permission_mode, Some("auto".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_existing_worktree_branch_source() {
-        let (db, path) = make_test_db("create_task_existing_worktree_branch");
+        let (db, _temp_dir) = make_test_db("create_task_existing_worktree_branch");
 
         let task = db
             .create_task_with_worktree_source(
@@ -959,12 +940,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_with_disabled_worktree_source() {
-        let (db, path) = make_test_db("create_task_disabled_worktree_source");
+        let (db, _temp_dir) = make_test_db("create_task_disabled_worktree_source");
 
         let task = db
             .create_task_with_worktree_source(
@@ -988,12 +968,11 @@ mod tests {
         assert_eq!(retrieved.worktree_branch, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_create_task_agent_fields_default_to_none() {
-        let (db, path) = make_test_db("create_task_agent_none");
+        let (db, _temp_dir) = make_test_db("create_task_agent_none");
 
         let task = db
             .create_task("No agent task", "backlog", None, None, None)
@@ -1007,6 +986,5 @@ mod tests {
         assert_eq!(retrieved.permission_mode, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

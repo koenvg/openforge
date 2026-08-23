@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn resume_startup_sessions_command_is_compatibility_noop() {
-    let (state, path) = test_state("app_invoke_resume_startup_sessions");
+    let (state, _temp_dir) = test_state("app_invoke_resume_startup_sessions");
     let mut receiver = state
         .app_event_tx
         .as_ref()
@@ -12,13 +12,11 @@ async fn resume_startup_sessions_command_is_compatibility_noop() {
     invoke_ok(&state, "resume_startup_sessions", json!({})).await;
 
     assert!(receiver.try_recv().is_err());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn handles_agent_lifecycle_followups() {
-    let (state, path) = test_state("app_invoke_agent_lifecycle_followups");
+    let (state, _temp_dir) = test_state("app_invoke_agent_lifecycle_followups");
     let claude_task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -56,8 +54,6 @@ async fn handles_agent_lifecycle_followups() {
             .status,
         "interrupted"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 use once_cell::sync::Lazy;
@@ -346,7 +342,7 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_pi_provider_boundary");
+    let (state, _temp_dir) = test_state("app_invoke_start_pi_provider_boundary");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -428,7 +424,6 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -439,7 +434,7 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
     let (_project_temp, project_repo_dir) = provider_repo_dir();
     let (_spoofed_temp, spoofed_repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_authoritative_project_path");
+    let (state, _temp_dir) = test_state("app_invoke_start_authoritative_project_path");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -504,7 +499,6 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -514,7 +508,7 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_rejects_stale_state");
+    let (state, _temp_dir) = test_state("app_invoke_start_rejects_stale_state");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -556,8 +550,6 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
             .is_none_or(|log| !log.contains("Do not start stale state")),
         "provider must not launch for stale Task state"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -567,7 +559,7 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_plugin_review_workflow");
+    let (state, _temp_dir) = test_state("app_invoke_start_plugin_review_workflow");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -637,7 +629,6 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -647,7 +638,7 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path, app_dir) =
+    let (state, _temp_dir, app_dir) =
         test_state_with_backend_app("app_invoke_start_materializes_image_references");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
@@ -705,7 +696,6 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -715,7 +705,7 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_opencode_agent_boundary");
+    let (state, _temp_dir) = test_state("app_invoke_start_opencode_agent_boundary");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -791,7 +781,6 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -801,7 +790,7 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_codex_provider_boundary");
+    let (state, _temp_dir) = test_state("app_invoke_start_codex_provider_boundary");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -871,7 +860,6 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(&task_id).await;
     }
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -890,7 +878,7 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     assert_git_success(&repo_dir, &["checkout", "main"]);
     let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_existing_branch_worktree");
+    let (state, _temp_dir) = test_state("app_invoke_start_existing_branch_worktree");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -965,8 +953,6 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
         .success(),
         "deleting a task created from an existing branch must not delete that branch"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -985,7 +971,7 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
     assert_git_success(&repo_dir, &["checkout", "main"]);
     let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
     let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, path) = test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
+    let (state, _temp_dir) = test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -1062,13 +1048,11 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
         .expect("get workspace")
         .expect("workspace should exist");
     assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn start_implementation_reports_missing_task() {
-    let (state, path) = test_state("app_invoke_start_implementation");
+    let (state, _temp_dir) = test_state("app_invoke_start_implementation");
 
     let err = invoke(
         &state,
@@ -1080,13 +1064,11 @@ async fn start_implementation_reports_missing_task() {
 
     assert_eq!(err.0, StatusCode::NOT_FOUND);
     assert!(err.1.contains("Task not found"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn start_implementation_blocks_in_progress_start_claim() {
-    let (state, path) = test_state("app_invoke_start_blocks_in_progress_claim");
+    let (state, _temp_dir) = test_state("app_invoke_start_blocks_in_progress_claim");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -1122,13 +1104,11 @@ async fn start_implementation_blocks_in_progress_start_claim() {
 
     assert_eq!(err.0, StatusCode::CONFLICT);
     assert!(err.1.contains("start in progress"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn start_implementation_blocks_active_agent_session() {
-    let (state, path) = test_state("app_invoke_start_blocks_active_session");
+    let (state, _temp_dir) = test_state("app_invoke_start_blocks_active_session");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -1159,13 +1139,11 @@ async fn start_implementation_blocks_active_agent_session() {
 
     assert_eq!(err.0, StatusCode::CONFLICT);
     assert!(err.1.contains("active agent session"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn start_implementation_blocks_unmet_dependencies() {
-    let (state, path) = test_state("app_invoke_start_blocks_dependencies");
+    let (state, _temp_dir) = test_state("app_invoke_start_blocks_dependencies");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -1192,13 +1170,11 @@ async fn start_implementation_blocks_unmet_dependencies() {
 
     assert_eq!(err.0, StatusCode::CONFLICT);
     assert!(err.1.contains("not done"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn start_implementation_reports_invalid_workspace_cwd_as_bad_request() {
-    let (state, path) = test_state("app_invoke_start_invalid_workspace_cwd");
+    let (state, _temp_dir) = test_state("app_invoke_start_invalid_workspace_cwd");
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
     let missing_workspace = temp_dir.path().join("Missing Project");
     let task_id = {
@@ -1245,13 +1221,11 @@ async fn start_implementation_reports_invalid_workspace_cwd_as_bad_request() {
         "invalid workspace errors should not be reported as generic spawn failures, got: {}",
         err.1
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_completes_successful_opencode_pty_run() {
-    let (state, path) = test_state("finalize_opencode_success");
+    let (state, _temp_dir) = test_state("finalize_opencode_success");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
@@ -1286,13 +1260,11 @@ async fn finalize_agent_session_completes_successful_opencode_pty_run() {
             .status,
         "completed"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_completes_successful_codex_pty_run() {
-    let (state, path) = test_state("finalize_codex_success");
+    let (state, _temp_dir) = test_state("finalize_codex_success");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -1338,13 +1310,11 @@ async fn finalize_agent_session_completes_successful_codex_pty_run() {
     assert_eq!(event.payload["task_id"], task_id);
     assert_eq!(event.payload["status"], "completed");
     assert_eq!(event.payload["provider"], "codex");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_interrupts_failed_codex_pty_run() {
-    let (state, path) = test_state("finalize_codex_failure");
+    let (state, _temp_dir) = test_state("finalize_codex_failure");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
@@ -1378,13 +1348,11 @@ async fn finalize_agent_session_interrupts_failed_codex_pty_run() {
         .expect("codex exists");
     assert_eq!(session.status, "interrupted");
     assert_eq!(session.error_message.as_deref(), Some("PTY process exited"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
-    let (state, path) = test_state("finalize_ignores_missing_pty_exit");
+    let (state, _temp_dir) = test_state("finalize_ignores_missing_pty_exit");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
@@ -1419,13 +1387,11 @@ async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
             .status,
         "running"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_ignores_stale_pty_exit_instance() {
-    let (state, path) = test_state("finalize_ignores_stale_pty_exit");
+    let (state, _temp_dir) = test_state("finalize_ignores_stale_pty_exit");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
@@ -1460,13 +1426,11 @@ async fn finalize_agent_session_ignores_stale_pty_exit_instance() {
             .status,
         "running"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn finalize_agent_session_does_not_override_paused_lifecycle_state() {
-    let (state, path) = test_state("finalize_does_not_override_paused");
+    let (state, _temp_dir) = test_state("finalize_does_not_override_paused");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
@@ -1498,8 +1462,6 @@ async fn finalize_agent_session_does_not_override_paused_lifecycle_state() {
         .expect("opencode exists");
     assert_eq!(session.status, "paused");
     assert!(session.error_message.is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 // ============================================================================
@@ -1603,7 +1565,7 @@ async fn update_task_status_to_done_is_rejected_and_preserves_worktree() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_done_rejected_keeps_worktree");
+    let (state, _temp_dir) = test_state("app_invoke_done_rejected_keeps_worktree");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     // 'done' is a legacy, recognized-but-unreachable status (AVIV-118): assigning
@@ -1647,8 +1609,6 @@ async fn update_task_status_to_done_is_rejected_and_preserves_worktree() {
         "the worktree record must survive a rejected move to Done"
     );
     drop(db);
-
-    let _ = std::fs::remove_file(db_path);
 }
 
 /// Polls until `condition` holds, panicking after a generous deadline. Used to
@@ -1669,7 +1629,7 @@ async fn delete_task_deletes_owned_branch_when_safe() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_delete_deletes_owned_branch");
+    let (state, _temp_dir) = test_state("app_invoke_delete_deletes_owned_branch");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
@@ -1679,8 +1639,6 @@ async fn delete_task_deletes_owned_branch_when_safe() {
         || !branch_exists_lifecycle(&repo_dir, &branch),
     )
     .await;
-
-    let _ = std::fs::remove_file(db_path);
 }
 
 #[tokio::test]
@@ -1688,7 +1646,7 @@ async fn delete_task_publishes_deleted_event_before_worktree_cleanup_finishes() 
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_delete_event_before_cleanup");
+    let (state, _temp_dir) = test_state("app_invoke_delete_event_before_cleanup");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
     let mut events = state
         .app_event_tx
@@ -1737,8 +1695,6 @@ async fn delete_task_publishes_deleted_event_before_worktree_cleanup_finishes() 
         !worktree_dir.exists() && !branch_exists_lifecycle(&repo_dir, &branch)
     })
     .await;
-
-    let _ = std::fs::remove_file(db_path);
 }
 
 #[tokio::test]
@@ -1746,7 +1702,7 @@ async fn delete_task_rejects_duplicate_delete_while_cleanup_in_flight() {
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let repo_dir = temp.path().join("repo");
     let worktree_dir = temp.path().join("wt");
-    let (state, db_path) = test_state("app_invoke_delete_duplicate_guard");
+    let (state, _temp_dir) = test_state("app_invoke_delete_duplicate_guard");
     let (task_id, branch) = setup_owned_worktree_task(&state, &repo_dir, &worktree_dir, true).await;
 
     let repo_lock = crate::git_worktree::acquire_lock(&repo_dir);
@@ -1769,6 +1725,4 @@ async fn delete_task_rejects_duplicate_delete_while_cleanup_in_flight() {
         !worktree_dir.exists() && !branch_exists_lifecycle(&repo_dir, &branch)
     })
     .await;
-
-    let _ = std::fs::remove_file(db_path);
 }

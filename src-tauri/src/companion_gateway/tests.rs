@@ -282,7 +282,7 @@ async fn companion_gateway_is_disabled_by_default_without_creating_identity() {
 
 #[test]
 fn persisted_gateway_preference_defaults_off_and_restores_explicit_opt_in() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_gateway_preference_defaults_off");
     assert!(!super::enabled_preference(&database).expect("default preference"));
     database

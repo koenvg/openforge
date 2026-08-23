@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn update_task_status_records_the_first_non_backlog_transition() {
-        let (db, path) = make_test_db("task_lifecycle_status_transition");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_status_transition");
         let task = db
             .create_task("Transition me", "backlog", None, None, None)
             .expect("create task");
@@ -195,12 +195,11 @@ mod tests {
         assert_eq!(returned_to_backlog.1, first_started_at.1);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn guarded_delete_rejects_stale_state_and_reports_missing_tasks() {
-        let (db, path) = make_test_db("task_lifecycle_guarded_delete");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_guarded_delete");
         let task = db
             .create_task("Delete me", "doing", None, None, None)
             .expect("create task");
@@ -227,12 +226,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn guarded_completion_rejects_stale_state_and_retains_the_task() {
-        let (db, path) = make_test_db("task_lifecycle_guarded_completion");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_guarded_completion");
         let task = db
             .create_task("Complete me", "doing", None, None, None)
             .expect("create task");
@@ -271,12 +269,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn completion_removes_runtime_children_and_preserves_task_references() {
-        let (db, path) = make_test_db("task_lifecycle_completion_children");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_completion_children");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -306,12 +303,11 @@ mod tests {
         assert_runtime_children_absent(&db, &task.id);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn hard_delete_removes_runtime_children_and_task_owned_references() {
-        let (db, path) = make_test_db("task_lifecycle_delete_children");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_delete_children");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -339,12 +335,11 @@ mod tests {
         assert_runtime_children_absent(&db, &task.id);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn hard_delete_rolls_back_all_writes_when_child_cleanup_fails() {
-        let (db, path) = make_test_db("task_lifecycle_delete_rollback");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_delete_rollback");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -360,12 +355,11 @@ mod tests {
         assert_runtime_children_present(&db, &task.id);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn completion_rolls_back_child_cleanup_when_status_update_fails() {
-        let (db, path) = make_test_db("task_lifecycle_completion_rollback");
+        let (db, _temp_dir) = make_test_db("task_lifecycle_completion_rollback");
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
@@ -387,7 +381,6 @@ mod tests {
         assert_runtime_children_present(&db, &task.id);
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 
     fn task_status_and_execution_start(db: &Database, task_id: &str) -> (String, Option<i64>) {

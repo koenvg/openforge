@@ -151,11 +151,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_agent_review_comment_insert_and_retrieve() {
-        let (db, path) = make_test_db("agent_review_insert");
+        let (db, _temp_dir) = make_test_db("agent_review_insert");
         insert_test_task(&db);
 
         // Insert a review_pr row for FK constraint
@@ -216,12 +215,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_review_comment_update_status() {
-        let (db, path) = make_test_db("agent_review_update");
+        let (db, _temp_dir) = make_test_db("agent_review_update");
         insert_test_task(&db);
 
         let conn = db.connection();
@@ -260,12 +258,11 @@ mod tests {
         assert_eq!(comments[0].status, "approved");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_review_comment_delete_for_pr() {
-        let (db, path) = make_test_db("agent_review_delete");
+        let (db, _temp_dir) = make_test_db("agent_review_delete");
         insert_test_task(&db);
 
         let conn = db.connection();
@@ -316,12 +313,11 @@ mod tests {
         assert_eq!(comments.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_review_comment_get_summary() {
-        let (db, path) = make_test_db("agent_review_summary");
+        let (db, _temp_dir) = make_test_db("agent_review_summary");
         insert_test_task(&db);
 
         let conn = db.connection();
@@ -370,12 +366,11 @@ mod tests {
         assert_eq!(summary.body, "First comment");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_review_comment_migration_table_exists() {
-        let (db, path) = make_test_db("agent_review_migration");
+        let (db, _temp_dir) = make_test_db("agent_review_migration");
 
         let conn = db.connection();
         let conn = conn.lock().unwrap();
@@ -429,12 +424,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_review_comment_multiple_prs() {
-        let (db, path) = make_test_db("agent_review_multi_pr");
+        let (db, _temp_dir) = make_test_db("agent_review_multi_pr");
         insert_test_task(&db);
 
         let conn = db.connection();
@@ -501,6 +495,5 @@ mod tests {
         assert_eq!(comments_pr2[0].review_pr_id, 2);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

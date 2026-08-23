@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn accepts_remaining_electron_cutover_ipc_commands() {
-    let (state, path) = test_state("app_invoke_electron_cutover_remaining_ipc");
+    let (state, _temp_dir) = test_state("app_invoke_electron_cutover_remaining_ipc");
     let (project_id, task_id) = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -80,13 +80,11 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
             "retired core skill command {command} should not be routed after plugin migration"
         );
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn force_github_sync_uses_sidecar_managed_client_state() {
-    let (state, path) = test_state("app_invoke_force_github_sync");
+    let (state, _temp_dir) = test_state("app_invoke_force_github_sync");
 
     let body = invoke_ok(&state, "force_github_sync", serde_json::Value::Null).await;
     assert_eq!(body["new_comments"], 0);
@@ -97,6 +95,4 @@ async fn force_github_sync_uses_sidecar_managed_client_state() {
     assert_eq!(body["rate_limited"], false);
     assert_eq!(body["rate_limit_reset_at"], serde_json::Value::Null);
     assert_eq!(body["outcome"], "missing_github_token");
-
-    let _ = std::fs::remove_file(path);
 }

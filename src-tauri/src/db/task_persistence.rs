@@ -179,7 +179,6 @@ impl Database {
 mod tests {
     use super::*;
     use crate::db::test_helpers::*;
-    use std::fs;
 
     fn task_ids(tasks: &[TaskRow]) -> Vec<&str> {
         tasks.iter().map(|task| task.id.as_str()).collect()
@@ -203,7 +202,7 @@ mod tests {
 
     #[test]
     fn task_collection_queries_order_by_most_recent_update() {
-        let (db, path) = make_test_db("task_persistence_ordering");
+        let (db, _temp_dir) = make_test_db("task_persistence_ordering");
         let project = db
             .create_project("Project", "/tmp/task-persistence-ordering")
             .expect("create project");
@@ -292,12 +291,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn compact_rows_use_explicit_titles_and_prompt_fallbacks() {
-        let (db, path) = make_test_db("task_persistence_compact_titles");
+        let (db, _temp_dir) = make_test_db("task_persistence_compact_titles");
         let project = db
             .create_project("Project", "/tmp/task-persistence-compact-titles")
             .expect("create project");
@@ -354,12 +352,11 @@ mod tests {
         assert_eq!(title_for(&explicit_title.id), "Explicit title");
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn every_task_row_query_hydrates_dependencies_and_labels() {
-        let (db, path) = make_test_db("task_persistence_hydration");
+        let (db, _temp_dir) = make_test_db("task_persistence_hydration");
         let project = db
             .create_project("Project", "/tmp/task-persistence-hydration")
             .expect("create project");
@@ -421,6 +418,5 @@ mod tests {
         }
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 }

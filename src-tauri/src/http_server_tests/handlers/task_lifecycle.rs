@@ -130,7 +130,7 @@ async fn test_delete_task_handler_permanently_deletes_task_and_keeps_other_tasks
 
 #[tokio::test]
 async fn test_hard_delete_task_handler_removes_task_row() {
-    let (state, path) = test_state("http_hard_delete_task_handler_removes_task");
+    let (state, _temp_dir) = test_state("http_hard_delete_task_handler_removes_task");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -166,13 +166,11 @@ async fn test_hard_delete_task_handler_removes_task_row() {
         .get_task("T-1")
         .expect("get task")
         .is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_hard_delete_task_handler_rejects_terminal_completion_claim() {
-    let (state, path) = test_state("http_hard_delete_conflicts_with_completion");
+    let (state, _temp_dir) = test_state("http_hard_delete_conflicts_with_completion");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         db.create_task("Task to retain", "backlog", None, None, None)
@@ -209,13 +207,11 @@ async fn test_hard_delete_task_handler_rejects_terminal_completion_claim() {
         .get_task(&task_id)
         .expect("get task")
         .is_some());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_hard_delete_task_handler_conflicts_with_in_progress_start() {
-    let (state, path) = test_state("http_hard_delete_conflicts_with_start");
+    let (state, _temp_dir) = test_state("http_hard_delete_conflicts_with_start");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         db.create_task("Task to keep", "backlog", None, None, None)
@@ -249,13 +245,11 @@ async fn test_hard_delete_task_handler_conflicts_with_in_progress_start() {
         .get_task(&task_id)
         .expect("get task")
         .is_some());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_delete_task_handler_rejects_non_backlog_task() {
-    let (state, path) = test_state("http_delete_task_handler_non_backlog_task");
+    let (state, _temp_dir) = test_state("http_delete_task_handler_non_backlog_task");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -288,13 +282,11 @@ async fn test_delete_task_handler_rejects_non_backlog_task() {
         .get_task("T-1")
         .expect("get task")
         .is_some());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_delete_task_handler_rejects_missing_task() {
-    let (state, path) = test_state("http_delete_task_handler_missing_task");
+    let (state, _temp_dir) = test_state("http_delete_task_handler_missing_task");
 
     let router = create_router(state);
     let response = router
@@ -310,13 +302,11 @@ async fn test_delete_task_handler_rejects_missing_task() {
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_start_task_handler_rejects_missing_task_id() {
-    let (state, path) = test_state("http_start_task_missing_task_id");
+    let (state, _temp_dir) = test_state("http_start_task_missing_task_id");
     let response = create_router(state)
         .oneshot(
             Request::builder()
@@ -330,13 +320,11 @@ async fn test_start_task_handler_rejects_missing_task_id() {
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_start_task_handler_returns_not_found_for_unknown_task() {
-    let (state, path) = test_state("http_start_task_unknown_task");
+    let (state, _temp_dir) = test_state("http_start_task_unknown_task");
     let response = create_router(state)
         .oneshot(
             Request::builder()
@@ -353,13 +341,11 @@ async fn test_start_task_handler_returns_not_found_for_unknown_task() {
     assert!(response_body_text(response)
         .await
         .contains("Task not found: T-404"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_start_task_handler_rejects_projectless_task() {
-    let (state, path) = test_state("http_start_task_projectless_task");
+    let (state, _temp_dir) = test_state("http_start_task_projectless_task");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         db.create_task("Projectless", "backlog", None, None, None)
@@ -382,13 +368,11 @@ async fn test_start_task_handler_rejects_projectless_task() {
     assert!(response_body_text(response)
         .await
         .contains("task is not associated with a project"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_start_task_handler_preserves_dependency_conflicts() {
-    let (state, path) = test_state("http_start_task_dependency_conflict");
+    let (state, _temp_dir) = test_state("http_start_task_dependency_conflict");
     let (dependency_id, task_id) = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -420,8 +404,6 @@ async fn test_start_task_handler_preserves_dependency_conflicts() {
     assert!(response_body_text(response)
         .await
         .contains(&format!("Task dependency {dependency_id} is not done")));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]

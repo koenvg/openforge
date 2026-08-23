@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn task_display_title_refresh_is_disabled_by_default() {
-    let (state, path) = test_state("task_title_refresh_disabled_by_default");
+    let (state, _temp_dir) = test_state("task_title_refresh_disabled_by_default");
     let notification = crate::agent_lifecycle::AgentLifecycleNotification {
         provider: "codex".to_string(),
         task_id: "task-title-refresh".to_string(),
@@ -17,13 +17,11 @@ fn task_display_title_refresh_is_disabled_by_default() {
         &state,
         &notification
     ));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn task_display_title_refresh_starts_for_supported_provider_activity_when_enabled() {
-    let (state, path) = test_state("task_title_refresh_enabled_supported_activity");
+    let (state, _temp_dir) = test_state("task_title_refresh_enabled_supported_activity");
     state
         .db
         .lock()
@@ -53,13 +51,11 @@ fn task_display_title_refresh_starts_for_supported_provider_activity_when_enable
             "{provider} {raw_event_type} should start title refresh"
         );
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn task_display_title_refresh_ignores_unsupported_provider_activity() {
-    let (state, path) = test_state("task_title_refresh_enabled_unsupported_activity");
+    let (state, _temp_dir) = test_state("task_title_refresh_enabled_unsupported_activity");
     state
         .db
         .lock()
@@ -125,13 +121,11 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
             "{provider} {raw_event_type} should not start title refresh"
         );
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn task_display_title_refresh_reads_task_override() {
-    let (state, path) = test_state("task_title_refresh_task_override");
+    let (state, _temp_dir) = test_state("task_title_refresh_task_override");
 
     let task_id = {
         let db = state.db.lock().expect("lock db");
@@ -178,6 +172,4 @@ fn task_display_title_refresh_reads_task_override() {
         should_start_task_display_title_refresh(&state, &notification),
         "task-level title-update override should win over global config"
     );
-
-    let _ = std::fs::remove_file(path);
 }

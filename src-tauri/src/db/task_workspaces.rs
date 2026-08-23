@@ -174,11 +174,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_task_workspace_lifecycle() {
-        let (db, path) = make_test_db("task_workspace_lifecycle");
+        let (db, _temp_dir) = make_test_db("task_workspace_lifecycle");
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
@@ -224,12 +223,11 @@ mod tests {
         assert_eq!(updated.status, "completed");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_upsert_task_workspace_record_updates_existing_row() {
-        let (db, path) = make_test_db("upsert_task_workspace_record");
+        let (db, _temp_dir) = make_test_db("upsert_task_workspace_record");
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
@@ -269,6 +267,5 @@ mod tests {
         assert_eq!(workspace.branch_name, Some("t-1".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

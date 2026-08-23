@@ -28,11 +28,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_config_operations() {
-        let (db, path) = make_test_db("config_ops");
+        let (db, _temp_dir) = make_test_db("config_ops");
 
         // Legacy OpenCode server port config is no longer seeded for new databases.
         let port = db
@@ -52,12 +51,11 @@ mod tests {
 
         // Clean up
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_config_set_new_key() {
-        let (db, path) = make_test_db("config_new_key");
+        let (db, _temp_dir) = make_test_db("config_new_key");
 
         db.set_config("custom_key", "custom_value")
             .expect("set failed");
@@ -70,6 +68,5 @@ mod tests {
         assert_eq!(val, Some("overwritten".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

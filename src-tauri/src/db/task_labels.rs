@@ -352,11 +352,10 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::db::{test_helpers::*, TaskLabelPersistenceError};
-    use std::fs;
 
     #[test]
     fn test_task_labels_are_project_scoped_case_insensitive_and_return_with_tasks() {
-        let (db, path) = make_test_db("task_labels_round_trip");
+        let (db, _temp_dir) = make_test_db("task_labels_round_trip");
         db.set_config("task_id_prefix", "T")
             .expect("set task id prefix");
         let project_a = db
@@ -396,12 +395,11 @@ mod tests {
         assert_eq!(project_a_labels, vec![first]);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_set_task_labels_replaces_assignments_but_keeps_unused_labels() {
-        let (db, path) = make_test_db("task_labels_replace");
+        let (db, _temp_dir) = make_test_db("task_labels_replace");
         db.set_config("task_id_prefix", "T")
             .expect("set task id prefix");
         let project = db
@@ -425,12 +423,11 @@ mod tests {
         assert!(all_labels.iter().any(|label| label.id == ui.id));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_set_task_labels_normalizes_and_deduplicates_label_names() {
-        let (db, path) = make_test_db("set_task_labels_normalized");
+        let (db, _temp_dir) = make_test_db("set_task_labels_normalized");
         db.set_config("task_id_prefix", "T")
             .expect("set task id prefix");
         let project = db
@@ -471,12 +468,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_set_task_labels_rolls_back_new_labels_when_assignment_fails() {
-        let (db, path) = make_test_db("task_labels_assignment_failure");
+        let (db, _temp_dir) = make_test_db("task_labels_assignment_failure");
         db.set_config("task_id_prefix", "T")
             .expect("set task id prefix");
         let project = db
@@ -517,12 +513,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_delete_task_label_removes_project_label_and_all_assignments() {
-        let (db, path) = make_test_db("task_labels_delete");
+        let (db, _temp_dir) = make_test_db("task_labels_delete");
         db.set_config("task_id_prefix", "T")
             .expect("set task id prefix");
         let project = db
@@ -565,12 +560,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_label_validation_rejects_blank_long_projectless_and_missing_tasks() {
-        let (db, path) = make_test_db("task_label_validation");
+        let (db, _temp_dir) = make_test_db("task_label_validation");
         let projectless = db
             .create_task("Projectless", "backlog", None, None, None)
             .expect("create projectless task");
@@ -600,12 +594,11 @@ mod tests {
                 if task_id == "T-missing"
         ));
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_add_task_label_rolls_back_new_label_when_assignment_fails() {
-        let (db, path) = make_test_db("add_task_label_assignment_failure");
+        let (db, _temp_dir) = make_test_db("add_task_label_assignment_failure");
         let project = db
             .create_project("A", "/tmp/add-label-assignment-failure")
             .expect("create project");
@@ -633,12 +626,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_remove_task_label_rejects_missing_task() {
-        let (db, path) = make_test_db("remove_task_label_missing_task");
+        let (db, _temp_dir) = make_test_db("remove_task_label_missing_task");
 
         assert!(matches!(
             db.remove_task_label("T-missing", 1),
@@ -646,12 +638,11 @@ mod tests {
                 if task_id == "T-missing"
         ));
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_add_task_label_rejects_cross_project_assignment() {
-        let (db, path) = make_test_db("task_label_cross_project_assignment");
+        let (db, _temp_dir) = make_test_db("task_label_cross_project_assignment");
         let project_a = db
             .create_project("A", "/tmp/labels-cross-project-a")
             .expect("create project a");
@@ -684,6 +675,5 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

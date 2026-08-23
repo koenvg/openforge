@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn database_service_advertises_only_current_task_actions_in_desktop_order() {
-        let (database, path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("companion_action_palette_availability");
         let workspace = tempfile::tempdir().expect("workspace tempdir");
         let database = Arc::new(Mutex::new(database));
@@ -586,13 +586,11 @@ mod tests {
                 .expect("visible Project"),
             project_id
         );
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
     async fn focus_actions_revalidate_state_and_persist_the_authoritative_board_membership() {
-        let (database, path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("companion_action_palette_focus");
         let database = Arc::new(Mutex::new(database));
         let (project_id, doing_id, backlog_id) = {
@@ -656,13 +654,11 @@ mod tests {
                 .await,
             Err(CompanionActionPaletteError::InvalidTaskState)
         );
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
     async fn run_app_uses_the_active_task_workspace_and_shared_shell_session() {
-        let (database, path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("companion_action_palette_run_app");
         let workspace = tempfile::tempdir().expect("workspace tempdir");
         let database = Arc::new(Mutex::new(database));
@@ -726,7 +722,5 @@ mod tests {
             .kill_pty(&shell_key)
             .await
             .expect("shell cleanup");
-
-        let _ = std::fs::remove_file(path);
     }
 }

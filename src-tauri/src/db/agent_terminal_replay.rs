@@ -74,7 +74,8 @@ mod tests {
 
     #[test]
     fn completed_agent_terminal_replay_survives_database_reopen() {
-        let (db, path) = make_test_db("completed_agent_terminal_replay");
+        let (db, temp_dir) = make_test_db("completed_agent_terminal_replay");
+        let db_path = temp_dir.path().join("test.db");
         let project = db
             .create_project("Replay Project", "/tmp/replay-project")
             .expect("create project");
@@ -111,7 +112,7 @@ mod tests {
         );
         drop(db);
 
-        let reopened = crate::db::Database::new(path.clone()).expect("reopen database");
+        let reopened = crate::db::Database::new(db_path).expect("reopen database");
         assert_eq!(
             reopened
                 .get_latest_agent_terminal_replay(&task.id)
@@ -121,12 +122,11 @@ mod tests {
         );
 
         drop(reopened);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn replay_persistence_rejects_a_session_that_became_active_again() {
-        let (db, path) = make_test_db("active_agent_terminal_replay");
+        let (db, _temp_dir) = make_test_db("active_agent_terminal_replay");
         let project = db
             .create_project("Active Replay Project", "/tmp/active-replay-project")
             .expect("create project");
@@ -153,6 +153,5 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(path);
     }
 }

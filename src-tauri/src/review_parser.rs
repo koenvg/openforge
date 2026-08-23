@@ -193,7 +193,6 @@ pub fn store_parsed_review(
 mod tests {
     use super::*;
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_parse_json_code_block() {
@@ -300,7 +299,7 @@ Let me know if you have questions."#;
 
     #[test]
     fn test_store_parsed_review() {
-        let (db, path) = make_test_db("review_parser_store");
+        let (db, _temp_dir) = make_test_db("review_parser_store");
         insert_test_task(&db);
 
         // Insert a review_prs row for FK constraint
@@ -363,6 +362,5 @@ Let me know if you have questions."#;
         assert_eq!(comments[1].raw_agent_output, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn host_filesystem_callbacks_route_to_project_services() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_filesystem_callbacks");
     let project_dir = tempfile::tempdir().expect("project dir");
     let src_dir = project_dir.path().join("src");

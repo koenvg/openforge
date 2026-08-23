@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn link_pull_request_persists_synthetic_pr_for_task() {
-        let (db, path) = make_test_db("link_pull_request_persists");
+        let (db, _temp_dir) = make_test_db("link_pull_request_persists");
         let task = db
             .create_task("Link a PR", "doing", None, None, None)
             .expect("create task");
@@ -356,13 +356,11 @@ mod tests {
         assert!(pr.id < 0, "manual links use a synthetic negative row id");
         assert_eq!(pr.title, "owner/repo#77");
         assert_eq!(pr.state, "open");
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn link_pull_request_reuses_existing_pr_row_for_same_repository_number() {
-        let (db, path) = make_test_db("link_pull_request_reuses_existing");
+        let (db, _temp_dir) = make_test_db("link_pull_request_reuses_existing");
         let old_task = db
             .create_task("Old link", "doing", None, None, None)
             .expect("create old task");
@@ -392,12 +390,10 @@ mod tests {
         assert_eq!(pr.id, 123456);
         assert_eq!(pr.ticket_id, new_task.id);
         assert_eq!(pr.title, "Fetched GitHub title");
-
-        let _ = std::fs::remove_file(path);
     }
     #[test]
     fn successful_task_actions_persist_terminal_local_state() {
-        let (db, path) = make_test_db("task_pr_action_local_state");
+        let (db, _temp_dir) = make_test_db("task_pr_action_local_state");
         let merged_task = db
             .create_task("Merge PR", "doing", None, None, None)
             .expect("create merge task");
@@ -458,12 +454,10 @@ mod tests {
             queued.merge_readiness_action.as_deref(),
             Some("wait_for_queue")
         );
-
-        let _ = std::fs::remove_file(path);
     }
     #[test]
     fn task_merge_target_rejects_a_changed_expected_head() {
-        let (db, path) = make_test_db("task_pr_action_expected_head");
+        let (db, _temp_dir) = make_test_db("task_pr_action_expected_head");
         let task = db
             .create_task("Merge PR", "doing", None, None, None)
             .expect("create task");
@@ -501,6 +495,5 @@ mod tests {
         .expect_err("changed head must reject merge");
 
         assert_eq!(error, "Pull request is no longer ready to merge");
-        let _ = std::fs::remove_file(path);
     }
 }
