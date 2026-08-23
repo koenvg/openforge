@@ -56,6 +56,14 @@ export class BackendLifecycle {
     }
 
     const state = this.getState(input.pluginId)
+    if (state.deactivationPromise) {
+      await state.deactivationPromise
+      return await this.activate(input)
+    }
+    if (state.activationPromise) {
+      await state.activationPromise
+      return await this.activate(input)
+    }
     this.refreshCrashLoopGuard(state)
     if (state.crashLoopGuardTripped) {
       throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
@@ -69,11 +77,6 @@ export class BackendLifecycle {
       return this.snapshot(input.pluginId)
     }
 
-    if (state.state === 'starting' && state.activationPromise) {
-      await state.activationPromise
-      return this.snapshot(input.pluginId)
-    }
-
     if (state.state === 'ready' || state.state === 'error') {
       await this.cleanup(state)
     }
@@ -83,25 +86,51 @@ export class BackendLifecycle {
     state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
     state.state = 'starting'
     state.error = null
+    state.activationGeneration += 1
 
-    state.activationPromise = this.activateState(state)
-    await state.activationPromise
+    const activationGeneration = state.activationGeneration
+    const activationPromise = this.activateState(state, activationGeneration)
+    state.activationPromise = activationPromise
+    try {
+      await activationPromise
+    } finally {
+      if (state.activationPromise === activationPromise) {
+        state.activationPromise = null
+      }
+    }
     return this.snapshot(input.pluginId)
   }
 
   async deactivate(pluginId: string): Promise<BackendStateSnapshot> {
     assertLocalId('backend', pluginId)
     const state = this.getState(pluginId)
-    await this.cleanup(state)
+    if (state.deactivationPromise) {
+      await state.deactivationPromise
+      return this.snapshot(pluginId)
+    }
+
+    const deactivationPromise = this.deactivateState(state)
+    state.deactivationPromise = deactivationPromise
+    try {
+      await deactivationPromise
+    } finally {
+      if (state.deactivationPromise === deactivationPromise) {
+        state.deactivationPromise = null
+      }
+    }
+    return this.snapshot(pluginId)
+  }
+
+  private async deactivateState(state: RuntimePluginState): Promise<void> {
+    state.activationGeneration += 1
+    state.crashTimestamps = []
+    state.crashLoopGuardTripped = false
     state.state = 'missing'
     state.error = null
     state.backendPath = null
     state.projectId = null
     state.module = null
-    state.activationPromise = null
-    state.crashTimestamps = []
-    state.crashLoopGuardTripped = false
-    return this.snapshot(pluginId)
+    await this.cleanup(state)
   }
 
   async whenReady(input: ReadyBackendInput): Promise<BackendStateSnapshot> {
@@ -189,7 +218,8 @@ export class BackendLifecycle {
       : createMemoryStorage()
   }
 
-  private async activateState(state: RuntimePluginState): Promise<void> {
+  private async activateState(state: RuntimePluginState, activationGeneration: number): Promise<void> {
+    const activationSubscriptions = state.subscriptions
     try {
       state.importGeneration += 1
       state.module = await loadBackendModule(state.backendPath ?? '', state.importGeneration)
@@ -201,12 +231,28 @@ export class BackendLifecycle {
 
       await withPluginConsole(state.pluginId, async () => {
         await plugin.activate(this.options.createBackendApi(state), this.createBackendContext(state))
-        await this.startBackgroundServices(state)
       })
+      if (!this.isCurrentActivation(state, activationGeneration)) {
+        await this.cleanupInvalidatedActivation(state, activationSubscriptions)
+        return
+      }
+
+      await withPluginConsole(state.pluginId, async () => {
+        await this.startBackgroundServices(state, activationGeneration)
+      })
+      if (!this.isCurrentActivation(state, activationGeneration)) {
+        await this.cleanupInvalidatedActivation(state, activationSubscriptions)
+        return
+      }
 
       state.state = 'ready'
       state.error = null
     } catch (error) {
+      if (!this.isCurrentActivation(state, activationGeneration)) {
+        await this.cleanupInvalidatedActivation(state, activationSubscriptions)
+        return
+      }
+
       const pluginError = toError(error)
       state.error = pluginError
       await this.cleanup(state)
@@ -214,9 +260,21 @@ export class BackendLifecycle {
       state.state = 'error'
       logPluginHostError(state.pluginId, `activation error: ${pluginError.message}`)
       throw pluginError
-    } finally {
-      state.activationPromise = null
     }
+  }
+
+  private isCurrentActivation(state: RuntimePluginState, activationGeneration: number): boolean {
+    return state.activationGeneration === activationGeneration
+  }
+
+  private async cleanupInvalidatedActivation(
+    state: RuntimePluginState,
+    activationSubscriptions: RuntimePluginState['subscriptions'],
+  ): Promise<void> {
+    if (state.deactivationPromise) {
+      await state.deactivationPromise
+    }
+    await this.cleanup(state, activationSubscriptions)
   }
 
   private refreshCrashLoopGuard(state: RuntimePluginState): void {
@@ -231,8 +289,11 @@ export class BackendLifecycle {
     state.crashLoopGuardTripped = state.crashTimestamps.length >= this.crashLoopLimit
   }
 
-  private async cleanup(state: RuntimePluginState): Promise<void> {
-    await state.subscriptions.disposeAll()
+  private async cleanup(
+    state: RuntimePluginState,
+    subscriptions: RuntimePluginState['subscriptions'] = state.subscriptions,
+  ): Promise<void> {
+    await subscriptions.disposeAll()
 
     const services = Array.from(state.backgroundServices.values()).reverse()
     for (const service of services) {
@@ -248,16 +309,33 @@ export class BackendLifecycle {
     }
 
     this.options.contributions.removeStateContributions(state)
-    state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
+    if (state.subscriptions === subscriptions) {
+      state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
+    }
   }
 
-  private async startBackgroundServices(state: RuntimePluginState): Promise<void> {
+  private async startBackgroundServices(state: RuntimePluginState, activationGeneration: number): Promise<void> {
     for (const service of state.backgroundServices.values()) {
       if (service.started) continue
       try {
         await service.start()
         service.started = true
+        if (!this.isCurrentActivation(state, activationGeneration)) {
+          try {
+            await service.stop?.()
+          } catch (error) {
+            const pluginError = toError(error)
+            logPluginHostError(state.pluginId, `background service stop error in ${service.qualifiedId}: ${pluginError.message}`)
+          } finally {
+            service.started = false
+          }
+          return
+        }
       } catch (error) {
+        if (!this.isCurrentActivation(state, activationGeneration)) {
+          service.started = false
+          return
+        }
         const pluginError = toError(error)
         logPluginHostError(state.pluginId, `background service start error in ${service.qualifiedId}: ${pluginError.message}`)
         throw pluginError
