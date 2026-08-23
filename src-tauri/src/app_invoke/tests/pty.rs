@@ -260,6 +260,23 @@ async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessio
 }
 
 #[tokio::test]
+async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
+    let (state, path) = test_state("app_invoke_persisted_terminal_replay");
+    let (task_id, _) = seed_follow_up_session(&state, "completed");
+    {
+        let db = crate::db::acquire_db(&state.db);
+        assert!(db
+            .save_completed_agent_terminal_replay(&task_id, "persisted terminal output")
+            .expect("persist replay"));
+    }
+
+    let replay = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": task_id })).await;
+
+    assert_eq!(replay, "persisted terminal output");
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn task_follow_up_failures_are_specific_and_task_isolated() {
     let (state, path) = test_state("app_invoke_follow_up_failures");
     let (task_id, _) = seed_follow_up_session(&state, "running");

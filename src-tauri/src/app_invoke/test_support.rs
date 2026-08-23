@@ -13,15 +13,21 @@ use std::sync::{Arc, Mutex};
 
 pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
     let (db, path) = crate::db::test_helpers::make_test_db(name);
+    let db = Arc::new(Mutex::new(db));
     let (app_event_tx, _) = tokio::sync::broadcast::channel(16);
     let mut pty_manager = PtyManager::new();
     pty_manager.set_pid_dir(path.with_extension("pids"));
+    let completed_session_reaper = crate::completed_session_reaper::CompletedSessionReaper::new(
+        Arc::clone(&db),
+        pty_manager.clone(),
+    );
     (
         AppState {
             app: None,
-            db: Arc::new(Mutex::new(db)),
+            db: Arc::clone(&db),
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(pty_manager),
+            completed_session_reaper,
             github_client: GitHubClient::new(),
             frontend_host_requests:
                 crate::frontend_host_request_transport::FrontendHostRequestTransport::production(

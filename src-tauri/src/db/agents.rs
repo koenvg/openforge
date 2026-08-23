@@ -146,6 +146,39 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn reactivate_agent_session_runtime(
+        &self,
+        id: &str,
+        pty_instance_id: u64,
+        provider_session_id: Option<&str>,
+    ) -> Result<()> {
+        let pty_instance_id = i64::try_from(pty_instance_id)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+        let conn = self.lock_conn()?;
+        let now = super::current_unix_timestamp()?;
+        let changed = conn.execute(
+            "UPDATE agent_sessions
+                SET status = 'running',
+                    pty_instance_id = ?1,
+                    error_message = NULL,
+                    updated_at = ?2,
+                    opencode_session_id = CASE
+                      WHEN provider = 'opencode' THEN COALESCE(?3, opencode_session_id)
+                      ELSE opencode_session_id
+                    END,
+                    pi_session_id = CASE
+                      WHEN provider = 'pi' THEN COALESCE(?3, pi_session_id)
+                      ELSE pi_session_id
+                    END
+              WHERE id = ?4",
+            rusqlite::params![pty_instance_id, now, provider_session_id, id],
+        )?;
+        if changed == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Ok(())
+    }
+
     pub fn set_agent_session_provider_id(
         &self,
         id: &str,

@@ -174,7 +174,7 @@ impl super::Database {
               )
              WHERE w.status = 'active'
                AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3, ?4)
+               AND latest_session.status IN (?1, ?2, ?3)
              ORDER BY w.updated_at DESC",
         )?;
 
@@ -183,7 +183,6 @@ impl super::Database {
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[0],
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[1],
                 super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[2],
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[3],
             ],
             |row| {
                 Ok(WorktreeRow {
@@ -421,8 +420,10 @@ mod tests {
         .expect("create latest failed session failed");
 
         let resumable = db.get_resumable_worktrees().expect("get resumable");
-        assert_eq!(resumable.len(), 1);
-        assert_eq!(resumable[0].task_id, completed_task.id);
+        assert!(
+            resumable.is_empty(),
+            "completed and failed Agent Sessions must not restart at startup"
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);

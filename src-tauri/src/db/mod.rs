@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod agent_review;
+mod agent_terminal_replay;
 mod agents;
 mod authored_prs;
 mod board_status;
@@ -55,8 +56,8 @@ pub use tasks::{
 };
 pub use worktrees::WorktreeRow;
 
-pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 4] =
-    ["running", "paused", "interrupted", "completed"];
+pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =
+    ["running", "paused", "interrupted"];
 
 use crate::github_client::PrLabel;
 
