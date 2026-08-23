@@ -186,11 +186,12 @@ fn ensure_windows_pathext_resolves_cmd(original_pathext: Option<&OsString>) {
 }
 
 const PROVIDER_RECORD_COMPLETE: &str = "openforge-provider-record=complete";
+const PROVIDER_LOG_READY: &str = "openforge-provider-log=ready";
 
 #[cfg(unix)]
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let script = format!(
-        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\n# Keep the fake provider alive until the test tears down its PTY. This prevents\n# an immediate child exit from racing PTY session registration on macOS.\nIFS= read -r _\nexit 0\n",
+        "#!/bin/sh\n{{\n  printf 'provider={command}\\n'\n  printf 'cwd=%s\\n' \"$PWD\"\n  i=0\n  for arg in \"$@\"; do\n    i=$((i + 1))\n    printf 'arg%s=%s\\n' \"$i\" \"$arg\"\n  done\n  printf '{PROVIDER_RECORD_COMPLETE}\\n'\n}} >> '{}'\nprintf '{PROVIDER_LOG_READY}\\n'\n# Keep the fake provider alive until the test tears down its PTY. This prevents\n# an immediate child exit from racing PTY session registration on macOS.\nIFS= read -r _\nexit 0\n",
         log_path.display()
     );
     let path = bin_dir.join(command);
@@ -204,7 +205,7 @@ fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
 fn install_fake_provider(bin_dir: &Path, command: &str, log_path: &Path) {
     let escaped_log_path = log_path.to_string_lossy().replace('\'', "''");
     let script = format!(
-        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}; Add-Content -LiteralPath $log -Value '{}'\" -- %*\r\nrem Keep the fake provider alive until the test tears down its PTY.\r\nset /p \"OPENFORGE_PROVIDER_RELEASE=\" >nul\r\nexit /b 0\r\n",
+        "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \"$log = '{}'; Add-Content -LiteralPath $log -Value 'provider={}'; Add-Content -LiteralPath $log -Value ('cwd=' + (Get-Location).Path); $i = 0; foreach ($arg in $args) {{ $i += 1; Add-Content -LiteralPath $log -Value ('arg' + $i + '=' + $arg) }}; Add-Content -LiteralPath $log -Value '{}'\" -- %*\r\necho {PROVIDER_LOG_READY}\r\nrem Keep the fake provider alive until the test tears down its PTY.\r\nset /p \"OPENFORGE_PROVIDER_RELEASE=\" >nul\r\nexit /b 0\r\n",
         escaped_log_path, command, PROVIDER_RECORD_COMPLETE
     );
     fs::write(bin_dir.join(format!("{command}.cmd")), script)
@@ -246,6 +247,43 @@ async fn wait_for_provider_log_record(
         "fake provider log at {} should contain completed {provider:?} record with {required_content:?}, got: {last_contents}",
         log_path.display()
     );
+}
+
+async fn read_provider_log_after_ready(
+    events: &mut tokio::sync::broadcast::Receiver<crate::app_events::AppEventEnvelope>,
+    task_id: &str,
+    log_path: &Path,
+) -> String {
+    let output_event_name = format!("pty-output-{task_id}");
+    let mut output = String::new();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events
+                .recv()
+                .await
+                .expect("provider PTY event channel should remain open");
+            if event.event_name != output_event_name {
+                continue;
+            }
+            if let Some(data) = event.payload["data"].as_str() {
+                output.push_str(data);
+            }
+            if output.contains(PROVIDER_LOG_READY) {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!("provider PTY should confirm its log is ready, got PTY output: {output:?}")
+    });
+
+    fs::read_to_string(log_path).unwrap_or_else(|error| {
+        panic!(
+            "provider log at {} should be readable after the ready signal: {error}",
+            log_path.display()
+        )
+    })
 }
 
 #[test]
@@ -712,6 +750,12 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
         task.id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     invoke_ok(
         &state,
         "start_implementation",
@@ -719,12 +763,8 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
     )
     .await;
 
-    let log = wait_for_provider_log_record(
-        &sandbox.log_path,
-        "opencode",
-        "Start through OpenCode provider",
-    )
-    .await;
+    let log =
+        read_provider_log_after_ready(&mut provider_events, &task_id, &sandbox.log_path).await;
     assert!(log.contains("provider=opencode"), "got provider log: {log}");
     assert!(log.contains("arg1=--agent"), "got provider log: {log}");
     assert!(
