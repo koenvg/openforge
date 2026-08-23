@@ -1,5 +1,5 @@
 import { writePty } from './ipc'
-import { getShellLifecycleState, updateShellLifecycleState } from './terminalPool'
+import { getShellLifecycleState, restorePtyInstance } from './terminalPool'
 import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from './agentPanelSessionSync'
 
 export type AgentStageLabels = Record<string, string>
@@ -52,12 +52,7 @@ export function syncAgentPanelStatusFromSession({
 }
 
 export function hydrateAgentTerminalPtyInstance(taskId: string, currentPtyInstance: number): void {
-  updateShellLifecycleState(taskId, {
-    ...getShellLifecycleState(taskId),
-    ptyActive: true,
-    shellExited: false,
-    currentPtyInstance,
-  })
+  restorePtyInstance(taskId, currentPtyInstance)
 }
 
 export async function writeAgentTerminalTranscription(taskId: string, text: string, logPrefix: string): Promise<void> {

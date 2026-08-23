@@ -232,7 +232,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
 
   it('locks known non-obvious event payload shapes', () => {
     expect(appShellEventContracts.find(contract => contract.eventName === 'session-resumed')).toMatchObject({
-      payload: '{ task_id: string; workspace_path: string }',
+      payload: '{ task_id: string; workspace_path: string; pty_instance_id?: number | null }',
     })
     expect(appShellEventContracts.find(contract => contract.eventName === 'agent-pty-exited')).toMatchObject({
       payload: '{ task_id: string; success: boolean; instance_id: number }',

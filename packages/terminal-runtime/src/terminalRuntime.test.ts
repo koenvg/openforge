@@ -378,6 +378,30 @@ describe('terminal runtime acquisition', () => {
   })
 })
 
+describe('terminal runtime resumed agent input', () => {
+  beforeEach(() => {
+    terminalMocks.instances.length = 0
+    imageAddonMocks.instances.length = 0
+  })
+
+  it('forwards keyboard input after an empty resumed PTY is restored as active', async () => {
+    const host = createHost()
+    const writePty = vi.spyOn(host, 'writePty')
+    const runtime = createTerminalRuntime(host)
+
+    runtime.restorePtyInstance('T-1', 42)
+    await runtime.acquire('T-1')
+
+    const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
+      | ((data: string) => void)
+      | undefined
+    expect(onData).toBeTypeOf('function')
+    onData?.('continue')
+
+    expect(writePty).toHaveBeenCalledWith('T-1', 'continue')
+  })
+})
+
 describe('terminal runtime shell output lifecycle', () => {
   beforeEach(() => {
     terminalMocks.instances.length = 0

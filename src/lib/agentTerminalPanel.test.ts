@@ -6,7 +6,7 @@ vi.mock('./ipc', () => ({
 
 vi.mock('./terminalPool', () => ({
   getShellLifecycleState: vi.fn(),
-  updateShellLifecycleState: vi.fn(),
+  restorePtyInstance: vi.fn(),
 }))
 
 import {
@@ -17,7 +17,7 @@ import {
   writeAgentTerminalTranscription,
 } from './agentTerminalPanel'
 import { writePty } from './ipc'
-import { getShellLifecycleState, updateShellLifecycleState } from './terminalPool'
+import { getShellLifecycleState, restorePtyInstance } from './terminalPool'
 
 describe('agent terminal panel helpers', () => {
   it('keeps provider-specific status text configurable', () => {
@@ -91,16 +91,9 @@ describe('agent terminal panel helpers', () => {
     expect(writePty).toHaveBeenCalledWith('T-1', 'hello')
   })
 
-  it('hydrates current PTY instance through terminalPool lifecycle state', () => {
-    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: true, currentPtyInstance: null, hasOutput: false })
-
+  it('restores current PTY instance through terminalPool lifecycle ownership', () => {
     hydrateAgentTerminalPtyInstance('T-1', 123)
 
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
-      ptyActive: true,
-      shellExited: false,
-      currentPtyInstance: 123,
-      hasOutput: false,
-    })
+    expect(restorePtyInstance).toHaveBeenCalledWith('T-1', 123)
   })
 })

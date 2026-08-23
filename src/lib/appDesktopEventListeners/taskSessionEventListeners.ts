@@ -13,6 +13,7 @@ import {
 import {
   getShellLifecycleState,
   release as releaseTerminal,
+  restorePtyInstance,
   updateShellLifecycleState,
 } from '../terminalPool'
 import { getTaskPromptText } from '../taskPrompt'
@@ -127,10 +128,17 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       },
     ),
 
-    sessionResumed: defineDesktopEventListener<{ task_id: string; workspace_path: string }>(
+    sessionResumed: defineDesktopEventListener<{
+      task_id: string
+      workspace_path: string
+      pty_instance_id?: number | null
+    }>(
       'session-resumed',
       async (event) => {
         const taskId = event.payload.task_id
+        if (typeof event.payload.pty_instance_id === 'number') {
+          restorePtyInstance(taskId, event.payload.pty_instance_id)
+        }
         const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
         updatedRuntimeInfo.set(taskId, {
           workspacePath: event.payload.workspace_path,
