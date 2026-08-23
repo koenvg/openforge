@@ -1,7 +1,4 @@
-use super::{
-    task_dependencies::load_task_dependency_ids,
-    task_labels::{load_task_labels, TaskLabelRow},
-};
+use super::task_labels::TaskLabelRow;
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 use std::fmt;
@@ -89,192 +86,7 @@ pub struct CompactTaskRow {
     pub labels: Vec<TaskLabelRow>,
 }
 
-const TASK_ROW_COLUMNS: &str = "id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, title, title_source, title_generated_at, worktree_source, worktree_branch, source_ticket_url";
-const COMPACT_TASK_ROW_COLUMNS: &str = "id, status, project_id, created_at, updated_at, agent, permission_mode, worktree_source, worktree_branch, COALESCE(NULLIF(title, ''), substr(initial_prompt, 1, 120)) AS title, title_source, title_generated_at, source_ticket_url";
-
-fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
-    Ok(TaskRow {
-        id: row.get(0)?,
-        initial_prompt: row.get(1)?,
-        status: row.get(2)?,
-        project_id: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
-        prompt: row.get(6)?,
-        agent: row.get(7)?,
-        permission_mode: row.get(8)?,
-        title: row.get(9)?,
-        title_source: row.get(10)?,
-        title_generated_at: row.get(11)?,
-        worktree_source: row.get(12)?,
-        worktree_branch: row.get(13)?,
-        source_ticket_url: row.get(14)?,
-        depends_on: Vec::new(),
-        labels: Vec::new(),
-    })
-}
-
-fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
-    Ok(CompactTaskRow {
-        id: row.get(0)?,
-        status: row.get(1)?,
-        project_id: row.get(2)?,
-        created_at: row.get(3)?,
-        updated_at: row.get(4)?,
-        agent: row.get(5)?,
-        permission_mode: row.get(6)?,
-        worktree_source: row.get(7)?,
-        worktree_branch: row.get(8)?,
-        title: row.get(9)?,
-        title_source: row.get(10)?,
-        title_generated_at: row.get(11)?,
-        source_ticket_url: row.get(12)?,
-        depends_on: Vec::new(),
-        labels: Vec::new(),
-    })
-}
-
-fn hydrate_task_row(conn: &rusqlite::Connection, mut task: TaskRow) -> Result<TaskRow> {
-    task.depends_on = load_task_dependency_ids(conn, &task.id)?;
-    task.labels = load_task_labels(conn, &task.id)?;
-    Ok(task)
-}
-
-fn hydrate_compact_task_row(
-    conn: &rusqlite::Connection,
-    mut task: CompactTaskRow,
-) -> Result<CompactTaskRow> {
-    task.depends_on = load_task_dependency_ids(conn, &task.id)?;
-    task.labels = load_task_labels(conn, &task.id)?;
-    Ok(task)
-}
-
 impl super::Database {
-    /// Get all tasks for a project
-    pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!(
-            "SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC"
-        );
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id], task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_tasks_for_project_excluding_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<TaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id, state], task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_compact_tasks_for_project(&self, project_id: &str) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id], compact_task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_compact_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_compact_tasks_for_project_excluding_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_compact_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_compact_tasks_for_project_by_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {COMPACT_TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id, state], compact_task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_compact_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_tasks_for_project_by_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<TaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([project_id, state], task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            result.push(hydrate_task_row(&conn, task?)?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks ORDER BY updated_at DESC");
-        let mut stmt = conn.prepare(&query)?;
-        let tasks = stmt.query_map([], task_from_row)?;
-
-        let mut result = Vec::new();
-        for task in tasks {
-            let mut task = task?;
-            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
-            task.labels = load_task_labels(&conn, &task.id)?;
-            result.push(task);
-        }
-        Ok(result)
-    }
-
-    pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
-        let conn = self.lock_conn()?;
-        let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks WHERE id = ?1");
-        let mut stmt = conn.prepare(&query)?;
-        let mut rows = stmt.query([id])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(hydrate_task_row(&conn, task_from_row(row)?)?))
-        } else {
-            Ok(None)
-        }
-    }
-
     /// Replace both prompt columns for a task that has never entered execution.
     ///
     /// The guarded SQL statement is the authoritative lifecycle check: a mutable
@@ -369,17 +181,6 @@ impl super::Database {
             rusqlite::params![trimmed, now, id],
         )?;
         Ok(changed > 0)
-    }
-
-    pub fn get_all_task_ids(&self) -> Result<Vec<String>> {
-        let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare("SELECT id FROM tasks")?;
-        let ids = stmt.query_map([], |row| row.get(0))?;
-        let mut result = Vec::new();
-        for id in ids {
-            result.push(id?);
-        }
-        Ok(result)
     }
 }
 
@@ -666,25 +467,6 @@ mod tests {
         assert_eq!(unchanged.title.as_deref(), Some("Manual title"));
         assert_eq!(unchanged.title_source.as_deref(), Some("manual"));
         assert_eq!(unchanged.title_generated_at, None);
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_get_task_by_id() {
-        let (db, path) = make_test_db("get_task_by_id");
-
-        let task = db
-            .create_task("Found me", "backlog", None, None, None)
-            .expect("create failed");
-
-        let retrieved = db.get_task(&task.id).expect("get failed");
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().initial_prompt, "Found me");
-
-        let missing = db.get_task("T-999").expect("get failed");
-        assert!(missing.is_none());
 
         drop(db);
         let _ = fs::remove_file(&path);

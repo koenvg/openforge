@@ -25,6 +25,7 @@ mod task_creation;
 mod task_dependencies;
 mod task_labels;
 mod task_lifecycle;
+mod task_persistence;
 mod task_start;
 mod task_workspaces;
 mod tasks;
