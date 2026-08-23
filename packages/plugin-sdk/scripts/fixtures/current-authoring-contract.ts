@@ -3,12 +3,13 @@ import {
   type AgentCommandMetadata,
   type CommandRegistration,
   type OpenForgePackageMetadata,
+  type PluginSidebarNavigationProps,
   type PluginCommandInvocationContext,
   type Task,
   type TasksAPI,
 } from '@openforge-app/plugin-sdk'
 import { defineBackendPlugin } from '@openforge-app/plugin-sdk/backend'
-import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
+import { defineFrontendPlugin, type PluginViewRegistration } from '@openforge-app/plugin-sdk/frontend'
 import {
   createOpenForgeRegistryFake,
   type TestingCommandContribution,
@@ -48,12 +49,38 @@ const tasks = null as unknown as TasksAPI
 // @ts-expect-error The host no longer exposes the legacy handoff-summary mutation.
 void tasks.updateSummary('KVG-3423', 'obsolete handoff')
 
+const appPackageMetadata = {
+  id: 'contract-fixture',
+  apiVersion: 1,
+  displayName: 'Contract fixture',
+  description: 'Exercises app-level custom sidebar navigation.',
+  enablement: 'app',
+  frontend: './frontend.js',
+  requires: ['views', 'appEnablement', 'customSidebarNavigation'],
+} satisfies OpenForgePackageMetadata
+
 const registry = createOpenForgeRegistryFake({
   pluginId: 'contract-fixture',
   projectId: invocation.projectId,
   taskId: invocation.taskId,
+  packageMetadata: appPackageMetadata,
 })
 void registry.backendApi.commands.register(registration)
+
+declare const viewComponent: PluginViewRegistration['component']
+declare const navigationComponent: NonNullable<PluginViewRegistration['navigationComponent']>
+declare const navigationProps: PluginSidebarNavigationProps
+navigationProps.onActivate()
+void navigationProps.view.qualifiedId
+
+void registry.frontendApi.views.register({
+  id: 'usage',
+  title: 'Usage',
+  icon: 'chart-column-big',
+  placement: 'sidebar',
+  component: viewComponent,
+  navigationComponent,
+})
 
 void defineBackendPlugin({
   activate(openforge, context) {

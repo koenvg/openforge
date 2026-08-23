@@ -8,7 +8,42 @@ import { spawnSync } from 'node:child_process'
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
 const fixturePath = join(packageRoot, 'scripts', 'fixtures', 'current-authoring-contract.ts')
-const minimumContractVersion = [0, 2, 1]
+const sourceSchemaPath = join(packageRoot, 'src', 'openforgePackageMetadataSchema.json')
+const hostCapabilityReleases = [
+  {
+    version: '0.2.1',
+    capabilities: [
+      'commands',
+      'events',
+      'views',
+      'injectionPoints',
+      'taskPane',
+      'taskStart',
+      'settings',
+      'background',
+      'backend',
+      'storage',
+      'context',
+      'navigation',
+      'tasks',
+      'projects',
+      'fs',
+      'shell',
+      'notifications',
+      'attention',
+      'system.openUrl',
+      'system.writeClipboardText',
+      'config',
+      'projectConfig',
+      'browserSurfaces',
+      'taskLinks',
+    ],
+  },
+  {
+    version: '0.2.4',
+    capabilities: ['appEnablement', 'customSidebarNavigation'],
+  },
+]
 
 function fail(message) {
   throw new Error(message)
@@ -37,22 +72,62 @@ function exportTargets(value) {
   return Object.values(value).flatMap(exportTargets)
 }
 
-function assertVersion(version) {
+function parseVersion(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version)
   if (!match) fail(`Plugin SDK package version is not valid semver: ${version}`)
-  const actual = match.slice(1).map(Number)
-  for (let index = 0; index < minimumContractVersion.length; index += 1) {
-    if (actual[index] > minimumContractVersion[index]) return
-    if (actual[index] < minimumContractVersion[index]) {
-      fail(`Plugin SDK ${version} predates the current host contract; expected at least ${minimumContractVersion.join('.')}.`)
+  return match.slice(1).map(Number)
+}
+
+function compareVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index]
+  }
+  return 0
+}
+
+function minimumVersionForCapabilities(schema) {
+  const capabilities = schema?.properties?.requires?.items?.enum
+  if (!Array.isArray(capabilities) || !capabilities.every(capability => typeof capability === 'string')) {
+    fail('Plugin SDK package metadata schema must declare string capabilities.')
+  }
+
+  const versionByCapability = new Map()
+  for (const release of hostCapabilityReleases) {
+    const version = parseVersion(release.version)
+    for (const capability of release.capabilities) {
+      if (versionByCapability.has(capability)) fail(`Duplicate capability release entry: ${capability}`)
+      versionByCapability.set(capability, version)
     }
+  }
+
+  const missing = capabilities.filter(capability => !versionByCapability.has(capability))
+  const stale = [...versionByCapability.keys()].filter(capability => !capabilities.includes(capability))
+  if (missing.length > 0 || stale.length > 0) {
+    fail([
+      'Host capability release ledger does not match the package metadata schema.',
+      missing.length > 0 ? `Record the first SDK version for: ${missing.join(', ')}` : '',
+      stale.length > 0 ? `Remove stale capability entries for: ${stale.join(', ')}` : '',
+    ].filter(Boolean).join('\n'))
+  }
+
+  return capabilities.reduce((minimum, capability) => {
+    const introduced = versionByCapability.get(capability)
+    return compareVersions(introduced, minimum) > 0 ? introduced : minimum
+  }, [0, 0, 0])
+}
+
+function assertVersion(version, minimumContractVersion) {
+  const actual = parseVersion(version)
+  if (compareVersions(actual, minimumContractVersion) < 0) {
+    fail(`Plugin SDK ${version} predates the current host contract; expected at least ${minimumContractVersion.join('.')}.`)
   }
 }
 
 const tempRoot = mkdtempSync(join(tmpdir(), 'openforge-plugin-sdk-contract-'))
 try {
   const sourceManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
-  assertVersion(sourceManifest.version)
+  const sourceSchema = JSON.parse(readFileSync(sourceSchemaPath, 'utf8'))
+  assertVersion(sourceManifest.version, minimumVersionForCapabilities(sourceSchema))
 
   run('npm', ['pack', '--pack-destination', tempRoot], {
     cwd: packageRoot,
