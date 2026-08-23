@@ -11,8 +11,8 @@ pub struct BrowserSessionPurgeIntentRow {
 }
 
 /// Plugin uninstall is the only remaining purge trigger: a Plugin Browser Session spans every Task,
-/// so nothing smaller than losing the plugin justifies destroying it. Rows with `scope = 'task'`
-/// written before ADR 0012 can still be present and are still drained by the Electron coordinator.
+/// so nothing smaller than losing the plugin justifies destroying it. Legacy rows with `scope = 'task'`
+/// can still be present and are still drained by the Electron coordinator.
 pub(super) fn enqueue_plugin_purge_if_present(conn: &Connection, plugin_id: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO browser_session_purge_intents (scope, owner_id, created_at)
@@ -79,7 +79,7 @@ mod tests {
     }
 
     /// A Plugin Browser Session outlives every Task that browsed with it, so completing a Task must
-    /// never schedule a purge — that would log the user out everywhere. See ADR 0012.
+    /// never schedule a purge because that would log the user out everywhere.
     #[test]
     fn task_completion_records_no_browser_purge_intent() {
         let (db, path) = make_test_db("browser_purge_task_completion");

@@ -4,8 +4,8 @@ import type { PluginBrowserSessionPartition } from './taskBrowserSurfaceManager.
 export interface TaskBrowserPartitionRegistration {
   pluginId: string
   /**
-   * Present only on superseded per-Task registrations written before ADR 0012. New registrations are
-   * plugin-scoped, so a partition is identified by its plugin alone.
+   * Present only on legacy per-Task registrations. New registrations are plugin-scoped, so a
+   * partition is identified by its plugin alone.
    */
   taskId?: string
   partition: PluginBrowserSessionPartition
@@ -44,8 +44,8 @@ type RegistryCandidate =
   | { status: 'invalid'; error: Error }
   | { status: 'valid'; content: string; snapshot: RegistrySnapshot }
 
-// Accepts both the plugin-scoped scheme and the superseded per-Task scheme, so a registry written
-// before ADR 0012 still loads and its stale partitions can be purged rather than stranded.
+// Accepts both the current plugin-scoped scheme and the legacy per-Task scheme, so old registries
+// still load and their stale partitions can be purged rather than stranded.
 const PARTITION_PATTERN = /^persist:openforge-(plugin|task)-browser-[a-f0-9]{64}$/
 const INITIALIZATION_MARKER = 'openforge-task-browser-partition-registry-v1\n'
 const DEFAULT_LOGGER: TaskBrowserPartitionRegistryLogger = console

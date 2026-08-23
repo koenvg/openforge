@@ -7,7 +7,6 @@ explicit Start/Delete/Complete Task actions, foreground live updates, and an
 interactive attachment to an already-running Task Agent terminal,
 pinned-certificate host restoration, Bonjour/mDNS endpoint discovery, stable
 Tailscale MagicDNS fallback, and explicit connection and recovery states.
-The approved [Mobile Project Board and Task Actions design](../../docs/superpowers/specs/2026-08-01-mobile-project-board-and-task-actions-design.md), [Mobile Task Creation design](../../docs/superpowers/specs/2026-08-10-mobile-task-creation-design.md), [Quiet Paper design system](../../docs/superpowers/specs/2026-08-13-mobile-companion-quiet-paper-design-system.md), and [ADR 0016](../../docs/adr/0016-pairing-grants-companion-task-authority.md) are the source of truth for this surface.
 
 ## Data and trust boundary
 
@@ -215,7 +214,7 @@ or relay; Tailscale remains user-selected network infrastructure.
     no location, Wi-Fi identity, Bluetooth, or nearby-device permission.
 11. Record device model/OS, app and desktop revision, LAN/Tailscale result, action/
     recovery outcomes, and any precise device-only blocker in
-    `docs/acceptance/companion-task-authority.md`.
+    `docs/mobile-companion-acceptance-matrix.md`.
 
 iOS requests the system Local Network permission for `_openforge._tcp`. Android
 uses NSD with only `INTERNET`, `ACCESS_NETWORK_STATE`, and Bonsoir's normal

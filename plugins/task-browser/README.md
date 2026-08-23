@@ -20,7 +20,7 @@ A built-in Trusted Plugin that adds a **Browser** tab to every Task through Open
 
 The tab starts on a blank page the first time so opening a Task never depends on external network access. Enter any HTTP(S) address in the toolbar. The last successful URL is saved in plugin Task storage and restored when the live surface must be recreated.
 
-Every Browser tab shares one Plugin Browser Session, so logging in to a site such as GitHub in one Task logs you in for every other Task and project too. The session outlives the Tasks that used it: completing or deleting a Task leaves it intact. It is destroyed only by an explicit session reset — which signs you out everywhere at once — or by uninstalling the plugin. See [ADR 0012](../../docs/adr/0012-plugin-scoped-browser-sessions.md).
+Every Browser tab shares one Plugin Browser Session, so logging in to a site such as GitHub in one Task logs you in for every other Task and project too. The session outlives the Tasks that used it: completing or deleting a Task leaves it intact. It is destroyed only by an explicit session reset, which signs you out everywhere at once, or by uninstalling the plugin.
 
 Task Browser visual feedback stays on the live page: add numbered region comments, then use the compact review controls to correct comments or normalized marker geometry, remove findings/captures, or undo the latest change. Unsent drafts persist per Task; save failures remain retryable in memory, and missing background PNGs are reported on each affected finding. **Send to agent** submits the corrected deterministic Markdown report immediately while retained background PNGs remain immutable Task artifacts for the Agent.
 

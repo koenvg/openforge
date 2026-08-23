@@ -2,7 +2,7 @@
 
 > Status: plugin API version `1`. OpenForge plugins are **trusted app extensions** packaged as normal npm-style packages. They use `@openforge-app/plugin-sdk` and must not import OpenForge app internals.
 
-This guide is the developer-facing starting point for creating plugins. For exact TypeScript contracts, see `packages/plugin-sdk/src/types.ts`. For historical rationale, see `docs/adr/0002-openforge-plugin-package-runtime.md`. For UI component ownership and public-export rules, see `docs/components/component-library-guidelines.md`.
+This guide is the developer-facing starting point for creating plugins. For exact TypeScript contracts, see `packages/plugin-sdk/src/types.ts`. For UI component ownership and public-export rules, see `docs/components/component-library-guidelines.md`.
 
 ## SDK license and plugin ownership
 
@@ -98,7 +98,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
 
-Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge UI component layer boundaries](./ui-component-boundaries.md).
+Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge component-library guidelines](./components/component-library-guidelines.md).
 
 ## Frontend entry point
 
@@ -379,7 +379,7 @@ Pass a visible `HTMLElement` to `attach`. OpenForge tracks its CSS-pixel bounds,
 
 `captureVisibleViewport()` uses Electron's visible-page capture rather than a full scrolling-page capture, temporarily hides host-owned annotation outlines from the evidence pixels, writes an immutable PNG to host-managed Task/plugin runtime storage under `userData`, and returns a JSON-serializable `{ artifactId, absolutePath, mediaType, width, height, url, title, capturedAt, dataUrl }`. `absolutePath` is the Agent-readable local PNG path; `url`, `title`, and ISO `capturedAt` describe the immutable viewport capture. Call it immediately after successful live-page feedback to preserve the selected state in the background; do not replace the live Browser Surface merely to display the returned data URL. A review workflow may compare the returned pixels and capture context to reuse existing evidence for multiple annotations, discarding a newly created duplicate through `discardCapture(artifactId)`. Selecting, capturing, clearing outlines, and discarding do not detach, destroy, or reset the Plugin Browser Session. Retain acknowledged artifacts when an Agent follow-up references their paths; Task runtime cleanup removes them with the Task.
 
-All surfaces of one plugin share a single durable Plugin Browser Session, spanning every Task and project, so a login performed in one Task is available in all of them. Sessions are isolated across plugins, never within a plugin. Cookies and Chromium site data survive surface destruction, plugin reload/disablement, Task deletion, and app restart. `openforge.browserSurfaces.resetSession()` takes no Task: it destroys that plugin's live surfaces in every Task and clears the shared browser session data and remembered site permissions, without clearing plugin task storage. Warn the user before calling it — it signs them out everywhere at once. See [ADR 0012](./adr/0012-plugin-scoped-browser-sessions.md).
+All surfaces of one plugin share a single durable Plugin Browser Session, spanning every Task and project, so a login performed in one Task is available in all of them. Sessions are isolated across plugins, never within a plugin. Cookies and Chromium site data survive surface destruction, plugin reload or disablement, Task deletion, and app restart. `openforge.browserSurfaces.resetSession()` takes no Task: it destroys that plugin's live surfaces in every Task and clears the shared browser session data and remembered site permissions, without clearing plugin task storage. Warn the user before calling it because it signs them out everywhere at once.
 
 Electron main owns the non-configurable sandboxed browser security baseline, top-level HTTP(S)-only policy, native bounds, resource limits, and cleanup. Recognized site permissions are mediated by host-owned prompts; unknown or malformed permission requests fail closed. Policy-approved HTTP(S) popups may open for ordinary browsing and authentication as host-owned child windows. Those children share the parent Plugin Browser Session and its secure navigation, permission, and download policy, and close with the parent surface. Popup requests using unsupported schemes or trying to override protected web preferences are denied.
 

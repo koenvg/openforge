@@ -485,7 +485,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - "Terminal API" could mean a host `openforge.terminal` capability, a normal package dependency, or the shared runtime — resolved: **Terminal Runtime** names the shared runtime; lower-level shell/event APIs remain capability primitives.
 - "Latest hash" in self-review could mean branch HEAD, latest commit, or the last accepted file version — resolved: use **Reviewed File Snapshot** for the last accepted file version.
 - "Website" could mean a hosted product surface or public promotion — resolved: the current website direction is a **Marketing Site**, not a web version of OpenForge.
-- The **Marketing Site First Milestone** could mean the broader ADR 0003 section list or a smaller launch page — resolved: keep the first implementation small and avoid standalone workflow and local-first trust sections.
+- The **Marketing Site First Milestone** could mean a broad product tour or a smaller launch page. Resolved: keep the first implementation small and avoid standalone workflow and local-first trust sections.
 - "Agent controls OpenForge through the CLI" could imply unrestricted app automation — resolved: the **Marketing Site Top Reasons** should say agents manage OpenForge **Tasks** through the CLI.
 - The **Marketing Site Promise** could be inflated into agent autonomy claims — resolved: avoid promises of autonomous engineering teams, code-review replacement, one-click shipping, hosted control planes, universal provider support, or enterprise collaboration suites.
 - "Ready" for pull requests could mean ready for human review, direct merge, or merge queue entry — resolved: use **Merge Readiness** only for strict GitHub-actionable merge or enqueue handoffs.

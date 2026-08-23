@@ -183,12 +183,4 @@ describe('OpenForge plugin Svelte runtime contract', () => {
     }
   })
 
-  it('documents host-shared Svelte as the official plugin SDK/Vite template contract', async () => {
-    const adr = await readFile(join(process.cwd(), 'docs/adr/0002-openforge-plugin-package-runtime.md'), 'utf8')
-
-    expect(adr).toContain('Official contract: host-shared Svelte')
-    expect(adr).toContain('OPENFORGE_HOST_SHARED_SVELTE_IMPORTS')
-    expect(adr).toContain('svelte/internal/disclose-version')
-    expect(adr).toContain('external: openforgePluginViteExternals')
-  })
 })

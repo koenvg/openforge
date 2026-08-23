@@ -1,9 +1,6 @@
 # OpenForge component-library guidelines
 
-Task: KVG-1907
-Source audit: [KVG-1906 component-library audit](./component-library-audit.md)
-
-These guidelines document the component-library conventions that are already supported by the KVG-1906 audit. They are intentionally narrower than a full design-system roadmap: do not use this document as permission to migrate large feature views, publish new SDK exports, or extract every repeated Tailwind class. When a rule below points to work that needs design or enforcement, track that as a follow-up task.
+These guidelines define the current component-library conventions. They are intentionally narrower than a full design system. Do not use them as permission to migrate large feature views, publish new SDK exports, or extract every repeated Tailwind class. Track changes that need design or enforcement as focused tasks.
 
 ## Goals and non-goals
 
@@ -16,7 +13,7 @@ Goals:
 
 Non-goals:
 
-- No broad component migration in this task.
+- Do not start a broad component migration from these guidelines.
 - No Storybook/catalog requirement until ownership boundaries settle.
 - No new public SDK component just because two app views share similar markup.
 - No generic wrappers for every Tailwind/daisyUI class combination.
@@ -157,15 +154,3 @@ Use this checklist before moving a component between layers:
 - Would publishing this in the SDK make it hard to change later?
 
 If the answers are unclear, keep the component local and create a focused design/refactor task.
-
-## Follow-up work split out of this task
-
-The audit proves several real follow-ups, but they should remain separate from these guidelines:
-
-- Define and enforce import-boundary checks for app-private versus plugin-safe UI.
-- Choose ownership and deduplicate cloned `Card` and `ResizablePanel` components.
-- Continue deduplicating plugin-local dialog callers onto the plugin-safe SDK `Modal.svelte` primitive when another repeated shell appears.
-- Split large plugin view containers (`PrReviewView.svelte`, `SkillsView.svelte`, `TaskSchedulesView.svelte`, `FilesView.svelte`) into state containers plus presentational sections before extracting generic UI.
-- Consolidate plugin page headers and empty/loading/error shells after API convergence is clear.
-
-Keep future tasks focused on one boundary or primitive at a time.

@@ -47,7 +47,7 @@ export const SECURE_TASK_BROWSER_WEB_PREFERENCES: TaskBrowserWebPreferences = Ob
 
 /**
  * One durable partition per plugin, spanning every Task and project, so a login performed in one
- * Task is available in all of them. See ADR 0012, which supersedes ADR 0009's per-Task scoping.
+ * Task is available in all of them.
  */
 export function pluginBrowserSessionPartition(pluginId: string): PluginBrowserSessionPartition {
   const digest = createHash('sha256').update(pluginId, 'utf8').digest('hex')
@@ -57,8 +57,8 @@ export function pluginBrowserSessionPartition(pluginId: string): PluginBrowserSe
 const LEGACY_TASK_PARTITION = /^persist:openforge-task-browser-[a-f0-9]{64}$/
 
 /**
- * Identifies partitions written under ADR 0009's per-Task scheme. No surface can bind to one and no
- * session reset can reach one, so first launch purges them instead of leaving credentials on disk.
+ * Identifies legacy partitions that were scoped per Task. No surface can bind to one and no session
+ * reset can reach one, so first launch purges them instead of leaving credentials on disk.
  */
 export function isSupersededTaskBrowserPartition(partition: string): boolean {
   return LEGACY_TASK_PARTITION.test(partition)

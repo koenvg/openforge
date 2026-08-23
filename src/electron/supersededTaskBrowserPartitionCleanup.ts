@@ -23,9 +23,9 @@ export interface SupersededTaskBrowserPartitionCleanupReport {
 const DEFAULT_LOGGER: SupersededTaskBrowserPartitionCleanupLogger = console
 
 /**
- * Clears the per-Task partitions written before ADR 0012. No surface can bind to one and no session
- * reset can reach one, so leaving them would strand real credentials on disk. A partition that fails
- * to clear stays registered, and the next launch retries it idempotently.
+ * Clears legacy per-Task partitions. No surface can bind to one and no session reset can reach one,
+ * so leaving them would strand real credentials on disk. A partition that fails to clear stays
+ * registered, and the next launch retries it idempotently.
  */
 export async function purgeSupersededTaskBrowserPartitions(
   options: SupersededTaskBrowserPartitionCleanupOptions,
