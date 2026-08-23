@@ -2,7 +2,7 @@ import { get } from 'svelte/store'
 import { activeProjectId, currentView, pendingTask, projects, selectedTaskId, tasks } from './stores'
 import { getTaskDetail } from './ipc'
 import { isCrossProjectView } from './views'
-import { pushNavState, restoreProjectView } from './router.svelte'
+import { pushNavState, restoreProjectView, selectFocusBoardTab } from './router.svelte'
 import type { AppView, Task } from './types'
 
 interface AppRouter {
@@ -60,6 +60,11 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     if (activeId === projectId && !isCrossProjectView(view, options.getSidebarPluginViewKeys())) {
       if (view !== 'board') {
         options.router.resetToBoard()
+      } else {
+        // Already on this project's board — a repeat click jumps to Focus instead of
+        // resetting (which would wipe an open task detail, since that also renders on
+        // the board view).
+        selectFocusBoardTab(projectId)
       }
       return
     }

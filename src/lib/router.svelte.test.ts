@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
-import { activeProjectId, currentView, lastViewedTaskId, projects, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
-import { captureProjectView, pushNavState, resetHistory, resetToBoard, restoreProjectView, useAppRouter } from './router.svelte'
+import { activeProjectId, currentView, focusBoardFilters, lastViewedTaskId, projects, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
+import { captureProjectView, pushNavState, resetHistory, resetToBoard, restoreProjectView, selectFocusBoardTab, useAppRouter } from './router.svelte'
 import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
 import type { Project, ReviewPullRequest } from './types'
 
@@ -234,6 +234,67 @@ describe('useAppRouter', () => {
 
     expect(get(activeProjectId)).toBe('proj-1')
     expect(get(currentView)).toBe('board')
+  })
+})
+
+describe('selectFocusBoardTab', () => {
+  beforeEach(() => {
+    focusBoardFilters.set(new Map())
+  })
+
+  it('sets the project\'s board filter to focus', () => {
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+
+    selectFocusBoardTab('proj-1')
+
+    expect(get(focusBoardFilters).get('proj-1')).toBe('focus')
+  })
+
+  it('does nothing for a null project id', () => {
+    selectFocusBoardTab(null)
+
+    expect(get(focusBoardFilters).size).toBe(0)
+  })
+
+  it('is a no-op when the project is already on focus', () => {
+    const map = new Map([['proj-1', 'focus' as const]])
+    focusBoardFilters.set(map)
+
+    selectFocusBoardTab('proj-1')
+
+    // Same Map instance — no reassignment happened.
+    expect(get(focusBoardFilters)).toBe(map)
+  })
+})
+
+describe('navigate(board) re-invocation', () => {
+  beforeEach(() => {
+    resetHistory()
+    projects.set([])
+    currentView.set('board')
+    selectedTaskId.set(null)
+    selectedReviewPr.set(null)
+    activeProjectId.set('proj-1')
+    focusBoardFilters.set(new Map())
+  })
+
+  it('jumps to Focus when the Board icon is clicked while already on the board', () => {
+    const router = useAppRouter()
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+
+    router.navigate('board')
+
+    expect(get(focusBoardFilters).get('proj-1')).toBe('focus')
+  })
+
+  it('does not touch the remembered filter when navigating to the board from elsewhere', () => {
+    const router = useAppRouter()
+    currentView.set('settings')
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+
+    router.navigate('board')
+
+    expect(get(focusBoardFilters).get('proj-1')).toBe('backlog')
   })
 })
 
