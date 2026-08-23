@@ -721,10 +721,10 @@
           }
         }
       },
-    "/projects/{projectId}/refresh-github": {
+    "/refresh-github": {
         "post": {
-          "operationId": "refreshCompanionProjectGithub",
-          "summary": "Refresh GitHub status for the selected Project",
+          "operationId": "refreshCompanionGithub",
+          "summary": "Refresh GitHub status across OpenForge",
           "description": "Runs one full GitHub sync attempt. A 204 response means every scheduled phase completed without polling errors; configuration, rate-limit, and sync failures use the typed Companion error response.",
           "security": [
             {
@@ -734,29 +734,16 @@
           "parameters": [
             {
               "$ref": "#/components/parameters/CompanionProtocolVersion"
-            },
-            {
-              "name": "projectId",
-              "in": "path",
-              "required": true,
-              "schema": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
-              }
             }
           ],
           "responses": {
             "204": {
-              "description": "Project GitHub refresh completed without errors"
+              "description": "Global GitHub refresh completed without errors"
             },
             "400": {
               "$ref": "#/components/responses/CompanionError"
             },
             "401": {
-              "$ref": "#/components/responses/CompanionError"
-            },
-            "404": {
               "$ref": "#/components/responses/CompanionError"
             },
             "409": {
@@ -840,7 +827,7 @@
         "in": "header",
         "required": true,
         "description": "Major Companion protocol version. Device authentication is evaluated before compatibility so this header never bypasses trust.",
-        "schema": { "type": "integer", "const": 2 }
+        "schema": { "type": "integer", "const": 3 }
       }
     },
     "schemas": {
@@ -998,7 +985,7 @@
         "required": ["hostId", "protocolVersion", "serverTime"],
         "properties": {
           "hostId": { "type": "string", "format": "uuid" },
-          "protocolVersion": { "type": "integer", "const": 2 },
+          "protocolVersion": { "type": "integer", "const": 3 },
           "serverTime": { "type": "string", "format": "date-time" }
         }
       },

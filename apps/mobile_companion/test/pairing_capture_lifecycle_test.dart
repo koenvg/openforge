@@ -21,7 +21,7 @@ const _fingerprint =
 const _secret = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 const _tailscaleEndpoint = 'https://desktop.example.ts.net:17424';
 const _tailscaleQrPayload =
-    '{"protocolVersion":2,"hostId":"$_hostId",'
+    '{"protocolVersion":3,"hostId":"$_hostId",'
     '"certificateSha256":"$_fingerprint",'
     '"endpointCandidates":["$_tailscaleEndpoint"],'
     '"oneTimeSecret":"$_secret"}';
@@ -442,7 +442,7 @@ final class _SuccessfulPairingClient implements CompanionClient {
     endpoint: Uri.parse(_tailscaleEndpoint),
     status: HostStatus(
       hostId: _hostId,
-      protocolVersion: 2,
+      protocolVersion: 3,
       serverTime: DateTime.utc(2026, 8, 1),
     ),
   );

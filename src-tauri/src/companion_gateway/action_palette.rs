@@ -91,7 +91,7 @@ pub(crate) trait CompanionActionPaletteService: Send + Sync {
         action: CompanionTaskActionId,
     ) -> CompanionActionPaletteFuture<'a>;
 
-    fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a>;
+    fn refresh_github(&self) -> CompanionActionPaletteFuture<'_>;
 }
 
 const OUT_OF_FOCUS_TASK_IDS_CONFIG_KEY: &str = "low_fire_task_ids";
@@ -458,9 +458,8 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
         })
     }
 
-    fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
+    fn refresh_github(&self) -> CompanionActionPaletteFuture<'_> {
         Box::pin(async move {
-            self.refresh_target(project_id)?;
             let result = crate::github_poller::poll_github_once_for_sidecar(
                 Arc::clone(&self.database),
                 &self.github_client,
@@ -504,7 +503,7 @@ impl CompanionActionPaletteService for UnavailableCompanionActionPaletteService 
         Box::pin(async { Err(CompanionActionPaletteError::TemporarilyUnavailable) })
     }
 
-    fn refresh_github<'a>(&'a self, _project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
+    fn refresh_github(&self) -> CompanionActionPaletteFuture<'_> {
         Box::pin(async { Err(CompanionActionPaletteError::TemporarilyUnavailable) })
     }
 }

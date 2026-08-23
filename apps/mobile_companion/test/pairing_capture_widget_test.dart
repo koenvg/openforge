@@ -14,7 +14,7 @@ const _hostId = '65d91f21-6732-45a6-9418-3dfaf4c93f52';
 const _endpoint = 'https://desktop.example.ts.net:17424';
 const _oneTimeSecret = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 const _qrPayload =
-    '{"protocolVersion":2,"hostId":"$_hostId",'
+    '{"protocolVersion":3,"hostId":"$_hostId",'
     '"certificateSha256":"9F:64:A7:47:E1:B9:7F:13:1F:AB:B6:B4:47:29:6C:9B:6F:02:01:E7:9F:B3:C5:35:6E:6C:77:E8:9B:6A:80:6A",'
     '"endpointCandidates":["$_endpoint"],'
     '"oneTimeSecret":"$_oneTimeSecret"}';
@@ -180,7 +180,7 @@ final class _RecordingPairingClient implements CompanionClient {
     endpoint: trustRecord.endpointCandidates.single,
     status: HostStatus(
       hostId: trustRecord.hostId,
-      protocolVersion: 2,
+      protocolVersion: 3,
       serverTime: DateTime.utc(2026, 8, 4),
     ),
   );

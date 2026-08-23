@@ -37,7 +37,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-pub(crate) const PROTOCOL_VERSION: u8 = 2;
+pub(crate) const PROTOCOL_VERSION: u8 = 3;
 pub(crate) const PROTOCOL_VERSION_HEADER: &str = "openforge-companion-protocol-version";
 const AUTHENTICATED_REQUESTS_PER_PEER_PER_MINUTE: usize = 120;
 const GLOBAL_AUTHENTICATED_REQUESTS_PER_MINUTE: usize = 4_096;

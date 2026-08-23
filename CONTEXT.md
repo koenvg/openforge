@@ -216,7 +216,7 @@ A mobile device explicitly approved by the desktop to connect to that trusted Op
 _Avoid_: Authenticated client, discovered device, terminal-only device
 
 **Companion Task Authority**:
-The narrow authority of a **Paired Companion Device** to perform explicitly available core Task lifecycle, focus, pull-request, and workspace-run actions, plus **GitHub Sync** for the **Selected Project**.
+The narrow authority of a **Paired Companion Device** to perform explicitly available core Task lifecycle, focus, pull-request, and workspace-run actions, plus app-wide **GitHub Sync**.
 _Avoid_: General command access, plugin command execution, unrestricted Task editing
 
 **Mobile Action Palette**:
@@ -311,6 +311,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 
 - The **Mobile Action Palette** mirrors the desktop action model, not Task or plugin-command search; native mobile navigation remains outside the palette.
 - The **Mobile Action Palette** presents only actions currently granted by **Companion Task Authority** and available for its Task or **Selected Project** context.
+- **GitHub Sync** remains app-wide when invoked from a **Selected Project** context; the **Selected Project** determines where the action appears, not what OpenForge refreshes.
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
 - A **Task Display Title** belongs to a **Task** and does not change its initial or mutable prompt.
 - Automatic **Task Display Title** generation is an experimental opt-in feature; when enabled, it happens at most once early in **Agent Session** activity and only when the user has not manually set a title.

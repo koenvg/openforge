@@ -1773,10 +1773,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         ("/tasks/{taskId}/merge", "mergeCompanionTaskPullRequest"),
         ("/tasks/{taskId}/enqueue", "enqueueCompanionTaskPullRequest"),
         ("/tasks/{taskId}/run-app", "runCompanionTaskApp"),
-        (
-            "/projects/{projectId}/refresh-github",
-            "refreshCompanionProjectGithub",
-        ),
+        ("/refresh-github", "refreshCompanionGithub"),
     ];
     for (path, operation_id) in explicit_action_paths {
         let item = paths[path].as_object().expect("explicit action path item");
@@ -1787,6 +1784,11 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         assert_eq!(item["post"]["operationId"], operation_id);
         assert!(item["post"].get("requestBody").is_none());
     }
+    assert_eq!(
+        paths["/refresh-github"]["post"]["security"],
+        serde_json::json!([{ "companionDeviceBearer": [] }]),
+        "GitHub refresh must require paired-device authorization",
+    );
     let events_path = paths["/events"].as_object().expect("events path item");
     assert_eq!(
         events_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1853,7 +1855,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         &paths["/tasks/{taskId}/merge"]["post"],
         &paths["/tasks/{taskId}/enqueue"]["post"],
         &paths["/tasks/{taskId}/run-app"]["post"],
-        &paths["/projects/{projectId}/refresh-github"]["post"],
+        &paths["/refresh-github"]["post"],
         &events_path["get"],
     ] {
         assert!(

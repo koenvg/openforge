@@ -20,7 +20,7 @@ const _secret = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 const _tailscaleEndpoint = 'https://desktop.example.ts.net:17424';
 
 String get _tailscaleQrPayload =>
-    '{"protocolVersion":2,"hostId":"$_hostId",'
+    '{"protocolVersion":3,"hostId":"$_hostId",'
     '"certificateSha256":"$_fingerprint",'
     '"endpointCandidates":["$_tailscaleEndpoint"],'
     '"oneTimeSecret":"$_secret"}';
@@ -739,7 +739,7 @@ final class _SuccessfulTailscaleClient implements CompanionClient {
       endpoint: endpoint,
       status: HostStatus(
         hostId: _hostId,
-        protocolVersion: 2,
+        protocolVersion: 3,
         serverTime: DateTime.utc(2026, 8, 1),
       ),
     );

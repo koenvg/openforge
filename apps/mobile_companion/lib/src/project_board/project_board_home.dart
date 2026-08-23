@@ -183,7 +183,7 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
         case CompanionActionId.refreshBoard:
           await widget.controller.refresh();
         case CompanionActionId.refreshGithub:
-          await palette.refreshProjectGithub(projectId);
+          await palette.refreshGithub();
         default:
           return;
       }
