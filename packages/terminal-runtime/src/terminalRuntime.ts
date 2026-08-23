@@ -100,6 +100,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
   const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
   const shellLifecycleListeners = new Map<string, Set<ShellLifecycleListener>>()
+  const pendingPtyInstances = new Map<string, number>()
   const openedTerminals = new WeakSet<Terminal>()
   let appEventsReconnectUnlisten: TerminalRuntimeUnlistenFn | null = null
   let appEventsReconnectListenerPending: Promise<void> | null = null
@@ -544,6 +545,11 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     })
   
     pool.set(taskId, entry)
+    const restoredPtyInstance = pendingPtyInstances.get(taskId)
+    if (restoredPtyInstance !== undefined) {
+      pendingPtyInstances.delete(taskId)
+      markShellPtyStarted(entry, restoredPtyInstance)
+    }
     await ensureAppEventsReconnectListener()
     return entry
   }
@@ -703,6 +709,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     }
 
     if (pendingAcquisition) pendingAcquisition.operation.entry = null
+    pendingPtyInstances.delete(taskId)
     shellLifecycleListeners.delete(taskId)
     releaseAppEventsReconnectListenerIfIdle()
   }
@@ -723,7 +730,17 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
     entry.currentPtyInstance = instanceId
   }
-  
+
+  function restorePtyInstance(taskId: string, instanceId: number): void {
+    const entry = pool.get(taskId)
+    if (!entry) {
+      pendingPtyInstances.set(taskId, instanceId)
+      return
+    }
+
+    markShellPtyStarted(entry, instanceId)
+  }
+
   function markShellPtyStarted(entry: PoolEntry, instanceId: number): void {
     entry.currentPtyInstance = instanceId
     entry.ptyActive = true
@@ -854,6 +871,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     markPtySpawnPending,
     clearPtySpawnPending,
     setCurrentPtyInstance,
+    restorePtyInstance,
     markShellPtyStarted,
     subscribeShellLifecycle,
     isShellExited,

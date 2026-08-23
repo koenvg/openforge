@@ -48,6 +48,7 @@ export const shouldSpawnPty = terminalRuntime.shouldSpawnPty
 export const markPtySpawnPending = terminalRuntime.markPtySpawnPending
 export const clearPtySpawnPending = terminalRuntime.clearPtySpawnPending
 export const setCurrentPtyInstance = terminalRuntime.setCurrentPtyInstance
+export const restorePtyInstance = terminalRuntime.restorePtyInstance
 export const markShellPtyStarted = terminalRuntime.markShellPtyStarted
 export const subscribeShellLifecycle = terminalRuntime.subscribeShellLifecycle
 export const isShellExited = terminalRuntime.isShellExited

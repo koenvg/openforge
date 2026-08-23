@@ -2,7 +2,7 @@ import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finalizeAgentSession, getLatestSession } from '../ipc'
 import { activeSessions, checkpointNotification, taskRuntimeInfo } from '../stores'
-import { getShellLifecycleState, release, updateShellLifecycleState } from '../terminalPool'
+import { getShellLifecycleState, release, restorePtyInstance, updateShellLifecycleState } from '../terminalPool'
 import { createTaskSessionEventListeners } from './taskSessionEventListeners'
 import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
 
@@ -14,6 +14,7 @@ vi.mock('../terminalPool', () => ({
     hasOutput: false,
   }),
   release: vi.fn(),
+  restorePtyInstance: vi.fn(),
   updateShellLifecycleState: vi.fn(),
 }))
 
@@ -83,17 +84,25 @@ describe('createTaskSessionEventListeners', () => {
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 
-  it('records runtime info and latest session on session-resumed without legacy OpenCode server port state', async () => {
+  it('restores a reattached completed PTY before loading the latest session', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
-    vi.mocked(getLatestSession).mockResolvedValue(createSession({ id: 'session-resumed' }))
+    vi.mocked(getLatestSession).mockResolvedValue(createSession({
+      id: 'session-resumed',
+      status: 'completed',
+      pty_instance_id: 42,
+    }))
     await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
 
     await handlers.get('session-resumed')?.({
-      payload: { task_id: 'task-1', workspace_path: '/tmp/work' },
+      payload: { task_id: 'task-1', workspace_path: '/tmp/work', pty_instance_id: 42 },
     })
 
+    expect(restorePtyInstance).toHaveBeenCalledWith('task-1', 42)
     expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work' })
-    expect(get(activeSessions).get('task-1')?.id).toBe('session-resumed')
+    expect(get(activeSessions).get('task-1')).toMatchObject({
+      id: 'session-resumed',
+      status: 'completed',
+    })
   })
 
   it('hydrates terminalPool with current PTY instance metadata from provider-neutral status events', async () => {

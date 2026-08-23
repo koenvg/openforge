@@ -124,6 +124,11 @@ vi.mock('../../lib/terminalPool', () => ({
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
   isValidTerminalDimensions: vi.fn().mockReturnValue(true),
+  restorePtyInstance: vi.fn().mockImplementation((_taskId: string, instanceId: number) => {
+    mocks.shellLifecycleState.ptyActive = true
+    mocks.shellLifecycleState.shellExited = false
+    mocks.shellLifecycleState.currentPtyInstance = instanceId
+  }),
   updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mocks.shellLifecycleState) => {
     mocks.shellLifecycleState.ptyActive = state.ptyActive
     mocks.shellLifecycleState.shellExited = state.shellExited

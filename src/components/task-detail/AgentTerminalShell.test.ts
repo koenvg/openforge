@@ -83,7 +83,7 @@ describe('AgentTerminalShell', () => {
     setActiveSession(createAgentSession({ provider: 'opencode', opencode_session_id: 'opencode-sess-abc123' }))
     mockShellLifecycleState.ptyActive = true
 
-    const { updateShellLifecycleState } = await import('../../lib/terminalPool')
+    const { restorePtyInstance } = await import('../../lib/terminalPool')
 
     render(AgentTerminalShell, {
       props: {
@@ -100,11 +100,7 @@ describe('AgentTerminalShell', () => {
       payload: { task_id: 'T-1', status: 'running', pty_instance_id: 42 },
     })
 
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
-      ptyActive: true,
-      shellExited: false,
-      currentPtyInstance: 42,
-    })
+    expect(restorePtyInstance).toHaveBeenCalledWith('T-1', 42)
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 

@@ -206,7 +206,7 @@ export const appShellEventContracts = [
   { eventName: 'review-status-changed', payload: 'review status payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'action-complete', payload: '{ task_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'implementation-failed', payload: '{ task_id: string; error: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
-  { eventName: 'session-resumed', payload: '{ task_id: string; workspace_path: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
+  { eventName: 'session-resumed', payload: '{ task_id: string; workspace_path: string; pty_instance_id?: number | null }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'startup-resume-complete', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'new-pr-comment', payload: 'PR comment notification payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'comment-addressed', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },

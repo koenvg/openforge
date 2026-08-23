@@ -302,6 +302,7 @@ pub(crate) async fn resume_task_sessions(
                     serde_json::json!({
                         "task_id": target.task_id,
                         "workspace_path": target.workspace_path,
+                        "pty_instance_id": result.pty_instance_id,
                     }),
                 );
 
