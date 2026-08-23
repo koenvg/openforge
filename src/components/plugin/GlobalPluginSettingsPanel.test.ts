@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/svelte'
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import GlobalPluginSettingsPanel from './GlobalPluginSettingsPanel.svelte'
 import PluginSlotTestView from './PluginSlotTestView.svelte'
@@ -7,8 +7,9 @@ import type { RuntimeContributionSource } from '../../lib/plugin/contributionRes
 import type { PluginEntry } from '../../lib/plugin/types'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 
-const { activatePluginMock } = vi.hoisted(() => ({
+const { activatePluginMock, uninstallPluginMock } = vi.hoisted(() => ({
   activatePluginMock: vi.fn(async () => true),
+  uninstallPluginMock: vi.fn(async () => undefined),
 }))
 
 // The panel drives plugin lifecycle through pluginRegistry; stub it so no real plugin
@@ -26,7 +27,7 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
   reloadInstalledPluginMetadata: vi.fn(),
   reloadPluginForApp: vi.fn(),
   reloadPluginForProject: vi.fn(),
-  uninstallPlugin: vi.fn(),
+  uninstallPlugin: uninstallPluginMock,
 }))
 
 vi.mock('../../lib/ipc', () => ({
@@ -109,5 +110,32 @@ describe('GlobalPluginSettingsPanel', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
     expect(document.querySelector('[data-slot-id="plugin.notes:notes-settings"]')).toBeNull()
+  })
+
+  it('warns that uninstalling deletes the plugin\'s data before doing it', async () => {
+    installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
+
+    render(GlobalPluginSettingsPanel, { props: {} })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Notes' }))
+
+    expect(screen.getByText(/deletes all saved data.*in every project/i)).toBeTruthy()
+    expect(uninstallPluginMock).not.toHaveBeenCalled()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm uninstall plugin: Notes' }))
+
+    expect(uninstallPluginMock).toHaveBeenCalledWith('plugin.notes')
+  })
+
+  it('cancels the uninstall without deleting anything', async () => {
+    installedPlugins.set(new Map([['plugin.notes', entry('plugin.notes', 'Notes')]]))
+
+    render(GlobalPluginSettingsPanel, { props: {} })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Uninstall plugin: Notes' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(uninstallPluginMock).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Uninstall plugin: Notes' })).toBeTruthy()
   })
 })

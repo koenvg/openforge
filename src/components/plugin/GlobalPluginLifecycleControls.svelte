@@ -62,14 +62,35 @@
     }
   }
 
+  let confirmingUninstall = $state(false)
+  let isUninstalling = $state(false)
+
+  function beginUninstallConfirmation() {
+    if (disabled) return
+    onActionError?.(null)
+    confirmingUninstall = true
+  }
+
+  function cancelUninstallConfirmation() {
+    confirmingUninstall = false
+  }
+
   async function handleUninstall() {
     if (disabled) return
 
     onActionError?.(null)
+    isUninstalling = true
     try {
+      // Uninstalling deletes the plugin's database row. plugin_storage has an
+      // ON DELETE CASCADE foreign key on that row, so this also erases every value
+      // the plugin has saved — global settings and every project's data. There is
+      // no way to undo it, so the button flow must ask first (AVIV-404).
       await uninstallPlugin(plugin.manifest.id)
     } catch (error) {
       onActionError?.(pluginActionErrorMessage(error))
+    } finally {
+      isUninstalling = false
+      confirmingUninstall = false
     }
   }
 </script>
@@ -105,7 +126,25 @@
   {/if}
   <button class="btn btn-ghost btn-xs" type="button" aria-label="Reload plugin: {plugin.manifest.name}" {disabled} onclick={handleReload}>Reload plugin</button>
   {#if !isBuiltIn}
-    <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" {disabled} onclick={handleUninstall}>Uninstall plugin</button>
+    {#if confirmingUninstall}
+      <div class="flex flex-col items-end gap-1 max-w-48">
+        <span class="text-[0.65rem] text-error text-right">This deletes all saved data for this plugin, in every project. It cannot be undone.</span>
+        <div class="flex items-center gap-2">
+          <button class="btn btn-ghost btn-xs" type="button" disabled={disabled || isUninstalling} onclick={cancelUninstallConfirmation}>Cancel</button>
+          <button
+            class="btn btn-error btn-xs"
+            type="button"
+            aria-label="Confirm uninstall plugin: {plugin.manifest.name}"
+            disabled={disabled || isUninstalling}
+            onclick={handleUninstall}
+          >
+            {isUninstalling ? 'Uninstalling…' : 'Yes, uninstall'}
+          </button>
+        </div>
+      </div>
+    {:else}
+      <button class="btn btn-error btn-outline btn-xs" type="button" aria-label="Uninstall plugin: {plugin.manifest.name}" {disabled} onclick={beginUninstallConfirmation}>Uninstall plugin</button>
+    {/if}
   {/if}
   <GlobalPluginDiagnostics {plugin} {activeProjectId} {disabled} {onActionError} />
 </div>
