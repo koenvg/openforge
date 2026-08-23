@@ -40,6 +40,10 @@ pub(crate) enum CompanionProjectActionId {
     RefreshGithub,
 }
 
+fn github_refresh_scope() -> crate::github_poller::PollScope {
+    crate::github_poller::PollScope::Global
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CompanionActionPaletteError {
     NotFound,
@@ -435,12 +439,12 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
 
     fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
         Box::pin(async move {
-            let project_id = self.refresh_target(project_id)?;
+            self.refresh_target(project_id)?;
             crate::github_poller::poll_github_once_for_sidecar(
                 Arc::clone(&self.database),
                 &self.github_client,
                 self.app_event_tx.clone(),
-                crate::github_poller::PollScope::ActiveRepo(Some(project_id)),
+                github_refresh_scope(),
             )
             .await;
             Ok(())
@@ -485,6 +489,14 @@ impl CompanionActionPaletteService for UnavailableCompanionActionPaletteService 
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn mobile_github_refresh_uses_the_global_poll_scope() {
+        assert_eq!(
+            github_refresh_scope(),
+            crate::github_poller::PollScope::Global
+        );
+    }
 
     #[test]
     fn database_service_advertises_only_current_task_actions_in_desktop_order() {
