@@ -1,58 +1,38 @@
 <script lang="ts">
   import { CheckCircle2, MessageSquare } from '@lucide/svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
-  import type { CommentSelectionState } from '../../lib/useCommentSelection.svelte'
-  import type { PrComment, PullRequestInfo, ReviewSubmissionComment } from '../../lib/types'
+  import type { SelfReviewFeedbackPane } from './selfReviewFeedbackPane.svelte'
   import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
   import { buildPrCommentUrl } from '../../lib/prCommentLinks'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
 
   interface Props {
-    taskId: string
+    pane: SelfReviewFeedbackPane
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
-    onRefresh: () => void | Promise<void>
-    linkedPr: PullRequestInfo | null
-    prComments: PrComment[]
-    commentSelection: CommentSelectionState
-    generalCommentCount: number
-    pendingInlineComments: ReviewSubmissionComment[]
-    markdownImageBaseUrl: string | null
-    onPendingInlineCommentsChange: (comments: ReviewSubmissionComment[]) => void
-    onCommentClick: (comment: PrComment) => void
-    onOpenLinkedPr: () => void
-    onCollapse: () => void
-    activeTab: 'pr' | 'notes'
-    onActiveTabChange: (tab: 'pr' | 'notes') => void
-    showAddressed: boolean
-    onShowAddressedChange: (showAddressed: boolean) => void
   }
 
-  let {
-    taskId,
-    agentStatus,
-    onSendToAgent,
-    onRefresh,
-    linkedPr,
-    prComments,
-    commentSelection,
-    generalCommentCount,
-    pendingInlineComments,
-    markdownImageBaseUrl,
-    onPendingInlineCommentsChange,
-    onCommentClick,
-    onOpenLinkedPr,
-    onCollapse,
-    activeTab,
-    onActiveTabChange,
-    showAddressed,
-    onShowAddressedChange,
-  }: Props = $props()
-  let visibleComments = $derived(showAddressed ? prComments : commentSelection.unaddressedComments)
-  let totalCommentCount = $derived(
-    commentSelection.unaddressedCount + generalCommentCount + pendingInlineComments.length,
-  )
+  let { pane, agentStatus, onSendToAgent }: Props = $props()
+  let taskId = $derived(pane.general.taskId)
+  let onRefresh = $derived(pane.pullRequest.onRefresh)
+  let linkedPr = $derived(pane.pullRequest.linkedPr)
+  let prComments = $derived(pane.pullRequest.comments)
+  let visibleComments = $derived(pane.pullRequest.visibleComments)
+  let commentSelection = $derived(pane.pullRequest.selection)
+  let generalCommentCount = $derived(pane.general.commentCount)
+  let pendingInlineComments = $derived(pane.composer.pendingInlineComments)
+  let markdownImageBaseUrl = $derived(pane.pullRequest.markdownImageBaseUrl)
+  let onPendingInlineCommentsChange = $derived(pane.composer.onPendingInlineCommentsChange)
+  let onSendComplete = $derived(pane.composer.onSendComplete)
+  let onCommentClick = $derived(pane.pullRequest.onCommentClick)
+  let onOpenLinkedPr = $derived(pane.pullRequest.onOpenLinkedPr)
+  let onCollapse = $derived(pane.navigation.onCollapse)
+  let activeTab = $derived(pane.navigation.activeTab)
+  let onActiveTabChange = $derived(pane.navigation.onActiveTabChange)
+  let showAddressed = $derived(pane.pullRequest.showAddressed)
+  let onShowAddressedChange = $derived(pane.pullRequest.onShowAddressedChange)
+  let totalCommentCount = $derived(pane.totalCommentCount)
 </script>
 
 <ResizablePanel storageKey="self-review-comments" defaultWidth={380} minWidth={300} maxWidth={620} side="right" label="Feedback">
@@ -160,7 +140,7 @@
       selectedPrComments={commentSelection.selectedPrComments}
       {pendingInlineComments}
       {onPendingInlineCommentsChange}
-      onSendComplete={commentSelection.deselectAll}
+      {onSendComplete}
     />
   </section>
 </ResizablePanel>

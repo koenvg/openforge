@@ -2,6 +2,7 @@ import { get } from 'svelte/store'
 import { selfReviewStateByTask } from '../../lib/taskScopedSelfReviewState'
 import type { PrFileDiff } from '../../lib/types'
 import { createSelfReviewChangedFilesPane } from './selfReviewChangedFilesPane.svelte'
+import { createSelfReviewFeedbackPane } from './selfReviewFeedbackPane.svelte'
 import {
   createSelfReviewCommentController,
 } from './selfReviewCommentController.svelte'
@@ -69,6 +70,13 @@ export function createSelfReviewWorkspaceController(
     onCommentsNeedAttention: () => navigationController.setSidebarVisible(true),
   })
 
+  const feedbackPane = createSelfReviewFeedbackPane({
+    getTaskId: options.getTaskId,
+    diff: diffController,
+    comments: commentController,
+    navigation: navigationController,
+  })
+
   function synchronizeWorkspaceState(): void {
     navigationController.synchronizeTask(options.getTaskId())
     fileStateController.synchronize()
@@ -96,6 +104,7 @@ export function createSelfReviewWorkspaceController(
   return {
     get taskId() { return options.getTaskId() },
     changedFilesPane,
+    feedbackPane,
     get fileTreeVisible() { return navigationController.fileTreeVisible },
     get includeCommitted() { return diffController.includeCommitted },
     get includeUncommitted() { return diffController.includeUncommitted },
@@ -104,8 +113,6 @@ export function createSelfReviewWorkspaceController(
     get uncommittedLocked() { return diffController.uncommittedLocked },
     get lockedScopeTooltip() { return diffController.lockedScopeTooltip },
     get sidebarVisible() { return navigationController.sidebarVisible },
-    get sidebarTab() { return navigationController.sidebarTab },
-    get showAddressed() { return navigationController.showAddressed },
     get reviewedFileShas() { return fileStateController.reviewedFileShas },
     get treeFiles() { return fileStateController.treeFiles },
     get visibleDiffFiles() { return fileStateController.visibleDiffFiles },
@@ -116,14 +123,10 @@ export function createSelfReviewWorkspaceController(
     get reviewedBaselineError() { return fileStateController.reviewedBaselineError },
     get commits() { return diffController.commits },
     get selectedCommitSha() { return diffController.selectedCommitSha },
-    get linkedPr() { return diffController.linkedPr },
-    get prComments() { return diffController.prComments },
     get commentSelection() { return commentController.commentSelection },
-    get generalCommentCount() { return commentController.generalCommentCount },
     get pendingInlineComments() { return commentController.pendingInlineComments },
     get visibleInlineReviewComments() { return commentController.visibleInlineReviewComments },
     get visiblePendingInlineComments() { return commentController.visiblePendingInlineComments },
-    get markdownImageBaseUrl() { return commentController.markdownImageBaseUrl },
     get initialScrollTop() { return navigationController.initialScrollTop },
     load,
     synchronizeWorkspaceState,
@@ -139,10 +142,7 @@ export function createSelfReviewWorkspaceController(
     focusDiff: navigationController.focusDiff,
     setFileTreeVisible: navigationController.setFileTreeVisible,
     toggleFileTree: navigationController.toggleFileTree,
-    setSidebarVisible: navigationController.setSidebarVisible,
     toggleSidebar: navigationController.toggleSidebar,
-    setSidebarTab: navigationController.setSidebarTab,
-    setShowAddressed: navigationController.setShowAddressed,
     handlePendingInlineCommentsChange: commentController.handlePendingInlineCommentsChange,
     toggleFileReviewed: fileStateController.toggleFileReviewed,
     getVisibleFileReviewIdentity: fileStateController.getVisibleFileReviewIdentity,
@@ -154,8 +154,6 @@ export function createSelfReviewWorkspaceController(
     batchFetchFileContents: fileStateController.batchFetchFileContents,
     resolveRepositoryImage: fileStateController.resolveRepositoryImage,
     openRepositoryPath: navigationController.openRepositoryPath,
-    openLinkedPr: navigationController.openLinkedPr,
-    scrollToComment: navigationController.scrollToComment,
     updateScrollTop: navigationController.updateScrollTop,
   }
 }
