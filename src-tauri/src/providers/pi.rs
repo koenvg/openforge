@@ -116,87 +116,104 @@ impl PiProvider {
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
-            builtin_pi_commands, scan_pi_skills_directory, scan_prompt_templates_directory,
-            scan_skills_directory,
+            builtin_pi_commands, enrich_command, scan_pi_skills_directory,
+            scan_prompt_templates_directory, scan_skills_directory, trigger_for,
+            GENERIC_SKILLS_SOURCE_DIR, PI_SKILLS_SOURCE_DIR,
         };
         use std::collections::HashMap;
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
 
-        for cmd in builtin_pi_commands() {
+        for mut cmd in builtin_pi_commands() {
+            enrich_command(&mut cmd, "builtin", "manual-only", None, None, None);
             commands_map.insert(cmd.name.clone(), cmd);
         }
 
+        let insert_skill = |map: &mut HashMap<String, crate::opencode_client::CommandInfo>,
+                            skill: crate::opencode_client::SkillInfo,
+                            origin: &str| {
+            let key = format!("skill:{}", skill.name);
+            let mut cmd = crate::opencode_client::CommandInfo {
+                name: key.clone(),
+                description: skill.description,
+                source: Some("skill".to_string()),
+                agent: skill.agent,
+                extra: serde_json::Map::new(),
+            };
+            enrich_command(
+                &mut cmd,
+                origin,
+                trigger_for(skill.disable_model_invocation),
+                Some(&skill.source_dir),
+                Some(&skill.source_path),
+                skill.user_invocable,
+            );
+            cmd.extra.insert(
+                "content".to_string(),
+                skill
+                    .template
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+            map.entry(key).or_insert(cmd);
+        };
+
         // User-level prompt templates and skills.
         if let Some(home) = dirs::home_dir() {
-            for cmd in
+            for mut cmd in
                 scan_prompt_templates_directory(&home.join(".pi").join("agent").join("prompts"))
             {
+                enrich_command(
+                    &mut cmd,
+                    "personal",
+                    "manual-only",
+                    Some(PI_SKILLS_SOURCE_DIR),
+                    None,
+                    None,
+                );
                 commands_map.insert(cmd.name.clone(), cmd);
             }
 
             for skill in
                 scan_pi_skills_directory(&home.join(".pi").join("agent").join("skills"), "user")
             {
-                commands_map
-                    .entry(format!("skill:{}", skill.name))
-                    .or_insert(crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    });
+                insert_skill(&mut commands_map, skill, "personal");
             }
 
-            for skill in
-                scan_skills_directory(&home.join(".agents").join("skills"), "user", ".agents")
-            {
-                commands_map
-                    .entry(format!("skill:{}", skill.name))
-                    .or_insert(crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    });
+            for skill in scan_skills_directory(
+                &home.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
+                "user",
+                GENERIC_SKILLS_SOURCE_DIR,
+            ) {
+                insert_skill(&mut commands_map, skill, "personal");
             }
         }
 
         // Project-level prompt templates and skills.
         if let Some(proj_path) = project_path {
             let proj = std::path::Path::new(proj_path);
-            for cmd in scan_prompt_templates_directory(&proj.join(".pi").join("prompts")) {
+            for mut cmd in scan_prompt_templates_directory(&proj.join(".pi").join("prompts")) {
+                enrich_command(
+                    &mut cmd,
+                    "project",
+                    "manual-only",
+                    Some(PI_SKILLS_SOURCE_DIR),
+                    None,
+                    None,
+                );
                 commands_map.insert(cmd.name.clone(), cmd);
             }
 
             for skill in scan_pi_skills_directory(&proj.join(".pi").join("skills"), "project") {
-                commands_map.insert(
-                    format!("skill:{}", skill.name),
-                    crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
-                );
+                insert_skill(&mut commands_map, skill, "project");
             }
 
-            for skill in
-                scan_skills_directory(&proj.join(".agents").join("skills"), "project", ".agents")
-            {
-                commands_map.insert(
-                    format!("skill:{}", skill.name),
-                    crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
-                );
+            for skill in scan_skills_directory(
+                &proj.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
+                "project",
+                GENERIC_SKILLS_SOURCE_DIR,
+            ) {
+                insert_skill(&mut commands_map, skill, "project");
             }
         }
 
@@ -311,5 +328,22 @@ mod tests {
                 && cmd.description.as_deref() == Some("Root markdown review skill")
                 && cmd.source.as_deref() == Some("skill")
         }));
+
+        let review = commands
+            .iter()
+            .find(|cmd| cmd.name == "review")
+            .expect("prompt template present");
+        assert_eq!(
+            review.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
+        let skill = commands
+            .iter()
+            .find(|cmd| cmd.name == "skill:release-notes")
+            .expect("skill present");
+        assert_eq!(
+            skill.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
     }
 }

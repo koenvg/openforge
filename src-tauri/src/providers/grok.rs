@@ -141,22 +141,162 @@ impl GrokProvider {
         session.grok_session_id.clone()
     }
 
+    /// Discovers Grok Build's own skills, plugin-provided skills, and built-in slash
+    /// commands, mirroring ClaudeCodeProvider's scan of commands/skills directories
+    /// (previously deferred — see docs.x.ai/build/features/skills-plugins-marketplaces):
+    /// - Personal skills: `~/.grok/skills/` and `~/.agents/skills/` (Grok Build reads
+    ///   the shared Agents-format directory directly, per that doc).
+    /// - Project skills: `<project>/.grok/skills/`.
+    /// - Plugin skills: any plugin folder under `.grok/plugins/` (project) or
+    ///   `~/.grok/plugins/` (personal) — presence on disk is enough to be active, there
+    ///   is no separate enable/disable registry the way Claude Code has one.
+    /// - Built-in Grok Build TUI commands (`builtin_grok_commands`).
+    ///
+    /// Not yet covered: marketplace-installed plugins under `.grok/plugins/marketplaces/`,
+    /// extra paths configured via `~/.grok/config.toml`, and Claude's server-driven
+    /// "authoritative" extras (`claude_authoritative`) — that overlay depends on Claude
+    /// CLI's `stream-json` init protocol, which Grok Build has no confirmed equivalent of.
     pub fn list_commands(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
-        // v1: no `.grok`/`.claude`-compat command discovery yet. Richer discovery
-        // (mirroring ClaudeCodeProvider's scan of commands/skills directories) is
-        // a deferred follow-up.
-        Vec::new()
+        use crate::command_discovery::{
+            builtin_grok_commands, enrich_command, resolve_installed_plugins_from_dir,
+            scan_plugin_commands, scan_skills_directory, trigger_for, GENERIC_SKILLS_SOURCE_DIR,
+            GROK_SKILLS_SOURCE_DIR,
+        };
+        use std::collections::HashMap;
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        for mut cmd in builtin_grok_commands() {
+            enrich_command(&mut cmd, "builtin", "manual-only", None, None, None);
+            commands_map.insert(cmd.name.clone(), cmd);
+        }
+
+        let insert_skill = |map: &mut HashMap<String, crate::opencode_client::CommandInfo>,
+                            skill: crate::opencode_client::SkillInfo,
+                            origin: &str| {
+            let name = skill.name.clone();
+            let mut cmd = crate::opencode_client::CommandInfo {
+                name: skill.name,
+                description: skill.description,
+                source: Some("skill".to_string()),
+                agent: skill.agent,
+                extra: serde_json::Map::new(),
+            };
+            enrich_command(
+                &mut cmd,
+                origin,
+                trigger_for(skill.disable_model_invocation),
+                Some(&skill.source_dir),
+                Some(&skill.source_path),
+                skill.user_invocable,
+            );
+            cmd.extra.insert(
+                "content".to_string(),
+                skill
+                    .template
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+            map.insert(name, cmd);
+        };
+
+        if let Some(home) = dirs::home_dir() {
+            for skill in scan_skills_directory(
+                &home.join(GROK_SKILLS_SOURCE_DIR).join("skills"),
+                "user",
+                GROK_SKILLS_SOURCE_DIR,
+            ) {
+                insert_skill(&mut commands_map, skill, "personal");
+            }
+            for skill in scan_skills_directory(
+                &home.join(GENERIC_SKILLS_SOURCE_DIR).join("skills"),
+                "user",
+                GENERIC_SKILLS_SOURCE_DIR,
+            ) {
+                insert_skill(&mut commands_map, skill, "personal");
+            }
+
+            let plugins = resolve_installed_plugins_from_dir(
+                &home.join(GROK_SKILLS_SOURCE_DIR).join("plugins"),
+            );
+            for plugin in &plugins {
+                for skill in scan_skills_directory(
+                    &plugin.cache_dir.join("skills"),
+                    "user",
+                    GROK_SKILLS_SOURCE_DIR,
+                ) {
+                    insert_skill(&mut commands_map, skill, "plugin");
+                }
+            }
+            for mut cmd in scan_plugin_commands(&plugins) {
+                enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+        }
+
+        if let Some(proj_path) = project_path {
+            let proj = Path::new(proj_path);
+            for skill in scan_skills_directory(
+                &proj.join(GROK_SKILLS_SOURCE_DIR).join("skills"),
+                "project",
+                GROK_SKILLS_SOURCE_DIR,
+            ) {
+                insert_skill(&mut commands_map, skill, "project");
+            }
+
+            let plugins = resolve_installed_plugins_from_dir(
+                &proj.join(GROK_SKILLS_SOURCE_DIR).join("plugins"),
+            );
+            for plugin in &plugins {
+                for skill in scan_skills_directory(
+                    &plugin.cache_dir.join("skills"),
+                    "project",
+                    GROK_SKILLS_SOURCE_DIR,
+                ) {
+                    insert_skill(&mut commands_map, skill, "plugin");
+                }
+            }
+            for mut cmd in scan_plugin_commands(&plugins) {
+                enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+        }
+
+        let mut commands: Vec<_> = commands_map.into_values().collect();
+        commands.sort_by(|a, b| a.name.cmp(&b.name));
+        commands
     }
 
+    /// Agents ship inside a plugin's `agents/` folder — same convention Claude Code's
+    /// plugins use — so this reuses `scan_plugin_agents` against the same on-disk plugin
+    /// list `list_commands` resolves for plugin skills.
     pub fn list_agents(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::AgentInfo> {
-        // v1: no `.grok` agent discovery yet. Deferred follow-up, same as list_commands.
-        Vec::new()
+        use crate::command_discovery::{
+            resolve_installed_plugins_from_dir, scan_plugin_agents, GROK_SKILLS_SOURCE_DIR,
+        };
+
+        let mut agents = Vec::new();
+        if let Some(home) = dirs::home_dir() {
+            let plugins = resolve_installed_plugins_from_dir(
+                &home.join(GROK_SKILLS_SOURCE_DIR).join("plugins"),
+            );
+            agents.extend(scan_plugin_agents(&plugins));
+        }
+        if let Some(proj_path) = project_path {
+            let proj = Path::new(proj_path);
+            let plugins = resolve_installed_plugins_from_dir(
+                &proj.join(GROK_SKILLS_SOURCE_DIR).join("plugins"),
+            );
+            agents.extend(scan_plugin_agents(&plugins));
+        }
+        agents.sort_by(|a, b| a.name.cmp(&b.name));
+        agents
     }
 }
 
@@ -207,15 +347,132 @@ mod tests {
     }
 
     #[test]
-    fn test_list_commands_returns_empty() {
+    fn list_commands_includes_builtin_grok_commands() {
         let provider = GrokProvider::new(PtyManager::new());
-        assert!(provider.list_commands(None).is_empty());
+
+        let commands = provider.list_commands(None);
+
+        let model_cmd = commands
+            .iter()
+            .find(|cmd| cmd.name == "model")
+            .expect("builtin /model command present");
+        assert_eq!(model_cmd.source.as_deref(), Some("builtin"));
+        assert_eq!(
+            model_cmd.extra.get("origin").and_then(|v| v.as_str()),
+            Some("builtin")
+        );
     }
 
     #[test]
-    fn test_list_agents_returns_empty() {
+    fn list_commands_discovers_project_grok_skill() {
+        let dir = tempfile::tempdir().unwrap();
+        let skill_dir = dir
+            .path()
+            .join(".grok")
+            .join("skills")
+            .join("release-notes");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: release-notes\ndescription: Draft release notes\n---\nBody",
+        )
+        .unwrap();
+
         let provider = GrokProvider::new(PtyManager::new());
-        assert!(provider.list_agents(None).is_empty());
+        let commands = provider.list_commands(dir.path().to_str());
+
+        let skill = commands
+            .iter()
+            .find(|cmd| cmd.name == "release-notes")
+            .expect("project skill present");
+        assert_eq!(
+            skill.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
+        assert_eq!(
+            skill.extra.get("sourceDir").and_then(|v| v.as_str()),
+            Some(".grok")
+        );
+    }
+
+    #[test]
+    fn list_commands_discovers_project_plugin_skill_and_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugin_dir = dir.path().join(".grok").join("plugins").join("my-plugin");
+        let skill_dir = plugin_dir.join("skills").join("triage");
+        let commands_dir = plugin_dir.join("commands");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::create_dir_all(&commands_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: triage\ndescription: Triage an issue\n---\nBody",
+        )
+        .unwrap();
+        std::fs::write(
+            commands_dir.join("sync.md"),
+            "---\ndescription: Sync the board\n---\nBody",
+        )
+        .unwrap();
+
+        let provider = GrokProvider::new(PtyManager::new());
+        let commands = provider.list_commands(dir.path().to_str());
+
+        let skill = commands
+            .iter()
+            .find(|cmd| cmd.name == "triage")
+            .expect("plugin skill present");
+        assert_eq!(
+            skill.extra.get("origin").and_then(|v| v.as_str()),
+            Some("plugin")
+        );
+
+        let command = commands
+            .iter()
+            .find(|cmd| cmd.name == "my-plugin:sync")
+            .expect("plugin command present");
+        assert_eq!(
+            command.extra.get("origin").and_then(|v| v.as_str()),
+            Some("plugin")
+        );
+    }
+
+    #[test]
+    fn list_commands_skips_the_marketplaces_registry_as_a_plugin() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(
+            dir.path()
+                .join(".grok")
+                .join("plugins")
+                .join("marketplaces"),
+        )
+        .unwrap();
+
+        let provider = GrokProvider::new(PtyManager::new());
+        let commands = provider.list_commands(dir.path().to_str());
+
+        assert!(commands.iter().all(|cmd| cmd.name != "marketplaces:sync"));
+    }
+
+    #[test]
+    fn list_agents_discovers_project_plugin_agents() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents_dir = dir
+            .path()
+            .join(".grok")
+            .join("plugins")
+            .join("my-plugin")
+            .join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        std::fs::write(
+            agents_dir.join("reviewer.md"),
+            "---\nname: reviewer\n---\nBody",
+        )
+        .unwrap();
+
+        let provider = GrokProvider::new(PtyManager::new());
+        let agents = provider.list_agents(dir.path().to_str());
+
+        assert!(agents.iter().any(|agent| agent.name == "reviewer"));
     }
 
     // ------------------------------------------------------------------

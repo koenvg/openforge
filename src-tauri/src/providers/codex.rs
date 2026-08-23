@@ -111,7 +111,9 @@ impl CodexProvider {
         &self,
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
-        use crate::command_discovery::{scan_skills_directory, CODEX_SKILLS_SOURCE_DIR};
+        use crate::command_discovery::{
+            enrich_command, scan_skills_directory, trigger_for, CODEX_SKILLS_SOURCE_DIR,
+        };
         use std::collections::HashMap;
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
@@ -120,15 +122,32 @@ impl CodexProvider {
             for skill in
                 scan_skills_directory(&codex_home.join("skills"), "user", CODEX_SKILLS_SOURCE_DIR)
             {
-                commands_map
-                    .entry(format!("skill:{}", skill.name))
-                    .or_insert(crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
+                let key = format!("skill:{}", skill.name);
+                commands_map.entry(key.clone()).or_insert_with(|| {
+                    let mut cmd = crate::opencode_client::CommandInfo {
+                        name: key,
                         description: skill.description,
                         source: Some("skill".to_string()),
                         agent: skill.agent,
                         extra: serde_json::Map::new(),
-                    });
+                    };
+                    enrich_command(
+                        &mut cmd,
+                        "personal",
+                        trigger_for(skill.disable_model_invocation),
+                        Some(&skill.source_dir),
+                        Some(&skill.source_path),
+                        skill.user_invocable,
+                    );
+                    cmd.extra.insert(
+                        "content".to_string(),
+                        skill
+                            .template
+                            .map(serde_json::Value::from)
+                            .unwrap_or(serde_json::Value::Null),
+                    );
+                    cmd
+                });
             }
         }
 
@@ -139,16 +158,30 @@ impl CodexProvider {
                 "project",
                 CODEX_SKILLS_SOURCE_DIR,
             ) {
-                commands_map.insert(
-                    format!("skill:{}", skill.name),
-                    crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
+                let key = format!("skill:{}", skill.name);
+                let mut cmd = crate::opencode_client::CommandInfo {
+                    name: key.clone(),
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                };
+                enrich_command(
+                    &mut cmd,
+                    "project",
+                    trigger_for(skill.disable_model_invocation),
+                    Some(&skill.source_dir),
+                    Some(&skill.source_path),
+                    skill.user_invocable,
                 );
+                cmd.extra.insert(
+                    "content".to_string(),
+                    skill
+                        .template
+                        .map(serde_json::Value::from)
+                        .unwrap_or(serde_json::Value::Null),
+                );
+                commands_map.insert(key, cmd);
             }
         }
 
@@ -248,6 +281,36 @@ mod tests {
     }
 
     #[test]
+    fn list_commands_enriches_home_skill_with_personal_origin() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_home = temp_dir.path().join("custom-codex-home");
+        let skill_dir = codex_home.join("skills/home-only-skill");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: home-only-skill\ndescription: Skill from CODEX_HOME\n---\n# Home skill",
+        )
+        .expect("write skill");
+        let _guard = EnvVarGuard::set("CODEX_HOME", &codex_home);
+
+        let provider = CodexProvider::new(PtyManager::new());
+        let commands = provider.list_commands(None);
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:home-only-skill")
+            .expect("home skill present");
+        assert_eq!(
+            command.extra.get("origin").and_then(|v| v.as_str()),
+            Some("personal")
+        );
+        assert_eq!(
+            command.extra.get("sourceDir").and_then(|v| v.as_str()),
+            Some(".codex")
+        );
+    }
+
+    #[test]
     fn list_commands_includes_project_codex_skills_for_dollar_invocation() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let skill_dir = temp_dir.path().join(".codex/skills/grill-with-docs");
@@ -266,5 +329,14 @@ mod tests {
                 && command.source.as_deref() == Some("skill")
                 && command.description.as_deref() == Some("Grill plans against docs")
         }));
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:grill-with-docs")
+            .expect("project skill present");
+        assert_eq!(
+            command.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
     }
 }

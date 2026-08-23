@@ -2,8 +2,8 @@ use crate::command_discovery::search_project_files;
 use crate::db;
 use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo};
 use crate::providers::{
-    claude_code::ClaudeCodeProvider, codex::CodexProvider, opencode::OpenCodeProvider,
-    pi::PiProvider,
+    claude_code::ClaudeCodeProvider, codex::CodexProvider, grok::GrokProvider,
+    opencode::OpenCodeProvider, pi::PiProvider,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,10 +59,9 @@ pub(crate) fn provider_commands(
             OpenCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
         ),
-        // v1: no `.grok` command discovery yet (mirrors GrokProvider::list_commands's
-        // own comment). Deferred follow-up — no need to spin up a PtyManager just
-        // to call a method that unconditionally returns an empty vec.
-        "grok" => Some(Vec::new()),
+        "grok" => Some(
+            GrokProvider::new(crate::pty_manager::PtyManager::new()).list_commands(project_path),
+        ),
         _ => None,
     }
 }
@@ -85,10 +84,9 @@ pub(crate) fn provider_agents(
         "opencode" => Some(
             OpenCodeProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path),
         ),
-        // v1: no `.grok` agent discovery yet (mirrors GrokProvider::list_agents's
-        // own comment). Deferred follow-up — no need to spin up a PtyManager just
-        // to call a method that unconditionally returns an empty vec.
-        "grok" => Some(Vec::new()),
+        "grok" => {
+            Some(GrokProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path))
+        }
         _ => None,
     }
 }
@@ -263,13 +261,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn provider_commands_returns_empty_for_grok() {
+    fn provider_commands_includes_grok_builtin_commands() {
         let commands = provider_commands("grok", None).expect("grok should be a known provider");
-        assert!(commands.is_empty());
+        assert!(commands.iter().any(|cmd| cmd.name == "model"));
     }
 
     #[test]
-    fn provider_agents_returns_empty_for_grok() {
+    fn provider_agents_is_wired_for_grok() {
+        // No project path and no local `.grok/plugins` fixture, so this is empty in
+        // practice — the point of this test is that "grok" dispatches to
+        // GrokProvider::list_agents at all (Some(..)), not that it stays empty forever.
         let agents = provider_agents("grok", None).expect("grok should be a known provider");
         assert!(agents.is_empty());
     }

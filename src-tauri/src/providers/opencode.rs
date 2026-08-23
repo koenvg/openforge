@@ -116,35 +116,72 @@ impl OpenCodeProvider {
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
-            resolve_active_plugins, scan_commands_directory, scan_plugin_agents,
-            scan_skills_directory,
+            enrich_command, resolve_active_plugins, scan_commands_directory, scan_plugin_agents,
+            scan_skills_directory, trigger_for,
         };
         use std::collections::HashMap;
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
 
+        let insert_skill = |map: &mut HashMap<String, crate::opencode_client::CommandInfo>,
+                            skill: crate::opencode_client::SkillInfo,
+                            origin: &str| {
+            let key = format!("skill:{}", skill.name);
+            let mut cmd = crate::opencode_client::CommandInfo {
+                name: key.clone(),
+                description: skill.description,
+                source: Some("skill".to_string()),
+                agent: skill.agent,
+                extra: serde_json::Map::new(),
+            };
+            enrich_command(
+                &mut cmd,
+                origin,
+                trigger_for(skill.disable_model_invocation),
+                Some(&skill.source_dir),
+                Some(&skill.source_path),
+                skill.user_invocable,
+            );
+            cmd.extra.insert(
+                "content".to_string(),
+                skill
+                    .template
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+            map.entry(key).or_insert(cmd);
+        };
+
         if let Some(config) = dirs::config_dir() {
             let opencode_config = config.join("opencode");
-            for cmd in scan_commands_directory(&opencode_config.join("commands")) {
+            for mut cmd in scan_commands_directory(&opencode_config.join("commands")) {
+                enrich_command(
+                    &mut cmd,
+                    "personal",
+                    "manual-only",
+                    Some(".opencode"),
+                    None,
+                    None,
+                );
                 commands_map.insert(cmd.name.clone(), cmd);
             }
             for skill in scan_skills_directory(&opencode_config.join("skills"), "user", ".opencode")
             {
-                commands_map
-                    .entry(format!("skill:{}", skill.name))
-                    .or_insert(crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    });
+                insert_skill(&mut commands_map, skill, "personal");
             }
         }
 
         if let Some(proj_path) = project_path {
             let proj = Path::new(proj_path);
-            for cmd in scan_commands_directory(&proj.join(".opencode").join("commands")) {
+            for mut cmd in scan_commands_directory(&proj.join(".opencode").join("commands")) {
+                enrich_command(
+                    &mut cmd,
+                    "project",
+                    "manual-only",
+                    Some(".opencode"),
+                    None,
+                    None,
+                );
                 commands_map.insert(cmd.name.clone(), cmd);
             }
             for skill in scan_skills_directory(
@@ -152,16 +189,7 @@ impl OpenCodeProvider {
                 "project",
                 ".opencode",
             ) {
-                commands_map.insert(
-                    format!("skill:{}", skill.name),
-                    crate::opencode_client::CommandInfo {
-                        name: format!("skill:{}", skill.name),
-                        description: skill.description,
-                        source: Some("skill".to_string()),
-                        agent: skill.agent,
-                        extra: serde_json::Map::new(),
-                    },
-                );
+                insert_skill(&mut commands_map, skill, "project");
             }
         }
 
@@ -172,12 +200,16 @@ impl OpenCodeProvider {
         commands.extend(
             scan_plugin_agents(&active_plugins)
                 .into_iter()
-                .map(|agent| crate::opencode_client::CommandInfo {
-                    name: format!("agent:{}", agent.name),
-                    description: Some(format!("Run with agent {}", agent.name)),
-                    source: Some("agent".to_string()),
-                    agent: Some(agent.name),
-                    extra: serde_json::Map::new(),
+                .map(|agent| {
+                    let mut cmd = crate::opencode_client::CommandInfo {
+                        name: format!("agent:{}", agent.name),
+                        description: Some(format!("Run with agent {}", agent.name)),
+                        source: Some("agent".to_string()),
+                        agent: Some(agent.name),
+                        extra: serde_json::Map::new(),
+                    };
+                    enrich_command(&mut cmd, "plugin", "auto+manual", None, None, None);
+                    cmd
                 }),
         );
         commands.sort_by(|left, right| left.name.cmp(&right.name));
@@ -255,6 +287,19 @@ mod tests {
                 && command.source.as_deref() == Some("skill")
                 && command.description.as_deref() == Some("Review the code")
         }));
+
+        let command = commands
+            .iter()
+            .find(|command| command.name == "skill:review")
+            .expect("project skill present");
+        assert_eq!(
+            command.extra.get("origin").and_then(|v| v.as_str()),
+            Some("project")
+        );
+        assert_eq!(
+            command.extra.get("sourceDir").and_then(|v| v.as_str()),
+            Some(".opencode")
+        );
     }
 
     #[test]
