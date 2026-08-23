@@ -1,4 +1,5 @@
-use rusqlite::{params, Result};
+use super::startup_resume_eligibility::{query_startup_resumable_rows, StartupResumeRow};
+use rusqlite::Result;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -14,6 +15,28 @@ pub struct TaskWorkspaceRow {
     pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl StartupResumeRow for TaskWorkspaceRow {
+    const TABLE: &'static str = "task_workspaces";
+    const SELECT_COLUMNS: &'static str =
+        "workspace.id, workspace.task_id, workspace.project_id, workspace.workspace_path, workspace.repo_path, workspace.kind, workspace.branch_name, workspace.provider_name, workspace.status, workspace.created_at, workspace.updated_at";
+
+    fn from_startup_resume_row(row: &rusqlite::Row<'_>) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            project_id: row.get(2)?,
+            workspace_path: row.get(3)?,
+            repo_path: row.get(4)?,
+            kind: row.get(5)?,
+            branch_name: row.get(6)?,
+            provider_name: row.get(7)?,
+            status: row.get(8)?,
+            created_at: row.get(9)?,
+            updated_at: row.get(10)?,
+        })
+    }
 }
 
 impl super::Database {
@@ -132,55 +155,7 @@ impl super::Database {
     /// Companion Terminal surfaces can reattach to a live provider process after restart.
     pub fn get_resumable_task_workspaces(&self) -> Result<Vec<TaskWorkspaceRow>> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT tw.id, tw.task_id, tw.project_id, tw.workspace_path, tw.repo_path,
-                    tw.kind, tw.branch_name, tw.provider_name, tw.status,
-                    tw.created_at, tw.updated_at
-             FROM task_workspaces tw
-             INNER JOIN tasks t ON tw.task_id = t.id
-             INNER JOIN agent_sessions latest_session
-               ON latest_session.ticket_id = tw.task_id
-              AND latest_session.rowid = (
-                SELECT s2.rowid
-                  FROM agent_sessions s2
-                 WHERE s2.ticket_id = tw.task_id
-                 ORDER BY s2.created_at DESC, s2.rowid DESC
-                 LIMIT 1
-              )
-             WHERE tw.status = 'active'
-               AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3, 'completed')
-             ORDER BY tw.updated_at DESC",
-        )?;
-
-        let rows = stmt.query_map(
-            params![
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[0],
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[1],
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[2],
-            ],
-            |row| {
-                Ok(TaskWorkspaceRow {
-                    id: row.get(0)?,
-                    task_id: row.get(1)?,
-                    project_id: row.get(2)?,
-                    workspace_path: row.get(3)?,
-                    repo_path: row.get(4)?,
-                    kind: row.get(5)?,
-                    branch_name: row.get(6)?,
-                    provider_name: row.get(7)?,
-                    status: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                })
-            },
-        )?;
-
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row?);
-        }
-        Ok(result)
+        query_startup_resumable_rows(&conn)
     }
 
     pub fn get_project_for_workspace(&self, workspace_path: &str) -> Result<Option<String>> {
@@ -247,144 +222,6 @@ mod tests {
             .expect("get updated workspace failed")
             .expect("updated workspace missing");
         assert_eq!(updated.status, "completed");
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_get_resumable_task_workspaces_only_doing_tasks() {
-        let (db, path) = make_test_db("resumable_task_workspaces");
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let doing_task = db
-            .create_task("Doing task", "doing", Some(&project.id), None, None)
-            .expect("create doing task failed");
-        let done_task = db
-            .create_task("Done task", "done", Some(&project.id), None, None)
-            .expect("create done task failed");
-
-        db.create_task_workspace_record(
-            &doing_task.id,
-            &project.id,
-            "/tmp/test-repo/.workspace/doing",
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-        )
-        .expect("create doing workspace failed");
-        db.create_task_workspace_record(
-            &done_task.id,
-            &project.id,
-            "/tmp/test-repo/.workspace/done",
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-        )
-        .expect("create done workspace failed");
-
-        db.create_agent_session(
-            "ses-doing",
-            &doing_task.id,
-            Some("oc-doing"),
-            "implement",
-            "running",
-            "opencode",
-        )
-        .expect("create doing session failed");
-        db.create_agent_session(
-            "ses-done",
-            &done_task.id,
-            Some("oc-done"),
-            "implement",
-            "running",
-            "opencode",
-        )
-        .expect("create done session failed");
-
-        let resumable = db
-            .get_resumable_task_workspaces()
-            .expect("get resumable failed");
-        assert_eq!(resumable.len(), 1);
-        assert_eq!(resumable[0].task_id, doing_task.id);
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_get_resumable_task_workspaces_keeps_completed_doing_task_attachable() {
-        let (db, path) = make_test_db("resumable_task_workspaces_latest_status");
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let completed_task = db
-            .create_task("Completed latest", "doing", Some(&project.id), None, None)
-            .expect("create completed task failed");
-        let failed_task = db
-            .create_task("Failed latest", "doing", Some(&project.id), None, None)
-            .expect("create failed task failed");
-
-        for task in [&completed_task, &failed_task] {
-            db.create_task_workspace_record(
-                &task.id,
-                &project.id,
-                &format!("/tmp/test-repo/.workspace/{}", task.id),
-                "/tmp/test-repo",
-                "project_dir",
-                None,
-                "opencode",
-            )
-            .expect("create workspace failed");
-        }
-
-        db.create_agent_session(
-            "ses-completed-old",
-            &completed_task.id,
-            Some("oc-completed-old"),
-            "implement",
-            "running",
-            "opencode",
-        )
-        .expect("create old completed-task session failed");
-        db.create_agent_session(
-            "ses-completed-latest",
-            &completed_task.id,
-            Some("oc-completed-latest"),
-            "implement",
-            "completed",
-            "opencode",
-        )
-        .expect("create latest completed session failed");
-        db.save_completed_agent_terminal_replay(&completed_task.id, "captured output")
-            .expect("save completed terminal replay");
-        db.create_agent_session(
-            "ses-failed-old",
-            &failed_task.id,
-            Some("oc-failed-old"),
-            "implement",
-            "paused",
-            "opencode",
-        )
-        .expect("create old failed-task session failed");
-        db.create_agent_session(
-            "ses-failed-latest",
-            &failed_task.id,
-            Some("oc-failed-latest"),
-            "implement",
-            "failed",
-            "opencode",
-        )
-        .expect("create latest failed session failed");
-
-        let resumable = db
-            .get_resumable_task_workspaces()
-            .expect("get resumable failed");
-        assert_eq!(resumable.len(), 1);
-        assert_eq!(resumable[0].task_id, completed_task.id);
 
         drop(db);
         let _ = fs::remove_file(&path);

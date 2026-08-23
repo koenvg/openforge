@@ -1,3 +1,4 @@
+use super::startup_resume_eligibility::{query_startup_resumable_rows, StartupResumeRow};
 use rusqlite::{params, Result};
 use serde::Serialize;
 
@@ -13,6 +14,26 @@ pub struct WorktreeRow {
     pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl StartupResumeRow for WorktreeRow {
+    const TABLE: &'static str = "worktrees";
+    const SELECT_COLUMNS: &'static str =
+        "workspace.id, workspace.task_id, workspace.project_id, workspace.repo_path, workspace.worktree_path, workspace.branch_name, workspace.status, workspace.created_at, workspace.updated_at";
+
+    fn from_startup_resume_row(row: &rusqlite::Row<'_>) -> Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            project_id: row.get(2)?,
+            repo_path: row.get(3)?,
+            worktree_path: row.get(4)?,
+            branch_name: row.get(5)?,
+            status: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+        })
+    }
 }
 
 impl super::Database {
@@ -158,52 +179,7 @@ impl super::Database {
     /// Companion Terminal surfaces can reattach to a live provider process after restart.
     pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT w.id, w.task_id, w.project_id, w.repo_path, w.worktree_path,
-                    w.branch_name, w.status, w.created_at, w.updated_at
-             FROM worktrees w
-             INNER JOIN tasks t ON w.task_id = t.id
-             INNER JOIN agent_sessions latest_session
-               ON latest_session.ticket_id = w.task_id
-              AND latest_session.rowid = (
-                SELECT s2.rowid
-                  FROM agent_sessions s2
-                 WHERE s2.ticket_id = w.task_id
-                 ORDER BY s2.created_at DESC, s2.rowid DESC
-                 LIMIT 1
-              )
-             WHERE w.status = 'active'
-               AND t.status = 'doing'
-               AND latest_session.status IN (?1, ?2, ?3, 'completed')
-             ORDER BY w.updated_at DESC",
-        )?;
-
-        let worktrees = stmt.query_map(
-            params![
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[0],
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[1],
-                super::STARTUP_RESUMABLE_AGENT_SESSION_STATUSES[2],
-            ],
-            |row| {
-                Ok(WorktreeRow {
-                    id: row.get(0)?,
-                    task_id: row.get(1)?,
-                    project_id: row.get(2)?,
-                    repo_path: row.get(3)?,
-                    worktree_path: row.get(4)?,
-                    branch_name: row.get(5)?,
-                    status: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
-                })
-            },
-        )?;
-
-        let mut result = Vec::new();
-        for worktree in worktrees {
-            result.push(worktree?);
-        }
-        Ok(result)
+        query_startup_resumable_rows(&conn)
     }
 
     /// Get project_id for a given worktree path.
@@ -265,165 +241,6 @@ mod tests {
         assert_eq!(worktree.worktree_path, "/tmp/wt-new");
         assert_eq!(worktree.branch_name, "branch-new");
         assert_eq!(worktree.status, "active");
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_get_resumable_worktrees_only_doing_tasks() {
-        let (db, path) = make_test_db("resumable_worktrees_doing");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("create project failed");
-
-        // Insert a "doing" task with active worktree and agent session — should be resumable
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-        conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-             rusqlite::params!["T-1", "Doing task", "doing", None::<String>, 1000, 1000, "Doing task"],
-         ).expect("insert T-1");
-        drop(conn);
-
-        db.create_worktree_record("T-1", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
-            .expect("create wt1");
-        db.create_agent_session(
-            "sess-1",
-            "T-1",
-            None,
-            "implementing",
-            "interrupted",
-            "claude-code",
-        )
-        .expect("create session 1");
-
-        // Insert a "backlog" task with active worktree and agent session — should NOT be resumable
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-        conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-             rusqlite::params!["T-2", "Backlog task", "backlog", None::<String>, 1000, 1000, "Backlog task"],
-         ).expect("insert T-2");
-        drop(conn);
-
-        db.create_worktree_record("T-2", &project.id, "/tmp/repo", "/tmp/wt2", "branch-2")
-            .expect("create wt2");
-        db.create_agent_session(
-            "sess-2",
-            "T-2",
-            None,
-            "implementing",
-            "interrupted",
-            "claude-code",
-        )
-        .expect("create session 2");
-
-        // Insert a "done" task with active worktree and agent session — should NOT be resumable
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-        conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-             rusqlite::params!["T-3", "Done task", "done", None::<String>, 1000, 1000, "Done task"],
-         ).expect("insert T-3");
-        drop(conn);
-
-        db.create_worktree_record("T-3", &project.id, "/tmp/repo", "/tmp/wt3", "branch-3")
-            .expect("create wt3");
-        db.create_agent_session(
-            "sess-3",
-            "T-3",
-            None,
-            "implementing",
-            "completed",
-            "claude-code",
-        )
-        .expect("create session 3");
-
-        let resumable = db.get_resumable_worktrees().expect("get resumable");
-
-        // Only the "doing" task should be returned
-        assert_eq!(resumable.len(), 1);
-        assert_eq!(resumable[0].task_id, "T-1");
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_get_resumable_worktrees_keeps_completed_doing_task_attachable() {
-        let (db, path) = make_test_db("resumable_worktrees_latest_status");
-
-        let project = db
-            .create_project("Test Project", "/tmp/test")
-            .expect("create project failed");
-        let completed_task = db
-            .create_task("Completed latest", "doing", Some(&project.id), None, None)
-            .expect("create completed task failed");
-        let failed_task = db
-            .create_task("Failed latest", "doing", Some(&project.id), None, None)
-            .expect("create failed task failed");
-
-        db.create_worktree_record(
-            &completed_task.id,
-            &project.id,
-            "/tmp/repo",
-            "/tmp/wt-completed",
-            "completed-branch",
-        )
-        .expect("create completed worktree failed");
-        db.create_worktree_record(
-            &failed_task.id,
-            &project.id,
-            "/tmp/repo",
-            "/tmp/wt-failed",
-            "failed-branch",
-        )
-        .expect("create failed worktree failed");
-
-        db.create_agent_session(
-            "sess-completed-old",
-            &completed_task.id,
-            None,
-            "implementing",
-            "running",
-            "claude-code",
-        )
-        .expect("create old completed-task session failed");
-        db.create_agent_session(
-            "sess-completed-latest",
-            &completed_task.id,
-            None,
-            "implementing",
-            "completed",
-            "claude-code",
-        )
-        .expect("create latest completed session failed");
-        db.save_completed_agent_terminal_replay(&completed_task.id, "captured output")
-            .expect("save completed terminal replay");
-        db.create_agent_session(
-            "sess-failed-old",
-            &failed_task.id,
-            None,
-            "implementing",
-            "interrupted",
-            "claude-code",
-        )
-        .expect("create old failed-task session failed");
-        db.create_agent_session(
-            "sess-failed-latest",
-            &failed_task.id,
-            None,
-            "implementing",
-            "failed",
-            "claude-code",
-        )
-        .expect("create latest failed session failed");
-
-        let resumable = db.get_resumable_worktrees().expect("get resumable");
-        assert_eq!(resumable.len(), 1);
-        assert_eq!(resumable[0].task_id, completed_task.id);
 
         drop(db);
         let _ = fs::remove_file(&path);
