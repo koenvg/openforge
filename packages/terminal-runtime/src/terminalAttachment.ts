@@ -1,3 +1,4 @@
+import { terminalLogMessage } from './terminalLogging'
 import { loadWebglAddon } from './terminalRendering'
 import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
 
@@ -37,7 +38,7 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
     host.resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
-      .catch(error => console.error('[terminalPool] resize failed:', error))
+      .catch(error => console.error(terminalLogMessage(host.loggerName, 'resize failed:'), error))
   }
 
   function waitForInitialFit(entry: PoolEntry, signal?: AbortSignal): Promise<void> {

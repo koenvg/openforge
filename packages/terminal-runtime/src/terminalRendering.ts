@@ -10,6 +10,7 @@ import {
   type TerminalImageProtocol,
 } from './terminalImages'
 import { createTerminalLinkHandler, loadTerminalWebLinksAddon } from './terminalLinks'
+import { terminalLogMessage } from './terminalLogging'
 import { getTerminalOptions } from './terminalOptions'
 import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
 import type { ThemeMode } from './theme'
@@ -36,9 +37,9 @@ function loadImageSupport(
     try {
       imageAddon.dispose()
     } catch (disposeError) {
-      console.warn('[terminalPool] Failed to dispose unavailable image addon:', disposeError)
+      console.warn(terminalLogMessage(host.loggerName, 'Failed to dispose unavailable image addon:'), disposeError)
     }
-    console.warn('[terminalPool] Inline images unavailable; keeping text fallbacks:', error)
+    console.warn(terminalLogMessage(host.loggerName, 'Inline images unavailable; keeping text fallbacks:'), error)
     return { imageAddon: null, imageProtocol: null }
   }
 
@@ -52,9 +53,9 @@ function loadImageSupport(
     try {
       imageAddon.dispose()
     } catch (disposeError) {
-      console.warn('[terminalPool] Failed to dispose unvalidated image addon:', disposeError)
+      console.warn(terminalLogMessage(host.loggerName, 'Failed to dispose unvalidated image addon:'), disposeError)
     }
-    console.warn('[terminalPool] Inline image validation unavailable; keeping text fallbacks:', error)
+    console.warn(terminalLogMessage(host.loggerName, 'Inline image validation unavailable; keeping text fallbacks:'), error)
     return { imageAddon: null, imageProtocol: null }
   }
 }
@@ -82,6 +83,7 @@ export function createTerminalEntry(
 
   return {
     taskId: terminalKey,
+    loggerName: host.loggerName,
     terminal,
     fitAddon,
     hostDiv: createHostDiv(),
@@ -112,7 +114,7 @@ export function disposeWebglContextLossListener(entry: PoolEntry): void {
   try {
     entry.webglContextLossDisposable?.dispose()
   } catch (error) {
-    console.warn('[terminalPool] Failed to dispose WebGL context loss listener:', error)
+    console.warn(terminalLogMessage(entry.loggerName, 'Failed to dispose WebGL context loss listener:'), error)
   } finally {
     entry.webglContextLossDisposable = null
   }
@@ -126,7 +128,7 @@ function disposeWebglAddon(entry: PoolEntry): void {
   try {
     webglAddon?.dispose()
   } catch (error) {
-    console.warn('[terminalPool] Failed to dispose WebGL renderer addon:', error)
+    console.warn(terminalLogMessage(entry.loggerName, 'Failed to dispose WebGL renderer addon:'), error)
   }
 }
 
@@ -139,7 +141,7 @@ export function loadWebglAddon(entry: PoolEntry, onContextLoss?: () => void): vo
     entry.webglAddon = webglAddon
     entry.webglContextLossDisposable = webglAddon.onContextLoss(() => {
       if (!entry.webglAddon) return
-      console.warn('[terminalPool] WebGL renderer context lost; falling back to the default renderer.')
+      console.warn(terminalLogMessage(entry.loggerName, 'WebGL renderer context lost; falling back to the default renderer.'))
       disposeWebglAddon(entry)
       entry.webglUnavailable = true
       onContextLoss?.()
@@ -153,13 +155,13 @@ export function loadWebglAddon(entry: PoolEntry, onContextLoss?: () => void): vo
         try {
           webglAddon?.dispose()
         } catch (disposeError) {
-          console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+          console.warn(terminalLogMessage(entry.loggerName, 'Failed to dispose unavailable WebGL renderer addon:'), disposeError)
         }
       }
       entry.webglAddon = null
       entry.webglContextLossDisposable = null
       entry.webglUnavailable = true
     }
-    console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
+    console.warn(terminalLogMessage(entry.loggerName, 'WebGL renderer unavailable; falling back to the default renderer:'), error)
   }
 }

@@ -1,12 +1,13 @@
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ILinkHandler, Terminal } from '@xterm/xterm'
+import { terminalLogMessage } from './terminalLogging'
 import type { TerminalRuntimeHost } from './terminalRuntimeTypes'
 
 function openTerminalLink(host: TerminalRuntimeHost, terminalKey: string, event: MouseEvent, uri: string): void {
   event.preventDefault()
   event.stopPropagation()
   host.openLink(terminalKey, uri).catch(error => {
-    console.error('[terminalPool] Failed to open terminal link:', error)
+    console.error(terminalLogMessage(host.loggerName, 'Failed to open terminal link:'), error)
   })
 }
 
