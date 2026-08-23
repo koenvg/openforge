@@ -216,7 +216,8 @@ mod tests {
         db.set_config(key, "github_issues").unwrap();
         assert_eq!(db.resolve_cleanup_destination(&project.id), "github_issues");
         // Project override beats global.
-        db.set_project_config(&project.id, key, "openforge").unwrap();
+        db.set_project_config(&project.id, key, "openforge")
+            .unwrap();
         assert_eq!(db.resolve_cleanup_destination(&project.id), "openforge");
 
         drop(db);

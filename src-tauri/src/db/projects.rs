@@ -251,7 +251,8 @@ impl super::Database {
     /// Checks project_config first, falls back to global config, then "openforge".
     pub fn resolve_cleanup_destination(&self, project_id: &str) -> String {
         if !project_id.is_empty() {
-            if let Ok(Some(dest)) = self.get_project_config(project_id, "code_cleanup_destination") {
+            if let Ok(Some(dest)) = self.get_project_config(project_id, "code_cleanup_destination")
+            {
                 if !dest.is_empty() {
                     return dest;
                 }
