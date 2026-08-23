@@ -959,7 +959,8 @@ mod tests {
             if !self.command_delay.is_zero() {
                 std::thread::sleep(self.command_delay);
             }
-            vec!["-lc".to_string(), format!("{}; sleep 5", self.script)]
+            // Keep test PTYs single-process so cleanup never waits on an orphan reaper.
+            vec!["-lc".to_string(), format!("{}; exec sleep 5", self.script)]
         }
 
         fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
