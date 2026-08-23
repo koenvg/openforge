@@ -14,6 +14,7 @@
 //! 3. Call `download_model_with_progress()` to fetch and verify a model file.
 //! 4. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
 
+use crate::idle_resource::{IdleResource, IdleResourceGuard};
 use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::RwLock;
-use std::time::Instant;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 use tokio_stream::StreamExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -33,6 +34,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 const APP_DIR_NAME: &str = "openforge";
 const MODELS_SUBDIR: &str = "models";
+pub(crate) const WHISPER_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 fn sha1_digest_to_lower_hex(digest: impl AsRef<[u8]>) -> String {
     digest
@@ -256,6 +258,11 @@ impl StdError for WhisperError {}
 // WhisperManager
 // ============================================================================
 
+struct LoadedWhisperContext {
+    model: WhisperModelSize,
+    context: WhisperContext,
+}
+
 /// Manages the Whisper model context with lazy initialisation.
 ///
 /// Supports multiple model sizes. The active model can be changed at runtime;
@@ -266,27 +273,42 @@ impl StdError for WhisperError {}
 /// loading/unloading holds an exclusive write lock.
 pub struct WhisperManager {
     /// Lazily-loaded Whisper inference context. `None` until first `ensure_loaded()`.
-    context: RwLock<Option<WhisperContext>>,
-    /// Path to the model file resolved at load time.
-    model_path: RwLock<Option<PathBuf>>,
-    /// Which model size is currently loaded in `context`. `None` if nothing loaded.
-    loaded_model: RwLock<Option<WhisperModelSize>>,
+    context: Arc<IdleResource<LoadedWhisperContext>>,
     /// The user-selected model size (persisted in config DB).
     active_model: RwLock<WhisperModelSize>,
     /// Reusable HTTP client for model downloads.
     client: Client,
+    /// Background task that releases the context after the idle timeout.
+    idle_reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl WhisperManager {
     /// Create a new `WhisperManager` with a specific active model.
     pub fn with_active_model(size: WhisperModelSize) -> Self {
         Self {
-            context: RwLock::new(None),
-            model_path: RwLock::new(None),
-            loaded_model: RwLock::new(None),
+            context: Arc::new(IdleResource::new(WHISPER_IDLE_TIMEOUT)),
             active_model: RwLock::new(size),
             client: Client::new(),
+            idle_reaper: Mutex::new(None),
         }
+    }
+
+    /// Start the background task that releases an idle model context.
+    pub fn start_idle_reaper(self: &Arc<Self>) {
+        let mut reaper = self
+            .idle_reaper
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if reaper.is_some() {
+            return;
+        }
+
+        *reaper = Some(self.context.start_idle_reaper(|| {
+            info!(
+                "[whisper] Unloaded model after {} seconds of inactivity",
+                WHISPER_IDLE_TIMEOUT.as_secs()
+            );
+        }));
     }
 
     // ============================================================================
@@ -307,32 +329,30 @@ impl WhisperManager {
 
     /// Return the currently active model size.
     pub fn get_active_model(&self) -> WhisperModelSize {
-        *self.active_model.read().unwrap()
+        *self
+            .active_model
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Set the active model size. If the loaded model differs, the context is
     /// unloaded so it will be lazily reloaded on next transcription.
     pub fn set_active_model(&self, size: WhisperModelSize) {
-        let mut active = self.active_model.write().unwrap();
+        let mut active = self
+            .active_model
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous = *active;
         *active = size;
-        drop(active);
 
-        // If the loaded model differs from the new active model, unload context.
-        let loaded = self.loaded_model.read().unwrap();
-        if loaded.as_ref() != Some(&size) && loaded.is_some() && previous != size {
-            drop(loaded);
-            let mut ctx_guard = self.context.write().unwrap();
-            *ctx_guard = None;
-            let mut path_guard = self.model_path.write().unwrap();
-            *path_guard = None;
-            let mut loaded_guard = self.loaded_model.write().unwrap();
-            *loaded_guard = None;
+        if previous != size {
+            self.context.clear();
             info!(
                 "[whisper] Unloaded model (switching from {} to {})",
                 previous, size
             );
         }
+        drop(active);
     }
 
     /// Return the status of the currently active model.
@@ -406,46 +426,50 @@ impl WhisperManager {
     /// # Errors
     /// - `WhisperError::ModelNotFound` if the model file does not exist.
     /// - `WhisperError::ContextLoadError` if whisper-rs fails to open the model.
+    #[cfg(test)]
     pub fn ensure_loaded(&self) -> Result<(), WhisperError> {
-        let active = self.get_active_model();
-
-        // Fast path: correct model already loaded.
-        {
-            let guard = self.context.read().unwrap();
-            let loaded = self.loaded_model.read().unwrap();
-            if guard.is_some() && *loaded == Some(active) {
-                return Ok(());
-            }
-        }
-
-        // Slow path: load from disk.
-        let path = Self::model_file_path_for(active).ok_or(WhisperError::ModelNotFound)?;
-        if !path.exists() {
-            return Err(WhisperError::ModelNotFound);
-        }
-
-        let path_str = path.to_string_lossy().to_string();
-        info!("[whisper] Loading model: {} path_configured=true", active);
-
-        let ctx = WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
-            .map_err(|e| WhisperError::ContextLoadError(e.to_string()))?;
-
-        let mut ctx_guard = self.context.write().unwrap();
-        *ctx_guard = Some(ctx);
-
-        let mut path_guard = self.model_path.write().unwrap();
-        *path_guard = Some(path);
-
-        let mut loaded_guard = self.loaded_model.write().unwrap();
-        *loaded_guard = Some(active);
-
-        info!("[whisper] Model loaded: {}", active);
+        drop(self.acquire_context()?);
         Ok(())
+    }
+
+    fn acquire_context(&self) -> Result<IdleResourceGuard<'_, LoadedWhisperContext>, WhisperError> {
+        let active = self
+            .active_model
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let selected_model = *active;
+        let context = self.context.acquire_or_try_replace(
+            |loaded| loaded.model == selected_model,
+            || {
+                let path =
+                    Self::model_file_path_for(selected_model).ok_or(WhisperError::ModelNotFound)?;
+                if !path.exists() {
+                    return Err(WhisperError::ModelNotFound);
+                }
+
+                let path_str = path.to_string_lossy().to_string();
+                info!(
+                    "[whisper] Loading model: {} path_configured=true",
+                    selected_model
+                );
+                let context =
+                    WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
+                        .map_err(|error| WhisperError::ContextLoadError(error.to_string()))?;
+
+                info!("[whisper] Model loaded: {}", selected_model);
+                Ok(LoadedWhisperContext {
+                    model: selected_model,
+                    context,
+                })
+            },
+        );
+        drop(active);
+        context
     }
 
     /// Transcribe 16 kHz mono f32 PCM audio data to text.
     ///
-    /// Lazily loads the active model on first call via `ensure_loaded()`.
+    /// Lazily loads the active model on first use.
     ///
     /// # Arguments
     /// * `audio_data` — Raw 16 kHz mono PCM samples in the range `[-1.0, 1.0]`.
@@ -459,21 +483,19 @@ impl WhisperManager {
     /// - `WhisperError::ContextLoadError` if the context cannot be initialised.
     /// - `WhisperError::InferenceError` if the inference call fails.
     pub fn transcribe(&self, audio_data: &[f32]) -> Result<TranscriptionResult, WhisperError> {
-        // 1. Ensure the context is loaded.
-        self.ensure_loaded()?;
-
-        // 2. Acquire read lock on context.
-        let ctx_guard = self.context.read().unwrap();
-        let ctx = ctx_guard.as_ref().ok_or_else(|| {
+        // Keep the model leased for the full inference so the idle reaper cannot drop it.
+        let loaded_context = self.acquire_context()?;
+        let context = loaded_context.get().ok_or_else(|| {
             WhisperError::ContextLoadError("Context unexpectedly absent after load".to_string())
         })?;
 
-        // 3. Create per-inference state.
-        let mut state = ctx
+        // Create per-inference state.
+        let mut state = context
+            .context
             .create_state()
             .map_err(|e| WhisperError::InferenceError(format!("create_state failed: {}", e)))?;
 
-        // 4. Build inference params: greedy, English.
+        // Build inference params: greedy, English.
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_language(Some("en"));
         params.set_print_special(false);
@@ -481,14 +503,14 @@ impl WhisperManager {
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
 
-        // 5. Run inference and measure wall-clock time.
+        // Run inference and measure wall-clock time.
         let start = Instant::now();
         state
             .full(params, audio_data)
             .map_err(|e| WhisperError::InferenceError(format!("full() failed: {}", e)))?;
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        // 6. Collect and concatenate segment texts.
+        // Collect and concatenate segment texts.
         let n_segments = state.full_n_segments();
 
         let mut text = String::new();
@@ -606,6 +628,18 @@ impl WhisperManager {
         let path_str = dest_path.to_string_lossy().to_string();
         info!("[whisper] Model downloaded and verified: {}", size);
         Ok(path_str)
+    }
+}
+
+impl Drop for WhisperManager {
+    fn drop(&mut self) {
+        let reaper = self
+            .idle_reaper
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(reaper) = reaper.take() {
+            reaper.abort();
+        }
     }
 }
 

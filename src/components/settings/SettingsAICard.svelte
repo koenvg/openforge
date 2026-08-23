@@ -98,6 +98,9 @@
         Uses approximately 1 GB of RAM during transcription.
       {/if}
     </p>
+    <p class="text-[0.7rem] text-base-content/50">
+      OpenForge keeps the model in memory for five minutes after use so consecutive dictation stays fast, then releases it. The next dictation reloads the model and may start more slowly.
+    </p>
     <p class="text-[0.7rem] text-base-content/50">Note: macOS controls microphone access per installed app bundle; re-approve access after replacing a local build if prompted.</p>
   </div>
 </SettingsSectionCard>
