@@ -32,6 +32,7 @@ import {
 } from './ipc'
 import { applyProjectOrder } from './projectOrder'
 import { loadHiddenProjectIds } from './projectVisibility'
+import { githubSyncFailureMessage } from './githubSyncResult'
 import { buildTicketPullRequestMap } from './pullRequestStore'
 import type { ProjectAttention, Task } from './types'
 
@@ -268,7 +269,12 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
 
     isSyncing = true
     try {
-      await forceGithubSync()
+      const result = await forceGithubSync()
+      const failureMessage = githubSyncFailureMessage(result)
+      if (failureMessage) {
+        error.set(failureMessage)
+        return
+      }
       await loadPullRequests()
       await loadTasks()
     } catch (e) {

@@ -16,9 +16,24 @@ impl GitHubEventTarget {
     }
 }
 
-// ============================================================================
-// PollResult
-// ============================================================================
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PollOutcome {
+    #[default]
+    Completed,
+    MissingGithubToken,
+    GithubTokenUnavailable,
+    Failed,
+    RateLimited,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManualGithubSyncError {
+    MissingToken,
+    TokenUnavailable,
+    PollErrors { count: usize },
+    RateLimited { reset_at: Option<i64> },
+}
 
 /// Result of a single GitHub polling cycle.
 ///
@@ -42,6 +57,9 @@ pub struct PollResult {
     /// Unix timestamp when the rate limit resets, if rate_limited is true.
     #[serde(default)]
     pub rate_limit_reset_at: Option<i64>,
+    /// Overall outcome used by explicit refresh callers to distinguish a real sync from a no-op or partial failure.
+    #[serde(default)]
+    pub outcome: PollOutcome,
 }
 
 impl PollResult {
@@ -54,6 +72,14 @@ impl PollResult {
             errors: 0,
             rate_limited: false,
             rate_limit_reset_at: None,
+            outcome: PollOutcome::Completed,
+        }
+    }
+
+    pub(super) fn with_outcome(outcome: PollOutcome) -> Self {
+        Self {
+            outcome,
+            ..Self::empty()
         }
     }
 
@@ -65,6 +91,35 @@ impl PollResult {
         self.errors += other.errors;
         self.rate_limited |= other.rate_limited;
         self.rate_limit_reset_at = other.rate_limit_reset_at.or(self.rate_limit_reset_at);
+        if outcome_priority(other.outcome) > outcome_priority(self.outcome) {
+            self.outcome = other.outcome;
+        }
+    }
+
+    pub(crate) fn manual_sync_error(&self) -> Option<ManualGithubSyncError> {
+        match self.outcome {
+            PollOutcome::MissingGithubToken => Some(ManualGithubSyncError::MissingToken),
+            PollOutcome::GithubTokenUnavailable => Some(ManualGithubSyncError::TokenUnavailable),
+            PollOutcome::RateLimited => Some(ManualGithubSyncError::RateLimited {
+                reset_at: self.rate_limit_reset_at,
+            }),
+            _ if self.rate_limited => Some(ManualGithubSyncError::RateLimited {
+                reset_at: self.rate_limit_reset_at,
+            }),
+            PollOutcome::Failed => Some(ManualGithubSyncError::PollErrors { count: self.errors }),
+            _ if self.errors > 0 => Some(ManualGithubSyncError::PollErrors { count: self.errors }),
+            PollOutcome::Completed => None,
+        }
+    }
+}
+
+fn outcome_priority(outcome: PollOutcome) -> u8 {
+    match outcome {
+        PollOutcome::Completed => 0,
+        PollOutcome::Failed => 1,
+        PollOutcome::RateLimited => 2,
+        PollOutcome::GithubTokenUnavailable => 3,
+        PollOutcome::MissingGithubToken => 4,
     }
 }
 

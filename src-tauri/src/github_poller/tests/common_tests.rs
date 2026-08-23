@@ -10,6 +10,7 @@ fn test_poll_result_construction() {
         errors: 1,
         rate_limited: false,
         rate_limit_reset_at: None,
+        outcome: PollOutcome::Failed,
     };
 
     assert_eq!(result.new_comments, 3);
@@ -31,6 +32,7 @@ fn test_poll_result_rate_limit_fields_default() {
         errors: 0,
         rate_limited: false,
         rate_limit_reset_at: None,
+        outcome: PollOutcome::Completed,
     };
 
     assert!(!result.rate_limited);
@@ -47,6 +49,7 @@ fn test_poll_result_serialization_includes_rate_limit() {
         errors: 0,
         rate_limited: true,
         rate_limit_reset_at: Some(1704067200),
+        outcome: PollOutcome::RateLimited,
     };
 
     let json = serde_json::to_string(&result).expect("serialization failed");
@@ -65,6 +68,7 @@ fn test_poll_result_deserialization_backward_compat() {
     }"#;
 
     let result: PollResult = serde_json::from_str(old_json).expect("deserialization failed");
+    assert_eq!(result.outcome, PollOutcome::Completed);
     assert_eq!(result.new_comments, 3);
     assert_eq!(result.ci_changes, 1);
     assert_eq!(result.review_changes, 0);
@@ -72,6 +76,53 @@ fn test_poll_result_deserialization_backward_compat() {
     assert_eq!(result.errors, 0);
     assert!(!result.rate_limited);
     assert_eq!(result.rate_limit_reset_at, None);
+}
+
+#[test]
+fn manual_sync_error_reports_the_poll_outcome() {
+    let cases = [
+        (
+            PollOutcome::MissingGithubToken,
+            ManualGithubSyncError::MissingToken,
+        ),
+        (
+            PollOutcome::GithubTokenUnavailable,
+            ManualGithubSyncError::TokenUnavailable,
+        ),
+        (
+            PollOutcome::Failed,
+            ManualGithubSyncError::PollErrors { count: 2 },
+        ),
+        (
+            PollOutcome::RateLimited,
+            ManualGithubSyncError::RateLimited {
+                reset_at: Some(1704067200),
+            },
+        ),
+    ];
+
+    for (outcome, expected) in cases {
+        let mut result = PollResult::empty();
+        result.outcome = outcome;
+        result.errors = 2;
+        result.rate_limit_reset_at = Some(1704067200);
+
+        assert_eq!(result.manual_sync_error(), Some(expected));
+    }
+
+    let mut result = PollResult::empty();
+    result.errors = 3;
+    assert_eq!(
+        result.manual_sync_error(),
+        Some(ManualGithubSyncError::PollErrors { count: 3 })
+    );
+
+    result.errors = 0;
+    result.rate_limited = true;
+    assert_eq!(
+        result.manual_sync_error(),
+        Some(ManualGithubSyncError::RateLimited { reset_at: None })
+    );
 }
 
 #[test]

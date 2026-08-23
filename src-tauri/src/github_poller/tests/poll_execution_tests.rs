@@ -96,6 +96,7 @@ fn test_poll_result_rate_limited_true_with_reset_timestamp() {
         errors: 0,
         rate_limited: true,
         rate_limit_reset_at: Some(1704067200),
+        outcome: PollOutcome::RateLimited,
     };
 
     assert!(result.rate_limited);
@@ -114,6 +115,7 @@ fn test_poll_result_rate_limited_with_changes_can_coexist() {
         errors: 0,
         rate_limited: true,
         rate_limit_reset_at: Some(1704067200),
+        outcome: PollOutcome::RateLimited,
     };
 
     // Verify both conditions are true simultaneously
@@ -133,6 +135,7 @@ fn test_poll_result_rate_limited_false_when_no_reset_detected() {
         errors: 0,
         rate_limited: false,
         rate_limit_reset_at: None,
+        outcome: PollOutcome::Completed,
     };
 
     assert!(!result.rate_limited);

@@ -192,6 +192,12 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
           context,
         ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
       }
+    } on CompanionV1Exception catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } on Object {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

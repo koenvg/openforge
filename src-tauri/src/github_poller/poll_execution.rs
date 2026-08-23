@@ -1,4 +1,4 @@
-use super::common::{json_value_for_event, GitHubEventTarget, PollResult};
+use super::common::{json_value_for_event, GitHubEventTarget, PollOutcome, PollResult};
 use super::persistence::{get_open_prs_for_task, poll_prs_for_project};
 use super::review_sync::{
     count_poll_phase_error, poll_authored_prs, poll_review_prs, sync_authored_task_prs,
@@ -18,6 +18,27 @@ use log::{debug, error, info, warn};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::time::{sleep, Duration};
+
+async fn github_token_for_poll() -> Result<String, PollOutcome> {
+    match crate::secure_store::get_secret_async("github_token").await {
+        Ok(Some(token)) if !token.trim().is_empty() => Ok(token),
+        Ok(_) => Err(PollOutcome::MissingGithubToken),
+        Err(error) => {
+            log::error!("[GitHub Poller] Failed to read GitHub token: {error}");
+            Err(PollOutcome::GithubTokenUnavailable)
+        }
+    }
+}
+
+fn poll_outcome(errors: usize, rate_limited: bool) -> PollOutcome {
+    if rate_limited {
+        PollOutcome::RateLimited
+    } else if errors > 0 {
+        PollOutcome::Failed
+    } else {
+        PollOutcome::Completed
+    }
+}
 
 /// Start the GitHub poller background task.
 ///
@@ -149,13 +170,10 @@ pub async fn refresh_task_github_status_for_sidecar(
     }
 
     github_client.clear_rate_limit_reset();
-    let github_token = crate::secure_store::get_secret_async("github_token")
-        .await
-        .unwrap_or(None)
-        .unwrap_or_default();
-    if github_token.is_empty() {
-        return Ok(PollResult::empty());
-    }
+    let github_token = match github_token_for_poll().await {
+        Ok(token) => token,
+        Err(outcome) => return Ok(PollResult::with_outcome(outcome)),
+    };
 
     let configured_github_username = {
         let db_lock = db.lock().unwrap();
@@ -174,14 +192,16 @@ pub async fn refresh_task_github_status_for_sidecar(
     .await;
 
     let rate_limit_reset = github_client.get_last_rate_limit_reset();
+    let rate_limited = rate_limit_reset.is_some();
     Ok(PollResult {
         new_comments,
         ci_changes,
         review_changes,
         pr_changes,
         errors,
-        rate_limited: rate_limit_reset.is_some(),
+        rate_limited,
         rate_limit_reset_at: rate_limit_reset,
+        outcome: poll_outcome(errors, rate_limited),
     })
 }
 
@@ -194,22 +214,10 @@ pub(super) async fn poll_github_once_with_state(
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
 
-    let github_token = crate::secure_store::get_secret_async("github_token")
-        .await
-        .unwrap_or(None)
-        .unwrap_or_default();
-
-    if github_token.is_empty() {
-        return PollResult {
-            new_comments: 0,
-            ci_changes: 0,
-            review_changes: 0,
-            pr_changes: 0,
-            errors: 0,
-            rate_limited: false,
-            rate_limit_reset_at: None,
-        };
-    }
+    let github_token = match github_token_for_poll().await {
+        Ok(token) => token,
+        Err(outcome) => return PollResult::with_outcome(outcome),
+    };
 
     let projects = {
         let db_lock = db.lock().unwrap();
@@ -228,6 +236,7 @@ pub(super) async fn poll_github_once_with_state(
                 errors: 1,
                 rate_limited: false,
                 rate_limit_reset_at: None,
+                outcome: PollOutcome::Failed,
             };
         }
     };
@@ -464,5 +473,6 @@ pub(super) async fn poll_github_once_with_state(
         errors: total_errors,
         rate_limited,
         rate_limit_reset_at: rate_limit_reset,
+        outcome: poll_outcome(total_errors, rate_limited),
     }
 }

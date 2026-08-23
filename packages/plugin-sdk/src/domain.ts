@@ -168,6 +168,13 @@ export interface PullRequestInfo {
   readiness_updated_at: number | null;
 }
 
+export type PollOutcome =
+  | 'completed'
+  | 'missing_github_token'
+  | 'github_token_unavailable'
+  | 'failed'
+  | 'rate_limited';
+
 export interface PollResult {
   new_comments: number;
   ci_changes: number;
@@ -176,6 +183,7 @@ export interface PollResult {
   errors: number;
   rate_limited: boolean;
   rate_limit_reset_at: number | null;
+  outcome: PollOutcome;
 }
 
 export interface MergeStatusInfo {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
-import type { ProjectAttention, PullRequestInfo, TaskAttentionRow } from './types'
+import type { PollResult, ProjectAttention, PullRequestInfo, TaskAttentionRow } from './types'
 
 vi.mock('./ipc', () => ({
   forceGithubSync: vi.fn(),
@@ -82,6 +82,19 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function pollResult(overrides: Partial<PollResult> = {}): PollResult {
+  return {
+    new_comments: 0,
+    ci_changes: 0,
+    review_changes: 0,
+    pr_changes: 0,
+    errors: 0,
+    rate_limited: false,
+    rate_limit_reset_at: null,
+    outcome: 'completed',
+    ...overrides,
+  }
+}
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -149,7 +162,7 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(getReviewPrs).mockResolvedValue([])
     vi.mocked(getAllTasks).mockResolvedValue([])
     vi.mocked(getTasksForProject).mockResolvedValue([])
-    vi.mocked(forceGithubSync).mockResolvedValue({} as any)
+    vi.mocked(forceGithubSync).mockResolvedValue(pollResult())
   })
 
   it('loads cross-project dependencies and active dependents as relationship references', async () => {
@@ -437,12 +450,35 @@ describe('useAppDataOrchestrator', () => {
       vi.useRealTimers()
     }
   })
+  it.each([
+    {
+      result: pollResult({ outcome: 'missing_github_token' }),
+      message: 'GitHub token is not configured. Add one in Settings and try again.',
+    },
+    {
+      result: pollResult({ outcome: 'completed', errors: 2 }),
+      message: 'GitHub sync encountered 2 errors. Check the developer logs and try again.',
+    },
+    {
+      result: pollResult({ outcome: 'rate_limited', rate_limited: true }),
+      message: 'GitHub rate limit reached. Try again after it resets.',
+    },
+  ])('reports an actionable manual GitHub sync failure for $result.outcome', async ({ result, message }) => {
+    vi.mocked(forceGithubSync).mockResolvedValue(result)
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+
+    await orchestrator.triggerGithubSync()
+
+    expect(get(error)).toBe(message)
+    expect(getPullRequests).not.toHaveBeenCalled()
+    expect(getTasksForProject).not.toHaveBeenCalled()
+  })
 
   it('guards GitHub sync so concurrent calls do not duplicate IPC syncs', async () => {
     const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
     let resolveSync: (() => void) | undefined
     vi.mocked(forceGithubSync).mockImplementationOnce(() => new Promise((resolve) => {
-      resolveSync = () => resolve({} as any)
+      resolveSync = () => resolve(pollResult())
     }))
 
     const firstSync = orchestrator.triggerGithubSync()

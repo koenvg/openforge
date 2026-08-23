@@ -49,6 +49,27 @@ pub(crate) enum CompanionActionPaletteError {
     NotFound,
     InvalidTaskState,
     TemporarilyUnavailable,
+    GithubTokenMissing,
+    GithubTokenUnavailable,
+    GithubSyncFailed { errors: usize },
+    GithubRateLimited,
+}
+
+impl From<crate::github_poller::ManualGithubSyncError> for CompanionActionPaletteError {
+    fn from(error: crate::github_poller::ManualGithubSyncError) -> Self {
+        match error {
+            crate::github_poller::ManualGithubSyncError::MissingToken => Self::GithubTokenMissing,
+            crate::github_poller::ManualGithubSyncError::TokenUnavailable => {
+                Self::GithubTokenUnavailable
+            }
+            crate::github_poller::ManualGithubSyncError::PollErrors { count } => {
+                Self::GithubSyncFailed { errors: count }
+            }
+            crate::github_poller::ManualGithubSyncError::RateLimited { .. } => {
+                Self::GithubRateLimited
+            }
+        }
+    }
 }
 
 pub(crate) type CompanionActionPaletteFuture<'a> =
@@ -440,13 +461,16 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
     fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
         Box::pin(async move {
             self.refresh_target(project_id)?;
-            crate::github_poller::poll_github_once_for_sidecar(
+            let result = crate::github_poller::poll_github_once_for_sidecar(
                 Arc::clone(&self.database),
                 &self.github_client,
                 self.app_event_tx.clone(),
                 github_refresh_scope(),
             )
             .await;
+            if let Some(error) = result.manual_sync_error() {
+                return Err(error.into());
+            }
             Ok(())
         })
     }

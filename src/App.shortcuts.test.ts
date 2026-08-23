@@ -38,6 +38,7 @@ describe('App shortcut behavior', () => {
       errors: 0,
       rate_limited: false,
       rate_limit_reset_at: null,
+      outcome: 'completed',
     })
 
     render(App)

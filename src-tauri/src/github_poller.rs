@@ -35,7 +35,7 @@ mod scheduling;
 mod sync_logging;
 
 #[allow(unused_imports)]
-pub use common::{GitHubEventTarget, PollResult};
+pub use common::{GitHubEventTarget, ManualGithubSyncError, PollOutcome, PollResult};
 pub use poll_execution::{
     poll_github_once_for_sidecar, refresh_task_github_status_for_sidecar,
     start_github_poller_for_sidecar,
