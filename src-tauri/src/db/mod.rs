@@ -18,6 +18,7 @@ mod pull_requests;
 mod review;
 mod self_review;
 mod settings_reset;
+mod startup_resume_eligibility;
 mod task_attention;
 mod task_config;
 mod task_dependencies;
