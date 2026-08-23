@@ -78,8 +78,12 @@ impl PluginHost {
 
     pub(super) async fn get_shell_buffer_for_host(&self, params: &Value) -> Result<Value, String> {
         let task_id = required_shell_session_key(params)?;
-        serde_json::to_value(self.pty_manager_for_host()?.get_pty_buffer(&task_id).await)
-            .map_err(|error| format!("failed to serialize PTY buffer: {error}"))
+        serde_json::to_value(
+            self.pty_manager_for_host()?
+                .pty_buffer_state(&task_id)
+                .await,
+        )
+        .map_err(|error| format!("failed to serialize PTY buffer: {error}"))
     }
 }
 

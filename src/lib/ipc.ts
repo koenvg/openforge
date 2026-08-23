@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
-import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
+import type { PtyBufferState, TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 
@@ -491,8 +491,8 @@ export async function killShellsForTask(taskId: string): Promise<void> {
   return invoke("pty_kill_shells_for_task", { taskId });
 }
 
-export async function getPtyBuffer(taskId: string): Promise<string | null> {
-  return invoke<string | null>("get_pty_buffer", { taskId });
+export async function getPtyBuffer(taskId: string): Promise<PtyBufferState> {
+  return invoke<PtyBufferState>("get_pty_buffer", { taskId });
 }
 
 export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {

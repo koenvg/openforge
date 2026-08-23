@@ -27,9 +27,14 @@ export interface PtyEvent {
   instance_id?: number | null
 }
 
+export interface PtyBufferState {
+  buffer: string | null
+  isLive: boolean
+}
+
 export interface TerminalRuntimeHost {
   listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void): Promise<TerminalRuntimeUnlistenFn>
-  getPtyBuffer(taskId: string): Promise<string | null>
+  getPtyBuffer(taskId: string): Promise<PtyBufferState>
   writePty(taskId: string, data: string): Promise<void>
   resizePty(taskId: string, cols: number, rows: number): Promise<void>
   openLink(terminalKey: string, url: string): Promise<void>
@@ -368,13 +373,16 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     if (entry.needsClear) return
   
     try {
-      const buffered = await host.getPtyBuffer(entry.taskId)
-      if (!buffered) return
-  
+      const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
+      entry.ptyActive = isLive
+      if (!buffer) {
+        notifyShellLifecycleListeners(entry.taskId)
+        return
+      }
+
       resetTerminal(entry)
       entry.needsClear = false
-      entry.terminal.write(buffered)
-      entry.ptyActive = true
+      entry.terminal.write(buffer)
       entry.hasOutput = true
       notifyShellLifecycleListeners(entry.taskId)
       if (entry.attached) refreshTerminal(entry)
@@ -487,10 +495,10 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   
     // Replay buffered output from backend
     try {
-      const buffered = await host.getPtyBuffer(taskId)
-      if (buffered) {
-        terminal.write(buffered)
-        entry.ptyActive = true
+      const { buffer, isLive } = await host.getPtyBuffer(taskId)
+      entry.ptyActive = isLive
+      if (buffer) {
+        terminal.write(buffer)
         entry.hasOutput = true
       }
     } catch (e) {

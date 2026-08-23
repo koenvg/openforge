@@ -8,10 +8,9 @@ fn shell_single_quote(value: &str) -> String {
 async fn handles_commands_that_do_not_require_spawn() {
     let (state, path) = test_state("app_invoke_pty_commands");
 
-    assert!(
-        invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-404" }))
-            .await
-            .is_null()
+    assert_eq!(
+        invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-404" })).await,
+        json!({ "buffer": null, "isLive": false })
     );
     assert!(invoke_ok(
         &state,
@@ -35,6 +34,10 @@ async fn spawns_without_backend_app_emitter() {
     )
     .await;
     assert!(instance_id.as_u64().expect("instance id") > 0);
+
+    let live_buffer = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-1-shell-1" })).await;
+    assert_eq!(live_buffer["isLive"], true);
+    assert!(live_buffer["buffer"].is_null());
 
     let mut events = state
         .app_event_tx
@@ -270,9 +273,12 @@ async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
             .expect("persist replay"));
     }
 
-    let replay = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": task_id })).await;
+    let buffer = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": task_id })).await;
 
-    assert_eq!(replay, "persisted terminal output");
+    assert_eq!(
+        buffer,
+        json!({ "buffer": "persisted terminal output", "isLive": false })
+    );
     let _ = std::fs::remove_file(path);
 }
 

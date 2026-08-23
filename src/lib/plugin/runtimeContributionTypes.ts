@@ -35,6 +35,7 @@ import type {
   PluginStorage,
   Project,
   ProjectAttention,
+  PtyBufferState,
   ShellSpawnRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,
@@ -79,7 +80,7 @@ export type RuntimeHostBridge = {
   writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
   resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>
   killShell?(request: { taskId: string; terminalIndex: number }): Promise<void>
-  getShellBuffer?(request: { taskId: string; terminalIndex: number }): Promise<string | null>
+  getShellBuffer?(request: { taskId: string; terminalIndex: number }): Promise<PtyBufferState>
   notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
   getAttention?(): Promise<ProjectAttention[]>
   openUrl?(url: string): Promise<void>

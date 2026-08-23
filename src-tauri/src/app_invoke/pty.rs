@@ -371,18 +371,18 @@ pub(super) async fn handle_app_pty_command(
         }
         "get_pty_buffer" => {
             let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
-            let replay = match pty_manager.get_pty_buffer(&payload.task_id).await {
-                Some(replay) => Some(replay),
-                None => crate::db::acquire_db(&state.db)
+            let mut buffer_state = pty_manager.pty_buffer_state(&payload.task_id).await;
+            if !buffer_state.is_live && buffer_state.buffer.is_none() {
+                buffer_state.buffer = crate::db::acquire_db(&state.db)
                     .get_latest_agent_terminal_replay(&payload.task_id)
                     .map_err(|error| {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             format!("Failed to load persisted PTY replay: {error}"),
                         )
-                    })?,
-            };
-            json_value(replay)?
+                    })?;
+            }
+            json_value(buffer_state)?
         }
         _ => return Ok(None),
     };
