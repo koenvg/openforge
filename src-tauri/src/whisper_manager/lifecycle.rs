@@ -25,6 +25,8 @@ impl WhisperManager {
             client: Client::new(),
             idle_reaper: std::sync::Mutex::new(None),
             #[cfg(test)]
+            download_override: None,
+            #[cfg(test)]
             transcription_override: None,
         }
     }

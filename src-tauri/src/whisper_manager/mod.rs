@@ -28,6 +28,10 @@ pub use {
 #[cfg(test)]
 type TestTranscriptionOverride =
     dyn Fn(&[f32]) -> Result<TranscriptionResult, WhisperError> + Send + Sync;
+#[cfg(test)]
+type TestDownloadOverride = dyn Fn(WhisperModelSize, &mut dyn FnMut(WhisperDownloadProgress)) -> Result<String, WhisperError>
+    + Send
+    + Sync;
 
 /// Errors that can occur during Whisper model management and transcription.
 #[derive(Debug)]
@@ -84,6 +88,8 @@ pub struct WhisperManager {
     active_model: RwLock<WhisperModelSize>,
     client: Client,
     idle_reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    #[cfg(test)]
+    download_override: Option<Arc<TestDownloadOverride>>,
     #[cfg(test)]
     transcription_override: Option<Arc<TestTranscriptionOverride>>,
 }

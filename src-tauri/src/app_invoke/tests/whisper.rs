@@ -3,8 +3,8 @@ use super::*;
 const CONCURRENCY_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[tokio::test]
-async fn handles_model_status_selection_and_transcription_errors() {
-    let (state, path) = test_state("app_invoke_whisper_status_selection");
+async fn reports_active_and_all_model_statuses() {
+    let (state, path) = test_state("app_invoke_whisper_statuses");
 
     let statuses = invoke_ok(
         &state,
@@ -18,10 +18,37 @@ async fn handles_model_status_selection_and_transcription_errors() {
         .iter()
         .any(|status| status["size"] == "small" && status["is_active"] == true));
 
-    invoke_ok(&state, "set_whisper_model", json!({ "modelSize": "tiny" })).await;
+    let active_status =
+        invoke_ok(&state, "get_whisper_model_status", serde_json::Value::Null).await;
+    assert_eq!(active_status["size"], "small");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn selects_and_persists_whisper_model() {
+    let (state, path) = test_state("app_invoke_whisper_selection");
+
+    let response = invoke_ok(&state, "set_whisper_model", json!({ "modelSize": "tiny" })).await;
+
+    assert_eq!(response, serde_json::Value::Null);
     let active_status =
         invoke_ok(&state, "get_whisper_model_status", serde_json::Value::Null).await;
     assert_eq!(active_status["size"], "tiny");
+    let persisted_size = state
+        .db
+        .lock()
+        .expect("db lock")
+        .get_config("whisper_model_size")
+        .expect("read persisted Whisper model size");
+    assert_eq!(persisted_size.as_deref(), Some("tiny"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn reports_transcription_failures() {
+    let (state, path) = test_state("app_invoke_whisper_transcription_error");
 
     let err = invoke(
         &state,
@@ -30,9 +57,9 @@ async fn handles_model_status_selection_and_transcription_errors() {
     )
     .await
     .expect_err("missing local model should fail transcription");
+
     assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(err.1.contains("Transcription failed"));
-
     let _ = std::fs::remove_file(path);
 }
 
@@ -395,4 +422,59 @@ fn cancelling_queued_transcription_does_not_start_inference() {
         );
         let _ = std::fs::remove_file(path);
     });
+}
+
+#[tokio::test]
+async fn downloads_model_publishes_progress_and_persists_path() {
+    let (mut state, db_path) = test_state("app_invoke_whisper_download");
+    state.whisper = Some(std::sync::Arc::new(
+        crate::whisper_manager::WhisperManager::with_download_override_for_test(
+            crate::whisper_manager::WhisperModelSize::Small,
+            |size, on_progress| {
+                assert_eq!(size, crate::whisper_manager::WhisperModelSize::Tiny);
+                on_progress(crate::whisper_manager::WhisperDownloadProgress {
+                    model_size: "tiny".to_string(),
+                    bytes_downloaded: 50,
+                    total_bytes: 100,
+                    percentage: 50.0,
+                });
+                Ok("/tmp/test-whisper-tiny.bin".to_string())
+            },
+        ),
+    ));
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("app event sender")
+        .subscribe();
+
+    let response = invoke_ok(
+        &state,
+        "download_whisper_model",
+        json!({ "modelSize": "tiny" }),
+    )
+    .await;
+
+    assert_eq!(response, serde_json::Value::Null);
+    let event = tokio::time::timeout(CONCURRENCY_TEST_TIMEOUT, events.recv())
+        .await
+        .expect("download progress event should arrive")
+        .expect("download progress event should be published");
+    assert_eq!(event.event_name, "whisper-download-progress");
+    assert_eq!(event.payload["model_size"], "tiny");
+    assert_eq!(event.payload["bytes_downloaded"], 50);
+    assert_eq!(event.payload["total_bytes"], 100);
+    assert_eq!(event.payload["percentage"], 50.0);
+    let persisted_path = state
+        .db
+        .lock()
+        .expect("db lock")
+        .get_config("whisper_model_path")
+        .expect("read persisted Whisper model path");
+    assert_eq!(
+        persisted_path.as_deref(),
+        Some("/tmp/test-whisper-tiny.bin")
+    );
+
+    let _ = std::fs::remove_file(db_path);
 }
