@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex as StdMutex, Weak};
 use tokio::sync::Mutex;
 
 use super::super::events::SharedRingBuffer;
-use super::super::managed_process::{terminate_managed_process_tree, ManagedProcessIdentity};
+use super::super::managed_process::{
+    terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity,
+};
 use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
     MANAGED_PROCESS_TERM_TIMEOUT,
@@ -157,14 +159,19 @@ impl PtyManager {
         session_key: &str,
         session: &mut PtySession,
     ) -> Result<(), PtyError> {
-        terminate_managed_process_tree(&session.managed_process, MANAGED_PROCESS_TERM_TIMEOUT)
-            .await
-            .map_err(|error| {
-                PtyError::CleanupFailed(format!(
-                    "unregistered PTY cleanup for {session_key}: {error}"
-                ))
-            })?;
-        let _ = session.child.try_wait();
+        terminate_managed_process_tree_with_root_reaper(
+            &session.managed_process,
+            MANAGED_PROCESS_TERM_TIMEOUT,
+            || {
+                let _ = session.child.try_wait();
+            },
+        )
+        .await
+        .map_err(|error| {
+            PtyError::CleanupFailed(format!(
+                "unregistered PTY cleanup for {session_key}: {error}"
+            ))
+        })?;
         Ok(())
     }
 
