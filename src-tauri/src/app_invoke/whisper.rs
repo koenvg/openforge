@@ -34,12 +34,23 @@ pub(super) async fn handle_app_whisper_command(
     let value = match request.command.as_str() {
         "transcribe_audio" => {
             let audio_data = payload_float32_pcm_base64(&request.payload)?;
-            json_value(whisper.transcribe(&audio_data).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Transcription failed: {e}"),
-                )
-            })?)?
+            let whisper = std::sync::Arc::clone(whisper);
+            let transcription =
+                tokio::task::spawn_blocking(move || whisper.transcribe(&audio_data))
+                    .await
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("transcription worker failed: {error}"),
+                        )
+                    })?
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Transcription failed: {error}"),
+                        )
+                    })?;
+            json_value(transcription)?
         }
         "get_whisper_model_status" => json_value(whisper.get_model_status())?,
         "get_all_whisper_model_statuses" => json_value(whisper.get_all_model_statuses())?,

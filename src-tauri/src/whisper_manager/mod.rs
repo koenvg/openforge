@@ -23,6 +23,10 @@ pub use {
     model_catalog::{ModelSpec, WhisperModelSize, WhisperModelStatus},
 };
 
+#[cfg(test)]
+type TestTranscriptionOverride =
+    dyn Fn(&[f32]) -> Result<TranscriptionResult, WhisperError> + Send + Sync;
+
 /// Errors that can occur during Whisper model management and transcription.
 #[derive(Debug)]
 pub enum WhisperError {
@@ -72,6 +76,8 @@ pub struct WhisperManager {
     active_model: RwLock<WhisperModelSize>,
     client: Client,
     idle_reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    #[cfg(test)]
+    transcription_override: Option<Arc<TestTranscriptionOverride>>,
 }
 
 #[cfg(test)]
