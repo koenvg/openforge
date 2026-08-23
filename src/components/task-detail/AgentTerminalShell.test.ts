@@ -104,6 +104,44 @@ describe('AgentTerminalShell', () => {
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
+  it('hydrates the persisted PTY instance before attaching a resumed Agent Session', async () => {
+    setActiveSession(createAgentSession({ provider: 'pi', pty_instance_id: 42 }))
+    const { attach, restorePtyInstance } = await import('../../lib/terminalPool')
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        sessionIdKey: 'pi_session_id',
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(restorePtyInstance).toHaveBeenCalledWith('T-1', 42)
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+    expect(vi.mocked(restorePtyInstance)).toHaveBeenCalledBefore(vi.mocked(attach))
+  })
+
+  it.each(['completed', 'failed', 'interrupted'])(
+    'does not restore stale persisted PTY metadata for a %s Agent Session',
+    async (status) => {
+      setActiveSession(createAgentSession({ provider: 'pi', status, pty_instance_id: 42 }))
+      const { attach, restorePtyInstance } = await import('../../lib/terminalPool')
+
+      render(AgentTerminalShell, {
+        props: {
+          taskId: 'T-1',
+          sessionIdKey: 'pi_session_id',
+        },
+      })
+
+      await vi.waitFor(() => {
+        expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+      })
+      expect(restorePtyInstance).not.toHaveBeenCalled()
+    },
+  )
+
   it('mounts the pooled terminal shell for an active session', async () => {
     setActiveSession(baseSession)
 
@@ -126,9 +164,9 @@ describe('AgentTerminalShell', () => {
     })
   })
 
-  it('focuses the pooled TTY when the Agent workbench becomes active', async () => {
+  it('recovers dimensions only while the Agent workbench remains active', async () => {
     setActiveSession(baseSession)
-    const { attach, focusTerminal } = await import('../../lib/terminalPool')
+    const { attach, recoverActiveTerminal } = await import('../../lib/terminalPool')
 
     const view = render(AgentTerminalShell, {
       props: {
@@ -141,7 +179,7 @@ describe('AgentTerminalShell', () => {
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
-    expect(focusTerminal).not.toHaveBeenCalled()
+    expect(recoverActiveTerminal).not.toHaveBeenCalled()
 
     await view.rerender({
       taskId: 'T-1',
@@ -150,8 +188,18 @@ describe('AgentTerminalShell', () => {
     })
 
     await vi.waitFor(() => {
-      expect(focusTerminal).toHaveBeenCalledWith('T-1')
+      expect(recoverActiveTerminal).toHaveBeenCalledWith(mockPoolEntry, expect.any(AbortSignal))
     })
+
+    const recoverySignal = vi.mocked(recoverActiveTerminal).mock.calls[0]?.[1]
+    expect(recoverySignal?.aborted).toBe(false)
+
+    await view.rerender({
+      taskId: 'T-1',
+      sessionIdKey: 'pi_session_id',
+      isActive: false,
+    })
+    expect(recoverySignal?.aborted).toBe(true)
   })
 
   it('leaves the agent PTY palette under the shared app theme runtime', async () => {
