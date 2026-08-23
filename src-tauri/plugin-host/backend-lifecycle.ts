@@ -77,19 +77,9 @@ export class BackendLifecycle {
       return this.snapshot(input.pluginId)
     }
 
-    if (state.state === 'ready' || state.state === 'error') {
-      await this.cleanup(state)
-    }
-
-    state.backendPath = input.backendPath
-    state.projectId = input.projectId ?? null
-    state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
-    state.state = 'starting'
-    state.error = null
     state.activationGeneration += 1
-
     const activationGeneration = state.activationGeneration
-    const activationPromise = this.activateState(state, activationGeneration)
+    const activationPromise = this.transitionToActivation(state, input, activationGeneration)
     state.activationPromise = activationPromise
     try {
       await activationPromise
@@ -99,6 +89,25 @@ export class BackendLifecycle {
       }
     }
     return this.snapshot(input.pluginId)
+  }
+
+  private async transitionToActivation(
+    state: RuntimePluginState,
+    input: ActivateBackendInput,
+    activationGeneration: number,
+  ): Promise<void> {
+    if (state.state === 'ready' || state.state === 'error') {
+      await this.cleanup(state)
+    }
+    if (!this.isCurrentActivation(state, activationGeneration)) return
+
+    state.backendPath = input.backendPath
+    state.projectId = input.projectId ?? null
+    state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
+    state.state = 'starting'
+    state.error = null
+
+    await this.activateState(state, activationGeneration)
   }
 
   async deactivate(pluginId: string): Promise<BackendStateSnapshot> {
@@ -151,7 +160,7 @@ export class BackendLifecycle {
       state.state === 'ready'
       && (!input.backendPath || (
         state.backendPath === input.backendPath
-        && state.projectId === (input.projectId ?? null)
+        && (input.projectId === undefined || state.projectId === (input.projectId ?? null))
       ))
     ) {
       return this.snapshot(input.pluginId)

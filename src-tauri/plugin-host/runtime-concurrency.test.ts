@@ -3,6 +3,80 @@ import { createPluginHostRuntime } from './index'
 import { writeBackendModule } from './backend-module.test-fixtures'
 
 describe('plugin-host backend concurrency', () => {
+  it('keeps an active Project context while concurrent backend invocations omit projectId', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          globalThis.__contextualActivationCount = (globalThis.__contextualActivationCount ?? 0) + 1
+          context.subscriptions.add(openforge.backend.registerMethod('get-dashboard', {
+            handler() {
+              return {
+                activations: globalThis.__contextualActivationCount,
+                projectId: openforge.context.getSnapshot().projectId
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+    const pluginId = 'contextual-plugin'
+
+    await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'plugin.backend.whenReady',
+      params: { pluginId, backendPath, projectId: 'P-1' },
+    })
+
+    const responses = await Promise.all([2, 3].map((id) => runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'plugin.backend.invoke',
+      params: { pluginId, backendPath, command: 'get-dashboard' },
+    })))
+
+    expect(responses).toEqual([
+      { jsonrpc: '2.0', id: 2, result: { activations: 1, projectId: 'P-1' } },
+      { jsonrpc: '2.0', id: 3, result: { activations: 1, projectId: 'P-1' } },
+    ])
+  })
+
+  it('serializes concurrent backend readiness changes for one plugin', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          globalThis.__serializedActivationCount = (globalThis.__serializedActivationCount ?? 0) + 1
+          context.subscriptions.add(openforge.backend.registerMethod('snapshot', {
+            handler() {
+              return {
+                activations: globalThis.__serializedActivationCount,
+                projectId: openforge.context.getSnapshot().projectId
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+    const pluginId = 'serialized-plugin'
+
+    await runtime.whenBackendReady({ pluginId, backendPath, projectId: 'P-1' })
+    const readiness = await Promise.all([
+      runtime.whenBackendReady({ pluginId, backendPath, projectId: 'P-2' }),
+      runtime.whenBackendReady({ pluginId, backendPath, projectId: 'P-2' }),
+    ])
+
+    expect(readiness).toEqual([
+      expect.objectContaining({ state: 'ready' }),
+      expect.objectContaining({ state: 'ready' }),
+    ])
+    await expect(runtime.invokeBackend({ pluginId, command: 'snapshot' })).resolves.toEqual({
+      activations: 2,
+      projectId: 'P-2',
+    })
+  })
+
   it('does not let a long-running backend handler block another plugin from becoming ready', async () => {
     const blockingBackendPath = await writeBackendModule(`
       export default {
