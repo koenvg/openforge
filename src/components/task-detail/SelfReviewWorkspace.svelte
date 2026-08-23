@@ -28,24 +28,9 @@
     />
     {#if controller.sidebarVisible}
       <SelfReviewFeedbackPanel
-        taskId={controller.taskId}
+        pane={controller.feedbackPane}
         {agentStatus}
         {onSendToAgent}
-        onRefresh={controller.refresh}
-        linkedPr={controller.linkedPr}
-        prComments={controller.prComments}
-        commentSelection={controller.commentSelection}
-        generalCommentCount={controller.generalCommentCount}
-        pendingInlineComments={controller.pendingInlineComments}
-        markdownImageBaseUrl={controller.markdownImageBaseUrl}
-        onPendingInlineCommentsChange={controller.handlePendingInlineCommentsChange}
-        onCommentClick={controller.scrollToComment}
-        onOpenLinkedPr={controller.openLinkedPr}
-        onCollapse={() => controller.setSidebarVisible(false)}
-        activeTab={controller.sidebarTab}
-        onActiveTabChange={controller.setSidebarTab}
-        showAddressed={controller.showAddressed}
-        onShowAddressedChange={controller.setShowAddressed}
       />
     {/if}
   </div>
