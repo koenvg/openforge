@@ -1025,7 +1025,7 @@ mod tests {
     }
 
     #[test]
-    fn load_resume_targets_recovers_completed_sessions_without_terminal_replay() {
+    fn load_resume_targets_reattaches_completed_sessions_for_doing_tasks() {
         let (db, path) = make_test_db("load_completed_resume_targets");
         let project = db
             .create_project("Replay recovery", "/tmp/replay-recovery")
@@ -1084,7 +1084,11 @@ mod tests {
             .map(|target| target.task_id)
             .collect();
         recovered_task_ids.sort();
-        let mut expected_task_ids = vec![missing_replay.id.clone(), empty_replay.id.clone()];
+        let mut expected_task_ids = vec![
+            missing_replay.id.clone(),
+            empty_replay.id.clone(),
+            captured_replay.id.clone(),
+        ];
         expected_task_ids.sort();
 
         assert_eq!(recovered_task_ids, expected_task_ids);

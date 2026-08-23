@@ -154,7 +154,8 @@ impl super::Database {
     }
 
     /// Returns active legacy worktrees whose latest Agent Session needs startup reattachment.
-    /// Completed sessions remain eligible until OpenForge captures a non-empty Terminal Replay.
+    /// Completed Agent Sessions remain eligible while their Task is still doing so desktop and
+    /// Companion Terminal surfaces can reattach to a live provider process after restart.
     pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
@@ -173,18 +174,7 @@ impl super::Database {
               )
              WHERE w.status = 'active'
                AND t.status = 'doing'
-               AND (
-                 latest_session.status IN (?1, ?2, ?3)
-                 OR (
-                   latest_session.status = 'completed'
-                   AND NOT EXISTS (
-                     SELECT 1
-                       FROM agent_terminal_replays replay
-                      WHERE replay.session_id = latest_session.id
-                        AND LENGTH(replay.replay) > 0
-                   )
-                 )
-               )
+               AND latest_session.status IN (?1, ?2, ?3, 'completed')
              ORDER BY w.updated_at DESC",
         )?;
 
@@ -362,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_resumable_worktrees_uses_latest_session_status() {
+    fn test_get_resumable_worktrees_keeps_completed_doing_task_attachable() {
         let (db, path) = make_test_db("resumable_worktrees_latest_status");
 
         let project = db
@@ -432,10 +422,8 @@ mod tests {
         .expect("create latest failed session failed");
 
         let resumable = db.get_resumable_worktrees().expect("get resumable");
-        assert!(
-            resumable.is_empty(),
-            "completed Agent Sessions with replay and failed Agent Sessions must not restart"
-        );
+        assert_eq!(resumable.len(), 1);
+        assert_eq!(resumable[0].task_id, completed_task.id);
 
         drop(db);
         let _ = fs::remove_file(&path);

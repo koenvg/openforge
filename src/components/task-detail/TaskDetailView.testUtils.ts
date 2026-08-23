@@ -166,6 +166,8 @@ vi.mock('../../lib/terminalPool', () => ({
   }),
   attach: vi.fn(),
   detach: vi.fn(),
+  recoverActiveTerminal: vi.fn(),
+  restorePtyInstance: vi.fn(),
   release: vi.fn(),
   resetTerminal: vi.fn((entry) => entry.terminal.reset()),
   releaseAllForTask: vi.fn().mockReturnValue(0),

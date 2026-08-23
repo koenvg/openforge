@@ -207,10 +207,10 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     })
   }
   
-  function waitForInitialFit(entry: PoolEntry): Promise<void> {
+  function waitForInitialFit(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
       requestAnimationFrame(() => {
-        if (!entry.attached) {
+        if (signal?.aborted || !entry.attached) {
           resolve()
           return
         }
@@ -222,7 +222,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
           return
         }
   
-        void waitForInitialFit(entry).then(() => resolve())
+        void waitForInitialFit(entry, signal).then(() => resolve())
       })
     })
   }
@@ -647,9 +647,9 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     await waitForInitialFit(entry)
   }
   
-  async function recoverActiveTerminal(entry: PoolEntry): Promise<void> {
+  async function recoverActiveTerminal(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
     if (!entry.attached) return
-    await waitForInitialFit(entry)
+    await waitForInitialFit(entry, signal)
   }
   
   function detach(entry: PoolEntry): void {

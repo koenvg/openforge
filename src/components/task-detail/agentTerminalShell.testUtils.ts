@@ -119,6 +119,7 @@ vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue(mocks.poolEntry),
   attach: vi.fn(),
   detach: vi.fn(),
+  recoverActiveTerminal: vi.fn(),
   focusTerminal: vi.fn(),
   release: vi.fn(),
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),

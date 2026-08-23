@@ -93,6 +93,9 @@ impl CompletedSessionReaper {
         let _operation_guard = operation_lock.lock().await;
         self.cancel_scheduled(task_id).await;
         self.persist_replay_if_completed(task_id).await;
+        if self.task_keeps_agent_session_live(task_id) {
+            return;
+        }
 
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
         let idle_timeout = self.idle_timeout();
@@ -133,6 +136,10 @@ impl CompletedSessionReaper {
             return;
         }
 
+        if self.task_keeps_agent_session_live(&task_id) {
+            return;
+        }
+
         if !self.persist_replay_if_completed(&task_id).await {
             return;
         }
@@ -146,6 +153,31 @@ impl CompletedSessionReaper {
                 "[completed_session_reaper] Failed to reclaim Agent Session PTY for task {}: {}",
                 task_id, error
             ),
+        }
+    }
+
+    fn task_keeps_agent_session_live(&self, task_id: &str) -> bool {
+        let db = match self.db.lock() {
+            Ok(db) => db,
+            Err(error) => {
+                warn!(
+                    "[completed_session_reaper] Database lock failed while checking Task {}: {}",
+                    task_id, error
+                );
+                return true;
+            }
+        };
+
+        match db.get_task(task_id) {
+            Ok(Some(task)) => task.status == "doing",
+            Ok(None) => false,
+            Err(error) => {
+                warn!(
+                    "[completed_session_reaper] Failed to load Task {} before PTY reclaim: {}",
+                    task_id, error
+                );
+                true
+            }
         }
     }
 
@@ -280,7 +312,80 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn completed_session_is_reclaimed_after_its_idle_timeout() {
+    async fn completed_session_for_doing_task_remains_attachable_after_idle_timeout() {
+        let (database, task_id, path) = completed_session_fixture("completed_session_doing_task");
+        let runtime = Arc::new(RecordingRuntime::default());
+        let reaper = CompletedSessionReaper::with_idle_timeout(
+            Arc::clone(&database),
+            Arc::clone(&runtime),
+            Duration::from_millis(20),
+        );
+
+        reaper.completed(&task_id).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert!(
+            runtime
+                .reclaimed
+                .lock()
+                .expect("recording runtime lock")
+                .is_empty(),
+            "a doing Task must keep its completed Agent Session PTY attachable"
+        );
+
+        drop(database);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn doing_task_completed_session_remains_available_to_companion_terminal() {
+        let (database, task_id, path) =
+            completed_session_fixture("completed_session_companion_attachment");
+        database
+            .lock()
+            .expect("database lock")
+            .save_completed_agent_terminal_replay(&task_id, "captured output")
+            .expect("seed captured replay");
+        let manager = PtyManager::new();
+        let temp_dir = tempfile::tempdir().expect("temp directory");
+        manager
+            .spawn_companion_test_agent_pty(&task_id, temp_dir.path(), "sleep 5")
+            .await
+            .expect("spawn Agent Session PTY");
+        let reaper = CompletedSessionReaper::with_runtime(
+            Arc::clone(&database),
+            Arc::new(PtyCompletedSessionRuntime {
+                manager: manager.clone(),
+            }),
+            Some(Duration::from_millis(20)),
+        );
+
+        reaper.completed(&task_id).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert_eq!(
+            database
+                .lock()
+                .expect("database lock")
+                .get_latest_agent_terminal_replay(&task_id)
+                .expect("load captured replay")
+                .as_deref(),
+            Some("captured output")
+        );
+
+        assert!(manager.agent_terminal_available(&task_id).await);
+        manager
+            .attach_agent_terminal(&task_id)
+            .await
+            .expect("attach Companion Terminal");
+
+        manager.kill_pty(&task_id).await.expect("stop Agent PTY");
+        drop(database);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn completed_session_for_done_task_is_reclaimed_after_its_idle_timeout() {
         let (database, task_id, path) = completed_session_fixture("completed_session_idle_reaper");
         let runtime = Arc::new(RecordingRuntime::default());
         let reaper = CompletedSessionReaper::with_idle_timeout(
@@ -288,6 +393,12 @@ mod tests {
             Arc::clone(&runtime),
             Duration::from_millis(20),
         );
+
+        database
+            .lock()
+            .expect("database lock")
+            .update_task_status(&task_id, "done")
+            .expect("complete Task");
 
         reaper.completed(&task_id).await;
         tokio::time::timeout(Duration::from_secs(1), async {
@@ -331,6 +442,12 @@ mod tests {
             Duration::from_secs(60),
         );
 
+        database
+            .lock()
+            .expect("database lock")
+            .update_task_status(&task_id, "done")
+            .expect("complete Task");
+
         reaper.completed(&task_id).await;
 
         assert_eq!(
@@ -366,12 +483,20 @@ mod tests {
             Duration::from_millis(20),
         );
 
-        reaper.completed(&task_id).await;
         database
             .lock()
             .expect("database lock")
-            .update_agent_session("session-idle", "implementing", "running", None, None)
-            .expect("reactivate Agent Session");
+            .update_task_status(&task_id, "done")
+            .expect("complete Task");
+
+        reaper.completed(&task_id).await;
+        {
+            let db = database.lock().expect("database lock");
+            db.update_agent_session("session-idle", "implementing", "running", None, None)
+                .expect("reactivate Agent Session");
+            db.update_task_status(&task_id, "doing")
+                .expect("reactivate Task");
+        }
         reaper.active(&task_id).await;
         tokio::time::sleep(Duration::from_millis(50)).await;
 

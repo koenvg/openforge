@@ -26,13 +26,23 @@ impl super::Database {
             return Ok(false);
         }
 
+        // A newly reattached PTY may have no output yet; keep captured history until it produces
+        // a non-empty replacement.
         let captured_at = super::current_unix_timestamp()?;
         tx.execute(
             "INSERT INTO agent_terminal_replays (session_id, task_id, replay, captured_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(session_id) DO UPDATE SET
-               replay = excluded.replay,
-               captured_at = excluded.captured_at",
+               replay = CASE
+                 WHEN LENGTH(excluded.replay) = 0 AND LENGTH(agent_terminal_replays.replay) > 0
+                 THEN agent_terminal_replays.replay
+                 ELSE excluded.replay
+               END,
+               captured_at = CASE
+                 WHEN LENGTH(excluded.replay) = 0 AND LENGTH(agent_terminal_replays.replay) > 0
+                 THEN agent_terminal_replays.captured_at
+                 ELSE excluded.captured_at
+               END",
             rusqlite::params![session_id, task_id, replay, captured_at],
         )?;
         tx.commit()?;
@@ -90,6 +100,15 @@ mod tests {
         assert!(db
             .save_completed_agent_terminal_replay(&task.id, "completed output\n")
             .expect("save replay"));
+        assert!(db
+            .save_completed_agent_terminal_replay(&task.id, "")
+            .expect("skip empty replay replacement"));
+        assert_eq!(
+            db.get_latest_agent_terminal_replay(&task.id)
+                .expect("load replay")
+                .as_deref(),
+            Some("completed output\n")
+        );
         drop(db);
 
         let reopened = crate::db::Database::new(path.clone()).expect("reopen database");

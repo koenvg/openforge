@@ -4,7 +4,7 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, focusTerminal, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, isValidTerminalDimensions, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
   import {
     hydrateAgentTerminalPtyInstance,
     syncAgentPanelStatusFromSession,
@@ -56,6 +56,12 @@
   }
 
   $effect(() => {
+    if (
+      (session?.status === 'running' || session?.status === 'paused')
+      && typeof session.pty_instance_id === 'number'
+    ) {
+      hydrateAgentTerminalPtyInstance(taskId, session.pty_instance_id)
+    }
     syncStatusFromSession(session?.status)
   })
 
@@ -86,12 +92,19 @@
   $effect(() => {
     if (!isActive || !poolEntryAttached) return
 
-    const activeTaskId = taskId
+    const activeEntry = poolEntry
+    if (!activeEntry) return
+    const recoveryController = new AbortController()
     const frame = requestAnimationFrame(() => {
-      if (isActive && poolEntryAttached) focusTerminal(activeTaskId)
+      if (isActive && poolEntryAttached && poolEntry === activeEntry) {
+        void recoverActiveTerminal(activeEntry, recoveryController.signal)
+      }
     })
 
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      recoveryController.abort()
+    }
   })
 
   onMount(async () => {

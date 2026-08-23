@@ -7,7 +7,7 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { getPtyBuffer, writePty } from "./ipc";
+import { getPtyBuffer, resizePty, writePty } from "./ipc";
 import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
 import {
 	_getPool,
@@ -24,6 +24,7 @@ import {
 	isValidTerminalDimensions,
 	markPtySpawnPending,
 	recoverActiveTerminal,
+	restorePtyInstance,
 	subscribeShellLifecycle,
 	release,
 	releaseAll,
@@ -873,22 +874,48 @@ describe("terminalPool", () => {
 		expect(entry.attached).toBe(true);
 	});
 
-	it("recoverActiveTerminal refits, refreshes, and focuses an attached entry", async () => {
+	it("recovers an attached resumed terminal by refitting, resizing its PTY, refreshing, and focusing", async () => {
 		const entry = await acquire("task-reactivate");
 		const wrapper = document.createElement("div");
 		await attach(entry, wrapper);
+		restorePtyInstance("task-reactivate", 42);
 
 		const { fit: fitSpy } = getFitAddonMocks(entry);
 		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
 		fitSpy.mockClear();
 		refreshSpy.mockClear();
 		focusSpy.mockClear();
+		vi.mocked(resizePty).mockClear();
 
 		await recoverActiveTerminal(entry);
 
 		expect(fitSpy).toHaveBeenCalledTimes(1);
+		expect(resizePty).toHaveBeenCalledWith("task-reactivate", entry.terminal.cols, entry.terminal.rows);
 		expect(refreshSpy).toHaveBeenCalled();
 		expect(focusSpy).toHaveBeenCalled();
+	});
+
+	it("cancels resumed terminal recovery before touching an inactive terminal", async () => {
+		const entry = await acquire("task-cancelled-reactivate");
+		const wrapper = document.createElement("div");
+		await attach(entry, wrapper);
+		restorePtyInstance("task-cancelled-reactivate", 42);
+
+		const { fit: fitSpy } = getFitAddonMocks(entry);
+		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
+		fitSpy.mockClear();
+		refreshSpy.mockClear();
+		focusSpy.mockClear();
+		vi.mocked(resizePty).mockClear();
+		const recoveryController = new AbortController();
+		recoveryController.abort();
+
+		await recoverActiveTerminal(entry, recoveryController.signal);
+
+		expect(fitSpy).not.toHaveBeenCalled();
+		expect(resizePty).not.toHaveBeenCalled();
+		expect(refreshSpy).not.toHaveBeenCalled();
+		expect(focusSpy).not.toHaveBeenCalled();
 	});
 
 	describe("terminal dimension validation", () => {
