@@ -56,6 +56,18 @@ describe('agent panel session status synchronization', () => {
     expect(onRunning).toHaveBeenCalledOnce()
   })
 
+  it('runs terminal lifecycle hooks without a panel status consumer', () => {
+    const onRunning = vi.fn()
+    const handler = createAgentStatusChangedHandler({
+      taskId: 'T-1',
+      onRunning,
+    })
+
+    handler({ payload: { task_id: 'T-1', status: 'running' } })
+
+    expect(onRunning).toHaveBeenCalledOnce()
+  })
+
   it('does not run the running hook for terminal session statuses', () => {
     const setStatus = vi.fn()
     const onRunning = vi.fn()

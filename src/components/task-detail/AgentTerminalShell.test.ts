@@ -219,6 +219,19 @@ describe('AgentTerminalShell', () => {
     expect(mockPoolEntry.terminal.options.theme).toEqual({})
   })
 
+  it('keeps an active pooled PTY visible without persisted session state', () => {
+    mockShellLifecycleState.ptyActive = true
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        sessionIdKey: 'pi_session_id',
+      },
+    })
+
+    expect(screen.queryByText('No active agent session')).toBeNull()
+  })
+
   it('shows the shared starting empty state when no session is active', async () => {
     render(AgentTerminalShell, {
       props: {

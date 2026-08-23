@@ -4,11 +4,8 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, isValidTerminalDimensions, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
-  import {
-    hydrateAgentTerminalPtyInstance,
-    syncAgentPanelStatusFromSession,
-  } from '../../lib/agentTerminalPanel'
+  import { acquire, attach, detach, getShellLifecycleState, isValidTerminalDimensions, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
+  import { hydrateAgentTerminalPtyInstance } from '../../lib/agentTerminalPanel'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
   type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id' | 'grok_session_id'
@@ -43,16 +40,8 @@
       : null
   )
 
-  // The live status no longer renders here (it lives in AgentStatusPill), but the
-  // session/status sync still drives terminalActive + PTY hydration, so we keep
-  // running it with a no-op status setter.
-  function syncStatusFromSession(sessionStatus: string | null | undefined) {
-    syncAgentPanelStatusFromSession({
-      taskId,
-      sessionStatus,
-      setStatus: () => {},
-      setTerminalActive: (active) => { terminalActive = active },
-    })
+  function syncTerminalActiveFromLifecycle() {
+    terminalActive = getShellLifecycleState(taskId).ptyActive
   }
 
   $effect(() => {
@@ -62,7 +51,7 @@
     ) {
       hydrateAgentTerminalPtyInstance(taskId, session.pty_instance_id)
     }
-    syncStatusFromSession(session?.status)
+    syncTerminalActiveFromLifecycle()
   })
 
   let previousCheckpointQuestion: string | null = null
@@ -114,12 +103,11 @@
     if (destroyed) return
     poolEntryAttached = true
 
-    syncStatusFromSession(session?.status)
+    syncTerminalActiveFromLifecycle()
 
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
-      setStatus: () => {},
-      onRunning: () => { syncStatusFromSession('running') },
+      onRunning: syncTerminalActiveFromLifecycle,
       onPtyInstanceId: (ptyInstanceId) => {
         hydrateAgentTerminalPtyInstance(taskId, ptyInstanceId)
         terminalActive = true
