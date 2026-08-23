@@ -1,0 +1,27 @@
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, vi } from 'vitest'
+
+export async function writeBackendModule(source: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'openforge-plugin-host-'))
+  const file = join(dir, `backend-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`)
+  await writeFile(file, source)
+  return file
+}
+
+export async function expectOnlyPluginHostStderr(expectedLines: string[], operation: () => Promise<void>): Promise<void> {
+  const chunks: string[] = []
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    chunks.push(String(chunk))
+    return true
+  })
+
+  try {
+    await operation()
+  } finally {
+    stderr.mockRestore()
+  }
+
+  expect(chunks.join('')).toBe(expectedLines.map(line => `${line}\n`).join(''))
+}
