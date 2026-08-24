@@ -1,0 +1,13 @@
+{
+  "runtimeFiles": [
+    "cli.js",
+    "command-line.js",
+    "debug-commands.js",
+    "help.js",
+    "http-transport.js",
+    "plugin-commands.js",
+    "plugin-management-commands.js",
+    "project-commands.js",
+    "task-commands.js"
+  ]
+}

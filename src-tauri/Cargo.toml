@@ -6,6 +6,9 @@ authors = ["OpenCode"]
 edition = "2021"
 rust-version = "1.95"
 
+[build-dependencies]
+serde_json = "1.0"
+
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }

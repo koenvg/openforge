@@ -3,38 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const OPENFORGE_CLI_RUNTIME_FILES: &[(&str, &str)] = &[
-    ("cli.js", include_str!("openforge-cli/cli.js")),
-    (
-        "command-line.js",
-        include_str!("openforge-cli/command-line.js"),
-    ),
-    (
-        "debug-commands.js",
-        include_str!("openforge-cli/debug-commands.js"),
-    ),
-    ("help.js", include_str!("openforge-cli/help.js")),
-    (
-        "http-transport.js",
-        include_str!("openforge-cli/http-transport.js"),
-    ),
-    (
-        "plugin-commands.js",
-        include_str!("openforge-cli/plugin-commands.js"),
-    ),
-    (
-        "plugin-management-commands.js",
-        include_str!("openforge-cli/plugin-management-commands.js"),
-    ),
-    (
-        "project-commands.js",
-        include_str!("openforge-cli/project-commands.js"),
-    ),
-    (
-        "task-commands.js",
-        include_str!("openforge-cli/task-commands.js"),
-    ),
-];
+include!(concat!(env!("OUT_DIR"), "/openforge_cli_runtime_assets.rs"));
 const OPENFORGE_SKILL_TEMPLATE: &str = include_str!("openforge-cli/openforge-skill.md");
 const OPENFORGE_PLUGIN_DEV_SKILL_TEMPLATE: &str =
     include_str!("openforge-cli/openforge-plugin-dev-skill.md");
@@ -375,17 +344,7 @@ mod tests {
 
         let skill_md = tmp_dir.path().join("openforge-skill.md");
         let plugin_dev_skill_md = tmp_dir.path().join("openforge-plugin-dev-skill.md");
-        for filename in [
-            "cli.js",
-            "command-line.js",
-            "debug-commands.js",
-            "help.js",
-            "http-transport.js",
-            "plugin-commands.js",
-            "plugin-management-commands.js",
-            "project-commands.js",
-            "task-commands.js",
-        ] {
+        for (filename, _) in OPENFORGE_CLI_RUNTIME_FILES.iter().copied() {
             assert!(
                 tmp_dir.path().join(filename).exists(),
                 "{filename} should be installed"
@@ -405,19 +364,11 @@ mod tests {
         assert!(!tmp_dir.path().join("tools.js").exists());
         assert!(!tmp_dir.path().join("package.json").exists());
 
-        let runtime_content = [
-            "cli.js",
-            "command-line.js",
-            "debug-commands.js",
-            "help.js",
-            "http-transport.js",
-            "plugin-commands.js",
-            "plugin-management-commands.js",
-            "project-commands.js",
-            "task-commands.js",
-        ]
-        .map(|filename| std::fs::read_to_string(tmp_dir.path().join(filename)).unwrap())
-        .join("\n");
+        let runtime_content = OPENFORGE_CLI_RUNTIME_FILES
+            .iter()
+            .map(|(filename, _)| std::fs::read_to_string(tmp_dir.path().join(filename)).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(runtime_content.contains("openforge task create"));
         assert!(runtime_content.contains("--label"));
         assert!(runtime_content.contains("openforge task labels add"));
