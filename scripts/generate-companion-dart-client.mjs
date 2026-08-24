@@ -485,7 +485,7 @@ ${bodyParameters.map((parameter) => `          ${lowerCamel(parameter.bodyProper
   }
   const statuses = response.statuses.join(', ')
   const decode = returnType === 'void'
-    ? `    _successJson(response, const <int>{${statuses}});`
+    ? `    _expectSuccessWithoutBody(response, const <int>{${statuses}});`
     : `    return ${returnType}.fromJson(
       _successJson(response, const <int>{${statuses}}),
     );`
@@ -504,7 +504,15 @@ ${decode}
 }
 
 function renderSupport(errorCodeName) {
-  return `Map<String, Object?> _successJson(
+  return `void _expectSuccessWithoutBody(
+  CompanionV1HttpResponse response,
+  Set<int> expectedStatuses,
+) {
+  if (expectedStatuses.contains(response.statusCode)) return;
+  _successJson(response, expectedStatuses);
+}
+
+Map<String, Object?> _successJson(
   CompanionV1HttpResponse response,
   Set<int> expectedStatuses,
 ) {

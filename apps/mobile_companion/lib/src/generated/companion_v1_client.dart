@@ -1451,7 +1451,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   Future<void> returnCompanionTaskToBoard({
@@ -1466,7 +1466,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   Future<void> mergeCompanionTaskPullRequest({
@@ -1481,7 +1481,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   Future<void> enqueueCompanionTaskPullRequest({
@@ -1496,7 +1496,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   Future<void> runCompanionTaskApp({
@@ -1511,7 +1511,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   Future<ProjectActionsSnapshot> getCompanionProjectActions({
@@ -1542,7 +1542,7 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
     );
-    _successJson(response, const <int>{204});
+    _expectSuccessWithoutBody(response, const <int>{204});
   }
 
   CompanionV1StreamRequest streamCompanionEvents({
@@ -1558,6 +1558,14 @@ final class CompanionV1Client {
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
     },
   );
+}
+
+void _expectSuccessWithoutBody(
+  CompanionV1HttpResponse response,
+  Set<int> expectedStatuses,
+) {
+  if (expectedStatuses.contains(response.statusCode)) return;
+  _successJson(response, expectedStatuses);
 }
 
 Map<String, Object?> _successJson(
