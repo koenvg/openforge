@@ -12,6 +12,11 @@ pub(in crate::plugin_installation) fn build_plugin_row(
     is_builtin: bool,
 ) -> Result<db::PluginRow, String> {
     let openforge = &loaded.package_json.openforge;
+    let installed_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("failed to compute install timestamp: {error}"))?
+        .as_millis();
+    let installed_at = install_timestamp(installed_at)?;
     Ok(db::PluginRow {
         id: openforge.id.clone(),
         name: openforge.display_name.clone(),
@@ -26,10 +31,30 @@ pub(in crate::plugin_installation) fn build_plugin_row(
         source_kind: source.kind().to_string(),
         source_spec: source.spec().to_string(),
         package_metadata: loaded.package_metadata_json.clone(),
-        installed_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| format!("failed to compute install timestamp: {error}"))?
-            .as_millis() as i64,
+        installed_at,
         is_builtin,
     })
+}
+
+fn install_timestamp(millis: u128) -> Result<i64, String> {
+    i64::try_from(millis).map_err(|_| {
+        "failed to compute install timestamp: milliseconds since Unix epoch are out of range"
+            .to_string()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_timestamp_rejects_milliseconds_outside_i64_range() {
+        let error = install_timestamp(i64::MAX as u128 + 1)
+            .expect_err("timestamp outside the database range should fail");
+
+        assert_eq!(
+            error,
+            "failed to compute install timestamp: milliseconds since Unix epoch are out of range"
+        );
+    }
 }
