@@ -13,11 +13,13 @@
   import { parseAndValidateWalkthroughSteps } from '../../lib/walkthroughParse'
   import {
     buildSyntheticStepFiles,
+    buildWalkthroughStepList,
     clampStepIndex,
-    isReviewSubmitStep,
     isWalkthroughStale,
-    totalWalkthroughSteps,
   } from '../../lib/walkthroughViewState'
+  import { parseAndValidateTicketCoverage } from '../../lib/ticketCoverageParse'
+  import type { TicketSnapshot } from '../../lib/ticketCoverage'
+  import TicketCoveragePanel from './TicketCoveragePanel.svelte'
   import { isInputFocused } from '../../lib/domUtils'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
@@ -146,18 +148,33 @@
 
   let isGenerating = $derived(walkthrough?.status === 'generating')
 
-  let totalSteps = $derived(parsedSteps ? totalWalkthroughSteps(parsedSteps) : 0)
+  // Jira ticket + gap analysis. The ticket step exists whenever Jira is
+  // configured — an unresolved or failed ticket still needs somewhere to render
+  // its key input and retry.
+  let ticketSnapshot = $state<TicketSnapshot | null>(null)
+  let jiraConfigured = $state(false)
+
+  let ticketCoverage = $derived(
+    walkthrough?.status === 'ready'
+      ? parseAndValidateTicketCoverage(walkthrough.steps_json, files)
+      : null,
+  )
+
+  let stepEntries = $derived(parsedSteps ? buildWalkthroughStepList(parsedSteps) : [])
+
+  let totalSteps = $derived(stepEntries.length)
 
   let clampedStepIndex = $derived(
     parsedSteps ? clampStepIndex(activeStepIndex, totalSteps) : 0,
   )
 
-  let isFinalStep = $derived(
-    parsedSteps ? isReviewSubmitStep(clampedStepIndex, parsedSteps) : false,
-  )
+  let activeEntry = $derived(stepEntries[clampedStepIndex] ?? null)
+
+  let isFinalStep = $derived(activeEntry?.kind === 'submit')
+  let isTicketStep = $derived(activeEntry?.kind === 'ticket')
 
   let activeStep = $derived<PrWalkthroughStep | null>(
-    parsedSteps && !isFinalStep ? parsedSteps[clampedStepIndex] : null,
+    activeEntry?.kind === 'concept' ? activeEntry.step : null,
   )
 
   // Step-anchored "Ask the AI author" threads for the current step.
@@ -189,15 +206,20 @@
   }
 
   // The final step shows every file; a per-concept step shows only its hunks.
+  // The ticket step renders its own panel instead of the diff, so it needs none.
   let stepFiles = $derived<PrFileDiff[]>(
     isFinalStep ? files : activeStep ? buildSyntheticStepFiles(files, activeStep) : [],
   )
 
-  let stepTitle = $derived(isFinalStep ? 'Review & submit' : activeStep?.title ?? '')
+  let stepTitle = $derived(
+    isTicketStep ? 'Ticket coverage' : isFinalStep ? 'Review & submit' : activeStep?.title ?? '',
+  )
   let stepSummary = $derived(
-    isFinalStep
-      ? 'Review every change together, then submit your review.'
-      : activeStep?.summary ?? '',
+    isTicketStep
+      ? 'Check the changes against the ticket before you read them.'
+      : isFinalStep
+        ? 'Review every change together, then submit your review.'
+        : activeStep?.summary ?? '',
   )
 
   $effect(() => {
@@ -250,7 +272,37 @@
     } finally {
       isLoading = false
     }
+    await loadTicket()
     return walkthrough
+  }
+
+  /**
+   * The ticket snapshot is written by the backend during generation, so it is
+   * reloaded alongside the walkthrough. A failure here is not surfaced: the
+   * walkthrough itself is still worth reading.
+   */
+  async function loadTicket() {
+    try {
+      const result = await githubSync.getPrTicket({ reviewPrId: pr.id, headSha: pr.head_sha })
+      ticketSnapshot = result?.snapshot ?? null
+      jiraConfigured = result?.jiraConfigured ?? false
+    } catch (e) {
+      console.error('[WalkthroughTab] Failed to load the Jira ticket:', e)
+      ticketSnapshot = null
+      jiraConfigured = false
+    }
+  }
+
+  /** Set the ticket for this PR, then regenerate so the analysis uses it. */
+  async function handleSetIssueKey(issueKey: string) {
+    try {
+      await githubSync.setPrJiraKey({ reviewPrId: pr.id, issueKey })
+    } catch (e) {
+      console.error('[WalkthroughTab] Failed to set the Jira ticket key:', e)
+      loadError = 'Failed to set the Jira ticket.'
+      return
+    }
+    await handleRegenerate()
   }
 
   async function handleGenerate() {
@@ -419,22 +471,19 @@
       </button>
 
       <div class="flex items-center justify-center gap-1 flex-1 min-w-0 overflow-x-auto">
-        {#each parsedSteps as step, i}
+        {#each stepEntries as entry, i}
           <button
             type="button"
             class="size-6 shrink-0 rounded-full text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(i === clampedStepIndex, i < clampedStepIndex)}"
             onclick={() => selectStep(i)}
-            title={step.title}
+            title={entry.kind === 'ticket'
+              ? 'Ticket coverage'
+              : entry.kind === 'submit'
+                ? 'Review & submit'
+                : entry.step.title}
             aria-current={i === clampedStepIndex ? 'step' : undefined}
           >{i + 1}</button>
         {/each}
-        <button
-          type="button"
-          class="size-6 shrink-0 rounded-full text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(isFinalStep, false)}"
-          onclick={() => selectStep(parsedSteps.length)}
-          title="Review & submit"
-          aria-current={isFinalStep ? 'step' : undefined}
-        >{parsedSteps.length + 1}</button>
       </div>
 
       <button
@@ -554,6 +603,18 @@
       </div>
     </div>
 
+    {#if isTicketStep}
+      <div class="flex flex-1 min-h-0 overflow-hidden">
+        <TicketCoveragePanel
+          snapshot={ticketSnapshot}
+          coverage={ticketCoverage}
+          {jiraConfigured}
+          {onOpenUrl}
+          onSetIssueKey={(issueKey) => { void handleSetIssueKey(issueKey) }}
+          onRegenerate={handleRegenerate}
+        />
+      </div>
+    {:else}
     <div class="flex flex-1 min-h-0 overflow-hidden">
       <ResizablePanel storageKey="walkthrough-file-tree" defaultWidth={220} minWidth={140} maxWidth={460} side="left">
         <FileTree files={stepFiles} onSelectFile={handleFileSelect} />
@@ -604,5 +665,6 @@
         </DiffViewer>
       </div>
     </div>
+    {/if}
   {/if}
 </div>

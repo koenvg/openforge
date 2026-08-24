@@ -70,21 +70,34 @@ export function clampStepIndex(index: number, total: number): number {
 }
 
 /**
- * Total number of steps shown in the Walkthrough: every parsed per-concept step
- * plus a trailing "Review & submit" step that shows the full diff and the submit
- * panel. Kept out of `parsedSteps` (which mirrors the agent's JSON) so the extra
- * step never leaks into parsing/validation.
+ * One entry in the Walkthrough's step navigator.
+ *
+ * Two of the three kinds are synthetic and deliberately kept out of
+ * `parsedSteps` (which mirrors the agent's JSON) so they never leak into
+ * parsing or validation:
+ *   - `ticket` leads, carrying the Jira ticket and the gap analysis
+ *   - `submit` trails, showing the full diff and the submit panel
  */
-export function totalWalkthroughSteps(steps: PrWalkthroughStep[]): number {
-  return steps.length + 1
-}
+export type WalkthroughStepEntry =
+  | { kind: 'ticket' }
+  | { kind: 'concept'; step: PrWalkthroughStep }
+  | { kind: 'submit' }
 
 /**
- * The trailing step (index === steps.length) is the full-diff "Review & submit"
- * step, not one of the parsed per-concept steps.
+ * Build the full navigator list. Callers index this array and switch on `kind`
+ * rather than doing arithmetic against `steps.length`, which is what made
+ * adding a leading step a five-site change the first time around.
+ *
+ * The ticket step is unconditional. Hiding it when Jira is unconfigured makes
+ * the gap analysis silently absent, with nothing to tell the reviewer why or
+ * how to switch it on; the step itself carries that explanation.
  */
-export function isReviewSubmitStep(index: number, steps: PrWalkthroughStep[]): boolean {
-  return index === steps.length
+export function buildWalkthroughStepList(steps: PrWalkthroughStep[]): WalkthroughStepEntry[] {
+  return [
+    { kind: 'ticket' as const },
+    ...steps.map(step => ({ kind: 'concept' as const, step })),
+    { kind: 'submit' as const },
+  ]
 }
 
 export function isWalkthroughStale(

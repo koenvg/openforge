@@ -38,6 +38,7 @@
     "requires": [
       "taskPane",
       "views",
+      "settings",
       "backend",
       "commands",
       "events",

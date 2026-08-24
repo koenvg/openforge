@@ -12,6 +12,7 @@ import type {
   ReviewPullRequest,
   ReviewSubmissionComment,
 } from '@openforge-app/plugin-sdk/domain'
+import type { TicketSnapshot } from '../../lib/ticketCoverage'
 
 export type PullRequestRepositoryRequest = {
   owner: string
@@ -83,6 +84,13 @@ export interface GithubSyncPrReviewClient {
   updatePrAiReviewCommentStatus(request: { reviewPrId: number; headSha: string; commentId: number; status: string }): Promise<void>
   getPrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<PrWalkthrough | null>
   deletePrWalkthrough(request: { reviewPrId: number; headSha: string }): Promise<void>
+  /** The Jira ticket resolved for this PR, plus whether Jira is configured at all. */
+  getPrTicket(request: { reviewPrId: number; headSha: string }): Promise<{
+    snapshot: TicketSnapshot | null
+    jiraConfigured: boolean
+  }>
+  /** Override which ticket this PR implements. Regenerate to pick it up. */
+  setPrJiraKey(request: { reviewPrId: number; issueKey: string | null }): Promise<void>
   startAgentWalkthrough(request: {
     repoOwner: string
     repoName: string
@@ -173,6 +181,8 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     updatePrAiReviewCommentStatus: ({ reviewPrId, headSha, commentId, status }) => invokeBackend<void>(api, 'updatePrAiReviewCommentStatus', { reviewPrId, headSha, commentId, status }),
     getPrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<PrWalkthrough | null>(api, 'getPrWalkthrough', { reviewPrId, headSha }),
     deletePrWalkthrough: ({ reviewPrId, headSha }) => invokeBackend<void>(api, 'deletePrWalkthrough', { reviewPrId, headSha }),
+    getPrTicket: ({ reviewPrId, headSha }) => invokeBackend<{ snapshot: TicketSnapshot | null; jiraConfigured: boolean }>(api, 'getPrTicket', { reviewPrId, headSha }),
+    setPrJiraKey: ({ reviewPrId, issueKey }) => invokeBackend<void>(api, 'setPrJiraKey', { reviewPrId, issueKey }),
     startAgentWalkthrough: (request) => invokeBackend<{ walkthrough_session_key: string }>(api, 'startAgentWalkthrough', request),
     abortAgentWalkthrough: ({ walkthroughSessionKey }) => invokeBackend<void>(api, 'abortAgentWalkthrough', { walkthroughSessionKey }),
     getAiThreads: ({ reviewPrId, headSha }) => invokeBackend<AiThread[]>(api, 'getAiThreads', { reviewPrId, headSha }),

@@ -9,6 +9,7 @@ enum GlobalCommandHandler {
     GithubReview,
     FilesReview,
     AgentGenerate,
+    Jira,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +37,13 @@ impl ResolvedGlobalCommand {
         Self {
             app_command,
             handler: GlobalCommandHandler::AgentGenerate,
+        }
+    }
+
+    const fn jira(app_command: &'static str) -> Self {
+        Self {
+            app_command,
+            handler: GlobalCommandHandler::Jira,
         }
     }
 }
@@ -106,6 +114,11 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "agentGenerateInRepo" => Ok(ResolvedGlobalCommand::agent_generate(
             "agent_generate_in_repo",
         )),
+        "setJiraApiToken" => Ok(ResolvedGlobalCommand::jira("set_jira_api_token")),
+        "clearJiraApiToken" => Ok(ResolvedGlobalCommand::jira("clear_jira_api_token")),
+        "getJiraApiTokenStatus" => Ok(ResolvedGlobalCommand::jira("get_jira_api_token_status")),
+        "testJiraConnection" => Ok(ResolvedGlobalCommand::jira("test_jira_connection")),
+        "fetchJiraWorkItem" => Ok(ResolvedGlobalCommand::jira("fetch_jira_work_item")),
         _ => Err(format!(
             "unsupported plugin host global command id: {qualified_id}"
         )),
@@ -171,6 +184,9 @@ impl PluginHost {
             GlobalCommandHandler::AgentGenerate => {
                 crate::app_invoke::handle_agent_generate_command(&state, &request).await
             }
+            GlobalCommandHandler::Jira => {
+                crate::app_invoke::handle_jira_command(&state, &request).await
+            }
         };
 
         result
@@ -228,6 +244,30 @@ mod tests {
         assert!(plugin_may_invoke_private_host_commands(
             GITHUB_SYNC_PLUGIN_ID
         ));
+    }
+
+    #[test]
+    fn jira_commands_map_to_the_jira_handler() {
+        // Authorization is plugin-scoped rather than per-command, so it is
+        // covered by the two tests either side of this one; what matters here is
+        // that each Jira id resolves to the right app command and handler.
+        let cases = [
+            ("openforge.setJiraApiToken", "set_jira_api_token"),
+            ("openforge.clearJiraApiToken", "clear_jira_api_token"),
+            (
+                "openforge.getJiraApiTokenStatus",
+                "get_jira_api_token_status",
+            ),
+            ("openforge.testJiraConnection", "test_jira_connection"),
+            ("openforge.fetchJiraWorkItem", "fetch_jira_work_item"),
+        ];
+
+        for (qualified_id, expected_app_command) in cases {
+            let resolved = resolve_openforge_global_command(qualified_id)
+                .unwrap_or_else(|error| panic!("{qualified_id} should resolve: {error}"));
+            assert_eq!(resolved.app_command, expected_app_command);
+            assert_eq!(resolved.handler, GlobalCommandHandler::Jira);
+        }
     }
 
     #[test]

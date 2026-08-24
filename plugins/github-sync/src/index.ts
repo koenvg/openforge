@@ -4,9 +4,11 @@ import PrReviewView from './review/pr/PrReviewView.svelte'
 import { createGithubSyncPrReviewClient } from './review/pr/githubSyncClient'
 import { pendingReviewPrOpen } from './lib/stores'
 import TaskPullRequestStatus from './task/TaskPullRequestStatus.svelte'
+import JiraSettingsSection from './settings/JiraSettingsSection.svelte'
 
 export const PrReviewViewComponent = PrReviewView
 export const TaskPullRequestStatusComponent = TaskPullRequestStatus
+export const JiraSettingsSectionComponent = JiraSettingsSection
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -37,6 +39,16 @@ export default defineFrontendPlugin({
       placement: 'sidebar',
       shortcut: 'Cmd+Shift+G',
       component: PrReviewView,
+    }))
+
+    // Global scope renders this inside the plugin's own card on the settings
+    // page, so the Jira credentials disappear when GitHub Sync is turned off.
+    context.subscriptions.add(openforge.settings.registerSection({
+      id: 'jira',
+      title: 'Jira',
+      scope: 'global',
+      order: 20,
+      component: JiraSettingsSection,
     }))
 
     const githubSync = createGithubSyncPrReviewClient(openforge)

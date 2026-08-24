@@ -6,6 +6,7 @@ mod core;
 mod core_unmatched;
 mod files_review;
 mod github_review;
+mod jira;
 mod lifecycle;
 mod plugins;
 mod pty;
@@ -192,6 +193,13 @@ pub(crate) async fn handle_agent_generate_command(
     agent_generate::handle_app_agent_generate_command(state, request).await
 }
 
+pub(crate) async fn handle_jira_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<Option<serde_json::Value>> {
+    jira::handle_app_jira_command(state, request).await
+}
+
 pub(crate) async fn handle_runtime_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -238,6 +246,9 @@ pub(crate) async fn handle_command(
         return Ok(value);
     }
     if let Some(value) = handle_agent_generate_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_jira_command(state, request).await? {
         return Ok(value);
     }
     if let Some(value) = handle_runtime_command(state, request).await? {

@@ -28,6 +28,7 @@ mod grok_hooks;
 mod http_bridge_port_contract;
 mod http_server;
 mod idle_resource;
+mod jira_runtime;
 mod migration;
 mod opencode_client;
 mod opencode_plugin;
