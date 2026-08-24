@@ -155,24 +155,29 @@ export class PluginHostRuntime {
   }
 
   private async serializePluginInvocation<T>(
-    pluginId: string,
+    invocationKey: string,
     invoke: () => Promise<T>,
   ): Promise<T> {
-    const preceding = this.invocationTails.get(pluginId) ?? Promise.resolve()
+    const preceding = this.invocationTails.get(invocationKey) ?? Promise.resolve()
     let release!: () => void
     const current = new Promise<void>((resolve) => { release = resolve })
     const tail = preceding.catch(() => undefined).then(() => current)
-    this.invocationTails.set(pluginId, tail)
+    this.invocationTails.set(invocationKey, tail)
 
     await preceding.catch(() => undefined)
     try {
       return await invoke()
     } finally {
       release()
-      if (this.invocationTails.get(pluginId) === tail) {
-        this.invocationTails.delete(pluginId)
+      if (this.invocationTails.get(invocationKey) === tail) {
+        this.invocationTails.delete(invocationKey)
       }
     }
+  }
+
+  private invokeSerializedBackend(input: InvokeBackendInput): Promise<unknown> {
+    const invocationKey = JSON.stringify(['backend', input.pluginId, input.command.trim()])
+    return this.serializePluginInvocation(invocationKey, () => this.invokeBackend(input))
   }
 
   async handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
@@ -201,12 +206,12 @@ export class PluginHostRuntime {
         }
         case 'plugin.backend.invoke': {
           const input = this.requireInvokeParams(params, method)
-          const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeBackend(input))
+          const result = await this.invokeSerializedBackend(input)
           return { jsonrpc: '2.0', id: request.id, result }
         }
         default: {
           const input = this.requireInvokeParams(params, method)
-          const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeBackend(input))
+          const result = await this.invokeSerializedBackend(input)
           return { jsonrpc: '2.0', id: request.id, result }
         }
       }

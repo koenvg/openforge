@@ -2,6 +2,65 @@ import { describe, expect, it, vi } from 'vitest'
 import { createPluginHostRuntime } from './index'
 import { writeBackendModule } from './backend-module.test-fixtures'
 
+type BackendInvocation = { pluginId: string; command: string }
+
+async function expectIndependentBackendInvocations(
+  blocking: BackendInvocation,
+  independent: BackendInvocation,
+  runtime = createPluginHostRuntime(),
+): Promise<void> {
+  const backendPath = await writeBackendModule(`
+    export default {
+      async activate(openforge, context) {
+        context.subscriptions.add(openforge.backend.registerMethod(${JSON.stringify(blocking.command)}, {
+          async handler() {
+            globalThis.__markIndependentHandlerStarted()
+            await new Promise(resolve => { globalThis.__releaseIndependentHandler = resolve })
+            return 'released'
+          }
+        }))
+        context.subscriptions.add(openforge.backend.registerMethod(${JSON.stringify(independent.command)}, { handler() { return 'pong' } }))
+      }
+    }
+  `)
+  const globals = globalThis as typeof globalThis & {
+    __markIndependentHandlerStarted?: () => void
+    __releaseIndependentHandler?: () => void
+  }
+  let markStarted: () => void = () => undefined
+  const started = new Promise<void>((resolve) => { markStarted = resolve })
+  globals.__markIndependentHandlerStarted = markStarted
+  const request = (id: number, invocation: BackendInvocation) => runtime.handleJsonRpcRequest({
+    jsonrpc: '2.0',
+    id,
+    method: 'plugin.backend.invoke',
+    params: { ...invocation, backendPath },
+  })
+  const blockingCall = request(1, blocking)
+  await started
+
+  const independentCall = request(2, independent)
+  let outcome: 'ready' | 'blocked'
+  let blockedTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    outcome = await Promise.race([
+      independentCall.then(() => 'ready' as const),
+      new Promise<'blocked'>((resolve) => {
+        blockedTimer = setTimeout(() => resolve('blocked'), 1_000)
+      }),
+    ])
+  } finally {
+    if (blockedTimer) clearTimeout(blockedTimer)
+    globals.__releaseIndependentHandler?.()
+    await expect(blockingCall).resolves.toEqual({ jsonrpc: '2.0', id: 1, result: 'released' })
+    await expect(independentCall).resolves.toEqual({ jsonrpc: '2.0', id: 2, result: 'pong' })
+    delete globals.__markIndependentHandlerStarted
+    delete globals.__releaseIndependentHandler
+  }
+
+  expect(outcome).toBe('ready')
+}
+
 describe('plugin-host backend concurrency', () => {
   it('keeps an active Project context while concurrent backend invocations omit projectId', async () => {
     const backendPath = await writeBackendModule(`
@@ -129,7 +188,7 @@ describe('plugin-host backend concurrency', () => {
     }
   })
 
-  it('serializes backend invocations for one plugin', async () => {
+  it('serializes repeated invocations of one backend method', async () => {
     const backendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
@@ -184,6 +243,20 @@ describe('plugin-host backend concurrency', () => {
       delete globals.__samePluginInvocationGate
       delete (globals as Partial<typeof globals>).__samePluginInvocationOrder
     }
+  })
+
+  it('does not let a long-running backend method block another method from the same plugin', async () => {
+    await expectIndependentBackendInvocations(
+      { pluginId: 'same-plugin', command: 'block' },
+      { pluginId: 'same-plugin', command: 'ping' },
+    )
+  })
+
+  it('keeps plugin and backend method identities distinct when serializing invocations', async () => {
+    await expectIndependentBackendInvocations(
+      { pluginId: 'a.b', command: 'c' },
+      { pluginId: 'a', command: 'b.c' },
+    )
   })
 
   it('does not let a long-running backend handler block another plugin invocation', async () => {
