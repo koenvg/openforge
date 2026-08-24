@@ -82,7 +82,7 @@ impl CompanionActionPaletteService for RecordingActionPalette {
         })
     }
 
-    fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
+    fn refresh_github(&self) -> CompanionActionPaletteFuture<'_> {
         Box::pin(async move {
             if let Some(error) = self.refresh_error {
                 return Err(error);
@@ -90,7 +90,7 @@ impl CompanionActionPaletteService for RecordingActionPalette {
             self.calls
                 .lock()
                 .expect("calls lock")
-                .push((project_id.to_string(), "refresh_github".to_string()));
+                .push(("global".to_string(), "refresh_github".to_string()));
             Ok(())
         })
     }
@@ -204,7 +204,7 @@ async fn project_actions_snapshot_advertises_only_supported_project_capabilities
 }
 
 #[tokio::test]
-async fn explicit_task_and_project_action_routes_dispatch_without_request_bodies() {
+async fn explicit_task_and_global_action_routes_dispatch_without_request_bodies() {
     let actions = Arc::new(RecordingActionPalette::default());
     let app = router(actions.clone());
     for (uri, task_id, action) in [
@@ -234,13 +234,20 @@ async fn explicit_task_and_project_action_routes_dispatch_without_request_bodies
     }
 
     let response = app
-        .oneshot(request("POST", "/companion/v1/projects/P-1/refresh-github"))
+        .clone()
+        .oneshot(request("POST", "/companion/v1/refresh-github"))
         .await
         .expect("router response");
     assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
     assert!(actions
         .calls()
-        .contains(&("P-1".to_string(), "refresh_github".to_string())));
+        .contains(&("global".to_string(), "refresh_github".to_string())));
+
+    let legacy_response = app
+        .oneshot(request("POST", "/companion/v1/projects/P-1/refresh-github"))
+        .await
+        .expect("legacy router response");
+    assert_eq!(legacy_response.status(), axum::http::StatusCode::NOT_FOUND,);
 }
 
 #[tokio::test]
@@ -274,7 +281,7 @@ async fn github_refresh_failures_return_typed_actionable_errors() {
 
     for (error, status, code, message) in cases {
         let response = router(Arc::new(RecordingActionPalette::with_refresh_error(error)))
-            .oneshot(request("POST", "/companion/v1/projects/P-1/refresh-github"))
+            .oneshot(request("POST", "/companion/v1/refresh-github"))
             .await
             .expect("router response");
 

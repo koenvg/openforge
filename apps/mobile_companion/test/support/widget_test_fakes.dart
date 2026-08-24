@@ -184,7 +184,7 @@ final class DomainCompanionClient implements CompanionClient {
     endpoint: trustRecord.endpointCandidates.single,
     status: HostStatus(
       hostId: trustRecord.hostId,
-      protocolVersion: 2,
+      protocolVersion: 3,
       serverTime: DateTime.utc(2026, 7, 30),
     ),
   );

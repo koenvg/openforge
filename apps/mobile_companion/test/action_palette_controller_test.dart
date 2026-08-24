@@ -134,11 +134,8 @@ final class _Client
   }
 
   @override
-  Future<void> refreshProjectGithub(
-    CompanionTrustRecord trustRecord,
-    String projectId,
-  ) async {
-    calls.add('refresh-github:$projectId');
+  Future<void> refreshGithub(CompanionTrustRecord trustRecord) async {
+    calls.add('refresh-github');
     final error = projectGithubRefreshError;
     if (error != null) {
       throw error;
@@ -220,7 +217,7 @@ void main() {
   );
 
   test(
-    'refreshProjectGithub dispatches once and refreshes authoritative state',
+    'refreshGithub dispatches once and refreshes authoritative state',
     () async {
       final client = _Client();
       var refreshes = 0;
@@ -232,9 +229,9 @@ void main() {
         onRefresh: () async => refreshes += 1,
       );
 
-      await controller.refreshProjectGithub('P-1');
+      await controller.refreshGithub();
 
-      expect(client.calls, <String>['refresh-github:P-1']);
+      expect(client.calls, <String>['refresh-github']);
       expect(refreshes, 1);
     },
   );
@@ -293,7 +290,7 @@ void main() {
   );
 
   test(
-    'refreshProjectGithub reports unauthenticated access without refreshing',
+    'refreshGithub reports unauthenticated access without refreshing',
     () async {
       const error = CompanionV1Exception(
         statusCode: 401,
@@ -312,40 +309,31 @@ void main() {
         onAuthorizationLost: () => authorizationLosses += 1,
       );
 
-      await expectLater(
-        controller.refreshProjectGithub('P-1'),
-        throwsA(same(error)),
-      );
+      await expectLater(controller.refreshGithub(), throwsA(same(error)));
 
       expect(refreshes, 0);
       expect(authorizationLosses, 1);
     },
   );
 
-  test(
-    'refreshProjectGithub refreshes before rethrowing other failures',
-    () async {
-      const error = CompanionV1Exception(
-        statusCode: 503,
-        code: 'temporarily_unavailable',
-        message: 'GitHub is temporarily unavailable.',
-      );
-      final client = _Client()..projectGithubRefreshError = error;
-      var refreshes = 0;
-      final controller = MobileActionPaletteController(
-        taskClient: client,
-        completionClient: client,
-        paletteClient: client,
-        storage: _Storage(),
-        onRefresh: () async => refreshes += 1,
-      );
+  test('refreshGithub refreshes before rethrowing other failures', () async {
+    const error = CompanionV1Exception(
+      statusCode: 503,
+      code: 'temporarily_unavailable',
+      message: 'GitHub is temporarily unavailable.',
+    );
+    final client = _Client()..projectGithubRefreshError = error;
+    var refreshes = 0;
+    final controller = MobileActionPaletteController(
+      taskClient: client,
+      completionClient: client,
+      paletteClient: client,
+      storage: _Storage(),
+      onRefresh: () async => refreshes += 1,
+    );
 
-      await expectLater(
-        controller.refreshProjectGithub('P-1'),
-        throwsA(same(error)),
-      );
+    await expectLater(controller.refreshGithub(), throwsA(same(error)));
 
-      expect(refreshes, 1);
-    },
-  );
+    expect(refreshes, 1);
+  });
 }

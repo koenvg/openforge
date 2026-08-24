@@ -142,11 +142,8 @@ final class _WidgetClient
   ) async => actionRequests.add('set-aside:$taskId');
 
   @override
-  Future<void> refreshProjectGithub(
-    CompanionTrustRecord trustRecord,
-    String projectId,
-  ) async {
-    actionRequests.add('refresh-github:$projectId');
+  Future<void> refreshGithub(CompanionTrustRecord trustRecord) async {
+    actionRequests.add('refresh-github');
     if (githubRefreshError case final Object error) throw error;
   }
 
@@ -676,7 +673,7 @@ void main() {
       expect(find.text('Refresh GitHub'), findsOneWidget);
       await tester.tap(find.text('Refresh GitHub'));
       await tester.pumpAndSettle();
-      expect(client.actionRequests, <String>['refresh-github:P-1']);
+      expect(client.actionRequests, <String>['refresh-github']);
 
       await tester.tap(find.byTooltip('Actions for Focus Task'));
       await tester.pumpAndSettle();

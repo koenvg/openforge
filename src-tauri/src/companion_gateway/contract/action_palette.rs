@@ -44,10 +44,7 @@ pub(super) fn routes() -> Router<CompanionRouterState> {
             "/companion/v1/projects/:project_id/actions",
             get(project_actions_handler),
         )
-        .route(
-            "/companion/v1/projects/:project_id/refresh-github",
-            post(refresh_github_handler),
-        )
+        .route("/companion/v1/refresh-github", post(refresh_github_handler))
         .route_layer(middleware::from_fn(record_task_action))
 }
 
@@ -125,7 +122,6 @@ task_action_handler!(run_app_handler, CompanionTaskActionId::RunApp);
 
 async fn refresh_github_handler(
     State(state): State<CompanionRouterState>,
-    Path(project_id): Path<String>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
@@ -139,7 +135,7 @@ async fn refresh_github_handler(
             "Companion GitHub refresh does not accept a request body",
         );
     }
-    match state.action_palette.refresh_github(&project_id).await {
+    match state.action_palette.refresh_github().await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => action_error_response(error),
     }

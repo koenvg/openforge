@@ -17,7 +17,7 @@ const _fingerprint =
 const _secret = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ';
 
 String get _qrPayload =>
-    '{"protocolVersion":2,"hostId":"$_hostId",'
+    '{"protocolVersion":3,"hostId":"$_hostId",'
     '"certificateSha256":"$_fingerprint",'
     '"endpointCandidates":["https://192.168.1.20:17424"],'
     '"oneTimeSecret":"$_secret"}';
@@ -47,7 +47,7 @@ final class _FakeClient implements CompanionClient {
   );
   HostStatus hostStatus = HostStatus(
     hostId: _hostId,
-    protocolVersion: 2,
+    protocolVersion: 3,
     serverTime: DateTime.utc(2026, 7, 30),
   );
   String? submittedDeviceName;
@@ -217,7 +217,7 @@ void main() {
       expect(storage.record?.deviceCredential, 'credential-1');
       final connected = controller.state as Connected;
       expect(connected.hostId, _hostId);
-      expect(connected.protocolVersion, 2);
+      expect(connected.protocolVersion, 3);
     },
   );
 
@@ -345,7 +345,7 @@ void main() {
       final client = _FakeClient()
         ..hostStatus = HostStatus(
           hostId: 'different-host',
-          protocolVersion: 2,
+          protocolVersion: 3,
           serverTime: DateTime.utc(2026, 7, 30),
         );
       final storage = _FakeStorage();

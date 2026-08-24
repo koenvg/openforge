@@ -6,9 +6,9 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '2a1363661cff7ebcbaa21dd3c595b35ed57c80beac77d726324badf575acd909';
+    '30111970216497a292f9be125dbca013ccc99d245437f2d5562c552928265a50';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
-const companionV1ProtocolVersion = '2';
+const companionV1ProtocolVersion = '3';
 
 abstract interface class CompanionV1Transport {
   Future<CompanionV1HttpResponse> send({
@@ -531,7 +531,7 @@ final class HostStatus {
     _expectOnly(json, const <String>{'hostId', 'protocolVersion', 'serverTime'});
     final model = HostStatus(
       hostId: _required(json, 'hostId', (value) => _asString(value, 'hostId')),
-      protocolVersion: _required(json, 'protocolVersion', (value) => _asInt(value, 'protocolVersion', constant: 2)),
+      protocolVersion: _required(json, 'protocolVersion', (value) => _asInt(value, 'protocolVersion', constant: 3)),
       serverTime: _required(json, 'serverTime', (value) => _asDateTime(value, 'serverTime')),
     );
     return model;
@@ -1531,13 +1531,12 @@ final class CompanionV1Client {
     );
   }
 
-  Future<void> refreshCompanionProjectGithub({
-    required String projectId,
+  Future<void> refreshCompanionGithub({
     required String credential,
   }) async {
     final response = await transport.send(
       method: 'POST',
-      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/refresh-github'),
+      uri: baseUrl.resolve('/companion/v1/refresh-github'),
       headers: <String, String>{
       'authorization': 'Bearer $credential',
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,

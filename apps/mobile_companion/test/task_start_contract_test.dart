@@ -87,7 +87,7 @@ void main() {
             .requests
             .single
             .headers['openforge-companion-protocol-version'],
-        '2',
+        '3',
       );
     },
   );

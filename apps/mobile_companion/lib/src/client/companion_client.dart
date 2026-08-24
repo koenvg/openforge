@@ -125,10 +125,7 @@ abstract interface class CompanionActionPaletteClient {
     String taskId,
   );
   Future<void> runTaskApp(CompanionTrustRecord trustRecord, String taskId);
-  Future<void> refreshProjectGithub(
-    CompanionTrustRecord trustRecord,
-    String projectId,
-  );
+  Future<void> refreshGithub(CompanionTrustRecord trustRecord);
 }
 
 final class GeneratedCompanionClient
@@ -412,16 +409,13 @@ final class GeneratedCompanionClient
       );
 
   @override
-  Future<void> refreshProjectGithub(
-    CompanionTrustRecord trustRecord,
-    String projectId,
-  ) => _singleAttemptMutation(
-    trustRecord,
-    (client) => client.refreshCompanionProjectGithub(
-      projectId: projectId,
-      credential: trustRecord.deviceCredential,
-    ),
-  );
+  Future<void> refreshGithub(CompanionTrustRecord trustRecord) =>
+      _singleAttemptMutation(
+        trustRecord,
+        (client) => client.refreshCompanionGithub(
+          credential: trustRecord.deviceCredential,
+        ),
+      );
   @override
   Future<TaskCompleteResult> completeTask(
     CompanionTrustRecord trustRecord,

@@ -118,11 +118,9 @@ final class MobileActionPaletteController {
     });
   }
 
-  Future<void> refreshProjectGithub(String projectId) async {
+  Future<void> refreshGithub() async {
     final trustRecord = await _trustRecord();
-    await _runMutation(
-      () => _paletteClient.refreshProjectGithub(trustRecord, projectId),
-    );
+    await _runMutation(() => _paletteClient.refreshGithub(trustRecord));
   }
 
   Future<void> _runMutation(Future<void> Function() mutation) async {

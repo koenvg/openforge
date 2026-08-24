@@ -111,7 +111,7 @@ void main() {
       expect(encodedContract, contains('mergeCompanionTaskPullRequest'));
       expect(encodedContract, contains('enqueueCompanionTaskPullRequest'));
       expect(encodedContract, contains('runCompanionTaskApp'));
-      expect(encodedContract, contains('refreshCompanionProjectGithub'));
+      expect(encodedContract, contains('refreshCompanionGithub'));
       final paths = contract['paths']! as Map<String, Object?>;
       expect(
         paths.keys,
@@ -134,7 +134,7 @@ void main() {
           '/tasks/{taskId}/enqueue',
           '/tasks/{taskId}/run-app',
           '/projects/{projectId}/actions',
-          '/projects/{projectId}/refresh-github',
+          '/refresh-github',
           '/events',
         ]),
       );
@@ -274,7 +274,7 @@ void main() {
       );
 
       expect(status.hostId, '65d91f21-6732-45a6-9418-3dfaf4c93f52');
-      expect(status.protocolVersion, 2);
+      expect(status.protocolVersion, 3);
       expect(attention.items.single.taskId, 'KVG-2945');
       expect(attention.items.single.projectName, 'OpenForge');
       expect(attention.items.single.state, 'needs-input');
@@ -315,7 +315,7 @@ void main() {
       );
       expect(
         transport.requests[2].headers['openforge-companion-protocol-version'],
-        '2',
+        '3',
       );
       expect(transport.requests[3].uri.path, '/companion/v1/attention');
       expect(
@@ -324,7 +324,7 @@ void main() {
       );
       expect(
         transport.requests[3].headers['openforge-companion-protocol-version'],
-        '2',
+        '3',
       );
       expect(transport.requests[4].method, 'POST');
       expect(
@@ -345,7 +345,7 @@ void main() {
       );
       expect(
         transport.requests[5].headers['openforge-companion-protocol-version'],
-        '2',
+        '3',
       );
       expect(transport.requests[6].method, 'POST');
       expect(
@@ -366,7 +366,7 @@ void main() {
       expect(eventRequest.headers, <String, String>{
         'accept': 'text/event-stream',
         'authorization': 'Bearer BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'openforge-companion-protocol-version': '2',
+        'openforge-companion-protocol-version': '3',
         'last-event-id': 'epoch:12',
       });
       expect(
@@ -374,6 +374,31 @@ void main() {
         isNot(contains('last-event-id')),
       );
       expect(transport.requests, hasLength(8));
+    },
+  );
+
+  test(
+    'generated GitHub refresh uses the global route and explicit authorization',
+    () async {
+      final transport = _RecordingTransport()
+        ..responses = <CompanionV1HttpResponse>[
+          CompanionV1HttpResponse(statusCode: 204, body: '{}'),
+        ];
+      final client = CompanionV1Client(
+        baseUrl: Uri.parse('https://desktop.local'),
+        transport: transport,
+      );
+
+      await client.refreshCompanionGithub(credential: 'credential-1');
+
+      final request = transport.requests.single;
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/companion/v1/refresh-github');
+      expect(request.headers, <String, String>{
+        'authorization': 'Bearer credential-1',
+        'openforge-companion-protocol-version': '3',
+      });
+      expect(request.body, isNull);
     },
   );
 
@@ -395,7 +420,7 @@ void main() {
     expect(
       () => HostStatus.fromJson(<String, Object?>{
         'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-        'protocolVersion': 2,
+        'protocolVersion': 3,
         'serverTime': '2026-07-30T12:00:01Z',
         'unexpected': true,
       }),
@@ -606,7 +631,7 @@ void main() {
             const CompanionV1HttpResponse(
               statusCode: 200,
               body:
-                  '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":2,"serverTime":"2026-08-01T12:00:00Z"}',
+                  '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":3,"serverTime":"2026-08-01T12:00:00Z"}',
             ),
             const SocketException('uncertain mutation outcome'),
           ],
@@ -713,7 +738,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode(<String, Object>{
               'hostId': '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-              'protocolVersion': 2,
+              'protocolVersion': 3,
               'serverTime': '2026-07-30T12:00:01Z',
             }),
           ),
@@ -785,7 +810,7 @@ void main() {
       const hostStatusResponse = CompanionV1HttpResponse(
         statusCode: 200,
         body:
-            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":2,"serverTime":"2026-08-01T09:00:00Z"}',
+            '{"hostId":"65d91f21-6732-45a6-9418-3dfaf4c93f52","protocolVersion":3,"serverTime":"2026-08-01T09:00:00Z"}',
       );
       final outcomes = <String, Object>{
         '192.168.1.20': never,
@@ -813,7 +838,7 @@ void main() {
         },
       );
       final bootstrap = PairingBootstrap(
-        protocolVersion: 2,
+        protocolVersion: 3,
         hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
         certificateSha256: 'trusted-pin',
         endpointCandidates: <Uri>[
