@@ -1630,7 +1630,8 @@ var TestingOpenForgeRegistryFake = class {
 			pluginId: this.pluginId,
 			apiVersion: 1,
 			packageMetadata: this.packageMetadata,
-			subscriptions
+			subscriptions,
+			onDidChange: () => ({ dispose: () => void 0 })
 		};
 	}
 };

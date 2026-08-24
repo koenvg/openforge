@@ -138,6 +138,7 @@ export interface OpenForgeContextSnapshot {
   taskId?: string | null
 }
 
+export type OpenForgeContextChangeHandler = (snapshot: OpenForgeContextSnapshot) => MaybePromise<void>
 export interface OpenForgeNavigationSnapshot {
   activeProjectId: string | null
   currentView: string
@@ -175,6 +176,7 @@ export interface OpenForgePluginContext {
   apiVersion: SupportedOpenForgeApiVersion
   packageMetadata: OpenForgePackageMetadata
   subscriptions: SubscriptionSink
+  onDidChange(handler: OpenForgeContextChangeHandler): Disposable
 }
 
 export type FrontendPluginContext = OpenForgePluginContext

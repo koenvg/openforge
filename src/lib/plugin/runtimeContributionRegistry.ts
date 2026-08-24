@@ -177,6 +177,12 @@ class RuntimeContributionRegistry {
     return { ...this.contextSnapshot }
   }
 
+  async publishContextChange(projectId: string | null): Promise<void> {
+    this.services.updateProjectId(projectId)
+    this.contextSnapshot.projectId = projectId
+    await this.commonApi.publishContextChange(this.getContextSnapshot())
+  }
+
   createRenderContextSnapshot(projectId: string | null, taskId: string | null): OpenForgeContextSnapshot {
     return {
       ...this.contextSnapshot,
@@ -191,6 +197,7 @@ class RuntimeContributionRegistry {
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions: this.frontendSubscriptions,
+      onDidChange: handler => this.commonApi.subscribeToContextChanges(handler),
     }
   }
 
@@ -200,6 +207,7 @@ class RuntimeContributionRegistry {
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions: this.backendSubscriptions,
+      onDidChange: handler => this.commonApi.subscribeToContextChanges(handler),
     }
   }
 

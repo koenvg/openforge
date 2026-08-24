@@ -172,10 +172,13 @@ interface OpenForgePluginContext {
   apiVersion: SupportedOpenForgeApiVersion
   packageMetadata: OpenForgePackageMetadata
   subscriptions: SubscriptionSink
+  onDidChange(handler: (snapshot: OpenForgeContextSnapshot) => MaybePromise<void>): Disposable
 }
 ```
 
 Use `context.subscriptions.add(...)` for disposables or cleanup functions returned by registrations. OpenForge can then dispose plugin-owned contributions when the plugin is deactivated.
+
+`context.onDidChange(...)` runs after OpenForge applies a Project context transition to a retained plugin. The handler receives the applied `OpenForgeContextSnapshot`. Rapid Project selections are coalesced, so skipped Projects do not produce notifications. Add the returned disposable to `context.subscriptions` when the subscription should live until plugin deactivation.
 
 `SupportedOpenForgeApiVersion` is currently `1`. The root export also exposes:
 

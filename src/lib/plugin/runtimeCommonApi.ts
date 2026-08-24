@@ -6,6 +6,8 @@ import type {
   Disposable,
   JsonValue,
   OpenForgeCommonAPI,
+  OpenForgeContextChangeHandler,
+  OpenForgeContextSnapshot,
   PluginCommandInvocationContext,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
@@ -96,6 +98,7 @@ export class RuntimeCommonApiRegistry {
   private readonly eventHandlers = new Map<string, Set<RuntimeEventHandler>>()
   private readonly commands = new Map<string, RuntimeCommandContribution>()
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
+  private readonly contextChangeHandlers = new Set<OpenForgeContextChangeHandler>()
   private eventListenerSequence = 0
 
   constructor(private readonly services: RuntimeRegistryServices) {}
@@ -206,6 +209,18 @@ export class RuntimeCommonApiRegistry {
     }
   }
 
+  async publishContextChange(snapshot: OpenForgeContextSnapshot): Promise<void> {
+    let firstError: unknown = null
+    for (const handler of Array.from(this.contextChangeHandlers)) {
+      try {
+        await handler({ ...snapshot })
+      } catch (error) {
+        firstError ??= error
+      }
+    }
+    if (firstError) throw firstError
+  }
+
   getSnapshot(): {
     commands: RuntimeCommandContribution[]
     eventListeners: RuntimeEventListenerContribution[]
@@ -233,6 +248,16 @@ export class RuntimeCommonApiRegistry {
     }
     return this.invokeRegisteredCommand(command, payload, context)
   }
+  subscribeToContextChanges(handler: OpenForgeContextChangeHandler): Disposable {
+    if (typeof handler !== 'function') {
+      throw new Error('context.onDidChange requires a handler function')
+    }
+    this.contextChangeHandlers.add(handler)
+    return this.services.trackDisposable(createDisposable(() => {
+      this.contextChangeHandlers.delete(handler)
+    }))
+  }
+
   private registerCommand(registration: Parameters<FrontendOpenForgeAPI['commands']['register']>[0]): Disposable {
     const qualifiedId = this.services.qualifiedId('commands', registration?.id)
     assertTitle('commands', registration?.title)

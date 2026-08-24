@@ -3,7 +3,7 @@ import type { PluginStorage } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI, BackendPlugin, BackendPluginContext } from '@openforge-app/plugin-sdk/backend'
 import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
 import type { ContributionRegistry } from './contribution-registry'
-import { createDefaultPackageMetadata, createInitialPluginState, RuntimeSubscriptionSink } from './runtime-state'
+import { createDefaultPackageMetadata, createDisposable, createInitialPluginState, RuntimeSubscriptionSink } from './runtime-state'
 import { createHostStorage, createMemoryStorage } from './storage'
 import type {
   ActivateBackendInput,
@@ -152,7 +152,11 @@ export class BackendLifecycle {
       && input.backendPath
       && state.backendPath === input.backendPath
     ) {
-      state.projectId = input.projectId ?? null
+      const projectId = input.projectId ?? null
+      if (state.projectId !== projectId) {
+        state.projectId = projectId
+        await this.publishContextChange(state)
+      }
       return this.snapshot(input.pluginId)
     }
 
@@ -194,6 +198,19 @@ export class BackendLifecycle {
     }
 
     throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+  }
+
+  private async publishContextChange(state: RuntimePluginState): Promise<void> {
+    const snapshot = { pluginId: state.pluginId, projectId: state.projectId }
+    let firstError: unknown = null
+    for (const handler of Array.from(state.contextChangeHandlers)) {
+      try {
+        await handler({ ...snapshot })
+      } catch (error) {
+        firstError ??= error
+      }
+    }
+    if (firstError) throw firstError
   }
 
   snapshot(pluginId: string): BackendStateSnapshot {
@@ -303,6 +320,7 @@ export class BackendLifecycle {
     subscriptions: RuntimePluginState['subscriptions'] = state.subscriptions,
   ): Promise<void> {
     await subscriptions.disposeAll()
+    state.contextChangeHandlers.clear()
 
     const services = Array.from(state.backgroundServices.values()).reverse()
     for (const service of services) {
@@ -358,6 +376,15 @@ export class BackendLifecycle {
       apiVersion: 1,
       packageMetadata: state.packageMetadata,
       subscriptions: state.subscriptions,
+      onDidChange: (handler) => {
+        if (typeof handler !== 'function') {
+          throw new Error('context.onDidChange requires a handler function')
+        }
+        state.contextChangeHandlers.add(handler)
+        return createDisposable(() => {
+          state.contextChangeHandlers.delete(handler)
+        })
+      },
     }
   }
 }

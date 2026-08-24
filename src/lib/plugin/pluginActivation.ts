@@ -276,6 +276,13 @@ export function getActivePluginRuntimeRegistry(
   return activeRuntimeRegistries.get(pluginId)
 }
 
+export async function publishPluginContextChange(
+  pluginId: string,
+  projectId: string | null,
+): Promise<void> {
+  await activeRuntimeRegistries.get(pluginId)?.publishContextChange(projectId)
+}
+
 export function _resetPluginActivationLifecycleForTests(): void {
   activationPromises.clear()
   activeRuntimeRegistries.clear()

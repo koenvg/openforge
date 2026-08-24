@@ -50,6 +50,7 @@ describe('pluginRegistry app enablement', () => {
 
   it('activates once without a Project, survives Project changes, receives current context, and disposes once', async () => {
     const View = vi.fn() as never
+    const contextChanges: Array<string | null> = []
     const frontendPlugin = defineFrontendPlugin({
       activate(openforge, context) {
         context.subscriptions.add(openforge.views.register({
@@ -58,6 +59,9 @@ describe('pluginRegistry app enablement', () => {
           icon: 'chart-column-big',
           placement: 'sidebar',
           component: View,
+        }))
+        context.subscriptions.add(context.onDidChange((snapshot) => {
+          contextChanges.push(snapshot.projectId)
         }))
       },
     })
@@ -108,6 +112,15 @@ describe('pluginRegistry app enablement', () => {
     const renderProps = getPluginRenderProps('account-usage', { projectId: 'project-2' })
     expect(renderProps.context.projectId).toBe('project-2')
     expect(renderProps.api.context.getSnapshot().projectId).toBe('project-2')
+    expect(contextChanges).toEqual(['project-1', 'project-2'])
+
+    activeProjectId.set(null)
+    await registryLoadEnabledForProject(null)
+
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledTimes(4)
+    expect(pluginBackendWhenReadyMock).toHaveBeenLastCalledWith('account-usage', null, true)
+    expect(get(runtimeContributionSources).get('account-usage')?.views).toHaveLength(1)
+    expect(contextChanges).toEqual(['project-1', 'project-2', null])
 
     await disablePluginForApp('account-usage')
 

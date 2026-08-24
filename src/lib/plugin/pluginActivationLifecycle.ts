@@ -2,6 +2,7 @@ export {
   _resetPluginActivationLifecycleForTests,
   activatePlugin,
   deactivatePluginById,
+  publishPluginContextChange,
 } from './pluginActivation'
 export { executePluginCommand } from './pluginCommandExecution'
 export {

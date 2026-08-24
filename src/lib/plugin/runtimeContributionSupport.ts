@@ -195,7 +195,7 @@ type RuntimeRegistryServicesOptions = RuntimeOptions & {
 
 export class RuntimeRegistryServices {
   readonly pluginId: string
-  readonly projectId: string | null
+  projectId: string | null
   readonly packageMetadata: RuntimeOptions['packageMetadata']
   readonly host: RuntimeHostBridge
   readonly storage: PluginStorage
@@ -211,6 +211,10 @@ export class RuntimeRegistryServices {
     this.storage = options.storage ?? createMemoryStorage()
     this.claims = options.claims ?? new RuntimeContributionClaims()
     this.disposableTracker = options.trackDisposable ?? ((disposable) => disposable)
+  }
+
+  updateProjectId(projectId: string | null): void {
+    this.projectId = projectId
   }
 
   qualifiedId(kind: RuntimeKind, localId: string): string {

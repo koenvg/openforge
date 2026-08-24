@@ -144,6 +144,7 @@ export class TestingOpenForgeRegistryFake {
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions,
+      onDidChange: () => ({ dispose: () => undefined }),
     }
   }
 }
