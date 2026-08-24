@@ -79,7 +79,7 @@ describe('package build scripts', () => {
       'utf8',
     )
 
-    expect(sdkPackage.version).toBe('0.2.4')
+    expect(sdkPackage.version).toBe('0.2.5')
     expect(sdkPackage.repository).toEqual({
       type: 'git',
       url: 'https://github.com/koenvg/openforge.git',
