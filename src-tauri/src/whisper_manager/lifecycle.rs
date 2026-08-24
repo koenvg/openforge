@@ -18,6 +18,9 @@ impl WhisperManager {
     pub fn with_active_model(size: WhisperModelSize) -> Self {
         Self {
             context: Arc::new(IdleResource::new(WHISPER_IDLE_TIMEOUT)),
+            transcription_admission: Arc::new(tokio::sync::Semaphore::new(
+                super::MAX_CONCURRENT_TRANSCRIPTIONS,
+            )),
             active_model: std::sync::RwLock::new(size),
             client: Client::new(),
             idle_reaper: std::sync::Mutex::new(None),

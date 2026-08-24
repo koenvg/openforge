@@ -26,6 +26,34 @@ impl WhisperManager {
         manager
     }
 
+    /// Run one transcription without occupying Tokio's blocking pool while waiting for capacity.
+    ///
+    /// Only one Whisper inference runs at a time. Requests waiting for admission are async and
+    /// can be cancelled without spawning blocking work. Once admitted, inference cannot be
+    /// aborted; it retains the admission permit until the blocking operation finishes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors documented by [`Self::transcribe`], or [`WhisperError::WorkerError`]
+    /// if admission closes or the blocking task cannot complete.
+    pub async fn transcribe_async(
+        self: &std::sync::Arc<Self>,
+        audio_data: Vec<f32>,
+    ) -> Result<TranscriptionResult, WhisperError> {
+        let admission = std::sync::Arc::clone(&self.transcription_admission)
+            .acquire_owned()
+            .await
+            .map_err(|error| WhisperError::WorkerError(error.to_string()))?;
+        let manager = std::sync::Arc::clone(self);
+
+        tokio::task::spawn_blocking(move || {
+            let _admission = admission;
+            manager.transcribe(&audio_data)
+        })
+        .await
+        .map_err(|error| WhisperError::WorkerError(error.to_string()))?
+    }
+
     /// Transcribe 16 kHz mono f32 PCM audio data to text.
     ///
     /// Lazily loads the active model on first use.

@@ -209,3 +209,190 @@ async fn transcription_inference_runs_off_the_tokio_request_executor() {
     assert_ne!(inference_thread, request_thread);
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn queued_transcriptions_do_not_consume_tokio_blocking_threads() {
+    const REQUEST_COUNT: usize = 8;
+
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
+    let (result_tx, result_rx) = std::sync::mpsc::channel();
+    let active_transcriptions = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let active_transcriptions_for_inference = std::sync::Arc::clone(&active_transcriptions);
+    let max_active_transcriptions = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let max_active_transcriptions_for_inference = std::sync::Arc::clone(&max_active_transcriptions);
+    let transcription_started = std::sync::Arc::new(tokio::sync::Notify::new());
+    let transcription_started_for_inference = std::sync::Arc::clone(&transcription_started);
+
+    let worker = std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(2)
+            .build()
+            .expect("test runtime should build");
+        runtime.block_on(async move {
+            let (mut state, path) = test_state("app_invoke_whisper_bounded_admission");
+            state.whisper = Some(std::sync::Arc::new(
+                crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
+                    crate::whisper_manager::WhisperModelSize::Small,
+                    move |_| {
+                        let active = active_transcriptions_for_inference
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                            + 1;
+                        max_active_transcriptions_for_inference
+                            .fetch_max(active, std::sync::atomic::Ordering::SeqCst);
+                        transcription_started_for_inference.notify_one();
+                        release_rx
+                            .lock()
+                            .expect("lock Whisper release receiver")
+                            .recv()
+                            .expect("release blocking Whisper work");
+                        active_transcriptions_for_inference
+                            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok(crate::whisper_manager::TranscriptionResult {
+                            text: "test transcript".to_string(),
+                            duration_ms: 0,
+                        })
+                    },
+                ),
+            ));
+            let state = std::sync::Arc::new(state);
+
+            let mut transcriptions = Vec::with_capacity(REQUEST_COUNT);
+            for _ in 0..REQUEST_COUNT {
+                let state = std::sync::Arc::clone(&state);
+                let mut transcription = Box::pin(async move {
+                    invoke(
+                        &state,
+                        "transcribe_audio",
+                        json!({ "audioPcmBase64": "AAAAAA==" }),
+                    )
+                    .await
+                });
+                assert!(matches!(
+                    futures::poll!(&mut transcription),
+                    std::task::Poll::Pending
+                ));
+                transcriptions.push(transcription);
+            }
+
+            transcription_started.notified().await;
+            let unrelated =
+                tokio::time::timeout(CONCURRENCY_TEST_TIMEOUT, tokio::task::spawn_blocking(|| 42))
+                    .await;
+            result_tx
+                .send(matches!(unrelated, Ok(Ok(42))))
+                .expect("report unrelated blocking result");
+
+            for transcription in transcriptions {
+                transcription.await.expect("transcription should succeed");
+            }
+            let _ = std::fs::remove_file(path);
+        });
+    });
+
+    let unrelated_completed = result_rx
+        .recv_timeout(CONCURRENCY_TEST_TIMEOUT)
+        .expect("unrelated blocking result should arrive");
+    for _ in 0..REQUEST_COUNT {
+        release_tx
+            .send(())
+            .expect("release blocking Whisper operation");
+    }
+    worker.join().expect("test runtime thread should join");
+
+    assert!(
+        unrelated_completed,
+        "queued transcriptions must not occupy Tokio blocking threads"
+    );
+    assert_eq!(
+        max_active_transcriptions.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "only one Whisper inference may run at a time"
+    );
+}
+
+#[test]
+fn cancelling_queued_transcription_does_not_start_inference() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .expect("test runtime should build");
+    runtime.block_on(async {
+        let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let call_count_for_inference = std::sync::Arc::clone(&call_count);
+        let first_started = std::sync::Arc::new(tokio::sync::Notify::new());
+        let first_started_for_inference = std::sync::Arc::clone(&first_started);
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
+
+        let (mut state, path) = test_state("app_invoke_whisper_cancelled_admission");
+        state.whisper = Some(std::sync::Arc::new(
+            crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
+                crate::whisper_manager::WhisperModelSize::Small,
+                move |_| {
+                    call_count_for_inference.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    first_started_for_inference.notify_one();
+                    release_rx
+                        .lock()
+                        .expect("lock Whisper release receiver")
+                        .recv()
+                        .expect("release blocking Whisper work");
+                    Ok(crate::whisper_manager::TranscriptionResult {
+                        text: "test transcript".to_string(),
+                        duration_ms: 0,
+                    })
+                },
+            ),
+        ));
+        let state = std::sync::Arc::new(state);
+
+        let first_state = std::sync::Arc::clone(&state);
+        let first = tokio::spawn(async move {
+            invoke(
+                &first_state,
+                "transcribe_audio",
+                json!({ "audioPcmBase64": "AAAAAA==" }),
+            )
+            .await
+        });
+        first_started.notified().await;
+
+        let queued_state = std::sync::Arc::clone(&state);
+        let mut queued = Box::pin(async move {
+            invoke(
+                &queued_state,
+                "transcribe_audio",
+                json!({ "audioPcmBase64": "AAAAAA==" }),
+            )
+            .await
+        });
+        assert!(matches!(
+            futures::poll!(&mut queued),
+            std::task::Poll::Pending
+        ));
+        drop(queued);
+
+        release_tx
+            .send(())
+            .expect("release active Whisper operation");
+        first
+            .await
+            .expect("active transcription task should join")
+            .expect("active transcription should succeed");
+        release_tx
+            .send(())
+            .expect("allow incorrectly admitted work to finish");
+        tokio::task::spawn_blocking(|| {})
+            .await
+            .expect("blocking work queued after cancellation should finish");
+
+        assert_eq!(
+            call_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "cancelled queued request must not start Whisper inference"
+        );
+        let _ = std::fs::remove_file(path);
+    });
+}

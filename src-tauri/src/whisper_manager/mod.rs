@@ -14,6 +14,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::sync::{Arc, Mutex, RwLock};
 
+const MAX_CONCURRENT_TRANSCRIPTIONS: usize = 1;
+
 use lifecycle::LoadedWhisperContext;
 // Preserve the command-facing facade while implementations live in focused modules.
 #[allow(unused_imports)]
@@ -40,6 +42,8 @@ pub enum WhisperError {
     InferenceError(String),
     /// Loading the WhisperContext from the model file failed.
     ContextLoadError(String),
+    /// The blocking transcription task could not complete.
+    WorkerError(String),
 }
 
 impl fmt::Display for WhisperError {
@@ -64,6 +68,9 @@ impl fmt::Display for WhisperError {
             WhisperError::ContextLoadError(msg) => {
                 write!(f, "Failed to load Whisper context: {}", msg)
             }
+            WhisperError::WorkerError(msg) => {
+                write!(f, "Transcription worker failed: {}", msg)
+            }
         }
     }
 }
@@ -73,6 +80,7 @@ impl StdError for WhisperError {}
 /// Manages the selected Whisper model, its download, and its lazy inference context.
 pub struct WhisperManager {
     context: Arc<IdleResource<LoadedWhisperContext>>,
+    transcription_admission: Arc<tokio::sync::Semaphore>,
     active_model: RwLock<WhisperModelSize>,
     client: Client,
     idle_reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
