@@ -743,6 +743,15 @@ impl PtyManager {
             )
             .await
         {
+            if let Some(stale_last_output) = &last_output_time {
+                let mut times = self.last_output.lock().await;
+                if times
+                    .get(task_id)
+                    .is_some_and(|stored| Arc::ptr_eq(stored, stale_last_output))
+                {
+                    times.remove(task_id);
+                }
+            }
             let mut buffers = self.output_buffers.lock().await;
             if buffers
                 .get(task_id)
@@ -1387,6 +1396,59 @@ mod tests {
 
         drop(older_lock);
         drop(newer_lock);
+    }
+
+    #[tokio::test]
+    async fn stale_agent_stream_registration_removes_its_last_output_tracking() {
+        let manager = PtyManager::new();
+        let task_id = "stale-stream-registration";
+        let (stale_token, _) = manager.begin_agent_spawn(task_id, "Stale").await;
+        let _ = manager.begin_agent_spawn(task_id, "Newer").await;
+        let stale_last_output = Arc::new(AtomicU64::new(0));
+        manager
+            .last_output
+            .lock()
+            .await
+            .insert(task_id.to_string(), Arc::clone(&stale_last_output));
+
+        let result = manager
+            .register_agent_stream_state(task_id, stale_token, 1, Some(stale_last_output))
+            .await;
+
+        assert!(result.is_err());
+        assert!(
+            !manager.last_output.lock().await.contains_key(task_id),
+            "superseded stream registration should remove its last-output tracking"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_agent_stream_registration_preserves_newer_last_output_tracking() {
+        let manager = PtyManager::new();
+        let task_id = "newer-stream-registration";
+        let (stale_token, _) = manager.begin_agent_spawn(task_id, "Stale").await;
+        let _ = manager.begin_agent_spawn(task_id, "Newer").await;
+        let newer_last_output = Arc::new(AtomicU64::new(0));
+        manager
+            .last_output
+            .lock()
+            .await
+            .insert(task_id.to_string(), Arc::clone(&newer_last_output));
+
+        let result = manager
+            .register_agent_stream_state(task_id, stale_token, 1, Some(Arc::new(AtomicU64::new(0))))
+            .await;
+
+        assert!(result.is_err());
+        assert!(
+            manager
+                .last_output
+                .lock()
+                .await
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &newer_last_output)),
+            "superseded stream registration should preserve newer last-output tracking"
+        );
     }
 
     #[tokio::test]
