@@ -22,6 +22,17 @@ impl PullRequestReadinessStatus {
             _ => None,
         }
     }
+
+    pub(crate) fn matches_action(self, action: Option<&str>) -> bool {
+        matches!(
+            (self, action),
+            (Self::ReadyToMerge, Some("merge"))
+                | (Self::ReadyToEnqueue, Some("enqueue"))
+                | (Self::QueuedPullRequest, Some("wait_for_queue"))
+                | (Self::ReadinessUnknown, Some("wait_for_github"))
+                | (Self::Blocked, Some("resolve_blockers"))
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +84,10 @@ pub(crate) struct PullRequestReadinessView {
 }
 
 impl PullRequestReadinessView {
+    pub(crate) fn current_persisted(pr: &PrRow) -> Option<Self> {
+        persisted_readiness_view(&PullRequestReadinessInput::from(pr))
+    }
+
     pub(crate) fn status(&self) -> PullRequestReadinessStatus {
         self.status
     }

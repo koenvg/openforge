@@ -1,6 +1,17 @@
 use super::{
     CompanionActionPaletteError, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
 };
+use crate::db::{PullRequestReadinessStatus, PullRequestReadinessView};
+
+fn matches_current_readiness(
+    pull_request: &crate::db::PrRow,
+    status: PullRequestReadinessStatus,
+) -> bool {
+    PullRequestReadinessView::current_persisted(pull_request).is_some_and(|readiness| {
+        readiness.status() == status
+            && status.matches_action(pull_request.merge_readiness_action.as_deref())
+    })
+}
 
 pub(super) fn available_actions(
     database: &crate::db::Database,
@@ -9,22 +20,20 @@ pub(super) fn available_actions(
     let pull_requests = database
         .get_open_prs()
         .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)?;
-    let ready_count = |status: &str, action: &str| {
+    let ready_count = |status: PullRequestReadinessStatus| {
         pull_requests
             .iter()
             .filter(|pull_request| {
-                pull_request.ticket_id == task_id
-                    && pull_request.merge_readiness_status.as_deref() == Some(status)
-                    && pull_request.merge_readiness_action.as_deref() == Some(action)
+                pull_request.ticket_id == task_id && matches_current_readiness(pull_request, status)
             })
             .count()
     };
 
     let mut actions = Vec::new();
-    if ready_count("ready_to_merge", "merge") == 1 {
+    if ready_count(PullRequestReadinessStatus::ReadyToMerge) == 1 {
         actions.push(CompanionTaskActionId::MergePullRequest);
     }
-    if ready_count("ready_to_enqueue", "enqueue") == 1 {
+    if ready_count(PullRequestReadinessStatus::ReadyToEnqueue) == 1 {
         actions.push(CompanionTaskActionId::EnqueuePullRequest);
     }
     Ok(actions)
@@ -33,8 +42,7 @@ pub(super) fn available_actions(
 fn unique_ready_pull_request(
     service: &DatabaseCompanionActionPaletteService,
     task_id: &str,
-    status: &str,
-    action: &str,
+    status: PullRequestReadinessStatus,
 ) -> Result<crate::db::PrRow, CompanionActionPaletteError> {
     let pull_requests = crate::github_runtime::get_pull_requests(&service.database)
         .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)?
@@ -42,8 +50,7 @@ fn unique_ready_pull_request(
         .filter(|pull_request| {
             pull_request.ticket_id == task_id
                 && pull_request.state == "open"
-                && pull_request.merge_readiness_status.as_deref() == Some(status)
-                && pull_request.merge_readiness_action.as_deref() == Some(action)
+                && matches_current_readiness(pull_request, status)
         })
         .collect::<Vec<_>>();
     match pull_requests.as_slice() {
@@ -74,7 +81,8 @@ pub(super) async fn merge(
     service: &DatabaseCompanionActionPaletteService,
     task_id: &str,
 ) -> Result<(), CompanionActionPaletteError> {
-    let pull_request = unique_ready_pull_request(service, task_id, "ready_to_merge", "merge")?;
+    let pull_request =
+        unique_ready_pull_request(service, task_id, PullRequestReadinessStatus::ReadyToMerge)?;
     crate::github_runtime::merge_task_pull_request(
         &service.database,
         &service.github_client,
@@ -92,7 +100,8 @@ pub(super) async fn enqueue(
     service: &DatabaseCompanionActionPaletteService,
     task_id: &str,
 ) -> Result<(), CompanionActionPaletteError> {
-    let pull_request = unique_ready_pull_request(service, task_id, "ready_to_enqueue", "enqueue")?;
+    let pull_request =
+        unique_ready_pull_request(service, task_id, PullRequestReadinessStatus::ReadyToEnqueue)?;
     crate::github_runtime::enqueue_task_pull_request(
         &service.database,
         &service.github_client,
@@ -112,7 +121,13 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
 
-    fn set_readiness(database: &crate::db::Database, id: i64, status: &str, action: &str) {
+    fn set_readiness(
+        database: &crate::db::Database,
+        id: i64,
+        status: &str,
+        action: &str,
+        source_head_sha: &str,
+    ) {
         database
             .update_pr_merge_readiness(
                 id,
@@ -121,7 +136,7 @@ mod tests {
                     action: Some(action.to_string()),
                     blockers_json: Some("[]".to_string()),
                     warnings_json: Some("[]".to_string()),
-                    source_head_sha: Some(String::new()),
+                    source_head_sha: Some(source_head_sha.to_string()),
                     merge_group_sha: None,
                     required_checks_policy_known: Some(true),
                     required_reviews_policy_known: Some(true),
@@ -164,7 +179,7 @@ mod tests {
                         false,
                     )
                     .expect("insert pull request");
-                set_readiness(&database, id, status, action);
+                set_readiness(&database, id, status, action, "");
             }
             task.id
         };
@@ -192,7 +207,27 @@ mod tests {
                     false,
                 )
                 .expect("insert duplicate merge-ready pull request");
-            set_readiness(&database, 3, "ready_to_merge", "merge");
+            set_readiness(&database, 3, "ready_to_merge", "enqueue", "");
+        }
+
+        let actions = service
+            .available_actions(&task_id)
+            .expect("available actions after mismatched readiness");
+        assert!(actions.contains(&CompanionTaskActionId::MergePullRequest));
+
+        {
+            let database = crate::db::acquire_db(&database);
+            set_readiness(&database, 3, "ready_to_merge", "merge", "stale-head-sha");
+        }
+
+        let actions = service
+            .available_actions(&task_id)
+            .expect("available actions after stale readiness");
+        assert!(actions.contains(&CompanionTaskActionId::MergePullRequest));
+
+        {
+            let database = crate::db::acquire_db(&database);
+            set_readiness(&database, 3, "ready_to_merge", "merge", "");
         }
 
         let actions = service
