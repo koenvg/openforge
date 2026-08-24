@@ -12,7 +12,7 @@ use super::sync_logging::{
     format_rate_limit_pause_log, format_sync_phase_log, format_sync_scope_log, poll_scope_log_name,
 };
 use crate::app_events::AppEventSender;
-use crate::db::Database;
+use crate::db::{acquire_db, Database};
 use crate::github_client::GitHubClient;
 use log::{debug, error, info, warn};
 use std::sync::{Arc, Mutex};
@@ -65,7 +65,7 @@ async fn start_github_poller_with_state(
 
     loop {
         let poll_interval = {
-            let db_lock = db.lock().unwrap();
+            let db_lock = acquire_db(&db);
             parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
@@ -176,7 +176,7 @@ pub async fn refresh_task_github_status_for_sidecar(
     };
 
     let configured_github_username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(&db);
         db_lock.get_config("github_username").ok().flatten()
     };
 
@@ -220,7 +220,7 @@ pub(super) async fn poll_github_once_with_state(
     };
 
     let projects = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(&db);
         db_lock.get_all_projects()
     };
 
@@ -293,7 +293,7 @@ pub(super) async fn poll_github_once_with_state(
     }
 
     let configured_github_username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(&db);
         db_lock.get_config("github_username").ok().flatten()
     };
 
