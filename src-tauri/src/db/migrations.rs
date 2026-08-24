@@ -2240,6 +2240,12 @@ mod tests {
             .expect("set pre-migration user_version");
     }
 
+    fn temporary_database_path() -> (tempfile::TempDir, PathBuf) {
+        let temp_dir = tempfile::tempdir().expect("create temporary database directory");
+        let path = temp_dir.path().join("migration.db");
+        (temp_dir, path)
+    }
+
     #[test]
     fn test_migrations_validate() {
         let migrations = get_migrations();
@@ -2279,11 +2285,7 @@ mod tests {
         // which is missing the tables (e.g. it was migrated on a branch that appended
         // its own migrations before these existed, so the indexes no longer line up)
         // must heal on open rather than failing every enabled-plugins query.
-        let path = std::env::temp_dir().join(format!(
-            "test_recreate_hier_tables_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let db = Database::new(path.clone()).expect("Database::new");
@@ -2320,16 +2322,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_sessions_pty_instance_migration_backfills_metadata_only_checkpoint() {
-        let path = std::env::temp_dir().join(format!(
-            "test_agent_session_pty_instance_backfill_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -2382,16 +2379,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn test_plugin_storage_migration_preserves_legacy_strings_that_look_like_json() {
-        let path = std::env::temp_dir().join(format!(
-            "test_plugin_storage_legacy_json_literal_strings_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -2451,16 +2443,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pi_session_column_exists() {
-        let path = std::env::temp_dir().join(format!(
-            "test_pi_session_column_exists_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -2481,16 +2468,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_grok_session_column_exists() {
-        let path = std::env::temp_dir().join(format!(
-            "test_grok_session_column_exists_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -2511,16 +2493,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_database_initialization() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_openforge_mig.db");
-
-        // Clean up if exists
-        let _ = fs::remove_file(&db_path);
+        let (_temp_dir, db_path) = temporary_database_path();
 
         // Create database
         let db = Database::new(db_path.clone()).expect("Failed to create database");
@@ -2583,19 +2560,13 @@ mod tests {
             "Fresh schema must not include legacy OpenCode server port/pid columns"
         );
 
-        // Clean up
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&db_path);
     }
 
     #[test]
     fn test_upgrade_removes_legacy_opencode_server_columns() {
-        let path = std::env::temp_dir().join(format!(
-            "test_upgrade_removes_legacy_opencode_server_columns_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -2706,7 +2677,6 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -2823,9 +2793,7 @@ mod tests {
 
     #[test]
     fn test_bootstrap_existing_db() {
-        let path =
-            std::env::temp_dir().join(format!("test_bootstrap_mig_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         // Create a raw database with the tasks table (simulating existing DB)
         {
@@ -2877,7 +2845,6 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     /// The board moved to the external com.openforge.issues plugin, which keeps its
@@ -2885,11 +2852,7 @@ mod tests {
     /// carry no trace of the tables it used to keep here.
     #[test]
     fn test_fresh_db_has_no_legacy_roadmap_tables() {
-        let path = std::env::temp_dir().join(format!(
-            "test_no_roadmap_tables_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -2908,13 +2871,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_new_db_user_version() {
-        let path = std::env::temp_dir().join(format!("test_uv_mig_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -2930,16 +2891,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pull_request_readiness_columns_backfilled_for_upgraded_db() {
-        let path = std::env::temp_dir().join(format!(
-            "test_pr_readiness_backfill_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open legacy db");
@@ -3012,7 +2968,6 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -3021,9 +2976,7 @@ mod tests {
         // inserted mid-list, so databases whose user_version is already past it
         // (e.g. the seeded dev DB at v28) never had the column added. A fully
         // migrated DB that predates the fix is missing is_queued on both PR tables.
-        let path =
-            std::env::temp_dir().join(format!("test_is_queued_backfill_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -3057,16 +3010,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_database_reopen_removes_handoff_notes_feature_data() {
-        let path = std::env::temp_dir().join(format!(
-            "test_handoff_notes_removal_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let db = Database::new(path.clone()).expect("create database");
@@ -3153,16 +3101,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_recreates_missing_plugin_tables_for_upgraded_db() {
-        let path = std::env::temp_dir().join(format!(
-            "test_recreate_plugin_tables_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let db = Database::new(path.clone()).expect("Database::new");
@@ -3225,16 +3168,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_recreates_missing_action_items_table_for_upgraded_db() {
-        let path = std::env::temp_dir().join(format!(
-            "test_recreate_action_items_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let db = Database::new(path.clone()).expect("Database::new");
@@ -3274,16 +3212,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_recreates_missing_action_items_table_from_v13_upgrade() {
-        let path = std::env::temp_dir().join(format!(
-            "test_recreate_action_items_v13_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -3484,14 +3417,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_migration_v6_adds_prompt() {
-        let path =
-            std::env::temp_dir().join(format!("test_v6_columns_mig_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -3509,14 +3439,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_migration_v6_backfill() {
-        let path =
-            std::env::temp_dir().join(format!("test_v6_backfill_mig_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         // Create a V5 database (without prompt/summary columns)
         {
@@ -3591,16 +3518,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependencies_table_created() {
-        let path = std::env::temp_dir().join(format!(
-            "test_task_dependencies_table_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -3617,14 +3539,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_id_prefix_seeded() {
-        let path =
-            std::env::temp_dir().join(format!("test_task_id_prefix_mig_{}.db", std::process::id()));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -3651,16 +3570,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_github_poll_interval_seeded() {
-        let path = std::env::temp_dir().join(format!(
-            "test_github_poll_interval_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         let db = Database::new(path.clone()).expect("Database::new");
         let conn = db.connection();
@@ -3678,16 +3592,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_github_poll_interval_upgrade_updates_legacy_default() {
-        let path = std::env::temp_dir().join(format!(
-            "test_github_poll_interval_upgrade_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -3720,16 +3629,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_github_poll_interval_upgrade_preserves_custom_value() {
-        let path = std::env::temp_dir().join(format!(
-            "test_github_poll_interval_custom_upgrade_mig_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -3762,16 +3666,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_github_poll_interval_user_value_persists_across_reopen() {
-        let path = std::env::temp_dir().join(format!(
-            "test_github_poll_interval_persist_reopen_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let db = Database::new(path.clone()).expect("Database::new");
@@ -3800,16 +3699,11 @@ mod tests {
 
         drop(conn);
         drop(reopened);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_upgrade_removes_jira_schema_and_config() {
-        let path = std::env::temp_dir().join(format!(
-            "test_upgrade_removes_jira_schema_and_config_{}.db",
-            std::process::id()
-        ));
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
@@ -3915,6 +3809,5 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }
