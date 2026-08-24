@@ -26,11 +26,15 @@ describe('findUnusedSvelteImports', () => {
 
   it('counts Svelte store auto-subscriptions and type references as usage', () => {
     const source = `<script lang="ts">
-      import type { Snippet } from 'svelte'
+      import type { Component, Snippet } from 'svelte'
       import { activeProjectId } from './stores'
 
       interface Props {
         children?: Snippet
+      }
+
+      function getComponent(): Component | null {
+        return null
       }
     </script>
 
@@ -41,13 +45,59 @@ describe('findUnusedSvelteImports', () => {
     expect(findUnusedSvelteImports(source)).toEqual([])
   })
 
-  it('does not count import-leading comments as usage', () => {
+  it('does not count comments as usage', () => {
     const source = `<script lang="ts">
-      // CommentOnly appears in documentation for this import.
       import CommentOnly from './CommentOnly.svelte'
-    </script>`
+      import TemplateCommentOnly from './TemplateCommentOnly.svelte'
 
-    expect(findUnusedSvelteImports(source).map((item) => item.name)).toEqual(['CommentOnly'])
+      // CommentOnly appears in documentation.
+    </script>
+
+    <!-- TemplateCommentOnly appears in documentation. -->`
+
+    expect(findUnusedSvelteImports(source).map((item) => item.name)).toEqual([
+      'CommentOnly',
+      'TemplateCommentOnly',
+    ])
+  })
+
+  it('does not count string literals as usage', () => {
+    const source = `<script lang="ts">
+      import ScriptStringOnly from './ScriptStringOnly.svelte'
+      import AttributeStringOnly from './AttributeStringOnly.svelte'
+
+      const label = 'ScriptStringOnly'
+    </script>
+
+    <p title="AttributeStringOnly">{label}</p>`
+
+    expect(findUnusedSvelteImports(source).map((item) => item.name)).toEqual([
+      'ScriptStringOnly',
+      'AttributeStringOnly',
+    ])
+  })
+
+  it('does not count references to shadowing script or template bindings as import usage', () => {
+    const source = `<script lang="ts">
+      import ScriptShadowed from './ScriptShadowed.svelte'
+      import TemplateShadowed from './TemplateShadowed.svelte'
+
+      function render(ScriptShadowed: string) {
+        return ScriptShadowed
+      }
+
+      const values = ['local value']
+    </script>
+
+    <p>{render('local value')}</p>
+    {#each values as TemplateShadowed}
+      <p>{TemplateShadowed}</p>
+    {/each}`
+
+    expect(findUnusedSvelteImports(source).map((item) => item.name)).toEqual([
+      'ScriptShadowed',
+      'TemplateShadowed',
+    ])
   })
 
   it('reports unused TypeScript imports through the command line', () => {
