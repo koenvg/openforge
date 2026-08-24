@@ -694,6 +694,57 @@ impl PtyManager {
         })
     }
 
+    #[cfg(test)]
+    fn pause_before_agent_event_stream_start(&self) {
+        let gate = self
+            .agent_event_stream_start_gate
+            .lock()
+            .expect("event stream start gate lock should not be poisoned")
+            .take();
+        if let Some(gate) = gate {
+            gate.reached_tx
+                .send(())
+                .expect("test should observe event stream startup");
+            gate.release_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("test should release event stream startup");
+        }
+    }
+
+    async fn remove_agent_stream_state_if_registered(
+        &self,
+        task_id: &str,
+        stream_state: &AgentStreamState,
+    ) {
+        if let Some(stale_last_output) = &stream_state.last_output_time {
+            let mut times = self.last_output.lock().await;
+            if times
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, stale_last_output))
+            {
+                times.remove(task_id);
+            }
+        }
+        {
+            let mut buffers = self.output_buffers.lock().await;
+            if buffers
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &stream_state.ring_buffer))
+            {
+                buffers.remove(task_id);
+            }
+        }
+        {
+            let mut hubs = self.attachment_hubs.lock().await;
+            if hubs
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &stream_state.attachment_hub))
+            {
+                hubs.remove(task_id);
+            }
+        }
+    }
+
     async fn start_agent_event_stream(
         &self,
         request: AgentEventStreamRequest<'_>,
@@ -717,13 +768,8 @@ impl PtyManager {
             )
             .await
         {
-            let mut hubs = self.attachment_hubs.lock().await;
-            if hubs
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &stream_state.attachment_hub))
-            {
-                hubs.remove(task_id);
-            }
+            self.remove_agent_stream_state_if_registered(task_id, &stream_state)
+                .await;
             return Err(error);
         }
 
@@ -837,6 +883,8 @@ impl PtyManager {
         let stream_state = self
             .register_agent_stream_state(task_id, token, instance_id, last_output_time)
             .await?;
+        #[cfg(test)]
+        self.pause_before_agent_event_stream_start();
         self.start_agent_event_stream(AgentEventStreamRequest {
             task_id,
             token,
@@ -1747,6 +1795,190 @@ mod tests {
         for _ in 0..10 {
             assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late().await;
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let task_id = "stale-before-event-stream";
+        let (stream_start_tx, stream_start_rx) = mpsc::channel();
+        let (release_stream_tx, release_stream_rx) = mpsc::channel();
+        *manager
+            .agent_event_stream_start_gate
+            .lock()
+            .expect("event stream start gate lock should not be poisoned") =
+            Some(crate::pty_manager::AgentEventStreamStartGate {
+                reached_tx: stream_start_tx,
+                release_rx: release_stream_rx,
+            });
+
+        let stale_manager = manager.clone();
+        let stale_cwd = tmp_dir.path().to_path_buf();
+        let stale_task_id = task_id.to_string();
+        let stale_spawn = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime should build");
+            runtime.block_on(stale_manager.spawn_agent_pty(
+                LockCheckingAgentAdapter {
+                    sessions: Arc::clone(&stale_manager.sessions),
+                    prepared_tx: None,
+                    command_delay: Duration::ZERO,
+                    script: "printf stale-agent",
+                    check_lock: false,
+                },
+                PtySpawnContext {
+                    task_id: &stale_task_id,
+                    cwd: &stale_cwd,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                None,
+            ))
+        });
+
+        stream_start_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("stale spawn should pause immediately before event stream startup");
+        let stale_buffer = manager
+            .output_buffers
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("stale replay buffer should be registered before startup");
+        let stale_last_output = manager
+            .last_output
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("stale output tracking should be registered before startup");
+        let stale_hub = manager
+            .attachment_hubs
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("stale attachment hub should be registered before startup");
+
+        let (_superseding_token, superseding_lock) =
+            manager.begin_agent_spawn(task_id, "Newer").await;
+        release_stream_tx
+            .send(())
+            .expect("stale spawn should be released");
+        let stale_result = stale_spawn.join().expect("stale spawn thread should join");
+        assert!(
+            matches!(stale_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before event streaming started")),
+            "superseded setup should stop before event streaming: {stale_result:?}"
+        );
+        assert!(
+            !manager.output_buffers.lock().await.contains_key(task_id),
+            "superseded setup must remove its replay buffer"
+        );
+        assert!(
+            !manager.last_output.lock().await.contains_key(task_id),
+            "superseded setup must remove its output tracking"
+        );
+        assert!(
+            !manager.attachment_hubs.lock().await.contains_key(task_id),
+            "superseded setup must remove its attachment hub"
+        );
+
+        let newer_instance_id = manager
+            .spawn_agent_pty(
+                LockCheckingAgentAdapter {
+                    sessions: Arc::clone(&manager.sessions),
+                    prepared_tx: None,
+                    command_delay: Duration::ZERO,
+                    script: "printf newer-agent",
+                    check_lock: false,
+                },
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                None,
+            )
+            .await
+            .expect("newer spawn should complete");
+        let newer_buffer = manager
+            .output_buffers
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("newer replay buffer should remain registered");
+        let newer_last_output = manager
+            .last_output
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("newer output tracking should remain registered");
+        let newer_hub = manager
+            .attachment_hubs
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .expect("newer attachment hub should remain registered");
+        manager
+            .remove_agent_stream_state_if_registered(
+                task_id,
+                &AgentStreamState {
+                    last_output_time: Some(Arc::clone(&stale_last_output)),
+                    ring_buffer: Arc::clone(&stale_buffer),
+                    attachment_hub: Arc::clone(&stale_hub),
+                },
+            )
+            .await;
+        assert!(
+            manager
+                .output_buffers
+                .lock()
+                .await
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &newer_buffer)),
+            "delayed stale cleanup must preserve the newer replay buffer"
+        );
+        assert!(
+            manager
+                .last_output
+                .lock()
+                .await
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &newer_last_output)),
+            "delayed stale cleanup must preserve newer output tracking"
+        );
+        assert!(
+            manager
+                .attachment_hubs
+                .lock()
+                .await
+                .get(task_id)
+                .is_some_and(|stored| Arc::ptr_eq(stored, &newer_hub)),
+            "delayed stale cleanup must preserve the newer attachment hub"
+        );
+        assert!(!Arc::ptr_eq(&stale_buffer, &newer_buffer));
+        assert!(!Arc::ptr_eq(&stale_last_output, &newer_last_output));
+        assert!(!Arc::ptr_eq(&stale_hub, &newer_hub));
+        assert_eq!(newer_hub.instance_id(), newer_instance_id);
+
+        manager
+            .kill_pty(task_id)
+            .await
+            .expect("newer test PTY should be cleaned up");
+        drop(superseding_lock);
     }
 
     #[tokio::test]

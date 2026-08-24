@@ -20,6 +20,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[cfg(test)]
+#[derive(Debug)]
+struct AgentEventStreamStartGate {
+    reached_tx: std::sync::mpsc::Sender<()>,
+    release_rx: std::sync::mpsc::Receiver<()>,
+}
+
+#[cfg(test)]
 use commands::resolve_shell_path;
 #[cfg(test)]
 pub(crate) use commands::{build_claude_args, get_shell_path};
@@ -97,6 +104,8 @@ pub struct PtyManager {
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: LifecycleLockRegistry,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
+    #[cfg(test)]
+    agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -157,6 +166,8 @@ impl PtyManager {
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
             lifecycle_locks: LifecycleLockRegistry::default(),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
+            #[cfg(test)]
+            agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }
