@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parse } from '@babel/parser'
+import { traverseBabelAst } from './babel-ast.mjs'
 
 const DEFAULT_PLUGIN_SOURCE_ROOT = 'plugins'
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.svelte'])
@@ -141,9 +142,7 @@ function collectImportSpecifiers(source, filePath) {
       })
     }
 
-    function visit(node) {
-      if (!node || typeof node !== 'object') return
-
+    traverseBabelAst(sourceFile, (node) => {
       if (node.type === 'ImportDeclaration'
         || node.type === 'ExportNamedDeclaration'
         || node.type === 'ExportAllDeclaration') {
@@ -163,14 +162,7 @@ function collectImportSpecifiers(source, filePath) {
           addModuleSpecifier(node.arguments[0], node)
         }
       }
-
-      for (const child of Object.values(node)) {
-        if (Array.isArray(child)) child.forEach(visit)
-        else visit(child)
-      }
-    }
-
-    visit(sourceFile)
+    })
   }
 
   return specifiers

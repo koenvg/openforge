@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { parse } from '@babel/parser'
 import type { CallExpression, Node, ObjectProperty } from '@babel/types'
 import { describe, expect, it } from 'vitest'
+import { traverseBabelAst } from '../../scripts/babel-ast.mjs'
 import * as ipc from './ipc'
 import {
   appDesktopEventContracts,
@@ -27,27 +28,15 @@ function propertyName(name: ObjectProperty['key'], sourceText: string): string {
   return sourceSlice(name, sourceText)
 }
 
-function isNode(value: unknown): value is Node {
-  return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
-}
-
 function findInvokeCalls(node: Node): CallExpression[] {
   const calls: CallExpression[] = []
 
-  function visit(value: unknown): void {
-    if (!isNode(value)) return
-
+  traverseBabelAst(node, value => {
     if (value.type === 'CallExpression' && value.callee.type === 'Identifier' && value.callee.name === 'invoke') {
       calls.push(value)
     }
+  })
 
-    for (const child of Object.values(value)) {
-      if (Array.isArray(child)) child.forEach(visit)
-      else visit(child)
-    }
-  }
-
-  visit(node)
   return calls
 }
 
