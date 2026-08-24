@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onDestroy } from 'svelte'
   import { createAudioRecorder } from '../../../lib/audioRecorder'
   import type { AudioRecorder } from '../../../lib/audioRecorder'
   import { transcribeAudio, getWhisperModelStatus } from '../../../lib/ipc'
   import type { VoiceInputState } from '../../../lib/types'
+  import { registerVoiceInputShortcutTarget } from '../../../lib/voiceInputShortcut'
 
   interface Props {
     onTranscription: (text: string) => void
@@ -25,6 +26,8 @@
   let recorder: AudioRecorder | null = null
   let durationInterval: ReturnType<typeof setInterval> | null = null
   let errorTimer: ReturnType<typeof setTimeout> | null = null
+  let rootElement: HTMLDivElement | null = null
+  let unregisterHotkeyTarget: (() => void) | null = null
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function formatDuration(ms: number): string {
@@ -121,19 +124,19 @@
     }
   }
 
-  // ── Hotkey listener ────────────────────────────────────────────────────────
-  function handleHotkeyEvent() {
-    if (!disabled && listenToHotkey) {
-      void handleClick()
-    }
-  }
+  // ── Hotkey registration ────────────────────────────────────────────────────
+  $effect(() => {
+    if (!listenToHotkey || !rootElement || unregisterHotkeyTarget) return
 
-  onMount(() => {
-    window.addEventListener('toggle-voice-recording', handleHotkeyEvent)
+    unregisterHotkeyTarget = registerVoiceInputShortcutTarget({
+      root: rootElement,
+      isEnabled: () => !disabled && listenToHotkey,
+      toggle: () => { void handleClick() },
+    })
   })
   // ── Cleanup ───────────────────────────────────────────────────────────────────
   onDestroy(() => {
-    window.removeEventListener('toggle-voice-recording', handleHotkeyEvent)
+    unregisterHotkeyTarget?.()
     clearDurationInterval()
     clearErrorTimer()
     if (recorder !== null) {
@@ -145,7 +148,7 @@
   })
 </script>
 
-<div class="flex flex-col items-center gap-1">
+<div bind:this={rootElement} class="flex flex-col items-center gap-1">
   <button
     type="button"
     class="btn {size === 'md' ? 'h-10 min-h-10 px-4' : 'btn-sm'} {voiceState === 'recording' ? 'btn-error' : appearance === 'outline' ? 'btn-outline' : 'btn-ghost'}"
