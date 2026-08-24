@@ -31,6 +31,15 @@ pub(super) fn get_open_prs_for_task(
         .collect())
 }
 
+#[derive(Debug)]
+struct PrMetadata {
+    pr_id: i64,
+    ci_status: Option<String>,
+    review_status: Option<String>,
+    mergeable: Option<bool>,
+    mergeable_state: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct CiPersistencePayload {
     pub(super) pr_id: i64,
@@ -146,25 +155,18 @@ pub(super) async fn poll_prs_for_project(
         return (0, 0, 0, 0, 0);
     }
 
-    type PrMetadata = (
-        i64,
-        Option<String>,
-        Option<String>,
-        Option<bool>,
-        Option<String>,
-    );
     let pr_metadata = {
         let db_lock = acquire_db(db);
         open_prs
             .iter()
             .map(|pr| {
-                Ok((
-                    pr.id,
-                    db_lock.get_pr_ci_status(pr.id)?,
-                    db_lock.get_pr_review_status(pr.id)?,
-                    pr.mergeable,
-                    pr.mergeable_state.clone(),
-                ))
+                Ok(PrMetadata {
+                    pr_id: pr.id,
+                    ci_status: db_lock.get_pr_ci_status(pr.id)?,
+                    review_status: db_lock.get_pr_review_status(pr.id)?,
+                    mergeable: pr.mergeable,
+                    mergeable_state: pr.mergeable_state.clone(),
+                })
             })
             .collect::<rusqlite::Result<Vec<PrMetadata>>>()
     };
@@ -178,18 +180,21 @@ pub(super) async fn poll_prs_for_project(
 
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, old_ci, _, _, _)| (*pr_id, old_ci.clone()))
+        .map(|metadata| (metadata.pr_id, metadata.ci_status.clone()))
         .collect();
 
     let old_review_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, _, old_review, _, _)| (*pr_id, old_review.clone()))
+        .map(|metadata| (metadata.pr_id, metadata.review_status.clone()))
         .collect();
 
     let old_mergeability_map: HashMap<i64, (Option<bool>, Option<String>)> = pr_metadata
         .into_iter()
-        .map(|(pr_id, _, _, old_mergeable, old_mergeable_state)| {
-            (pr_id, (old_mergeable, old_mergeable_state))
+        .map(|metadata| {
+            (
+                metadata.pr_id,
+                (metadata.mergeable, metadata.mergeable_state),
+            )
         })
         .collect();
 
