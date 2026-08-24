@@ -1,4 +1,5 @@
 use crate::db;
+use crate::plugin_enablement::PluginEnablement;
 use crate::plugin_installation::package_source::PackageSourceSpec;
 use regex::Regex;
 use serde::Deserialize;
@@ -24,14 +25,6 @@ pub(super) struct PackageJsonFile {
     pub(super) openforge: OpenForgePackageMetadata,
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum PluginEnablement {
-    App,
-    #[default]
-    Project,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct OpenForgePackageMetadata {
@@ -40,7 +33,7 @@ pub(super) struct OpenForgePackageMetadata {
     display_name: String,
     description: String,
     #[serde(default)]
-    _enablement: PluginEnablement,
+    enablement: PluginEnablement,
     #[serde(default)]
     frontend: Option<String>,
     #[serde(default)]
@@ -48,7 +41,7 @@ pub(super) struct OpenForgePackageMetadata {
     #[serde(default)]
     backend: Option<String>,
     #[serde(default, rename = "requires")]
-    _requires: Option<Vec<String>>,
+    requires: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -253,24 +246,6 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
             }
         }
     }
-
-    if openforge.get("enablement").and_then(Value::as_str) == Some("app") {
-        let has_capability = openforge
-            .get("requires")
-            .and_then(Value::as_array)
-            .is_some_and(|requires| {
-                requires
-                    .iter()
-                    .any(|value| value.as_str() == Some("appEnablement"))
-            });
-        if !has_capability {
-            return Err(
-                "package.json openforge.enablement \"app\" requires the appEnablement capability"
-                    .to_string(),
-            );
-        }
-    }
-
     Ok(())
 }
 
@@ -290,6 +265,21 @@ pub(super) fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<
             package.openforge.api_version,
             schema_rules.supported_api_versions_label()
         ));
+    }
+
+    if package.openforge.enablement == PluginEnablement::App
+        && !package
+            .openforge
+            .requires
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .any(|capability| capability == "appEnablement")
+    {
+        return Err(
+            "package.json openforge.enablement \"app\" requires the appEnablement capability"
+                .to_string(),
+        );
     }
 
     if package.openforge.frontend.is_none() && package.openforge.backend.is_none() {

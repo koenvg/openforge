@@ -33,6 +33,7 @@ mod opencode_client;
 mod opencode_plugin;
 mod pi_extension;
 mod plugin_command_broker;
+mod plugin_enablement;
 mod plugin_folder_scan;
 mod plugin_host;
 mod plugin_installation;
