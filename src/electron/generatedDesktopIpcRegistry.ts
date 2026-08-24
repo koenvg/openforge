@@ -16,6 +16,7 @@ export const desktopCommandContracts = [
   {"functionName":"deleteProject","ipcCommand":"delete_project","payloadKeys":["id"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getProjectAttention","ipcCommand":"get_project_attention","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getTaskAttention","ipcCommand":"get_task_attention","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
+  {"functionName":"getSetAsideTasks","ipcCommand":"get_set_aside_tasks","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getProjectConfig","ipcCommand":"get_project_config","payloadKeys":["projectId","key"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"getResolvedAiProvider","ipcCommand":"resolve_ai_provider","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"setProjectConfig","ipcCommand":"set_project_config","payloadKeys":["projectId","key","value"],"owner":"rust-sidecar","domain":"config"},

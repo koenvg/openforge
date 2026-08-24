@@ -17,6 +17,7 @@ export const desktopIpcFunctionDomains = {
   deleteProject: 'tasks-projects',
   getProjectAttention: 'tasks-projects',
   getTaskAttention: 'tasks-projects',
+  getSetAsideTasks: 'tasks-projects',
   getProjectConfig: 'config',
   getResolvedAiProvider: 'config',
   setProjectConfig: 'config',

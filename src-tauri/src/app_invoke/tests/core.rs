@@ -127,6 +127,44 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         "No agent running. Start when ready."
     );
 
+    // Nothing is parked yet, so the set-aside lane is empty while that same Task sits in
+    // the attention projection above.
+    assert_eq!(
+        invoke_ok(&state, "get_set_aside_tasks", serde_json::Value::Null)
+            .await
+            .as_array()
+            .expect("set-aside rows")
+            .len(),
+        0
+    );
+
+    invoke_ok(
+        &state,
+        "set_project_config",
+        json!({
+            "projectId": project_id,
+            "key": "low_fire_task_ids",
+            "value": format!("[\"{task_id}\"]"),
+        }),
+    )
+    .await;
+
+    let set_aside = invoke_ok(&state, "get_set_aside_tasks", serde_json::Value::Null).await;
+    let set_aside_rows = set_aside.as_array().expect("set-aside rows");
+    assert_eq!(set_aside_rows.len(), 1);
+    assert_eq!(set_aside_rows[0]["task_id"], task_id);
+    assert_eq!(set_aside_rows[0]["project_id"], project_id);
+    assert_eq!(set_aside_rows[0]["title"], "Plan migration");
+    // Parking the Task also drops it out of the attention projection.
+    assert_eq!(
+        invoke_ok(&state, "get_task_attention", serde_json::Value::Null)
+            .await
+            .as_array()
+            .expect("task attention rows")
+            .len(),
+        0
+    );
+
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
     let completed = crate::db::acquire_db(&state.db)
         .get_task(task_id)

@@ -56,6 +56,7 @@ vi.mock('../lib/ipc', () => ({
     return []
   }),
   getTaskAttention: vi.fn(async () => []),
+  getSetAsideTasks: vi.fn(async () => []),
   getOpenCodeStatus: vi.fn(async () => {
     callOrder.push('getOpenCodeStatus')
     return { installed: false, running: false, session_count: 0 }

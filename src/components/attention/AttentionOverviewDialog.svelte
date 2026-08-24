@@ -4,7 +4,7 @@
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
-  import { getAllTasks, getTaskAttention, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
+  import { getAllTasks, getTaskAttention, getSetAsideTasks, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { buildAttentionOverview } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
@@ -21,7 +21,11 @@
   let { onClose, onOpenTask, onOpenPr }: Props = $props()
 
   const COLLAPSED_CONFIG_KEY = 'attention_overview_collapsed_projects'
+  const FILTERS_CONFIG_KEY = 'attention_overview_filters'
   const OTHER_ID = '__other__'
+  const CHIP_ACTIVE = 'border-primary/40 bg-primary/10 text-primary'
+  const CHIP_NEUTRAL = 'border-base-300 bg-base-200/60 text-base-content/70 hover:text-base-content'
+  const CHIP_MUTED = 'border-base-300 bg-base-200/40 text-base-content/40 hover:text-base-content/70'
   // Coalesce store-change bursts (streaming agents, PR polls) into one reload while open.
   const REFRESH_DEBOUNCE_MS = 250
 
@@ -29,7 +33,8 @@
     id: string
     name: string
     isActive: boolean
-    focusTasks: AttentionFocusTask[]
+    /** Whichever task lane `E` currently selects, already filtered by `T`. */
+    taskItems: AttentionFocusTask[]
     reviewPrs: ReviewPullRequest[]
   }
 
@@ -44,6 +49,9 @@
     items: { row: NavRow; index: number }[]
   }
 
+  /** Which lane the task rows come from. Both are loaded; `E` picks between them. */
+  type TaskLane = 'focus' | 'set-aside'
+
   let loading = $state(true)
   let overviewRequestGeneration = 0
   let overview = $state<AttentionOverview | null>(null)
@@ -51,22 +59,42 @@
   let focusedIndex = $state(0)
   let activeId = $state<string | null>(null)
   let bodyEl = $state<HTMLElement | null>(null)
+  let showReviews = $state(true)
+  // Deliberately not persisted: the dialog is "Needs your attention" first, so it always
+  // reopens on the focus lane rather than in whatever mode it was last left in.
+  let taskLane = $state<TaskLane>('focus')
+
+  let taskCount = $derived(
+    (taskLane === 'set-aside' ? overview?.totalSetAsideTasks : overview?.totalFocusTasks) ?? 0,
+  )
+  let reviewCount = $derived(overview?.totalReviewPrs ?? 0)
+
+  // R is hiding reviews that do exist. Drives the empty state, so an empty list never claims
+  // "all caught up" when the filter is what emptied it.
+  let reviewsHidden = $derived(!showReviews && reviewCount > 0)
 
   let displayGroups = $derived.by<DisplayGroup[]>(() => {
     if (!overview) return []
-    const groups: DisplayGroup[] = overview.groups.map((group) => ({
-      id: group.project.id,
-      name: group.project.name,
-      isActive: group.project.id === activeId,
-      focusTasks: group.focusTasks,
-      reviewPrs: group.reviewPrs,
-    }))
-    if (overview.otherReviewPrs.length > 0) {
+    const groups: DisplayGroup[] = []
+    for (const group of overview.groups) {
+      const taskItems = taskLane === 'set-aside' ? group.setAsideTasks : group.focusTasks
+      const reviewPrs = showReviews ? group.reviewPrs : []
+      // A project only earns a header when the current filters leave it something to show.
+      if (taskItems.length === 0 && reviewPrs.length === 0) continue
+      groups.push({
+        id: group.project.id,
+        name: group.project.name,
+        isActive: group.project.id === activeId,
+        taskItems,
+        reviewPrs,
+      })
+    }
+    if (showReviews && overview.otherReviewPrs.length > 0) {
       groups.push({
         id: OTHER_ID,
         name: 'Other repositories',
         isActive: false,
-        focusTasks: [],
+        taskItems: [],
         reviewPrs: overview.otherReviewPrs,
       })
     }
@@ -78,7 +106,7 @@
     for (const group of displayGroups) {
       out.push({ kind: 'header', group })
       if (!collapsedIds.has(group.id)) {
-        for (const item of group.focusTasks) out.push({ kind: 'task', group, item })
+        for (const item of group.taskItems) out.push({ kind: 'task', group, item })
         for (const pr of group.reviewPrs) out.push({ kind: 'review', group, pr })
       }
     }
@@ -116,6 +144,33 @@
     } catch (e) {
       console.error('Failed to persist attention-overview collapse state:', e)
     }
+  }
+
+  function applyStoredFilters(raw: string | null): void {
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.showReviews === 'boolean') showReviews = parsed.showReviews
+    } catch { /* ignore malformed config */ }
+  }
+
+  async function persistFilters(): Promise<void> {
+    try {
+      await setConfig(FILTERS_CONFIG_KEY, JSON.stringify({ showReviews }))
+    } catch (e) {
+      console.error('Failed to persist attention-overview filters:', e)
+    }
+  }
+
+  function toggleReviews(): void {
+    showReviews = !showReviews
+    void persistFilters()
+  }
+
+  /** Swap which task lane the list shows. The two lanes are exclusive; there is no "both". */
+  function toggleLane(): void {
+    taskLane = taskLane === 'set-aside' ? 'focus' : 'set-aside'
+    focusedIndex = 0
   }
 
   function setCollapsed(id: string, collapsed: boolean): void {
@@ -174,6 +229,21 @@
     if (loading) return
     const row = rows[focusedIndex]
 
+    // Filter shortcuts, unmodified only, so ⌘R stays reload. Case-insensitive, so Shift+R
+    // works like R.
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      switch (e.key.toLowerCase()) {
+        case 'r':
+          e.preventDefault()
+          toggleReviews()
+          return true
+        case 'e':
+          e.preventDefault()
+          toggleLane()
+          return true
+      }
+    }
+
     switch (e.key) {
       case 'ArrowDown':
       case 'j':
@@ -216,9 +286,10 @@
     const projectList = get(projects)
     const nextActiveId = get(activeProjectId)
 
-    const [allTasks, taskAttentionRows] = await Promise.all([
+    const [allTasks, taskAttentionRows, setAsideTaskRows] = await Promise.all([
       getAllTasks(),
       getTaskAttention(),
+      getSetAsideTasks(),
     ])
 
     const resolvedRepoByProject = new Map<string, string | null>()
@@ -237,6 +308,7 @@
         projects: projectList,
         allTasks,
         taskAttentionRows,
+        setAsideTaskRows,
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
@@ -251,12 +323,15 @@
     loading = true
     try {
       const collapsedRawPromise = getConfig(COLLAPSED_CONFIG_KEY)
+      const filtersRawPromise = getConfig(FILTERS_CONFIG_KEY)
       const gathered = await gatherOverview()
       const collapsed = parseCollapsed(await collapsedRawPromise)
+      const filtersRaw = await filtersRawPromise
       if (generation !== overviewRequestGeneration) return
       overview = gathered.overview
       activeId = gathered.activeId
       collapsedIds = collapsed
+      applyStoredFilters(filtersRaw)
 
       await tick()
       if (generation !== overviewRequestGeneration) return
@@ -299,13 +374,39 @@
 
   // Keep the focused row scrolled into view and holding DOM focus as the cursor
   // moves, so Enter/Space activate the highlighted row.
+  //
+  // `loading` is read on purpose. The initial load picks the cursor row while the body still
+  // shows the spinner, so this effect finds no element and bails; without that dependency it
+  // would never re-run for an unchanged index and the opening row would look highlighted but
+  // hold no DOM focus, leaving Enter dead until the user nudged the cursor off and back.
   $effect(() => {
     const index = focusedIndex
-    if (!bodyEl) return
+    if (loading || !bodyEl) return
     const el = bodyEl.querySelector<HTMLElement>(`[data-attn-row="${index}"]`)
     if (!el) return
     el.scrollIntoView?.({ block: 'nearest' })
     if (document.activeElement !== el) el.focus?.({ preventScroll: true })
+  })
+
+  /**
+   * True when nothing inside the dialog meaningfully holds focus. Removing the focused row
+   * (a filter emptied the list, or a refresh dropped that row) leaves focus on `<body>`,
+   * outside the modal, so every key the dialog owns stops arriving. `bodyEl` counts as
+   * stranded too: it is only ever a parking spot, never a place the user aimed at.
+   */
+  function focusIsStranded(): boolean {
+    const active = document.activeElement
+    return !active || active === document.body || !active.isConnected || active === bodyEl
+  }
+
+  // Recover from that. Runs whenever the row list changes shape, but only takes focus when it
+  // is stranded, so a header chip the user clicked keeps it.
+  $effect(() => {
+    void rows.length
+    if (loading || !bodyEl) return
+    if (!focusIsStranded()) return
+    const el = bodyEl.querySelector<HTMLElement>(`[data-attn-row="${focusedIndex}"]`)
+    ;(el ?? bodyEl).focus?.({ preventScroll: true })
   })
 
   onMount(() => {
@@ -337,9 +438,9 @@
   ariaLabel="Attention overview"
   showHeader={false}
   onKeydown={onKeydown}
-  boxClass="max-h-[82vh]"
+  boxClass="h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)]!"
 >
-  <div class="flex flex-col min-h-0 max-h-[82vh]">
+  <div class="flex flex-col min-h-0 h-full">
     <!-- Header -->
     <div class="flex items-center gap-3.5 px-5 py-4 border-b border-base-300">
       <div class="w-9 h-9 rounded-xl grid place-items-center shrink-0 bg-primary/15 text-primary">
@@ -350,13 +451,54 @@
       </div>
       <div class="flex flex-col min-w-0">
         <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
+        {#if taskLane === 'set-aside'}
+          <span class="text-[11px] text-base-content/50 leading-tight">Showing set-aside tasks</span>
+        {/if}
       </div>
       <div class="flex-1"></div>
+      <!-- Two chips, mirroring the two keyboard shortcuts, so the letters are discoverable
+           without a legend and the current state is always on screen. R shows or hides the
+           reviews. E names the one task lane on screen and swaps to the other. -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        {#each [
+          {
+            key: 'E',
+            label: taskLane === 'set-aside' ? 'Set aside' : 'Focus',
+            count: taskCount,
+            pressed: taskLane === 'set-aside',
+            // Focus is the default lane, so it reads normal rather than switched-off; only
+            // the set-aside detour lights up.
+            tone: taskLane === 'set-aside' ? CHIP_ACTIVE : CHIP_NEUTRAL,
+            toggle: toggleLane,
+          },
+          {
+            key: 'R',
+            label: 'Reviews',
+            count: reviewCount,
+            pressed: showReviews,
+            tone: showReviews ? CHIP_ACTIVE : CHIP_MUTED,
+            toggle: toggleReviews,
+          },
+        ] as chip (chip.key)}
+          <button
+            type="button"
+            aria-pressed={chip.pressed}
+            class="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-lg border text-xs font-medium transition-colors {chip.tone}"
+            onclick={chip.toggle}
+          >
+            <kbd class="kbd kbd-xs">{chip.key}</kbd>
+            <span>{chip.label}</span>
+            <span class="tabular-nums opacity-70">{chip.count}</span>
+          </button>
+        {/each}
+      </div>
       <button class="btn btn-ghost btn-xs shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</button>
     </div>
 
     <!-- Body -->
-    <div bind:this={bodyEl} class="overflow-y-auto flex-1 min-h-0 px-3 py-2">
+    <!-- tabindex lets the scroll container hold focus while the list is empty, so the
+         dialog keeps receiving E and R instead of losing them to <body>. -->
+    <div bind:this={bodyEl} tabindex="-1" class="overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none">
       {#if loading}
         <div class="flex flex-col items-center justify-center gap-3 py-16 text-base-content/50 text-sm">
           <span class="loading loading-spinner loading-md text-primary"></span>
@@ -364,9 +506,17 @@
         </div>
       {:else if navGroups.length === 0}
         <div class="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <span class="text-2xl">🎉</span>
-          <p class="text-sm font-medium text-base-content m-0">You're all caught up</p>
-          <p class="text-xs text-base-content/50 m-0">No focus tasks or review requests need you right now.</p>
+          {#if reviewsHidden}
+            <p class="text-sm font-medium text-base-content m-0">Reviews are hidden</p>
+            <p class="text-xs text-base-content/50 m-0">Press R to bring them back.</p>
+          {:else if taskLane === 'set-aside'}
+            <p class="text-sm font-medium text-base-content m-0">Nothing is set aside</p>
+            <p class="text-xs text-base-content/50 m-0">No project has a task parked in Out of Focus. Press E to go back.</p>
+          {:else}
+            <span class="text-2xl">🎉</span>
+            <p class="text-sm font-medium text-base-content m-0">You're all caught up</p>
+            <p class="text-xs text-base-content/50 m-0">No focus tasks or review requests need you right now.</p>
+          {/if}
         </div>
       {:else}
         {#each navGroups as ng (ng.group.id)}
@@ -394,8 +544,10 @@
               <!-- Count badges only when collapsed -->
               {#if collapsed}
                 <span class="ml-auto flex items-center gap-1.5 shrink-0">
-                  {#if ng.group.focusTasks.length > 0}
-                    <span class="badge badge-ghost badge-sm">{ng.group.focusTasks.length} focus</span>
+                  {#if ng.group.taskItems.length > 0}
+                    <span class="badge badge-ghost badge-sm">
+                      {ng.group.taskItems.length} {taskLane === 'set-aside' ? 'set aside' : 'focus'}
+                    </span>
                   {/if}
                   {#if ng.group.reviewPrs.length > 0}
                     <span class="badge badge-error badge-sm">{ng.group.reviewPrs.length} review{ng.group.reviewPrs.length > 1 ? 's' : ''}</span>

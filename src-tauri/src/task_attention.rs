@@ -335,16 +335,82 @@ pub(crate) fn project_task_attention(input: TaskAttentionInput) -> Vec<TaskAtten
                 continue;
             }
 
-            let title = task_display_title(&task.id, task.title.as_deref(), &task.initial_prompt);
-            rows.push(TaskAttentionRow {
-                task_id: task.id.clone(),
-                project_id: project.id.clone(),
-                project_name: project.name.clone(),
-                title,
-                state: state.to_string(),
-                reason: task_reason(state, prs),
-                activity_at: session.map_or(task.updated_at, |session| session.updated_at),
-            });
+            rows.push(attention_row(project, task, session, prs, state));
+        }
+
+        rows[project_row_start..].sort_by_key(|row| std::cmp::Reverse(row.activity_at));
+    }
+
+    rows
+}
+
+fn attention_row(
+    project: &TaskAttentionProject,
+    task: &TaskAttentionTask,
+    session: Option<&TaskAttentionSession>,
+    prs: &[&TaskAttentionPullRequest],
+    state: &str,
+) -> TaskAttentionRow {
+    TaskAttentionRow {
+        task_id: task.id.clone(),
+        project_id: project.id.clone(),
+        project_name: project.name.clone(),
+        title: task_display_title(&task.id, task.title.as_deref(), &task.initial_prompt),
+        state: state.to_string(),
+        reason: task_reason(state, prs),
+        activity_at: session.map_or(task.updated_at, |session| session.updated_at),
+    }
+}
+
+/// Project the set-aside ("Out of Focus") lane across every Project.
+///
+/// Rows share the attention shape so the desktop overview can swap one list for the other,
+/// but membership is inverted and unfiltered: every `doing` Task the user parked is listed
+/// regardless of state. Parking is a manual choice, so no focus-state rule applies. A Task
+/// whose agent is running stays in the lane the user put it in.
+pub(crate) fn project_set_aside_tasks(input: TaskAttentionInput) -> Vec<TaskAttentionRow> {
+    let sessions: HashMap<&str, &TaskAttentionSession> = input
+        .sessions
+        .iter()
+        .map(|session| (session.ticket_id.as_str(), session))
+        .collect();
+    let mut pull_requests: HashMap<&str, Vec<&TaskAttentionPullRequest>> = HashMap::new();
+    for pr in &input.pull_requests {
+        pull_requests
+            .entry(pr.ticket_id.as_str())
+            .or_default()
+            .push(pr);
+    }
+
+    let mut rows = Vec::new();
+    for project in &input.projects {
+        let set_aside: HashSet<&str> = input
+            .out_of_focus_by_project
+            .get(&project.id)
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect();
+        if set_aside.is_empty() {
+            continue;
+        }
+        let project_row_start = rows.len();
+
+        for task in &input.tasks {
+            if task.project_id.as_deref() != Some(project.id.as_str())
+                || task.status != "doing"
+                || !set_aside.contains(task.id.as_str())
+            {
+                continue;
+            }
+
+            let session = sessions.get(task.id.as_str()).copied();
+            let prs = pull_requests
+                .get(task.id.as_str())
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let state = task_state(session, prs);
+            rows.push(attention_row(project, task, session, prs, state));
         }
 
         rows[project_row_start..].sort_by_key(|row| std::cmp::Reverse(row.activity_at));
@@ -385,6 +451,89 @@ mod tests {
         });
 
         assert_eq!(actual, fixture.expected);
+    }
+
+    fn set_aside_task(id: &str, project_id: &str, updated_at: i64) -> TaskAttentionTask {
+        TaskAttentionTask {
+            id: id.to_string(),
+            project_id: Some(project_id.to_string()),
+            status: "doing".to_string(),
+            title: Some(format!("Title {id}")),
+            initial_prompt: String::new(),
+            updated_at,
+            depends_on: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn set_aside_projection_lists_parked_doing_tasks_newest_first() {
+        let mut backlog = set_aside_task("t-backlog", "p1", 40);
+        backlog.status = "backlog".to_string();
+
+        let rows = project_set_aside_tasks(TaskAttentionInput {
+            projects: vec![TaskAttentionProject {
+                id: "p1".to_string(),
+                name: "Project One".to_string(),
+            }],
+            tasks: vec![
+                set_aside_task("t-focus", "p1", 30),
+                set_aside_task("t-old", "p1", 10),
+                set_aside_task("t-new", "p1", 20),
+                backlog,
+            ],
+            sessions: Vec::new(),
+            pull_requests: Vec::new(),
+            out_of_focus_by_project: HashMap::from([(
+                "p1".to_string(),
+                vec![
+                    "t-old".to_string(),
+                    "t-new".to_string(),
+                    "t-backlog".to_string(),
+                ],
+            )]),
+            focus_states_by_project: HashMap::new(),
+        });
+
+        // Only parked `doing` Tasks, newest activity first. The focus-lane Task and the
+        // backlog Task (parked but not started) stay out.
+        assert_eq!(
+            rows.iter()
+                .map(|row| row.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["t-new", "t-old"],
+        );
+        assert_eq!(rows[0].project_name, "Project One");
+        assert_eq!(rows[0].state, "idle");
+    }
+
+    #[test]
+    fn set_aside_projection_ignores_the_focus_state_filter() {
+        // A parked Task whose agent is running is still parked: the lane is a manual choice,
+        // so unlike the attention projection it never drops rows by state.
+        let rows = project_set_aside_tasks(TaskAttentionInput {
+            projects: vec![TaskAttentionProject {
+                id: "p1".to_string(),
+                name: "Project One".to_string(),
+            }],
+            tasks: vec![set_aside_task("t-running", "p1", 10)],
+            sessions: vec![TaskAttentionSession {
+                ticket_id: "t-running".to_string(),
+                status: "running".to_string(),
+                checkpoint_data: None,
+                updated_at: 50,
+            }],
+            pull_requests: Vec::new(),
+            out_of_focus_by_project: HashMap::from([(
+                "p1".to_string(),
+                vec!["t-running".to_string()],
+            )]),
+            focus_states_by_project: HashMap::from([("p1".to_string(), vec!["idle".to_string()])]),
+        });
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].state, "active");
+        assert_eq!(rows[0].activity_at, 50);
     }
 
     fn pull_request() -> TaskAttentionPullRequest {

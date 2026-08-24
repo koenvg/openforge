@@ -141,6 +141,18 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(attention)
         }
+        "get_set_aside_tasks" => {
+            let set_aside = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_set_aside_task_rows().map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get set-aside tasks: {e}"),
+                    )
+                })?
+            };
+            json_value(set_aside)
+        }
         "get_task_detail" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let task = {

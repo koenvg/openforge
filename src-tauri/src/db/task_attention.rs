@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use crate::{
     project_board::{project_task_board, ProjectBoardProjection},
     task_attention::{
-        project_task_attention, TaskAttentionInput, TaskAttentionProject, TaskAttentionPullRequest,
-        TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
+        project_set_aside_tasks, project_task_attention, TaskAttentionInput, TaskAttentionProject,
+        TaskAttentionPullRequest, TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
     },
 };
 
@@ -114,6 +114,11 @@ impl super::Database {
     /// Standalone review-request pull requests intentionally remain outside this seam.
     pub(crate) fn get_task_attention_rows(&self) -> Result<Vec<TaskAttentionRow>> {
         Ok(project_task_attention(self.get_task_projection_input()?))
+    }
+
+    /// Returns every set-aside ("Out of Focus") Task across all Projects, in attention-row shape.
+    pub(crate) fn get_set_aside_task_rows(&self) -> Result<Vec<TaskAttentionRow>> {
+        Ok(project_set_aside_tasks(self.get_task_projection_input()?))
     }
 
     /// Returns the backend-authoritative four-lane Board projection for a Project.

@@ -10,10 +10,12 @@ export interface AttentionFocusTask {
   reason: string
 }
 
-/** One project's slice of the overview: its attention tasks and its owed review PRs. */
+/** One project's slice of the overview: its task lanes and its owed review PRs. */
 export interface AttentionProjectGroup {
   project: Project
   focusTasks: AttentionFocusTask[]
+  /** Tasks the user parked in the project's Out of Focus lane. */
+  setAsideTasks: AttentionFocusTask[]
   reviewPrs: ReviewPullRequest[]
 }
 
@@ -23,6 +25,7 @@ export interface AttentionOverview {
   /** Owed review PRs whose repo maps to no local project. */
   otherReviewPrs: ReviewPullRequest[]
   totalFocusTasks: number
+  totalSetAsideTasks: number
   totalReviewPrs: number
 }
 
@@ -33,6 +36,11 @@ export interface BuildAttentionOverviewInput {
   allTasks: Task[]
   /** Backend-authoritative Task-only Needs Attention projection. */
   taskAttentionRows: TaskAttentionRow[]
+  /**
+   * Backend-authoritative set-aside ("Out of Focus") projection, in the same row shape.
+   * Disjoint from `taskAttentionRows`: a parked Task never appears in both. Defaults to empty.
+   */
+  setAsideTaskRows?: TaskAttentionRow[]
   /** All review-requested PRs (cross-repo), kept on their standalone path. */
   reviewPrs: ReviewPullRequest[]
   /** Globally excluded repos ("owner/name"). */
@@ -117,18 +125,21 @@ export function buildAttentionOverview(input: BuildAttentionOverviewInput): Atte
 
   const groups: AttentionProjectGroup[] = []
   let totalFocusTasks = 0
+  let totalSetAsideTasks = 0
   let totalReviewPrs = otherReviewPrs.length
 
   for (const project of input.projects) {
     if (hiddenProjectIds.has(project.id)) continue
     const focusTasks = buildFocusTasks(project, tasksById, input.taskAttentionRows)
+    const setAsideTasks = buildFocusTasks(project, tasksById, input.setAsideTaskRows ?? [])
     const reviewPrs = reviewsByProject.get(project.id) ?? []
-    if (focusTasks.length === 0 && reviewPrs.length === 0) continue
+    if (focusTasks.length === 0 && setAsideTasks.length === 0 && reviewPrs.length === 0) continue
 
-    groups.push({ project, focusTasks, reviewPrs })
+    groups.push({ project, focusTasks, setAsideTasks, reviewPrs })
     totalFocusTasks += focusTasks.length
+    totalSetAsideTasks += setAsideTasks.length
     totalReviewPrs += reviewPrs.length
   }
 
-  return { groups, otherReviewPrs, totalFocusTasks, totalReviewPrs }
+  return { groups, otherReviewPrs, totalFocusTasks, totalSetAsideTasks, totalReviewPrs }
 }

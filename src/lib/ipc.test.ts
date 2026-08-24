@@ -23,6 +23,7 @@ import {
   fsSearchFiles,
   fsWriteFile,
   getAllTasks,
+  getSetAsideTasks,
   getTaskAttention,
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
@@ -141,6 +142,14 @@ describe("ipc task attention projection", () => {
     await expect(getTaskAttention()).resolves.toEqual([]);
 
     expect(invokeMock).toHaveBeenCalledWith("get_task_attention");
+  });
+
+  it("requests the backend-owned set-aside rows", async () => {
+    invokeMock.mockResolvedValue([]);
+
+    await expect(getSetAsideTasks()).resolves.toEqual([]);
+
+    expect(invokeMock).toHaveBeenCalledWith("get_set_aside_tasks");
   });
 });
 

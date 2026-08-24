@@ -17,6 +17,7 @@ import AttentionOverviewDialog from './AttentionOverviewDialog.svelte'
 const ipc = vi.hoisted(() => ({
   getAllTasks: vi.fn(),
   getTaskAttention: vi.fn(),
+  getSetAsideTasks: vi.fn(),
   getProjectConfig: vi.fn(),
   getConfig: vi.fn(),
   setConfig: vi.fn(),
@@ -92,9 +93,15 @@ function reviewPr(id: number, owner: string, name: string, title: string): Revie
   }
 }
 
-function renderDialog() {
+type DialogProps = {
+  onClose: () => void
+  onOpenTask: (task: Task) => void
+  onOpenPr: (pr: ReviewPullRequest, projectId: string | null) => void
+}
+
+function renderDialog(props: Partial<DialogProps> = {}) {
   return render(AttentionOverviewDialog, {
-    props: { onClose: vi.fn(), onOpenTask: vi.fn(), onOpenPr: vi.fn() },
+    props: { onClose: vi.fn(), onOpenTask: vi.fn(), onOpenPr: vi.fn(), ...props },
   })
 }
 
@@ -119,6 +126,7 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
     ipc.getAllTasks.mockResolvedValue([])
     ipc.getTaskAttention.mockResolvedValue([])
+    ipc.getSetAsideTasks.mockResolvedValue([])
     ipc.getProjectConfig.mockResolvedValue(null)
     ipc.getConfig.mockResolvedValue(null)
     ipc.setConfig.mockResolvedValue(undefined)
@@ -213,5 +221,243 @@ describe('AttentionOverviewDialog — live refresh while open', () => {
 
     expect(screen.queryByText('Task One')).toBeNull() // still collapsed
     expect(screen.getByText('Task Two')).toBeTruthy() // sibling still expanded
+  })
+})
+
+describe('AttentionOverviewDialog — initial focus', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    projects.set([projectRecord('p1', 'Project One')])
+    reviewPrs.set([])
+    ticketPrs.set(new Map())
+    hiddenProjectIds.set(new Set())
+    globalExcludedPrRepos.set(new Set())
+    activeProjectId.set(null)
+    taskAttentionRows.set([])
+
+    ipc.getAllTasks.mockResolvedValue([taskRecord('t1', 'p1', 'Task One'), taskRecord('t2', 'p1', 'Task Two')])
+    ipc.getTaskAttention.mockResolvedValue([
+      attentionRow('t1', 'p1', 'Task One'),
+      attentionRow('t2', 'p1', 'Task Two'),
+    ])
+    ipc.getSetAsideTasks.mockResolvedValue([])
+    ipc.getProjectConfig.mockResolvedValue(null)
+    ipc.getConfig.mockResolvedValue(null)
+    ipc.setConfig.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  it('hands DOM focus to the highlighted row once the list renders', async () => {
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Task One')).toBeTruthy())
+
+    // Row 0 is the project header, which ↑/↓ skip while expanded, so the cursor opens on row 1.
+    expect(document.activeElement?.getAttribute('data-attn-row')).toBe('1')
+  })
+
+  it('keeps the shortcuts alive after a filter empties the list', async () => {
+    // Reviews only: hiding them removes every row, including the one holding DOM focus.
+    ipc.getAllTasks.mockResolvedValue([])
+    ipc.getTaskAttention.mockResolvedValue([])
+    reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'Please review my fix')])
+
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Please review my fix')).toBeTruthy())
+
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'r' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByText(/Reviews are hidden/i)).toBeTruthy()
+
+    // R again, from wherever focus landed, has to bring them back without a mouse click first.
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'r' })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('Please review my fix')).toBeTruthy()
+    expect(document.activeElement?.getAttribute('data-attn-row')).toBe('1')
+  })
+
+  it('opens the highlighted row on Enter without moving the cursor first', async () => {
+    const onOpenTask = vi.fn()
+    renderDialog({ onOpenTask })
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Task One')).toBeTruthy())
+
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+
+    expect(onOpenTask).toHaveBeenCalledTimes(1)
+    expect(onOpenTask.mock.calls[0][0].id).toBe('t1')
+  })
+})
+
+describe('AttentionOverviewDialog — E / R toggles', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    projects.set([projectRecord('p1', 'Project One'), projectRecord('p2', 'Project Two')])
+    reviewPrs.set([reviewPr(1, 'someone', 'unknown', 'Please review my fix')])
+    ticketPrs.set(new Map())
+    hiddenProjectIds.set(new Set())
+    globalExcludedPrRepos.set(new Set())
+    activeProjectId.set(null)
+    taskAttentionRows.set([])
+
+    ipc.getAllTasks.mockResolvedValue([
+      taskRecord('t1', 'p1', 'Focus task'),
+      taskRecord('t2', 'p1', 'Parked one'),
+      taskRecord('t3', 'p2', 'Parked two'),
+    ])
+    ipc.getTaskAttention.mockResolvedValue([attentionRow('t1', 'p1', 'Focus task')])
+    ipc.getSetAsideTasks.mockResolvedValue([
+      attentionRow('t2', 'p1', 'Parked one'),
+      attentionRow('t3', 'p2', 'Parked two'),
+    ])
+    ipc.getProjectConfig.mockResolvedValue(null)
+    ipc.getConfig.mockResolvedValue(null)
+    ipc.setConfig.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  async function renderLoaded() {
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Focus task')).toBeTruthy())
+    return screen.getByRole('dialog')
+  }
+
+  async function press(dialog: HTMLElement, key: string) {
+    await fireEvent.keyDown(dialog, { key })
+    await vi.advanceTimersByTimeAsync(0)
+  }
+
+  it('R hides every review row and leaves tasks alone, then restores them', async () => {
+    const dialog = await renderLoaded()
+
+    await press(dialog, 'r')
+    expect(screen.queryByText('Please review my fix')).toBeNull()
+    expect(screen.getByText('Focus task')).toBeTruthy()
+
+    await press(dialog, 'r')
+    expect(screen.getByText('Please review my fix')).toBeTruthy()
+  })
+
+  it('E swaps the focus lane for the set-aside tasks of every project', async () => {
+    const dialog = await renderLoaded()
+    expect(screen.queryByText('Parked one')).toBeNull()
+
+    await press(dialog, 'e')
+
+    expect(screen.queryByText('Focus task')).toBeNull()
+    expect(screen.getByText('Parked one')).toBeTruthy()
+    expect(screen.getByText('Parked two')).toBeTruthy()
+    expect(screen.getByText('Project Two')).toBeTruthy()
+
+    await press(dialog, 'e')
+    expect(screen.getByText('Focus task')).toBeTruthy()
+    expect(screen.queryByText('Parked one')).toBeNull()
+  })
+
+  it('has no shortcut that hides the task rows', async () => {
+    const dialog = await renderLoaded()
+
+    await press(dialog, 't')
+
+    expect(screen.getByText('Focus task')).toBeTruthy()
+  })
+
+  it('accepts the shortcuts uppercase and ignores them when a modifier is held', async () => {
+    const dialog = await renderLoaded()
+
+    await fireEvent.keyDown(dialog, { key: 'E', shiftKey: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByText('Parked one')).toBeTruthy()
+
+    // ⌘R is the app/browser reload, never a filter toggle.
+    await fireEvent.keyDown(dialog, { key: 'r', metaKey: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByText('Please review my fix')).toBeTruthy()
+  })
+
+  it('persists the review toggle, but reopens on the focus lane', async () => {
+    const dialog = await renderLoaded()
+
+    await press(dialog, 'r')
+    await press(dialog, 'e')
+
+    expect(ipc.setConfig).toHaveBeenCalledWith(
+      'attention_overview_filters',
+      JSON.stringify({ showReviews: false }),
+    )
+    expect(ipc.setConfig.mock.calls.every(([key]) => key !== 'attention_overview_lane')).toBe(true)
+  })
+
+  it('restores the persisted review toggle when the dialog reopens', async () => {
+    ipc.getConfig.mockImplementation(async (key: string) =>
+      key === 'attention_overview_filters' ? JSON.stringify({ showReviews: false }) : null)
+
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Focus task')).toBeTruthy())
+
+    expect(screen.queryByText('Please review my fix')).toBeNull()
+  })
+
+  it('shows exactly two chips: the task lane and the review toggle', async () => {
+    const dialog = await renderLoaded()
+    const chips = () => screen.getAllByRole('button')
+      .map((button) => button.textContent?.replace(/\s+/g, ' ').trim())
+      .filter((text) => /^[ER] /.test(text ?? ''))
+
+    // E names the one task lane on screen and carries its count. There is no separate
+    // "Tasks" chip, so the header never reads as two lists running side by side.
+    expect(chips()).toEqual(['E Focus 1', 'R Reviews 1'])
+
+    await press(dialog, 'e')
+
+    expect(chips()).toEqual(['E Set aside 2', 'R Reviews 1'])
+  })
+
+  it('toggles from the header chip as well as the keyboard', async () => {
+    await renderLoaded()
+
+    await fireEvent.click(screen.getByRole('button', { name: /^E Focus 1$/ }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(screen.getByText('Parked one')).toBeTruthy()
+    expect(screen.queryByText('Focus task')).toBeNull()
+    expect(screen.getByRole('button', { name: /^E Set aside 2$/ }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('explains an empty list caused by hidden reviews instead of claiming you are caught up', async () => {
+    // Reviews only, so hiding them clears the list.
+    ipc.getTaskAttention.mockResolvedValue([])
+    ipc.getSetAsideTasks.mockResolvedValue([])
+    renderDialog()
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Please review my fix')).toBeTruthy())
+
+    await press(screen.getByRole('dialog'), 'r')
+
+    expect(screen.queryByText(/all caught up/i)).toBeNull()
+    expect(screen.getByText(/Reviews are hidden/i)).toBeTruthy()
+  })
+
+  it('says nothing is set aside instead of claiming you are caught up', async () => {
+    reviewPrs.set([])
+    ipc.getSetAsideTasks.mockResolvedValue([])
+    const dialog = await renderLoaded()
+
+    await press(dialog, 'e')
+
+    expect(screen.getByText(/Nothing is set aside/i)).toBeTruthy()
+    expect(screen.queryByText(/all caught up/i)).toBeNull()
   })
 })

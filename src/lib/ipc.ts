@@ -116,6 +116,11 @@ export async function getTaskAttention(): Promise<TaskAttentionRow[]> {
   return invoke<TaskAttentionRow[]>("get_task_attention");
 }
 
+/** Every set-aside ("Out of Focus") task across all projects, in attention-row shape. */
+export async function getSetAsideTasks(): Promise<TaskAttentionRow[]> {
+  return invoke<TaskAttentionRow[]>("get_set_aside_tasks");
+}
+
 export async function getProjectConfig(projectId: string, key: string): Promise<string | null> {
   return invoke<string | null>("get_project_config", { projectId, key });
 }

@@ -42,6 +42,7 @@ fn command_domain(command: &str) -> Option<CommandDomain> {
         | "get_tasks"
         | "get_project_attention"
         | "get_task_attention"
+        | "get_set_aside_tasks"
         | "get_task_detail"
         | "get_tasks_for_project"
         | "get_task_workspace" => Some(CommandDomain::Task),
@@ -115,6 +116,7 @@ mod tests {
             ("get_tasks", CommandDomain::Task),
             ("get_project_attention", CommandDomain::Task),
             ("get_task_attention", CommandDomain::Task),
+            ("get_set_aside_tasks", CommandDomain::Task),
             ("get_task_detail", CommandDomain::Task),
             ("get_tasks_for_project", CommandDomain::Task),
             ("get_task_workspace", CommandDomain::Task),

@@ -117,6 +117,50 @@ describe('buildAttentionOverview — backend-projected tasks', () => {
   })
 })
 
+describe('buildAttentionOverview — set-aside tasks', () => {
+  it('carries the set-aside lane alongside the focus lane on the same project group', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1')],
+      allTasks: [task('focused', 'p1'), task('parked', 'p1')],
+      taskAttentionRows: [attentionRow('focused', 'p1')],
+      setAsideTaskRows: [attentionRow('parked', 'p1', { title: 'Parked work', state: 'paused' })],
+    }))
+
+    expect(result.groups[0].focusTasks.map((item) => item.task.id)).toEqual(['focused'])
+    expect(result.groups[0].setAsideTasks.map((item) => ({ id: item.task.id, title: item.title, state: item.state })))
+      .toEqual([{ id: 'parked', title: 'Parked work', state: 'paused' }])
+    expect(result.totalSetAsideTasks).toBe(1)
+  })
+
+  it('keeps a project whose only rows are set aside, so the set-aside view can show it', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1'), project('p2')],
+      allTasks: [task('parked', 'p2')],
+      setAsideTaskRows: [attentionRow('parked', 'p2')],
+    }))
+
+    expect(result.groups.map((group) => group.project.id)).toEqual(['p2'])
+    expect(result.groups[0].focusTasks).toHaveLength(0)
+  })
+
+  it('drops set-aside rows for hidden projects and rows without a desktop Task record', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1'), project('hidden')],
+      allTasks: [task('parked', 'p1'), task('hidden-parked', 'hidden')],
+      setAsideTaskRows: [
+        attentionRow('parked', 'p1'),
+        attentionRow('stale', 'p1'),
+        attentionRow('hidden-parked', 'hidden'),
+      ],
+      hiddenProjectIds: new Set(['hidden']),
+    }))
+
+    expect(result.groups.map((group) => group.project.id)).toEqual(['p1'])
+    expect(result.groups[0].setAsideTasks.map((item) => item.task.id)).toEqual(['parked'])
+    expect(result.totalSetAsideTasks).toBe(1)
+  })
+})
+
 describe('buildAttentionOverview — standalone review PRs', () => {
   it('includes only unopened, non-DO-NOT-REVIEW, non-excluded PRs for the matching project', () => {
     const result = buildAttentionOverview(baseInput({
