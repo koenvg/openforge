@@ -104,6 +104,53 @@ describe('PluginFolderPanel', () => {
     expect(mocks.scanPluginFolder).not.toHaveBeenCalled()
   })
 
+  it('shows a configuration read failure with a retry action', async () => {
+    mocks.getConfig.mockRejectedValue(new Error('settings unavailable'))
+    render(PluginFolderPanel)
+
+    expect(await screen.findByText('settings unavailable')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Retry loading plugin folder' })).toBeTruthy()
+    expect(mocks.scanPluginFolder).not.toHaveBeenCalled()
+  })
+
+  it('recovers when retrying the configuration read', async () => {
+    mocks.getConfig
+      .mockRejectedValueOnce(new Error('settings unavailable'))
+      .mockResolvedValueOnce(FOLDER)
+    mocks.scanPluginFolder.mockResolvedValue([discovered()])
+    render(PluginFolderPanel)
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Retry loading plugin folder' }))
+
+    await vi.waitFor(() => {
+      expect(mocks.getConfig).toHaveBeenCalledTimes(2)
+      expect(mocks.scanPluginFolder).toHaveBeenCalledWith(FOLDER)
+      expect(screen.getByText('Alpha')).toBeTruthy()
+    })
+    expect(screen.queryByText('settings unavailable')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry loading plugin folder' })).toBeNull()
+  })
+
+  it('starts only one configuration retry when the retry action is clicked twice', async () => {
+    let resolveRetry: (folder: string) => void = () => {}
+    const retryResult = new Promise<string>((resolve) => {
+      resolveRetry = resolve
+    })
+    mocks.getConfig
+      .mockRejectedValueOnce(new Error('settings unavailable'))
+      .mockReturnValue(retryResult)
+    mocks.scanPluginFolder.mockResolvedValue([discovered()])
+    render(PluginFolderPanel)
+
+    const retry = await screen.findByRole('button', { name: 'Retry loading plugin folder' })
+    retry.click()
+    retry.click()
+
+    expect(mocks.getConfig).toHaveBeenCalledTimes(2)
+    resolveRetry(FOLDER)
+    await vi.waitFor(() => expect(screen.getByText('Alpha')).toBeTruthy())
+  })
+
   it('remembers the chosen folder and scans it', async () => {
     mocks.selectDirectory.mockResolvedValue(FOLDER)
     mocks.scanPluginFolder.mockResolvedValue([discovered()])

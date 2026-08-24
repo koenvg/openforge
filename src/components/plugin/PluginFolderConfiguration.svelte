@@ -17,22 +17,28 @@
 
   let folderPath = $state<string | null>(null)
   let configurationLoadError = $state<string | null>(null)
+  let configurationLoading = $state(false)
   let canScan = $state(false)
   let discoveryBusy = $state(false)
 
+  async function loadFolderConfiguration() {
+    if (configurationLoading) return
+    configurationLoading = true
+    configurationLoadError = null
+    try {
+      const stored = (await getConfig(PLUGIN_FOLDER_CONFIG_KEY))?.trim() ?? ''
+      if (!stored) return
+      folderPath = stored
+      canScan = true
+    } catch (error) {
+      configurationLoadError = pluginActionErrorMessage(error)
+    } finally {
+      configurationLoading = false
+    }
+  }
+
   onMount(() => {
-    void (async () => {
-      try {
-        const stored = (await getConfig(PLUGIN_FOLDER_CONFIG_KEY))?.trim() ?? ''
-        if (!stored) return
-        folderPath = stored
-        canScan = true
-      } catch (error) {
-        // This matches the previous panel behavior: a configuration read failure is retained as
-        // a scan error, but there is no selected folder section in which to display it.
-        configurationLoadError = pluginActionErrorMessage(error)
-      }
-    })()
+    void loadFolderConfiguration()
   })
 
   async function chooseFolder() {
@@ -73,6 +79,23 @@
   }
 </script>
 
+{#if configurationLoadError}
+  <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
+    <AlertCircle size={14} class="shrink-0 mt-0.5" />
+    <div class="flex flex-col items-start gap-1">
+      <span class="break-words">{configurationLoadError}</span>
+      <button
+        class="btn btn-ghost btn-xs"
+        type="button"
+        disabled={disabled || configurationLoading}
+        onclick={loadFolderConfiguration}
+      >
+        Retry loading plugin folder
+      </button>
+    </div>
+  </div>
+{/if}
+
 {#if !folderPath}
   <button class="btn btn-primary btn-sm self-start" type="button" {disabled} onclick={chooseFolder}>
     <FolderOpen size={14} />
@@ -92,12 +115,6 @@
     </button>
   </div>
 
-  {#if configurationLoadError}
-    <div class="text-xs text-error bg-error/10 p-2 rounded flex items-start gap-2">
-      <AlertCircle size={14} class="shrink-0 mt-0.5" />
-      <span class="break-words">{configurationLoadError}</span>
-    </div>
-  {/if}
 
   <PluginFolderDiscovery
     {folderPath}
