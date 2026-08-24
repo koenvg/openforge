@@ -375,6 +375,20 @@ fn append_start_prompt_contributions(
     }
 }
 
+fn split_leading_pi_skill_invocation(prompt: &str) -> Option<(&str, &str)> {
+    let after_prefix = prompt.strip_prefix("/skill:")?;
+    let skill_name_len = after_prefix
+        .find(char::is_whitespace)
+        .unwrap_or(after_prefix.len());
+    if skill_name_len == 0 {
+        return None;
+    }
+
+    let invocation_end = "/skill:".len() + skill_name_len;
+    let (invocation, remainder) = prompt.split_at(invocation_end);
+    Some((invocation, remainder.trim_start()))
+}
+
 pub fn build_task_prompt(
     task: &db::TaskRow,
     additional_instructions: Option<&str>,
@@ -382,7 +396,18 @@ pub fn build_task_prompt(
     start_prompt_contributions: &[StartPromptContribution],
     prompt_prefix: Option<&str>,
 ) -> String {
+    let task_prompt = task.prompt.as_deref().unwrap_or(&task.initial_prompt);
+    let (skill_invocation, task_prompt) = split_leading_pi_skill_invocation(task_prompt)
+        .map_or((None, task_prompt), |(invocation, remainder)| {
+            (Some(invocation), remainder)
+        });
     let mut prompt = String::new();
+    if let Some(invocation) = skill_invocation {
+        prompt.push_str(invocation);
+        // Pi finds the command name at the first ASCII space, then treats the
+        // complete generated prompt as the skill's arguments.
+        prompt.push(' ');
+    }
 
     append_start_prompt_contributions(&mut prompt, task, start_prompt_contributions);
 
@@ -429,7 +454,7 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
         }
     }
 
-    prompt.push_str(task.prompt.as_deref().unwrap_or(&task.initial_prompt));
+    prompt.push_str(task_prompt);
     prompt.push('\n');
 
     prompt
@@ -483,6 +508,40 @@ mod tests {
             content: "Project start guidance for {{taskId}}".to_string(),
             order: 0,
         }]
+    }
+
+    #[test]
+    fn test_build_task_prompt_keeps_leading_pi_skill_command_before_generated_instructions() {
+        let task = sample_task(
+            "T-122",
+            "/skill:manual-skill Complete the release notes",
+            None,
+        );
+
+        let prompt = build_task_prompt(
+            &task,
+            Some("Project rules here"),
+            true,
+            &start_prompt_contributions(),
+            Some("Verify this is still relevant before doing it."),
+        );
+
+        assert!(
+            prompt.starts_with("/skill:manual-skill "),
+            "Pi only expands skill commands at the start of the prompt"
+        );
+        let contribution_at = prompt.find("<openforge_start_prompt_contribution").unwrap();
+        let cleanup_at = prompt.find("<openforge_code_cleanup>").unwrap();
+        let instructions_at = prompt.find("Project rules here").unwrap();
+        let prefix_at = prompt
+            .find("Verify this is still relevant before doing it.")
+            .unwrap();
+        let task_at = prompt.find("Complete the release notes").unwrap();
+
+        assert!(contribution_at < cleanup_at);
+        assert!(cleanup_at < instructions_at);
+        assert!(instructions_at < prefix_at);
+        assert!(prefix_at < task_at);
     }
 
     #[test]
