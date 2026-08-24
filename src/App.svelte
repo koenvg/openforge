@@ -35,6 +35,7 @@
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { getViews, isCrossProjectView } from './lib/views'
   import { registerAppShortcuts } from './lib/appShortcuts'
+  import { toggleVoiceInputShortcut } from './lib/voiceInputShortcut'
   import { useAppShortcutHelpController } from './lib/appShortcutHelpController.svelte'
   import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
   import { loadAppStartupData } from './lib/appStartup'
@@ -353,7 +354,7 @@
         },
         goBack: () => { void navigation.goBack() },
         navigateForward: () => { void navigation.goForward() },
-        toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
+        toggleVoiceRecording: () => { toggleVoiceInputShortcut() },
         toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
         toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
         canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !shortcutHelp.isOpen,

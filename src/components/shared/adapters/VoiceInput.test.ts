@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import VoiceInput from './VoiceInput.svelte'
+import { toggleVoiceInputShortcut } from '../../../lib/voiceInputShortcut'
 
 vi.mock('../../../lib/ipc', () => ({
   transcribeAudio: vi.fn(),
@@ -20,6 +21,20 @@ vi.mock('../../../lib/audioRecorder', () => ({
 import { getWhisperModelStatus, transcribeAudio } from '../../../lib/ipc'
 import { createAudioRecorder } from '../../../lib/audioRecorder'
 
+function mockUnavailableWhisperModel() {
+  vi.mocked(getWhisperModelStatus).mockResolvedValue({
+    size: 'small',
+    display_name: 'Small',
+    downloaded: false,
+    model_path: null,
+    model_size_bytes: null,
+    model_name: 'ggml-small.bin',
+    disk_size_mb: 466,
+    ram_usage_mb: 1000,
+    is_active: true,
+  })
+}
+
 describe('VoiceInput', () => {
   const baseProps = {
     onTranscription: vi.fn(),
@@ -36,17 +51,7 @@ describe('VoiceInput', () => {
   })
 
   it('shows model not downloaded message when model status returns downloaded: false', async () => {
-    vi.mocked(getWhisperModelStatus).mockResolvedValue({
-      size: 'small',
-      display_name: 'Small',
-      downloaded: false,
-      model_path: null,
-      model_size_bytes: null,
-      model_name: 'ggml-small.bin',
-      disk_size_mb: 466,
-      ram_usage_mb: 1000,
-      is_active: true,
-    })
+    mockUnavailableWhisperModel()
 
     render(VoiceInput, { props: baseProps })
     const button = screen.getByRole('button', { name: 'Start voice input' })
@@ -107,39 +112,54 @@ describe('VoiceInput', () => {
     expect(button.getAttribute('title')).toBe('Voice input (⌘D)')
   })
 
-  it('responds to toggle-voice-recording event when listenToHotkey is true', async () => {
-    vi.mocked(getWhisperModelStatus).mockResolvedValue({
-      size: 'small',
-      display_name: 'Small',
-      downloaded: false,
-      model_path: null,
-      model_size_bytes: null,
-      model_name: 'ggml-small.bin',
-      disk_size_mb: 466,
-      ram_usage_mb: 1000,
-      is_active: true,
-    })
+  it('responds to the voice shortcut when listenToHotkey is true', async () => {
+    mockUnavailableWhisperModel()
 
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: true } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    toggleVoiceInputShortcut()
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).toHaveBeenCalled()
   })
 
-  it('ignores toggle-voice-recording event when listenToHotkey is false', async () => {
+  it('ignores the voice shortcut when listenToHotkey is false', async () => {
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: false } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    toggleVoiceInputShortcut()
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).not.toHaveBeenCalled()
   })
 
-  it('ignores toggle-voice-recording event when disabled', async () => {
+  it('registers for the voice shortcut when listenToHotkey becomes true', async () => {
+    mockUnavailableWhisperModel()
+    const view = render(VoiceInput, { props: { ...baseProps, listenToHotkey: false } })
+
+    expect(toggleVoiceInputShortcut()).toBe(false)
+
+    await view.rerender({ ...baseProps, listenToHotkey: true })
+    expect(toggleVoiceInputShortcut()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(getWhisperModelStatus).toHaveBeenCalledOnce()
+  })
+
+  it('ignores the voice shortcut when disabled', async () => {
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: true, disabled: true } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    toggleVoiceInputShortcut()
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).not.toHaveBeenCalled()
+  })
+
+  it('starts only one recording when multiple voice inputs listen to the shortcut', async () => {
+    mockUnavailableWhisperModel()
+
+    render(VoiceInput, { props: { onTranscription: vi.fn(), listenToHotkey: true } })
+    render(VoiceInput, { props: { onTranscription: vi.fn(), listenToHotkey: true } })
+
+    expect(toggleVoiceInputShortcut()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(getWhisperModelStatus).toHaveBeenCalledOnce()
   })
 })
