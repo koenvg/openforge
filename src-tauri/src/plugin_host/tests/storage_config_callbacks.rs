@@ -1,4 +1,5 @@
 use super::super::*;
+use super::build_plugin_host;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
@@ -97,6 +98,41 @@ async fn host_storage_callback_round_trips_through_plugin_storage_table() {
         .await
         .expect("get deleted storage callback");
     assert_eq!(deleted, Value::Null);
+}
+
+#[tokio::test]
+async fn host_storage_callbacks_preserve_scope_validation_errors() {
+    let host = build_plugin_host();
+    let params = json!({
+        "pluginId": "backend-plugin",
+        "scope": "project",
+        "key": "repo"
+    });
+
+    for method in [
+        "openforge.storage.get",
+        "openforge.storage.set",
+        "openforge.storage.delete",
+    ] {
+        let error = host
+            .handle_host_callback(method, &params)
+            .await
+            .expect_err("project storage without scopeId should fail");
+        assert_eq!(error, "Plugin storage scope 'project' requires scopeId");
+    }
+
+    let error = host
+        .handle_host_callback(
+            "openforge.storage.get",
+            &json!({
+                "pluginId": "backend-plugin",
+                "scope": "workspace",
+                "key": "repo"
+            }),
+        )
+        .await
+        .expect_err("unsupported storage scope should fail");
+    assert_eq!(error, "Unsupported plugin storage scope: workspace");
 }
 
 #[tokio::test]

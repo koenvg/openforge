@@ -268,6 +268,39 @@ async fn handles_db_backed_commands() {
 }
 
 #[tokio::test]
+async fn plugin_storage_ipc_preserves_scope_validation_errors() {
+    let (state, _temp_dir) = test_state("app_invoke_plugin_storage_scope_errors");
+
+    for (payload, expected) in [
+        (
+            json!({
+                "pluginId": "com.openforge.github-sync",
+                "scope": "task",
+                "key": "settings"
+            }),
+            "Plugin storage scope 'task' requires scopeId",
+        ),
+        (
+            json!({
+                "pluginId": "com.openforge.github-sync",
+                "scope": "workspace",
+                "scopeId": "W-1",
+                "key": "settings"
+            }),
+            "Unsupported plugin storage scope: workspace",
+        ),
+    ] {
+        let error = invoke(&state, "get_plugin_storage", payload)
+            .await
+            .expect_err("invalid plugin storage scope should fail");
+        assert_eq!(
+            error,
+            (StatusCode::INTERNAL_SERVER_ERROR, expected.to_string())
+        );
+    }
+}
+
+#[tokio::test]
 async fn resolves_plugin_asset_roots_through_rust_plugin_platform() {
     let (state, _temp_dir, _app_dir) = test_state_with_backend_app("app_invoke_plugin_asset_roots");
     let source = tempfile::tempdir().expect("source plugin dir");
