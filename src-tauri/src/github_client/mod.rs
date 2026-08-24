@@ -110,6 +110,11 @@ impl GitHubClient {
     }
 
     #[cfg(test)]
+    pub(crate) fn set_last_rate_limit_reset(&self, reset_at: Option<i64>) {
+        *self.last_rate_limit_reset.lock().unwrap() = reset_at;
+    }
+
+    #[cfg(test)]
     pub(crate) fn shares_cache_with(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.etag_cache, &other.etag_cache)
             && Arc::ptr_eq(&self.last_rate_limit_reset, &other.last_rate_limit_reset)
