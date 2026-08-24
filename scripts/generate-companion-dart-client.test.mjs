@@ -88,4 +88,16 @@ describe('Companion OpenAPI Dart generator', () => {
     expect(generated).toContain("'generator_probe_failed'")
     expect(generated).toContain(`'${fingerprint}'`)
   })
+  it('does not decode successful no-content operation responses', async () => {
+    const contract = JSON.parse(await readFile(contractUrl, 'utf8'))
+    const generated = generateCompanionDartClient(`${JSON.stringify(contract)}\n`)
+    const operation = generated.match(
+      /Future<void> refreshCompanionGithub\([\s\S]*?^  \}$/m,
+    )?.[0]
+
+    expect(operation).toContain(
+      '_expectSuccessWithoutBody(response, const <int>{204});',
+    )
+    expect(operation).not.toContain('_successJson')
+  })
 })
