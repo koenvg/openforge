@@ -52,7 +52,7 @@
   }
 
   onMount(async () => {
-    const registeredUnlisten = await listenDesktopEvent<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
+    const registeredUnlisten = await listenDesktopEvent(
       'whisper-download-progress',
       (event) => {
         if (destroyed) return

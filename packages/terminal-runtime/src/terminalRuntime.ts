@@ -20,13 +20,18 @@ import { themeMode as defaultThemeMode } from './theme'
 
 export { APP_EVENTS_RECONNECTED_EVENT } from './terminalReconnectReplay'
 export type { TerminalImageProtocol } from './terminalImages'
+export { ptyExitEventName, ptyOutputEventName } from './terminalRuntimeTypes'
 export type {
+  AppEventsReconnectedPayload,
   PoolEntry,
   PtyBufferState,
-  PtyEvent,
+  PtyExitEventPayload,
+  PtyOutputEventPayload,
   ShellLifecycleState,
   TaskTerminalTabsSession,
   TerminalRuntimeEvent,
+  TerminalRuntimeEventName,
+  TerminalRuntimeEventPayload,
   TerminalRuntimeHost,
   TerminalRuntimeUnlistenFn,
   TerminalTab,

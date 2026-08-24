@@ -1,4 +1,7 @@
 import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../electron/frontendHostRequestProtocol.js'
+import type { AgentEvent, PollResult } from './types'
+
+export type AgentStatusChangedKind = 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
 
 export type DesktopCommandOwner = 'rust-sidecar' | 'electron-main'
 
@@ -21,17 +24,169 @@ export interface DesktopCommandContract {
   domain: DesktopIpcDomain
 }
 
-export interface AppDesktopEventContract {
-  eventName: string
-  payload: string
-  domain: DesktopIpcDomain
+export interface TaskPullRequestUpdatedPayload {
+  task_id: string
+  pr_id: number
+  action: 'merged' | 'enqueued'
 }
 
-export interface DynamicDesktopEventContract {
-  eventPattern: string
-  payload: string
-  domain: DesktopIpcDomain
+export interface AppEventsGapPayload {
+  requestedAfter: string
+  oldestAvailable: string
+  newestAvailable: string
 }
+
+export interface ReviewStatusChangedPayload {
+  task_id: string
+  project_id: string | null
+  pr_id: number
+  pr_title: string
+  review_status: string
+  timestamp: number
+}
+
+export interface ActionCompletePayload {
+  task_id: string
+}
+
+export interface ImplementationFailedPayload {
+  task_id: string
+  error: string
+}
+
+export interface SessionResumedPayload {
+  task_id: string
+  workspace_path: string
+  pty_instance_id?: number | null
+}
+
+export interface NewPrCommentPayload {
+  ticket_id: string
+  comment_id: number
+}
+
+export interface CiStatusChangedPayload {
+  task_id: string
+  project_id?: string | null
+  pr_id: number
+  pr_title: string
+  ci_status: string
+  timestamp: number
+}
+
+export interface SessionAbortedPayload {
+  ticket_id: string
+  session_id: string
+}
+
+export interface AgentStatusChangedPayload {
+  task_id: string
+  status: string
+  provider?: string
+  kind?: AgentStatusChangedKind | null
+  pty_instance_id?: number | null
+  raw_event_type?: string | null
+  raw_status_type?: string | null
+}
+
+export interface AgentPtyExitedPayload {
+  task_id: string
+  success: boolean
+  instance_id: number
+}
+
+export interface GithubRateLimitedPayload {
+  reset_at: number | null
+}
+
+export interface OpenUrlEventPayload {
+  url: string
+}
+
+export interface WriteClipboardTextEventPayload {
+  text: string
+}
+
+export interface PluginInstallationChangedPayload {
+  plugin_id: string
+}
+
+export interface AppPluginEnablementChangedPayload {
+  plugin_id: string
+  enabled: boolean
+}
+
+export interface ProjectPluginEnablementChangedPayload {
+  plugin_id: string
+  project_id: string
+  enabled: boolean
+}
+
+export interface PluginReloadRequestedPayload {
+  plugin_id: string
+  project_id?: string | null
+}
+
+export interface TaskChangedPayload {
+  action: 'created' | 'updated' | 'deleted'
+  task_id: string
+}
+
+export interface AppDesktopEventPayloads {
+  'github-sync-complete': PollResult
+  'task-pull-request-updated': TaskPullRequestUpdatedPayload
+  'openforge-app-events-gap': AppEventsGapPayload
+  'review-status-changed': ReviewStatusChangedPayload
+  'action-complete': ActionCompletePayload
+  'implementation-failed': ImplementationFailedPayload
+  'session-resumed': SessionResumedPayload
+  'startup-resume-complete': void
+  'new-pr-comment': NewPrCommentPayload
+  'comment-addressed': void
+  'ci-status-changed': CiStatusChangedPayload
+  'agent-event': AgentEvent
+  'session-aborted': SessionAbortedPayload
+  'agent-status-changed': AgentStatusChangedPayload
+  'agent-pty-exited': AgentPtyExitedPayload
+  'review-pr-count-changed': number
+  'authored-prs-updated': void
+  'github-rate-limited': GithubRateLimitedPayload
+  'plugin-frontend-command-request': unknown
+  'openforge.open-url': OpenUrlEventPayload
+  'openforge.write-clipboard-text': WriteClipboardTextEventPayload
+  'plugin-installation-changed': PluginInstallationChangedPayload
+  'app-plugin-enablement-changed': AppPluginEnablementChangedPayload
+  'project-plugin-enablement-changed': ProjectPluginEnablementChangedPayload
+  'plugin-reload-requested': PluginReloadRequestedPayload
+  'task-changed': TaskChangedPayload
+}
+
+export type AppDesktopEventName = keyof AppDesktopEventPayloads
+
+export interface WhisperDownloadProgressPayload {
+  model_size: string
+  bytes_downloaded: number
+  total_bytes: number
+  percentage: number
+}
+
+export interface AdditionalDesktopEventPayloads {
+  'whisper-download-progress': WhisperDownloadProgressPayload
+}
+
+export type KnownDesktopEventName =
+  | AppDesktopEventName
+  | keyof AdditionalDesktopEventPayloads
+  | import('@openforge-app/terminal-runtime').TerminalRuntimeEventName
+
+export type KnownDesktopEventPayload<TEventName extends KnownDesktopEventName> =
+  TEventName extends AppDesktopEventName
+    ? AppDesktopEventPayloads[TEventName]
+    : TEventName extends keyof AdditionalDesktopEventPayloads
+      ? AdditionalDesktopEventPayloads[TEventName]
+      : TEventName extends import('@openforge-app/terminal-runtime').TerminalRuntimeEventName
+        ? import('@openforge-app/terminal-runtime').TerminalRuntimeEventPayload<TEventName>
+        : never
 
 export const desktopCommandContracts = [
   { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames', 'worktreeSource', 'worktreeBranch', 'title', 'sourceTicketUrl', 'codeCleanupEnabled', 'taskDisplayTitleUpdatesEnabled', 'aiProvider'], owner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -202,75 +357,3 @@ export const desktopCommandOwnershipContracts = [
   ...desktopCommandContracts,
   ...internalDesktopCommandContracts,
 ] as const
-
-export const appDesktopEventContracts = [
-  { eventName: 'github-sync-complete', payload: 'PollResult', domain: 'github-review' },
-  { eventName: 'task-pull-request-updated', payload: '{ task_id: string; pr_id: number; action: "merged" | "enqueued" }', domain: 'github-review' },
-  { eventName: 'openforge-app-events-gap', payload: '{ requestedAfter: string; oldestAvailable: string; newestAvailable: string }', domain: 'app-shell' },
-  { eventName: 'review-status-changed', payload: 'review status payload', domain: 'github-review' },
-  { eventName: 'action-complete', payload: '{ task_id: string }', domain: 'agent-session-pty' },
-  { eventName: 'implementation-failed', payload: '{ task_id: string; error: string }', domain: 'agent-session-pty' },
-  { eventName: 'session-resumed', payload: '{ task_id: string; workspace_path: string; pty_instance_id?: number | null }', domain: 'agent-session-pty' },
-  { eventName: 'startup-resume-complete', payload: 'void', domain: 'agent-session-pty' },
-  { eventName: 'new-pr-comment', payload: 'PR comment notification payload', domain: 'github-review' },
-  { eventName: 'comment-addressed', payload: 'void', domain: 'github-review' },
-  { eventName: 'ci-status-changed', payload: '{ task_id: string; pr_id: number; pr_title: string; ci_status: string; timestamp: number }', domain: 'github-review' },
-  { eventName: 'agent-event', payload: 'AgentEvent', domain: 'agent-session-pty' },
-  { eventName: 'session-aborted', payload: '{ ticket_id: string; session_id: string }', domain: 'agent-session-pty' },
-  { eventName: 'agent-status-changed', payload: '{ task_id: string; status: string; provider?: string; kind?: AgentLifecycleEventKind; pty_instance_id?: number | null; raw_event_type?: string | null; raw_status_type?: string | null }', domain: 'agent-session-pty' },
-  { eventName: 'agent-pty-exited', payload: '{ task_id: string; success: boolean; instance_id: number }', domain: 'agent-session-pty' },
-  { eventName: 'review-pr-count-changed', payload: 'number', domain: 'github-review' },
-  { eventName: 'authored-prs-updated', payload: 'void', domain: 'github-review' },
-  { eventName: 'github-rate-limited', payload: 'GitHub rate limit payload', domain: 'github-review' },
-  { eventName: 'plugin-frontend-command-request', payload: 'transient correlated frontend host request (Plugin Command or Task compose)', domain: 'app-shell' },
-  { eventName: 'openforge.open-url', payload: '{ url: string }', domain: 'plugins' },
-  { eventName: 'openforge.write-clipboard-text', payload: '{ text: string }', domain: 'plugins' },
-  { eventName: 'plugin-installation-changed', payload: '{ plugin_id: string }', domain: 'plugins' },
-  { eventName: 'app-plugin-enablement-changed', payload: '{ plugin_id: string; enabled: boolean }', domain: 'plugins' },
-  { eventName: 'project-plugin-enablement-changed', payload: '{ plugin_id: string; project_id: string; enabled: boolean }', domain: 'plugins' },
-  { eventName: 'plugin-reload-requested', payload: '{ plugin_id: string; project_id?: string | null }', domain: 'plugins' },
-  { eventName: 'task-changed', payload: '{ action: "created" | "updated" | "deleted"; task_id: string }', domain: 'tasks-projects' },
-] as const satisfies readonly AppDesktopEventContract[]
-
-export const dynamicDesktopEventContracts = [
-  {
-    eventPattern: 'pty-output-{taskId}',
-    payload: '{ task_id: string; data: string; instance_id: number }',
-    domain: 'agent-session-pty',
-  },
-  {
-    eventPattern: 'pty-exit-{taskId}',
-    payload: '{ instance_id: number }',
-    domain: 'agent-session-pty',
-  },
-  {
-    eventPattern: 'pty-output-{taskId}-shell-{terminalIndex}',
-    payload: '{ task_id: string; data: string; instance_id: number }',
-    domain: 'agent-session-pty',
-  },
-  {
-    eventPattern: 'pty-exit-{taskId}-shell-{terminalIndex}',
-    payload: '{ instance_id: number }',
-    domain: 'agent-session-pty',
-  },
-  {
-    eventPattern: 'plugin:sidecar-exited',
-    payload: '{ code: number | null; signal: number | null; pid: number | null; retry_attempts: number }',
-    domain: 'plugins',
-  },
-  {
-    eventPattern: 'plugin:sidecar-failed',
-    payload: '{ error: string | null; retry_attempts: number }',
-    domain: 'plugins',
-  },
-  {
-    eventPattern: 'whisper-download-progress',
-    payload: '{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }',
-    domain: 'whisper-audio',
-  },
-  {
-    eventPattern: '{plugin-defined-desktop-event}',
-    payload: 'unknown plugin-defined payload',
-    domain: 'plugins',
-  },
-] as const satisfies readonly DynamicDesktopEventContract[]

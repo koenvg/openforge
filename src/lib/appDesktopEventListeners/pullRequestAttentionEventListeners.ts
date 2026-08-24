@@ -37,13 +37,7 @@ export function createPullRequestAttentionEventListeners(deps: PullRequestAttent
       void deps.loadProjectAttention()
     }),
 
-    ciStatusChanged: defineDesktopEventListener<{
-      task_id: string
-      pr_id: number
-      pr_title: string
-      ci_status: string
-      timestamp: number
-    }>('ci-status-changed', (event) => {
+    ciStatusChanged: defineDesktopEventListener('ci-status-changed', (event) => {
       if (event.payload.ci_status === 'failure') {
         const session = get(activeSessions).get(event.payload.task_id)
         if (!session || session.status !== 'running') {
@@ -60,7 +54,7 @@ export function createPullRequestAttentionEventListeners(deps: PullRequestAttent
       void deps.loadProjectAttention()
     }),
 
-    reviewPrCountChanged: defineDesktopEventListener<number>('review-pr-count-changed', () => {
+    reviewPrCountChanged: defineDesktopEventListener('review-pr-count-changed', () => {
       void deps.refreshPrCounts()
     }),
 
@@ -68,7 +62,7 @@ export function createPullRequestAttentionEventListeners(deps: PullRequestAttent
       void deps.refreshPrCounts()
     }),
 
-    githubRateLimited: defineDesktopEventListener<{ reset_at: number | null }>('github-rate-limited', (event) => {
+    githubRateLimited: defineDesktopEventListener('github-rate-limited', (event) => {
       rateLimitNotification.set({
         reset_at: event.payload.reset_at,
         timestamp: Date.now(),

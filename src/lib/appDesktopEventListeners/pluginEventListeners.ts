@@ -16,7 +16,7 @@ type PluginEventDeps = Pick<
 
 export function createPluginEventListeners(deps: PluginEventDeps) {
   return {
-    pluginInstallationChanged: defineDesktopEventListener<{ plugin_id: string }>(
+    pluginInstallationChanged: defineDesktopEventListener(
       'plugin-installation-changed',
       async (event) => {
         const pluginId = event.payload.plugin_id
@@ -28,10 +28,7 @@ export function createPluginEventListeners(deps: PluginEventDeps) {
       },
     ),
 
-    appPluginEnablementChanged: defineDesktopEventListener<{
-      plugin_id: string
-      enabled: boolean
-    }>('app-plugin-enablement-changed', async (event) => {
+    appPluginEnablementChanged: defineDesktopEventListener('app-plugin-enablement-changed', async (event) => {
       try {
         await (deps.loadEnabledPluginsForApp ?? loadEnabledForApp)()
       } catch (error) {
@@ -39,11 +36,7 @@ export function createPluginEventListeners(deps: PluginEventDeps) {
       }
     }),
 
-    projectPluginEnablementChanged: defineDesktopEventListener<{
-      plugin_id: string
-      project_id: string
-      enabled: boolean
-    }>('project-plugin-enablement-changed', async (event) => {
+    projectPluginEnablementChanged: defineDesktopEventListener('project-plugin-enablement-changed', async (event) => {
       const projectId = event.payload.project_id
       if ((deps.getActiveProjectId?.() ?? projectId) !== projectId) return
       try {
@@ -53,10 +46,7 @@ export function createPluginEventListeners(deps: PluginEventDeps) {
       }
     }),
 
-    pluginReloadRequested: defineDesktopEventListener<{
-      plugin_id: string
-      project_id?: string | null
-    }>('plugin-reload-requested', async (event) => {
+    pluginReloadRequested: defineDesktopEventListener('plugin-reload-requested', async (event) => {
       const pluginId = event.payload.plugin_id
       const projectId = deps.getActiveProjectId?.() ?? null
       try {

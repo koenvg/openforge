@@ -17,7 +17,7 @@ import {
   updateShellLifecycleState,
 } from '../terminalPool'
 import { getTaskPromptText } from '../taskPrompt'
-import type { AgentEvent, AgentSession } from '../types'
+import type { AgentSession } from '../types'
 import { defineDesktopEventListener } from './types'
 import type { AppDesktopEventDeps } from './types'
 
@@ -102,7 +102,7 @@ async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | nu
 
 export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
   return {
-    actionComplete: defineDesktopEventListener<{ task_id: string }>('action-complete', async (event) => {
+    actionComplete: defineDesktopEventListener('action-complete', async (event) => {
       const taskId = event.payload.task_id
       const session = await getOrLoadActiveSession(taskId)
       if (session && session.status !== 'completed') {
@@ -113,7 +113,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       void deps.loadProjectAttention()
     }),
 
-    implementationFailed: defineDesktopEventListener<{ task_id: string; error: string }>(
+    implementationFailed: defineDesktopEventListener(
       'implementation-failed',
       (event) => {
         const taskId = event.payload.task_id
@@ -128,11 +128,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       },
     ),
 
-    sessionResumed: defineDesktopEventListener<{
-      task_id: string
-      workspace_path: string
-      pty_instance_id?: number | null
-    }>(
+    sessionResumed: defineDesktopEventListener(
       'session-resumed',
       async (event) => {
         const taskId = event.payload.task_id
@@ -160,7 +156,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       void deps.loadSessions()
     }),
 
-    agentEvent: defineDesktopEventListener<AgentEvent>('agent-event', async (event) => {
+    agentEvent: defineDesktopEventListener('agent-event', async (event) => {
       const { task_id: taskId, event_type: eventType } = event.payload
       const session = await getOrLoadActiveSession(taskId)
       if (!session) return
@@ -202,7 +198,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       void deps.loadProjectAttention()
     }),
 
-    sessionAborted: defineDesktopEventListener<{ ticket_id: string; session_id: string }>(
+    sessionAborted: defineDesktopEventListener(
       'session-aborted',
       (event) => {
         deleteActiveSession(event.payload.ticket_id)
@@ -212,12 +208,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       },
     ),
 
-    agentStatusChanged: defineDesktopEventListener<{
-      task_id: string
-      status: string
-      kind?: AgentStatusChangedKind | null
-      pty_instance_id?: number | null
-    }>('agent-status-changed', async (event) => {
+    agentStatusChanged: defineDesktopEventListener('agent-status-changed', async (event) => {
       const { task_id: taskId, status } = event.payload
       hydratePtyInstanceFromStatusMetadata(
         taskId,
@@ -272,11 +263,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       void deps.loadProjectAttention()
     }),
 
-    agentPtyExited: defineDesktopEventListener<{
-      task_id: string
-      success: boolean
-      instance_id: number
-    }>('agent-pty-exited', (event) => {
+    agentPtyExited: defineDesktopEventListener('agent-pty-exited', (event) => {
       const taskId = event.payload.task_id
       const success = event.payload.success
       const ptyInstanceId = event.payload.instance_id
@@ -289,7 +276,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       }, 1500)
     }),
 
-    taskChanged: defineDesktopEventListener<{ action: string; task_id: string }>(
+    taskChanged: defineDesktopEventListener(
       'task-changed',
       async (event) => {
         if (event.payload.action === 'deleted') {

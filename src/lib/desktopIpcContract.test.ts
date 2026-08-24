@@ -6,10 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { traverseBabelAst } from '../../scripts/babel-ast.mjs'
 import * as ipc from './ipc'
 import {
-  appDesktopEventContracts,
   desktopCommandContracts,
   desktopCommandOwnershipContracts,
-  dynamicDesktopEventContracts,
 } from './desktopIpcContract'
 
 interface ParsedInvokeContract {
@@ -118,81 +116,6 @@ describe('Desktop IPC contract', () => {
       .toBe(desktopCommandOwnershipContracts.length)
   })
 
-  it('locks the app desktop event channel names registered by appDesktopEventListeners', () => {
-    expect(appDesktopEventContracts.map(contract => contract.eventName)).toEqual([
-      'github-sync-complete',
-      'task-pull-request-updated',
-      'openforge-app-events-gap',
-      'review-status-changed',
-      'action-complete',
-      'implementation-failed',
-      'session-resumed',
-      'startup-resume-complete',
-      'new-pr-comment',
-      'comment-addressed',
-      'ci-status-changed',
-      'agent-event',
-      'session-aborted',
-      'agent-status-changed',
-      'agent-pty-exited',
-      'review-pr-count-changed',
-      'authored-prs-updated',
-      'github-rate-limited',
-      'plugin-frontend-command-request',
-      'openforge.open-url',
-      'openforge.write-clipboard-text',
-      'plugin-installation-changed',
-      'app-plugin-enablement-changed',
-      'project-plugin-enablement-changed',
-      'plugin-reload-requested',
-      'task-changed',
-    ])
-  })
-
-  it('locks high-risk dynamic PTY and plugin event patterns outside appDesktopEventListeners', () => {
-    expect(dynamicDesktopEventContracts.map(contract => contract.eventPattern)).toEqual([
-      'pty-output-{taskId}',
-      'pty-exit-{taskId}',
-      'pty-output-{taskId}-shell-{terminalIndex}',
-      'pty-exit-{taskId}-shell-{terminalIndex}',
-      'plugin:sidecar-exited',
-      'plugin:sidecar-failed',
-      'whisper-download-progress',
-      '{plugin-defined-desktop-event}',
-    ])
-    expect(dynamicDesktopEventContracts.find(contract => contract.eventPattern === 'pty-output-{taskId}')).toMatchObject({
-      payload: '{ task_id: string; data: string; instance_id: number }',
-      domain: 'agent-session-pty',
-    })
-    expect(dynamicDesktopEventContracts.find(contract => contract.eventPattern === 'pty-exit-{taskId}')).toMatchObject({
-      payload: '{ instance_id: number }',
-      domain: 'agent-session-pty',
-    })
-    expect(dynamicDesktopEventContracts.find(contract => contract.eventPattern === 'plugin:sidecar-exited')).toMatchObject({
-      domain: 'plugins',
-      payload: '{ code: number | null; signal: number | null; pid: number | null; retry_attempts: number }',
-    })
-    expect(dynamicDesktopEventContracts.find(contract => contract.eventPattern === 'plugin:sidecar-failed')).toMatchObject({
-      domain: 'plugins',
-      payload: '{ error: string | null; retry_attempts: number }',
-    })
-    expect(dynamicDesktopEventContracts.find(contract => contract.eventPattern === 'whisper-download-progress')).toMatchObject({
-      domain: 'whisper-audio',
-      payload: '{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }',
-    })
-  })
-
-  it('locks known non-obvious event payload shapes', () => {
-    expect(appDesktopEventContracts.find(contract => contract.eventName === 'session-resumed')).toMatchObject({
-      payload: '{ task_id: string; workspace_path: string; pty_instance_id?: number | null }',
-    })
-    expect(appDesktopEventContracts.find(contract => contract.eventName === 'agent-pty-exited')).toMatchObject({
-      payload: '{ task_id: string; success: boolean; instance_id: number }',
-    })
-    expect(appDesktopEventContracts.find(contract => contract.eventName === 'task-changed')).toMatchObject({
-      payload: '{ action: "created" | "updated" | "deleted"; task_id: string }',
-    })
-  })
 
   it('records Electron main ownership for desktop shell commands and Rust sidecar ownership for backend commands', () => {
     expect(desktopCommandContracts.find(contract => contract.functionName === 'openUrl')).toMatchObject({

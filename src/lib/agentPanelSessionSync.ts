@@ -1,18 +1,9 @@
 import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
+import type { AgentStatusChangedKind, AgentStatusChangedPayload } from './desktopIpcContract'
+
+export type { AgentStatusChangedKind } from './desktopIpcContract'
 
 export type AgentPanelStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error'
-export type AgentStatusChangedKind = 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
-
-interface AgentStatusChangedPayload {
-  task_id: string
-  status: string
-  provider?: string
-  kind?: AgentStatusChangedKind | null
-  pty_instance_id?: number | null
-  raw_event_type?: string | null
-  raw_status_type?: string | null
-}
-
 interface AgentStatusChangedEvent {
   payload: unknown
 }
@@ -81,5 +72,5 @@ export function createAgentStatusChangedHandler({
 }
 
 export async function listenToAgentStatusChanged(options: AgentStatusChangedHandlerOptions): Promise<DesktopUnlistenFn> {
-  return listenDesktopEvent<AgentStatusChangedPayload>('agent-status-changed', createAgentStatusChangedHandler(options))
+  return listenDesktopEvent('agent-status-changed', createAgentStatusChangedHandler(options))
 }

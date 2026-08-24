@@ -7,7 +7,7 @@ import {
 import { defineDesktopEventListener } from './types'
 
 export function createFrontendHostRequestEventListener() {
-  return defineDesktopEventListener<unknown>(
+  return defineDesktopEventListener(
     FRONTEND_HOST_REQUEST_EVENT,
     async (event) => handleFrontendHostRequest(event.payload, {
       list: listFrontendAgentCommands,

@@ -131,6 +131,7 @@ const {
 
 vi.mock('../desktopIpc', () => ({
   listenDesktopEvent: listenDesktopEventMock,
+  listenPluginDesktopEvent: listenDesktopEventMock,
 }))
 
 vi.mock('./builtinPluginModules', () => ({

@@ -12,10 +12,40 @@ export interface TerminalRuntimeEvent<TPayload> {
   payload: TPayload
 }
 
-export interface PtyEvent {
-  data?: string | null
-  instance_id?: number | null
+export interface PtyOutputEventPayload {
+  task_id: string
+  data: string
+  instance_id: number
 }
+
+export interface PtyExitEventPayload {
+  instance_id: number
+}
+
+export function ptyOutputEventName(terminalKey: string): `pty-output-${string}` {
+  return `pty-output-${terminalKey}`
+}
+
+export function ptyExitEventName(terminalKey: string): `pty-exit-${string}` {
+  return `pty-exit-${terminalKey}`
+}
+
+export interface AppEventsReconnectedPayload {
+  attempt: number
+  reconnectedAt: string
+}
+
+export type TerminalRuntimeEventName =
+  | `pty-output-${string}`
+  | `pty-exit-${string}`
+  | 'openforge-app-events-reconnected'
+
+export type TerminalRuntimeEventPayload<TEventName extends TerminalRuntimeEventName> =
+  TEventName extends `pty-output-${string}`
+    ? PtyOutputEventPayload
+    : TEventName extends `pty-exit-${string}`
+      ? PtyExitEventPayload
+      : AppEventsReconnectedPayload
 
 export interface PtyBufferState {
   buffer: string | null
@@ -23,7 +53,10 @@ export interface PtyBufferState {
 }
 
 export interface TerminalRuntimeHost {
-  listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void): Promise<TerminalRuntimeUnlistenFn>
+  listenEvent<TEventName extends TerminalRuntimeEventName>(
+    eventName: TEventName,
+    handler: (event: TerminalRuntimeEvent<TerminalRuntimeEventPayload<TEventName>>) => void,
+  ): Promise<TerminalRuntimeUnlistenFn>
   getPtyBuffer(taskId: string): Promise<PtyBufferState>
   writePty(taskId: string, data: string): Promise<void>
   resizePty(taskId: string, cols: number, rows: number): Promise<void>

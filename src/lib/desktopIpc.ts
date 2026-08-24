@@ -1,3 +1,14 @@
+import type {
+  AppDesktopEventName,
+  AppDesktopEventPayloads,
+  KnownDesktopEventName,
+  KnownDesktopEventPayload,
+} from './desktopIpcContract'
+import type {
+  TerminalRuntimeEventName,
+  TerminalRuntimeEventPayload,
+} from '@openforge-app/terminal-runtime'
+
 export type DesktopUnlistenFn = () => void
 
 export interface DesktopEvent<T> {
@@ -40,15 +51,41 @@ export async function invokeDesktopCommand<T>(command: string, payload?: unknown
   return requireElectronBridge().invoke(command, payload ?? null) as Promise<T>
 }
 
-export async function listenDesktopEvent<T>(
+async function listenRawDesktopEvent<TPayload>(
   eventName: string,
-  handler: (event: DesktopEvent<T>) => void | Promise<void>,
+  handler: (event: DesktopEvent<TPayload>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn> {
   const unsubscribe = requireElectronBridge().onEvent(eventName, (payload) => {
-    void handler({ event: eventName, payload: payload as T })
+    void handler({ event: eventName, payload: payload as TPayload })
   })
 
   return () => unsubscribe()
+}
+
+export function listenDesktopEvent<TEventName extends AppDesktopEventName>(
+  eventName: TEventName,
+  handler: (event: DesktopEvent<AppDesktopEventPayloads[TEventName]>) => void | Promise<void>,
+): Promise<DesktopUnlistenFn>
+export function listenDesktopEvent<TEventName extends TerminalRuntimeEventName>(
+  eventName: TEventName,
+  handler: (event: DesktopEvent<TerminalRuntimeEventPayload<TEventName>>) => void | Promise<void>,
+): Promise<DesktopUnlistenFn>
+export function listenDesktopEvent<TEventName extends KnownDesktopEventName>(
+  eventName: TEventName,
+  handler: (event: DesktopEvent<KnownDesktopEventPayload<TEventName>>) => void | Promise<void>,
+): Promise<DesktopUnlistenFn>
+export function listenDesktopEvent(
+  eventName: KnownDesktopEventName,
+  handler: (event: DesktopEvent<never>) => void | Promise<void>,
+): Promise<DesktopUnlistenFn> {
+  return listenRawDesktopEvent(eventName, handler)
+}
+
+export function listenPluginDesktopEvent(
+  eventName: string,
+  handler: (event: DesktopEvent<unknown>) => void | Promise<void>,
+): Promise<DesktopUnlistenFn> {
+  return listenRawDesktopEvent(eventName, handler)
 }
 
 export {}
