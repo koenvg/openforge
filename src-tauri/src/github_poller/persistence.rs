@@ -148,7 +148,6 @@ pub(super) async fn poll_prs_for_project(
 
     type PrMetadata = (
         i64,
-        Option<i64>,
         Option<String>,
         Option<String>,
         Option<bool>,
@@ -161,7 +160,6 @@ pub(super) async fn poll_prs_for_project(
             .map(|pr| {
                 Ok((
                     pr.id,
-                    db_lock.get_pr_last_polled(pr.id)?,
                     db_lock.get_pr_ci_status(pr.id)?,
                     db_lock.get_pr_review_status(pr.id)?,
                     pr.mergeable,
@@ -180,17 +178,17 @@ pub(super) async fn poll_prs_for_project(
 
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, _, old_ci, _, _, _)| (*pr_id, old_ci.clone()))
+        .map(|(pr_id, old_ci, _, _, _)| (*pr_id, old_ci.clone()))
         .collect();
 
     let old_review_map: HashMap<i64, Option<String>> = pr_metadata
         .iter()
-        .map(|(pr_id, _, _, old_review, _, _)| (*pr_id, old_review.clone()))
+        .map(|(pr_id, _, old_review, _, _)| (*pr_id, old_review.clone()))
         .collect();
 
     let old_mergeability_map: HashMap<i64, (Option<bool>, Option<String>)> = pr_metadata
         .into_iter()
-        .map(|(pr_id, _, _, _, old_mergeable, old_mergeable_state)| {
+        .map(|(pr_id, _, _, old_mergeable, old_mergeable_state)| {
             (pr_id, (old_mergeable, old_mergeable_state))
         })
         .collect();
