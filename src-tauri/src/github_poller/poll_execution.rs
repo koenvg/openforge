@@ -19,8 +19,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::time::{sleep, Duration};
 
-async fn github_token_for_poll() -> Result<String, PollOutcome> {
-    match crate::secure_store::get_secret_async("github_token").await {
+async fn github_token_for_poll(github_client: &GitHubClient) -> Result<String, PollOutcome> {
+    match github_client.github_token().await {
         Ok(Some(token)) if !token.trim().is_empty() => Ok(token),
         Ok(_) => Err(PollOutcome::MissingGithubToken),
         Err(error) => {
@@ -170,7 +170,7 @@ pub async fn refresh_task_github_status_for_sidecar(
     }
 
     github_client.clear_rate_limit_reset();
-    let github_token = match github_token_for_poll().await {
+    let github_token = match github_token_for_poll(github_client).await {
         Ok(token) => token,
         Err(outcome) => return Ok(PollResult::with_outcome(outcome)),
     };
@@ -214,7 +214,7 @@ pub(super) async fn poll_github_once_with_state(
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
 
-    let github_token = match github_token_for_poll().await {
+    let github_token = match github_token_for_poll(github_client).await {
         Ok(token) => token,
         Err(outcome) => return PollResult::with_outcome(outcome),
     };

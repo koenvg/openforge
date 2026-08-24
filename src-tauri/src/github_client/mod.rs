@@ -52,12 +52,20 @@ fn current_unix_timestamp() -> i64 {
         .as_secs() as i64
 }
 
+#[derive(Clone, Debug)]
+enum GitHubTokenSource {
+    SecureStore,
+    #[cfg(test)]
+    Fixed(Result<Option<String>, String>),
+}
+
 /// GitHub API client
 #[derive(Clone)]
 pub struct GitHubClient {
     client: Client,
     etag_cache: Arc<Mutex<EtagResponseCache>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
+    token_source: GitHubTokenSource,
 }
 
 /// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
@@ -95,6 +103,25 @@ impl GitHubClient {
             client: Client::new(),
             etag_cache: Arc::new(Mutex::new(EtagResponseCache::new())),
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
+            token_source: GitHubTokenSource::SecureStore,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_token(result: Result<Option<String>, String>) -> Self {
+        Self {
+            token_source: GitHubTokenSource::Fixed(result),
+            ..Self::new()
+        }
+    }
+
+    pub(crate) async fn github_token(&self) -> Result<Option<String>, String> {
+        match &self.token_source {
+            GitHubTokenSource::SecureStore => {
+                crate::secure_store::get_secret_async("github_token").await
+            }
+            #[cfg(test)]
+            GitHubTokenSource::Fixed(result) => result.clone(),
         }
     }
 
