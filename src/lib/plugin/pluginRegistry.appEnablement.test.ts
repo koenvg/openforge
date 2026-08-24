@@ -19,7 +19,6 @@ import {
   resetPluginRegistryTestState,
   runtimeContributionSources,
   setAppPluginEnabledMock,
-  updateAppPluginContexts,
 } from './pluginRegistryTestSupport'
 import { activeProjectId } from '../stores'
 
@@ -76,14 +75,33 @@ describe('pluginRegistry app enablement', () => {
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'account-usage', module: frontendPlugin })
 
     await registryLoadEnabledForApp()
+
+    let releaseFirstContextUpdate: (() => void) | undefined
+    pluginBackendWhenReadyMock.mockImplementation((_pluginId, projectId, forceContextUpdate) => {
+      if (projectId === 'project-1' && forceContextUpdate) {
+        return new Promise<void>((resolve) => {
+          releaseFirstContextUpdate = resolve
+        })
+      }
+      return Promise.resolve()
+    })
+
     activeProjectId.set('project-1')
-    await registryLoadEnabledForProject('project-1')
+    const firstProjectTransition = registryLoadEnabledForProject('project-1')
+    await vi.waitFor(() => {
+      expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('account-usage', 'project-1', true)
+    })
+
     activeProjectId.set('project-2')
-    await registryLoadEnabledForProject('project-2')
-    await updateAppPluginContexts('project-2')
+    const secondProjectTransition = registryLoadEnabledForProject('project-2')
+    await Promise.resolve()
+    expect(pluginBackendWhenReadyMock).not.toHaveBeenCalledWith('account-usage', 'project-2', true)
+
+    releaseFirstContextUpdate?.()
+    await Promise.all([firstProjectTransition, secondProjectTransition])
 
     expect(loadPluginFrontendMock).toHaveBeenCalledTimes(1)
-    expect(pluginBackendWhenReadyMock).toHaveBeenCalledTimes(2)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledTimes(3)
     expect(pluginBackendWhenReadyMock).toHaveBeenLastCalledWith('account-usage', 'project-2', true)
     expect(get(appEnabledPluginIds)).toEqual(new Set(['account-usage']))
     expect(get(runtimeContributionSources).get('account-usage')?.views).toHaveLength(1)

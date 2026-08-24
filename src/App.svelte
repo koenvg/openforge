@@ -27,9 +27,9 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { clearProjectEnabledPluginIds, enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
-  import { activatePlugin, deactivateAllPlugins, executePluginCommand, getPluginRenderProps, initializePluginRuntime, loadEnabledForApp, loadEnabledForProject, updateAppPluginContexts } from './lib/plugin/pluginRegistry'
+  import { activatePlugin, deactivateAllPlugins, executePluginCommand, getPluginRenderProps, initializePluginRuntime, loadEnabledForApp, loadEnabledForProject } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
@@ -227,16 +227,8 @@
 
   $effect(() => {
     const projectId = $activeProjectId
-    if (projectId && projectId !== previousPluginProjectId) {
-      void loadEnabledForProject(projectId)
-    } else if (!projectId && previousPluginProjectId !== null) {
-      clearProjectEnabledPluginIds()
-    }
-
     if (projectId !== previousPluginProjectId) {
-      void updateAppPluginContexts(projectId).catch((error) => {
-        console.error('[plugins] Failed to update app plugin context:', error)
-      })
+      void loadEnabledForProject(projectId)
     }
 
     previousPluginProjectId = projectId

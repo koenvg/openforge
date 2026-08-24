@@ -380,6 +380,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Trusted Plugin** may own a **Plugin-owned Domain** when the concept is not shared across plugins or core workflows.
 - **Plugin Installation** makes a **Trusted Plugin** available without activating it.
 - A **Trusted Plugin** uses either **App Plugin Enablement** or **Project Plugin Enablement** as declared by its package.
+- A project-enabled **Trusted Plugin** runtime is bound to exactly one visible **Project**. Changing the visible Project fully deactivates the old frontend and backend runtime before activating a new runtime for the next Project, even when both Projects enable the same plugin; with no visible Project, no project-enabled runtime remains active.
+- An app-enabled **Trusted Plugin** runtime remains active across visible Project changes. OpenForge updates its current Project context without restarting the runtime.
 - **Plugin Installation** does not automatically imply either form of enablement.
 - Newly installed non-built-in **Trusted Plugins** start disabled until explicitly enabled.
 - Built-in project-enabled **Trusted Plugins** may be enabled by default for projects, while still allowing explicit **Project Plugin Enablement** disablement.

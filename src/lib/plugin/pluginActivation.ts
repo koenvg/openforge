@@ -71,11 +71,12 @@ function normalizePluginAssetUrl(
 function createFrontendRuntimeRegistryForPlugin(
   pluginId: string,
   manifest: PluginManifest,
+  projectId: string | null,
 ): RuntimeContributionRegistryInstance {
   const packageMetadata = getPackageMetadataForPlugin(pluginId, manifest)
   return createRuntimeContributionRegistry({
     pluginId,
-    projectId: packageMetadata.enablement === 'app' ? null : get(activeProjectId),
+    projectId: packageMetadata.enablement === 'app' ? null : projectId,
     packageMetadata,
     storage: createIpcPluginStorage(pluginId),
     host: createPluginRuntimeHost(pluginId),
@@ -116,8 +117,9 @@ async function activateFrontendRuntimePlugin(
   manifest: PluginManifest,
   frontendPlugin: Parameters<RuntimeContributionRegistryInstance['activateFrontend']>[0],
   activationGeneration: number,
+  projectId: string | null,
 ): Promise<boolean> {
-  const runtimeRegistry = createFrontendRuntimeRegistryForPlugin(pluginId, manifest)
+  const runtimeRegistry = createFrontendRuntimeRegistryForPlugin(pluginId, manifest, projectId)
 
   try {
     await runtimeRegistry.activateFrontend(frontendPlugin)
@@ -149,6 +151,7 @@ async function activateFrontendRuntimePlugin(
 async function activateBuiltinPluginModule(
   pluginId: string,
   activationGeneration: number,
+  projectId: string | null,
 ): Promise<boolean> {
   try {
     const { getBuiltinPluginModule } = await import('./builtinPluginModules')
@@ -167,6 +170,7 @@ async function activateBuiltinPluginModule(
         manifest,
         builtinModule,
         activationGeneration,
+        projectId,
       )
     }
 
@@ -183,6 +187,7 @@ async function activateExternalPluginModule(
   pluginId: string,
   manifest: PluginManifest,
   activationGeneration: number,
+  projectId: string | null,
 ): Promise<boolean> {
   if (!manifest.frontend) {
     if (!manifest.backend) {
@@ -219,6 +224,7 @@ async function activateExternalPluginModule(
       manifest,
       loaded.module,
       activationGeneration,
+      projectId,
     )
     if (!activated) clearLoadedPlugin(pluginId)
     return activated
@@ -276,7 +282,10 @@ export function _resetPluginActivationLifecycleForTests(): void {
   pluginFrontendReloadGenerations.clear()
 }
 
-export async function activatePlugin(pluginId: string): Promise<boolean> {
+export async function activatePlugin(
+  pluginId: string,
+  projectId: string | null = get(activeProjectId),
+): Promise<boolean> {
   const activationGeneration = pluginFrontendReloadGenerations.get(pluginId) ?? 0
   const pendingActivation = activationPromises.get(pluginId)
   if (pendingActivation) {
@@ -285,7 +294,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     }
 
     await pendingActivation.promise.catch(() => false)
-    return activatePlugin(pluginId)
+    return activatePlugin(pluginId, projectId)
   }
 
   const map = get(installedPlugins)
@@ -304,8 +313,13 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     await stopPluginBackgroundServices(pluginId)
 
     const activated = entry.isBuiltin
-      ? await activateBuiltinPluginModule(pluginId, activationGeneration)
-      : await activateExternalPluginModule(pluginId, entry.manifest, activationGeneration)
+      ? await activateBuiltinPluginModule(pluginId, activationGeneration, projectId)
+      : await activateExternalPluginModule(
+          pluginId,
+          entry.manifest,
+          activationGeneration,
+          projectId,
+        )
 
     return activated
   })()
