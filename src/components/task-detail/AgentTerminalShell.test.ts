@@ -1,12 +1,12 @@
 import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { listenCallbacks, resetAgentIpcMocks } from './agentIpcMocks.testUtils'
+import { resetActiveSessions, setActiveSession } from './activeAgentSessions.testUtils'
 import {
-  listenCallbacks,
   mockPoolEntry,
   mockShellLifecycleState,
-  resetAgentTerminalTestState,
-  setActiveSession,
-} from './agentTerminalShell.testUtils'
+  resetAgentTerminalMocks,
+} from './agentTerminalMocks.testUtils'
 import { createAgentSession } from './agentSession.testFixtures'
 import AgentTerminalShell from './AgentTerminalShell.svelte'
 
@@ -14,7 +14,10 @@ const baseSession = createAgentSession({ provider: 'pi' })
 
 describe('AgentTerminalShell', () => {
   beforeEach(() => {
-    resetAgentTerminalTestState()
+    resetActiveSessions()
+    resetAgentIpcMocks()
+    resetAgentTerminalMocks()
+    vi.clearAllMocks()
   })
 
   it.each([
