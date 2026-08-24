@@ -786,32 +786,36 @@ async fn advertisement_follows_gateway_enable_disable_and_shutdown_lifecycle() {
 
 #[tokio::test]
 async fn partial_multi_interface_startup_cannot_leave_an_untracked_listener() {
-    let probe =
-        std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).expect("reserve test port");
-    let port = probe.local_addr().expect("test address").port();
-    drop(probe);
+    let blocked_interface = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+    let first_interface = IpAddr::V6(std::net::Ipv6Addr::LOCALHOST);
+    let blocker = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .expect("occupy one test interface");
+    let port = blocker.local_addr().expect("blocked test address").port();
     let store = Arc::new(InMemoryIdentityStore::default());
     let manager = CompanionGatewayManager::new(
         store,
         Arc::new(InMemoryCompanionDeviceStore::default()),
         Arc::new(FixedEndpointProvider::new(vec![
-            (
-                CompanionEndpointKind::Lan,
-                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
-            ),
-            (
-                CompanionEndpointKind::Lan,
-                IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
-            ),
+            (CompanionEndpointKind::Lan, first_interface),
+            (CompanionEndpointKind::Lan, blocked_interface),
         ])),
         Arc::new(NoopCompanionAdvertiser),
         port,
     );
 
-    assert!(manager.enable().await.is_err());
-    let rebound = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
+    let error = manager
+        .enable()
+        .await
+        .expect_err("occupied second interface must fail startup");
+    let blocked_address = std::net::SocketAddr::new(blocked_interface, port);
+    assert!(
+        error.contains(&blocked_address.to_string()),
+        "startup must fail on the test-owned listener: {error}"
+    );
+    let rebound = std::net::TcpListener::bind(std::net::SocketAddr::new(first_interface, port))
         .expect("failed startup must release every pre-bound socket");
     drop(rebound);
+    drop(blocker);
     let status = manager.disable().await;
     assert_eq!(status.phase, GatewayPhase::Disabled);
 }
