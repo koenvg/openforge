@@ -129,6 +129,255 @@ fn normalize_worktree_source(
     }
 }
 
+struct NormalizedTaskOptions<'a> {
+    initial_prompt: &'a str,
+    status: &'a str,
+    project_id: Option<&'a str>,
+    prompt: &'a str,
+    permission_mode: Option<&'a str>,
+    worktree_source: Option<String>,
+    worktree_branch: Option<String>,
+    title: Option<String>,
+    source_ticket_url: Option<String>,
+    code_cleanup_enabled: Option<bool>,
+    task_display_title_updates_enabled: Option<bool>,
+    ai_provider: Option<&'a str>,
+}
+
+fn normalize_task_options<'a>(
+    conn: &rusqlite::Connection,
+    opts: NewTaskOptions<'a>,
+) -> Result<NormalizedTaskOptions<'a>> {
+    let NewTaskOptions {
+        initial_prompt,
+        status,
+        project_id,
+        prompt,
+        permission_mode,
+        worktree_source,
+        worktree_branch,
+        title,
+        source_ticket_url,
+        code_cleanup_enabled,
+        task_display_title_updates_enabled,
+        ai_provider,
+    } = opts;
+    let defaulted_worktree_source =
+        project_defaulted_worktree_source(conn, project_id, worktree_source)?;
+    let (worktree_source, worktree_branch) =
+        normalize_worktree_source(defaulted_worktree_source.as_deref(), worktree_branch)?;
+
+    Ok(NormalizedTaskOptions {
+        initial_prompt,
+        status,
+        project_id,
+        prompt: prompt.unwrap_or(initial_prompt),
+        permission_mode,
+        worktree_source,
+        worktree_branch,
+        title: title
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        source_ticket_url: source_ticket_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        code_cleanup_enabled,
+        task_display_title_updates_enabled,
+        ai_provider,
+    })
+}
+
+fn allocate_task_id(conn: &rusqlite::Connection, project_id: Option<&str>) -> Result<String> {
+    let next_id: i64 = conn.query_row(
+        "SELECT value FROM config WHERE key = 'next_task_id'",
+        [],
+        |row| {
+            let val: String = row.get(0)?;
+            Ok(val.parse::<i64>().unwrap_or(1))
+        },
+    )?;
+
+    // Resolve the task-ID prefix as project_config ?? config ?? "T". The
+    // single global `next_task_id` counter is unchanged, so IDs stay globally
+    // unique and sequential; only the prefix is per-project.
+    let global_prefix: String = conn
+        .query_row(
+            "SELECT value FROM config WHERE key = 'task_id_prefix'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "T".to_string());
+    let project_prefix: Option<String> = match project_id {
+        Some(project_id) => conn
+            .query_row(
+                "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'task_id_prefix'",
+                [project_id],
+                |row| row.get(0),
+            )
+            .ok(),
+        None => None,
+    };
+    let prefix = project_prefix
+        .filter(|prefix| !prefix.is_empty())
+        .or_else(|| Some(global_prefix).filter(|prefix| !prefix.is_empty()))
+        .unwrap_or_else(|| "T".to_string());
+    let task_id = format!("{prefix}-{next_id}");
+
+    conn.execute(
+        "UPDATE config SET value = ?1 WHERE key = 'next_task_id'",
+        [&(next_id + 1).to_string()],
+    )?;
+
+    Ok(task_id)
+}
+
+fn insert_task_row(
+    conn: &rusqlite::Connection,
+    task_id: String,
+    opts: &NormalizedTaskOptions<'_>,
+    now: i64,
+) -> Result<TaskRow> {
+    let title_source = opts.title.as_ref().map(|_| "manual".to_string());
+    let execution_started_at = (opts.status != "backlog").then_some(now);
+
+    conn.execute(
+        "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        rusqlite::params![
+            &task_id,
+            opts.initial_prompt,
+            opts.status,
+            opts.project_id,
+            now,
+            now,
+            opts.prompt,
+            None::<String>,
+            opts.permission_mode,
+            opts.worktree_source.as_deref(),
+            opts.worktree_branch.as_deref(),
+            opts.title.as_deref(),
+            title_source.as_deref(),
+            None::<i64>,
+            execution_started_at,
+            opts.source_ticket_url.as_deref(),
+        ],
+    )?;
+
+    Ok(TaskRow {
+        id: task_id,
+        initial_prompt: opts.initial_prompt.to_string(),
+        status: opts.status.to_string(),
+        project_id: opts.project_id.map(str::to_string),
+        created_at: now,
+        updated_at: now,
+        prompt: Some(opts.prompt.to_string()),
+        agent: None,
+        permission_mode: opts.permission_mode.map(str::to_string),
+        worktree_source: opts.worktree_source.clone(),
+        worktree_branch: opts.worktree_branch.clone(),
+        title: opts.title.clone(),
+        title_source,
+        title_generated_at: None,
+        source_ticket_url: opts.source_ticket_url.clone(),
+        depends_on: Vec::new(),
+        labels: Vec::new(),
+    })
+}
+
+fn persist_task_config_snapshots(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    opts: &NormalizedTaskOptions<'_>,
+) -> Result<()> {
+    let bool_str = |value: bool| if value { "true" } else { "false" };
+    if let Some(value) = opts.code_cleanup_enabled {
+        conn.execute(
+            "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+            [task_id, "code_cleanup_tasks_enabled", bool_str(value)],
+        )?;
+    }
+    if let Some(value) = opts.task_display_title_updates_enabled {
+        conn.execute(
+            "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+            [
+                task_id,
+                "task_display_title_metadata_updates_enabled",
+                bool_str(value),
+            ],
+        )?;
+    }
+    if let Some(value) = opts.ai_provider {
+        if !value.is_empty() {
+            conn.execute(
+                "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
+                [task_id, "ai_provider", value],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn persist_task_dependency_metadata(
+    conn: &rusqlite::Connection,
+    task: &mut TaskRow,
+    dependency_ids: &[String],
+    now: i64,
+) -> std::result::Result<(), TaskCreationError> {
+    if !dependency_ids.is_empty() {
+        task.depends_on = persist_new_task_dependencies(conn, &task.id, dependency_ids, now)
+            .map_err(TaskCreationError::dependencies)?;
+    }
+
+    Ok(())
+}
+
+fn persist_task_label_metadata(
+    conn: &rusqlite::Connection,
+    task: &mut TaskRow,
+    label_names: &[String],
+    now: i64,
+) -> std::result::Result<(), TaskCreationError> {
+    if !label_names.is_empty() {
+        task.labels = persist_new_task_labels(conn, &task.id, label_names, now)
+            .map_err(TaskCreationError::labels)?;
+    }
+
+    Ok(())
+}
+
+fn create_task_in_transaction(
+    conn: &rusqlite::Connection,
+    opts: NewTaskOptions<'_>,
+    dependency_ids: &[String],
+    label_names: &[String],
+) -> std::result::Result<TaskRow, TaskCreationError> {
+    let opts = normalize_task_options(conn, opts)?;
+    let task_id = allocate_task_id(conn, opts.project_id)?;
+    let now = super::current_unix_timestamp()?;
+    let mut task = insert_task_row(conn, task_id, &opts, now)?;
+
+    persist_task_config_snapshots(conn, &task.id, &opts)?;
+    persist_task_dependency_metadata(conn, &mut task, dependency_ids, now)?;
+    persist_task_label_metadata(conn, &mut task, label_names, now)?;
+
+    Ok(task)
+}
+
+fn run_task_creation_transaction(
+    connection: &mut rusqlite::Connection,
+    opts: NewTaskOptions<'_>,
+    dependency_ids: &[String],
+    label_names: &[String],
+) -> std::result::Result<TaskRow, TaskCreationError> {
+    let transaction = connection.transaction()?;
+    let task = create_task_in_transaction(&transaction, opts, dependency_ids, label_names)?;
+    transaction.commit()?;
+    Ok(task)
+}
+
 impl super::Database {
     pub fn create_task(
         &self,
@@ -187,169 +436,8 @@ impl super::Database {
         dependency_ids: &[String],
         label_names: &[String],
     ) -> std::result::Result<TaskRow, TaskCreationError> {
-        let NewTaskOptions {
-            initial_prompt,
-            status,
-            project_id,
-            prompt,
-            permission_mode,
-            worktree_source,
-            worktree_branch,
-            title,
-            source_ticket_url,
-            code_cleanup_enabled,
-            task_display_title_updates_enabled,
-            ai_provider,
-        } = opts;
         let mut connection = self.lock_conn()?;
-        let transaction = connection.transaction()?;
-        let conn = &transaction;
-        let defaulted_worktree_source =
-            project_defaulted_worktree_source(conn, project_id, worktree_source)?;
-        let (worktree_source, worktree_branch) =
-            normalize_worktree_source(defaulted_worktree_source.as_deref(), worktree_branch)?;
-        // Normalize a blank title to NULL so the UI falls back to the derived title.
-        let title = title
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let title_source = title.as_ref().map(|_| "manual".to_string());
-        // Normalize a blank source-ticket link to NULL so the UI shows nothing.
-        let source_ticket_url = source_ticket_url
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-
-        let next_id: i64 = conn.query_row(
-            "SELECT value FROM config WHERE key = 'next_task_id'",
-            [],
-            |row| {
-                let val: String = row.get(0)?;
-                Ok(val.parse::<i64>().unwrap_or(1))
-            },
-        )?;
-
-        // Resolve the task-ID prefix as project_config ?? config ?? "T". The
-        // single global `next_task_id` counter is unchanged, so IDs stay globally
-        // unique and sequential; only the prefix is per-project.
-        let global_prefix: String = conn
-            .query_row(
-                "SELECT value FROM config WHERE key = 'task_id_prefix'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or_else(|_| "T".to_string());
-        let project_prefix: Option<String> = match project_id {
-            Some(pid) => conn
-                .query_row(
-                    "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'task_id_prefix'",
-                    [pid],
-                    |row| row.get(0),
-                )
-                .ok(),
-            None => None,
-        };
-        let prefix = project_prefix
-            .filter(|p| !p.is_empty())
-            .or_else(|| Some(global_prefix).filter(|p| !p.is_empty()))
-            .unwrap_or_else(|| "T".to_string());
-        let task_id = format!("{}-{}", prefix, next_id);
-
-        conn.execute(
-            "UPDATE config SET value = ?1 WHERE key = 'next_task_id'",
-            [&(next_id + 1).to_string()],
-        )?;
-
-        let now = super::current_unix_timestamp()?;
-
-        // Default prompt to initial_prompt if not provided (backward compat). A task
-        // created outside backlog has already entered its execution lifecycle.
-        let final_prompt = prompt.unwrap_or(initial_prompt);
-        let execution_started_at = (status != "backlog").then_some(now);
-
-        conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode, worktree_source, worktree_branch, title, title_source, title_generated_at, execution_started_at, source_ticket_url)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-            rusqlite::params![
-                &task_id,
-                initial_prompt,
-                status,
-                project_id,
-                now,
-                now,
-                final_prompt,
-                None::<String>,
-                permission_mode,
-                worktree_source.as_deref(),
-                worktree_branch.as_deref(),
-                title.as_deref(),
-                title_source.as_deref(),
-                None::<i64>,
-                execution_started_at,
-                source_ticket_url.as_deref(),
-            ],
-        )?;
-
-        // Snapshot the task-level hierarchy settings that live in `task_config`.
-        // A `None` field leaves the row unset so the runtime falls back to the
-        // resolved project/global value (preserving legacy-task behavior).
-        let bool_str = |b: bool| if b { "true" } else { "false" };
-        if let Some(v) = code_cleanup_enabled {
-            conn.execute(
-                "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
-                [&task_id, "code_cleanup_tasks_enabled", bool_str(v)],
-            )?;
-        }
-        if let Some(v) = task_display_title_updates_enabled {
-            conn.execute(
-                "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
-                [
-                    &task_id,
-                    "task_display_title_metadata_updates_enabled",
-                    bool_str(v),
-                ],
-            )?;
-        }
-        if let Some(v) = ai_provider {
-            if !v.is_empty() {
-                conn.execute(
-                    "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
-                    [&task_id, "ai_provider", v],
-                )?;
-            }
-        }
-
-        let mut task = TaskRow {
-            id: task_id,
-            initial_prompt: initial_prompt.to_string(),
-            status: status.to_string(),
-            project_id: project_id.map(|s| s.to_string()),
-            created_at: now,
-            updated_at: now,
-            prompt: Some(final_prompt.to_string()),
-            agent: None,
-            permission_mode: permission_mode.map(|s| s.to_string()),
-            worktree_source,
-            worktree_branch,
-            title,
-            title_source,
-            title_generated_at: None,
-            source_ticket_url,
-            depends_on: Vec::new(),
-            labels: Vec::new(),
-        };
-
-        if !dependency_ids.is_empty() {
-            task.depends_on = persist_new_task_dependencies(conn, &task.id, dependency_ids, now)
-                .map_err(TaskCreationError::dependencies)?;
-        }
-        if !label_names.is_empty() {
-            task.labels = persist_new_task_labels(conn, &task.id, label_names, now)
-                .map_err(TaskCreationError::labels)?;
-        }
-
-        transaction.commit().map_err(TaskCreationError::Storage)?;
-        Ok(task)
+        run_task_creation_transaction(&mut connection, opts, dependency_ids, label_names)
     }
 }
 
