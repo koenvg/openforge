@@ -1,22 +1,31 @@
 use super::{task_project_id, Database};
 use rusqlite::Result;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TaskDependencyPersistenceError {
+    #[error("task cannot depend on itself")]
     SelfDependency(String),
+    #[error("task {0} does not exist")]
     TaskNotFound(String),
+    #[error("dependency task {0} does not exist")]
     DependencyNotFound(String),
+    #[error(
+        "dependency task {dependency_id} and {task_id} must both belong to projects or both be unassigned"
+    )]
     AssignmentMismatch {
         task_id: String,
         dependency_id: String,
     },
+    #[error("dependency task {dependency_id} would create a cycle with {task_id}")]
     Cycle {
         task_id: String,
         dependency_id: String,
     },
+    #[error("task chain must contain at least two task ids")]
     ChainTooShort,
-    Storage(rusqlite::Error),
+    #[error("{0}")]
+    Storage(#[from] rusqlite::Error),
 }
 
 impl TaskDependencyPersistenceError {
@@ -25,56 +34,6 @@ impl TaskDependencyPersistenceError {
             Self::Storage(error) => error,
             domain_error => rusqlite::Error::ToSqlConversionFailure(Box::new(domain_error)),
         }
-    }
-}
-
-impl fmt::Display for TaskDependencyPersistenceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SelfDependency(_) => formatter.write_str("task cannot depend on itself"),
-            Self::TaskNotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
-            Self::DependencyNotFound(dependency_id) => {
-                write!(formatter, "dependency task {dependency_id} does not exist")
-            }
-            Self::AssignmentMismatch {
-                task_id,
-                dependency_id,
-            } => write!(
-                formatter,
-                "dependency task {dependency_id} and {task_id} must both belong to projects or both be unassigned"
-            ),
-            Self::Cycle {
-                task_id,
-                dependency_id,
-            } => write!(
-                formatter,
-                "dependency task {dependency_id} would create a cycle with {task_id}"
-            ),
-            Self::ChainTooShort => {
-                formatter.write_str("task chain must contain at least two task ids")
-            }
-            Self::Storage(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for TaskDependencyPersistenceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Storage(error) => Some(error),
-            Self::SelfDependency(_)
-            | Self::TaskNotFound(_)
-            | Self::DependencyNotFound(_)
-            | Self::AssignmentMismatch { .. }
-            | Self::Cycle { .. }
-            | Self::ChainTooShort => None,
-        }
-    }
-}
-
-impl From<rusqlite::Error> for TaskDependencyPersistenceError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Storage(error)
     }
 }
 
@@ -273,6 +232,25 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::db::{test_helpers::*, TaskDependencyPersistenceError};
+    use std::error::Error as _;
+
+    #[test]
+    fn task_dependency_error_preserves_sources_and_from_conversion() {
+        let error = TaskDependencyPersistenceError::from(rusqlite::Error::InvalidQuery);
+        assert!(matches!(
+            &error,
+            TaskDependencyPersistenceError::Storage(rusqlite::Error::InvalidQuery)
+        ));
+        assert_eq!(error.to_string(), rusqlite::Error::InvalidQuery.to_string());
+        assert!(error
+            .source()
+            .expect("storage error must be the source")
+            .downcast_ref::<rusqlite::Error>()
+            .is_some());
+
+        let domain_error = TaskDependencyPersistenceError::TaskNotFound("T-404".to_string());
+        assert!(domain_error.source().is_none());
+    }
 
     #[test]
     fn test_task_dependencies_round_trip_and_deduplicate() {
