@@ -4,20 +4,61 @@ use super::super::{
 };
 use super::write_package_json;
 use serde_json::Value;
-use std::fs;
-use tempfile::tempdir;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+use tempfile::{tempdir, TempDir};
+
+struct PluginPackageFixture {
+    source: TempDir,
+    managed: TempDir,
+}
+
+impl PluginPackageFixture {
+    fn new(metadata: &str) -> Self {
+        let fixture = Self {
+            source: tempdir().expect("source tempdir should create"),
+            managed: tempdir().expect("managed tempdir should create"),
+        };
+        fixture.write_metadata(metadata);
+        fixture
+    }
+
+    fn source_path(&self) -> &Path {
+        self.source.path()
+    }
+
+    fn managed_path(&self) -> &Path {
+        self.managed.path()
+    }
+
+    fn source_spec(&self) -> String {
+        self.source_path().to_string_lossy().into_owned()
+    }
+
+    fn write_metadata(&self, metadata: &str) {
+        write_package_json(self.source_path(), metadata);
+    }
+
+    fn write_artifact(&self, relative_path: &str, contents: &str) {
+        let path: PathBuf = self.source_path().join(relative_path);
+        let parent = path
+            .parent()
+            .expect("plugin artifact should have a parent directory");
+        fs::create_dir_all(parent).expect("plugin artifact directory should create");
+        fs::write(path, contents).expect("plugin artifact should write");
+    }
+}
 
 #[test]
 fn install_package_preserves_schema_validation_error() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.schema","apiVersion":1,"displayName":"Schema","description":"Schema","frontend":"dist/frontend.js","unexpected":true}"#,
     );
 
     let error =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("unknown metadata field should fail installation");
 
     assert_eq!(
@@ -28,15 +69,12 @@ fn install_package_preserves_schema_validation_error() {
 
 #[test]
 fn install_package_preserves_artifact_path_validation_error() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.artifact","apiVersion":1,"displayName":"Artifact","description":"Artifact","frontend":"../frontend.js"}"#,
     );
 
     let error =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("escaping artifact path should fail installation");
 
     assert_eq!(
@@ -47,14 +85,12 @@ fn install_package_preserves_artifact_path_validation_error() {
 
 #[test]
 fn inspect_plugin_package_preserves_discovery_details_and_installer_error() {
-    let source = tempdir().expect("source tempdir should create");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.discovery","apiVersion":1,"displayName":"Discovery","description":"Needs build","frontend":"dist/frontend.js","frontendStyles":["dist/frontend.css"]}"#,
     );
 
-    let inspected =
-        inspect_plugin_package_dir(source.path()).expect("OpenForge package should be discovered");
+    let inspected = inspect_plugin_package_dir(fixture.source_path())
+        .expect("OpenForge package should be discovered");
 
     assert_eq!(inspected.id, "acme.discovery");
     assert_eq!(inspected.name, "Discovery");
@@ -68,35 +104,22 @@ fn inspect_plugin_package_preserves_discovery_details_and_installer_error() {
         inspected.problem,
         Some(format!(
             "OpenForge plugin frontend entry is missing at {}; run the package build first",
-            source.path().join("dist/frontend.js").display()
+            fixture.source_path().join("dist/frontend.js").display()
         ))
     );
 }
 
 #[test]
 fn install_package_preserves_plugin_row_construction() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(
-        source.path().join("dist/frontend.mjs"),
-        "export default {};",
-    )
-    .expect("frontend should write");
-    fs::write(
-        source.path().join("dist/backend.cjs"),
-        "module.exports = {};",
-    )
-    .expect("backend should write");
-    fs::write(source.path().join("dist/frontend.css"), ".plugin {}")
-        .expect("stylesheet should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.row","apiVersion":1,"displayName":"Row","description":"Mapped row","frontend":"dist/frontend.mjs","frontendStyles":["dist/frontend.css"],"backend":"dist/backend.cjs","requires":["views"]}"#,
     );
+    fixture.write_artifact("dist/frontend.mjs", "export default {};");
+    fixture.write_artifact("dist/backend.cjs", "module.exports = {};");
+    fixture.write_artifact("dist/frontend.css", ".plugin {}");
 
     let row =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect("valid package should install");
 
     assert_eq!(row.id, "acme.row");
@@ -110,14 +133,14 @@ fn install_package_preserves_plugin_row_construction() {
     assert_eq!(row.backend_entry.as_deref(), Some("dist/backend.cjs"));
     assert_eq!(
         row.install_path,
-        source
-            .path()
+        fixture
+            .source_path()
             .canonicalize()
             .expect("source path should canonicalize")
             .to_string_lossy()
     );
     assert_eq!(row.source_kind, "local");
-    assert_eq!(row.source_spec, source.path().to_string_lossy());
+    assert_eq!(row.source_spec, fixture.source_spec());
     assert_eq!(
         row.package_metadata,
         r#"{"apiVersion":1,"backend":"dist/backend.cjs","description":"Mapped row","displayName":"Row","frontend":"dist/frontend.mjs","frontendStyles":["dist/frontend.css"],"id":"acme.row","requires":["views"]}"#
@@ -202,74 +225,55 @@ fn install_package_source_accepts_schema_declared_capabilities() {
         .iter()
         .enumerate()
     {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/frontend.js"), "export default {};")
-            .expect("frontend should write");
-        write_package_json(
-            source.path(),
-            &format!(
-                r#"{{"id":"acme.capability.{index}","apiVersion":1,"displayName":"Capability","description":"Capability","frontend":"dist/frontend.js","requires":["{capability}"]}}"#
-            ),
-        );
+        let fixture = PluginPackageFixture::new(&format!(
+            r#"{{"id":"acme.capability.{index}","apiVersion":1,"displayName":"Capability","description":"Capability","frontend":"dist/frontend.js","requires":["{capability}"]}}"#
+        ));
+        fixture.write_artifact("dist/frontend.js", "export default {};");
 
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .unwrap_or_else(|error| panic!("capability {capability} should install: {error}"));
     }
 }
 
 #[test]
 fn install_package_source_enforces_app_enablement_contract() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-
     let app_metadata = r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js","requires":["appEnablement"]}"#;
-    write_package_json(source.path(), app_metadata);
+    let fixture = PluginPackageFixture::new(app_metadata);
+    fixture.write_artifact("dist/frontend.js", "export default {};");
     let row =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect("app-enabled package should install with capability gating");
     assert_eq!(
         row.package_metadata,
         r#"{"apiVersion":1,"description":"App","displayName":"App","enablement":"app","frontend":"dist/frontend.js","id":"acme.app","requires":["appEnablement"]}"#
     );
 
-    write_package_json(
-        source.path(),
+    fixture.write_metadata(
         r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js"}"#,
     );
     let missing_capability =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("app enablement without capability should fail");
     assert!(missing_capability.contains("requires the appEnablement capability"));
 
-    write_package_json(
-        source.path(),
+    fixture.write_metadata(
         r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"workspace","frontend":"dist/frontend.js"}"#,
     );
     let invalid =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("invalid enablement should fail");
     assert!(invalid.contains("enablement must be \"app\" or \"project\""));
 }
 
 #[test]
 fn install_package_source_rejects_unknown_openforge_property() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.unknown","apiVersion":1,"displayName":"Unknown","description":"Unknown","frontend":"dist/frontend.js","unexpected":true}"#,
     );
+    fixture.write_artifact("dist/frontend.js", "export default {};");
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
@@ -279,18 +283,13 @@ fn install_package_source_rejects_unknown_openforge_property() {
 
 #[test]
 fn install_package_source_rejects_id_not_matching_schema_pattern() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"Acme Invalid","apiVersion":1,"displayName":"Invalid","description":"Invalid","frontend":"dist/frontend.js"}"#,
     );
+    fixture.write_artifact("dist/frontend.js", "export default {};");
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
@@ -300,18 +299,13 @@ fn install_package_source_rejects_id_not_matching_schema_pattern() {
 
 #[test]
 fn install_package_source_rejects_malformed_plugin_icon() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.bad-icon","apiVersion":1,"displayName":"Bad Icon","description":"Bad icon","icon":{"type":"svg","svg":""},"frontend":"dist/frontend.js"}"#,
     );
+    fixture.write_artifact("dist/frontend.js", "export default {};");
 
     let error =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("install should fail");
 
     assert!(error
@@ -320,18 +314,13 @@ fn install_package_source_rejects_malformed_plugin_icon() {
 
 #[test]
 fn install_package_source_rejects_missing_declared_frontend_stylesheet() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.missing-style","apiVersion":1,"displayName":"Missing Style","description":"Needs CSS build","frontend":"dist/frontend.js","frontendStyles":["dist/missing.css"]}"#,
     );
+    fixture.write_artifact("dist/frontend.js", "export default {};");
 
     let error =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path())
             .expect_err("install should fail");
 
     assert!(error.contains("frontendStyles[0] entry is missing"));
@@ -340,15 +329,12 @@ fn install_package_source_rejects_missing_declared_frontend_stylesheet() {
 
 #[test]
 fn install_package_source_rejects_missing_built_js_entry_with_clear_error() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.missing","apiVersion":1,"displayName":"Missing Build","description":"Needs build","frontend":"dist/frontend.js"}"#,
     );
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
@@ -358,18 +344,13 @@ fn install_package_source_rejects_missing_built_js_entry_with_clear_error() {
 
 #[test]
 fn install_package_source_rejects_legacy_contributes_metadata() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.js"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.legacy","apiVersion":1,"displayName":"Legacy","description":"Legacy","frontend":"dist/frontend.js","contributes":{}}"#,
     );
+    fixture.write_artifact("dist/frontend.js", "export default {};");
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
@@ -379,15 +360,12 @@ fn install_package_source_rejects_legacy_contributes_metadata() {
 
 #[test]
 fn install_package_source_rejects_path_traversal_entry() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.traversal","apiVersion":1,"displayName":"Traversal","description":"Traversal","frontend":"../frontend.js"}"#,
     );
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
@@ -397,18 +375,13 @@ fn install_package_source_rejects_path_traversal_entry() {
 
 #[test]
 fn install_package_source_rejects_non_js_entry() {
-    let source = tempdir().expect("source tempdir should create");
-    let managed = tempdir().expect("managed tempdir should create");
-    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-    fs::write(source.path().join("dist/frontend.ts"), "export default {};")
-        .expect("frontend should write");
-    write_package_json(
-        source.path(),
+    let fixture = PluginPackageFixture::new(
         r#"{"id":"acme.typescript","apiVersion":1,"displayName":"Typescript","description":"Typescript","frontend":"dist/frontend.ts"}"#,
     );
+    fixture.write_artifact("dist/frontend.ts", "export default {};");
 
     let result =
-        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path());
+        install_plugin_package_from_source_spec(&fixture.source_spec(), fixture.managed_path());
 
     assert!(result.is_err());
     assert!(result
