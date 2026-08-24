@@ -26,7 +26,7 @@ mod response_cache;
 mod reviews;
 pub mod types;
 
-pub use assets::{GithubAssetKind, ResolvedGithubAsset};
+pub use assets::ResolvedGithubAsset;
 pub use checks::{aggregate_ci_status, deduplicate_check_runs, filter_to_required};
 pub use error::GitHubError;
 pub use events::{dedupe_pr_refs, extract_authored_pr_refs_from_user_events};

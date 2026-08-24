@@ -18,8 +18,10 @@ fn payload_float32_pcm_base64(payload: &serde_json::Value) -> AppResult<Vec<f32>
     }
 
     Ok(bytes
-        .chunks_exact(std::mem::size_of::<f32>())
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .as_chunks::<{ std::mem::size_of::<f32>() }>()
+        .0
+        .iter()
+        .map(|chunk| f32::from_le_bytes(*chunk))
         .collect())
 }
 
