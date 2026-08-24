@@ -117,6 +117,19 @@ fn make_review_comment_poll_result(
 }
 
 #[test]
+fn poll_comment_persistence_records_database_failures() {
+    let (db, _temp_dir) = make_test_db("persist_comment_database_failure");
+    let result = make_review_comment_poll_result(999, 900, false);
+    let events = GitHubEventTarget::sidecar(None);
+
+    let persist_result = persist_polled_comments(&events, &db, &result, &HashSet::new(), 1_000);
+
+    assert_eq!(persist_result.new_comment_count, 0);
+    assert_eq!(persist_result.failed_insert_count, 1);
+    assert_eq!(persist_result.error_count, 1);
+}
+
+#[test]
 fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering_addressed() {
     let (db, _temp_dir) = make_test_db("persist_outdated_refresh");
     insert_test_task(&db);

@@ -1,7 +1,7 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
 use super::pr_execution::{poll_single_pr, should_fetch_comments_for_pr, PollSinglePrResult};
 use super::review_sync::StaleAuthoredPrTerminalState;
-use crate::db::{finalize_readiness_facts_for_poll, Database, PrRow};
+use crate::db::{acquire_db, finalize_readiness_facts_for_poll, Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
     GitHubClient,
@@ -15,7 +15,7 @@ pub(super) fn get_open_prs_for_task(
     db: &Mutex<Database>,
     task_id: &str,
 ) -> Result<Vec<PrRow>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = acquire_db(db);
     if db_lock
         .get_task(task_id)
         .map_err(|e| format!("Failed to find task: {e}"))?
@@ -47,6 +47,7 @@ pub(super) struct CiPersistencePayload {
 pub(super) struct PersistCommentsResult {
     pub(super) new_comment_count: usize,
     pub(super) failed_insert_count: usize,
+    pub(super) error_count: usize,
 }
 
 pub(super) fn persist_polled_comments(
@@ -82,6 +83,7 @@ pub(super) fn persist_polled_comments(
                     comment.id, e
                 );
                 persist_result.failed_insert_count += 1;
+                persist_result.error_count += 1;
                 continue;
             }
 
@@ -107,6 +109,7 @@ pub(super) fn persist_polled_comments(
                 "[GitHub Poller] Failed to update outdated for comment {}: {}",
                 comment.id, e
             );
+            persist_result.error_count += 1;
         }
     }
 
@@ -151,24 +154,28 @@ pub(super) async fn poll_prs_for_project(
         Option<bool>,
         Option<String>,
     );
-    let pr_metadata: Vec<PrMetadata> = {
-        let db_lock = db.lock().unwrap();
+    let pr_metadata = {
+        let db_lock = acquire_db(db);
         open_prs
             .iter()
             .map(|pr| {
-                let last_polled = db_lock.get_pr_last_polled(pr.id).ok().flatten();
-                let old_ci = db_lock.get_pr_ci_status(pr.id).ok().flatten();
-                let old_review = db_lock.get_pr_review_status(pr.id).ok().flatten();
-                (
+                Ok((
                     pr.id,
-                    last_polled,
-                    old_ci,
-                    old_review,
+                    db_lock.get_pr_last_polled(pr.id)?,
+                    db_lock.get_pr_ci_status(pr.id)?,
+                    db_lock.get_pr_review_status(pr.id)?,
                     pr.mergeable,
                     pr.mergeable_state.clone(),
-                )
+                ))
             })
-            .collect()
+            .collect::<rusqlite::Result<Vec<PrMetadata>>>()
+    };
+    let pr_metadata = match pr_metadata {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            error!("[GitHub Poller] Failed to load PR metadata: {e}");
+            return (0, 0, 0, 0, 1);
+        }
     };
 
     let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
@@ -236,7 +243,7 @@ pub(super) async fn poll_prs_for_project(
     let mut pr_change_count = 0;
     let mut error_count = 0;
 
-    let db_lock = db.lock().unwrap();
+    let db_lock = acquire_db(db);
 
     for result in results {
         if let Some(err) = &result.error {
@@ -256,6 +263,7 @@ pub(super) async fn poll_prs_for_project(
                     "[GitHub Poller] Failed to resolve Project for Task {}: {}",
                     result.ticket_id, error
                 );
+                error_count += 1;
                 None
             }
         };
@@ -273,6 +281,7 @@ pub(super) async fn poll_prs_for_project(
 
         let persist_result = persist_polled_comments(events, &db_lock, &result, &existing_ids, now);
         new_comment_count += persist_result.new_comment_count;
+        error_count += persist_result.error_count;
 
         if let Some(ci_payload) = ci_persistence_payload(&result) {
             if let Err(e) = db_lock.update_pr_ci_status(
@@ -285,6 +294,7 @@ pub(super) async fn poll_prs_for_project(
                     "[GitHub Poller] Failed to update CI status for PR #{}: {}",
                     result.pr_id, e
                 );
+                error_count += 1;
             } else if ci_payload.status_changed {
                 if let Err(e) = events.emit(
                     "ci-status-changed",
@@ -317,6 +327,7 @@ pub(super) async fn poll_prs_for_project(
                     "[GitHub Poller] Failed to update review status for PR #{}: {}",
                     result.pr_id, e
                 );
+                error_count += 1;
             } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
                 if let Err(e) = events.emit(
                     "review-status-changed",
@@ -344,6 +355,7 @@ pub(super) async fn poll_prs_for_project(
                     "[GitHub Poller] Failed to update GitHub node id for PR #{}: {}",
                     result.pr_id, e
                 );
+                error_count += 1;
             }
         }
 
@@ -352,6 +364,7 @@ pub(super) async fn poll_prs_for_project(
                 "[GitHub Poller] Failed to update is_queued for PR #{}: {}",
                 result.pr_id, e
             );
+            error_count += 1;
         }
 
         if let Err(e) = db_lock.update_pr_mergeability(
@@ -363,6 +376,7 @@ pub(super) async fn poll_prs_for_project(
                 "[GitHub Poller] Failed to update mergeability for PR #{}: {}",
                 result.pr_id, e
             );
+            error_count += 1;
         }
 
         let readiness_facts = finalize_readiness_facts_for_poll(
@@ -379,6 +393,7 @@ pub(super) async fn poll_prs_for_project(
                 "[GitHub Poller] Failed to update merge readiness for PR #{}: {}",
                 result.pr_id, e
             );
+            error_count += 1;
         }
 
         match apply_terminal_pr_state(&db_lock, &result) {
@@ -412,6 +427,7 @@ pub(super) async fn poll_prs_for_project(
                 "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
                 result.pr_id, e
             );
+            error_count += 1;
         }
     }
 

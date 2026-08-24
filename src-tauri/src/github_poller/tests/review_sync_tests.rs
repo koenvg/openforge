@@ -362,6 +362,28 @@ fn test_count_poll_phase_error_increments_total_errors_and_rate_limit_count_on_f
     assert_eq!(rate_limit_count, 1);
 }
 
+#[tokio::test]
+async fn review_list_sync_recovers_from_poisoned_database_lock() {
+    let (db, _temp_dir) = make_test_db("review_list_sync_poisoned_lock");
+    let db = Mutex::new(db);
+    poison_mutex(&db);
+    let client = GitHubClient::new();
+    let events = GitHubEventTarget::sidecar(None);
+
+    assert!(
+        poll_review_prs(&client, &db, &events, "token")
+            .await
+            .is_ok(),
+        "review PR sync should recover from lock poison"
+    );
+    assert!(
+        poll_authored_prs(&client, &db, &events, "token")
+            .await
+            .is_ok(),
+        "authored PR sync should recover from lock poison"
+    );
+}
+
 #[test]
 fn test_count_poll_phase_error_leaves_counters_unchanged_on_success() {
     let mut total_errors = 3;

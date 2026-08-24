@@ -15,6 +15,14 @@ use crate::github_client::{
 use std::collections::HashSet;
 use std::sync::Mutex;
 
+fn poison_mutex<T>(mutex: &Mutex<T>) {
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = mutex.lock().expect("lock mutex before poisoning");
+        panic!("poison test mutex");
+    }));
+    assert!(poisoned.is_err(), "test mutex should be poisoned");
+}
+
 fn make_project(id: &str) -> ProjectRow {
     ProjectRow {
         id: id.to_string(),

@@ -71,6 +71,20 @@ fn refresh_task_github_status_rejects_unknown_task_before_polling() {
 }
 
 #[test]
+fn refresh_task_github_status_recovers_from_poisoned_database_lock() {
+    let (db, _temp_dir) = make_test_db("refresh_task_github_status_poisoned_lock");
+    let task = db
+        .create_task("Selected task", "doing", None, None, None)
+        .expect("create selected task");
+    let db = Mutex::new(db);
+    poison_mutex(&db);
+
+    let prs = get_open_prs_for_task(&db, &task.id).expect("select task PRs after lock poison");
+
+    assert!(prs.is_empty());
+}
+
+#[test]
 fn test_poller_uses_managed_github_client() {
     let managed_client = GitHubClient::new();
     let app = AppHandle::new();
