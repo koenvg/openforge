@@ -1,5 +1,5 @@
 import type { BridgeResponseLike, ElectronInvokeDeps } from './backendBridge.js'
-import { SIDECAR_BACKED_COMMANDS } from './generatedRustSidecarCommands.js'
+import { SIDECAR_BACKED_COMMANDS } from './generatedDesktopIpcRegistry.js'
 
 export function isSidecarBackedCommand(command: string): boolean {
   return SIDECAR_BACKED_COMMANDS.has(command)
