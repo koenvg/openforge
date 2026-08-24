@@ -1,13 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { Project, Task } from './lib/types'
 import { callOrder, installAppTestLifecycle, mockActivatePlugin, mockCurrentViewStore, mockLoadEnabledForProject, mockRouterNavigate, mockRouterNavigateToTask, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
 
-async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
+async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockInstance<typeof console.error>) => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   try {
-    await run()
+    await run(consoleErrorSpy)
   } finally {
     consoleErrorSpy.mockRestore()
   }
@@ -65,6 +65,23 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       expect(mockActivatePlugin).toHaveBeenCalledWith('persisted-enabled-plugin')
     })
   }, 15000)
+
+  it('reports a rejected project plugin lifecycle transition', async () => {
+    await withSuppressedExpectedConsoleError(async (consoleErrorSpy) => {
+      const transitionError = new Error('backend context update failed')
+      mockLoadEnabledForProject.mockRejectedValueOnce(transitionError)
+
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[plugins] Failed to load enabled plugins for visible project proj-1:',
+          transitionError,
+        )
+      })
+    })
+  })
 
   it('initializes reviewRequestCount from DB on startup', async () => {
     const { getReviewPrs } = await import('./lib/ipc')
