@@ -187,6 +187,22 @@ _Avoid_: modal prompt, forced update banner, always-visible update button
 The shared OpenForge runtime that owns terminal session lifecycle for **Terminal Surfaces**.
 _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
 
+**Terminal Session**:
+A desktop-owned terminal identity that combines a live PTY with its current terminal state independently of any **Terminal Surface**.
+_Avoid_: xterm instance, terminal DOM, renderer session
+
+**Terminal View Attachment**:
+A temporary presentation of one **Terminal Session** within a **Terminal Surface**, without ownership of the session's lifecycle.
+_Avoid_: Terminal Session, PTY owner, terminal instance
+
+**Terminal Snapshot**:
+A complete renderable view of a **Terminal Session** at one output sequence boundary, used to initialize or recover a **Terminal View Attachment**.
+_Avoid_: raw replay buffer, terminal transcript, durable terminal history
+
+**Terminal Geometry Lease**:
+The exclusive, revocable right of one **Terminal View Attachment** to set the row and column dimensions of its **Terminal Session**.
+_Avoid_: shared resize control, viewport size, permanent geometry owner
+
 **Terminal Surface**:
 A plugin or core UI area that presents an interactive terminal through the **Terminal Runtime**.
 _Avoid_: PTY owner, terminal backend, shell manager
@@ -405,6 +421,14 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **App Update** UI links to release notes rather than embedding a changelog in the Settings card.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
+- The **Terminal Runtime** owns **Terminal Session** lifecycle, while the **Rust Sidecar** owns each session's PTY and authoritative current terminal state.
+- A **Terminal View Attachment** begins from an atomic **Terminal Snapshot** and then accepts only later live output.
+- A **Terminal View Attachment** becomes interactive from the renderable portion of its **Terminal Snapshot** before bounded older history finishes transferring.
+- The active desktop **Terminal View Attachment** holds the **Terminal Geometry Lease**; one companion may hold it only while no desktop attachment exists.
+- The **Rust Sidecar** is the sole authority for terminal-generated protocol replies; **Terminal View Attachments** send user input only.
+- A gap in live terminal output causes the **Terminal View Attachment** to request a new **Terminal Snapshot** rather than guess or replay incomplete state.
+- Replacing, hiding, or ending a **Terminal View Attachment** does not end its **Terminal Session** or accumulate an unbounded hidden-view output queue.
+- Explicit termination, PTY exit, applicable permanent **Task** deletion, or app shutdown ends a **Terminal Session**; ordinary view and renderer lifecycle events do not.
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
 - The **Terminal Runtime** uses **Shell Session Keys** to distinguish terminal shell tabs/sessions.
 - A **Shell Session Key** is not a **Task** id, even when it belongs to a **Task** terminal.
