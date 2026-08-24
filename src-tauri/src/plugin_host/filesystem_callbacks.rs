@@ -1,10 +1,15 @@
 use super::callbacks::{
-    optional_param_string, optional_param_usize, required_param_string,
+    optional_param_string, optional_param_u64, optional_param_usize, required_param_string,
     required_param_string_allow_empty,
 };
 use super::PluginHost;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
+const DEFAULT_EXTERNAL_TEXT_CHUNK_BYTES: usize = 64 * 1024;
+const MIN_EXTERNAL_TEXT_CHUNK_BYTES: usize = 4;
+const MAX_EXTERNAL_TEXT_CHUNK_BYTES: usize = 1024 * 1024;
 
 impl PluginHost {
     pub(super) async fn read_project_dir_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -120,6 +125,29 @@ impl PluginHost {
             .map(Value::String)
     }
 
+    pub(super) async fn read_external_text_file_chunk_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let path = required_param_string(params, "path")?;
+        let offset = optional_param_u64(params, "offset")?.unwrap_or(0);
+        let max_bytes =
+            optional_param_usize(params, "maxBytes")?.unwrap_or(DEFAULT_EXTERNAL_TEXT_CHUNK_BYTES);
+        if !(MIN_EXTERNAL_TEXT_CHUNK_BYTES..=MAX_EXTERNAL_TEXT_CHUNK_BYTES).contains(&max_bytes) {
+            return Err(format!(
+                "external text chunk maxBytes must be between {MIN_EXTERNAL_TEXT_CHUNK_BYTES} and {MAX_EXTERNAL_TEXT_CHUNK_BYTES}"
+            ));
+        }
+        let root = self.external_read_root_for_host(params)?;
+        let (content, next_offset, eof) =
+            read_text_file_chunk_under_root(&root, &path, offset, max_bytes).await?;
+        Ok(json!({
+            "content": content,
+            "nextOffset": next_offset,
+            "eof": eof,
+        }))
+    }
+
     async fn plugin_user_data_root_for_host(&self, params: &Value) -> Result<PathBuf, String> {
         let plugin_id = filesystem_plugin_id(params)?;
         let root = self
@@ -161,6 +189,61 @@ async fn read_text_file_under_root(root: &Path, path: &str) -> Result<String, St
     tokio::fs::read_to_string(full_path)
         .await
         .map_err(|error| format!("failed to read UTF-8 text file: {error}"))
+}
+
+async fn read_text_file_chunk_under_root(
+    root: &Path,
+    path: &str,
+    offset: u64,
+    max_bytes: usize,
+) -> Result<(String, u64, bool), String> {
+    let full_path = crate::project_fs::resolve_existing_path(root, Some(path))
+        .map_err(|error| error.to_string())?;
+    let mut file = tokio::fs::File::open(full_path)
+        .await
+        .map_err(|error| format!("failed to open UTF-8 text file: {error}"))?;
+    let file_len = file
+        .metadata()
+        .await
+        .map_err(|error| format!("failed to inspect UTF-8 text file: {error}"))?
+        .len();
+    if offset >= file_len {
+        return Ok((String::new(), offset, true));
+    }
+
+    file.seek(std::io::SeekFrom::Start(offset))
+        .await
+        .map_err(|error| format!("failed to seek UTF-8 text file: {error}"))?;
+    let mut bytes = Vec::with_capacity(max_bytes);
+    (&mut file)
+        .take(max_bytes as u64)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|error| format!("failed to read UTF-8 text file chunk: {error}"))?;
+    let read_was_empty = bytes.is_empty();
+    let reached_eof = offset.saturating_add(bytes.len() as u64) >= file_len;
+    let valid_len = match std::str::from_utf8(&bytes) {
+        Ok(_) => bytes.len(),
+        Err(error) if error.error_len().is_none() && !reached_eof => error.valid_up_to(),
+        Err(error) => {
+            return Err(format!(
+                "failed to read UTF-8 text file: invalid UTF-8 at byte {}",
+                offset.saturating_add(error.valid_up_to() as u64)
+            ));
+        }
+    };
+    if valid_len == 0 && !bytes.is_empty() {
+        return Err("failed to read UTF-8 text file: chunk made no progress".to_string());
+    }
+    bytes.truncate(valid_len);
+    let content = String::from_utf8(bytes)
+        .map_err(|error| format!("failed to read UTF-8 text file: {error}"))?;
+    let next_offset = offset.saturating_add(valid_len as u64);
+    Ok((
+        content,
+        next_offset,
+        read_was_empty || next_offset >= file_len,
+    ))
 }
 
 fn filesystem_plugin_id(params: &Value) -> Result<String, String> {

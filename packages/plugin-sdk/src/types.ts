@@ -521,6 +521,32 @@ export interface ExternalReadFileRequest {
   path: string
 }
 
+export const DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 64 * 1024
+export const MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 4
+export const MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 1024 * 1024
+
+/** Applies the default external text chunk size and rejects values outside host limits. */
+export function resolveExternalTextFileChunkSize(chunkSizeBytes?: number): number {
+  const size = chunkSizeBytes ?? DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES
+  if (
+    !Number.isInteger(size)
+    || size < MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES
+    || size > MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES
+  ) {
+    throw new RangeError(
+      `chunkSizeBytes must be an integer between ${MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES} and ${MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES}`,
+    )
+  }
+  return size
+}
+
+export interface ExternalReadTextFileChunksRequest extends ExternalReadFileRequest {
+  /** UTF-8 chunks contain at most this many bytes. Defaults to 64 KiB. */
+  chunkSizeBytes?: number
+  /** Stops future reads. An in-flight host read may finish, but its result is discarded. */
+  signal?: AbortSignal
+}
+
 export interface UserDataFileSystemAPI {
   readDir(request?: UserDataDirectoryRequest): Promise<FileEntry[]>
   readTextFile(request: UserDataFileRequest): Promise<string>
@@ -530,6 +556,8 @@ export interface UserDataFileSystemAPI {
 export interface ExternalReadFileSystemAPI {
   readDir(request: ExternalReadDirectoryRequest): Promise<FileEntry[]>
   readTextFile(request: ExternalReadFileRequest): Promise<string>
+  /** Lazily reads a UTF-8 file without retaining a host file handle between chunks. */
+  readTextFileChunks(request: ExternalReadTextFileChunksRequest): AsyncIterable<string>
 }
 
 export interface BackendFileSystemAPI extends FileSystemAPI {

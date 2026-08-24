@@ -208,6 +208,8 @@ Both frontend and backend APIs extend `OpenForgeCommonAPI`:
 
 All storage/config values are `JsonValue` (`string`, `number`, `boolean`, `null`, arrays, or objects). File APIs use the exported domain file types such as `FileEntry` and `FileContent`.
 
+`BackendOpenForgeAPI.fs` also exposes `userData` and `external`. `external.readTextFileChunks(request)` returns an `AsyncIterable<string>` for files that should not be loaded into the shared plugin-host heap at once. `chunkSizeBytes` defaults to `DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES` (64 KiB) and must be between `MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES` (4) and `MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES` (1 MiB). `resolveExternalTextFileChunkSize(...)` applies that default and range check in SDK-backed adapters and testing utilities. The request may include an `AbortSignal`. The host applies the external root and symlink checks to every chunk read and holds no file descriptor while the plugin processes a yielded chunk. See [OpenForge plugin authoring](../plugin-authoring.md#files-shell-notifications-and-links) for iteration and lifecycle details.
+
 ## Plugin Command schema validation
 
 OpenForge validates a Plugin Command's `input` before calling its handler and its `output` after the handler returns. Validation errors include the qualified command id, `input` or `output`, and the nested property or array index when applicable.
@@ -366,7 +368,7 @@ Use `@openforge-app/plugin-sdk/testing` to exercise plugins without the real Ope
 - `TestingOpenForgeRegistryFake`
 - `TestingSubscriptionSink`
 
-The testing module also exports mock API and contribution types, including `MockFrontendOpenForgeAPI`, `MockBackendOpenForgeAPI`, `TestingOpenForgeApiCalls`, `TestingOpenForgeRegistrySnapshot`, and contribution records for commands, events, views, task-pane tabs, settings sections, backend methods, and background services.
+The testing module also exports mock API and contribution types, including `MockFrontendOpenForgeAPI`, `MockBackendOpenForgeAPI`, `TestingOpenForgeApiCalls`, `TestingOpenForgeRegistrySnapshot`, and contribution records for commands, events, views, task-pane tabs, settings sections, backend methods, and background services. Pass `externalTextFiles` to a backend fake to seed `fs.external.readTextFileChunks(...)`; calls are recorded in `fsExternalReadTextFileChunks`.
 
 ## Vite/build exports
 

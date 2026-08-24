@@ -35,12 +35,16 @@ export {
 } from './testing'
 
 export {
+  DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
+  MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
+  MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES,
   TaskFollowUpError,
   MAX_SUPPORTED_API_VERSION,
   MIN_SUPPORTED_API_VERSION,
   OPENFORGE_PLUGIN_API_VERSION,
   SUPPORTED_OPENFORGE_API_VERSIONS,
   isPluginViewKey,
+  resolveExternalTextFileChunkSize,
   makePluginViewKey,
   parsePluginViewKey,
 } from './types'
@@ -63,6 +67,7 @@ export type {
   BackendFileSystemAPI,
   ExternalReadDirectoryRequest,
   ExternalReadFileRequest,
+  ExternalReadTextFileChunksRequest,
   ExternalReadFileSystemAPI,
   FileSystemAPI,
   UserDataDirectoryRequest,
@@ -140,6 +145,8 @@ export type {
   TestingBackendMethodContribution,
   TestingCommandContribution,
   TestingContributionBase,
+  TestingExternalTextFile,
+  TestingExternalTextFileChunksCall,
   TestingEventListenerContribution,
   TestingOpenForgeApiCalls,
   TestingOpenForgeApiOptions,

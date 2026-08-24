@@ -1,3 +1,4 @@
+import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'
 import type {
   AgentSession,
   CommandInfo,
@@ -53,6 +54,35 @@ function objectCallbackParams(value: unknown): Record<string, unknown> {
 
 function pluginFileCallbackParams(pluginId: string, request?: unknown): Record<string, unknown> {
   return { ...objectCallbackParams(request), pluginId }
+}
+
+type ExternalTextFileChunkResult = {
+  content: string
+  nextOffset: number
+  eof: boolean
+}
+
+
+function validateExternalTextFileChunk(
+  chunk: ExternalTextFileChunkResult,
+  offset: number,
+  maxBytes: number,
+): void {
+  if (
+    typeof chunk.content !== 'string'
+    || !Number.isSafeInteger(chunk.nextOffset)
+    || typeof chunk.eof !== 'boolean'
+  ) {
+    throw new Error('OpenForge host returned an invalid external text file chunk')
+  }
+  const byteLength = Buffer.byteLength(chunk.content, 'utf8')
+  if (
+    chunk.nextOffset !== offset + byteLength
+    || byteLength > maxBytes
+    || (!chunk.eof && byteLength === 0)
+  ) {
+    throw new Error('OpenForge host returned an invalid external text file chunk')
+  }
 }
 export type BackendApiRuntime = {
   hostCallbacks: HostCallbackHandler | null
@@ -125,6 +155,25 @@ export function createBackendApi(
       external: {
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.external.readDir', pluginFileCallbackParams(state.pluginId, request)),
         readTextFile: async request => await hostCallback<string>('openforge.fs.external.readTextFile', pluginFileCallbackParams(state.pluginId, request)),
+        readTextFileChunks: (request) => {
+          const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes)
+          const { root, path, signal } = request
+          return (async function* () {
+            let offset = 0
+            while (true) {
+              signal?.throwIfAborted()
+              const chunk = await hostCallback<ExternalTextFileChunkResult>(
+                'openforge.fs.external.readTextFileChunk',
+                { pluginId: state.pluginId, root, path, offset, maxBytes: chunkSizeBytes },
+              )
+              signal?.throwIfAborted()
+              validateExternalTextFileChunk(chunk, offset, chunkSizeBytes)
+              if (chunk.content.length > 0) yield chunk.content
+              if (chunk.eof) return
+              offset = chunk.nextOffset
+            }
+          })()
+        },
       },
     },
     shell: {

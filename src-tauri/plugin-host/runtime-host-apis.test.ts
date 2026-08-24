@@ -140,7 +140,15 @@ describe('plugin-host backend host APIs', () => {
               await openforge.fs.userData.writeTextFile({ path: 'telemetry/usage.json', content: '{"runs":2}' })
               const sessions = await openforge.fs.external.readDir({ root: '/Users/test/.pi/agent/sessions', path: '2026' })
               const session = await openforge.fs.external.readTextFile({ root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' })
-              return { userData, sessions, session }
+              let streamedSession = ''
+              for await (const chunk of openforge.fs.external.readTextFileChunks({
+                root: '/Users/test/.pi/agent/sessions',
+                path: '2026/session.jsonl',
+                chunkSizeBytes: 4
+              })) {
+                streamedSession += chunk
+              }
+              return { userData, sessions, session, streamedSession }
             }
           }))
         }
@@ -153,6 +161,11 @@ describe('plugin-host backend host APIs', () => {
       if (request.method === 'openforge.fs.userData.writeTextFile') return null
       if (request.method === 'openforge.fs.external.readDir') return [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }]
       if (request.method === 'openforge.fs.external.readTextFile') return '{}\n'
+      if (request.method === 'openforge.fs.external.readTextFileChunk') {
+        return request.params.offset === 0
+          ? { content: '{}\n', nextOffset: 3, eof: false }
+          : { content: 'x\n', nextOffset: 5, eof: true }
+      }
       throw new Error(`unexpected host callback: ${request.method}`)
     }
 
@@ -160,12 +173,15 @@ describe('plugin-host backend host APIs', () => {
       userData: '{"runs":1}',
       sessions: [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }],
       session: '{}\n',
+      streamedSession: '{}\nx\n',
     })
     expect(calls).toEqual([
       { method: 'openforge.fs.userData.readTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json' } },
       { method: 'openforge.fs.userData.writeTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json', content: '{"runs":2}' } },
       { method: 'openforge.fs.external.readDir', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026' } },
       { method: 'openforge.fs.external.readTextFile', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' } },
+      { method: 'openforge.fs.external.readTextFileChunk', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl', offset: 0, maxBytes: 4 } },
+      { method: 'openforge.fs.external.readTextFileChunk', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl', offset: 3, maxBytes: 4 } },
     ])
   })
 

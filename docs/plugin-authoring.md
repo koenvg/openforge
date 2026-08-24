@@ -460,7 +460,7 @@ Project file methods are available to frontend and backend plugins:
 Backend plugins also receive two user-scoped file APIs under the same `fs` capability:
 
 - `openforge.fs.userData` reads and writes files in a host-owned directory namespaced by plugin id. Paths are relative to that directory. Use this for durable plugin files that do not fit JSON `storage`, such as telemetry logs or cached indexes.
-- `openforge.fs.external` reads from an absolute root chosen by the plugin or user. Every call includes the root, and the nested `path` remains relative to it. This API has `readDir(...)` and `readTextFile(...)`, but no write method.
+- `openforge.fs.external` reads from an absolute root chosen by the plugin or user. Every call includes the root, and the nested `path` remains relative to it. This API has `readDir(...)`, `readTextFile(...)`, and the byte-bounded `readTextFileChunks(...)` async iterable. It cannot write external files.
 
 ```ts
 import { homedir } from 'node:os'
@@ -473,13 +473,35 @@ const session = await openforge.fs.external.readTextFile({
   path: '2026/session.jsonl'
 })
 
+const scanAbort = new AbortController()
+let unfinishedLine = ''
+for await (const chunk of openforge.fs.external.readTextFileChunks({
+  root: piSessionsRoot,
+  path: '2026/session.jsonl',
+  chunkSizeBytes: 64 * 1024,
+  signal: scanAbort.signal,
+})) {
+  unfinishedLine += chunk
+  for (let newline = unfinishedLine.indexOf('\n'); newline >= 0; newline = unfinishedLine.indexOf('\n')) {
+    await indexSessionLine(unfinishedLine.slice(0, newline))
+    unfinishedLine = unfinishedLine.slice(newline + 1)
+  }
+}
+if (unfinishedLine.length > 0) await indexSessionLine(unfinishedLine)
+
 await openforge.fs.userData.writeTextFile({
   path: 'telemetry/usage.json',
   content: JSON.stringify({ sessionCount: years.length })
 })
 ```
 
-The host creates parent directories for `userData.writeTextFile(...)`. `readTextFile(...)` returns the complete UTF-8 file rather than the Project preview format or its 1 MiB text limit; invalid UTF-8 fails the call. The host canonicalizes roots and existing read targets, rejects absolute child paths, relative external roots, `..` traversal, symlink traversal outside the selected root, and writes through a symlink target. It does not expand `~`.
+The host creates parent directories for `userData.writeTextFile(...)`. `readTextFile(...)` returns the complete UTF-8 file rather than the Project preview format or its 1 MiB text limit. Use it only when the complete file fits comfortably in the shared plugin-host heap.
+
+`readTextFileChunks(...)` starts host I/O when iteration begins. Each yielded string is at most `chunkSizeBytes` in UTF-8 bytes. The default is 64 KiB, and accepted values range from 4 bytes through 1 MiB. A chunk never splits a UTF-8 code point, but chunk boundaries do not follow lines. A line scanner must retain text after the last newline and prepend it to the next chunk. Its memory use is one chunk plus the longest unfinished line.
+
+The host canonicalizes the root and target again for every chunk, applying the same absolute-root, relative-child, traversal, and symlink-escape checks as `readTextFile(...)`. It opens and closes the file for each host read, so no descriptor or host stream session remains while plugin code processes a yielded chunk. Breaking out of the loop needs no explicit cleanup. The iterable is not a file snapshot; replacing, truncating, or appending the file during iteration may change later chunks or fail the read. Invalid UTF-8 fails the iteration. Paths do not expand `~`, and user-data writes reject symlink targets outside their assigned root.
+
+Pass an `AbortSignal` when a background service needs cancellation. The iterable checks it before and after each host read. Aborting stops future reads and discards a result that completes after cancellation, though the in-flight host read itself may finish. Call `abort()` from the background service's `stop()` hook.
 
 This is a scope boundary, not an installation permission prompt. Trusted Plugins are not sandboxed, and `package.json#openforge.requires` remains declarative. The user-data directory persists when a plugin is disabled or uninstalled so an update or reinstall can recover its state.
 
@@ -490,7 +512,7 @@ Backend entries run as trusted Node code, so Node built-ins and npm dependencies
 Migrate direct filesystem code as follows:
 
 1. Replace writes to a plugin-created directory under the home directory with `openforge.fs.userData.writeTextFile(...)`. Store a relative path, not an absolute home path.
-2. Replace reads from a configured directory such as `~/.pi/agent/sessions` with `openforge.fs.external.readDir(...)` and `readTextFile(...)`. Resolve the absolute root once with `node:os` and `node:path`, then pass relative child paths to the API.
+2. Replace reads from a configured directory such as `~/.pi/agent/sessions` with `openforge.fs.external.readDir(...)` and `readTextFile(...)`. Use `readTextFileChunks(...)` for files that should not be loaded into the shared plugin-host heap at once. Resolve the absolute root once with `node:os` and `node:path`, then pass relative child paths to the API.
 3. Keep `node:fs` only when a Node dependency or package-local implementation detail requires it. Do not use it to access OpenForge app data, Project files, or another plugin's user-data directory.
 
 Frontend plugins cannot use `fs.userData`, `fs.external`, or `node:fs`. Put this work in the backend entry and expose only the needed result through a backend method.
@@ -539,7 +561,7 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs` and `fsExternalReads`.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs`, `fsExternalReads`, and `fsExternalReadTextFileChunks`. Seed chunked reads with the `externalTextFiles` option. The fake splits seeded content on the same UTF-8 byte limit and honors `AbortSignal` cancellation.
 
 ## Authoring checklist
 
