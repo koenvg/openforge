@@ -1,4 +1,4 @@
-use super::package_metadata::LoadedPluginPackage;
+use super::package_metadata::ValidatedPluginPackage;
 use crate::{db, plugin_installation::package_source::PackageSourceSpec};
 use std::{
     path::Path,
@@ -6,7 +6,7 @@ use std::{
 };
 
 pub(in crate::plugin_installation) fn build_plugin_row(
-    loaded: &LoadedPluginPackage,
+    loaded: &ValidatedPluginPackage,
     install_path: &Path,
     source: &PackageSourceSpec,
     is_builtin: bool,

@@ -2,7 +2,11 @@ use crate::plugin_enablement::PluginEnablement;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use std::{fs, path::Path, sync::OnceLock};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 pub(in crate::plugin_installation) const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON: &str =
     include_str!("../../../../packages/plugin-sdk/src/openforgePackageMetadataSchema.json");
@@ -35,8 +39,23 @@ pub(in crate::plugin_installation) struct OpenForgePackageMetadata {
 
 #[derive(Debug)]
 pub(in crate::plugin_installation) struct LoadedPluginPackage {
+    package_json_path: PathBuf,
+    raw_value: Value,
+}
+
+#[derive(Debug)]
+pub(in crate::plugin_installation) struct ValidatedPluginPackage {
     pub(in crate::plugin_installation) package_json: PackageJsonFile,
     pub(in crate::plugin_installation) package_metadata_json: String,
+}
+
+#[derive(Debug)]
+pub(in crate::plugin_installation) struct PluginPackageDiscoveryFields {
+    pub(in crate::plugin_installation) id: String,
+    pub(in crate::plugin_installation) name: String,
+    pub(in crate::plugin_installation) version: String,
+    pub(in crate::plugin_installation) description: String,
+    pub(in crate::plugin_installation) declared_entries: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -91,28 +110,91 @@ pub(in crate::plugin_installation) fn load_package_from_dir(
             package_json_path.display()
         )
     })?;
-    let raw_value: Value = serde_json::from_str(&raw).map_err(|error| {
+    let raw_value = serde_json::from_str(&raw).map_err(|error| {
         format!(
             "failed to parse OpenForge plugin package.json {}: {error}",
             package_json_path.display()
         )
     })?;
-    validate_package_json_shape(&raw_value)?;
-
-    let package_json: PackageJsonFile =
-        serde_json::from_value(raw_value.clone()).map_err(|error| {
-            format!(
-                "failed to parse OpenForge plugin package metadata {}: {error}",
-                package_json_path.display()
-            )
-        })?;
-
-    let package_metadata_json = package_metadata_json(&raw_value)?;
 
     Ok(LoadedPluginPackage {
-        package_json,
-        package_metadata_json,
+        package_json_path,
+        raw_value,
     })
+}
+
+impl LoadedPluginPackage {
+    pub(in crate::plugin_installation) fn discovery_fields(
+        &self,
+        dir: &Path,
+    ) -> Option<PluginPackageDiscoveryFields> {
+        let object = self.raw_value.as_object()?;
+        let openforge = object.get("openforge")?.as_object()?;
+        let id = json_string_field(openforge, "id");
+        let fallback_name = if id.is_empty() {
+            dir.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            id.clone()
+        };
+        let display_name = json_string_field(openforge, "displayName");
+
+        Some(PluginPackageDiscoveryFields {
+            name: if display_name.is_empty() {
+                fallback_name
+            } else {
+                display_name
+            },
+            id,
+            version: json_string_field(object, "version"),
+            description: json_string_field(openforge, "description"),
+            declared_entries: declared_entries(openforge),
+        })
+    }
+
+    pub(in crate::plugin_installation) fn validate(self) -> Result<ValidatedPluginPackage, String> {
+        validate_package_json_shape(&self.raw_value)?;
+        let package_json = serde_json::from_value(self.raw_value.clone()).map_err(|error| {
+            format!(
+                "failed to parse OpenForge plugin package metadata {}: {error}",
+                self.package_json_path.display()
+            )
+        })?;
+        let package_metadata_json = package_metadata_json(&self.raw_value)?;
+
+        Ok(ValidatedPluginPackage {
+            package_json,
+            package_metadata_json,
+        })
+    }
+}
+
+fn json_string_field(object: &Map<String, Value>, key: &str) -> String {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn declared_entries(openforge: &Map<String, Value>) -> Vec<String> {
+    let mut entries = Vec::new();
+    for key in ["frontend", "backend"] {
+        if let Some(entry) = openforge.get(key).and_then(Value::as_str) {
+            entries.push(entry.to_string());
+        }
+    }
+    if let Some(stylesheets) = openforge.get("frontendStyles").and_then(Value::as_array) {
+        entries.extend(
+            stylesheets
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string),
+        );
+    }
+    entries
 }
 
 fn validate_package_json_shape(value: &Value) -> Result<(), String> {

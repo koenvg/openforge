@@ -136,7 +136,7 @@ fn prepare_acquired_package(
     managed_base_dir: &Path,
 ) -> Result<PreparedPluginInstallation, String> {
     let loaded = load_package_from_dir(&acquired.package_dir)?;
-    validate_package(&loaded.package_json, &acquired.package_dir)?;
+    let loaded = validate_package(loaded, &acquired.package_dir)?;
 
     let destination = if acquired.source.kind() == "local" {
         None
