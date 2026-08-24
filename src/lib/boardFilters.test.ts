@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_FOCUS_STATES,
   filterTasks,
+  taskMatchesTextFilter,
   getFilterCounts,
   loadFocusFilterStates,
   loadOutOfFocusTaskIds,
@@ -41,6 +42,25 @@ function task(id: string, status: Task['status'] = 'doing'): Task {
 beforeEach(() => {
   ipc.getProjectConfig.mockReset()
   ipc.setProjectConfig.mockReset()
+})
+
+describe('plain-text Task filtering', () => {
+  it('matches case-insensitive substrings across the Task title, prompts, and labels', () => {
+    const candidate = {
+      ...task('T-1'),
+      title: 'Authentication overhaul',
+      initial_prompt: 'Build the login flow',
+      prompt: 'Include recovery codes',
+      labels: [{ id: 1, project_id: 'P-1', name: 'Security' }],
+    } as Task & { labels: Array<{ id: number; project_id: string; name: string }> }
+
+    expect(taskMatchesTextFilter(candidate, 'AUTH')).toBe(true)
+    expect(taskMatchesTextFilter(candidate, 'login')).toBe(true)
+    expect(taskMatchesTextFilter(candidate, 'recovery')).toBe(true)
+    expect(taskMatchesTextFilter(candidate, 'security')).toBe(true)
+    expect(taskMatchesTextFilter(candidate, 'payments')).toBe(false)
+    expect(taskMatchesTextFilter(candidate, '')).toBe(true)
+  })
 })
 
 describe('backend-authoritative board partitioning', () => {

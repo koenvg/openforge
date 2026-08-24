@@ -182,6 +182,134 @@ describe('FocusBoard', () => {
   })
 
 
+  it('opens a bottom filter with slash and filters the visible Tasks as the user types', async () => {
+    const authTask = { ...makeTask('T-10', 'doing', 'Update login flow'), title: 'Authentication overhaul' }
+    const billingTask = { ...makeTask('T-11', 'doing', 'Update invoices'), title: 'Billing cleanup' }
+    renderBoard({
+      tasks: [authTask, billingTask],
+      sessions: new Map([
+        [authTask.id, makeSession(authTask.id, 'paused', null)],
+        [billingTask.id, makeSession(billingTask.id, 'paused', null)],
+      ]),
+    })
+    const taskList = await screen.findByRole('region', { name: 'Task list' })
+    expect(within(taskList).getByText('Authentication overhaul')).toBeTruthy()
+    expect(within(taskList).getByText('Billing cleanup')).toBeTruthy()
+
+    await fireEvent.keyDown(window, { key: '/' })
+
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    expect(document.activeElement).toBe(filterInput)
+
+    await fireEvent.input(filterInput, { target: { value: 'AUTH' } })
+
+    expect(within(taskList).getByText('Authentication overhaul')).toBeTruthy()
+    expect(within(taskList).queryByText('Billing cleanup')).toBeNull()
+  })
+
+  it('leaves slash available while the user is typing in another editable control', async () => {
+    renderBoard()
+    const editor = document.createElement('textarea')
+    document.body.append(editor)
+    editor.focus()
+
+    await fireEvent.keyDown(window, { key: '/' })
+
+    expect(screen.queryByRole('searchbox', { name: 'Filter tasks' })).toBeNull()
+    editor.remove()
+  })
+
+  it('does not open the filter while the user is interacting with a dialog', async () => {
+    renderBoard()
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    const dialogButton = document.createElement('button')
+    dialog.append(dialogButton)
+    document.body.append(dialog)
+    dialogButton.focus()
+
+    await fireEvent.keyDown(window, { key: '/' })
+
+    expect(screen.queryByRole('searchbox', { name: 'Filter tasks' })).toBeNull()
+    dialog.remove()
+  })
+
+  it('keeps an applied filter visible and lets the user edit or clear it', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(filterInput, { target: { value: 'focus' } })
+
+    await fireEvent.keyDown(filterInput, { key: 'Enter' })
+
+    expect(screen.queryByRole('searchbox', { name: 'Filter tasks' })).toBeNull()
+    const editFilter = screen.getByRole('button', { name: 'Edit task filter: focus' })
+    expect(screen.getByRole('button', { name: 'Clear task filter' })).toBeTruthy()
+
+    await fireEvent.click(editFilter)
+    const reopenedInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    expect((reopenedInput as HTMLInputElement).value).toBe('focus')
+
+    await fireEvent.keyDown(reopenedInput, { key: 'Escape' })
+
+    expect(screen.queryByRole('searchbox', { name: 'Filter tasks' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clear task filter' })).toBeNull()
+
+    await fireEvent.keyDown(window, { key: '/' })
+    const secondInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(secondInput, { target: { value: 'focus' } })
+    await fireEvent.keyDown(secondInput, { key: 'Enter' })
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear task filter' }))
+
+    expect(screen.queryByRole('button', { name: 'Clear task filter' })).toBeNull()
+  })
+
+  it('clears an applied filter when the user presses Escape', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(filterInput, { target: { value: 'focus' } })
+    await fireEvent.keyDown(filterInput, { key: 'Enter' })
+
+    await fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.queryByLabelText('Clear task filter')).toBeNull()
+  })
+
+  it('shows a filter-specific empty state when no Tasks match', async () => {
+    renderBoard()
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+
+    await fireEvent.input(filterInput, { target: { value: 'payments' } })
+
+    expect(screen.getByRole('status').textContent).toContain('No tasks match ‘payments’.')
+    expect(screen.queryByText('Nothing needs your attention')).toBeNull()
+  })
+
+  it('clears the text filter when the user switches projects', async () => {
+    const view = renderBoard()
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(filterInput, { target: { value: 'focus' } })
+    await fireEvent.keyDown(filterInput, { key: 'Enter' })
+    expect(screen.getByRole('button', { name: 'Clear task filter' })).toBeTruthy()
+
+    await view.rerender({
+      projectId: 'proj-2',
+      projectName: 'Second Project',
+      tasks: [{ ...taskFocus, project_id: 'proj-2' }],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Clear task filter' })).toBeNull()
+    })
+  })
+
   it('shows only started/current attention tasks in Focus and non-attention tasks in In Flight', async () => {
     renderBoard()
 
