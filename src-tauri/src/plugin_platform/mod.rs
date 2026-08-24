@@ -13,7 +13,7 @@ use std::{path::PathBuf, sync::Mutex};
 )]
 pub(crate) use asset_resolution::PluginAssetRoot;
 pub(crate) use lifecycle::PluginLifecycleLocks;
-pub(crate) use storage::validate_plugin_storage_scope;
+pub(crate) use storage::PluginStorageScope;
 
 pub(crate) struct PluginPlatform<'a> {
     db: &'a Mutex<db::Database>,
