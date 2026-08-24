@@ -3,7 +3,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task, Project, PullRequestInfo, TaskLabel, AgentSession } from '../../lib/types'
+import type { Task, Project, PullRequestInfo, TaskLabel } from '../../lib/types'
+import { createAgentSession } from './agentSession.testFixtures'
 import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks, ticketPrs } from '../../lib/stores'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
@@ -142,26 +143,6 @@ describe('TaskInfoPanel', () => {
     }
   }
 
-  function createAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
-    return {
-      id: 'session-1',
-      ticket_id: 'T-42',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'pi',
-      claude_session_id: null,
-      pi_session_id: 'pi-sess-abc123',
-      grok_session_id: null,
-      ...overrides,
-    }
-  }
-
   it('lets a source ticket link be added after creation and persists it through the typed IPC wrapper', async () => {
     tasks.set([baseTask])
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
@@ -248,7 +229,14 @@ describe('TaskInfoPanel', () => {
   })
 
   it('shows a copyable resume command in details when the active session can be resumed', () => {
-    activeSessions.set(new Map([['T-42', createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123' })]]))
+    activeSessions.set(new Map([
+      ['T-42', createAgentSession({
+        id: 'session-1',
+        ticket_id: 'T-42',
+        provider: 'pi',
+        pi_session_id: 'pi-sess-abc123',
+      })],
+    ]))
 
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
 
@@ -268,7 +256,14 @@ describe('TaskInfoPanel', () => {
   })
 
   it('hides the resume command row when no active session command is available', () => {
-    activeSessions.set(new Map([['T-42', createAgentSession({ provider: 'codex', pi_session_id: null })]]))
+    activeSessions.set(new Map([
+      ['T-42', createAgentSession({
+        id: 'session-1',
+        ticket_id: 'T-42',
+        provider: 'codex',
+        pi_session_id: null,
+      })],
+    ]))
 
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/repo/T-42' } })
 
