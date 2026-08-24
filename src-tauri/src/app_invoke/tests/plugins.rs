@@ -89,7 +89,7 @@ fn write_local_plugin_package(source_path: &std::path::Path, plugin_id: &str) {
 
 #[tokio::test]
 async fn register_builtin_plugin_rejects_external_plugin_rows() {
-    let (state, path, _app_dir) =
+    let (state, _temp_dir, _app_dir) =
         test_state_with_backend_app("app_invoke_builtin_rejects_external_row");
 
     let err = invoke(&state, "register_builtin_plugin", external_plugin_payload())
@@ -105,13 +105,11 @@ async fn register_builtin_plugin_rejects_external_plugin_rows() {
     )
     .await
     .is_null());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn register_builtin_plugin_recomputes_builtin_identity() {
-    let (state, path, _app_dir) =
+    let (state, _temp_dir, _app_dir) =
         test_state_with_backend_app("app_invoke_builtin_recomputes_identity");
 
     invoke_ok(
@@ -130,13 +128,11 @@ async fn register_builtin_plugin_recomputes_builtin_identity() {
     assert_eq!(installed["id"], "com.openforge.file-viewer");
     assert_eq!(installed["is_builtin"], true);
     assert_eq!(installed["source_kind"], "builtin");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn uninstall_plugin_rejects_builtin_plugins() {
-    let (state, path, _app_dir) =
+    let (state, _temp_dir, _app_dir) =
         test_state_with_backend_app("app_invoke_builtin_uninstall_rejects");
 
     invoke_ok(
@@ -163,13 +159,11 @@ async fn uninstall_plugin_rejects_builtin_plugins() {
     )
     .await
     .is_null());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn uninstall_plugin_removes_custom_plugins() {
-    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_custom_uninstall");
+    let (state, _temp_dir, _app_dir) = test_state_with_backend_app("app_invoke_custom_uninstall");
     {
         let db = state.db.lock().expect("db lock");
         db.install_plugin(&custom_plugin_row("com.example.custom"))
@@ -190,13 +184,11 @@ async fn uninstall_plugin_removes_custom_plugins() {
     )
     .await
     .is_null());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn handles_db_backed_commands() {
-    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_plugin_db_backed");
+    let (state, _temp_dir, _app_dir) = test_state_with_backend_app("app_invoke_plugin_db_backed");
     let project_id = {
         let db = state.db.lock().expect("db lock");
         db.create_project("Open Forge", "/tmp/openforge")
@@ -273,13 +265,11 @@ async fn handles_db_backed_commands() {
     )
     .await
     .is_null());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn resolves_plugin_asset_roots_through_rust_plugin_platform() {
-    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_plugin_asset_roots");
+    let (state, _temp_dir, _app_dir) = test_state_with_backend_app("app_invoke_plugin_asset_roots");
     let source = tempfile::tempdir().expect("source plugin dir");
     write_local_plugin_package(source.path(), "com.example.assets");
 
@@ -320,13 +310,11 @@ async fn resolves_plugin_asset_roots_through_rust_plugin_platform() {
         .expect("builtin asset root should be a string")
         .ends_with("plugins/file-viewer"));
     assert_eq!(builtin["is_builtin"], true);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn installs_local_plugin_with_backend_app_path_state() {
-    let (state, path, _app_dir) =
+    let (state, _temp_dir, _app_dir) =
         test_state_with_backend_app("app_invoke_local_plugin_backend_paths");
     let source = tempfile::tempdir().expect("source plugin dir");
     write_local_plugin_package(source.path(), "com.example.local-sidecar");
@@ -346,12 +334,11 @@ async fn installs_local_plugin_with_backend_app_path_state() {
             .expect("install_path should be a string"),
         source.path().canonicalize().unwrap().to_string_lossy()
     );
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn install_local_plugin_preserves_app_invoke_missing_app_path_contract() {
-    let (state, path) = test_state("app_invoke_local_plugin_missing_app_path");
+    let (state, _temp_dir) = test_state("app_invoke_local_plugin_missing_app_path");
 
     let err = invoke(
         &state,
@@ -366,13 +353,11 @@ async fn install_local_plugin_preserves_app_invoke_missing_app_path_contract() {
         err.1,
         "app IPC command requires app data path state before Electron sidecar support"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn scans_a_plugin_folder_for_installable_plugin_packages() {
-    let (state, path) = test_state("app_invoke_scan_plugin_folder");
+    let (state, _temp_dir) = test_state("app_invoke_scan_plugin_folder");
     let folder = tempfile::tempdir().expect("plugin folder");
     write_local_plugin_package(&folder.path().join("plugins/alpha"), "com.example.alpha");
 
@@ -397,8 +382,6 @@ async fn scans_a_plugin_folder_for_installable_plugin_packages() {
             .expect("package dir should canonicalize")
             .to_string_lossy()
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -469,7 +452,7 @@ async fn acknowledges_frontend_plugin_commands_exactly_once() {
 }
 #[tokio::test]
 async fn scanning_a_missing_plugin_folder_is_a_bad_request() {
-    let (state, path) = test_state("app_invoke_scan_plugin_folder_missing");
+    let (state, _temp_dir) = test_state("app_invoke_scan_plugin_folder_missing");
 
     let err = invoke(
         &state,
@@ -485,6 +468,4 @@ async fn scanning_a_missing_plugin_folder_is_a_bad_request() {
         "error should name the folder: {}",
         err.1
     );
-
-    let _ = std::fs::remove_file(path);
 }

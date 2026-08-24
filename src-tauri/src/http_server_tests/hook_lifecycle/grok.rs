@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn grok_stop_hook_maps_to_ended_and_persists_session_id() {
-    let (state, path) = test_state("grok_stop_hook_ended");
+    let (state, _temp_dir) = test_state("grok_stop_hook_ended");
     let task_id = create_agent_session_fixture(
         &state,
         AgentSessionFixture {
@@ -39,13 +39,11 @@ async fn grok_stop_hook_maps_to_ended_and_persists_session_id() {
         .expect("session exists");
     assert_eq!(session.status, "completed");
     assert_eq!(session.grok_session_id.as_deref(), Some("grok-ses-1"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_session_start_hook_marks_completed_session_running_and_persists_session_id() {
-    let (state, path) = test_state("grok_session_start_hook_running");
+    let (state, _temp_dir) = test_state("grok_session_start_hook_running");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -91,13 +89,11 @@ async fn grok_session_start_hook_marks_completed_session_running_and_persists_se
     assert_eq!(session.status, "running");
     assert_eq!(session.pty_instance_id, Some(2));
     assert_eq!(session.grok_session_id.as_deref(), Some("grok-ses-2"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_hook_ignores_stale_pty_instance() {
-    let (state, path) = test_state("grok_hook_stale_pty_instance");
+    let (state, _temp_dir) = test_state("grok_hook_stale_pty_instance");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -142,13 +138,11 @@ async fn grok_hook_ignores_stale_pty_instance() {
         .expect("session exists");
     assert_eq!(session.status, "completed");
     assert!(session.grok_session_id.is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_notification_permission_hook_pauses_running_session() {
-    let (state, path) = test_state("grok_notification_permission_pauses");
+    let (state, _temp_dir) = test_state("grok_notification_permission_pauses");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -192,13 +186,11 @@ async fn grok_notification_permission_hook_pauses_running_session() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "paused");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_hook_empty_body_still_processes_event() {
-    let (state, path) = test_state("grok_hook_empty_body_processes");
+    let (state, _temp_dir) = test_state("grok_hook_empty_body_processes");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -251,13 +243,11 @@ async fn grok_hook_empty_body_still_processes_event() {
         .expect("session exists");
     assert_eq!(session.status, "completed");
     assert_eq!(session.grok_session_id.as_deref(), Some("grok-ses-empty"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_hook_non_json_body_still_processes_event() {
-    let (state, path) = test_state("grok_hook_non_json_body_processes");
+    let (state, _temp_dir) = test_state("grok_hook_non_json_body_processes");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -309,13 +299,11 @@ async fn grok_hook_non_json_body_still_processes_event() {
         session.grok_session_id.as_deref(),
         Some("grok-ses-non-json")
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_hook_empty_pty_instance_id_query_value_reaches_handler() {
-    let (state, path) = test_state("grok_hook_empty_pty_instance_id");
+    let (state, _temp_dir) = test_state("grok_hook_empty_pty_instance_id");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -357,13 +345,11 @@ async fn grok_hook_empty_pty_instance_id_query_value_reaches_handler() {
         StatusCode::OK,
         "an empty pty_instance_id query value must not cause the whole request to be rejected"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn grok_hook_garbage_pty_instance_id_query_value_reaches_handler() {
-    let (state, path) = test_state("grok_hook_garbage_pty_instance_id");
+    let (state, _temp_dir) = test_state("grok_hook_garbage_pty_instance_id");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -403,6 +389,4 @@ async fn grok_hook_garbage_pty_instance_id_query_value_reaches_handler() {
         StatusCode::OK,
         "a non-numeric pty_instance_id query value must not cause the whole request to be rejected"
     );
-
-    let _ = std::fs::remove_file(path);
 }

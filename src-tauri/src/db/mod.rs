@@ -185,13 +185,15 @@ pub fn acquire_db(db: &std::sync::Mutex<Database>) -> std::sync::MutexGuard<'_, 
 #[cfg(test)]
 pub mod test_helpers {
     use super::*;
-    use std::fs;
 
-    pub fn make_test_db(name: &str) -> (Database, std::path::PathBuf) {
-        let db_path = std::env::temp_dir().join(format!("test_{}.db", name));
-        let _ = fs::remove_file(&db_path);
-        let db = Database::new(db_path.clone()).expect("Failed to create database");
-        (db, db_path)
+    pub fn make_test_db(name: &str) -> (Database, tempfile::TempDir) {
+        let temp_dir = tempfile::Builder::new()
+            .prefix(&format!("openforge-{name}-"))
+            .tempdir()
+            .expect("Failed to create temporary database directory");
+        let db_path = temp_dir.path().join("test.db");
+        let db = Database::new(db_path).expect("Failed to create database");
+        (db, temp_dir)
     }
 
     pub fn insert_test_task(db: &Database) {
@@ -206,22 +208,28 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+
+    #[test]
+    fn make_test_db_isolates_repeated_names() {
+        let (_first_db, first_temp_dir) = super::test_helpers::make_test_db("repeated_name");
+        let (_second_db, second_temp_dir) = super::test_helpers::make_test_db("repeated_name");
+
+        assert_ne!(first_temp_dir.path(), second_temp_dir.path());
+    }
 
     #[test]
     fn test_acquire_db_with_healthy_mutex() {
-        let (db, db_path) = super::test_helpers::make_test_db("acquire_db_healthy");
+        let (db, _temp_dir) = super::test_helpers::make_test_db("acquire_db_healthy");
         let mutex = std::sync::Mutex::new(db);
         let guard = super::acquire_db(&mutex);
         assert!(guard.get_config("app_mode").is_ok());
         drop(guard);
         drop(mutex);
-        let _ = fs::remove_file(&db_path);
     }
 
     #[test]
     fn database_operations_return_storage_error_when_connection_mutex_is_poisoned() {
-        let (db, db_path) = super::test_helpers::make_test_db("connection_mutex_poisoned");
+        let (db, _temp_dir) = super::test_helpers::make_test_db("connection_mutex_poisoned");
         let conn = db.connection();
         let poisoner = std::thread::spawn(move || {
             let _guard = conn.lock().expect("connection mutex should start healthy");
@@ -247,7 +255,6 @@ mod tests {
             ))
         ));
         drop(db);
-        let _ = fs::remove_file(&db_path);
     }
 
     #[test]

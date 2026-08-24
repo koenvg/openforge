@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn finalize_task_start_returns_database_error_when_connection_mutex_is_poisoned() {
-        let (db, db_path) =
+        let (db, _temp_dir) =
             crate::db::test_helpers::make_test_db("finalize_task_start_connection_poisoned");
         let conn = db.connection();
         let poisoner = std::thread::spawn(move || {
@@ -159,6 +159,5 @@ mod tests {
             .is_some());
 
         drop(db);
-        let _ = std::fs::remove_file(db_path);
     }
 }

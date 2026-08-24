@@ -344,11 +344,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_agent_session_lifecycle() {
-        let (db, path) = make_test_db("agent_session_lifecycle");
+        let (db, _temp_dir) = make_test_db("agent_session_lifecycle");
         insert_test_task(&db);
 
         db.create_agent_session("ses-1", "T-100", None, "read_ticket", "running", "opencode")
@@ -393,12 +392,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_latest_session_for_ticket() {
-        let (db, path) = make_test_db("latest_session");
+        let (db, _temp_dir) = make_test_db("latest_session");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -420,12 +418,11 @@ mod tests {
         assert_eq!(latest.id, "ses-new");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_latest_sessions_for_tickets_breaks_created_at_ties_by_rowid() {
-        let (db, path) = make_test_db("latest_sessions_tie_break");
+        let (db, _temp_dir) = make_test_db("latest_sessions_tie_break");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -459,12 +456,11 @@ mod tests {
         assert_eq!(sessions[0].status, "running");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_checkpoint_data_persistence() {
-        let (db, path) = make_test_db("checkpoint_persist");
+        let (db, _temp_dir) = make_test_db("checkpoint_persist");
         insert_test_task(&db);
 
         db.create_agent_session("ses-cp", "T-100", None, "implement", "running", "opencode")
@@ -498,12 +494,11 @@ mod tests {
         assert_eq!(session.checkpoint_data, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_mark_running_sessions_interrupted() {
-        let (db, path) = make_test_db("mark_interrupted");
+        let (db, _temp_dir) = make_test_db("mark_interrupted");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -563,12 +558,11 @@ mod tests {
         assert_eq!(count2, 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_mark_running_sessions_interrupted_before_preserves_recently_restored_sessions() {
-        let (db, path) = make_test_db("mark_interrupted_before");
+        let (db, _temp_dir) = make_test_db("mark_interrupted_before");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -623,12 +617,11 @@ mod tests {
         assert_eq!(restored.status, "running");
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_agent_session_with_claude_provider() {
-        let (db, path) = make_test_db("claude_provider");
+        let (db, _temp_dir) = make_test_db("claude_provider");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -661,12 +654,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_agent_sessions_for_tickets_returns_all_matching_sessions_latest_first() {
-        let (db, path) = make_test_db("agent_sessions_for_tickets");
+        let (db, _temp_dir) = make_test_db("agent_sessions_for_tickets");
         insert_test_task(&db);
         db.conn
             .lock()
@@ -713,12 +705,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_sessions_by_provider() {
-        let (db, path) = make_test_db("sessions_by_provider");
+        let (db, _temp_dir) = make_test_db("sessions_by_provider");
         insert_test_task(&db);
 
         db.create_agent_session("ses-oc1", "T-100", None, "implement", "running", "opencode")
@@ -760,12 +751,11 @@ mod tests {
         assert_eq!(none_sessions.len(), 0);
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_running_claude_sessions() {
-        let (db, path) = make_test_db("running_claude_sessions");
+        let (db, _temp_dir) = make_test_db("running_claude_sessions");
         insert_test_task(&db);
 
         db.create_agent_session(
@@ -805,6 +795,5 @@ mod tests {
         assert_eq!(running[0].status, "running");
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 }

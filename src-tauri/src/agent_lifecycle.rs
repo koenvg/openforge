@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn opencode_lifecycle_ignores_message_ids_as_provider_session_ids() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("opencode_ignore_message_provider_id");
+        let (db, _temp_dir) = make_test_db("opencode_ignore_message_provider_id");
         insert_test_task(&db);
         db.create_agent_session(
             "session-row",
@@ -656,14 +656,12 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session.opencode_session_id.as_deref(), Some("ses_existing"));
-
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn opencode_lifecycle_accepts_real_session_ids_as_provider_session_ids() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("opencode_accept_real_provider_id");
+        let (db, _temp_dir) = make_test_db("opencode_accept_real_provider_id");
         insert_test_task(&db);
         db.create_agent_session(
             "session-row",
@@ -696,14 +694,12 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session.opencode_session_id.as_deref(), Some("ses_good123"));
-
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn normalized_lifecycle_kind_drives_status_even_with_unknown_raw_debug_fields() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("normalized_lifecycle_ignores_raw_debug");
+        let (db, _temp_dir) = make_test_db("normalized_lifecycle_ignores_raw_debug");
         let task = db
             .create_task("OpenCode task", "doing", None, None, None)
             .expect("create task");
@@ -751,14 +747,12 @@ mod tests {
             .expect("session exists");
         assert_eq!(session.status, "running");
         assert_eq!(session.opencode_session_id, Some("ses-5".to_string()));
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn claude_lifecycle_requires_matching_pty_instance() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("claude_lifecycle_requires_pty_instance");
+        let (db, _temp_dir) = make_test_db("claude_lifecycle_requires_pty_instance");
         let task = db
             .create_task("Claude task", "doing", None, None, None)
             .expect("create task");
@@ -829,14 +823,12 @@ mod tests {
             session.claude_session_id,
             Some("claude-current".to_string())
         );
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn codex_lifecycle_requires_matching_pty_instance() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("codex_lifecycle_requires_pty_instance");
+        let (db, _temp_dir) = make_test_db("codex_lifecycle_requires_pty_instance");
         let task = db
             .create_task("Codex task", "doing", None, None, None)
             .expect("create task");
@@ -904,14 +896,12 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session.status, "running");
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn claude_lifecycle_keeps_provider_session_ids_task_scoped_for_active_tasks() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("claude_lifecycle_provider_id_unique");
+        let (db, _temp_dir) = make_test_db("claude_lifecycle_provider_id_unique");
         let first_task = db
             .create_task("First Claude task", "doing", None, None, None)
             .expect("create first task");
@@ -984,14 +974,12 @@ mod tests {
             Some("claude-shared")
         );
         assert_eq!(second_session.claude_session_id, None);
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn pi_lifecycle_does_not_attach_one_provider_session_to_two_active_tasks() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("pi_lifecycle_provider_id_unique");
+        let (db, _temp_dir) = make_test_db("pi_lifecycle_provider_id_unique");
         let first_task = db
             .create_task("First Pi task", "done", None, None, None)
             .expect("create first task");
@@ -1048,14 +1036,12 @@ mod tests {
             .expect("second session exists");
         assert_eq!(first_session.pi_session_id.as_deref(), Some("pi-shared"));
         assert_eq!(second_session.pi_session_id, None);
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn pi_lifecycle_does_not_replace_an_existing_provider_session_id() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("pi_lifecycle_preserves_provider_id");
+        let (db, _temp_dir) = make_test_db("pi_lifecycle_preserves_provider_id");
         let task = db
             .create_task("Pi task", "doing", None, None, None)
             .expect("create task");
@@ -1093,8 +1079,6 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session.pi_session_id.as_deref(), Some("pi-authoritative"));
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
@@ -1105,7 +1089,7 @@ mod tests {
     #[test]
     fn session_provider_id_returns_grok_session_id() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("session_provider_id_returns_grok_session_id");
+        let (db, _temp_dir) = make_test_db("session_provider_id_returns_grok_session_id");
         let task = db
             .create_task("Grok task", "doing", None, None, None)
             .expect("create task");
@@ -1126,14 +1110,12 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session_provider_id(&session, "grok"), Some("grok-abc"));
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn grok_lifecycle_requires_matching_pty_instance() {
         use crate::db::test_helpers::*;
-        let (db, path) = make_test_db("grok_lifecycle_requires_pty_instance");
+        let (db, _temp_dir) = make_test_db("grok_lifecycle_requires_pty_instance");
         let task = db
             .create_task("Grok task", "doing", None, None, None)
             .expect("create task");
@@ -1201,8 +1183,6 @@ mod tests {
             .expect("session exists");
         assert_eq!(session.status, "running");
         assert_eq!(session.grok_session_id, Some("grok-current".to_string()));
-
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]

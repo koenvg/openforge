@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn host_project_callbacks_route_to_app_services() {
-    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_project_callbacks");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_project_callbacks");
     let project = database
         .create_project("Plugin Host", "/tmp/plugin-host")
         .expect("project fixture");

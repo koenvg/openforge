@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn task_label_domain_errors_keep_the_existing_bad_request_contract() {
-    let (state, path) = test_state("app_invoke_task_label_domain_errors");
+    let (state, _temp_dir) = test_state("app_invoke_task_label_domain_errors");
     let (project, projectless_task) = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -46,6 +46,4 @@ async fn task_label_domain_errors_keep_the_existing_bad_request_contract() {
         assert_eq!(error.0, StatusCode::BAD_REQUEST);
         assert_eq!(error.1, expected_message);
     }
-
-    let _ = std::fs::remove_file(path);
 }

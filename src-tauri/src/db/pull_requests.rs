@@ -603,11 +603,10 @@ impl super::Database {
 mod tests {
     use crate::db::test_helpers::*;
     use crate::db::PrMergeReadinessFacts;
-    use std::fs;
 
     #[test]
     fn test_pull_request_crud() {
-        let (db, path) = make_test_db("pr_crud");
+        let (db, _temp_dir) = make_test_db("pr_crud");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -648,12 +647,11 @@ mod tests {
         assert_eq!(open_prs.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn pull_requests_can_be_queried_for_one_task() {
-        let (db, path) = make_test_db("pr_for_task");
+        let (db, _temp_dir) = make_test_db("pr_for_task");
         insert_test_task(&db);
         {
             let conn = db.connection();
@@ -700,12 +698,11 @@ mod tests {
         assert_eq!(pull_requests[0].title, "Requested task PR");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pull_request_terminal_state_updates_merged_and_closed() {
-        let (db, path) = make_test_db("pr_terminal_state_updates");
+        let (db, _temp_dir) = make_test_db("pr_terminal_state_updates");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -734,12 +731,11 @@ mod tests {
         assert_eq!(closed[0].merged_at, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pull_requests_with_same_number_in_different_repositories_do_not_collide() {
-        let (db, path) = make_test_db("pr_same_number_different_repos");
+        let (db, _temp_dir) = make_test_db("pr_same_number_different_repos");
         insert_test_task(&db);
 
         db.insert_pull_request_with_number(
@@ -781,12 +777,11 @@ mod tests {
             .any(|pr| pr.id == 2001 && pr.pr_number == 42 && pr.repo_name == "api"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_global_pr_upsert_migrates_legacy_repo_number_row_and_comments() {
-        let (db, path) = make_test_db("pr_global_upsert_migrates_legacy_row");
+        let (db, _temp_dir) = make_test_db("pr_global_upsert_migrates_legacy_row");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -848,12 +843,11 @@ mod tests {
         assert!(legacy_comments.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pr_comment_lifecycle() {
-        let (db, path) = make_test_db("pr_comment_lifecycle");
+        let (db, _temp_dir) = make_test_db("pr_comment_lifecycle");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -919,12 +913,11 @@ mod tests {
         assert_eq!(comments[1].addressed, 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_pr_comments_by_ids() {
-        let (db, path) = make_test_db("pr_comments_by_ids");
+        let (db, _temp_dir) = make_test_db("pr_comments_by_ids");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -989,12 +982,11 @@ mod tests {
         assert_eq!(empty.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_mark_comments_addressed_batch() {
-        let (db, path) = make_test_db("mark_batch_addressed");
+        let (db, _temp_dir) = make_test_db("mark_batch_addressed");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1057,12 +1049,11 @@ mod tests {
         assert_eq!(comments[2].addressed, 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_ci_status_migration() {
-        let (db, path) = make_test_db("ci_migration");
+        let (db, _temp_dir) = make_test_db("ci_migration");
 
         let conn = db.connection();
         let conn = conn.lock().unwrap();
@@ -1089,12 +1080,11 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_pr_ci_status() {
-        let (db, path) = make_test_db("ci_status_update");
+        let (db, _temp_dir) = make_test_db("ci_status_update");
         insert_test_task(&db);
 
         let now = 1000i64;
@@ -1123,12 +1113,11 @@ mod tests {
         assert!(pr.ci_check_runs.as_ref().unwrap().contains("build"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_pr_is_queued() {
-        let (db, path) = make_test_db("update_pr_is_queued");
+        let (db, _temp_dir) = make_test_db("update_pr_is_queued");
         insert_test_task(&db);
         let _ = db.insert_pull_request(
             1,
@@ -1149,12 +1138,11 @@ mod tests {
         db.update_pr_is_queued(1, false).unwrap();
         let prs = db.get_open_prs().unwrap();
         assert!(!prs[0].is_queued);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_pr_mergeability() {
-        let (db, path) = make_test_db("update_pr_mergeability");
+        let (db, _temp_dir) = make_test_db("update_pr_mergeability");
         insert_test_task(&db);
         let _ = db.insert_pull_request(
             1,
@@ -1176,13 +1164,11 @@ mod tests {
         assert_eq!(prs.len(), 1);
         assert_eq!(prs[0].mergeable, Some(false));
         assert_eq!(prs[0].mergeable_state.as_deref(), Some("dirty"));
-
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_pr_merge_readiness_round_trip() {
-        let (db, path) = make_test_db("pr_merge_readiness_round_trip");
+        let (db, _temp_dir) = make_test_db("pr_merge_readiness_round_trip");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1236,12 +1222,11 @@ mod tests {
         assert_eq!(pr.readiness_updated_at, Some(1704067200));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
-        let (db, path) = make_test_db("pr_upsert_preserve_terminal_state");
+        let (db, _temp_dir) = make_test_db("pr_upsert_preserve_terminal_state");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1366,12 +1351,11 @@ mod tests {
             .contains("pull_request_closed"));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pr_upsert_preserves_ci_status() {
-        let (db, path) = make_test_db("ci_upsert_preserve");
+        let (db, _temp_dir) = make_test_db("ci_upsert_preserve");
         insert_test_task(&db);
 
         let now = 1000i64;
@@ -1421,12 +1405,11 @@ mod tests {
         assert_eq!(pr.title, "Test PR Updated");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_get_existing_comment_ids() {
-        let (db, path) = make_test_db("existing_comment_ids");
+        let (db, _temp_dir) = make_test_db("existing_comment_ids");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1495,12 +1478,11 @@ mod tests {
         assert_eq!(empty.len(), 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_pr_last_polled_lifecycle() {
-        let (db, path) = make_test_db("pr_last_polled");
+        let (db, _temp_dir) = make_test_db("pr_last_polled");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1530,12 +1512,11 @@ mod tests {
         assert_eq!(nonexistent, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_insert_pr_comment_with_addressed() {
-        let (db, path) = make_test_db("pr_comment_addressed");
+        let (db, _temp_dir) = make_test_db("pr_comment_addressed");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1586,12 +1567,11 @@ mod tests {
         assert_eq!(comments[1].addressed, 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_update_comment_outdated_preserves_addressed() {
-        let (db, path) = make_test_db("comment_outdated_preserves_addressed");
+        let (db, _temp_dir) = make_test_db("comment_outdated_preserves_addressed");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1648,12 +1628,11 @@ mod tests {
         assert_eq!(comments[0].addressed, 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_unaddressed_comment_count_subquery() {
-        let (db, path) = make_test_db("unaddressed_count");
+        let (db, _temp_dir) = make_test_db("unaddressed_count");
         insert_test_task(&db);
 
         db.insert_pull_request(
@@ -1729,6 +1708,5 @@ mod tests {
         assert_eq!(pr2.unaddressed_comment_count, 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

@@ -1230,7 +1230,7 @@ mod tests {
 
     #[test]
     fn test_resolve_workspace_path_from_task_workspaces_only() {
-        let (db, db_path) = make_test_db("resolve_workspace_path_task_workspaces_only");
+        let (db, _temp_dir) = make_test_db("resolve_workspace_path_task_workspaces_only");
         let workspace_dir = tempdir().expect("create temp workspace dir");
         let workspace_path = workspace_dir.path().to_string_lossy().to_string();
         let project = db
@@ -1255,12 +1255,11 @@ mod tests {
         assert_eq!(path, workspace_path);
 
         drop(db);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
     fn test_resolve_workspace_path_prefers_worktrees_row() {
-        let (db, db_path) = make_test_db("resolve_workspace_path_prefers_worktrees");
+        let (db, _temp_dir) = make_test_db("resolve_workspace_path_prefers_worktrees");
         let worktree_dir = tempdir().expect("create temp worktree dir");
         let worktree_path = worktree_dir.path().to_string_lossy().to_string();
         let workspace_dir = tempdir().expect("create temp workspace dir");
@@ -1296,12 +1295,11 @@ mod tests {
         assert_eq!(path, worktree_path);
 
         drop(db);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
     fn test_resolve_workspace_path_falls_back_when_worktree_path_is_stale() {
-        let (db, db_path) = make_test_db("resolve_workspace_path_stale_worktree");
+        let (db, _temp_dir) = make_test_db("resolve_workspace_path_stale_worktree");
         let workspace_dir = tempdir().expect("create temp workspace dir");
         let workspace_path = workspace_dir.path().to_string_lossy().to_string();
         let project = db
@@ -1341,12 +1339,11 @@ mod tests {
         assert_eq!(path, workspace_path);
 
         drop(db);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
     fn test_resolve_workspace_path_returns_err_when_no_row_exists() {
-        let (db, db_path) = make_test_db("resolve_workspace_path_no_row");
+        let (db, _temp_dir) = make_test_db("resolve_workspace_path_no_row");
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
@@ -1368,7 +1365,6 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]

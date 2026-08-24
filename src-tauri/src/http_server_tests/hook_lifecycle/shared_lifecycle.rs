@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
-    let (state, path) = test_state("agent_lifecycle_route_opencode_running");
+    let (state, _temp_dir) = test_state("agent_lifecycle_route_opencode_running");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -59,13 +59,11 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
     assert_eq!(event.payload["raw_event_type"], "session.created");
     assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 88);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
-    let (state, path) = test_state("agent_lifecycle_route_pi_running");
+    let (state, _temp_dir) = test_state("agent_lifecycle_route_pi_running");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -116,13 +114,11 @@ async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
     assert_eq!(event.payload["raw_event_type"], "agent.start");
     assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 89);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
-    let (state, path) = test_state("agent_lifecycle_route_claude_running");
+    let (state, _temp_dir) = test_state("agent_lifecycle_route_claude_running");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -177,13 +173,11 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
     assert_eq!(event.payload["raw_event_type"], "pre-tool-use");
     assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 90);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn agent_lifecycle_route_updates_claude_requested_permission_to_paused() {
-    let (state, path) = test_state("agent_lifecycle_route_claude_permission");
+    let (state, _temp_dir) = test_state("agent_lifecycle_route_claude_permission");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -238,6 +232,4 @@ async fn agent_lifecycle_route_updates_claude_requested_permission_to_paused() {
     assert_eq!(event.payload["raw_event_type"], "notification-permission");
     assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 91);
-
-    let _ = std::fs::remove_file(path);
 }

@@ -36,7 +36,7 @@ fn test_app_event_sse_data_uses_openforge_event_envelope_shape() {
 
 #[tokio::test]
 async fn test_app_events_keepalive_during_quiet_periods() {
-    let (state, path) = test_state("app_events_keepalive");
+    let (state, _temp_dir) = test_state("app_events_keepalive");
     let _keep_sender_alive = state
         .app_event_tx
         .as_ref()
@@ -67,8 +67,6 @@ async fn test_app_events_keepalive_during_quiet_periods() {
         text.contains("openforge-event-stream-keepalive"),
         "expected keepalive text in SSE chunk, got: {text}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -168,7 +166,7 @@ async fn test_app_events_stream_reports_gap_for_expired_last_event_id() {
 
 #[tokio::test]
 async fn test_app_events_requires_backend_token() {
-    let (state, path) = test_state("app_events_requires_token");
+    let (state, _temp_dir) = test_state("app_events_requires_token");
     let router = create_router(state);
 
     let unauthorized = router
@@ -181,13 +179,11 @@ async fn test_app_events_requires_backend_token() {
         .await
         .expect("request should succeed");
     assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_app_readiness_requires_backend_token_and_reports_readiness_state() {
-    let (state, path) = test_state("app_readiness_requires_token");
+    let (state, _temp_dir) = test_state("app_readiness_requires_token");
     state.sidecar_readiness.mark_startup_resume_running(2);
     state.sidecar_readiness.record_startup_resume_success();
     state
@@ -227,13 +223,11 @@ async fn test_app_readiness_requires_backend_token_and_reports_readiness_state()
     assert_eq!(body["startupResume"]["resumedCount"], 1);
     assert_eq!(body["startupResume"]["failedCount"], 1);
     assert_eq!(body["degraded"][0]["area"], "startupResume");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_app_health_requires_backend_token() {
-    let (state, path) = test_state("app_health_requires_token");
+    let (state, _temp_dir) = test_state("app_health_requires_token");
     let router = create_router(state);
 
     let unauthorized = router
@@ -260,6 +254,4 @@ async fn test_app_health_requires_backend_token() {
         .expect("request should succeed");
     assert_eq!(authorized.status(), StatusCode::OK);
     assert_eq!(response_body_json(authorized).await["status"], "ok");
-
-    let _ = std::fs::remove_file(path);
 }

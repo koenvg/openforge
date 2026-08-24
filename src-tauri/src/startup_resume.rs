@@ -476,7 +476,7 @@ mod tests {
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db;
     use crate::db::test_helpers::make_test_db;
-    use std::fs;
+
     use std::sync::{Arc, Mutex};
 
     fn test_agent_session_with_status(status: &str) -> db::AgentSessionRow {
@@ -518,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn completed_replay_recovery_is_handed_to_idle_reaper() {
-        let (database, path) = make_test_db("completed_replay_recovery_reaper");
+        let (database, _temp_dir) = make_test_db("completed_replay_recovery_reaper");
         let project = database
             .create_project("Replay recovery", "/tmp/replay-recovery")
             .expect("create project");
@@ -564,7 +564,6 @@ mod tests {
         );
 
         drop(database);
-        let _ = fs::remove_file(path);
     }
 
     #[derive(Default)]
@@ -594,7 +593,7 @@ mod tests {
     #[tokio::test]
     async fn resume_task_sessions_reports_degraded_readiness_when_initial_database_lock_is_poisoned(
     ) {
-        let (db, path) = make_test_db("resume_task_sessions_poisoned_initial_lock");
+        let (db, _temp_dir) = make_test_db("resume_task_sessions_poisoned_initial_lock");
         let db = Arc::new(Mutex::new(db));
         let poison_db = Arc::clone(&db);
         let _ = std::thread::spawn(move || {
@@ -626,14 +625,12 @@ mod tests {
             .expect("read recorded events")
             .iter()
             .any(|event| event == "startup-resume-complete"));
-
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn restore_resumed_session_state_marks_interrupted_opencode_session_running_like_other_tty_providers(
     ) {
-        let (db, path) = make_test_db("restore_resumed_session_state");
+        let (db, _temp_dir) = make_test_db("restore_resumed_session_state");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -703,12 +700,11 @@ mod tests {
         assert_eq!(workspace.kind, "git_worktree");
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn restore_resumed_opencode_session_becomes_running_after_tty_resume() {
-        let (db, path) = make_test_db("restore_resumed_opencode_tty_running");
+        let (db, _temp_dir) = make_test_db("restore_resumed_opencode_tty_running");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -769,12 +765,11 @@ mod tests {
         assert_eq!(restored.error_message, None);
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn restore_resumed_opencode_session_refreshes_checkpoint_for_completed_session() {
-        let (db, path) = make_test_db("restore_resumed_opencode_completed_checkpoint");
+        let (db, _temp_dir) = make_test_db("restore_resumed_opencode_completed_checkpoint");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -832,12 +827,11 @@ mod tests {
         assert_eq!(restored.checkpoint_data, None);
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn persist_resumed_pi_session_state_updates_changed_pi_session_id() {
-        let (db, path) = make_test_db("persist_resumed_pi_session_id");
+        let (db, _temp_dir) = make_test_db("persist_resumed_pi_session_id");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -893,12 +887,11 @@ mod tests {
         assert_eq!(restored.status, "running");
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn restore_resumed_pi_session_refreshes_checkpoint_for_completed_session() {
-        let (db, path) = make_test_db("restore_resumed_pi_completed_checkpoint");
+        let (db, _temp_dir) = make_test_db("restore_resumed_pi_completed_checkpoint");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -951,12 +944,11 @@ mod tests {
         assert_eq!(restored.checkpoint_data, None);
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn load_resume_targets_prefers_task_workspaces_and_falls_back_to_worktrees() {
-        let (db, path) = make_test_db("load_resume_targets");
+        let (db, _temp_dir) = make_test_db("load_resume_targets");
 
         let project = db
             .create_project("Test Project", "/tmp/test-repo")
@@ -1021,12 +1013,11 @@ mod tests {
                 && target.workspace_path == "/tmp/test-repo/.worktrees/legacy"));
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 
     #[test]
     fn load_resume_targets_reattaches_completed_sessions_for_doing_tasks() {
-        let (db, path) = make_test_db("load_completed_resume_targets");
+        let (db, _temp_dir) = make_test_db("load_completed_resume_targets");
         let project = db
             .create_project("Replay recovery", "/tmp/replay-recovery")
             .expect("create project failed");
@@ -1094,6 +1085,5 @@ mod tests {
         assert_eq!(recovered_task_ids, expected_task_ids);
 
         drop(db);
-        let _ = fs::remove_file(path);
     }
 }

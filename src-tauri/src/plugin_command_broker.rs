@@ -606,7 +606,8 @@ mod tests {
 
     #[tokio::test]
     async fn lists_only_catalog_discoverable_backend_commands_enabled_for_resolved_task_project() {
-        let (database, _path) = crate::db::test_helpers::make_test_db("plugin_command_broker_list");
+        let (database, _temp_dir) =
+            crate::db::test_helpers::make_test_db("plugin_command_broker_list");
         let project = database
             .create_project("Project", "/tmp/project")
             .expect("project");
@@ -661,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn describes_hidden_exact_command_and_rejects_context_and_authorization_failures() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_describe");
         let project = database
             .create_project("Project", "/tmp/project")
@@ -747,7 +748,7 @@ mod tests {
 
     #[tokio::test]
     async fn invokes_hidden_exact_backend_command_with_authoritative_separate_context() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_invoke");
         let project = database
             .create_project("Project", "/tmp/project")
@@ -861,7 +862,7 @@ mod tests {
 
     #[tokio::test]
     async fn lists_backend_commands_when_an_unrelated_plugin_frontend_is_unavailable() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_partial_frontend");
         let project = database
             .create_project("Project", "/tmp/project")
@@ -902,7 +903,7 @@ mod tests {
 
     #[tokio::test]
     async fn describes_exact_backend_command_when_its_plugin_frontend_is_unavailable() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_backend_description");
         let project = database
             .create_project("Project", "/tmp/project")
@@ -942,7 +943,7 @@ mod tests {
 
     #[tokio::test]
     async fn describing_a_frontend_command_reports_its_unavailable_runtime() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_frontend_unavailable");
         let project = database
             .create_project("Project", "/tmp/project")
@@ -981,7 +982,7 @@ mod tests {
 
     #[tokio::test]
     async fn discovers_and_invokes_frontend_commands_through_the_shared_broker_seam() {
-        let (database, _path) =
+        let (database, _temp_dir) =
             crate::db::test_helpers::make_test_db("plugin_command_broker_frontend");
         let project = database
             .create_project("Project", "/tmp/project")

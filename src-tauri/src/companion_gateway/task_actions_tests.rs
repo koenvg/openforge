@@ -167,7 +167,7 @@ async fn response_json(response: Response) -> serde_json::Value {
 
 #[tokio::test]
 async fn authenticated_complete_stops_runtime_retains_reference_data_and_invalidates() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_complete_route");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_complete_route");
     let database = Arc::new(Mutex::new(database));
     let (project_id, task_id) = {
         let database = crate::db::acquire_db(&database);
@@ -231,13 +231,11 @@ async fn authenticated_complete_stops_runtime_retains_reference_data_and_invalid
     assert_eq!(event.payload["task_id"], task_id);
     assert_eq!(event.payload["project_id"], project_id);
     assert_eq!(event.payload["action"], "deleted");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn complete_conceals_hidden_tasks_and_rejects_stale_or_duplicate_operations() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_complete_policy");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_complete_policy");
     let database = Arc::new(Mutex::new(database));
     let (hidden_task_id, backlog_task_id, claimed_task_id) = {
         let database = crate::db::acquire_db(&database);
@@ -326,13 +324,11 @@ async fn complete_conceals_hidden_tasks_and_rejects_stale_or_duplicate_operation
     .expect("router response");
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(response).await["error"]["code"], "revoked");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn authenticated_delete_is_backlog_only_bodyless_and_permanent() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_delete_route");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_delete_route");
     let database = Arc::new(Mutex::new(database));
     let (project_id, backlog_id, doing_id) = {
         let database = crate::db::acquire_db(&database);
@@ -440,13 +436,11 @@ async fn authenticated_delete_is_backlog_only_bodyless_and_permanent() {
         .await
         .expect("router response");
     assert_eq!(hidden.status(), axum::http::StatusCode::NOT_FOUND);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn delete_rejects_lost_authority_and_duplicate_operation_claims() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_delete_policy");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_delete_policy");
     let database = Arc::new(Mutex::new(database));
     let task_id = {
         let database = crate::db::acquire_db(&database);
@@ -497,14 +491,12 @@ async fn delete_rejects_lost_authority_and_duplicate_operation_claims() {
     .expect("router response");
     assert_eq!(denied.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(denied).await["error"]["code"], "revoked");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn existing_paired_credential_keeps_task_authority_without_reapproval_or_host_unlock() {
     const CREDENTIAL: &str = "existing-device-credential";
-    let (database, path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("companion_existing_device_authority");
     let database = Arc::new(Mutex::new(database));
     let (first_task_id, second_task_id) = {
@@ -582,6 +574,4 @@ async fn existing_paired_credential_keeps_task_authority_without_reapproval_or_h
         .expect("revoked credential response");
     assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert_eq!(response_json(revoked).await["error"]["code"], "revoked");
-
-    let _ = std::fs::remove_file(path);
 }

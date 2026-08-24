@@ -6,7 +6,7 @@ fn shell_single_quote(value: &str) -> String {
 
 #[tokio::test]
 async fn handles_commands_that_do_not_require_spawn() {
-    let (state, path) = test_state("app_invoke_pty_commands");
+    let (state, _temp_dir) = test_state("app_invoke_pty_commands");
 
     assert_eq!(
         invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-404" })).await,
@@ -19,13 +19,11 @@ async fn handles_commands_that_do_not_require_spawn() {
     )
     .await
     .is_null());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn spawns_without_backend_app_emitter() {
-    let (state, path) = test_state("app_invoke_pty_spawn_without_app");
+    let (state, _temp_dir) = test_state("app_invoke_pty_spawn_without_app");
 
     let instance_id = invoke_ok(
         &state,
@@ -82,12 +80,11 @@ async fn spawns_without_backend_app_emitter() {
             .await;
     }
     assert!(saw_exit, "sidecar should publish PTY exit events");
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn spawns_shell_in_workspace_path_with_spaces() {
-    let (state, path) = test_state("app_invoke_pty_spawn_space_cwd");
+    let (state, _temp_dir) = test_state("app_invoke_pty_spawn_space_cwd");
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
     let workspace_path = temp_dir.path().join("Snooze Vault");
     std::fs::create_dir_all(&workspace_path).expect("workspace with spaces should be created");
@@ -147,12 +144,11 @@ async fn spawns_shell_in_workspace_path_with_spaces() {
         Some(expected_cwd.as_str()),
         "shell PTY should start with actual cwd at workspace containing spaces"
     );
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn rejects_shell_spawn_when_workspace_cwd_is_missing_instead_of_falling_back() {
-    let (state, path) = test_state("app_invoke_pty_spawn_missing_cwd");
+    let (state, _temp_dir) = test_state("app_invoke_pty_spawn_missing_cwd");
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
     let missing_workspace = temp_dir.path().join("Missing Vault");
 
@@ -181,7 +177,6 @@ async fn rejects_shell_spawn_when_workspace_cwd_is_missing_instead_of_falling_ba
         "client-facing invalid cwd errors should not be wrapped as internal spawn failures, got: {}",
         err.1
     );
-    let _ = std::fs::remove_file(path);
 }
 
 fn seed_follow_up_session(state: &crate::http_server::AppState, status: &str) -> (String, String) {
@@ -223,7 +218,7 @@ async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessio
         ("running", "queued"),
         ("paused", "queued"),
     ] {
-        let (state, db_path) = test_state(&format!("app_invoke_follow_up_{status}"));
+        let (state, _temp_dir) = test_state(&format!("app_invoke_follow_up_{status}"));
         let (task_id, session_id) = seed_follow_up_session(&state, status);
         let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
         let output_path = temp_dir.path().join("follow-up.txt");
@@ -258,13 +253,12 @@ async fn sends_idle_agent_follow_up_immediately_and_queues_busy_or_paused_sessio
             .expect("pty manager")
             .kill_pty(&task_id)
             .await;
-        let _ = std::fs::remove_file(db_path);
     }
 }
 
 #[tokio::test]
 async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
-    let (state, path) = test_state("app_invoke_persisted_terminal_replay");
+    let (state, _temp_dir) = test_state("app_invoke_persisted_terminal_replay");
     let (task_id, _) = seed_follow_up_session(&state, "completed");
     {
         let db = crate::db::acquire_db(&state.db);
@@ -279,12 +273,11 @@ async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
         buffer,
         json!({ "buffer": "persisted terminal output", "isLive": false })
     );
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn task_follow_up_failures_are_specific_and_task_isolated() {
-    let (state, path) = test_state("app_invoke_follow_up_failures");
+    let (state, _temp_dir) = test_state("app_invoke_follow_up_failures");
     let (task_id, _) = seed_follow_up_session(&state, "running");
 
     let no_session = invoke(
@@ -308,6 +301,4 @@ async fn task_follow_up_failures_are_specific_and_task_isolated() {
     assert!(delivery_failure
         .1
         .contains("AGENT_FOLLOW_UP_DELIVERY_FAILED"));
-
-    let _ = std::fs::remove_file(path);
 }

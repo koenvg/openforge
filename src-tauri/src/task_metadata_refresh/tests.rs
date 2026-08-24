@@ -121,7 +121,7 @@ fn task_metadata_refresh_debug_diagnostics_use_sidecar_logger_level_filter() {
 
 #[test]
 fn task_display_title_candidate_uses_short_first_prompt_line() {
-    let (db, path) = make_test_db("metadata_title_candidate");
+    let (db, _temp_dir) = make_test_db("metadata_title_candidate");
     let task = db
         .create_task(
             "  Investigate flaky migration race\nwith lots of details",
@@ -136,13 +136,11 @@ fn task_display_title_candidate_uses_short_first_prompt_line() {
         task_display_title_candidate(&task).as_deref(),
         Some("Investigate flaky migration race")
     );
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn refresh_task_display_title_once_sets_generated_title() {
-    let (db, path) = make_test_db("metadata_refresh_generated_title");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_generated_title");
     let task = db
         .create_task(
             "Repair SQLite migration race\nExtra detail",
@@ -163,13 +161,11 @@ fn refresh_task_display_title_once_sets_generated_title() {
     assert!(updated.title_generated_at.is_some());
 
     assert!(!refresh_task_display_title_once(&db, &task.id).expect("second refresh"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn build_task_display_title_prompt_uses_snapshot_without_cleanup_blocks() {
-    let (db, path) = make_test_db("metadata_title_prompt_snapshot");
+    let (db, _temp_dir) = make_test_db("metadata_title_prompt_snapshot");
     let task = db
         .create_task("Initial vague request", "doing", None, None, None)
         .expect("create task");
@@ -185,13 +181,11 @@ fn build_task_display_title_prompt_uses_snapshot_without_cleanup_blocks() {
     assert!(prompt.contains("edited auth middleware"));
     assert!(!prompt.contains("openforge_code_cleanup"));
     assert!(prompt.contains("Return only JSON"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn build_task_display_title_prompt_excludes_start_prompt_contribution_envelopes() {
-    let (db, path) = make_test_db("metadata_title_prompt_contributions");
+    let (db, _temp_dir) = make_test_db("metadata_title_prompt_contributions");
     let task = db
         .create_task(
             "Implement title sanitization\n\n<openforge_start_prompt_contribution id=\"task-guidance\">\ntask guidance must not influence title\n</openforge_start_prompt_contribution>\n\nKeep task details",
@@ -223,8 +217,6 @@ fn build_task_display_title_prompt_excludes_start_prompt_contribution_envelopes(
     assert!(prompt.contains("Activity result"));
     assert!(!prompt.contains("openforge_start_prompt_contribution"));
     assert!(!prompt.contains("guidance must not influence title"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
@@ -382,7 +374,7 @@ fn task_display_title_metadata_job_contract_is_provider_agnostic_and_bounded() {
 
 #[test]
 fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
-    let (db, path) = make_test_db("metadata_refresh_ai_title");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title");
     let task = db
         .create_task("Vague initial prompt", "doing", None, None, None)
         .expect("create task");
@@ -402,13 +394,11 @@ fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
     let updated = db.get_task(&task.id).expect("get task").unwrap();
     assert_eq!(updated.title.as_deref(), Some("SQLite Lock Fix"));
     assert_eq!(updated.title_source.as_deref(), Some("generated"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[tokio::test]
 async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock() {
-    let (db, path) = make_test_db("metadata_refresh_ai_title_poisoned_database_lock");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_poisoned_database_lock");
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -444,13 +434,11 @@ async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock(
         .expect("task exists");
     assert_eq!(updated.title.as_deref(), Some("Recovered Title Refresh"));
     assert_eq!(updated.title_source.as_deref(), Some("generated"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[tokio::test]
 async fn queued_task_display_title_refresh_coalesces_after_pending_lock_is_poisoned() {
-    let (db, path) = make_test_db("metadata_refresh_ai_title_poisoned_pending_lock");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_poisoned_pending_lock");
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -501,13 +489,11 @@ async fn queued_task_display_title_refresh_coalesces_after_pending_lock_is_poiso
         .expect("get task")
         .expect("task exists");
     assert_eq!(updated.title.as_deref(), Some("Recovered Queue Coalescing"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[tokio::test]
 async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_snapshot() {
-    let (db, path) = make_test_db("metadata_refresh_ai_title_debounce");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_debounce");
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -579,14 +565,12 @@ async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_s
         .unwrap();
     assert_eq!(updated.title.as_deref(), Some("Debounced Title Refresh"));
     assert_eq!(updated.title_source.as_deref(), Some("generated"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[tokio::test]
 async fn refresh_task_display_title_with_ai_once_skips_in_flight_title_when_newer_snapshot_arrives()
 {
-    let (db, path) = make_test_db("metadata_refresh_ai_title_in_flight_superseded");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_in_flight_superseded");
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -662,13 +646,11 @@ async fn refresh_task_display_title_with_ai_once_skips_in_flight_title_when_newe
         .unwrap();
     assert_eq!(updated.title.as_deref(), Some("Richer Running Update"));
     assert_eq!(updated.title_source.as_deref(), Some("generated"));
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn refresh_task_display_title_once_skips_manual_title() {
-    let (db, path) = make_test_db("metadata_refresh_manual_title");
+    let (db, _temp_dir) = make_test_db("metadata_refresh_manual_title");
     let task = db
         .create_task_with_options(crate::db::NewTaskOptions {
             initial_prompt: "Generated candidate",
@@ -690,6 +672,4 @@ fn refresh_task_display_title_once_skips_manual_title() {
     let updated = db.get_task(&task.id).expect("get task").unwrap();
     assert_eq!(updated.title.as_deref(), Some("Manual title"));
     assert_eq!(updated.title_source.as_deref(), Some("manual"));
-
-    let _ = std::fs::remove_file(&path);
 }

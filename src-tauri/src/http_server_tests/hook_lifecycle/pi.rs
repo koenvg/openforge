@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
-    let (state, path) = test_state("pi_agent_status_publishes_app_event");
+    let (state, _temp_dir) = test_state("pi_agent_status_publishes_app_event");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -40,13 +40,11 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
     assert_eq!(event.payload["raw_event_type"], "agent.start");
     assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 7);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
-    let (state, path) = test_state("http_pi_agent_end_completed");
+    let (state, _temp_dir) = test_state("http_pi_agent_end_completed");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -97,13 +95,11 @@ async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
     assert_eq!(session.pty_instance_id, Some(42));
     assert_eq!(session.checkpoint_data, None);
     assert!(session.error_message.is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_pi_agent_start_hook_marks_completed_pi_session_running() {
-    let (state, path) = test_state("http_pi_agent_start_running");
+    let (state, _temp_dir) = test_state("http_pi_agent_start_running");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -154,13 +150,11 @@ async fn test_pi_agent_start_hook_marks_completed_pi_session_running() {
     assert_eq!(session.pty_instance_id, Some(42));
     assert_eq!(session.checkpoint_data, None);
     assert!(session.error_message.is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
 fn test_pi_status_update_emits_when_matching_session_already_has_target_status() {
-    let (state, path) = test_state("http_pi_agent_start_idempotent_running");
+    let (state, _temp_dir) = test_state("http_pi_agent_start_idempotent_running");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -208,13 +202,11 @@ fn test_pi_status_update_emits_when_matching_session_already_has_target_status()
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_pi_agent_start_hook_ignores_stale_pty_instance() {
-    let (state, path) = test_state("http_pi_agent_start_stale_instance");
+    let (state, _temp_dir) = test_state("http_pi_agent_start_stale_instance");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -262,13 +254,11 @@ async fn test_pi_agent_start_hook_ignores_stale_pty_instance() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "completed");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_pi_agent_end_hook_ignores_stale_pty_instance() {
-    let (state, path) = test_state("http_pi_agent_end_stale_instance");
+    let (state, _temp_dir) = test_state("http_pi_agent_end_stale_instance");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -316,6 +306,4 @@ async fn test_pi_agent_end_hook_ignores_stale_pty_instance() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-
-    let _ = std::fs::remove_file(path);
 }

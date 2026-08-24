@@ -356,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn reclaimed_completed_session_resumes_provider_for_follow_up() {
-        let (state, path) =
+        let (state, _temp_dir) =
             crate::app_invoke::test_support::test_state("reclaimed_completed_session_follow_up");
         let workspace = tempfile::tempdir().expect("workspace tempdir");
         let task_id = {
@@ -427,7 +427,5 @@ mod tests {
             .expect("Agent Session exists");
         assert_eq!(session.status, "running");
         assert_eq!(session.pty_instance_id, Some(99));
-
-        let _ = std::fs::remove_file(path);
     }
 }

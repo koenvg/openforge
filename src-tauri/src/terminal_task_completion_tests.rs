@@ -78,7 +78,7 @@ fn make_service(
 
 #[tokio::test]
 async fn typed_delete_and_complete_requests_validate_backlog_and_doing_distinctly() {
-    let (database, path) = crate::db::test_helpers::make_test_db("typed_terminal_actions");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("typed_terminal_actions");
     let db = Arc::new(Mutex::new(database));
     let (backlog_id, doing_id) = {
         let database = crate::db::acquire_db(&db);
@@ -119,13 +119,12 @@ async fn typed_delete_and_complete_requests_validate_backlog_and_doing_distinctl
         completed,
         TerminalTaskCompletionOutcome::Completed { .. }
     ));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn completion_publishes_through_the_canonical_task_event_bus() {
-    let (database, path) = crate::db::test_helpers::make_test_db("terminal_completion_event_bus");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("terminal_completion_event_bus");
     let db = Arc::new(Mutex::new(database));
     let (project_id, task_id) = {
         let database = crate::db::acquire_db(&db);
@@ -168,8 +167,6 @@ async fn completion_publishes_through_the_canonical_task_event_bus() {
             .as_deref(),
         Some(format!("task:{task_id}").as_str())
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
@@ -179,7 +176,7 @@ async fn background_cleanup_failure_keeps_deletion_and_releases_its_claim() {
     let worktree_path = temp.path().join("worktree");
     std::fs::create_dir_all(&repo_path).expect("create invalid repo directory");
     std::fs::create_dir_all(&worktree_path).expect("create worktree directory");
-    let (database, path) = crate::db::test_helpers::make_test_db("terminal_cleanup_failure");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("terminal_cleanup_failure");
     let db = Arc::new(Mutex::new(database));
     let task_id = {
         let database = crate::db::acquire_db(&db);
@@ -239,12 +236,12 @@ async fn background_cleanup_failure_keeps_deletion_and_releases_its_claim() {
             .is_none(),
         "background cleanup failure must not restore a permanently deleted Task",
     );
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn complete_accepts_a_legacy_doing_state_alias_without_a_stale_write() {
-    let (database, path) = crate::db::test_helpers::make_test_db("terminal_legacy_doing_state");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("terminal_legacy_doing_state");
     let db = Arc::new(Mutex::new(database));
     let task_id = crate::db::acquire_db(&db)
         .create_task("Legacy doing Task", "in_progress", None, None, None)
@@ -266,11 +263,10 @@ async fn complete_accepts_a_legacy_doing_state_alias_without_a_stale_write() {
         outcome,
         TerminalTaskCompletionOutcome::Completed { .. }
     ));
-    let _ = std::fs::remove_file(path);
 }
 #[tokio::test]
 async fn running_task_stops_agent_and_shells_before_marking_task_complete() {
-    let (database, path) = crate::db::test_helpers::make_test_db("terminal_runtime_shutdown");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("terminal_runtime_shutdown");
     let db = Arc::new(Mutex::new(database));
     let task_id = {
         let database = crate::db::acquire_db(&db);
@@ -299,13 +295,12 @@ async fn running_task_stops_agent_and_shells_before_marking_task_complete() {
         .expect("get completed task")
         .expect("completed Task reference remains");
     assert_eq!(completed.status, "done");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn duplicate_claim_and_runtime_failure_leave_task_uncompleted() {
-    let (database, path) = crate::db::test_helpers::make_test_db("terminal_completion_rejections");
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("terminal_completion_rejections");
     let db = Arc::new(Mutex::new(database));
     let task_id = crate::db::acquire_db(&db)
         .create_task("Running Task", "doing", None, None, None)
@@ -348,6 +343,4 @@ async fn duplicate_claim_and_runtime_failure_leave_task_uncompleted() {
             .status,
         "doing"
     );
-
-    let _ = std::fs::remove_file(path);
 }

@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn test_get_tasks_handler_returns_tasks_for_project() {
-    let (state, path) = test_state("http_get_tasks_handler_returns_tasks");
+    let (state, _temp_dir) = test_state("http_get_tasks_handler_returns_tasks");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -34,13 +34,11 @@ async fn test_get_tasks_handler_returns_tasks_for_project() {
     assert_eq!(tasks.len(), 3);
     assert!(tasks.iter().any(|task| task["status"] == "done"));
     assert!(tasks[0].get("initial_prompt").is_some());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
-    let (state, path) = test_state("http_get_tasks_handler_excludes_done_compact");
+    let (state, _temp_dir) = test_state("http_get_tasks_handler_excludes_done_compact");
     let open_task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -89,13 +87,11 @@ async fn test_get_tasks_handler_excludes_done_and_compacts_when_requested() {
     assert!(tasks[0].get("initial_prompt").is_none());
     assert!(tasks[0].get("prompt").is_none());
     assert!(tasks[0].get("summary").is_none());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_tasks_handler_excludes_done_when_include_done_is_false() {
-    let (state, path) = test_state("http_get_tasks_handler_include_done_false");
+    let (state, _temp_dir) = test_state("http_get_tasks_handler_include_done_false");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -125,13 +121,11 @@ async fn test_get_tasks_handler_excludes_done_when_include_done_is_false() {
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0]["status"], "backlog");
     assert!(tasks[0].get("initial_prompt").is_some());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn http_create_task_handler_uses_project_worktree_default() {
-    let (state, path) = test_state("http_create_task_handler_worktree_default");
+    let (state, _temp_dir) = test_state("http_create_task_handler_worktree_default");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -168,13 +162,11 @@ async fn http_create_task_handler_uses_project_worktree_default() {
         .expect("task exists");
     assert_eq!(task.worktree_source.as_deref(), Some("disabled"));
     assert_eq!(task.worktree_branch, None);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_returns_server_error_when_worktree_lookup_fails() {
-    let (state, path) = test_state("http_create_task_worktree_lookup_failure");
+    let (state, _temp_dir) = test_state("http_create_task_worktree_lookup_failure");
     state
         .db
         .lock()
@@ -205,13 +197,11 @@ async fn create_task_returns_server_error_when_worktree_lookup_fails() {
         body.contains("Failed to resolve project from worktree"),
         "unexpected response body: {body}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_returns_server_error_when_project_listing_fails() {
-    let (state, path) = test_state("http_create_task_project_listing_failure");
+    let (state, _temp_dir) = test_state("http_create_task_project_listing_failure");
     state
         .db
         .lock()
@@ -240,13 +230,11 @@ async fn create_task_returns_server_error_when_project_listing_fails() {
         body.contains("Failed to list projects while resolving project"),
         "unexpected response body: {body}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_returns_unprocessable_entity_for_unresolved_worktree() {
-    let (state, path) = test_state("http_create_task_unresolved_worktree");
+    let (state, _temp_dir) = test_state("http_create_task_unresolved_worktree");
 
     let response = create_router(state)
         .oneshot(
@@ -268,13 +256,11 @@ async fn create_task_returns_unprocessable_entity_for_unresolved_worktree() {
         body.contains("Could not determine project"),
         "unexpected response body: {body}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
-    let (state, path) = test_state("http_create_task_explicit_project_worktree");
+    let (state, _temp_dir) = test_state("http_create_task_explicit_project_worktree");
     let project_id = {
         let db = state.db.lock().expect("lock db");
         db.create_project("OpenForge", "/Users/koen/workspace/openforge")
@@ -308,14 +294,12 @@ async fn create_task_with_explicit_project_worktree_outside_caller_directory() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(task.project_id.as_deref(), Some(project_id.as_str()));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[cfg(unix)]
 #[tokio::test]
 async fn create_task_infers_project_from_equivalent_registered_path() {
-    let (state, path) = test_state("http_create_task_equivalent_registered_path");
+    let (state, _temp_dir) = test_state("http_create_task_equivalent_registered_path");
     let filesystem = tempfile::tempdir().expect("create filesystem fixture");
     let project_directory = filesystem.path().join("project");
     let nested_directory = project_directory.join("nested");
@@ -362,13 +346,11 @@ async fn create_task_infers_project_from_equivalent_registered_path() {
         let json = response_body_json(response).await;
         assert_eq!(json["project_id"], project_id, "worktree: {worktree}");
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_infers_project_when_registered_path_is_missing() {
-    let (state, path) = test_state("http_create_task_missing_registered_path");
+    let (state, _temp_dir) = test_state("http_create_task_missing_registered_path");
     let filesystem = tempfile::tempdir().expect("create filesystem fixture");
     let missing_project = filesystem.path().join("missing-project");
     let missing_project = missing_project.to_str().expect("UTF-8 missing path");
@@ -398,13 +380,11 @@ async fn create_task_infers_project_when_registered_path_is_missing() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_body_json(response).await;
     assert_eq!(json["project_id"], project_id);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_tasks_handler_filters_by_state() {
-    let (state, path) = test_state("http_get_tasks_handler_filters_by_state");
+    let (state, _temp_dir) = test_state("http_get_tasks_handler_filters_by_state");
     {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -433,13 +413,11 @@ async fn test_get_tasks_handler_filters_by_state() {
     let tasks = json.as_array().expect("array response");
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0]["status"], "doing");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_tasks_handler_rejects_invalid_state() {
-    let (state, path) = test_state("http_get_tasks_handler_rejects_invalid_state");
+    let (state, _temp_dir) = test_state("http_get_tasks_handler_rejects_invalid_state");
     {
         let db = state.db.lock().expect("lock db");
         let _ = db
@@ -460,13 +438,11 @@ async fn test_get_tasks_handler_rejects_invalid_state() {
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_update_task_handler_updates_never_started_initial_prompt() {
-    let (state, path) = test_state("http_update_task_initial_prompt");
+    let (state, _temp_dir) = test_state("http_update_task_initial_prompt");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -504,13 +480,11 @@ async fn test_update_task_handler_updates_never_started_initial_prompt() {
         .expect("task exists");
     assert_eq!(task.initial_prompt, "New prompt");
     assert_eq!(task.prompt.as_deref(), Some("New prompt"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_update_task_handler_rejects_started_initial_prompt_with_replacement_guidance() {
-    let (state, path) = test_state("http_update_task_rejects_started_initial_prompt");
+    let (state, _temp_dir) = test_state("http_update_task_rejects_started_initial_prompt");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let project = db
@@ -553,6 +527,4 @@ async fn test_update_task_handler_rejects_started_initial_prompt_with_replacemen
         .expect("task exists");
     assert_eq!(task.initial_prompt, "Original prompt");
     assert_eq!(task.prompt.as_deref(), Some("Original prompt"));
-
-    let _ = std::fs::remove_file(path);
 }

@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn pi_agent_start_handler_preserves_project_id_after_database_lock_poisoning() {
-    let (state, path) = test_state("http_pi_agent_start_poisoned_database_lock");
+    let (state, _temp_dir) = test_state("http_pi_agent_start_poisoned_database_lock");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -62,14 +62,12 @@ async fn pi_agent_start_handler_preserves_project_id_after_database_lock_poisoni
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn legacy_event_handler_completes_title_refresh_post_processing_with_poisoned_database_lock()
 {
-    let (state, path) = test_state("legacy_title_refresh_poisoned_database_lock");
+    let (state, _temp_dir) = test_state("legacy_title_refresh_poisoned_database_lock");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -145,6 +143,4 @@ async fn legacy_event_handler_completes_title_refresh_post_processing_with_poiso
     assert_eq!(task_changed.payload["action"], "updated");
     assert_eq!(task_changed.payload["task_id"], task_id);
     assert_eq!(task_changed.payload["project_id"], project_id);
-
-    let _ = std::fs::remove_file(path);
 }

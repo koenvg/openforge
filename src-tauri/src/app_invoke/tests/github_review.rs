@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn handler_uses_shared_boundary() {
-    let (state, path) = test_state("app_invoke_github_shared_boundary");
+    let (state, _temp_dir) = test_state("app_invoke_github_shared_boundary");
     {
         let db = state.db.lock().expect("db lock");
         let task = db
@@ -25,13 +25,11 @@ async fn handler_uses_shared_boundary() {
 
     let value = invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await;
     assert_eq!(value[0]["title"], "Fix bug");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn get_pull_requests_scopes_results_to_the_requested_task() {
-    let (state, path) = test_state("app_invoke_get_pull_requests_for_task");
+    let (state, _temp_dir) = test_state("app_invoke_get_pull_requests_for_task");
     let (requested_task_id, other_task_id) = {
         let db = state.db.lock().expect("db lock");
         let requested_task = db
@@ -79,13 +77,11 @@ async fn get_pull_requests_scopes_results_to_the_requested_task() {
     assert_eq!(value.as_array().map(Vec::len), Some(1));
     assert_eq!(value[0]["ticket_id"], requested_task_id);
     assert_ne!(value[0]["ticket_id"], other_task_id);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn link_pull_request_persists_pr_for_task() {
-    let (state, path) = test_state("app_invoke_link_pull_request");
+    let (state, _temp_dir) = test_state("app_invoke_link_pull_request");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Link PR task", "doing", None, None, None)
@@ -109,13 +105,11 @@ async fn link_pull_request_persists_pr_for_task() {
     let prs = invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await;
     assert_eq!(prs[0]["ticket_id"], task_id);
     assert_eq!(prs[0]["pr_number"], 123);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn refresh_task_github_status_returns_empty_result_for_task_without_linked_prs() {
-    let (state, path) = test_state("app_invoke_refresh_task_github_status_empty");
+    let (state, _temp_dir) = test_state("app_invoke_refresh_task_github_status_empty");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Refresh PR status", "doing", None, None, None)
@@ -135,13 +129,11 @@ async fn refresh_task_github_status_returns_empty_result_for_task_without_linked
     assert_eq!(value["review_changes"], 0);
     assert_eq!(value["pr_changes"], 0);
     assert_eq!(value["errors"], 0);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn task_merge_rejects_changed_expected_head_without_pre_action_sync() {
-    let (state, path) = test_state("app_invoke_task_merge_expected_head");
+    let (state, _temp_dir) = test_state("app_invoke_task_merge_expected_head");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         let task = db
@@ -189,12 +181,11 @@ async fn task_merge_rejects_changed_expected_head_without_pre_action_sync() {
 
     assert_eq!(error.0, StatusCode::CONFLICT);
     assert_eq!(error.1, "Pull request is no longer ready to merge");
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn refresh_task_github_status_rejects_missing_task() {
-    let (state, path) = test_state("app_invoke_refresh_task_github_status_missing_task");
+    let (state, _temp_dir) = test_state("app_invoke_refresh_task_github_status_missing_task");
 
     let err = invoke(
         &state,
@@ -206,13 +197,11 @@ async fn refresh_task_github_status_rejects_missing_task() {
 
     assert_eq!(err.0, StatusCode::NOT_FOUND);
     assert!(err.1.contains("Task not found"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn link_pull_request_rejects_invalid_url() {
-    let (state, path) = test_state("app_invoke_link_pull_request_invalid_url");
+    let (state, _temp_dir) = test_state("app_invoke_link_pull_request_invalid_url");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Link PR task", "doing", None, None, None)
@@ -230,13 +219,11 @@ async fn link_pull_request_rejects_invalid_url() {
 
     assert_eq!(err.0, StatusCode::BAD_REQUEST);
     assert!(err.1.contains("Invalid pull request URL"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn submit_pr_review_rejects_null_comments_before_runtime() {
-    let (state, path) = test_state("app_invoke_submit_pr_review_null_comments");
+    let (state, _temp_dir) = test_state("app_invoke_submit_pr_review_null_comments");
 
     let err = invoke(
         &state,
@@ -256,12 +243,11 @@ async fn submit_pr_review_rejects_null_comments_before_runtime() {
 
     assert_eq!(err.0, StatusCode::BAD_REQUEST);
     assert!(err.1.contains("payload.comments is invalid"));
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn handles_db_backed_commands_and_events() {
-    let (state, path) = test_state("app_invoke_github_review_db_backed");
+    let (state, _temp_dir) = test_state("app_invoke_github_review_db_backed");
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -390,6 +376,4 @@ async fn handles_db_backed_commands_and_events() {
         invoke_ok(&state, "get_authored_prs", serde_json::Value::Null).await[0]["title"],
         "Authored by me"
     );
-
-    let _ = std::fs::remove_file(path);
 }

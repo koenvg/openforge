@@ -43,7 +43,7 @@ async fn serve_error_still_runs_coordinated_sidecar_cleanup() {
 }
 #[tokio::test]
 async fn sidecar_runtime_shutdown_cleanup_is_safe_and_idempotent_without_live_children() {
-    let (state, _path) = test_state("sidecar_runtime_shutdown_cleanup_empty");
+    let (state, _temp_dir) = test_state("sidecar_runtime_shutdown_cleanup_empty");
 
     shutdown_sidecar_runtime(&state, None).await;
     shutdown_sidecar_runtime(&state, None).await;
@@ -70,7 +70,7 @@ async fn coordinated_sidecar_shutdown_closes_the_companion_gateway_within_budget
 
 #[tokio::test]
 async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
-    let (state, _path) = test_state("sidecar_runtime_shutdown_live_shell");
+    let (state, _temp_dir) = test_state("sidecar_runtime_shutdown_live_shell");
     let workspace = tempfile::tempdir().expect("workspace temp dir");
     let task_id = format!("T-shutdown-{}", uuid::Uuid::new_v4());
     let pty_manager = state.pty_manager.as_ref().expect("PTY manager");

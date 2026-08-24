@@ -200,11 +200,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn create_worktree_record_reconciles_existing_record_for_same_task() {
-        let (db, path) = make_test_db("worktree_record_idempotent");
+        let (db, _temp_dir) = make_test_db("worktree_record_idempotent");
 
         let project = db
             .create_project("Test Project", "/tmp/test")
@@ -243,6 +242,5 @@ mod tests {
         assert_eq!(worktree.status, "active");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

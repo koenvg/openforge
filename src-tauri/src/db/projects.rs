@@ -376,11 +376,10 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
-    use std::fs;
 
     #[test]
     fn test_delete_project_with_tasks_succeeds() {
-        let (db, path) = make_test_db("delete_project_with_tasks");
+        let (db, _temp_dir) = make_test_db("delete_project_with_tasks");
 
         let project = db
             .create_project("My Project", "/tmp/proj")
@@ -477,12 +476,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_project_config_operations() {
-        let (db, path) = make_test_db("project_config");
+        let (db, _temp_dir) = make_test_db("project_config");
 
         let project = db
             .create_project("Test Project", "/tmp/test")
@@ -509,12 +507,11 @@ mod tests {
         assert_eq!(nonexistent, None);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_clear_project_config_restores_inheritance() {
-        let (db, path) = make_test_db("clear_project_config");
+        let (db, _temp_dir) = make_test_db("clear_project_config");
         let project = db
             .create_project("Test Project", "/tmp/test")
             .expect("create project");
@@ -531,12 +528,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_global_and_project_config_are_independent() {
-        let (db, path) = make_test_db("independent_configs");
+        let (db, _temp_dir) = make_test_db("independent_configs");
 
         db.set_config("github_token", "global-token-456")
             .expect("Failed to set global github_token");
@@ -559,12 +555,11 @@ mod tests {
         assert_eq!(project_repo_hint, Some("owner/repo".to_string()));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_project_attention_summaries_empty() {
-        let (db, path) = make_test_db("attention_empty");
+        let (db, _temp_dir) = make_test_db("attention_empty");
 
         let project = db
             .create_project("Empty Project", "/tmp/empty")
@@ -584,12 +579,11 @@ mod tests {
         assert!(summaries.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_project_attention_summaries_with_signals() {
-        let (db, path) = make_test_db("attention_signals");
+        let (db, _temp_dir) = make_test_db("attention_signals");
 
         let project = db
             .create_project("Active Project", "/tmp/active")
@@ -676,12 +670,11 @@ mod tests {
         assert_eq!(summary.completed_agents, 1);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn project_attention_uses_latest_session_rowid_when_created_at_ties() {
-        let (db, path) = make_test_db("attention_latest_session_rowid_tie");
+        let (db, _temp_dir) = make_test_db("attention_latest_session_rowid_tie");
 
         let project = db
             .create_project("Active Project", "/tmp/active")
@@ -728,12 +721,11 @@ mod tests {
         assert_eq!(summary.completed_agents, 0);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_resolve_ai_provider_uses_project_config() {
-        let (db, path) = make_test_db("resolve_provider_project");
+        let (db, _temp_dir) = make_test_db("resolve_provider_project");
 
         let project = db
             .create_project("Test Project", "/tmp/test")
@@ -748,12 +740,11 @@ mod tests {
         assert_eq!(provider, "opencode");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_resolve_ai_provider_falls_back_to_global() {
-        let (db, path) = make_test_db("resolve_provider_global");
+        let (db, _temp_dir) = make_test_db("resolve_provider_global");
 
         let project = db
             .create_project("Test Project", "/tmp/test")
@@ -764,24 +755,22 @@ mod tests {
         assert_eq!(provider, "claude-code");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_resolve_ai_provider_empty_project_id() {
-        let (db, path) = make_test_db("resolve_provider_empty");
+        let (db, _temp_dir) = make_test_db("resolve_provider_empty");
 
         // Empty project ID should fall back to global
         let provider = db.resolve_ai_provider("");
         assert_eq!(provider, "claude-code");
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_project_with_path_exists() {
-        let (db, path) = make_test_db("project_with_path_exists");
+        let (db, _temp_dir) = make_test_db("project_with_path_exists");
 
         assert!(
             !db.project_with_path_exists("/tmp/does-not-exist")
@@ -804,6 +793,5 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

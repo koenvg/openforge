@@ -273,11 +273,10 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::db::{test_helpers::*, TaskDependencyPersistenceError};
-    use std::fs;
 
     #[test]
     fn test_task_dependencies_round_trip_and_deduplicate() {
-        let (db, path) = make_test_db("task_dependencies_round_trip");
+        let (db, _temp_dir) = make_test_db("task_dependencies_round_trip");
         db.set_config("task_id_prefix", "T").unwrap();
         let prerequisite = db
             .create_task("Prerequisite", "done", None, None, None)
@@ -303,12 +302,11 @@ mod tests {
         assert_eq!(listed.depends_on, vec!["T-1".to_string()]);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependency_error_identifies_self_dependency() {
-        let (db, path) = make_test_db("task_dependency_self");
+        let (db, _temp_dir) = make_test_db("task_dependency_self");
         db.set_config("task_id_prefix", "T").unwrap();
         let task = db
             .create_task("Task", "backlog", None, None, None)
@@ -325,12 +323,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependency_error_identifies_missing_tasks() {
-        let (db, path) = make_test_db("task_dependency_missing_tasks");
+        let (db, _temp_dir) = make_test_db("task_dependency_missing_tasks");
         db.set_config("task_id_prefix", "T").unwrap();
         let task = db
             .create_task("Task", "backlog", None, None, None)
@@ -358,12 +355,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependency_accepts_cross_project_dependency() {
-        let (db, path) = make_test_db("task_dependency_cross_project");
+        let (db, _temp_dir) = make_test_db("task_dependency_cross_project");
         db.set_config("task_id_prefix", "T").unwrap();
         let project_a = db.create_project("A", "/tmp/a").expect("create project a");
         let project_b = db.create_project("B", "/tmp/b").expect("create project b");
@@ -380,12 +376,11 @@ mod tests {
         assert_eq!(persisted.depends_on, vec![dependency.id]);
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependency_error_identifies_assignment_mismatch() {
-        let (db, path) = make_test_db("task_dependency_assignment_mismatch");
+        let (db, _temp_dir) = make_test_db("task_dependency_assignment_mismatch");
         db.set_config("task_id_prefix", "T").unwrap();
         let project = db.create_project("A", "/tmp/a").expect("create project");
         let assigned = db
@@ -425,12 +420,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_set_task_dependencies_rejects_unknown_task_even_when_empty() {
-        let (db, path) = make_test_db("task_dependency_unknown_empty");
+        let (db, _temp_dir) = make_test_db("task_dependency_unknown_empty");
 
         let error = db
             .set_task_dependencies("T-404", &[])
@@ -441,12 +435,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_task_dependency_error_identifies_cycles() {
-        let (db, path) = make_test_db("task_dependency_cycles");
+        let (db, _temp_dir) = make_test_db("task_dependency_cycles");
         db.set_config("task_id_prefix", "T").unwrap();
         let first = db
             .create_task("First", "backlog", None, None, None)
@@ -493,12 +486,11 @@ mod tests {
         ));
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_link_task_chain_rolls_back_on_invalid_edge() {
-        let (db, path) = make_test_db("task_dependency_chain_rollback");
+        let (db, _temp_dir) = make_test_db("task_dependency_chain_rollback");
         db.set_config("task_id_prefix", "T").unwrap();
         let project_a = db.create_project("A", "/tmp/a").expect("create project a");
         db.create_task("First", "backlog", Some(&project_a.id), None, None)
@@ -517,6 +509,5 @@ mod tests {
         assert!(second.depends_on.is_empty());
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 }

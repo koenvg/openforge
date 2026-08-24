@@ -5,7 +5,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn plugin_host_create_task_uses_project_worktree_default() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_create_task_worktree_default");
     let project = database
         .create_project("Plugin Tasks", "/tmp/plugin-tasks")
@@ -35,7 +35,7 @@ async fn plugin_host_create_task_uses_project_worktree_default() {
 
 #[tokio::test]
 async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_follow_up_callback");
     let project = database
         .create_project("Plugin Tasks", "/tmp/plugin-tasks")
@@ -64,7 +64,7 @@ async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
 
 #[tokio::test]
 async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
-    let (database, _path) =
+    let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_compose_callback");
     let app = AppHandle::new();
     app.manage(Arc::new(Mutex::new(database)));
@@ -120,7 +120,7 @@ async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
 
 #[tokio::test]
 async fn plugin_host_task_callbacks_create_start_and_read_state() {
-    let (database, _path) = crate::db::test_helpers::make_test_db("plugin_host_task_callbacks");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("plugin_host_task_callbacks");
     let project_dir = tempfile::tempdir().expect("project dir");
     let project = database
         .create_project("Plugin Tasks", &project_dir.path().to_string_lossy())

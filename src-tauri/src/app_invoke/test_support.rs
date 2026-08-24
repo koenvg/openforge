@@ -11,12 +11,12 @@ use crate::{
 use axum::http::StatusCode;
 use std::sync::{Arc, Mutex};
 
-pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
-    let (db, path) = crate::db::test_helpers::make_test_db(name);
+pub(crate) fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
+    let (db, temp_dir) = crate::db::test_helpers::make_test_db(name);
     let db = Arc::new(Mutex::new(db));
     let (app_event_tx, _) = tokio::sync::broadcast::channel(16);
     let mut pty_manager = PtyManager::new();
-    pty_manager.set_pid_dir(path.with_extension("pids"));
+    pty_manager.set_pid_dir(temp_dir.path().join("pids"));
     let completed_session_reaper = crate::completed_session_reaper::CompletedSessionReaper::new(
         Arc::clone(&db),
         pty_manager.clone(),
@@ -45,14 +45,14 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             task_claims: TaskClaims::new(),
             poll_context: crate::github_poller::PollContext::new(),
         },
-        path,
+        temp_dir,
     )
 }
 
 pub(crate) fn test_state_with_backend_app(
     name: &str,
-) -> (AppState, std::path::PathBuf, tempfile::TempDir) {
-    let (mut state, db_path) = test_state(name);
+) -> (AppState, tempfile::TempDir, tempfile::TempDir) {
+    let (mut state, db_temp_dir) = test_state(name);
     let app_dir = tempfile::tempdir().expect("app data dir should create");
     let app =
         electron_sidecar_app_handle(app_dir.path().to_path_buf(), app_dir.path().to_path_buf());
@@ -61,7 +61,7 @@ pub(crate) fn test_state_with_backend_app(
         state.app_event_tx.clone(),
     ));
     state.app = Some(app);
-    (state, db_path, app_dir)
+    (state, db_temp_dir, app_dir)
 }
 
 pub(crate) async fn invoke(

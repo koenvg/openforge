@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_global_plugin_default_layers_under_project() {
-        let (db, path) = crate::db::test_helpers::make_test_db("global_plugin_defaults");
+        let (db, _temp_dir) = crate::db::test_helpers::make_test_db("global_plugin_defaults");
         let project = db.create_project("P", "/tmp/p").unwrap();
         // Insert a NON-builtin plugin (is_builtin = 0) via the existing test insert helper.
         insert_test_plugin(&db, "acme.tool", /* is_builtin */ false);
@@ -403,12 +403,11 @@ mod tests {
         assert!(!db.is_plugin_enabled(&project.id, "acme.tool").unwrap());
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn app_plugin_enablement_is_independent_of_projects() {
-        let (db, _tmp) = make_test_db("app_plugin_enablement");
+        let (db, _temp_dir) = make_test_db("app_plugin_enablement");
         let mut plugin = sample_plugin("account-usage");
         plugin.package_metadata = r#"{"id":"account-usage","enablement":"app"}"#.to_string();
         db.install_plugin(&plugin).unwrap();
@@ -431,7 +430,7 @@ mod tests {
 
     #[test]
     fn install_and_get_plugin() {
-        let (db, _tmp) = make_test_db("plugins_install_get");
+        let (db, _temp_dir) = make_test_db("plugins_install_get");
         let p = sample_plugin("p1");
         db.install_plugin(&p).unwrap();
         let got = db.get_plugin("p1").unwrap().expect("plugin should exist");
@@ -441,7 +440,7 @@ mod tests {
 
     #[test]
     fn install_and_get_plugin_persists_package_source_metadata() {
-        let (db, _tmp) = make_test_db("plugins_install_metadata");
+        let (db, _temp_dir) = make_test_db("plugins_install_metadata");
         let mut plugin = sample_plugin("pkg");
         plugin.source_kind = "npm".to_string();
         plugin.source_spec = "npm:@acme/openforge-plugin@1.2.3".to_string();
@@ -458,7 +457,7 @@ mod tests {
 
     #[test]
     fn list_plugins_empty_then_populated() {
-        let (db, _tmp) = make_test_db("plugins_list");
+        let (db, _temp_dir) = make_test_db("plugins_list");
         assert!(db.list_plugins().unwrap().is_empty());
         db.install_plugin(&sample_plugin("a")).unwrap();
         db.install_plugin(&sample_plugin("b")).unwrap();
@@ -468,7 +467,7 @@ mod tests {
 
     #[test]
     fn uninstall_plugin() {
-        let (db, _tmp) = make_test_db("plugins_uninstall");
+        let (db, _temp_dir) = make_test_db("plugins_uninstall");
         db.install_plugin(&sample_plugin("x")).unwrap();
         db.uninstall_plugin("x").unwrap();
         assert!(db.get_plugin("x").unwrap().is_none());
@@ -476,7 +475,7 @@ mod tests {
 
     #[test]
     fn set_and_get_enabled_plugins() {
-        let (db, _tmp) = make_test_db("plugins_enabled");
+        let (db, _temp_dir) = make_test_db("plugins_enabled");
         db.install_plugin(&sample_plugin("pa")).unwrap();
         db.install_plugin(&sample_plugin("pb")).unwrap();
 
@@ -493,7 +492,7 @@ mod tests {
 
     #[test]
     fn builtin_plugins_are_enabled_by_default_for_projects() {
-        let (db, _tmp) = make_test_db("plugins_builtin_default_enabled");
+        let (db, _temp_dir) = make_test_db("plugins_builtin_default_enabled");
         let mut builtin = sample_plugin("builtin-pr-skills");
         builtin.is_builtin = true;
         builtin.source_kind = "builtin".to_string();
@@ -508,7 +507,7 @@ mod tests {
 
     #[test]
     fn explicit_project_disable_hides_builtin_plugins() {
-        let (db, _tmp) = make_test_db("plugins_builtin_explicit_disable");
+        let (db, _temp_dir) = make_test_db("plugins_builtin_explicit_disable");
         let mut builtin = sample_plugin("builtin-pr-skills");
         builtin.is_builtin = true;
         builtin.source_kind = "builtin".to_string();
@@ -525,7 +524,7 @@ mod tests {
 
     #[test]
     fn set_enabled_idempotent() {
-        let (db, _tmp) = make_test_db("plugins_idempotent");
+        let (db, _temp_dir) = make_test_db("plugins_idempotent");
         db.install_plugin(&sample_plugin("q")).unwrap();
         db.set_plugin_enabled("proj1", "q", true).unwrap();
         db.set_plugin_enabled("proj1", "q", false).unwrap();
@@ -534,7 +533,7 @@ mod tests {
 
     #[test]
     fn is_plugin_enabled_propagates_query_errors() {
-        let (db, _tmp) = make_test_db("plugins_enabled_query_error");
+        let (db, _temp_dir) = make_test_db("plugins_enabled_query_error");
         {
             let conn = db.connection();
             let conn = conn.lock().unwrap();
@@ -546,7 +545,7 @@ mod tests {
 
     #[test]
     fn reinstall_plugin_preserves_project_enabled_state() {
-        let (db, _tmp) = make_test_db("plugins_reinstall_preserves_enabled");
+        let (db, _temp_dir) = make_test_db("plugins_reinstall_preserves_enabled");
         let mut plugin = sample_plugin("upgraded");
         db.install_plugin(&plugin).unwrap();
         db.set_plugin_enabled("proj1", "upgraded", true).unwrap();
@@ -561,7 +560,7 @@ mod tests {
 
     #[test]
     fn plugin_storage_round_trip() {
-        let (db, _tmp) = make_test_db("plugins_storage_round_trip");
+        let (db, _temp_dir) = make_test_db("plugins_storage_round_trip");
         db.install_plugin(&sample_plugin("plugin-a")).unwrap();
         db.install_plugin(&sample_plugin("plugin-b")).unwrap();
 

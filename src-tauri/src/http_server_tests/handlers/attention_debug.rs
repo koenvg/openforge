@@ -3,7 +3,7 @@ use super::*;
 #[cfg(unix)]
 #[tokio::test]
 async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
-    let (state, path) = test_state("http_debug_process_memory_handler");
+    let (state, _temp_dir) = test_state("http_debug_process_memory_handler");
     let router = create_router(state);
     let response = router
         .oneshot(
@@ -29,13 +29,11 @@ async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
     assert!(json["ptyProcessTrees"].as_array().is_some());
     assert_eq!(json["githubResponseCache"]["entryCount"], 0);
     assert_eq!(json["githubResponseCache"]["bodyBytes"], 0);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention() {
-    let (state, path) = test_state("http_get_project_attention_handler_zeroed_row");
+    let (state, _temp_dir) = test_state("http_get_project_attention_handler_zeroed_row");
     {
         let db = state.db.lock().expect("lock db");
         let _ = db
@@ -63,13 +61,11 @@ async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention
     assert_eq!(json["ci_failures"], 0);
     assert_eq!(json["unaddressed_comments"], 0);
     assert_eq!(json["completed_agents"], 0);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn test_get_project_attention_handler_returns_not_found_for_unknown_project() {
-    let (state, path) = test_state("http_get_project_attention_handler_not_found");
+    let (state, _temp_dir) = test_state("http_get_project_attention_handler_not_found");
 
     let router = create_router(state);
     let response = router
@@ -84,6 +80,4 @@ async fn test_get_project_attention_handler_returns_not_found_for_unknown_projec
         .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    let _ = std::fs::remove_file(path);
 }

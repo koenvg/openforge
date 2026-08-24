@@ -118,7 +118,7 @@ fn make_review_comment_poll_result(
 
 #[test]
 fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering_addressed() {
-    let (db, path) = make_test_db("persist_outdated_refresh");
+    let (db, _temp_dir) = make_test_db("persist_outdated_refresh");
     insert_test_task(&db);
     db.insert_pull_request(
         142,
@@ -164,12 +164,11 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     );
 
     drop(db);
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn test_persist_polled_comments_does_not_fail_when_review_body_exists_in_both_sources() {
-    let (db, path) = make_test_db("persist_polled_comments_review_body_once");
+    let (db, _temp_dir) = make_test_db("persist_polled_comments_review_body_once");
     insert_test_task(&db);
     db.insert_pull_request(
         42,
@@ -201,12 +200,11 @@ fn test_persist_polled_comments_does_not_fail_when_review_body_exists_in_both_so
     assert_eq!(comments[0].comment_type, "review_body");
 
     drop(db);
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn test_persist_polled_comments_is_idempotent_across_poll_cycles_for_review_bodies() {
-    let (db, path) = make_test_db("persist_polled_comments_review_body_idempotent");
+    let (db, _temp_dir) = make_test_db("persist_polled_comments_review_body_idempotent");
     insert_test_task(&db);
     db.insert_pull_request(
         84,
@@ -245,12 +243,11 @@ fn test_persist_polled_comments_is_idempotent_across_poll_cycles_for_review_bodi
     assert_eq!(comments[0].id, -42);
 
     drop(db);
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn test_persist_polled_comments_deduplicates_repeated_ids_within_batch() {
-    let (db, path) = make_test_db("persist_polled_comments_batch_dedup");
+    let (db, _temp_dir) = make_test_db("persist_polled_comments_batch_dedup");
     insert_test_task(&db);
     db.insert_pull_request(
         126,
@@ -289,7 +286,6 @@ fn test_persist_polled_comments_deduplicates_repeated_ids_within_batch() {
     assert_eq!(comments[0].id, -42);
 
     drop(db);
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
@@ -341,7 +337,7 @@ fn ci_persistence_payload_filters_to_required_checks_and_reports_status_change()
 
 #[test]
 fn refresh_task_github_status_reconciles_terminal_pr_state() {
-    let (db, path) = make_test_db("refresh_task_github_status_terminal_state");
+    let (db, _temp_dir) = make_test_db("refresh_task_github_status_terminal_state");
     insert_test_task(&db);
     db.insert_pull_request(
         142,
@@ -374,5 +370,4 @@ fn refresh_task_github_status_reconciles_terminal_pr_state() {
     assert_eq!(pr.merge_readiness_status.as_deref(), Some("blocked"));
 
     drop(db);
-    let _ = std::fs::remove_file(&path);
 }

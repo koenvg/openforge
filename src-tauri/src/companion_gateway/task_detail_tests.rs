@@ -214,7 +214,7 @@ async fn task_detail_maps_authorization_not_found_and_source_failures_to_stable_
 
 #[tokio::test]
 async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
-    let (database, path) = crate::db::test_helpers::make_test_db("companion_task_detail");
+    let (database, _temp_dir) = crate::db::test_helpers::make_test_db("companion_task_detail");
     let project = database
         .create_project("OpenForge", "/Users/secret/repository")
         .expect("project");
@@ -356,6 +356,4 @@ async fn sqlite_task_detail_includes_full_prompt_and_safe_agent_semantics() {
             "leaked {forbidden}: {encoded}"
         );
     }
-
-    drop(path);
 }

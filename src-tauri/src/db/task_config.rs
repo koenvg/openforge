@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_task_config_roundtrip() {
-        let (db, path) = make_test_db("task_config_rt");
+        let (db, _temp_dir) = make_test_db("task_config_rt");
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
                 initial_prompt: "p",
@@ -129,12 +129,11 @@ mod tests {
         );
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_resolve_task_bool_precedence() {
-        let (db, path) = make_test_db("resolve_task_bool");
+        let (db, _temp_dir) = make_test_db("resolve_task_bool");
         let project = db.create_project("P", "/tmp/p").unwrap();
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
@@ -167,12 +166,11 @@ mod tests {
         assert!(db.resolve_task_bool(&task.id, key, false));
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn test_resolve_ai_provider_for_task_precedence() {
-        let (db, path) = make_test_db("resolve_provider_task");
+        let (db, _temp_dir) = make_test_db("resolve_provider_task");
         let project = db.create_project("P", "/tmp/p").unwrap();
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
@@ -201,6 +199,5 @@ mod tests {
         assert_eq!(db.resolve_ai_provider_for_task(&task.id), "codex");
 
         drop(db);
-        let _ = std::fs::remove_file(&path);
     }
 }

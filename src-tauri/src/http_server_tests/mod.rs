@@ -19,8 +19,8 @@ async fn response_body_text(response: axum::response::Response) -> String {
     String::from_utf8(bytes.to_vec()).expect("response body should be UTF-8")
 }
 
-fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
-    let (db, path) = crate::db::test_helpers::make_test_db(name);
+fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
+    let (db, temp_dir) = crate::db::test_helpers::make_test_db(name);
     let db = Arc::new(Mutex::new(db));
     let pty_manager = PtyManager::new();
     let completed_session_reaper = crate::completed_session_reaper::CompletedSessionReaper::new(
@@ -52,7 +52,7 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             task_claims: TaskClaims::new(),
             poll_context: crate::github_poller::PollContext::new(),
         },
-        path,
+        temp_dir,
     )
 }
 

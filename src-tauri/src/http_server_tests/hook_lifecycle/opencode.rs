@@ -24,7 +24,7 @@ fn opencode_status_events_follow_plugin_lifecycle_mapping() {
 
 #[tokio::test]
 async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
-    let (state, path) = test_state("opencode_hook_idle_complete");
+    let (state, _temp_dir) = test_state("opencode_hook_idle_complete");
     let task_id = create_agent_session_fixture(
         &state,
         AgentSessionFixture {
@@ -63,13 +63,11 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
         session.opencode_session_id,
         Some("ses_session77".to_string())
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
-    let (state, path) = test_state("opencode_hook_preserves_checkpoint");
+    let (state, _temp_dir) = test_state("opencode_hook_preserves_checkpoint");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -118,13 +116,11 @@ async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
         session.opencode_session_id,
         Some("ses_session77".to_string())
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn opencode_hook_ignores_error_status_events() {
-    let (state, path) = test_state("opencode_hook_error_failed");
+    let (state, _temp_dir) = test_state("opencode_hook_error_failed");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -167,6 +163,4 @@ async fn opencode_hook_ignores_error_status_events() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-
-    let _ = std::fs::remove_file(path);
 }

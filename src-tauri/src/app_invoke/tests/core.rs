@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn handles_config_projects_tasks_and_unmatched_commands() {
-    let (state, path) = test_state("app_invoke_config_projects_tasks");
+    let (state, _temp_dir) = test_state("app_invoke_config_projects_tasks");
 
     invoke_ok(
         &state,
@@ -129,13 +129,11 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
     .await
     .expect_err("unsupported command should be rejected");
     assert_eq!(unsupported.0, StatusCode::NOT_IMPLEMENTED);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn rejects_legacy_coordinate_only_pull_request_commands() {
-    let (state, path) = test_state("app_invoke_legacy_pull_request_commands");
+    let (state, _temp_dir) = test_state("app_invoke_legacy_pull_request_commands");
 
     for command in ["merge_pull_request", "enqueue_pull_request"] {
         let error = invoke(
@@ -147,13 +145,11 @@ async fn rejects_legacy_coordinate_only_pull_request_commands() {
         .expect_err("legacy pull request command should be rejected");
         assert_eq!(error.0, StatusCode::NOT_IMPLEMENTED);
     }
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn create_task_dependency_domain_errors_keep_the_existing_bad_request_contract() {
-    let (state, path) = test_state("app_invoke_create_task_dependency_error");
+    let (state, _temp_dir) = test_state("app_invoke_create_task_dependency_error");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -184,13 +180,11 @@ async fn create_task_dependency_domain_errors_keep_the_existing_bad_request_cont
         .get_all_tasks()
         .expect("list tasks")
         .is_empty());
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn delete_project_conflicts_with_an_in_progress_task_start() {
-    let (state, path) = test_state("app_invoke_delete_project_claim");
+    let (state, _temp_dir) = test_state("app_invoke_delete_project_claim");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -231,12 +225,11 @@ async fn delete_project_conflicts_with_an_in_progress_task_start() {
         .get_task(task_id)
         .expect("get task")
         .is_some());
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn app_invoke_updates_only_never_started_initial_prompts() {
-    let (state, path) = test_state("app_invoke_initial_prompt_lifecycle_guard");
+    let (state, _temp_dir) = test_state("app_invoke_initial_prompt_lifecycle_guard");
     let task = invoke_ok(
         &state,
         "create_task",
@@ -286,13 +279,11 @@ async fn app_invoke_updates_only_never_started_initial_prompts() {
         .expect("task exists");
     assert_eq!(unchanged.initial_prompt, "Updated prompt");
     assert_eq!(unchanged.prompt.as_deref(), Some("Updated prompt"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn app_invoke_update_task_source_ticket_url_sets_and_clears() {
-    let (state, path) = test_state("app_invoke_update_source_ticket_url");
+    let (state, _temp_dir) = test_state("app_invoke_update_source_ticket_url");
     let task = invoke_ok(
         &state,
         "create_task",
@@ -335,13 +326,11 @@ async fn app_invoke_update_task_source_ticket_url_sets_and_clears() {
         .expect("get task")
         .expect("task exists");
     assert_eq!(cleared.source_ticket_url, None);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata() {
-    let (state, path) = test_state("app_invoke_delete_task_permanent");
+    let (state, _temp_dir) = test_state("app_invoke_delete_task_permanent");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -423,25 +412,22 @@ async fn app_invoke_delete_task_permanently_removes_record_and_worktree_metadata
     )
     .await;
     assert_eq!(active_tasks.as_array().expect("active tasks").len(), 0);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn app_invoke_delete_task_rejects_missing_task() {
-    let (state, path) = test_state("app_invoke_delete_missing_task");
+    let (state, _temp_dir) = test_state("app_invoke_delete_missing_task");
 
     let error = invoke(&state, "delete_task", json!({ "id": "T-missing" }))
         .await
         .expect_err("a missing task must be rejected");
 
     assert_eq!(error.0, StatusCode::NOT_FOUND);
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn app_invoke_delete_task_rejects_completed_task_as_stale() {
-    let (state, path) = test_state("app_invoke_delete_completed_task");
+    let (state, _temp_dir) = test_state("app_invoke_delete_completed_task");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         db.create_task("Already complete", "done", None, None, None)
@@ -454,11 +440,10 @@ async fn app_invoke_delete_task_rejects_completed_task_as_stale() {
         .expect_err("a stale completion must be rejected");
 
     assert_eq!(error.0, StatusCode::CONFLICT);
-    let _ = std::fs::remove_file(path);
 }
 #[tokio::test]
 async fn app_invoke_create_task_uses_project_worktree_default_when_source_omitted() {
-    let (state, path) = test_state("app_invoke_create_task_project_worktree_default");
+    let (state, _temp_dir) = test_state("app_invoke_create_task_project_worktree_default");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -486,13 +471,11 @@ async fn app_invoke_create_task_uses_project_worktree_default_when_source_omitte
 
     assert_eq!(task["worktree_source"], "disabled");
     assert_eq!(task["worktree_branch"], serde_json::Value::Null);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn task_label_commands_round_trip_labels_on_tasks() {
-    let (state, path) = test_state("app_invoke_task_labels");
+    let (state, _temp_dir) = test_state("app_invoke_task_labels");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -571,13 +554,11 @@ async fn task_label_commands_round_trip_labels_on_tasks() {
         updated["labels"].as_array().expect("updated labels").len(),
         1
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn update_task_status_rejects_done_and_leaves_status_unchanged() {
-    let (state, path) = test_state("app_invoke_reject_done_status");
+    let (state, _temp_dir) = test_state("app_invoke_reject_done_status");
     let project = invoke_ok(
         &state,
         "create_project",
@@ -620,8 +601,6 @@ async fn update_task_status_rejects_done_and_leaves_status_unchanged() {
             .status,
         "doing"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 async fn task_workspace_value(
@@ -633,7 +612,7 @@ async fn task_workspace_value(
 
 #[tokio::test]
 async fn task_workspace_legacy_worktree_fallback_carries_workspace_data_only() {
-    let (state, path) = test_state("app_invoke_task_workspace_legacy_fallback");
+    let (state, _temp_dir) = test_state("app_invoke_task_workspace_legacy_fallback");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         let project = db
@@ -675,13 +654,11 @@ async fn task_workspace_legacy_worktree_fallback_carries_workspace_data_only() {
     assert_eq!(workspace.get("opencode_port"), None);
     assert_eq!(workspace["kind"], "git_worktree");
     assert_eq!(workspace["branch_name"], "feature/electron");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn task_workspace_prefers_task_workspace_over_legacy_worktree() {
-    let (state, path) = test_state("app_invoke_task_workspace_prefers_new_model");
+    let (state, _temp_dir) = test_state("app_invoke_task_workspace_prefers_new_model");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         let project = db
@@ -723,13 +700,11 @@ async fn task_workspace_prefers_task_workspace_over_legacy_worktree() {
     assert_eq!(workspace["provider_name"], "pi");
     assert_eq!(workspace["kind"], "repository");
     assert_eq!(workspace["branch_name"], serde_json::Value::Null);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn lists_and_acknowledges_plugin_browser_session_purge_intents() {
-    let (state, path) = test_state("app_invoke_browser_session_purges");
+    let (state, _temp_dir) = test_state("app_invoke_browser_session_purges");
     {
         let db = crate::db::acquire_db(&state.db);
         db.install_plugin(&crate::db::PluginRow {
@@ -779,13 +754,11 @@ async fn lists_and_acknowledges_plugin_browser_session_purge_intents() {
         .await,
         json!([]),
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn board_shaping_task_mutations_publish_project_scoped_invalidations() {
-    let (state, path) = test_state("app_invoke_task_board_invalidations");
+    let (state, _temp_dir) = test_state("app_invoke_task_board_invalidations");
     let project = crate::db::acquire_db(&state.db)
         .create_project("OpenForge", "/tmp/openforge")
         .expect("create Project");
@@ -826,6 +799,4 @@ async fn board_shaping_task_mutations_publish_project_scoped_invalidations() {
     assert_eq!(event.event_name, "task-changed");
     assert_eq!(event.payload["task_id"], task_id);
     assert_eq!(event.payload["project_id"], project.id);
-
-    let _ = std::fs::remove_file(path);
 }

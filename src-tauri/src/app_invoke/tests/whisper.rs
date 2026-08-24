@@ -4,7 +4,7 @@ const CONCURRENCY_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_
 
 #[tokio::test]
 async fn reports_active_and_all_model_statuses() {
-    let (state, path) = test_state("app_invoke_whisper_statuses");
+    let (state, _temp_dir) = test_state("app_invoke_whisper_statuses");
 
     let statuses = invoke_ok(
         &state,
@@ -21,13 +21,11 @@ async fn reports_active_and_all_model_statuses() {
     let active_status =
         invoke_ok(&state, "get_whisper_model_status", serde_json::Value::Null).await;
     assert_eq!(active_status["size"], "small");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn selects_and_persists_whisper_model() {
-    let (state, path) = test_state("app_invoke_whisper_selection");
+    let (state, _temp_dir) = test_state("app_invoke_whisper_selection");
 
     let response = invoke_ok(&state, "set_whisper_model", json!({ "modelSize": "tiny" })).await;
 
@@ -42,13 +40,11 @@ async fn selects_and_persists_whisper_model() {
         .get_config("whisper_model_size")
         .expect("read persisted Whisper model size");
     assert_eq!(persisted_size.as_deref(), Some("tiny"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn reports_transcription_failures() {
-    let (state, path) = test_state("app_invoke_whisper_transcription_error");
+    let (state, _temp_dir) = test_state("app_invoke_whisper_transcription_error");
 
     let err = invoke(
         &state,
@@ -60,12 +56,11 @@ async fn reports_transcription_failures() {
 
     assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(err.1.contains("Transcription failed"));
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn accepts_compact_voice_transcription_payloads() {
-    let (state, path) = test_state("app_invoke_compact_voice_transcription_payload");
+    let (state, _temp_dir) = test_state("app_invoke_compact_voice_transcription_payload");
     let samples = 120_000;
     let raw_pcm_bytes = vec![0_u8; samples * 4];
     let audio_pcm_base64 =
@@ -87,13 +82,11 @@ async fn accepts_compact_voice_transcription_payloads() {
     .expect_err("missing local model should fail transcription");
     assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
     assert!(err.1.contains("Transcription failed"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
 async fn rejects_bad_transcription_payloads_as_bad_request() {
-    let (state, path) = test_state("app_invoke_rejects_bad_whisper_payload");
+    let (state, _temp_dir) = test_state("app_invoke_rejects_bad_whisper_payload");
 
     let malformed = invoke(&state, "transcribe_audio", serde_json::Value::Null)
         .await
@@ -111,8 +104,6 @@ async fn rejects_bad_transcription_payloads_as_bad_request() {
     assert!(unaligned
         .1
         .contains("payload.audioPcmBase64 decoded byte length must be divisible by 4"));
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -129,7 +120,7 @@ fn unrelated_requests_remain_responsive_during_transcription() {
             .build()
             .expect("test runtime should build");
         runtime.block_on(async move {
-            let (mut state, path) = test_state("app_invoke_whisper_blocking_responsiveness");
+            let (mut state, _temp_dir) = test_state("app_invoke_whisper_blocking_responsiveness");
             state.whisper = Some(std::sync::Arc::new(
                 crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                     crate::whisper_manager::WhisperModelSize::Small,
@@ -178,7 +169,6 @@ fn unrelated_requests_remain_responsive_during_transcription() {
                 .expect("transcription task should join")
                 .expect("transcription request should succeed");
             assert_eq!(transcription["text"], "test transcript");
-            let _ = std::fs::remove_file(path);
         });
     });
 
@@ -206,7 +196,7 @@ fn unrelated_requests_remain_responsive_during_transcription() {
 async fn transcription_inference_runs_off_the_tokio_request_executor() {
     let request_thread = std::thread::current().id();
     let (inference_thread_tx, inference_thread_rx) = std::sync::mpsc::channel();
-    let (mut state, path) = test_state("app_invoke_whisper_worker_thread");
+    let (mut state, _temp_dir) = test_state("app_invoke_whisper_worker_thread");
     state.whisper = Some(std::sync::Arc::new(
         crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
             crate::whisper_manager::WhisperModelSize::Small,
@@ -234,7 +224,6 @@ async fn transcription_inference_runs_off_the_tokio_request_executor() {
 
     assert_eq!(transcription["text"], "worker transcript");
     assert_ne!(inference_thread, request_thread);
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -258,7 +247,7 @@ fn queued_transcriptions_do_not_consume_tokio_blocking_threads() {
             .build()
             .expect("test runtime should build");
         runtime.block_on(async move {
-            let (mut state, path) = test_state("app_invoke_whisper_bounded_admission");
+            let (mut state, _temp_dir) = test_state("app_invoke_whisper_bounded_admission");
             state.whisper = Some(std::sync::Arc::new(
                 crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                     crate::whisper_manager::WhisperModelSize::Small,
@@ -314,7 +303,6 @@ fn queued_transcriptions_do_not_consume_tokio_blocking_threads() {
             for transcription in transcriptions {
                 transcription.await.expect("transcription should succeed");
             }
-            let _ = std::fs::remove_file(path);
         });
     });
 
@@ -354,7 +342,7 @@ fn cancelling_queued_transcription_does_not_start_inference() {
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
 
-        let (mut state, path) = test_state("app_invoke_whisper_cancelled_admission");
+        let (mut state, _temp_dir) = test_state("app_invoke_whisper_cancelled_admission");
         state.whisper = Some(std::sync::Arc::new(
             crate::whisper_manager::WhisperManager::with_transcription_override_for_test(
                 crate::whisper_manager::WhisperModelSize::Small,
@@ -420,13 +408,12 @@ fn cancelling_queued_transcription_does_not_start_inference() {
             1,
             "cancelled queued request must not start Whisper inference"
         );
-        let _ = std::fs::remove_file(path);
     });
 }
 
 #[tokio::test]
 async fn downloads_model_publishes_progress_and_persists_path() {
-    let (mut state, db_path) = test_state("app_invoke_whisper_download");
+    let (mut state, _temp_dir) = test_state("app_invoke_whisper_download");
     state.whisper = Some(std::sync::Arc::new(
         crate::whisper_manager::WhisperManager::with_download_override_for_test(
             crate::whisper_manager::WhisperModelSize::Small,
@@ -475,6 +462,4 @@ async fn downloads_model_publishes_progress_and_persists_path() {
         persisted_path.as_deref(),
         Some("/tmp/test-whisper-tiny.bin")
     );
-
-    let _ = std::fs::remove_file(db_path);
 }
