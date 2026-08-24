@@ -77,6 +77,58 @@ describe('plugin-host backend concurrency', () => {
     })
   })
 
+  it('reconciles concurrent Plugin Command discovery for different Projects', async () => {
+    const writeDiscoveryBackend = (backendLabel: string) => writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          const projectId = openforge.context.getSnapshot().projectId
+          globalThis.__discoveryActivationProjects = [
+            ...(globalThis.__discoveryActivationProjects ?? []),
+            projectId
+          ]
+          if (projectId === 'P-1') await globalThis.__discoveryActivationGate
+          context.subscriptions.add(openforge.commands.register({
+            id: 'project-command',
+            title: 'Project command',
+            agent: { description: '${backendLabel} command for ' + projectId },
+            handler() { return projectId }
+          }))
+        }
+      }
+    `)
+    const firstBackendPath = await writeDiscoveryBackend('First backend')
+    const secondBackendPath = await writeDiscoveryBackend('Second backend')
+    const globals = globalThis as typeof globalThis & {
+      __discoveryActivationGate?: Promise<void>
+      __discoveryActivationProjects?: Array<string | null>
+    }
+    let releaseFirstActivation: () => void = () => undefined
+    globals.__discoveryActivationGate = new Promise<void>((resolve) => { releaseFirstActivation = resolve })
+    globals.__discoveryActivationProjects = []
+    const runtime = createPluginHostRuntime()
+    const pluginId = 'project-discovery-plugin'
+
+    const firstDiscovery = runtime.listAgentCommands({ pluginId, backendPath: firstBackendPath, projectId: 'P-1' })
+    let secondDiscovery: typeof firstDiscovery | undefined
+    try {
+      await vi.waitFor(() => {
+        expect(globals.__discoveryActivationProjects).toEqual(['P-1'])
+      })
+      secondDiscovery = runtime.listAgentCommands({ pluginId, backendPath: secondBackendPath, projectId: 'P-2' })
+      releaseFirstActivation()
+      await expect(Promise.all([firstDiscovery, secondDiscovery])).resolves.toEqual([
+        expect.any(Array),
+        [expect.objectContaining({ description: 'Second backend command for P-2' })],
+      ])
+      expect(globals.__discoveryActivationProjects).toEqual(['P-1', 'P-2'])
+    } finally {
+      releaseFirstActivation()
+      await Promise.allSettled([firstDiscovery, ...(secondDiscovery ? [secondDiscovery] : [])])
+      delete globals.__discoveryActivationGate
+      delete globals.__discoveryActivationProjects
+    }
+  })
+
   it('serializes backend invocations for one plugin', async () => {
     const backendPath = await writeBackendModule(`
       export default {
