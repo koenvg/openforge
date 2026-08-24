@@ -55,6 +55,7 @@ fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
         instance_id: 1,
         kind,
         pid_file_name,
+        shadow_model: None,
     }
 }
 

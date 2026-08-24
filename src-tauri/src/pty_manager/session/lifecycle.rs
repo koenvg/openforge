@@ -1,3 +1,4 @@
+use crate::terminal_model::ShadowTerminalSession;
 use log::{error, info};
 use portable_pty::PtySize;
 use std::collections::{HashMap, HashSet};
@@ -134,6 +135,7 @@ pub(in super::super) struct PtySession {
     pub(in super::super) instance_id: u64,
     pub(in super::super) kind: PtySessionKind,
     pub(in super::super) pid_file_name: String,
+    pub(in super::super) shadow_model: Option<ShadowTerminalSession>,
     pub(in super::super) managed_process: ManagedProcessIdentity,
 }
 
@@ -302,6 +304,9 @@ impl PtyManager {
             .resize(size)
             .map_err(|e| PtyError::IoError(io::Error::other(e.to_string())))?;
 
+        if let Some(shadow_model) = &session.shadow_model {
+            shadow_model.resize(cols, rows);
+        }
         Ok(())
     }
 

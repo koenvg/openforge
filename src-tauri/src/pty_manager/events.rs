@@ -1,4 +1,5 @@
 use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
+use crate::terminal_model::ShadowTerminalFeeder;
 use log::{info, warn};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -190,6 +191,7 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
     session_key: &str,
     last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
+    shadow_feeder: Option<ShadowTerminalFeeder>,
 ) {
     let mut buffer = [0u8; PTY_READ_BUFFER_SIZE];
     let mut incomplete_utf8: Vec<u8> = Vec::new();
@@ -202,6 +204,9 @@ pub(super) fn read_pty_output_loop<R: Read + ?Sized>(
                 break;
             }
             Ok(n) => {
+                if let Some(shadow_feeder) = &shadow_feeder {
+                    shadow_feeder.feed(&buffer[..n]);
+                }
                 if let Some(hub) = &attachment_hub {
                     hub.publish_output(&buffer[..n]);
                 }
@@ -229,10 +234,18 @@ pub(super) fn spawn_pty_output_reader(
     session_key: String,
     last_output: Option<Arc<AtomicU64>>,
     attachment_hub: Option<Arc<PtyAttachmentHub>>,
+    shadow_feeder: Option<ShadowTerminalFeeder>,
 ) -> PtyOutputReceiver {
     let (tx, rx) = pty_output_channel();
     tokio::task::spawn_blocking(move || {
-        read_pty_output_loop(&mut reader, tx, &session_key, last_output, attachment_hub);
+        read_pty_output_loop(
+            &mut reader,
+            tx,
+            &session_key,
+            last_output,
+            attachment_hub,
+            shadow_feeder,
+        );
     });
     rx
 }

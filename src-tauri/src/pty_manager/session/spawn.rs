@@ -1,8 +1,9 @@
 //! Shared PTY process creation and session publication primitives.
 
 use crate::app_events::AppEventSender;
+use crate::terminal_model::{ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelOptions};
 use crate::user_environment::user_environment;
-use log::info;
+use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -58,6 +59,7 @@ struct SpawnedPty {
     reader: Box<dyn Read + Send>,
     session: PtySession,
     pid_file: PathBuf,
+    shadow_feeder: Option<ShadowTerminalFeeder>,
 }
 
 impl SpawnedPty {
@@ -72,6 +74,7 @@ impl SpawnedPty {
 
 struct PtyProcessRequest {
     command: CommandBuilder,
+    session_key: String,
     cols: u16,
     rows: u16,
     instance_id: u64,
@@ -160,6 +163,25 @@ impl PtyManager {
             ))
         })?;
 
+        let (shadow_model, shadow_feeder) = if self.shadow_mode.is_enabled() {
+            match ShadowTerminalSession::start(
+                request.session_key.clone(),
+                request.instance_id,
+                TerminalModelOptions::new(request.cols, request.rows),
+            ) {
+                Ok((session, feeder)) => (Some(session), Some(feeder)),
+                Err(error) => {
+                    warn!(
+                        "[terminal-shadow] key={} instance={} phase=create disabled: {}",
+                        request.session_key, request.instance_id, error
+                    );
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        };
+
         Ok(SpawnedPty {
             reader,
             session: PtySession {
@@ -169,9 +191,11 @@ impl PtyManager {
                 instance_id: request.instance_id,
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
+                shadow_model,
                 managed_process,
             },
             pid_file,
+            shadow_feeder,
         })
     }
 

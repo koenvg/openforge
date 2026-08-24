@@ -8,6 +8,7 @@ mod managed_process;
 mod pids;
 mod session;
 
+use crate::terminal_model::ShadowMode;
 #[cfg(test)]
 use attachment::PtyAttachmentHub;
 use attachment::PtyAttachmentHubs;
@@ -103,6 +104,7 @@ pub struct PtyManager {
     attachment_hubs: PtyAttachmentHubs,
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: LifecycleLockRegistry,
+    shadow_mode: ShadowMode,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
@@ -165,6 +167,7 @@ impl PtyManager {
             attachment_hubs: Arc::new(Mutex::new(HashMap::new())),
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
             lifecycle_locks: LifecycleLockRegistry::default(),
+            shadow_mode: ShadowMode::from_environment(),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
@@ -182,6 +185,10 @@ impl Default for PtyManager {
 impl PtyManager {
     pub fn set_pid_dir(&mut self, dir: PathBuf) {
         self.pid_dir_override = Some(dir);
+    }
+
+    pub(crate) fn set_shadow_mode(&mut self, mode: ShadowMode) {
+        self.shadow_mode = mode;
     }
 }
 
