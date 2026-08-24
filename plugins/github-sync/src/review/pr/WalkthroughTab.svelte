@@ -24,6 +24,12 @@
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
   import { approvedInlineAgentComments, agentCommentToSubmission } from '@openforge-app/pr-review-ui/diffComments'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+  import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw } from '@lucide/svelte'
+  import {
+    loadWalkthroughStepDetailsExpanded,
+    saveWalkthroughStepDetailsExpanded,
+  } from '../../lib/walkthroughPreferences'
   import type { GithubSyncPrReviewClient } from './githubSyncClient'
   import type { FileContents } from '@openforge-app/pr-review-ui/diffAdapter'
 
@@ -116,6 +122,19 @@
   let activeStepIndex = $state(0)
   let activeStepFilename = $state<string | null>(null)
   let diffViewer = $state<DiffViewer>()
+  let stepDetailsExpanded = $state(loadWalkthroughStepDetailsExpanded())
+
+  function toggleStepDetails() {
+    stepDetailsExpanded = !stepDetailsExpanded
+    saveWalkthroughStepDetailsExpanded(stepDetailsExpanded)
+  }
+
+  /** Rail pill styling: the current step reads as filled, visited steps as muted-solid, upcoming as faint. */
+  function stepPillClass(isCurrent: boolean, isVisited: boolean): string {
+    if (isCurrent) return 'bg-primary text-primary-content'
+    if (isVisited) return 'bg-base-content/20 text-base-content/70 hover:bg-base-content/30'
+    return 'bg-base-300/60 text-base-content/50 hover:bg-base-300'
+  }
 
   let parsedSteps = $derived<PrWalkthroughStep[] | null>(
     walkthrough?.status === 'ready'
@@ -386,121 +405,159 @@
       </div>
     {/if}
 
-    <div class="flex flex-col gap-5 px-6 py-5 border-b border-base-300 shrink-0">
-      <div class="flex items-start gap-5">
-        <div class="flex flex-col items-center leading-none shrink-0 pt-0.5">
-          <span class="text-4xl font-bold text-base-content tabular-nums">{clampedStepIndex + 1}</span>
-          <span class="text-[10px] font-medium uppercase tracking-wider text-base-content/40 mt-2 whitespace-nowrap">of {totalSteps}</span>
-        </div>
+    <!-- Step navigation. Prev/Next are the reviewer's primary control, so they are
+         full-size buttons flanking the step rail instead of ghost text in a corner. -->
+    <div class="flex items-center gap-3 px-4 py-2 border-b border-base-300 bg-base-200/40 shrink-0">
+      <button
+        class="btn btn-sm btn-outline gap-1 shrink-0"
+        onclick={goPrev}
+        disabled={clampedStepIndex <= 0}
+        title="Previous step (←)"
+      >
+        <ChevronLeft size={16} aria-hidden="true" />
+        Prev
+      </button>
 
-        <div class="flex flex-col gap-1.5 min-w-0 flex-1">
-          <h3 class="text-sm font-semibold text-base-content m-0 leading-snug">{stepTitle}</h3>
-          {#if stepSummary}
-            <p class="text-lg leading-relaxed text-base-content/90 m-0">{stepSummary}</p>
-          {/if}
-
-          {#if activeStep && onAskAgentStep}
-            <div class="flex flex-col gap-2 mt-1 max-h-48 overflow-y-auto">
-              {#each activeStepThreads as thread}
-                <div class="px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md text-[0.8rem]">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="badge badge-info badge-sm">Ask the AI</span>
-                    {#if thread.status === 'pending'}
-                      <span class="loading loading-spinner loading-xs"></span>
-                      <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
-                    {/if}
-                    {#if thread.status === 'error'}
-                      <span class="text-error text-[0.7rem]">failed — send again</span>
-                    {/if}
-                  </div>
-                  {#each thread.messages as m}
-                    <div class="mb-1">
-                      <span class="text-base-content/50 text-[0.7rem] mr-1 {m.role === 'user' ? 'font-semibold' : ''}">{m.role === 'ai' ? 'AI author' : 'You'}</span>
-                      <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={m.body} {onOpenUrl} /></span>
-                    </div>
-                  {/each}
-                  {#if thread.status === 'answered'}
-                    <div class="flex gap-2 mt-1">
-                      <input
-                        class="input input-bordered input-xs flex-1"
-                        aria-label="Reply to the AI author"
-                        placeholder="Reply…"
-                        value={stepReplyDrafts[thread.id] ?? ''}
-                        oninput={(e: Event) => {
-                          if (!(e.currentTarget instanceof HTMLInputElement)) return
-                          stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: e.currentTarget.value }
-                        }}
-                        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); submitStepReply(thread.id) } }}
-                      />
-                      <button type="button" class="btn btn-xs btn-primary" onclick={() => submitStepReply(thread.id)}>Reply</button>
-                    </div>
-                  {/if}
-                </div>
-              {/each}
-
-              {#if stepQuestionOpen}
-                <div>
-                  <textarea
-                    class="textarea textarea-bordered w-full min-h-[44px] text-[0.8rem] resize-y"
-                    aria-label="Ask the AI author about this step"
-                    placeholder="Ask the AI author about this step… (Cmd/Ctrl+Enter to send)"
-                    rows="2"
-                    bind:value={stepQuestionText}
-                    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitStepQuestion() } }}
-                  ></textarea>
-                  <div class="flex justify-end gap-2 mt-1">
-                    <button type="button" class="btn btn-xs btn-ghost" onclick={() => { stepQuestionOpen = false; stepQuestionText = '' }}>Cancel</button>
-                    <button type="button" class="btn btn-xs btn-primary" onclick={submitStepQuestion}>Ask</button>
-                  </div>
-                </div>
-              {:else}
-                <button type="button" class="btn btn-ghost btn-xs text-info self-start" onclick={() => { stepQuestionOpen = true }}>+ Ask about this step</button>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <div class="flex items-center gap-1 shrink-0">
-          <button
-            class="btn btn-ghost btn-xs"
-            onclick={goPrev}
-            disabled={clampedStepIndex <= 0}
-            title="Previous step (←)"
-          >◀ Prev</button>
-          <button
-            class="btn btn-ghost btn-xs"
-            onclick={goNext}
-            disabled={clampedStepIndex >= totalSteps - 1}
-            title="Next step (→)"
-          >Next ▶</button>
-          {#if !stale}
-            <button class="btn btn-ghost btn-xs text-base-content/40" onclick={handleRegenerate} title="Regenerate walkthrough">↻</button>
-          {/if}
-        </div>
-      </div>
-
-      <div class="flex flex-wrap justify-center gap-2">
+      <div class="flex items-center justify-center gap-1 flex-1 min-w-0 overflow-x-auto">
         {#each parsedSteps as step, i}
           <button
             type="button"
-            class="btn btn-sm btn-circle {i === clampedStepIndex ? 'btn-primary' : 'btn-ghost text-base-content/60'}"
+            class="size-6 shrink-0 rounded-full text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(i === clampedStepIndex, i < clampedStepIndex)}"
             onclick={() => selectStep(i)}
             title={step.title}
+            aria-current={i === clampedStepIndex ? 'step' : undefined}
           >{i + 1}</button>
         {/each}
         <button
           type="button"
-          class="btn btn-sm btn-circle {isFinalStep ? 'btn-primary' : 'btn-ghost text-base-content/60'}"
+          class="size-6 shrink-0 rounded-full text-[11px] font-semibold tabular-nums transition-colors {stepPillClass(isFinalStep, false)}"
           onclick={() => selectStep(parsedSteps.length)}
           title="Review & submit"
+          aria-current={isFinalStep ? 'step' : undefined}
         >{parsedSteps.length + 1}</button>
+      </div>
+
+      <button
+        class="btn btn-sm btn-primary gap-1 shrink-0"
+        onclick={goNext}
+        disabled={clampedStepIndex >= totalSteps - 1}
+        title="Next step (→)"
+      >
+        Next
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+    </div>
+
+    <!-- Step details. Collapsible: the summary and Q&A threads are the only thing
+         between the nav rail and the diff, so hiding them hands that height back. -->
+    <div class="flex items-start gap-2 px-4 {stepDetailsExpanded ? 'py-2.5' : 'py-1'} border-b border-base-300 shrink-0">
+      <div class="flex flex-col gap-1.5 min-w-0 flex-1">
+        <div class="flex items-baseline gap-2 min-w-0">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-primary tabular-nums shrink-0">Step {clampedStepIndex + 1}</span>
+          <span class="text-[10px] font-medium uppercase tracking-wider text-base-content/40 shrink-0">of {totalSteps}</span>
+          <h3 class="text-sm font-semibold text-base-content m-0 leading-snug min-w-0 {stepDetailsExpanded ? '' : 'truncate'}">{stepTitle}</h3>
+        </div>
+
+        {#if stepDetailsExpanded}
+          <div class="flex flex-col gap-2 max-h-[28vh] overflow-y-auto pr-1">
+            {#if stepSummary}
+              <p class="text-sm leading-relaxed text-base-content/80 m-0">{stepSummary}</p>
+            {/if}
+
+            {#if activeStep && onAskAgentStep}
+              <div class="flex flex-col gap-2">
+                {#each activeStepThreads as thread}
+                  <div class="px-3 py-2 bg-base-100 border border-base-300 border-l-4 border-l-info rounded-md text-[0.8rem]">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="badge badge-info badge-sm">Ask the AI</span>
+                      {#if thread.status === 'pending'}
+                        <span class="loading loading-spinner loading-xs"></span>
+                        <span class="text-base-content/50 text-[0.7rem]">thinking…</span>
+                      {/if}
+                      {#if thread.status === 'error'}
+                        <span class="text-error text-[0.7rem]">failed — send again</span>
+                      {/if}
+                    </div>
+                    {#each thread.messages as m}
+                      <div class="mb-1">
+                        <span class="text-base-content/50 text-[0.7rem] mr-1 {m.role === 'user' ? 'font-semibold' : ''}">{m.role === 'ai' ? 'AI author' : 'You'}</span>
+                        <span class="[&_p]:m-0 [&_p]:inline"><MarkdownContent content={m.body} {onOpenUrl} /></span>
+                      </div>
+                    {/each}
+                    {#if thread.status === 'answered'}
+                      <div class="flex gap-2 mt-1">
+                        <input
+                          class="input input-bordered input-xs flex-1"
+                          aria-label="Reply to the AI author"
+                          placeholder="Reply…"
+                          value={stepReplyDrafts[thread.id] ?? ''}
+                          oninput={(e: Event) => {
+                            if (!(e.currentTarget instanceof HTMLInputElement)) return
+                            stepReplyDrafts = { ...stepReplyDrafts, [thread.id]: e.currentTarget.value }
+                          }}
+                          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); submitStepReply(thread.id) } }}
+                        />
+                        <button type="button" class="btn btn-xs btn-primary" onclick={() => submitStepReply(thread.id)}>Reply</button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+
+                {#if stepQuestionOpen}
+                  <div>
+                    <textarea
+                      class="textarea textarea-bordered w-full min-h-[44px] text-[0.8rem] resize-y"
+                      aria-label="Ask the AI author about this step"
+                      placeholder="Ask the AI author about this step… (Cmd/Ctrl+Enter to send)"
+                      rows="2"
+                      bind:value={stepQuestionText}
+                      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitStepQuestion() } }}
+                    ></textarea>
+                    <div class="flex justify-end gap-2 mt-1">
+                      <button type="button" class="btn btn-xs btn-ghost" onclick={() => { stepQuestionOpen = false; stepQuestionText = '' }}>Cancel</button>
+                      <button type="button" class="btn btn-xs btn-primary" onclick={submitStepQuestion}>Ask</button>
+                    </div>
+                  </div>
+                {:else}
+                  <button type="button" class="btn btn-ghost btn-xs text-info self-start" onclick={() => { stepQuestionOpen = true }}>+ Ask about this step</button>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <div class="flex items-center gap-0.5 shrink-0">
+        {#if !stale}
+          <button
+            class="btn btn-ghost btn-xs btn-square text-base-content/40"
+            onclick={handleRegenerate}
+            title="Regenerate walkthrough"
+            aria-label="Regenerate walkthrough"
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+          </button>
+        {/if}
+        <button
+          class="btn btn-ghost btn-xs btn-square text-base-content/50"
+          onclick={toggleStepDetails}
+          title={stepDetailsExpanded ? 'Collapse step details' : 'Expand step details'}
+          aria-label={stepDetailsExpanded ? 'Collapse step details' : 'Expand step details'}
+          aria-expanded={stepDetailsExpanded}
+        >
+          {#if stepDetailsExpanded}
+            <ChevronUp size={14} aria-hidden="true" />
+          {:else}
+            <ChevronDown size={14} aria-hidden="true" />
+          {/if}
+        </button>
       </div>
     </div>
 
     <div class="flex flex-1 min-h-0 overflow-hidden">
-      <div class="w-[260px] shrink-0 border-r border-base-300 overflow-hidden">
+      <ResizablePanel storageKey="walkthrough-file-tree" defaultWidth={220} minWidth={140} maxWidth={460} side="left">
         <FileTree files={stepFiles} onSelectFile={handleFileSelect} />
-      </div>
+      </ResizablePanel>
       <div class="flex-1 min-w-0 overflow-hidden">
         <DiffViewer
           bind:this={diffViewer}
