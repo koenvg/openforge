@@ -477,6 +477,13 @@ describe("ipc spawnShellPty", () => {
 		expect(ipcModule).not.toHaveProperty("resumeImplementation");
 	});
 
+	it("does not export plugin-owned PR walkthrough commands", () => {
+		expect(ipcModule).not.toHaveProperty("getPrWalkthrough");
+		expect(ipcModule).not.toHaveProperty("startAgentWalkthrough");
+		expect(ipcModule).not.toHaveProperty("abortAgentWalkthrough");
+		expect(ipcModule).not.toHaveProperty("deletePrWalkthrough");
+	});
+
 	it("sends registerBuiltinPlugin metadata as a single trusted builtin command argument", async () => {
 		await registerBuiltinPlugin({
 			id: "com.openforge.file-viewer",
