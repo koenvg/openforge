@@ -102,13 +102,13 @@ impl AgentSpawnToken {
     }
 }
 
-struct SpawnedAgentPty {
+struct SpawnedPty {
     reader: Box<dyn Read + Send>,
     session: PtySession,
     pid_file: PathBuf,
 }
 
-impl SpawnedAgentPty {
+impl SpawnedPty {
     fn instance_id(&self) -> u64 {
         self.session.instance_id
     }
@@ -116,6 +116,24 @@ impl SpawnedAgentPty {
     fn managed_process(&self) -> &ManagedProcessIdentity {
         &self.session.managed_process
     }
+}
+
+struct PtyProcessRequest {
+    command: CommandBuilder,
+    cols: u16,
+    rows: u16,
+    instance_id: u64,
+    description: String,
+    pid_file_name: String,
+    kind: PtySessionKind,
+}
+
+struct SessionRegistrationRequest<'a> {
+    session_key: &'a str,
+    generation: u64,
+    session: PtySession,
+    replacement_label: &'a str,
+    stale_error: PtyError,
 }
 
 struct AgentStreamState {
@@ -132,7 +150,17 @@ struct AgentProcessRequest<'a> {
     terminal_image_protocol: Option<TerminalImageProtocol>,
 }
 
-struct AgentEventSink {
+struct ShellProcessRequest<'a> {
+    task_id: &'a str,
+    session_key: &'a str,
+    cwd: &'a Path,
+    cols: u16,
+    rows: u16,
+    terminal_image_protocol: Option<TerminalImageProtocol>,
+    command: CommandBuilder,
+}
+
+struct PtyEventSink {
     app_handle: Option<crate::backend_runtime::AppHandle>,
     app_event_tx: Option<AppEventSender>,
 }
@@ -145,7 +173,33 @@ struct AgentEventStreamRequest<'a> {
     stream_state: AgentStreamState,
     lifecycle_lock: LifecycleLockLease,
     pid_file: PathBuf,
-    event_sink: AgentEventSink,
+    event_sink: PtyEventSink,
+}
+
+struct ShellSpawnToken {
+    session_key: String,
+    generation: u64,
+}
+
+impl ShellSpawnToken {
+    fn stale_error(&self, task_id: &str, stage: &str) -> PtyError {
+        PtyError::SpawnFailed(format!("shell PTY for task {task_id} was {stage}"))
+    }
+}
+
+struct ShellStreamState {
+    last_output_time: Arc<AtomicU64>,
+    ring_buffer: SharedRingBuffer,
+}
+
+struct ShellEventStreamRequest {
+    session_key: String,
+    instance_id: u64,
+    reader: Box<dyn Read + Send>,
+    stream_state: ShellStreamState,
+    lifecycle_lock: LifecycleLockLease,
+    pid_file: PathBuf,
+    event_sink: PtyEventSink,
 }
 
 impl PtyManager {
@@ -425,24 +479,25 @@ impl PtyManager {
         Ok(())
     }
 
-    fn create_agent_process<A: AgentPtyProviderAdapter>(
-        &self,
-        adapter: &A,
-        request: AgentProcessRequest<'_>,
-    ) -> Result<SpawnedAgentPty, PtyError> {
-        let pid_file_name = adapter.pid_file_name(request.task_id);
+    fn configure_pty_command(
+        command: &mut CommandBuilder,
+        cwd: &Path,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
+    ) {
+        command.cwd(cwd);
+        for (key, value) in user_environment() {
+            command.env(key, value);
+        }
+        command.env("PWD", cwd.to_string_lossy().to_string());
+        for (key, value) in terminal_environment(terminal_image_protocol) {
+            command.env(key, value);
+        }
+    }
+
+    fn create_pty_process(&self, request: PtyProcessRequest) -> Result<SpawnedPty, PtyError> {
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
-        let pid_file = pid_dir.join(&pid_file_name);
-
-        info!(
-            "Spawning {} PTY for task {} ({}x{})",
-            adapter.label(),
-            request.task_id,
-            request.cols,
-            request.rows
-        );
-
+        let pid_file = pid_dir.join(&request.pid_file_name);
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: request.rows,
@@ -450,42 +505,25 @@ impl PtyManager {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
+            .map_err(|error| {
+                PtyError::SpawnFailed(format!("Failed to create PTY pair: {error}"))
+            })?;
         let reader = pair
             .master
             .try_clone_reader()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
+            .map_err(|error| PtyError::SpawnFailed(format!("Failed to clone reader: {error}")))?;
         let writer = pair
             .master
             .take_writer()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
-
-        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
-        let mut cmd = CommandBuilder::new(adapter.command_name());
-        for arg in adapter.command_args() {
-            cmd.arg(arg);
-        }
-        cmd.cwd(request.cwd);
-
-        for (key, value) in user_environment() {
-            cmd.env(key, value);
-        }
-        cmd.env("PWD", request.cwd.to_string_lossy().to_string());
-        for (key, value) in terminal_environment(request.terminal_image_protocol) {
-            cmd.env(key, value);
-        }
-        for (key, value) in adapter.extra_env(request.task_id, instance_id) {
-            cmd.env(key, value);
-        }
+            .map_err(|error| PtyError::SpawnFailed(format!("Failed to take writer: {error}")))?;
 
         let mut child = pair
             .slave
-            .spawn_command(cmd)
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
+            .spawn_command(request.command)
+            .map_err(|error| PtyError::SpawnFailed(format!("Failed to spawn command: {error}")))?;
         drop(pair.slave);
 
-        let pid_description = format!("{} PTY for task {}", adapter.label(), request.task_id);
-        let pid = require_root_pid_or_cleanup(child.process_id(), &pid_description, || {
+        let pid = require_root_pid_or_cleanup(child.process_id(), &request.description, || {
             let cleanup_result = child.kill();
             let _ = child.try_wait();
             cleanup_result
@@ -494,87 +532,122 @@ impl PtyManager {
             force_kill_unverified_spawn(pid);
             let _ = child.try_wait();
             PtyError::SpawnFailed(format!(
-                "Failed to capture managed process identity for {} PTY task {}: {}",
-                adapter.label(),
-                request.task_id,
-                error
+                "Failed to capture managed process identity for {}: {error}",
+                request.description
             ))
         })?;
-        info!(
-            "{} PTY for task {} started (PID: {})",
-            adapter.label(),
-            request.task_id,
-            pid
-        );
 
-        Ok(SpawnedAgentPty {
+        Ok(SpawnedPty {
             reader,
             session: PtySession {
                 child,
                 master: pair.master,
                 writer,
-                instance_id,
-                kind: PtySessionKind::Agent,
-                pid_file_name,
+                instance_id: request.instance_id,
+                kind: request.kind,
+                pid_file_name: request.pid_file_name,
                 managed_process,
             },
             pid_file,
         })
     }
 
-    async fn register_agent_session(
+    fn create_agent_process<A: AgentPtyProviderAdapter>(
         &self,
-        task_id: &str,
-        token: AgentSpawnToken,
-        session: PtySession,
+        adapter: &A,
+        request: AgentProcessRequest<'_>,
+    ) -> Result<SpawnedPty, PtyError> {
+        info!(
+            "Spawning {} PTY for task {} ({}x{})",
+            adapter.label(),
+            request.task_id,
+            request.cols,
+            request.rows
+        );
+
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let mut command = CommandBuilder::new(adapter.command_name());
+        for arg in adapter.command_args() {
+            command.arg(arg);
+        }
+        Self::configure_pty_command(&mut command, request.cwd, request.terminal_image_protocol);
+        for (key, value) in adapter.extra_env(request.task_id, instance_id) {
+            command.env(key, value);
+        }
+
+        let spawned = self.create_pty_process(PtyProcessRequest {
+            command,
+            cols: request.cols,
+            rows: request.rows,
+            instance_id,
+            description: format!("{} PTY for task {}", adapter.label(), request.task_id),
+            pid_file_name: adapter.pid_file_name(request.task_id),
+            kind: PtySessionKind::Agent,
+        })?;
+        info!(
+            "{} PTY for task {} started (PID: {})",
+            adapter.label(),
+            request.task_id,
+            spawned.managed_process().root_pid
+        );
+        Ok(spawned)
+    }
+
+    async fn register_spawned_session(
+        &self,
+        request: SessionRegistrationRequest<'_>,
     ) -> Result<(), PtyError> {
+        let SessionRegistrationRequest {
+            session_key,
+            generation,
+            session,
+            replacement_label,
+            stale_error,
+        } = request;
         let mut pending_session = Some(session);
         let replaced_session = {
             let generations = self.agent_spawn_generations.lock().await;
             let registration_is_stale = generations
-                .get(task_id)
-                .map(|current| *current != token.generation)
+                .get(session_key)
+                .map(|current| *current != generation)
                 .unwrap_or(true);
             if registration_is_stale {
                 None
             } else {
                 self.sessions.lock().await.insert(
-                    task_id.to_string(),
-                    pending_session.take().expect("pending session"),
+                    session_key.to_string(),
+                    pending_session.take().expect("pending PTY session"),
                 )
             }
         };
 
         if let Some(stale_session) = pending_session {
-            self.terminate_or_retain_unregistered_session(task_id, stale_session)
+            self.terminate_or_retain_unregistered_session(session_key, stale_session)
                 .await?;
-            return Err(token.stale_error(task_id, "before session registration completed"));
+            return Err(stale_error);
         }
 
         if let Some(mut replaced_session) = replaced_session {
-            info!(
-                "[PTY] Replacing existing {} PTY for task {}",
-                token.label, task_id
-            );
-            self.terminate_session_process(task_id, &mut replaced_session)
+            info!("[PTY] Replacing existing {replacement_label} PTY for session {session_key}");
+            self.terminate_session_process(session_key, &mut replaced_session)
                 .await?;
-            self.clear_session_tracking(task_id).await;
+            self.clear_session_tracking(session_key).await;
         }
         Ok(())
     }
 
-    async fn persist_agent_identity(
+    async fn persist_session_identity(
         &self,
-        task_id: &str,
+        session_key: &str,
         pid_file: &Path,
         managed_process: &ManagedProcessIdentity,
     ) -> Result<(), PtyError> {
         if let Err(error) = write_managed_process_identity(pid_file, managed_process) {
-            if let Some(failed_session) = self.sessions.lock().await.remove(task_id) {
-                self.terminate_or_retain_unregistered_session(task_id, failed_session)
+            if let Some(failed_session) = self.sessions.lock().await.remove(session_key) {
+                self.terminate_or_retain_unregistered_session(session_key, failed_session)
                     .await?;
             }
-            self.clear_session_tracking(task_id).await;
+            self.clear_session_tracking(session_key).await;
             return Err(error);
         }
         Ok(())
@@ -850,14 +923,21 @@ impl PtyManager {
         )?;
         let instance_id = spawned.instance_id();
         let managed_process = spawned.managed_process().clone();
-        let SpawnedAgentPty {
+        let SpawnedPty {
             reader,
             session,
             pid_file,
         } = spawned;
 
-        self.register_agent_session(task_id, token, session).await?;
-        self.persist_agent_identity(task_id, &pid_file, &managed_process)
+        self.register_spawned_session(SessionRegistrationRequest {
+            session_key: task_id,
+            generation: token.generation,
+            session,
+            replacement_label: token.label,
+            stale_error: token.stale_error(task_id, "before session registration completed"),
+        })
+        .await?;
+        self.persist_session_identity(task_id, &pid_file, &managed_process)
             .await?;
 
         #[cfg(target_os = "macos")]
@@ -893,7 +973,7 @@ impl PtyManager {
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,
-            event_sink: AgentEventSink {
+            event_sink: PtyEventSink {
                 app_handle,
                 app_event_tx,
             },
@@ -904,11 +984,169 @@ impl PtyManager {
         Ok(instance_id)
     }
 
+    async fn begin_shell_spawn(
+        &self,
+        session_key: &str,
+        task_id: &str,
+    ) -> (ShellSpawnToken, PendingShellSpawn, LifecycleLockLease) {
+        let token = ShellSpawnToken {
+            session_key: session_key.to_string(),
+            generation: NEXT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed),
+        };
+        let pending_spawn = {
+            let mut generations = self.agent_spawn_generations.lock().await;
+            let pending_spawn =
+                PendingShellSpawn::register(self, session_key, task_id, token.generation);
+            generations.insert(token.session_key.clone(), token.generation);
+            pending_spawn
+        };
+        let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
+        (token, pending_spawn, lifecycle_lock)
+    }
+
+    async fn replace_existing_shell_session(
+        &self,
+        session_key: &str,
+        task_id: &str,
+    ) -> Result<(), PtyError> {
+        let Some(mut old_session) = self.sessions.lock().await.remove(session_key) else {
+            return Ok(());
+        };
+
+        info!("[PTY] Replacing existing shell PTY for task {task_id}");
+        if let Err(error) = self
+            .terminate_session_process(session_key, &mut old_session)
+            .await
+        {
+            self.sessions
+                .lock()
+                .await
+                .insert(session_key.to_string(), old_session);
+            return Err(error);
+        }
+        self.clear_session_tracking(session_key).await;
+        Ok(())
+    }
+
+    fn create_shell_process(
+        &self,
+        request: ShellProcessRequest<'_>,
+    ) -> Result<SpawnedPty, PtyError> {
+        let ShellProcessRequest {
+            task_id,
+            session_key,
+            cwd,
+            cols,
+            rows,
+            terminal_image_protocol,
+            mut command,
+        } = request;
+        info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
+        Self::configure_pty_command(&mut command, cwd, terminal_image_protocol);
+        let spawned = self.create_pty_process(PtyProcessRequest {
+            command,
+            cols,
+            rows,
+            instance_id: NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed),
+            description: format!("Shell PTY for task {task_id}"),
+            pid_file_name: pid_file_name_for_session_key(session_key),
+            kind: PtySessionKind::Shell {
+                task_id: task_id.to_string(),
+            },
+        })?;
+        info!(
+            "Shell PTY for task {} started (PID: {})",
+            task_id,
+            spawned.managed_process().root_pid
+        );
+        Ok(spawned)
+    }
+
+    async fn register_shell_stream_state(&self, session_key: &str) -> ShellStreamState {
+        let last_output_time = Arc::new(AtomicU64::new(0));
+        self.last_output
+            .lock()
+            .await
+            .insert(session_key.to_string(), Arc::clone(&last_output_time));
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
+        self.output_buffers
+            .lock()
+            .await
+            .insert(session_key.to_string(), Arc::clone(&ring_buffer));
+        ShellStreamState {
+            last_output_time,
+            ring_buffer,
+        }
+    }
+
+    fn start_shell_event_stream(&self, request: ShellEventStreamRequest) {
+        let ShellEventStreamRequest {
+            session_key,
+            instance_id,
+            reader,
+            stream_state,
+            lifecycle_lock,
+            pid_file,
+            event_sink,
+        } = request;
+        let rx = spawn_pty_output_reader(
+            reader,
+            session_key.clone(),
+            Some(Arc::clone(&stream_state.last_output_time)),
+            None,
+        );
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key,
+                instance_id,
+                app_handle: event_sink.app_handle,
+                app_event_tx: event_sink.app_event_tx,
+                ring_buffer: stream_state.ring_buffer,
+                attachment_hub: None,
+                attachment_hubs: None,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    lifecycle_lock,
+                    pid_file,
+                    emit_agent_exit: false,
+                },
+            },
+        );
+    }
+
+    async fn finish_shell_spawn(&self, token: &ShellSpawnToken) {
+        let mut generations = self.agent_spawn_generations.lock().await;
+        if generations.get(&token.session_key) == Some(&token.generation) {
+            generations.remove(&token.session_key);
+        }
+    }
+
     pub(crate) async fn spawn_shell_pty(
         &self,
         context: PtySpawnContext<'_>,
         terminal_index: Option<u32>,
         terminal_image_protocol: Option<TerminalImageProtocol>,
+    ) -> Result<u64, PtyError> {
+        self.spawn_shell_pty_with_command(
+            context,
+            terminal_index,
+            terminal_image_protocol,
+            CommandBuilder::new(get_shell_path()),
+        )
+        .await
+    }
+
+    async fn spawn_shell_pty_with_command(
+        &self,
+        context: PtySpawnContext<'_>,
+        terminal_index: Option<u32>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
+        command: CommandBuilder,
     ) -> Result<u64, PtyError> {
         let PtySpawnContext {
             task_id,
@@ -919,186 +1157,66 @@ impl PtyManager {
             app_event_tx,
         } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
-        let key = shell_session_key(task_id, terminal_index);
-        let spawn_generation = NEXT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed);
-        self.agent_spawn_generations
-            .lock()
-            .await
-            .insert(key.clone(), spawn_generation);
-        let _pending_shell_spawn =
-            PendingShellSpawn::register(self, &key, task_id, spawn_generation);
-        let pid_file_name = pid_file_name_for_session_key(&key);
-        let lifecycle_lock = self.lifecycle_lock_for(&key).await;
+        let session_key = shell_session_key(task_id, terminal_index);
+        let (token, _pending_spawn, lifecycle_lock) =
+            self.begin_shell_spawn(&session_key, task_id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
-        if !self.is_current_spawn(&key, spawn_generation).await {
-            return Err(PtyError::SpawnFailed(format!(
-                "shell PTY for task {task_id} was cancelled before spawn"
-            )));
-        }
-        let old_session = self.sessions.lock().await.remove(&key);
-
-        if let Some(mut old_session) = old_session {
-            info!("[PTY] Replacing existing shell PTY for task {}", task_id);
-            if let Err(error) = self.terminate_session_process(&key, &mut old_session).await {
-                self.sessions.lock().await.insert(key.clone(), old_session);
-                return Err(error);
-            }
-            self.clear_session_tracking(&key).await;
-        }
-        let pid_dir = self.get_pid_dir()?;
-        std::fs::create_dir_all(&pid_dir)?;
-        let pid_file = pid_dir.join(&pid_file_name);
-
-        info!(
-            "Spawning shell PTY for task {} ({}x{})",
-            task_id, cols, rows
-        );
-
-        let pty_system = native_pty_system();
-        let size = PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        };
-
-        let pair = pty_system
-            .openpty(size)
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
-        let reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
-
-        let shell_path = get_shell_path();
-        let mut cmd = CommandBuilder::new(&shell_path);
-        cmd.cwd(&resolved_cwd);
-
-        for (key, value) in user_environment() {
-            cmd.env(key, value);
-        }
-        cmd.env("PWD", resolved_cwd.to_string_lossy().to_string());
-
-        for (key, value) in terminal_environment(terminal_image_protocol) {
-            cmd.env(key, value);
+        if !self
+            .is_current_spawn(&token.session_key, token.generation)
+            .await
+        {
+            return Err(token.stale_error(task_id, "cancelled before spawn"));
         }
 
-        let mut child = pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
-
-        drop(pair.slave);
-
-        let pid_description = format!("Shell PTY for task {task_id}");
-        let pid = require_root_pid_or_cleanup(child.process_id(), &pid_description, || {
-            let cleanup_result = child.kill();
-            let _ = child.try_wait();
-            cleanup_result
-        })?;
-        let managed_process = ManagedProcessIdentity::capture(pid).map_err(|error| {
-            force_kill_unverified_spawn(pid);
-            let _ = child.try_wait();
-            PtyError::SpawnFailed(format!(
-                "Failed to capture managed process identity for shell PTY task {task_id}: {error}"
-            ))
-        })?;
-        info!("Shell PTY for task {} started (PID: {})", task_id, pid);
-        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
-        let mut pending_session = Some(PtySession {
-            child,
-            master: pair.master,
-            writer,
-            instance_id,
-            kind: PtySessionKind::Shell {
-                task_id: task_id.to_string(),
-            },
-            pid_file_name: pid_file_name.clone(),
-            managed_process: managed_process.clone(),
-        });
-        if !self.is_current_spawn(&key, spawn_generation).await {
-            self.terminate_or_retain_unregistered_session(
-                &key,
-                pending_session.take().expect("pending shell session"),
-            )
+        self.replace_existing_shell_session(&session_key, task_id)
             .await?;
-            return Err(PtyError::SpawnFailed(format!(
-                "shell PTY for task {task_id} was replaced before registration"
-            )));
-        }
+        let spawned = self.create_shell_process(ShellProcessRequest {
+            task_id,
+            session_key: &session_key,
+            cwd: &resolved_cwd,
+            cols,
+            rows,
+            terminal_image_protocol,
+            command,
+        })?;
+        let instance_id = spawned.instance_id();
+        let managed_process = spawned.managed_process().clone();
+        let SpawnedPty {
+            reader,
+            session,
+            pid_file,
+        } = spawned;
 
-        let replaced_session = self.sessions.lock().await.insert(
-            key.clone(),
-            pending_session.take().expect("pending shell session"),
-        );
-        if let Some(mut replaced_session) = replaced_session {
-            self.terminate_session_process(&key, &mut replaced_session)
-                .await?;
-            self.clear_session_tracking(&key).await;
-        }
-        if let Err(error) = write_managed_process_identity(&pid_file, &managed_process) {
-            if let Some(failed_session) = self.sessions.lock().await.remove(&key) {
-                self.terminate_or_retain_unregistered_session(&key, failed_session)
-                    .await?;
-            }
-            self.clear_session_tracking(&key).await;
-            return Err(error);
-        }
+        self.register_spawned_session(SessionRegistrationRequest {
+            session_key: &session_key,
+            generation: token.generation,
+            session,
+            replacement_label: "shell",
+            stale_error: token.stale_error(task_id, "replaced before registration"),
+        })
+        .await?;
+        self.persist_session_identity(&session_key, &pid_file, &managed_process)
+            .await?;
 
         #[cfg(target_os = "macos")]
         {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
 
-        let last_output_time = Arc::new(AtomicU64::new(0));
-        {
-            let mut times = self.last_output.lock().await;
-            times.insert(key.clone(), Arc::clone(&last_output_time));
-        }
-        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
-            CLAUDE_BUFFER_CAPACITY,
-        )));
-        {
-            let mut buffers = self.output_buffers.lock().await;
-            buffers.insert(key.clone(), Arc::clone(&ring_buffer));
-        }
-        let ring_buffer_emitter = Arc::clone(&ring_buffer);
-
-        let rx = spawn_pty_output_reader(
+        let stream_state = self.register_shell_stream_state(&session_key).await;
+        self.start_shell_event_stream(ShellEventStreamRequest {
+            session_key,
+            instance_id,
             reader,
-            key.clone(),
-            Some(Arc::clone(&last_output_time)),
-            None,
-        );
-        spawn_batched_pty_event_emitter(
-            rx,
-            PtyEventEmitterConfig {
-                session_key: key.clone(),
-                instance_id,
+            stream_state,
+            lifecycle_lock: lifecycle_lock.clone(),
+            pid_file,
+            event_sink: PtyEventSink {
                 app_handle,
                 app_event_tx,
-                ring_buffer: ring_buffer_emitter,
-                attachment_hub: None,
-                attachment_hubs: None,
-                exit_action: PtyExitAction::Cleanup {
-                    sessions: Arc::clone(&self.sessions),
-                    last_output: Arc::clone(&self.last_output),
-                    output_buffers: Arc::clone(&self.output_buffers),
-                    lifecycle_lock: lifecycle_lock.clone(),
-                    pid_file,
-                    emit_agent_exit: false,
-                },
             },
-        );
-        let mut generations = self.agent_spawn_generations.lock().await;
-        if generations.get(&key) == Some(&spawn_generation) {
-            generations.remove(&key);
-        }
-
+        });
+        self.finish_shell_spawn(&token).await;
         Ok(instance_id)
     }
 }
@@ -1177,6 +1295,13 @@ mod tests {
     use std::path::Path;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    fn long_running_shell_command() -> CommandBuilder {
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.arg("-c");
+        command.arg("exec sleep 30");
+        command
+    }
 
     struct LockCheckingAgentAdapter {
         sessions: PtySessions,
@@ -1292,7 +1417,7 @@ mod tests {
                 },
             )
             .expect("process creation stage should succeed");
-        let SpawnedAgentPty {
+        let SpawnedPty {
             reader,
             session,
             pid_file,
@@ -1301,7 +1426,14 @@ mod tests {
             manager.begin_agent_spawn(task_id, adapter.label()).await;
 
         let result = manager
-            .register_agent_session(task_id, stale_token, session)
+            .register_spawned_session(SessionRegistrationRequest {
+                session_key: task_id,
+                generation: stale_token.generation,
+                session,
+                replacement_label: stale_token.label,
+                stale_error: stale_token
+                    .stale_error(task_id, "before session registration completed"),
+            })
             .await;
 
         assert!(matches!(result, Err(PtyError::SpawnFailed(_))));
@@ -1510,6 +1642,137 @@ mod tests {
         assert!(!manager.sessions.lock().await.contains_key(task_id));
     }
 
+    #[tokio::test]
+    async fn shell_spawn_persists_identity_and_owns_lifecycle_state_until_cleanup() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let pid_dir = tmp_dir.path().join("pids");
+        manager.set_pid_dir(pid_dir.clone());
+        let task_id = "shell-lifecycle";
+        let session_key = shell_session_key(task_id, Some(2));
+        let pid_file = pid_dir.join(format!("{session_key}.pid"));
+
+        let instance_id = manager
+            .spawn_shell_pty_with_command(
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                Some(2),
+                None,
+                long_running_shell_command(),
+            )
+            .await
+            .expect("shell PTY should spawn");
+
+        let expected_identity = {
+            let sessions = manager.sessions.lock().await;
+            let session = sessions
+                .get(&session_key)
+                .expect("spawned shell should be registered");
+            assert_eq!(session.instance_id, instance_id);
+            assert!(matches!(
+                &session.kind,
+                PtySessionKind::Shell { task_id: stored_task_id } if stored_task_id == task_id
+            ));
+            session.managed_process.clone()
+        };
+        let persisted_identity: ManagedProcessIdentity = serde_json::from_str(
+            &std::fs::read_to_string(&pid_file).expect("shell identity should be persisted"),
+        )
+        .expect("shell identity should parse");
+        assert_eq!(persisted_identity, expected_identity);
+        assert!(manager
+            .output_buffers
+            .lock()
+            .await
+            .contains_key(&session_key));
+        assert!(manager.last_output.lock().await.contains_key(&session_key));
+        assert!(manager.lifecycle_locks.contains_key(&session_key));
+        assert!(!manager
+            .agent_spawn_generations
+            .lock()
+            .await
+            .contains_key(&session_key));
+        assert!(!manager.pending_shell_spawns.contains_key(&session_key));
+
+        manager
+            .kill_pty(&session_key)
+            .await
+            .expect("shell cleanup should succeed");
+        assert!(!pid_file.exists());
+        assert!(!manager
+            .output_buffers
+            .lock()
+            .await
+            .contains_key(&session_key));
+        assert!(!manager.last_output.lock().await.contains_key(&session_key));
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while manager.lifecycle_locks.contains_key(&session_key) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("shell teardown should release its lifecycle lock");
+    }
+
+    #[tokio::test]
+    async fn unresolved_shell_recovery_metadata_blocks_spawn_without_clobbering_record() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let pid_dir = tmp_dir.path().join("pids");
+        manager.set_pid_dir(pid_dir.clone());
+        let task_id = "recovery-conflict-shell";
+        let session_key = shell_session_key(task_id, Some(0));
+        let pid_file = pid_dir.join(format!("{session_key}.pid"));
+        std::fs::create_dir_all(&pid_dir).expect("PID directory should be created");
+        let unresolved_identity = ManagedProcessIdentity {
+            version: 1,
+            root_pid: 999_991,
+            process_group_id: 999_991,
+            session_id: 999_991,
+            root_start_time: 42,
+        };
+        write_managed_process_identity(&pid_file, &unresolved_identity)
+            .expect("unresolved identity should persist");
+
+        let result = manager
+            .spawn_shell_pty_with_command(
+                PtySpawnContext {
+                    task_id,
+                    cwd: tmp_dir.path(),
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                Some(0),
+                None,
+                long_running_shell_command(),
+            )
+            .await;
+
+        assert!(
+            matches!(result, Err(PtyError::CleanupFailed(ref message)) if message.contains("existing recovery metadata was preserved"))
+        );
+        let persisted: ManagedProcessIdentity = serde_json::from_str(
+            &std::fs::read_to_string(&pid_file).expect("recovery metadata should remain"),
+        )
+        .expect("recovery metadata should still parse");
+        assert_eq!(persisted, unresolved_identity);
+        assert!(!manager.sessions.lock().await.contains_key(&session_key));
+        assert!(!manager
+            .output_buffers
+            .lock()
+            .await
+            .contains_key(&session_key));
+        assert!(!manager.last_output.lock().await.contains_key(&session_key));
+    }
+
     #[test]
     fn missing_root_pid_runs_emergency_child_cleanup() {
         let cleanup_called = std::cell::Cell::new(false);
@@ -1629,7 +1892,7 @@ mod tests {
         let spawn_task_id = task_id.to_string();
         let spawn_task = tokio::spawn(async move {
             spawn_manager
-                .spawn_shell_pty(
+                .spawn_shell_pty_with_command(
                     PtySpawnContext {
                         task_id: &spawn_task_id,
                         cwd: &spawn_cwd,
@@ -1640,6 +1903,7 @@ mod tests {
                     },
                     Some(0),
                     None,
+                    long_running_shell_command(),
                 )
                 .await
         });
@@ -1664,7 +1928,16 @@ mod tests {
         tokio::task::yield_now().await;
         drop(lifecycle_guard);
 
-        let _ = spawn_task.await.expect("spawn task should join");
+        let spawn_result = spawn_task.await.expect("spawn task should join");
+        assert!(
+            matches!(
+                spawn_result,
+                Err(PtyError::SpawnFailed(ref message))
+                    if message.contains("cancelled before spawn")
+                        || message.contains("replaced before registration")
+            ),
+            "cleanup should cancel the pending shell spawn: {spawn_result:?}"
+        );
         cleanup_task
             .await
             .expect("cleanup task should join")
