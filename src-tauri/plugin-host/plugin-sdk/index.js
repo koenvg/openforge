@@ -207,6 +207,15 @@ function assertOpenForgePluginCapabilitiesMatchSchema() {
 	if (schemaCapabilities.length !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS.length || schemaCapabilities.some((capability, index) => capability !== OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS[index])) throw new Error("OpenForgePluginCapability must match openforgePackageMetadataSchema.json properties.requires.items.enum");
 }
 assertOpenForgePluginCapabilitiesMatchSchema();
+var DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 65536;
+var MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 4;
+var MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 1048576;
+/** Applies the default external text chunk size and rejects values outside host limits. */
+function resolveExternalTextFileChunkSize(chunkSizeBytes) {
+	const size = chunkSizeBytes ?? 65536;
+	if (!Number.isInteger(size) || size < 4 || size > 1048576) throw new RangeError(`chunkSizeBytes must be an integer between 4 and ${MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES}`);
+	return size;
+}
 var TaskFollowUpError = class extends Error {
 	code;
 	constructor(code, message) {
@@ -437,6 +446,7 @@ function createTestingCalls() {
 		fsUserDataWrites: [],
 		fsExternalReadDirs: [],
 		fsExternalReads: [],
+		fsExternalReadTextFileChunks: [],
 		shellSpawns: [],
 		shellWrites: [],
 		shellResizes: [],
@@ -571,6 +581,7 @@ var TestingRegistryServices = class {
 	storage;
 	config = /* @__PURE__ */ new Map();
 	seededTasks;
+	externalTextFiles;
 	claims = new TestingContributionClaims();
 	constructor(options = {}) {
 		this.pluginId = options.pluginId ?? "test-plugin";
@@ -586,6 +597,7 @@ var TestingRegistryServices = class {
 		this.calls = createTestingCalls();
 		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
 		this.seededTasks = options.tasks ?? [];
+		this.externalTextFiles = options.externalTextFiles ?? [];
 	}
 	localQualifiedId(kind, id) {
 		assertLocalId(kind, id);
@@ -695,6 +707,22 @@ var TestingBackendServicesFake = class {
 };
 //#endregion
 //#region packages/plugin-sdk/src/testing/commonApiFake.ts
+var UTF8_ENCODER = new TextEncoder();
+function* splitExternalTextFile(content, maxBytes) {
+	let chunk = "";
+	let chunkBytes = 0;
+	for (const character of content) {
+		const characterBytes = UTF8_ENCODER.encode(character).byteLength;
+		if (chunkBytes + characterBytes > maxBytes && chunk.length > 0) {
+			yield chunk;
+			chunk = "";
+			chunkBytes = 0;
+		}
+		chunk += character;
+		chunkBytes += characterBytes;
+	}
+	if (chunk.length > 0) yield chunk;
+}
 var TestingCommonApiFake = class {
 	services;
 	commands = /* @__PURE__ */ new Map();
@@ -913,6 +941,23 @@ var TestingCommonApiFake = class {
 					readTextFile: async (request) => {
 						this.services.calls.fsExternalReads.push(request);
 						return "";
+					},
+					readTextFileChunks: (request) => {
+						const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes);
+						const { root, path, signal } = request;
+						this.services.calls.fsExternalReadTextFileChunks.push({
+							root,
+							path,
+							chunkSizeBytes
+						});
+						const content = this.services.externalTextFiles.find((file) => file.root === root && file.path === path)?.content ?? "";
+						return (async function* () {
+							for (const chunk of splitExternalTextFile(content, chunkSizeBytes)) {
+								signal?.throwIfAborted();
+								yield chunk;
+							}
+							signal?.throwIfAborted();
+						})();
 					}
 				}
 			}
@@ -2008,4 +2053,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { BrowserSurfaceError, MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { BrowserSurfaceError, DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MAX_SUPPORTED_API_VERSION, MIN_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TaskFollowUpError, TestingOpenForgeRegistryFake, TestingSubscriptionSink, buildProjectFileTree, canMergePullRequest, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, flattenVisibleProjectFileTree, formatProjectFileTreeSize, getMergeReadiness, getProjectFileTreeDepth, getProjectFileTreeItemAccessibility, getProjectFileTreeKeyboardAction, getProjectFileTreeParentPath, hasMergeConflicts, hasProjectFileTreeShortcutModifier, isAllowedBrowserSurfaceUrl, isClosedUnmergedPullRequest, isMergedPullRequest, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, projectFileTreePathToId, resolveExternalTextFileChunkSize, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

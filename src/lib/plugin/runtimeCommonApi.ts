@@ -200,6 +200,7 @@ export class RuntimeCommonApiRegistry {
         external: {
           readDir: async () => unavailableCapability('fs.external.readDir'),
           readTextFile: async () => unavailableCapability('fs.external.readTextFile'),
+          readTextFileChunks: () => unavailableCapability('fs.external.readTextFileChunks'),
         },
       },
     }

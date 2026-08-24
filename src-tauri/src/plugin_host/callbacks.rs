@@ -49,6 +49,9 @@ impl PluginHost {
             "openforge.fs.external.readTextFile" => {
                 self.read_external_text_file_for_host(params).await
             }
+            "openforge.fs.external.readTextFileChunk" => {
+                self.read_external_text_file_chunk_for_host(params).await
+            }
             "openforge.shell.spawn" => self.spawn_shell_for_host(params).await,
             "openforge.shell.write" => self.write_shell_for_host(params).await,
             "openforge.shell.resize" => self.resize_shell_for_host(params).await,
@@ -116,6 +119,18 @@ pub(super) fn optional_param_usize(params: &Value, key: &str) -> Result<Option<u
         }
         Some(_) => Err(format!(
             "plugin host callback param must be a positive integer or null: {key}"
+        )),
+    }
+}
+
+pub(super) fn optional_param_u64(params: &Value, key: &str) -> Result<Option<u64>, String> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => number.as_u64().map(Some).ok_or_else(|| {
+            format!("plugin host callback param must be a non-negative integer: {key}")
+        }),
+        Some(_) => Err(format!(
+            "plugin host callback param must be a non-negative integer or null: {key}"
         )),
     }
 }

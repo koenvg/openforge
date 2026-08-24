@@ -37,18 +37,56 @@ describe('testing capability fakes', () => {
   })
 
   it('records backend user data and external filesystem calls', async () => {
-    const api = createMockBackendOpenForgeApi({ pluginId: 'skill-usage' })
+    const api = createMockBackendOpenForgeApi({
+      pluginId: 'skill-usage',
+      externalTextFiles: [{
+        root: '/Users/test/.pi/agent/sessions',
+        path: '2026/session.jsonl',
+        content: 'ab🙂cd\n',
+      }],
+    })
 
     await api.fs.userData.readDir({ path: 'telemetry' })
     await api.fs.userData.readTextFile({ path: 'telemetry/usage.json' })
     await api.fs.userData.writeTextFile({ path: 'telemetry/usage.json', content: '{"runs":1}' })
     await api.fs.external.readDir({ root: '/Users/test/.pi/agent/sessions', path: '2026' })
     await api.fs.external.readTextFile({ root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' })
+    const chunks: string[] = []
+    for await (const chunk of api.fs.external.readTextFileChunks({
+      root: '/Users/test/.pi/agent/sessions',
+      path: '2026/session.jsonl',
+      chunkSizeBytes: 4,
+    })) {
+      chunks.push(chunk)
+    }
 
     expect(api.__testing.calls.fsUserDataReadDirs).toEqual([{ path: 'telemetry' }])
     expect(api.__testing.calls.fsUserDataReads).toEqual([{ path: 'telemetry/usage.json' }])
     expect(api.__testing.calls.fsUserDataWrites).toEqual([{ path: 'telemetry/usage.json', content: '{"runs":1}' }])
     expect(api.__testing.calls.fsExternalReadDirs).toEqual([{ root: '/Users/test/.pi/agent/sessions', path: '2026' }])
     expect(api.__testing.calls.fsExternalReads).toEqual([{ root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' }])
+    expect(chunks).toEqual(['ab', '🙂', 'cd\n'])
+    expect(api.__testing.calls.fsExternalReadTextFileChunks).toEqual([{
+      root: '/Users/test/.pi/agent/sessions',
+      path: '2026/session.jsonl',
+      chunkSizeBytes: 4,
+    }])
+  })
+
+  it('stops fake external text iteration after cancellation', async () => {
+    const api = createMockBackendOpenForgeApi({
+      externalTextFiles: [{ root: '/sessions', path: 'session.jsonl', content: 'abcdef' }],
+    })
+    const controller = new AbortController()
+    const iterator = api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'session.jsonl',
+      chunkSizeBytes: 4,
+      signal: controller.signal,
+    })[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toEqual({ value: 'abcd', done: false })
+    controller.abort()
+    await expect(iterator.next()).rejects.toMatchObject({ name: 'AbortError' })
   })
 })

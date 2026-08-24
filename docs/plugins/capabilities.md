@@ -78,7 +78,7 @@ Backend plugins are loaded with `defineBackendPlugin(...)` in the trusted shared
 | --- | --- | --- |
 | `background` | `openforge.background` | Register background services with `global`, `project`, or `task` scope. OpenForge starts newly registered services after backend activation. |
 | `fs` | `openforge.fs.userData` | Read directories and complete UTF-8 files, and write UTF-8 files at relative paths in the host-owned user-data directory for the calling plugin. Parent directories are created for writes. |
-| `fs` | `openforge.fs.external` | Read directories and complete UTF-8 files at relative paths under an absolute external root supplied on each call. The host rejects relative roots and traversal outside the canonical root. This API cannot write external files. |
+| `fs` | `openforge.fs.external` | Read directories, complete UTF-8 files, or byte-bounded UTF-8 chunks at relative paths under an absolute external root supplied on each call. The host rejects relative roots and traversal or symlink escapes outside the canonical root. This API cannot write external files. |
 
 ### Frontend/backend bridge capability
 

@@ -19,6 +19,8 @@ export type {
   TestingBackendMethodContribution,
   TestingCommandContribution,
   TestingContributionBase,
+  TestingExternalTextFile,
+  TestingExternalTextFileChunksCall,
   TestingEventListenerContribution,
   TestingInjectionPointContribution,
   TestingOpenForgeApiCalls,

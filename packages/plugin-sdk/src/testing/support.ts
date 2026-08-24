@@ -16,6 +16,7 @@ import type { Task } from '../domain'
 import type {
   TestingCommandContribution,
   TestingMaybePromise,
+  TestingExternalTextFile,
   TestingOpenForgeApiCalls,
   TestingOpenForgeApiOptions,
   TestingRuntimeKind,
@@ -79,6 +80,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     fsUserDataWrites: [],
     fsExternalReadDirs: [],
     fsExternalReads: [],
+    fsExternalReadTextFileChunks: [],
     shellSpawns: [],
     shellWrites: [],
     shellResizes: [],
@@ -236,6 +238,7 @@ export class TestingRegistryServices {
   readonly storage: PluginStorage
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
+  readonly externalTextFiles: TestingExternalTextFile[]
   readonly claims = new TestingContributionClaims()
 
   constructor(options: TestingOpenForgeApiOptions = {}) {
@@ -252,6 +255,7 @@ export class TestingRegistryServices {
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
+    this.externalTextFiles = options.externalTextFiles ?? []
   }
 
   localQualifiedId(kind: TestingRuntimeKind, id: string): string {

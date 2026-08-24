@@ -1,3 +1,4 @@
+import { resolveExternalTextFileChunkSize } from '../types'
 import type {
   BackendOpenForgeAPI,
   CommandRegistration,
@@ -21,6 +22,25 @@ import type {
   TestingEventHandler,
   TestingEventListenerContribution,
 } from './contracts'
+
+const UTF8_ENCODER = new TextEncoder()
+
+
+function* splitExternalTextFile(content: string, maxBytes: number): Generator<string> {
+  let chunk = ''
+  let chunkBytes = 0
+  for (const character of content) {
+    const characterBytes = UTF8_ENCODER.encode(character).byteLength
+    if (chunkBytes + characterBytes > maxBytes && chunk.length > 0) {
+      yield chunk
+      chunk = ''
+      chunkBytes = 0
+    }
+    chunk += character
+    chunkBytes += characterBytes
+  }
+  if (chunk.length > 0) yield chunk
+}
 
 export type TestingCommonApi = OpenForgeCommonAPI & Pick<FrontendOpenForgeAPI, 'navigation'>
 
@@ -234,6 +254,21 @@ export class TestingCommonApiFake {
           readTextFile: async (request) => {
             this.services.calls.fsExternalReads.push(request)
             return ''
+          },
+          readTextFileChunks: (request) => {
+            const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes)
+            const { root, path, signal } = request
+            this.services.calls.fsExternalReadTextFileChunks.push({ root, path, chunkSizeBytes })
+            const content = this.services.externalTextFiles.find(
+              file => file.root === root && file.path === path,
+            )?.content ?? ''
+            return (async function* () {
+              for (const chunk of splitExternalTextFile(content, chunkSizeBytes)) {
+                signal?.throwIfAborted()
+                yield chunk
+              }
+              signal?.throwIfAborted()
+            })()
           },
         },
       },

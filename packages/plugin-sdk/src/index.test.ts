@@ -7,6 +7,7 @@ import {
   isOpenForgePackageMetadata,
   createMockOpenForgeApi,
   createOpenForgeRegistryFake,
+  resolveExternalTextFileChunkSize,
   validateOpenForgePackageMetadata,
 } from './index'
 
@@ -19,6 +20,9 @@ describe('Plugin SDK root export', () => {
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.title).toBe('OpenForge package metadata')
     expect(typeof createMockOpenForgeApi).toBe('function')
     expect(typeof createOpenForgeRegistryFake).toBe('function')
+    expect(resolveExternalTextFileChunkSize()).toBe(64 * 1024)
+    expect(resolveExternalTextFileChunkSize(4)).toBe(4)
+    expect(() => resolveExternalTextFileChunkSize(3)).toThrow('chunkSizeBytes must be an integer between 4 and 1048576')
   })
 
   it('does not expose legacy manifest contribution validation from the root contract', async () => {

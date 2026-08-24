@@ -27,6 +27,7 @@ import type {
   TaskStartPrefixContext,
   ExternalReadDirectoryRequest,
   ExternalReadFileRequest,
+  ExternalReadTextFileChunksRequest,
   UserDataDirectoryRequest,
   UserDataFileRequest,
   UserDataFileWriteRequest,
@@ -38,6 +39,14 @@ export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 
 export type TestingMaybePromise<T> = T | Promise<T>
 export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
 export type TestingEventHandler = (payload: unknown) => void
+
+export interface TestingExternalTextFile extends ExternalReadFileRequest {
+  content: string
+}
+
+export type TestingExternalTextFileChunksCall = Omit<ExternalReadTextFileChunksRequest, 'signal' | 'chunkSizeBytes'> & {
+  chunkSizeBytes: number
+}
 
 export interface TestingOpenForgeApiOptions {
   pluginId?: string
@@ -53,6 +62,8 @@ export interface TestingOpenForgeApiOptions {
    * mirroring the host capability. Defaults to an empty list.
    */
   tasks?: Task[]
+  /** UTF-8 files returned by `fs.external.readTextFileChunks`. Defaults to none. */
+  externalTextFiles?: TestingExternalTextFile[]
 }
 
 export interface TestingOpenForgeApiCalls {
@@ -80,6 +91,7 @@ export interface TestingOpenForgeApiCalls {
   fsUserDataWrites: UserDataFileWriteRequest[]
   fsExternalReadDirs: ExternalReadDirectoryRequest[]
   fsExternalReads: ExternalReadFileRequest[]
+  fsExternalReadTextFileChunks: TestingExternalTextFileChunksCall[]
   shellSpawns: ShellSpawnRequest[]
   shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>
   shellResizes: Array<{ taskId: string; terminalIndex: number; cols: number; rows: number }>

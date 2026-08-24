@@ -215,6 +215,48 @@ async fn host_filesystem_callbacks_scope_user_data_and_external_reads() {
 }
 
 #[tokio::test]
+async fn host_filesystem_callbacks_stream_external_text_in_byte_bounded_chunks() {
+    let app_data_dir = tempfile::tempdir().expect("app data dir");
+    let resource_dir = tempfile::tempdir().expect("resource dir");
+    let external_root = tempfile::tempdir().expect("external root");
+    let content = "ab🙂cd\n";
+    std::fs::write(external_root.path().join("session.jsonl"), content).expect("session fixture");
+    let app = AppHandle::with_app_paths(
+        app_data_dir.path().to_path_buf(),
+        resource_dir.path().to_path_buf(),
+    );
+    let host = PluginHost::new(app);
+    let mut offset = 0;
+    let mut reconstructed = String::new();
+
+    loop {
+        let chunk = host
+            .handle_host_callback(
+                "openforge.fs.external.readTextFileChunk",
+                &json!({
+                    "pluginId": "skill-usage",
+                    "root": external_root.path(),
+                    "path": "session.jsonl",
+                    "offset": offset,
+                    "maxBytes": 4,
+                }),
+            )
+            .await
+            .expect("read external text chunk");
+        let chunk_content = chunk["content"].as_str().expect("chunk content");
+        assert!(chunk_content.len() <= 4);
+        reconstructed.push_str(chunk_content);
+        offset = chunk["nextOffset"].as_u64().expect("next offset");
+        if chunk["eof"].as_bool().expect("eof flag") {
+            break;
+        }
+    }
+
+    assert_eq!(reconstructed, content);
+    assert_eq!(offset, content.len() as u64);
+}
+
+#[tokio::test]
 async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
     let app_data_dir = tempfile::tempdir().expect("app data dir");
     let resource_dir = tempfile::tempdir().expect("resource dir");
@@ -245,6 +287,44 @@ async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
         .await
         .expect_err("external traversal should fail");
     assert!(external_traversal.contains("Path traversal detected"));
+
+    let external_chunk_traversal = host
+        .handle_host_callback(
+            "openforge.fs.external.readTextFileChunk",
+            &json!({
+                "pluginId": "skill-usage",
+                "root": &external_root,
+                "path": "../secret.txt",
+                "offset": 0,
+                "maxBytes": 4,
+            }),
+        )
+        .await
+        .expect_err("external chunk traversal should fail");
+    assert!(external_chunk_traversal.contains("Path traversal detected"));
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(
+            external_parent.path().join("secret.txt"),
+            external_root.join("linked-secret.txt"),
+        )
+        .expect("outside-root symlink fixture");
+        let external_chunk_symlink = host
+            .handle_host_callback(
+                "openforge.fs.external.readTextFileChunk",
+                &json!({
+                    "pluginId": "skill-usage",
+                    "root": &external_root,
+                    "path": "linked-secret.txt",
+                    "offset": 0,
+                    "maxBytes": 4,
+                }),
+            )
+            .await
+            .expect_err("external chunk symlink escape should fail");
+        assert!(external_chunk_symlink.contains("Path traversal detected"));
+    }
 
     let user_data_traversal = host
         .handle_host_callback(
