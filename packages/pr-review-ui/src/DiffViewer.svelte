@@ -174,7 +174,7 @@
   // Large diff warning banner calculations
   const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
   const totalFiles = $derived(files.length)
-  const collapsedCount = $derived(fileCollapse.collapsedFiles.size)
+  const autoCollapsedFileCount = $derived(fileCollapse.autoCollapsedFileCount)
   const showLargeDiffWarning = $derived(totalChanges > 5000)
   const sortedFiles = $derived(sortFilesAsTree(files))
 
@@ -333,7 +333,7 @@
     {:else}
       {#if showLargeDiffWarning}
         <div class="alert alert-warning py-2 px-4 rounded-none border-x-0 border-t-0 text-sm">
-          <span>Large diff — {totalFiles} files, {totalChanges} total changes. {collapsedCount} files auto-collapsed for performance.</span>
+          <span>Large diff — {totalFiles} files, {totalChanges} total changes. {autoCollapsedFileCount} files auto-collapsed for performance.</span>
         </div>
       {/if}
       <div style="height: {virtualizer.totalSize}px; width: 100%; position: relative;">
