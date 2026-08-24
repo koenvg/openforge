@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugin_platform::{PluginPlatformError, PluginPlatformResult};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,27 +34,25 @@ fn empty_package_metadata() -> String {
 }
 
 impl AppRegisterBuiltinPluginRequest {
-    fn into_builtin_plugin_row(self) -> Result<db::PluginRow, String> {
+    fn into_builtin_plugin_row(self) -> PluginPlatformResult<db::PluginRow> {
         let is_builtin =
             crate::builtin_plugins::has_sentinel_install_path(&self.id, &self.install_path);
         if !is_builtin {
-            return Err(
-                "trusted built-in plugin registration requires a known built-in plugin id and matching builtin: install path"
-                    .to_string(),
-            );
+            return Err(PluginPlatformError::invalid_request(
+                "trusted built-in plugin registration requires a known built-in plugin id and matching builtin: install path",
+            ));
         }
 
         if self.source_kind != "builtin" {
-            return Err(
-                "trusted built-in plugin registration requires sourceKind builtin".to_string(),
-            );
+            return Err(PluginPlatformError::invalid_request(
+                "trusted built-in plugin registration requires sourceKind builtin",
+            ));
         }
 
         if !self.source_spec.is_empty() && self.source_spec != self.id {
-            return Err(
-                "trusted built-in plugin registration requires sourceSpec to match the plugin id"
-                    .to_string(),
-            );
+            return Err(PluginPlatformError::invalid_request(
+                "trusted built-in plugin registration requires sourceSpec to match the plugin id",
+            ));
         }
 
         Ok(db::PluginRow {
@@ -87,9 +86,9 @@ fn plugin_platform(
     )
 }
 
-fn map_plugin_platform_error(message: String) -> (StatusCode, String) {
+fn map_plugin_platform_error(error: PluginPlatformError) -> (StatusCode, String) {
     crate::plugin_platform_adapter::map_plugin_platform_error(
-        message,
+        error,
         crate::plugin_platform_adapter::PluginPlatformTransport::AppInvoke,
     )
 }

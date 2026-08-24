@@ -5,6 +5,7 @@ use crate::{
     plugin_command_broker::{
         PluginCommandBroker, PluginCommandDiscoveryContext, PluginCommandDiscoveryError,
     },
+    plugin_platform::PluginPlatformError,
 };
 use axum::{
     extract::{Json, State},
@@ -123,16 +124,16 @@ fn http_plugin_platform(
 }
 
 #[cfg(test)]
-fn http_plugin_error_status(message: &str) -> StatusCode {
+fn http_plugin_error_status(error: &PluginPlatformError) -> StatusCode {
     crate::plugin_platform_adapter::plugin_platform_error_status(
-        message,
+        error,
         crate::plugin_platform_adapter::PluginPlatformTransport::HttpPluginManagement,
     )
 }
 
-fn map_http_plugin_error(message: String) -> (StatusCode, String) {
+fn map_http_plugin_error(error: PluginPlatformError) -> (StatusCode, String) {
     crate::plugin_platform_adapter::map_plugin_platform_error(
-        message,
+        error,
         crate::plugin_platform_adapter::PluginPlatformTransport::HttpPluginManagement,
     )
 }
@@ -377,22 +378,35 @@ mod tests {
     }
 
     #[test]
-    fn plugin_error_status_maps_existing_messages() {
-        assert_eq!(
-            http_plugin_error_status("Unknown plugin: plugin.test"),
-            StatusCode::NOT_FOUND
-        );
-        assert_eq!(
-            http_plugin_error_status("backend entry must stay within the plugin install root"),
-            StatusCode::BAD_REQUEST
-        );
-        assert_eq!(
-            http_plugin_error_status("plugin host state is not available"),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        assert_eq!(
-            http_plugin_error_status("unexpected plugin failure"),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
+    fn plugin_error_variants_preserve_existing_http_statuses_and_messages() {
+        let cases = [
+            (
+                PluginPlatformError::not_found("Unknown plugin: plugin.test"),
+                StatusCode::NOT_FOUND,
+                "Unknown plugin: plugin.test",
+            ),
+            (
+                PluginPlatformError::invalid_request(
+                    "backend entry must stay within the plugin install root",
+                ),
+                StatusCode::BAD_REQUEST,
+                "backend entry must stay within the plugin install root",
+            ),
+            (
+                PluginPlatformError::unavailable("plugin host state is not available"),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "plugin host state is not available",
+            ),
+            (
+                PluginPlatformError::internal("unexpected plugin failure"),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "unexpected plugin failure",
+            ),
+        ];
+
+        for (error, expected_status, expected_message) in cases {
+            assert_eq!(http_plugin_error_status(&error), expected_status);
+            assert_eq!(error.to_string(), expected_message);
+        }
     }
 }

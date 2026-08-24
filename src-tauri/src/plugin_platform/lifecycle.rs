@@ -1,4 +1,4 @@
-use super::PluginPlatform;
+use super::{PluginPlatform, PluginPlatformError, PluginPlatformResult};
 use crate::db;
 use std::{
     collections::HashMap,
@@ -85,64 +85,74 @@ fn acquire_mutex<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl PluginPlatform<'_> {
-    pub(crate) fn register_builtin_plugin(&self, plugin: &db::PluginRow) -> Result<(), String> {
+    pub(crate) fn register_builtin_plugin(
+        &self,
+        plugin: &db::PluginRow,
+    ) -> PluginPlatformResult<()> {
         if !plugin.is_builtin
             || plugin.source_kind != "builtin"
             || !crate::builtin_plugins::has_sentinel_install_path(&plugin.id, &plugin.install_path)
         {
-            return Err(
-                "trusted built-in plugin registration requires a known built-in plugin row"
-                    .to_string(),
-            );
+            return Err(PluginPlatformError::invalid_request(
+                "trusted built-in plugin registration requires a known built-in plugin row",
+            ));
         }
 
         let db = db::acquire_db(self.db);
-        db.install_plugin(plugin)
-            .map_err(|error| format!("Failed to register built-in plugin: {error}"))
+        db.install_plugin(plugin).map_err(|error| {
+            PluginPlatformError::invalid_request(format!(
+                "Failed to register built-in plugin: {error}"
+            ))
+        })
     }
 
     pub(crate) fn install_local_plugin_bundle(
         &self,
         source_path: &Path,
-    ) -> Result<db::PluginRow, String> {
+    ) -> PluginPlatformResult<db::PluginRow> {
         let prepared = crate::plugin_installation::prepare_local_plugin_bundle(
             source_path,
             self.app_data_dir()?,
-        )?;
+        )
+        .map_err(PluginPlatformError::internal)?;
         self.finalize_plugin_installation(prepared, "Failed to install local plugin")
     }
 
     pub(crate) async fn install_npm_plugin_bundle(
         &self,
         package_name: &str,
-    ) -> Result<db::PluginRow, String> {
+    ) -> PluginPlatformResult<db::PluginRow> {
         let app_data_dir = self.app_data_dir()?.to_path_buf();
         let prepared =
             crate::plugin_installation::prepare_npm_plugin_bundle(package_name, &app_data_dir)
-                .await?;
+                .await
+                .map_err(PluginPlatformError::internal)?;
         self.finalize_plugin_installation(prepared, "Failed to install npm plugin")
     }
 
     pub(crate) async fn install_git_plugin_bundle(
         &self,
         git_spec: &str,
-    ) -> Result<db::PluginRow, String> {
+    ) -> PluginPlatformResult<db::PluginRow> {
         let app_data_dir = self.app_data_dir()?.to_path_buf();
         let prepared =
-            crate::plugin_installation::prepare_git_plugin_bundle(git_spec, &app_data_dir).await?;
+            crate::plugin_installation::prepare_git_plugin_bundle(git_spec, &app_data_dir)
+                .await
+                .map_err(PluginPlatformError::internal)?;
         self.finalize_plugin_installation(prepared, "Failed to install git plugin")
     }
 
     pub(crate) async fn install_plugin_package_source(
         &self,
         source_spec: &str,
-    ) -> Result<db::PluginRow, String> {
+    ) -> PluginPlatformResult<db::PluginRow> {
         let app_data_dir = self.app_data_dir()?.to_path_buf();
         let prepared = crate::plugin_installation::prepare_plugin_package_from_source_spec_async(
             source_spec,
             &app_data_dir,
         )
-        .await?;
+        .await
+        .map_err(PluginPlatformError::internal)?;
         self.finalize_plugin_installation(prepared, "Failed to install plugin package source")
     }
 
@@ -150,7 +160,7 @@ impl PluginPlatform<'_> {
         &self,
         prepared: crate::plugin_installation::PreparedPluginInstallation,
         registration_error_context: &str,
-    ) -> Result<db::PluginRow, String> {
+    ) -> PluginPlatformResult<db::PluginRow> {
         self.finalize_plugin_installation_with(prepared, registration_error_context, || {})
     }
 
@@ -159,21 +169,22 @@ impl PluginPlatform<'_> {
         prepared: crate::plugin_installation::PreparedPluginInstallation,
         registration_error_context: &str,
         after_package_publish: F,
-    ) -> Result<db::PluginRow, String>
+    ) -> PluginPlatformResult<db::PluginRow>
     where
         F: FnOnce(),
     {
         let lifecycle_lock = self.lifecycle_locks.lock_for(prepared.plugin_id());
         let _lifecycle_guard = lifecycle_lock.acquire();
-        let plugin = prepared.finalize()?;
+        let plugin = prepared.finalize().map_err(PluginPlatformError::internal)?;
         after_package_publish();
         let db = db::acquire_db(self.db);
-        db.install_plugin(&plugin)
-            .map_err(|error| format!("{registration_error_context}: {error}"))?;
+        db.install_plugin(&plugin).map_err(|error| {
+            PluginPlatformError::internal(format!("{registration_error_context}: {error}"))
+        })?;
         Ok(plugin)
     }
 
-    pub(crate) fn uninstall_plugin(&self, plugin_id: &str) -> Result<(), String> {
+    pub(crate) fn uninstall_plugin(&self, plugin_id: &str) -> PluginPlatformResult<()> {
         let lifecycle_lock = self.lifecycle_locks.lock_for(plugin_id);
         let _lifecycle_guard = lifecycle_lock.acquire();
         // Keep the outer database guard through filesystem finalization so concurrent
@@ -181,17 +192,23 @@ impl PluginPlatform<'_> {
         let db = db::acquire_db(self.db);
         let plugin = db
             .get_plugin(plugin_id)
-            .map_err(|error| format!("Failed to read plugin before uninstall: {error}"))?;
+            .map_err(|error| format!("Failed to read plugin before uninstall: {error}"))
+            .map_err(PluginPlatformError::internal)?;
 
         let staged_uninstall = if let Some(plugin) = plugin.as_ref() {
             if plugin.is_builtin || plugin.source_kind == "builtin" {
-                return Err("built-in plugins cannot be uninstalled".to_string());
+                return Err(PluginPlatformError::invalid_request(
+                    "built-in plugins cannot be uninstalled",
+                ));
             }
 
-            Some(crate::plugin_installation::stage_managed_plugin_uninstall(
-                plugin,
-                self.app_data_dir()?,
-            )?)
+            Some(
+                crate::plugin_installation::stage_managed_plugin_uninstall(
+                    plugin,
+                    self.app_data_dir()?,
+                )
+                .map_err(PluginPlatformError::internal)?,
+            )
         } else {
             None
         };
@@ -224,25 +241,29 @@ impl PluginPlatform<'_> {
         };
 
         drop(db);
-        result
+        result.map_err(PluginPlatformError::internal)
     }
 
-    pub(crate) fn plugin(&self, plugin_id: &str) -> Result<Option<db::PluginRow>, String> {
+    pub(crate) fn plugin(&self, plugin_id: &str) -> PluginPlatformResult<Option<db::PluginRow>> {
         let db = db::acquire_db(self.db);
-        db.get_plugin(plugin_id)
-            .map_err(|error| format!("Failed to get plugin: {error}"))
+        db.get_plugin(plugin_id).map_err(|error| {
+            PluginPlatformError::internal(format!("Failed to get plugin: {error}"))
+        })
     }
 
-    pub(crate) fn plugins(&self) -> Result<Vec<db::PluginRow>, String> {
+    pub(crate) fn plugins(&self) -> PluginPlatformResult<Vec<db::PluginRow>> {
         let db = db::acquire_db(self.db);
-        db.list_plugins()
-            .map_err(|error| format!("Failed to list plugins: {error}"))
+        db.list_plugins().map_err(|error| {
+            PluginPlatformError::internal(format!("Failed to list plugins: {error}"))
+        })
     }
 
-    fn app_data_dir(&self) -> Result<&Path, String> {
-        self.app_data_dir
-            .as_deref()
-            .ok_or_else(|| "app data directory is required for this plugin operation".to_string())
+    fn app_data_dir(&self) -> PluginPlatformResult<&Path> {
+        self.app_data_dir.as_deref().ok_or_else(|| {
+            PluginPlatformError::app_data_dir_required(
+                "app data directory is required for this plugin operation",
+            )
+        })
     }
 }
 
@@ -450,7 +471,7 @@ mod tests {
             .uninstall_plugin(MANAGED_PLUGIN_ID)
             .expect_err("database failure should abort uninstall");
 
-        assert!(error.contains("Failed to uninstall plugin"));
+        assert!(error.to_string().contains("Failed to uninstall plugin"));
         assert!(platform
             .plugin(MANAGED_PLUGIN_ID)
             .expect("plugin row should remain readable")
