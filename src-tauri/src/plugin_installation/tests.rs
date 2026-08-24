@@ -25,6 +25,125 @@ fn make_executable(path: &Path) {
 }
 
 #[test]
+fn install_package_preserves_schema_validation_error() {
+    let source = tempdir().expect("source tempdir should create");
+    let managed = tempdir().expect("managed tempdir should create");
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.schema","apiVersion":1,"displayName":"Schema","description":"Schema","frontend":"dist/frontend.js","unexpected":true}"#,
+    );
+
+    let error =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect_err("unknown metadata field should fail installation");
+
+    assert_eq!(
+        error,
+        "package.json openforge.unexpected is not supported by the OpenForge package metadata schema"
+    );
+}
+
+#[test]
+fn install_package_preserves_artifact_path_validation_error() {
+    let source = tempdir().expect("source tempdir should create");
+    let managed = tempdir().expect("managed tempdir should create");
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.artifact","apiVersion":1,"displayName":"Artifact","description":"Artifact","frontend":"../frontend.js"}"#,
+    );
+
+    let error =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect_err("escaping artifact path should fail installation");
+
+    assert_eq!(
+        error,
+        "package.json openforge.frontend entry must stay within the plugin package directory"
+    );
+}
+
+#[test]
+fn inspect_plugin_package_preserves_discovery_details_and_installer_error() {
+    let source = tempdir().expect("source tempdir should create");
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.discovery","apiVersion":1,"displayName":"Discovery","description":"Needs build","frontend":"dist/frontend.js","frontendStyles":["dist/frontend.css"]}"#,
+    );
+
+    let inspected =
+        inspect_plugin_package_dir(source.path()).expect("OpenForge package should be discovered");
+
+    assert_eq!(inspected.id, "acme.discovery");
+    assert_eq!(inspected.name, "Discovery");
+    assert_eq!(inspected.version, "1.2.3");
+    assert_eq!(inspected.description, "Needs build");
+    assert_eq!(
+        inspected.missing_entries,
+        vec!["dist/frontend.js", "dist/frontend.css"]
+    );
+    assert_eq!(
+        inspected.problem,
+        Some(format!(
+            "OpenForge plugin frontend entry is missing at {}; run the package build first",
+            source.path().join("dist/frontend.js").display()
+        ))
+    );
+}
+
+#[test]
+fn install_package_preserves_plugin_row_construction() {
+    let source = tempdir().expect("source tempdir should create");
+    let managed = tempdir().expect("managed tempdir should create");
+    fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+    fs::write(
+        source.path().join("dist/frontend.mjs"),
+        "export default {};",
+    )
+    .expect("frontend should write");
+    fs::write(
+        source.path().join("dist/backend.cjs"),
+        "module.exports = {};",
+    )
+    .expect("backend should write");
+    fs::write(source.path().join("dist/frontend.css"), ".plugin {}")
+        .expect("stylesheet should write");
+    write_package_json(
+        source.path(),
+        r#"{"id":"acme.row","apiVersion":1,"displayName":"Row","description":"Mapped row","frontend":"dist/frontend.mjs","frontendStyles":["dist/frontend.css"],"backend":"dist/backend.cjs","requires":["views"]}"#,
+    );
+
+    let row =
+        install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
+            .expect("valid package should install");
+
+    assert_eq!(row.id, "acme.row");
+    assert_eq!(row.name, "Row");
+    assert_eq!(row.version, "1.2.3");
+    assert_eq!(row.api_version, 1);
+    assert_eq!(row.description, "Mapped row");
+    assert_eq!(row.permissions, "[]");
+    assert_eq!(row.contributes, "{}");
+    assert_eq!(row.frontend_entry, "dist/frontend.mjs");
+    assert_eq!(row.backend_entry.as_deref(), Some("dist/backend.cjs"));
+    assert_eq!(
+        row.install_path,
+        source
+            .path()
+            .canonicalize()
+            .expect("source path should canonicalize")
+            .to_string_lossy()
+    );
+    assert_eq!(row.source_kind, "local");
+    assert_eq!(row.source_spec, source.path().to_string_lossy());
+    assert_eq!(
+        row.package_metadata,
+        r#"{"apiVersion":1,"backend":"dist/backend.cjs","description":"Mapped row","displayName":"Row","frontend":"dist/frontend.mjs","frontendStyles":["dist/frontend.css"],"id":"acme.row","requires":["views"]}"#
+    );
+    assert!(row.installed_at > 0);
+    assert!(!row.is_builtin);
+}
+
+#[test]
 fn staged_cleanup_reports_non_directory_tombstone() {
     let temp_dir = tempdir().expect("cleanup tempdir should create");
     let staged_path = temp_dir.path().join("staged-package");
