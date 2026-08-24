@@ -25,6 +25,7 @@ export type BridgeFetch = (url: string, init: {
 }) => Promise<BridgeResponseLike>
 
 export type OpenExternal = (url: string) => Promise<void>
+export type GetApplicationNameForProtocol = (url: string) => string
 export type QuitApp = () => void | Promise<void>
 export type WriteClipboardText = (text: string) => void | Promise<void>
 export type SelectDirectory = (options: {
@@ -39,6 +40,7 @@ export interface ElectronInvokeDeps {
   sidecarConfig: SidecarLaunchConfig | null
   fetch: BridgeFetch
   openExternal: OpenExternal
+  getApplicationNameForProtocol?: GetApplicationNameForProtocol
   quitApp?: QuitApp
   writeClipboardText?: WriteClipboardText
   selectDirectory?: SelectDirectory

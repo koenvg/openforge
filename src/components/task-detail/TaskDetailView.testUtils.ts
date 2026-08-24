@@ -107,6 +107,7 @@ vi.mock('../../lib/ipc', () => ({
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   openInEditor: vi.fn().mockResolvedValue(undefined),
+  hasVsCodeProtocolHandler: vi.fn().mockResolvedValue(true),
   getTaskWorkspace: vi.fn().mockResolvedValue(null),
   getConfig: vi.fn().mockResolvedValue(''),
   getProjectConfig: vi.fn().mockResolvedValue(null),

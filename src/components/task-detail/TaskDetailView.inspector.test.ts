@@ -208,6 +208,38 @@ describe('TaskDetailView — inspector', () => {
         vi.mocked(getTaskWorkspace).mockResolvedValue(null)
       })
 
+      it('does not show the VS Code action when VS Code is not installed', async () => {
+        const { getTaskWorkspace, hasVsCodeProtocolHandler } = await import('../../lib/ipc')
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+        vi.mocked(hasVsCodeProtocolHandler).mockClear().mockResolvedValueOnce(false)
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => expect(hasVsCodeProtocolHandler).toHaveBeenCalledTimes(1))
+        await screen.findByRole('button', { name: 'Run app locally' })
+        expect(screen.queryByRole('button', { name: /open in vs code/i })).toBeNull()
+
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
+      it('keeps the VS Code action hidden when capability detection fails', async () => {
+        const { getTaskWorkspace, hasVsCodeProtocolHandler } = await import('../../lib/ipc')
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt' }))
+        vi.mocked(hasVsCodeProtocolHandler).mockRejectedValueOnce(new Error('protocol lookup failed'))
+
+        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+        await waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+          '[TaskDetailView] Failed to check the VS Code protocol handler:',
+          expect.any(Error),
+        ))
+        expect(screen.queryByRole('button', { name: /open in vs code/i })).toBeNull()
+
+        consoleError.mockRestore()
+        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+      })
+
       it('opens the workspace in VS Code when the VS Code button is clicked', async () => {
         const { getTaskWorkspace, openInEditor } = await import('../../lib/ipc')
         vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))

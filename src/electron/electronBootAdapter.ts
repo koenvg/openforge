@@ -90,6 +90,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       sidecarConfig: context.getSidecarConfig(),
       fetch: (url, init) => fetch(url, init),
       openExternal: (url) => shell.openExternal(url),
+      getApplicationNameForProtocol: (url) => app.getApplicationNameForProtocol(url),
       quitApp: () => app.quit(),
       writeClipboardText: (text) => clipboard.writeText(text),
       selectDirectory: async ({ defaultPath, buttonLabel, message }) => {

@@ -48,6 +48,7 @@ export const desktopIpcFunctionDomains = {
   linkPullRequest: 'github-review',
   openUrl: 'misc',
   openInEditor: 'misc',
+  hasVsCodeProtocolHandler: 'misc',
   quitApp: 'app-shell',
   writeClipboardText: 'app-shell',
   selectDirectory: 'app-shell',

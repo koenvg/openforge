@@ -46,6 +46,7 @@ export const desktopCommandContracts = [
   {"functionName":"getPullRequests","ipcCommand":"get_pull_requests","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"linkPullRequest","ipcCommand":"link_pull_request","payloadKeys":["taskId","prUrl"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"openInEditor","ipcCommand":"open_in_editor","payloadKeys":["path"],"owner":"electron-main","domain":"misc"},
+  {"functionName":"hasVsCodeProtocolHandler","ipcCommand":"has_vscode_protocol_handler","payloadKeys":[],"owner":"electron-main","domain":"misc"},
   {"functionName":"openUrl","ipcCommand":"open_url","payloadKeys":["url"],"owner":"electron-main","domain":"misc"},
   {"functionName":"quitApp","ipcCommand":"quit_app","payloadKeys":[],"owner":"electron-main","domain":"app-shell"},
   {"functionName":"getDeveloperLogs","ipcCommand":"get_developer_logs","payloadKeys":["limit"],"owner":"electron-main","domain":"app-shell"},
