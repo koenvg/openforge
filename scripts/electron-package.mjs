@@ -122,6 +122,17 @@ export async function hydrateElectronTemplate({
 
 export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
 export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
+export const OPENFORGE_CLI_RUNTIME_FILES = Object.freeze([
+  'cli.js',
+  'command-line.js',
+  'debug-commands.js',
+  'help.js',
+  'http-transport.js',
+  'plugin-commands.js',
+  'plugin-management-commands.js',
+  'project-commands.js',
+  'task-commands.js',
+])
 
 function isBuiltinPluginCatalogEntry(value) {
   return Boolean(value && typeof value.id === 'string' && typeof value.directoryName === 'string')
@@ -240,6 +251,9 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout 
   const cliSourceDir = join(rustSidecarLayout.backendCrateRootPath, 'src', 'openforge-cli')
   const cliSourcePath = join(cliSourceDir, 'cli.js')
   if (!(await pathExists(cliSourcePath))) return
+  for (const filename of OPENFORGE_CLI_RUNTIME_FILES) {
+    await assertExists(join(cliSourceDir, filename), `OpenForge CLI runtime module ${filename}`)
+  }
 
   const skillSourcePath = join(cliSourceDir, 'openforge-skill.md')
   const pluginDevSkillSourcePath = join(cliSourceDir, 'openforge-plugin-dev-skill.md')
@@ -249,7 +263,9 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout 
   const cliResourcesDir = join(resourcesDir, 'openforge-cli')
   await rm(cliResourcesDir, { recursive: true, force: true })
   await mkdir(cliResourcesDir, { recursive: true })
-  await cp(cliSourcePath, join(cliResourcesDir, 'cli.js'))
+  for (const filename of OPENFORGE_CLI_RUNTIME_FILES) {
+    await cp(join(cliSourceDir, filename), join(cliResourcesDir, filename))
+  }
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
   await cp(pluginDevSkillSourcePath, join(cliResourcesDir, 'openforge-plugin-dev-skill.md'))
 }

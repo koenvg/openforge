@@ -5,6 +5,7 @@ import {
   APP_NAME,
   ELECTRON_APP_PACKAGE_NAME,
   ELECTRON_BUNDLE_IDENTIFIER,
+  OPENFORGE_CLI_RUNTIME_FILES,
   assertPackageArchitectureCompatibility,
   buildAndPackageElectronApp,
   createElectronAppPackageJson,
@@ -368,6 +369,12 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(root, 'crates/openforge-backend/target/release/openforge-backend'), '#!/bin/sh\necho sidecar\n')
     await mkdir(join(root, 'crates/openforge-backend/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("configured openforge cli")\n')
+    for (const filename of OPENFORGE_CLI_RUNTIME_FILES.slice(1)) {
+      await writeFile(
+        join(root, 'crates/openforge-backend/src/openforge-cli', filename),
+        `configured ${filename}\n`,
+      )
+    }
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-skill.md'), 'configured openforge skill docs\n')
     await writeFile(join(root, 'crates/openforge-backend/src/openforge-cli/openforge-plugin-dev-skill.md'), 'configured openforge plugin dev skill docs\n')
 
@@ -375,6 +382,7 @@ describe('Electron macOS packaging helpers', () => {
 
     const output = electronBundlePath(root)
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('configured openforge cli')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/task-commands.js'), 'utf8')).resolves.toContain('configured task-commands.js')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('configured openforge skill docs')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-plugin-dev-skill.md'), 'utf8')).resolves.toContain('configured openforge plugin dev skill docs')
   })
@@ -401,6 +409,12 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'src-tauri/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("openforge cli")\n')
+    for (const filename of OPENFORGE_CLI_RUNTIME_FILES.slice(1)) {
+      await writeFile(
+        join(root, 'src-tauri/src/openforge-cli', filename),
+        `packaged ${filename}\n`,
+      )
+    }
     await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-skill.md'), 'openforge skill docs\n')
     await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-plugin-dev-skill.md'), 'openforge plugin dev skill docs\n')
     const builtInPluginCatalog = [
@@ -436,6 +450,7 @@ describe('Electron macOS packaging helpers', () => {
     }
     await expect(readFile(join(output, 'Contents/MacOS/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/plugin-commands.js'), 'utf8')).resolves.toContain('packaged plugin-commands.js')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-plugin-dev-skill.md'), 'utf8')).resolves.toContain('openforge plugin dev skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')

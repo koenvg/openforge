@@ -25,20 +25,22 @@ function replaceRequired(contents, pattern, replacement, filePath) {
   return contents.replace(pattern, replacement)
 }
 
-function renderCliSource(current, filePath) {
-  let next = replaceRequired(
+function renderCliTransportSource(current, filePath) {
+  return replaceRequired(
     current,
     /const DEFAULT_OPENFORGE_HTTP_PORT = '[0-9]+';?/,
     `const DEFAULT_OPENFORGE_HTTP_PORT = '${DEFAULT_HTTP_BRIDGE_PORT_STRING}';`,
     filePath,
   )
-  next = replaceRequired(
-    next,
+}
+
+function renderCliHelpSource(current, filePath) {
+  return replaceRequired(
+    current,
     /OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port \(default: [0-9]+\)/,
     `OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: ${DEFAULT_HTTP_BRIDGE_PORT_STRING})`,
     filePath,
   )
-  return next
 }
 
 function renderSkillDoc(current, filePath) {
@@ -64,7 +66,8 @@ export function httpBridgePortContractTargets(rustSidecarLayout = resolveRustSid
   return [
     [join(rustSidecarLayout.repoRoot, 'src', 'electron', 'httpBridgePortContract.ts'), renderElectronContract],
     [backendSourcePath('http_bridge_port_contract.rs'), renderRustContract],
-    [backendSourcePath('openforge-cli', 'cli.js'), (current, filePath) => renderCliSource(current, filePath)],
+    [backendSourcePath('openforge-cli', 'http-transport.js'), (current, filePath) => renderCliTransportSource(current, filePath)],
+    [backendSourcePath('openforge-cli', 'help.js'), (current, filePath) => renderCliHelpSource(current, filePath)],
     [backendSourcePath('openforge-cli', 'openforge-skill.md'), (current, filePath) => renderSkillDoc(current, filePath)],
     [backendSourcePath('pi-extension', 'openforge.ts'), (current, filePath) => renderPiExtension(current, filePath)],
   ]
