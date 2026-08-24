@@ -20,7 +20,7 @@
 //! - All PRs in a project are polled concurrently using futures::future::join_all
 //! - poll_single_pr() handles one PR: comments + CI (check_runs + combined_status in parallel)
 //! - DB is locked once after all HTTP calls complete for batch writes
-//! - last_polled_at timestamps are read before HTTP calls and written after
+//! - last_polled_at timestamps are written after successful polls
 //!
 //! ## Error Handling
 //! - Logs errors and continues (doesn't crash the polling loop)
