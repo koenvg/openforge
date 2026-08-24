@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import { listenDesktopEvent } from '../desktopIpc'
+import { listenPluginDesktopEvent } from '../desktopIpc'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 
 type PluginHostEventName = string
@@ -39,7 +39,7 @@ function ensureDesktopEventSubscription(event: string): DesktopEventSubscription
     disposed: false,
   }
 
-  subscription.ready = listenDesktopEvent(event, (desktopEvent) => {
+  subscription.ready = listenPluginDesktopEvent(event, (desktopEvent) => {
     for (const listener of Array.from(subscription.listeners)) {
       listener(desktopEvent.payload)
     }

@@ -1,8 +1,9 @@
+import type { AppDesktopEventName, AppDesktopEventPayloads } from '../desktopIpcContract'
 import type { DesktopEvent, DesktopUnlistenFn } from '../desktopIpc'
 
-export type AppEventListen = <T>(
-  event: string,
-  handler: (event: DesktopEvent<T>) => void | Promise<void>,
+export type AppEventListen = <TEventName extends AppDesktopEventName>(
+  event: TEventName,
+  handler: (event: DesktopEvent<AppDesktopEventPayloads[TEventName]>) => void | Promise<void>,
 ) => Promise<DesktopUnlistenFn>
 
 export interface AppWindowCloseTarget {
@@ -26,15 +27,15 @@ export interface AppDesktopEventDeps {
   listen?: AppEventListen
 }
 
-export interface DesktopEventListenerRegistration {
-  readonly eventName: string
+export interface DesktopEventListenerRegistration<TEventName extends AppDesktopEventName = AppDesktopEventName> {
+  readonly eventName: TEventName
   register(listen: AppEventListen): Promise<DesktopUnlistenFn>
 }
 
-export function defineDesktopEventListener<T>(
-  eventName: string,
-  handler: (event: DesktopEvent<T>) => void | Promise<void>,
-): DesktopEventListenerRegistration {
+export function defineDesktopEventListener<TEventName extends AppDesktopEventName>(
+  eventName: TEventName,
+  handler: (event: DesktopEvent<AppDesktopEventPayloads[TEventName]>) => void | Promise<void>,
+): DesktopEventListenerRegistration<TEventName> {
   return {
     eventName,
     register: listen => listen(eventName, handler),

@@ -1,9 +1,10 @@
 import { terminalLogMessage } from './terminalLogging'
-import type {
-  PoolEntry,
-  PtyEvent,
-  TerminalRuntimeHost,
-  TerminalRuntimeUnlistenFn,
+import {
+  ptyExitEventName,
+  ptyOutputEventName,
+  type PoolEntry,
+  type TerminalRuntimeHost,
+  type TerminalRuntimeUnlistenFn,
 } from './terminalRuntimeTypes'
 
 interface TerminalAcquisitionOperation {
@@ -122,7 +123,7 @@ export function createTerminalAcquisition({
     const outputListenerRetained = await retainAcquisitionListener(
       operation,
       entry,
-      host.listenEvent<PtyEvent>(`pty-output-${terminalKey}`, (event) => {
+      host.listenEvent(ptyOutputEventName(terminalKey), (event) => {
         const instanceId = event.payload.instance_id
         if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
         if (!event.payload.data) return
@@ -140,7 +141,7 @@ export function createTerminalAcquisition({
     const exitListenerRetained = await retainAcquisitionListener(
       operation,
       entry,
-      host.listenEvent<PtyEvent>(`pty-exit-${terminalKey}`, (event) => {
+      host.listenEvent(ptyExitEventName(terminalKey), (event) => {
         const instanceId = event.payload.instance_id
         if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
         lifecycle.markPtyExited(entry)

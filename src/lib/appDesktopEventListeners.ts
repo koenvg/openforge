@@ -6,7 +6,7 @@ import { createPluginEventListeners } from './appDesktopEventListeners/pluginEve
 import { createPluginSystemEventListeners } from './appDesktopEventListeners/pluginSystemEventListeners'
 import { createPullRequestAttentionEventListeners } from './appDesktopEventListeners/pullRequestAttentionEventListeners'
 import { createTaskSessionEventListeners } from './appDesktopEventListeners/taskSessionEventListeners'
-import type { AppDesktopEventDeps } from './appDesktopEventListeners/types'
+import type { AppDesktopEventDeps, AppEventListen } from './appDesktopEventListeners/types'
 
 export type {
   AppDesktopEventDeps,
@@ -14,10 +14,7 @@ export type {
   AppWindowCloseTarget,
 } from './appDesktopEventListeners/types'
 
-export async function registerAppDesktopEventListeners(
-  deps: AppDesktopEventDeps,
-): Promise<DesktopUnlistenFn[]> {
-  const listen = deps.listen ?? listenDesktopEvent
+export function createAppDesktopEventListenerRegistrations(deps: AppDesktopEventDeps) {
   const appLifecycleListeners = createAppLifecycleEventListeners(deps)
   const frontendHostRequestListener = createFrontendHostRequestEventListener()
   const pullRequestAttentionListeners = createPullRequestAttentionEventListeners(deps)
@@ -25,7 +22,7 @@ export async function registerAppDesktopEventListeners(
   const pluginListeners = createPluginEventListeners(deps)
   const pluginSystemListeners = createPluginSystemEventListeners()
 
-  const eventListenerRegistrations = [
+  return [
     pullRequestAttentionListeners.githubSyncComplete,
     pullRequestAttentionListeners.taskPullRequestUpdated,
     appLifecycleListeners.appEventsGap,
@@ -52,8 +49,24 @@ export async function registerAppDesktopEventListeners(
     pluginListeners.projectPluginEnablementChanged,
     pluginListeners.pluginReloadRequested,
     taskSessionListeners.taskChanged,
-  ]
+  ] as const
+}
 
+type RegisteredAppDesktopEventName = ReturnType<
+  typeof createAppDesktopEventListenerRegistrations
+>[number]['eventName']
+type MissingAppDesktopEventName = Exclude<
+  import('./desktopIpcContract').AppDesktopEventName,
+  RegisteredAppDesktopEventName
+>
+const appDesktopEventContractIsComplete: MissingAppDesktopEventName extends never ? true : never = true
+void appDesktopEventContractIsComplete
+
+export async function registerAppDesktopEventListeners(
+  deps: AppDesktopEventDeps,
+): Promise<DesktopUnlistenFn[]> {
+  const listen: AppEventListen = deps.listen ?? listenDesktopEvent
+  const eventListenerRegistrations = createAppDesktopEventListenerRegistrations(deps)
   const unlisteners: DesktopUnlistenFn[] = []
   try {
     unlisteners.push(await deps.appWindow.onCloseRequested(deps.onCloseRequested))
