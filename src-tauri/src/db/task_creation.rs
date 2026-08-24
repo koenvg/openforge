@@ -231,7 +231,8 @@ fn allocate_task_id(conn: &rusqlite::Connection, project_id: Option<&str>) -> Re
             [],
             |row| row.get(0),
         )
-        .unwrap_or_else(|_| "T".to_string());
+        .optional()?
+        .unwrap_or_else(|| "T".to_string());
     let project_prefix: Option<String> = match project_id {
         Some(project_id) => conn
             .query_row(
@@ -239,7 +240,7 @@ fn allocate_task_id(conn: &rusqlite::Connection, project_id: Option<&str>) -> Re
                 [project_id],
                 |row| row.get(0),
             )
-            .ok(),
+            .optional()?,
         None => None,
     };
     let prefix = project_prefix
@@ -794,6 +795,54 @@ mod tests {
     }
 
     #[test]
+    fn task_creation_falls_back_when_project_prefix_is_missing() {
+        let (db, _temp_dir) = make_test_db("task_project_prefix_missing");
+        db.set_config("task_id_prefix", "GLOBAL")
+            .expect("set global prefix");
+        let project = db.create_project("Web", "/tmp/web").unwrap();
+
+        let task = db
+            .create_task(
+                "Use global prefix",
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+            )
+            .expect("missing project prefix should fall back");
+
+        assert_eq!(task.id, "GLOBAL-1");
+    }
+
+    #[test]
+    fn task_creation_propagates_project_prefix_storage_errors() {
+        let (db, _temp_dir) = make_test_db("task_project_prefix_storage_error");
+        let project = db.create_project("Web", "/tmp/web").unwrap();
+        let conn = db.connection();
+        conn.lock()
+            .expect("lock database")
+            .execute(
+                "INSERT INTO project_config (project_id, key, value) VALUES (?1, 'task_id_prefix', X'00')",
+                [&project.id],
+            )
+            .expect("store malformed project prefix");
+        drop(conn);
+
+        let error = db
+            .create_task("Must fail", "backlog", Some(&project.id), None, None)
+            .expect_err("malformed project prefix must fail task creation");
+
+        assert!(matches!(
+            error,
+            rusqlite::Error::InvalidColumnType(0, _, rusqlite::types::Type::Blob)
+        ));
+        assert!(
+            db.get_all_tasks().expect("read tasks").is_empty(),
+            "failed task creation must not insert a task"
+        );
+    }
+
+    #[test]
     fn test_create_task_snapshots_task_config_when_provided() {
         let (db, _temp_dir) = crate::db::test_helpers::make_test_db("task_snapshot");
         let project = db.create_project("P", "/tmp/p").unwrap();
@@ -1063,6 +1112,33 @@ mod tests {
             task.id
         );
         drop(db);
+    }
+
+    #[test]
+    fn task_creation_propagates_global_prefix_storage_errors() {
+        let (db, _temp_dir) = make_test_db("task_global_prefix_storage_error");
+        let conn = db.connection();
+        conn.lock()
+            .expect("lock database")
+            .execute(
+                "UPDATE config SET value = X'00' WHERE key = 'task_id_prefix'",
+                [],
+            )
+            .expect("store malformed global prefix");
+        drop(conn);
+
+        let error = db
+            .create_task("Must fail", "backlog", None, None, None)
+            .expect_err("malformed global prefix must fail task creation");
+
+        assert!(matches!(
+            error,
+            rusqlite::Error::InvalidColumnType(0, _, rusqlite::types::Type::Blob)
+        ));
+        assert!(
+            db.get_all_tasks().expect("read tasks").is_empty(),
+            "failed task creation must not insert a task"
+        );
     }
 
     #[test]
