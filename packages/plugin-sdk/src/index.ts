@@ -81,6 +81,7 @@ export type {
   NavigationAPI,
   NotificationsAPI,
   OpenForgeCommonAPI,
+  OpenForgeContextChangeHandler,
   OpenForgeContextSnapshot,
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,

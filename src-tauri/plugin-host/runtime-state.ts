@@ -69,6 +69,7 @@ export function createInitialPluginState(pluginId: string, storage: PluginStorag
     methods: new Map(),
     commands: new Map(),
     eventHandlers: new Map(),
+    contextChangeHandlers: new Set(),
     backgroundServices: new Map(),
     storage,
     subscriptions: new RuntimeSubscriptionSink(pluginId),

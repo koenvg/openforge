@@ -169,6 +169,7 @@ const {
   updateAppPluginContexts,
 } = await import('./pluginRegistry')
 const { appEnabledPluginIds, installedPlugins, enabledPluginIds, projectEnabledPluginIds, runtimeContributionSources } = await import('./pluginStore')
+const { _resetProjectPluginReconciliationForTests } = await import('./pluginInstallReconciliation')
 const {
   _resetPluginActivationLifecycleForTests,
   invokeFrontendAgentCommand,
@@ -268,6 +269,7 @@ export function resetPluginRegistryTestState(): void {
   isPluginLoadedMock.mockReset()
   getBuiltinPluginModuleMock.mockReset()
   _resetPluginActivationLifecycleForTests()
+  _resetProjectPluginReconciliationForTests()
   installedPlugins.set(new Map())
   appEnabledPluginIds.set(new Set())
   projectEnabledPluginIds.set(new Set())

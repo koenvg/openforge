@@ -9,6 +9,7 @@ import {
   enabledPluginIds,
   get,
   getEnabledPluginsMock,
+  getPluginRenderProps,
   getRegisteredComponent,
   installFromLocal,
   installPluginFromLocalIpcMock,
@@ -60,12 +61,20 @@ describe('pluginRegistry project enablement', () => {
     expect(get(installedPlugins).get('scheduler-plugin')).toMatchObject({ state: 'active', error: null })
   })
 
-  it('rebinds an enabled project Plugin runtime when the visible Project changes', async () => {
+  it('retains an enabled project Plugin runtime when the Selected Project changes', async () => {
+    const View = vi.fn() as never
     const activationProjectIds: Array<string | null> = []
     const dispose = vi.fn()
     const frontendPlugin = defineFrontendPlugin({
       activate(openforge, context) {
         activationProjectIds.push(openforge.context.getSnapshot().projectId)
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main',
+          icon: 'plug',
+          placement: 'rail',
+          component: View,
+        }))
         context.subscriptions.add({ dispose })
       },
     })
@@ -79,11 +88,194 @@ describe('pluginRegistry project enablement', () => {
     activeProjectId.set('P-2')
     await registryLoadEnabledForProject('P-2')
 
-    expect(activationProjectIds).toEqual(['P-1', 'P-2'])
-    expect(dispose).toHaveBeenCalledTimes(1)
-    expect(pluginBackendDeactivateMock).toHaveBeenCalledTimes(1)
+    expect(activationProjectIds).toEqual(['P-1'])
+    expect(loadPluginFrontendMock).toHaveBeenCalledTimes(1)
+    expect(dispose).not.toHaveBeenCalled()
+    expect(getRegisteredComponent('plugin:project-runtime-plugin:main')).toBe(View)
+    expect(pluginBackendDeactivateMock).not.toHaveBeenCalled()
     expect(pluginBackendWhenReadyMock).toHaveBeenNthCalledWith(1, 'project-runtime-plugin', 'P-1')
-    expect(pluginBackendWhenReadyMock).toHaveBeenNthCalledWith(2, 'project-runtime-plugin', 'P-2')
+    expect(pluginBackendWhenReadyMock).toHaveBeenNthCalledWith(2, 'project-runtime-plugin', 'P-2', true)
+    expect(getPluginRenderProps('project-runtime-plugin', { projectId: 'P-2' }).api.context.getSnapshot()).toMatchObject({
+      pluginId: 'project-runtime-plugin',
+      projectId: 'P-2',
+    })
+  })
+
+  it('notifies retained frontend Plugins when reconciled Project context changes', async () => {
+    const contextChanges: Array<string | null> = []
+    let disposeContextChanges: (() => void | Promise<void>) | undefined
+    const frontendPlugin = defineFrontendPlugin({
+      activate(_openforge, context) {
+        const subscription = context.onDidChange((snapshot) => {
+          contextChanges.push(snapshot.projectId)
+        })
+        disposeContextChanges = () => subscription.dispose()
+        context.subscriptions.add(subscription)
+      },
+    })
+    const manifest = makeManifest({ id: 'context-plugin', frontend: 'index.js', backend: null })
+    installedPlugins.set(new Map([['context-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('context-plugin')])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'context-plugin', module: frontendPlugin })
+
+    activeProjectId.set('P-1')
+    await registryLoadEnabledForProject('P-1')
+    activeProjectId.set('P-2')
+    await registryLoadEnabledForProject('P-2')
+
+    expect(contextChanges).toEqual(['P-2'])
+
+    await disposeContextChanges?.()
+    activeProjectId.set('P-3')
+    await registryLoadEnabledForProject('P-3')
+
+    expect(contextChanges).toEqual(['P-2'])
+  })
+
+  it('does not rebind or reactivate Plugins when the same Project is selected repeatedly', async () => {
+    const manifest = makeManifest({ id: 'stable-plugin', frontend: null, backend: 'backend.js' })
+    installedPlugins.set(new Map([['stable-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{
+      ...makeNormalized('stable-plugin'),
+      frontendEntry: null,
+      backendEntry: 'backend.js',
+    }])
+
+    await registryLoadEnabledForProject('P-1')
+    await registryLoadEnabledForProject('P-1')
+
+    expect(getEnabledPluginsMock).toHaveBeenCalledTimes(2)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledTimes(1)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('stable-plugin', 'P-1')
+    expect(pluginBackendDeactivateMock).not.toHaveBeenCalled()
+  })
+
+  it('reconciles retained, departing, and entering project Plugins from enablement differences', async () => {
+    const backendOnlyEntry = (pluginId: string) => ({
+      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.js' }),
+      state: 'installed' as const,
+      error: null,
+    })
+    installedPlugins.set(new Map([
+      ['retained-plugin', backendOnlyEntry('retained-plugin')],
+      ['departing-plugin', backendOnlyEntry('departing-plugin')],
+      ['entering-plugin', backendOnlyEntry('entering-plugin')],
+    ]))
+    getEnabledPluginsMock.mockImplementation(async (projectId: string) => {
+      const pluginIds = projectId === 'P-1'
+        ? ['retained-plugin', 'departing-plugin']
+        : ['retained-plugin', 'entering-plugin']
+      return pluginIds.map(pluginId => ({
+        ...makeNormalized(pluginId),
+        frontendEntry: null,
+        backendEntry: 'backend.js',
+      }))
+    })
+
+    await registryLoadEnabledForProject('P-1')
+    await registryLoadEnabledForProject('P-2')
+
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledTimes(1)
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledWith('departing-plugin')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('retained-plugin', 'P-2', true)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('entering-plugin', 'P-2')
+    expect(pluginBackendWhenReadyMock).not.toHaveBeenCalledWith('departing-plugin', 'P-2', true)
+  })
+
+  it('applies only the latest pending Selected Project while reconciliation is in flight', async () => {
+    let releaseFirstLookup: (() => void) | undefined
+    const firstLookupBlocked = new Promise<void>((resolve) => {
+      releaseFirstLookup = resolve
+    })
+    const backendOnlyEntry = (pluginId: string) => ({
+      manifest: makeManifest({ id: pluginId, frontend: null, backend: 'backend.js' }),
+      state: 'installed' as const,
+      error: null,
+    })
+    installedPlugins.set(new Map([
+      ['first-plugin', backendOnlyEntry('first-plugin')],
+      ['skipped-plugin', backendOnlyEntry('skipped-plugin')],
+      ['latest-plugin', backendOnlyEntry('latest-plugin')],
+    ]))
+    getEnabledPluginsMock.mockImplementation(async (projectId: string) => {
+      if (projectId === 'P-1') await firstLookupBlocked
+      const pluginId = projectId === 'P-1'
+        ? 'first-plugin'
+        : projectId === 'P-2' ? 'skipped-plugin' : 'latest-plugin'
+      return [{
+        ...makeNormalized(pluginId),
+        frontendEntry: null,
+        backendEntry: 'backend.js',
+      }]
+    })
+
+    const first = registryLoadEnabledForProject('P-1')
+    await vi.waitFor(() => expect(getEnabledPluginsMock).toHaveBeenCalledWith('P-1'))
+    const skipped = registryLoadEnabledForProject('P-2')
+    const latest = registryLoadEnabledForProject('P-3')
+    releaseFirstLookup?.()
+    await Promise.all([first, skipped, latest])
+
+    expect(getEnabledPluginsMock.mock.calls.map(([projectId]) => projectId)).toEqual(['P-1', 'P-3'])
+    expect(pluginBackendWhenReadyMock).not.toHaveBeenCalledWith('skipped-plugin', 'P-2')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('latest-plugin', 'P-3')
+  })
+
+  it('coalesces retained Plugin context notifications with rapid Project selections', async () => {
+    let releaseFirstLookup: (() => void) | undefined
+    const firstLookupBlocked = new Promise<void>((resolve) => {
+      releaseFirstLookup = resolve
+    })
+    const contextChanges: Array<string | null> = []
+    const frontendPlugin = defineFrontendPlugin({
+      activate(_openforge, context) {
+        context.subscriptions.add(context.onDidChange((snapshot) => {
+          contextChanges.push(snapshot.projectId)
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'context-plugin', frontend: 'index.js', backend: null })
+    installedPlugins.set(new Map([['context-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'context-plugin', module: frontendPlugin })
+    getEnabledPluginsMock.mockImplementation(async (projectId: string) => {
+      if (projectId === 'P-1') await firstLookupBlocked
+      return [makeNormalized('context-plugin')]
+    })
+
+    activeProjectId.set('P-1')
+    const first = registryLoadEnabledForProject('P-1')
+    await vi.waitFor(() => expect(getEnabledPluginsMock).toHaveBeenCalledWith('P-1'))
+    activeProjectId.set('P-2')
+    const skipped = registryLoadEnabledForProject('P-2')
+    activeProjectId.set('P-3')
+    const latest = registryLoadEnabledForProject('P-3')
+    releaseFirstLookup?.()
+    await Promise.all([first, skipped, latest])
+
+    expect(contextChanges).toEqual(['P-3'])
+    expect(loadPluginFrontendMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('continues reconciling later Projects after a retained backend context update fails', async () => {
+    const manifest = makeManifest({ id: 'recovering-plugin', frontend: null, backend: 'backend.js' })
+    installedPlugins.set(new Map([['recovering-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{
+      ...makeNormalized('recovering-plugin'),
+      frontendEntry: null,
+      backendEntry: 'backend.js',
+    }])
+    pluginBackendWhenReadyMock.mockImplementation(async (_pluginId, projectId, preserveActivation) => {
+      if (projectId === 'P-2' && preserveActivation) {
+        throw new Error('context update failed')
+      }
+    })
+
+    await registryLoadEnabledForProject('P-1')
+    await expect(registryLoadEnabledForProject('P-2')).rejects.toThrow('context update failed')
+    await expect(registryLoadEnabledForProject('P-3')).resolves.toBeUndefined()
+
+    expect(pluginBackendWhenReadyMock).toHaveBeenLastCalledWith('recovering-plugin', 'P-3', true)
+    expect(get(installedPlugins).get('recovering-plugin')?.state).toBe('active')
   })
 
   it('deactivates project-scoped Plugin runtimes when no Project is visible', async () => {

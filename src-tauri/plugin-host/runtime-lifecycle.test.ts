@@ -58,6 +58,9 @@ describe('plugin-host backend lifecycle', () => {
       export default {
         async activate(openforge, context) {
           globalThis.__contextActivationCount = (globalThis.__contextActivationCount ?? 0) + 1
+          context.subscriptions.add(context.onDidChange((snapshot) => {
+            globalThis.__contextChanges = [...(globalThis.__contextChanges ?? []), snapshot.projectId]
+          }))
           context.subscriptions.add(openforge.background.register({
             id: 'usage',
             scope: 'global',
@@ -70,7 +73,8 @@ describe('plugin-host backend lifecycle', () => {
                 context: openforge.context.getSnapshot(),
                 activations: globalThis.__contextActivationCount,
                 starts: globalThis.__contextStarts,
-                stops: globalThis.__contextStops ?? 0
+                stops: globalThis.__contextStops ?? 0,
+                contextChanges: globalThis.__contextChanges ?? []
               }
             }
           }))
@@ -88,6 +92,7 @@ describe('plugin-host backend lifecycle', () => {
       activations: 1,
       starts: 1,
       stops: 0,
+      contextChanges: ['P-2'],
     } })
 
     await runtime.deactivateBackend('usage-context')

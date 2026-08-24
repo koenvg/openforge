@@ -1,4 +1,11 @@
-import type { Disposable, OpenForgePackageMetadata, OpenForgePluginContext, SubscriptionSink, SupportedOpenForgeApiVersion } from './types'
+import type {
+  Disposable,
+  OpenForgeContextChangeHandler,
+  OpenForgePackageMetadata,
+  OpenForgePluginContext,
+  SubscriptionSink,
+  SupportedOpenForgeApiVersion,
+} from './types'
 
 class SubscriptionSet implements SubscriptionSink {
   private readonly subscriptions = new Set<Disposable | (() => void)>()
@@ -23,6 +30,10 @@ class SubscriptionSet implements SubscriptionSink {
 
 export class PluginContextImpl implements OpenForgePluginContext {
   readonly subscriptions: SubscriptionSet
+
+  onDidChange(_handler: OpenForgeContextChangeHandler): Disposable {
+    return { dispose: () => undefined }
+  }
 
   constructor(
     readonly pluginId: string,

@@ -1,5 +1,6 @@
 import type {
   CommandRegistration,
+  OpenForgeContextChangeHandler,
   OpenForgePackageMetadata,
   PluginCommandInvocationContext,
   PluginStorage,
@@ -132,6 +133,7 @@ export type RuntimePluginState = {
   methods: Map<string, RuntimeBackendMethod>
   commands: Map<string, RuntimeBackendCommand>
   eventHandlers: Map<string, Set<RuntimeEventHandler>>
+  contextChangeHandlers: Set<OpenForgeContextChangeHandler>
   backgroundServices: Map<string, RuntimeBackendService>
   storage: PluginStorage
   subscriptions: SubscriptionSink & { disposeAll(): Promise<void> }
