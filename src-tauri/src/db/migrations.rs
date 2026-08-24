@@ -2208,7 +2208,6 @@ CREATE INDEX IF NOT EXISTS idx_browser_session_purge_intents_created
 mod tests {
     use super::*;
     use crate::db::Database;
-    use std::fs;
     use std::path::PathBuf;
 
     #[derive(Clone, Copy)]
@@ -2681,8 +2680,7 @@ mod tests {
 
     #[test]
     fn test_migration_copies_github_token_to_global() {
-        let path = format!("/tmp/test_migration_copy_mig_{}.db", std::process::id());
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         // Simulate an existing database with project_config data (pre-migration)
         {
@@ -2714,7 +2712,7 @@ mod tests {
         }
 
         // Now open with Database::new() which will run the migration hook
-        let db = Database::new(PathBuf::from(&path)).expect("Failed to open DB");
+        let db = Database::new(path).expect("Failed to open DB");
 
         assert_eq!(
             db.get_config("github_token").unwrap(),
@@ -2722,19 +2720,14 @@ mod tests {
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_migration_does_not_overwrite_existing_global() {
-        let path = format!(
-            "/tmp/test_migration_idempotent_mig_{}.db",
-            std::process::id()
-        );
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
         {
-            let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
+            let db = Database::new(path.clone()).expect("Failed to create DB");
             db.set_config("github_token", "existing-token")
                 .expect("set");
             let project = db
@@ -2744,22 +2737,20 @@ mod tests {
                 .expect("set");
         }
 
-        let db = Database::new(PathBuf::from(&path)).expect("Failed to reopen DB");
+        let db = Database::new(path).expect("Failed to reopen DB");
         assert_eq!(
             db.get_config("github_token").unwrap(),
             Some("existing-token".to_string())
         );
 
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
     fn test_indexes_created_on_migration() {
-        let path = format!("/tmp/test_indexes_mig_{}.db", std::process::id());
-        let _ = fs::remove_file(&path);
+        let (_temp_dir, path) = temporary_database_path();
 
-        let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
+        let db = Database::new(path).expect("Failed to create DB");
         let conn = db.connection();
         let conn = conn.lock().unwrap();
 
@@ -2788,7 +2779,6 @@ mod tests {
 
         drop(conn);
         drop(db);
-        let _ = fs::remove_file(&path);
     }
 
     #[test]
