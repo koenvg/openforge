@@ -177,7 +177,7 @@ export class BackendLifecycle {
 
     if (state.state === 'starting' && state.activationPromise) {
       await state.activationPromise
-      return this.snapshot(input.pluginId)
+      return await this.whenReady(input)
     }
 
     if (input.backendPath) {
