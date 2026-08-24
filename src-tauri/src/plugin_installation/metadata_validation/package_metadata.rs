@@ -1,63 +1,56 @@
-use crate::db;
 use crate::plugin_enablement::PluginEnablement;
-use crate::plugin_installation::package_source::PackageSourceSpec;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use std::{
-    fs,
-    path::{Component, Path},
-    sync::OnceLock,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::Path, sync::OnceLock};
 
-pub(super) const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON: &str =
-    include_str!("../../../packages/plugin-sdk/src/openforgePackageMetadataSchema.json");
+pub(in crate::plugin_installation) const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON: &str =
+    include_str!("../../../../packages/plugin-sdk/src/openforgePackageMetadataSchema.json");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct PackageJsonFile {
+pub(in crate::plugin_installation) struct PackageJsonFile {
     #[serde(rename = "name")]
     _name: String,
-    pub(super) version: String,
+    pub(in crate::plugin_installation) version: String,
     #[serde(default, rename = "peerDependencies")]
     _peer_dependencies: Option<Value>,
-    pub(super) openforge: OpenForgePackageMetadata,
+    pub(in crate::plugin_installation) openforge: OpenForgePackageMetadata,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct OpenForgePackageMetadata {
-    pub(super) id: String,
-    api_version: i64,
-    display_name: String,
-    description: String,
+pub(in crate::plugin_installation) struct OpenForgePackageMetadata {
+    pub(in crate::plugin_installation) id: String,
+    pub(in crate::plugin_installation) api_version: i64,
+    pub(in crate::plugin_installation) display_name: String,
+    pub(in crate::plugin_installation) description: String,
     #[serde(default)]
-    enablement: PluginEnablement,
+    pub(in crate::plugin_installation) enablement: PluginEnablement,
     #[serde(default)]
-    frontend: Option<String>,
+    pub(in crate::plugin_installation) frontend: Option<String>,
     #[serde(default)]
-    frontend_styles: Option<Vec<String>>,
+    pub(in crate::plugin_installation) frontend_styles: Option<Vec<String>>,
     #[serde(default)]
-    backend: Option<String>,
+    pub(in crate::plugin_installation) backend: Option<String>,
     #[serde(default, rename = "requires")]
-    requires: Option<Vec<String>>,
+    pub(in crate::plugin_installation) requires: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
-pub(super) struct LoadedPluginPackage {
-    pub(super) package_json: PackageJsonFile,
-    pub(super) package_metadata_json: String,
+pub(in crate::plugin_installation) struct LoadedPluginPackage {
+    pub(in crate::plugin_installation) package_json: PackageJsonFile,
+    pub(in crate::plugin_installation) package_metadata_json: String,
 }
 
 #[derive(Debug)]
-pub(super) struct PackageMetadataSchemaRules {
-    pub(super) allowed_metadata_fields: Vec<String>,
-    pub(super) required_metadata_fields: Vec<String>,
+pub(in crate::plugin_installation) struct PackageMetadataSchemaRules {
+    pub(in crate::plugin_installation) allowed_metadata_fields: Vec<String>,
+    pub(in crate::plugin_installation) required_metadata_fields: Vec<String>,
     string_metadata_fields: Vec<String>,
-    pub(super) supported_api_versions: Vec<i64>,
-    pub(super) id_pattern: Regex,
-    pub(super) allowed_capabilities: Vec<String>,
+    pub(in crate::plugin_installation) supported_api_versions: Vec<i64>,
+    pub(in crate::plugin_installation) id_pattern: Regex,
+    pub(in crate::plugin_installation) allowed_capabilities: Vec<String>,
 }
 
 impl PackageMetadataSchemaRules {
@@ -92,7 +85,9 @@ impl PackageMetadataSchemaRules {
     }
 }
 
-pub(super) fn load_package_from_dir(dir: &Path) -> Result<LoadedPluginPackage, String> {
+pub(in crate::plugin_installation) fn load_package_from_dir(
+    dir: &Path,
+) -> Result<LoadedPluginPackage, String> {
     let package_json_path = dir.join("package.json");
     let raw = fs::read_to_string(&package_json_path).map_err(|error| {
         format!(
@@ -249,7 +244,9 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<(), String> {
+pub(in crate::plugin_installation) fn validate_package_metadata(
+    package: &PackageJsonFile,
+) -> Result<(), String> {
     let schema_rules = package_metadata_schema_rules()?;
 
     if !schema_rules.id_pattern.is_match(&package.openforge.id) {
@@ -293,223 +290,7 @@ pub(super) fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<
         return Err("package.json openforge.frontendStyles requires a frontend entry".to_string());
     }
 
-    if let Some(frontend) = package.openforge.frontend.as_deref() {
-        validate_relative_entry_path(
-            dir,
-            frontend,
-            "frontend",
-            &["js", "mjs", "cjs"],
-            "built JavaScript artifact",
-        )?;
-    }
-    if let Some(backend) = package.openforge.backend.as_deref() {
-        validate_relative_entry_path(
-            dir,
-            backend,
-            "backend",
-            &["js", "mjs", "cjs"],
-            "built JavaScript artifact",
-        )?;
-    }
-    for (index, stylesheet) in package
-        .openforge
-        .frontend_styles
-        .as_deref()
-        .unwrap_or_default()
-        .iter()
-        .enumerate()
-    {
-        validate_relative_entry_path(
-            dir,
-            stylesheet,
-            &format!("frontendStyles[{index}]"),
-            &["css"],
-            "built CSS artifact",
-        )?;
-    }
     Ok(())
-}
-
-/// One candidate plugin package directory as seen by folder discovery.
-///
-/// Carries whatever is needed to render a row even when the package is invalid, so a
-/// broken package can be shown with an explanation instead of vanishing from the list.
-#[derive(Debug)]
-pub(crate) struct InspectedPluginPackage {
-    pub id: String,
-    pub name: String,
-    pub version: String,
-    pub description: String,
-    /// Declared entry artifacts (frontend, backend, stylesheets) that are not on disk yet.
-    pub missing_entries: Vec<String>,
-    /// Why the local installer would reject this package, in the installer's own words.
-    pub problem: Option<String>,
-}
-
-/// Inspect `dir` as a candidate OpenForge plugin package.
-///
-/// Returns `None` when the directory is not a plugin package at all — no readable
-/// `package.json`, unparseable JSON, or no `openforge` block — so discovery keeps walking
-/// instead of reporting a spurious row. A directory that *is* a plugin package but fails
-/// validation returns `Some` with `problem` set, deliberately mirroring the error the local
-/// installer would raise for it.
-pub(crate) fn inspect_plugin_package_dir(dir: &Path) -> Option<InspectedPluginPackage> {
-    let raw = fs::read_to_string(dir.join("package.json")).ok()?;
-    let raw_value: Value = serde_json::from_str(&raw).ok()?;
-    let object = raw_value.as_object()?;
-    let openforge = object.get("openforge")?.as_object()?;
-
-    let id = json_string_field(openforge, "id");
-    let name = if id.is_empty() {
-        dir.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_string()
-    } else {
-        id.clone()
-    };
-
-    let problem = load_package_from_dir(dir)
-        .and_then(|loaded| validate_package(&loaded.package_json, dir))
-        .err();
-
-    Some(InspectedPluginPackage {
-        name: {
-            let display_name = json_string_field(openforge, "displayName");
-            if display_name.is_empty() {
-                name
-            } else {
-                display_name
-            }
-        },
-        id,
-        version: json_string_field(object, "version"),
-        description: json_string_field(openforge, "description"),
-        missing_entries: declared_entries(openforge)
-            .into_iter()
-            .filter(|entry| !dir.join(entry).is_file())
-            .collect(),
-        problem,
-    })
-}
-
-fn json_string_field(object: &Map<String, Value>, key: &str) -> String {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
-}
-
-/// Every build artifact path the package claims to ship, in declaration order.
-fn declared_entries(openforge: &Map<String, Value>) -> Vec<String> {
-    let mut entries = Vec::new();
-    for key in ["frontend", "backend"] {
-        if let Some(entry) = openforge.get(key).and_then(Value::as_str) {
-            entries.push(entry.to_string());
-        }
-    }
-    for stylesheet in openforge
-        .get("frontendStyles")
-        .and_then(Value::as_array)
-        .unwrap_or(&Vec::new())
-    {
-        if let Some(stylesheet) = stylesheet.as_str() {
-            entries.push(stylesheet.to_string());
-        }
-    }
-    entries
-}
-
-fn validate_relative_entry_path(
-    dir: &Path,
-    entry: &str,
-    field_name: &str,
-    allowed_extensions: &[&str],
-    artifact_description: &str,
-) -> Result<(), String> {
-    let entry_path = Path::new(entry);
-    if entry_path.is_absolute()
-        || entry_path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir))
-    {
-        return Err(format!(
-            "package.json openforge.{field_name} entry must stay within the plugin package directory"
-        ));
-    }
-
-    let candidate = dir.join(entry_path);
-    if !candidate.is_file() {
-        return Err(format!(
-            "OpenForge plugin {field_name} entry is missing at {}; run the package build first",
-            candidate.display()
-        ));
-    }
-
-    let extension = candidate
-        .extension()
-        .and_then(|extension| extension.to_str());
-    if !extension.is_some_and(|extension| allowed_extensions.contains(&extension)) {
-        let extension_label = allowed_extensions
-            .iter()
-            .map(|extension| format!(".{extension}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(format!(
-            "package.json openforge.{field_name} must point to a {artifact_description} ({extension_label})"
-        ));
-    }
-
-    let canonical_dir = dir.canonicalize().map_err(|error| {
-        format!(
-            "failed to canonicalize plugin package directory {}: {error}",
-            dir.display()
-        )
-    })?;
-    let canonical_candidate = candidate.canonicalize().map_err(|error| {
-        format!(
-            "failed to canonicalize OpenForge plugin {field_name} entry {}: {error}",
-            candidate.display()
-        )
-    })?;
-
-    if !canonical_candidate.starts_with(&canonical_dir) {
-        return Err(format!(
-            "package.json openforge.{field_name} entry must stay within the plugin package directory"
-        ));
-    }
-
-    Ok(())
-}
-
-pub(super) fn build_plugin_row(
-    loaded: &LoadedPluginPackage,
-    install_path: &Path,
-    source: &PackageSourceSpec,
-    is_builtin: bool,
-) -> Result<db::PluginRow, String> {
-    let openforge = &loaded.package_json.openforge;
-    Ok(db::PluginRow {
-        id: openforge.id.clone(),
-        name: openforge.display_name.clone(),
-        version: loaded.package_json.version.clone(),
-        api_version: openforge.api_version,
-        description: openforge.description.clone(),
-        permissions: "[]".to_string(),
-        contributes: "{}".to_string(),
-        frontend_entry: openforge.frontend.clone().unwrap_or_default(),
-        backend_entry: openforge.backend.clone(),
-        install_path: install_path.to_string_lossy().into_owned(),
-        source_kind: source.kind().to_string(),
-        source_spec: source.spec().to_string(),
-        package_metadata: loaded.package_metadata_json.clone(),
-        installed_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| format!("failed to compute install timestamp: {error}"))?
-            .as_millis() as i64,
-        is_builtin,
-    })
 }
 
 fn package_metadata_json(value: &Value) -> Result<String, String> {
@@ -552,8 +333,8 @@ fn validate_non_empty_json_string(
     }
 }
 
-pub(super) fn package_metadata_schema_rules() -> Result<&'static PackageMetadataSchemaRules, String>
-{
+pub(in crate::plugin_installation) fn package_metadata_schema_rules(
+) -> Result<&'static PackageMetadataSchemaRules, String> {
     static RULES: OnceLock<Result<PackageMetadataSchemaRules, String>> = OnceLock::new();
     match RULES.get_or_init(parse_package_metadata_schema_rules) {
         Ok(rules) => Ok(rules),
