@@ -3,7 +3,12 @@ import { resolve } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import * as ipc from './ipc'
-import { appDesktopEventContracts, desktopCommandContracts, dynamicDesktopEventContracts } from './desktopIpcContract'
+import {
+  appDesktopEventContracts,
+  desktopCommandContracts,
+  desktopCommandOwnershipContracts,
+  dynamicDesktopEventContracts,
+} from './desktopIpcContract'
 
 interface ParsedInvokeContract {
   functionName: string
@@ -91,6 +96,21 @@ describe('Desktop IPC contract', () => {
       .sort(([left], [right]) => left.localeCompare(right))
 
     expect(declaredContracts).toEqual(parsedContracts)
+  })
+
+  it('locks internal desktop command ownership outside the public ipc.ts wrappers', () => {
+    const publicCommands = new Set<string>(desktopCommandContracts.map(contract => contract.ipcCommand))
+    const internalContracts = desktopCommandOwnershipContracts
+      .filter(contract => !publicCommands.has(contract.ipcCommand))
+      .map(({ ipcCommand, owner, domain }) => ({ ipcCommand, owner, domain }))
+
+    expect(internalContracts).toEqual([
+      { ipcCommand: 'list_browser_session_purge_intents', owner: 'rust-sidecar', domain: 'plugins' },
+      { ipcCommand: 'acknowledge_browser_session_purge_intent', owner: 'rust-sidecar', domain: 'plugins' },
+      { ipcCommand: 'plugin_frontend_command_acknowledge', owner: 'rust-sidecar', domain: 'plugins' },
+    ])
+    expect(new Set(desktopCommandOwnershipContracts.map(contract => contract.ipcCommand)).size)
+      .toBe(desktopCommandOwnershipContracts.length)
   })
 
   it('locks the app desktop event channel names registered by appDesktopEventListeners', () => {

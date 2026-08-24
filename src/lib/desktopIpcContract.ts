@@ -1,3 +1,5 @@
+import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from '../electron/frontendHostRequestProtocol.js'
+
 export type DesktopCommandOwner = 'rust-sidecar' | 'electron-main'
 
 export type DesktopIpcDomain =
@@ -189,6 +191,17 @@ export const desktopCommandContracts = [
   { functionName: 'pluginBackendWhenReady', ipcCommand: 'plugin_backend_when_ready', payloadKeys: ['pluginId', 'projectId', 'preserveActivation'], owner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], owner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly DesktopCommandContract[]
+
+const internalDesktopCommandContracts = [
+  { ipcCommand: 'list_browser_session_purge_intents', owner: 'rust-sidecar', domain: 'plugins' },
+  { ipcCommand: 'acknowledge_browser_session_purge_intent', owner: 'rust-sidecar', domain: 'plugins' },
+  { ipcCommand: FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND, owner: 'rust-sidecar', domain: 'plugins' },
+] as const satisfies readonly Pick<DesktopCommandContract, 'ipcCommand' | 'owner' | 'domain'>[]
+
+export const desktopCommandOwnershipContracts = [
+  ...desktopCommandContracts,
+  ...internalDesktopCommandContracts,
+] as const
 
 export const appDesktopEventContracts = [
   { eventName: 'github-sync-complete', payload: 'PollResult', domain: 'github-review' },
