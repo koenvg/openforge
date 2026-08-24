@@ -608,7 +608,7 @@ pub fn parse_diff_shortstat(shortstat: &str) -> (i32, i32, i32) {
 }
 
 /// Parse `git rev-list --left-right --count HEAD...@{upstream}` output
-/// ("<ahead>\t<behind>") into (ahead, behind). Malformed/empty input yields (0, 0).
+/// (`<ahead>\t<behind>`) into (ahead, behind). Malformed/empty input yields (0, 0).
 pub fn parse_ahead_behind(rev_list: &str) -> (i32, i32) {
     let mut counts = rev_list.split_whitespace();
     let ahead = counts

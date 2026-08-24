@@ -495,7 +495,7 @@ pub fn parse_installed_plugins(json_str: &str) -> Vec<InstalledPlugin> {
 }
 
 /// Get enabled plugin keys from Claude Code's settings.json.
-/// Returns keys where enabledPlugins[key] == true.
+/// Returns keys where `enabledPlugins[key] == true`.
 /// Returns empty vec on any parse error.
 pub fn get_enabled_plugins(settings_json: &str) -> Vec<String> {
     let value: serde_json::Value = match serde_json::from_str(settings_json) {
