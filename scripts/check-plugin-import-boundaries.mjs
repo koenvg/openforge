@@ -2,7 +2,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import ts from 'typescript'
+import { parse } from '@babel/parser'
 
 const DEFAULT_PLUGIN_SOURCE_ROOT = 'plugins'
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.svelte'])
@@ -125,40 +125,49 @@ function getScriptBlocks(source, filePath) {
 
 function collectImportSpecifiers(source, filePath) {
   const specifiers = []
+  const extension = path.extname(filePath)
+  const parserPlugins = []
+  if (extension === '.ts' || extension === '.tsx' || extension === '.svelte') parserPlugins.push('typescript')
+  if (extension === '.tsx' || extension === '.jsx') parserPlugins.push('jsx')
 
   for (const block of getScriptBlocks(source, filePath)) {
-    const sourceFile = ts.createSourceFile(filePath, block.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const sourceFile = parse(block.content, { sourceType: 'unambiguous', plugins: parserPlugins })
 
     function addModuleSpecifier(moduleSpecifier, node) {
-      if (!moduleSpecifier || !ts.isStringLiteralLike(moduleSpecifier)) return
+      if (moduleSpecifier?.type !== 'StringLiteral') return
       specifiers.push({
-        importPath: moduleSpecifier.text,
-        line: getLineNumber(source, block.start + node.getStart(sourceFile)),
+        importPath: moduleSpecifier.value,
+        line: getLineNumber(source, block.start + (node.start ?? 0)),
       })
     }
 
     function visit(node) {
-      if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-        addModuleSpecifier(node.moduleSpecifier, node)
+      if (!node || typeof node !== 'object') return
+
+      if (node.type === 'ImportDeclaration'
+        || node.type === 'ExportNamedDeclaration'
+        || node.type === 'ExportAllDeclaration') {
+        addModuleSpecifier(node.source, node)
       }
 
-      if (ts.isImportEqualsDeclaration(node)) {
-        const moduleReference = node.moduleReference
-        if (ts.isExternalModuleReference(moduleReference)) {
-          addModuleSpecifier(moduleReference.expression, node)
-        }
+      if (node.type === 'TSImportEqualsDeclaration'
+        && node.moduleReference.type === 'TSExternalModuleReference') {
+        addModuleSpecifier(node.moduleReference.expression, node)
       }
 
-      if (ts.isCallExpression(node) && node.arguments.length > 0) {
-        if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      if (node.type === 'ImportExpression') addModuleSpecifier(node.source, node)
+
+      if (node.type === 'CallExpression' && node.arguments.length > 0) {
+        if (node.callee.type === 'Import') addModuleSpecifier(node.arguments[0], node)
+        if (node.callee.type === 'Identifier' && node.callee.name === 'require') {
           addModuleSpecifier(node.arguments[0], node)
         }
-
-        if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
-          addModuleSpecifier(node.arguments[0], node)
-        }
       }
-      ts.forEachChild(node, visit)
+
+      for (const child of Object.values(node)) {
+        if (Array.isArray(child)) child.forEach(visit)
+        else visit(child)
+      }
     }
 
     visit(sourceFile)

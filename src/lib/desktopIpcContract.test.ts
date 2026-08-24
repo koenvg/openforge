@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import ts from 'typescript'
+import { parse } from '@babel/parser'
+import type { CallExpression, Node, ObjectProperty } from '@babel/types'
 import { describe, expect, it } from 'vitest'
 import * as ipc from './ipc'
 import {
@@ -16,22 +17,37 @@ interface ParsedInvokeContract {
   payloadKeys: string[]
 }
 
-function propertyName(name: ts.PropertyName, sourceFile: ts.SourceFile): string {
-  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text
-  return name.getText(sourceFile)
+function sourceSlice(node: Node, sourceText: string): string {
+  return node.start === null || node.end === null ? '' : sourceText.slice(node.start, node.end)
 }
 
-function findInvokeCalls(node: ts.Node): ts.CallExpression[] {
-  const calls: ts.CallExpression[] = []
+function propertyName(name: ObjectProperty['key'], sourceText: string): string {
+  if (name.type === 'Identifier') return name.name
+  if (name.type === 'StringLiteral' || name.type === 'NumericLiteral') return String(name.value)
+  return sourceSlice(name, sourceText)
+}
 
-  function visit(child: ts.Node): void {
-    if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === 'invoke') {
-      calls.push(child)
+function isNode(value: unknown): value is Node {
+  return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
+}
+
+function findInvokeCalls(node: Node): CallExpression[] {
+  const calls: CallExpression[] = []
+
+  function visit(value: unknown): void {
+    if (!isNode(value)) return
+
+    if (value.type === 'CallExpression' && value.callee.type === 'Identifier' && value.callee.name === 'invoke') {
+      calls.push(value)
     }
-    ts.forEachChild(child, visit)
+
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child)) child.forEach(visit)
+      else visit(child)
+    }
   }
 
-  ts.forEachChild(node, visit)
+  visit(node)
   return calls
 }
 
@@ -39,34 +55,34 @@ function findInvokeCalls(node: ts.Node): ts.CallExpression[] {
 function parseIpcInvokeContracts(): ParsedInvokeContract[] {
   const sourcePath = resolve(process.cwd(), 'src/lib/ipc.ts')
   const sourceText = readFileSync(sourcePath, 'utf8')
-  const sourceFile = ts.createSourceFile(sourcePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const sourceFile = parse(sourceText, { sourceType: 'module', plugins: ['typescript'] })
   const contracts: ParsedInvokeContract[] = []
 
-  for (const statement of sourceFile.statements) {
-    if (!ts.isFunctionDeclaration(statement) || !statement.name) continue
-    const isExported = statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
-    if (!isExported) continue
+  for (const statement of sourceFile.program.body) {
+    if (statement.type !== 'ExportNamedDeclaration') continue
+    const declaration = statement.declaration
+    if (declaration?.type !== 'FunctionDeclaration' || !declaration.id) continue
 
-    const invokeCalls = findInvokeCalls(statement)
+    const invokeCalls = findInvokeCalls(declaration)
     if (invokeCalls.length === 0) continue
 
     const commandArgument = invokeCalls[0].arguments[0]
-    if (!commandArgument || !ts.isStringLiteral(commandArgument)) continue
+    if (!commandArgument || commandArgument.type !== 'StringLiteral') continue
 
     const payloadKeys = invokeCalls.flatMap((invokeCall) => {
       const payloadArgument = invokeCall.arguments[1]
-      return payloadArgument && ts.isObjectLiteralExpression(payloadArgument)
+      return payloadArgument?.type === 'ObjectExpression'
         ? payloadArgument.properties.map((property) => {
-          if (ts.isShorthandPropertyAssignment(property)) return property.name.text
-          if (ts.isPropertyAssignment(property)) return propertyName(property.name, sourceFile)
-          return property.getText(sourceFile)
+          if (property.type !== 'ObjectProperty') return sourceSlice(property, sourceText)
+          if (property.shorthand && property.key.type === 'Identifier') return property.key.name
+          return propertyName(property.key, sourceText)
         })
         : []
     }).filter((key, index, keys) => keys.indexOf(key) === index)
 
     contracts.push({
-      functionName: statement.name.text,
-      ipcCommand: commandArgument.text,
+      functionName: declaration.id.name,
+      ipcCommand: commandArgument.value,
       payloadKeys,
     })
   }

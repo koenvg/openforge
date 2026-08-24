@@ -64,6 +64,8 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@babel/parser": "catalog:",
+    "@babel/types": "catalog:",
     "@git-diff-view/lowlight": "catalog:",
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@testing-library/jest-dom": "^7.0.1",

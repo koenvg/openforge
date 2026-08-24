@@ -2,7 +2,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
+import { parse } from '@babel/parser'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '..')
@@ -13,64 +13,67 @@ const outputPath = resolve(repoRoot, 'src/electron/generatedRustSidecarCommands.
 function unwrapExpression(expression) {
   let current = expression
   while (
-    ts.isAsExpression(current)
-    || ts.isSatisfiesExpression(current)
-    || ts.isParenthesizedExpression(current)
+    current.type === 'TSAsExpression'
+    || current.type === 'TSSatisfiesExpression'
+    || current.type === 'ParenthesizedExpression'
   ) {
     current = current.expression
   }
   return current
 }
 
+function* topLevelVariableDeclarations(sourceFile) {
+  for (const statement of sourceFile.program.body) {
+    const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
+    if (declaration?.type === 'VariableDeclaration') yield* declaration.declarations
+  }
+}
+
 function collectStringConstants(sourceFile) {
   const constants = new Map()
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue
-      const initializer = unwrapExpression(declaration.initializer)
-      if (ts.isStringLiteral(initializer)) constants.set(declaration.name.text, initializer.text)
-    }
+  for (const declaration of topLevelVariableDeclarations(sourceFile)) {
+    if (declaration.id.type !== 'Identifier' || !declaration.init) continue
+    const initializer = unwrapExpression(declaration.init)
+    if (initializer.type === 'StringLiteral') constants.set(declaration.id.name, initializer.value)
   }
   return constants
 }
 
 function propertyValue(object, name) {
   const property = object.properties.find(candidate => (
-    ts.isPropertyAssignment(candidate)
-    && ((ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)) && candidate.name.text === name)
+    candidate.type === 'ObjectProperty'
+    && ((candidate.key.type === 'Identifier' && candidate.key.name === name)
+      || (candidate.key.type === 'StringLiteral' && candidate.key.value === name))
   ))
-  return property?.initializer
+  return property?.type === 'ObjectProperty' ? property.value : null
 }
 
 function resolveString(expression, constants) {
   if (!expression) return null
   const unwrapped = unwrapExpression(expression)
-  if (ts.isStringLiteral(unwrapped)) return unwrapped.text
-  if (ts.isIdentifier(unwrapped)) return constants.get(unwrapped.text) ?? null
+  if (unwrapped.type === 'StringLiteral') return unwrapped.value
+  if (unwrapped.type === 'Identifier') return constants.get(unwrapped.name) ?? null
   return null
 }
 
 function commandContracts(sourceFile, constants) {
   const commands = []
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue
-      if (!['desktopCommandContracts', 'internalDesktopCommandContracts'].includes(declaration.name.text)) continue
+  for (const declaration of topLevelVariableDeclarations(sourceFile)) {
+    if (declaration.id.type !== 'Identifier' || !declaration.init) continue
+    const declarationName = declaration.id.name
+    if (!['desktopCommandContracts', 'internalDesktopCommandContracts'].includes(declarationName)) continue
 
-      const initializer = unwrapExpression(declaration.initializer)
-      if (!ts.isArrayLiteralExpression(initializer)) {
-        throw new Error(`${declaration.name.text} must be an array literal`)
-      }
+    const initializer = unwrapExpression(declaration.init)
+    if (initializer.type !== 'ArrayExpression') {
+      throw new Error(`${declarationName} must be an array literal`)
+    }
 
-      for (const element of initializer.elements) {
-        if (!ts.isObjectLiteralExpression(element)) throw new Error(`${declaration.name.text} contains a non-object entry`)
-        const owner = resolveString(propertyValue(element, 'owner'), constants)
-        const command = resolveString(propertyValue(element, 'ipcCommand'), constants)
-        if (!owner || !command) throw new Error(`${declaration.name.text} contains an unresolved command contract`)
-        if (owner === 'rust-sidecar') commands.push(command)
-      }
+    for (const element of initializer.elements) {
+      if (element?.type !== 'ObjectExpression') throw new Error(`${declarationName} contains a non-object entry`)
+      const owner = resolveString(propertyValue(element, 'owner'), constants)
+      const command = resolveString(propertyValue(element, 'ipcCommand'), constants)
+      if (!owner || !command) throw new Error(`${declarationName} contains an unresolved command contract`)
+      if (owner === 'rust-sidecar') commands.push(command)
     }
   }
   return commands
@@ -86,8 +89,8 @@ async function main() {
     readFile(contractPath, 'utf8'),
     readFile(protocolPath, 'utf8'),
   ])
-  const contractFile = ts.createSourceFile(contractPath, contractSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  const protocolFile = ts.createSourceFile(protocolPath, protocolSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const contractFile = parse(contractSource, { sourceType: 'module', plugins: ['typescript'] })
+  const protocolFile = parse(protocolSource, { sourceType: 'module', plugins: ['typescript'] })
   const constants = new Map([
     ...collectStringConstants(contractFile),
     ...collectStringConstants(protocolFile),

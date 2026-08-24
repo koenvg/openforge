@@ -2,7 +2,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import ts from 'typescript'
+import { parse } from 'svelte/compiler'
 
 const DEFAULT_TARGETS = ['src', 'plugins', 'packages']
 const IGNORED_DIRS = new Set(['.git', 'node_modules', 'dist', 'target', '.svelte-kit'])
@@ -26,21 +26,6 @@ function walkSvelteFiles(targetPath, files = []) {
   return files
 }
 
-function getScriptBlocks(source) {
-  const blocks = []
-  const scriptPattern = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi
-  let match
-
-  while ((match = scriptPattern.exec(source)) !== null) {
-    const content = match[1]
-    if (content === undefined) continue
-    const start = match.index + match[0].indexOf(content)
-    blocks.push({ content, start })
-  }
-
-  return blocks
-}
-
 function replaceRangeWithSpaces(source, start, end) {
   return source.slice(0, start) + ' '.repeat(end - start) + source.slice(end)
 }
@@ -54,49 +39,25 @@ function hasIdentifier(source, identifier) {
   return new RegExp(`(?<![\\w$])\\$?${escaped}(?![\\w$])`).test(source)
 }
 
-function getImportedBindings(sourceFile, importDeclaration) {
-  const bindings = []
-  const clause = importDeclaration.importClause
-  if (!clause) return bindings
-
-  if (clause.name) bindings.push(clause.name.text)
-
-  const namedBindings = clause.namedBindings
-  if (!namedBindings) return bindings
-
-  if (ts.isNamespaceImport(namedBindings)) {
-    bindings.push(namedBindings.name.text)
-    return bindings
-  }
-
-  for (const element of namedBindings.elements) {
-    bindings.push(element.name.text)
-  }
-
-  return bindings
-}
-
 export function findUnusedSvelteImports(source, fileName = 'component.svelte') {
-  const scriptBlocks = getScriptBlocks(source)
+  const ast = parse(source, { filename: fileName, modern: true })
+  const scriptBlocks = [ast.module, ast.instance]
+    .filter(Boolean)
+    .sort((left, right) => left.start - right.start)
   let searchableSource = source
   const imports = []
 
   for (const block of scriptBlocks) {
-    const sourceFile = ts.createSourceFile(fileName, block.content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    let statementStart = block.content.start
+    for (const statement of block.content.body) {
+      if (statement.type === 'ImportDeclaration') {
+        searchableSource = replaceRangeWithSpaces(searchableSource, statementStart, statement.end)
 
-    for (const statement of sourceFile.statements) {
-      if (!ts.isImportDeclaration(statement)) continue
-
-      const statementStart = statement.getFullStart()
-      const statementEnd = statement.end
-      const absoluteStart = block.start + statementStart
-      const absoluteEnd = block.start + statementEnd
-
-      searchableSource = replaceRangeWithSpaces(searchableSource, absoluteStart, absoluteEnd)
-
-      for (const binding of getImportedBindings(sourceFile, statement)) {
-        imports.push({ name: binding, index: block.start + statement.getStart(sourceFile) })
+        for (const specifier of statement.specifiers) {
+          imports.push({ name: specifier.local.name, index: statement.start })
+        }
       }
+      statementStart = statement.end
     }
   }
 
