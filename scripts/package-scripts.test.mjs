@@ -56,6 +56,30 @@ describe('package build scripts', () => {
     expect(ciWorkflow).toContain("steps.plugin_build.outputs.exit_code != '0'")
   })
 
+  it('uses Node.js 24-backed GitHub Action releases', async () => {
+    const workflowDirectory = join(repoRoot, '.github/workflows')
+    const workflowFiles = (await readdir(workflowDirectory)).filter((name) => name.endsWith('.yml'))
+    const workflowSource = (
+      await Promise.all(
+        workflowFiles.map((name) => readFile(join(workflowDirectory, name), 'utf8')),
+      )
+    ).join('\n')
+
+    for (const action of [
+      'actions/checkout',
+      'actions/setup-node',
+      'actions/upload-artifact',
+      'pnpm/action-setup',
+    ]) {
+      const versions = [...workflowSource.matchAll(new RegExp(`${action}@([^\\s]+)`, 'g'))].map(
+        ([, version]) => version,
+      )
+
+      expect(versions.length, action).toBeGreaterThan(0)
+      expect(new Set(versions), action).toEqual(new Set(['v6']))
+    }
+  })
+
   it('runs the packaged Electron smoke guardrail in general CI on macOS instead of release-only CI', async () => {
     const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
     const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
@@ -98,8 +122,6 @@ describe('package build scripts', () => {
       'npm view "@openforge-app/plugin-sdk@$PACKAGE_VERSION"',
       'pnpm packages:metadata:check',
       'npm pack --dry-run',
-      'uses: actions/setup-node@v6',
-      'node-version: 24',
       'npm install --global npm@^11.5.1',
       'npm publish --access public --provenance',
     ]
@@ -113,6 +135,7 @@ describe('package build scripts', () => {
     }
 
     expect(reusablePublishWorkflow).toContain('workflow_call:')
+    expect(reusablePublishWorkflow).toContain('node-version: 24')
     for (const sharedStep of sharedPublishSteps) {
       expect(reusablePublishWorkflow).toContain(sharedStep)
     }

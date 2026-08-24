@@ -24,7 +24,7 @@ jobs:
     outputs:
       build_number: ${{ steps.source-version.outputs.build_number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Derive monotonic build number from source history
@@ -45,7 +45,7 @@ jobs:
       OPENFORGE_MOBILE_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Java
         uses: actions/setup-java@v4
@@ -72,7 +72,7 @@ jobs:
         run: ./scripts/mobile-companion build-android-release
 
       - name: Upload Android private artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: openforge-companion-android-${{ inputs.version_name }}-${{ needs.version.outputs.build_number }}
           if-no-files-found: error
@@ -93,7 +93,7 @@ jobs:
       OPENFORGE_MOBILE_BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -134,7 +134,7 @@ jobs:
         run: ./scripts/mobile-companion build-ios-release
 
       - name: Upload iOS private artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: openforge-companion-ios-${{ inputs.version_name }}-${{ needs.version.outputs.build_number }}
           if-no-files-found: error
