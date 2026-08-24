@@ -1530,6 +1530,8 @@ mod tests {
         );
     }
 
+    const CWD_OUTPUT_READY: &str = "openforge-cwd-output=ready";
+
     struct CwdPrintingAgentAdapter;
 
     impl AgentPtyProviderAdapter for CwdPrintingAgentAdapter {
@@ -1538,11 +1540,17 @@ mod tests {
         }
 
         fn command_name(&self) -> &'static str {
-            "/bin/pwd"
+            "/bin/sh"
         }
 
         fn command_args(&self) -> Vec<String> {
-            vec!["-P".to_string()]
+            vec![
+                "-c".to_string(),
+                format!(
+                    "/bin/pwd -P; printf '{}\\n'; IFS= read -r _",
+                    CWD_OUTPUT_READY
+                ),
+            ]
         }
 
         fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
@@ -1592,26 +1600,55 @@ mod tests {
             .await
             .expect("agent PTY should spawn in workspace with spaces");
 
-        let output = tokio::time::timeout(Duration::from_secs(5), async {
+        let output_result = tokio::time::timeout(Duration::from_secs(5), async {
             let mut output = String::new();
             loop {
-                let event = app_event_rx
-                    .recv()
-                    .await
-                    .expect("PTY event channel should remain open");
-                match event.event_name.as_str() {
-                    "pty-output-agent-space-cwd" => output.push_str(
-                        event.payload["data"]
-                            .as_str()
-                            .expect("PTY output event should contain text data"),
-                    ),
-                    "pty-exit-agent-space-cwd" => break output,
-                    _ => {}
+                let event = app_event_rx.recv().await?;
+                if event.event_name != "pty-output-agent-space-cwd" {
+                    continue;
+                }
+
+                output.push_str(
+                    event.payload["data"]
+                        .as_str()
+                        .expect("PTY output event should contain text data"),
+                );
+                if output
+                    .lines()
+                    .any(|line| line.trim_end_matches('\r') == CWD_OUTPUT_READY)
+                {
+                    break Ok::<_, tokio::sync::broadcast::error::RecvError>(output);
                 }
             }
         })
-        .await
-        .expect("agent PTY should emit output and exit");
+        .await;
+        if !matches!(&output_result, Ok(Ok(_))) {
+            let _ = manager.kill_pty("agent-space-cwd").await;
+        }
+        let output = output_result
+            .expect("agent PTY should emit the cwd output readiness marker")
+            .expect("PTY event channel should remain open until cwd output is ready");
+
+        let release_result = manager.write_pty("agent-space-cwd", b"\n").await;
+        if release_result.is_err() {
+            let _ = manager.kill_pty("agent-space-cwd").await;
+        }
+        release_result.expect("test should release the cwd-printing process");
+        let exit_result = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let event = app_event_rx.recv().await?;
+                if event.event_name == "pty-exit-agent-space-cwd" {
+                    break Ok::<_, tokio::sync::broadcast::error::RecvError>(());
+                }
+            }
+        })
+        .await;
+        if !matches!(&exit_result, Ok(Ok(()))) {
+            let _ = manager.kill_pty("agent-space-cwd").await;
+        }
+        exit_result
+            .expect("agent PTY should exit after the test releases it")
+            .expect("PTY event channel should remain open until the process exits");
 
         assert!(
             output
