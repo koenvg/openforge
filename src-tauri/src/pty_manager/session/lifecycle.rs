@@ -1,5 +1,6 @@
 use crate::terminal_model::ShadowTerminalSession;
-use log::{error, info};
+use base64::Engine;
+use log::{error, info, warn};
 use portable_pty::PtySize;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
@@ -15,7 +16,9 @@ use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
     MANAGED_PROCESS_TERM_TIMEOUT,
 };
-use super::super::{PtyBufferState, PtyError, PtyManager, PtyProcessDiagnosticSession};
+use super::super::{
+    PtyBufferState, PtyError, PtyManager, PtyProcessDiagnosticSession, TerminalViewSnapshot,
+};
 
 pub(in super::super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(in super::super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
@@ -525,6 +528,43 @@ impl PtyManager {
             buffer: self.get_pty_buffer(task_id).await,
             is_live,
         }
+    }
+
+    pub async fn terminal_view_snapshot(&self, session_key: &str) -> Option<TerminalViewSnapshot> {
+        if !self.terminal_view_enabled() {
+            return None;
+        }
+        let (instance_id, client) = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions.get(session_key)?;
+            (
+                session.instance_id,
+                session.shadow_model.as_ref()?.snapshot_client(),
+            )
+        };
+        let snapshot = match tokio::task::spawn_blocking(move || client.portable_snapshot()).await {
+            Ok(Ok(snapshot)) if snapshot.instance_id == instance_id => snapshot,
+            Ok(Ok(_)) => return None,
+            Ok(Err(error)) => {
+                warn!(
+                    "[terminal-model-view] key={} instance={} snapshot unavailable: {}",
+                    session_key, instance_id, error
+                );
+                return None;
+            }
+            Err(error) => {
+                warn!(
+                    "[terminal-model-view] key={} instance={} snapshot worker failed: {}",
+                    session_key, instance_id, error
+                );
+                return None;
+            }
+        };
+        Some(TerminalViewSnapshot {
+            instance_id: snapshot.instance_id,
+            watermark: snapshot.watermark,
+            data: base64::engine::general_purpose::STANDARD.encode(snapshot.portable_vt),
+        })
     }
 
     pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {

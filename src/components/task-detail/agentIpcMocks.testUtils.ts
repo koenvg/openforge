@@ -16,6 +16,7 @@ vi.mock('../../lib/ipc', () => ({
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
   getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
+  getTerminalViewSnapshot: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({

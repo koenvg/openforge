@@ -119,6 +119,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
   let focusFilterStates = $state<TaskState[]>([...DEFAULT_FOCUS_STATES])
   let isCodeCleanupTasksEnabled = $state(codeCleanupTasksEnabledState.current)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
+  let isGhosttyTerminalStateEnabled = $state(false)
   let isDarkMode = $state(themeModeState.current === 'dark')
 
   let isSaving = $state(false)
@@ -217,6 +218,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
       isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
       codeCleanupTasksEnabled.set(isCodeCleanupTasksEnabled)
       isTaskDisplayTitleMetadataUpdatesEnabled = globalSettings.taskDisplayTitleMetadataUpdatesEnabled
+      isGhosttyTerminalStateEnabled = globalSettings.ghosttyTerminalStateEnabled
       githubPollInterval = globalSettings.githubPollInterval
       globalUseWorktrees = globalSettings.useWorktrees
       globalAiProvider = globalSettings.aiProvider
@@ -382,6 +384,11 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     scheduleSave()
   }
 
+  function handleGhosttyTerminalStateChange(enabled: boolean): void {
+    isGhosttyTerminalStateEnabled = enabled
+    scheduleSave({ ghosttyTerminalStateEnabled: enabled })
+  }
+
   function handleGlobalSettingChange(key: string, value: string): void {
     switch (key) {
       case 'code_cleanup_tasks_enabled':
@@ -545,6 +552,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get modelStatuses() { return modelStatuses },
     get downloadingModel() { return downloadingModel },
     get isDarkMode() { return isDarkMode },
+    get isGhosttyTerminalStateEnabled() { return isGhosttyTerminalStateEnabled },
     get settingsLoading() { return settingsLoading },
     get projectSettingsLoadError() { return projectSettingsLoadError },
     get globalSettingsLoadError() { return globalSettingsLoadError },
@@ -582,6 +590,7 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     beginDeleteConfirmation() { confirmingDelete = true; deleteError = null },
     cancelDeleteConfirmation() { confirmingDelete = false; deleteError = null },
     handleThemeToggle,
+    handleGhosttyTerminalStateChange,
     handleGlobalSettingChange,
     handleGlobalPluginToggle,
     handleProjectSettingChange,

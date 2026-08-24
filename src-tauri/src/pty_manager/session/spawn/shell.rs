@@ -55,6 +55,7 @@ struct ShellProcessRequest<'a> {
     rows: u16,
     terminal_image_protocol: Option<TerminalImageProtocol>,
     command: CommandBuilder,
+    app_event_tx: Option<crate::app_events::AppEventSender>,
 }
 
 struct ShellSpawnToken {
@@ -141,6 +142,7 @@ impl PtyManager {
             rows,
             terminal_image_protocol,
             mut command,
+            app_event_tx,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
         Self::configure_pty_command(&mut command, cwd, terminal_image_protocol);
@@ -155,6 +157,7 @@ impl PtyManager {
             kind: PtySessionKind::Shell {
                 task_id: task_id.to_string(),
             },
+            app_event_tx,
         })?;
         info!(
             "Shell PTY for task {} started (PID: {})",
@@ -282,6 +285,7 @@ impl PtyManager {
             rows,
             terminal_image_protocol,
             command,
+            app_event_tx: app_event_tx.clone(),
         })?;
         let instance_id = spawned.instance_id();
         let managed_process = spawned.managed_process().clone();

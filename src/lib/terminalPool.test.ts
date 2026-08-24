@@ -220,6 +220,7 @@ vi.mock("./ipc", () => ({
 	writePty: vi.fn().mockResolvedValue(undefined),
 	resizePty: vi.fn().mockResolvedValue(undefined),
 	getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
+	getTerminalViewSnapshot: vi.fn().mockResolvedValue(null),
 	openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -830,6 +831,10 @@ describe("terminalPool", () => {
 		const entryB = await acquire("task-reconnect-b");
 		const { reset: resetA, write: writeA } = getTerminalMocks(entryA);
 		const { reset: resetB, write: writeB } = getTerminalMocks(entryB);
+		resetA.mockClear();
+		writeA.mockClear();
+		resetB.mockClear();
+		writeB.mockClear();
 
 		const reconnectCb = getListenCallback("openforge-app-events-reconnected");
 		reconnectCb({ payload: { attempt: 1 } });

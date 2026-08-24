@@ -46,6 +46,101 @@ describe('terminal runtime acquisition', () => {
     }
   })
 
+  it('boots xterm from a Ghostty snapshot and applies only frames after its watermark', async () => {
+    const terminalKey = 'T-ghostty-shell-0'
+    const host = createHost()
+    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 7,
+      watermark: 1,
+      data: btoa('ghostty snapshot'),
+    })
+    const resumeSnapshot = host.deferTerminalViewSnapshot(terminalKey)
+    const runtime = createTerminalRuntime(host)
+
+    const acquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => {
+      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    })
+    host.emit(`pty-model-output-${terminalKey}`, {
+      instance_id: 7,
+      sequence: 2,
+      data: btoa(' later'),
+    })
+    resumeSnapshot()
+    const entry = await acquisition
+
+    expect(entry.terminalStateSource).toBe('ghostty')
+    expect(entry.terminalModelSequence).toBe(2)
+    expect(getPtyBuffer).not.toHaveBeenCalled()
+    const writes = terminalMocks.instances[0].write.mock.calls
+    expect(Array.from(writes[0][0] as Uint8Array)).toEqual(
+      Array.from(new TextEncoder().encode('ghostty snapshot')),
+    )
+    expect(Array.from(writes[1][0] as Uint8Array)).toEqual(
+      Array.from(new TextEncoder().encode(' later')),
+    )
+  })
+
+  it('switches a legacy view when a newly created Terminal Session starts publishing model frames', async () => {
+    const terminalKey = 'T-late-model-shell-0'
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+    expect(entry.terminalStateSource).toBe('legacy')
+
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 12,
+      watermark: 1,
+      data: btoa('model became available'),
+    })
+    host.emit(`pty-model-output-${terminalKey}`, {
+      instance_id: 12,
+      sequence: 1,
+      data: btoa('model became available'),
+    })
+
+    await vi.waitFor(() => {
+      expect(entry.terminalStateSource).toBe('ghostty')
+      expect(entry.terminalModelSequence).toBe(1)
+    })
+    expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
+  })
+
+  it('requests a fresh Ghostty snapshot when a live-frame sequence has a gap', async () => {
+    const terminalKey = 'T-gap-shell-0'
+    const host = createHost()
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 9,
+      watermark: 1,
+      data: btoa('initial state'),
+    })
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 9,
+      watermark: 3,
+      data: btoa('recovered state'),
+    })
+    host.emit(`pty-model-output-${terminalKey}`, {
+      instance_id: 9,
+      sequence: 3,
+      data: btoa('gap frame'),
+    })
+
+    await vi.waitFor(() => {
+      expect(entry.terminalModelRecovery).toBeNull()
+      expect(entry.terminalModelSequence).toBe(3)
+      expect(entry.terminalStateSource).toBe('ghostty')
+      expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
+    })
+    const writes = terminalMocks.instances[0].write.mock.calls
+    expect(Array.from(writes.at(-1)?.[0] as Uint8Array)).toEqual(
+      Array.from(new TextEncoder().encode('recovered state')),
+    )
+  })
+
   it('deduplicates concurrent acquisitions for one terminal key', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)

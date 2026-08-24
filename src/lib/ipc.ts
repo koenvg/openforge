@@ -1,7 +1,7 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
-import type { PtyBufferState, TerminalImageProtocol } from '@openforge-app/terminal-runtime'
+import type { PtyBufferState, TerminalImageProtocol, TerminalViewSnapshot } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 import type { PullRequestMergeMethod } from './types'
@@ -512,6 +512,10 @@ export async function killShellsForTask(taskId: string): Promise<void> {
 
 export async function getPtyBuffer(taskId: string): Promise<PtyBufferState> {
   return invoke<PtyBufferState>("get_pty_buffer", { taskId });
+}
+
+export async function getTerminalViewSnapshot(taskId: string): Promise<TerminalViewSnapshot | null> {
+  return invoke<TerminalViewSnapshot | null>("get_terminal_view_snapshot", { taskId });
 }
 
 export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {

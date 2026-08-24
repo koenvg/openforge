@@ -61,6 +61,7 @@ describe('settingsSaver', () => {
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
+      ghosttyTerminalStateEnabled: true,
       githubPollInterval: 45,
       useWorktrees: false,
       aiProvider: 'opencode',
@@ -70,6 +71,7 @@ describe('settingsSaver', () => {
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
+    expect(setConfig).toHaveBeenCalledWith('ghostty_terminal_state_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
     expect(setConfig).toHaveBeenCalledWith('use_worktrees', 'false')
     expect(setConfig).toHaveBeenCalledWith('ai_provider', 'opencode')

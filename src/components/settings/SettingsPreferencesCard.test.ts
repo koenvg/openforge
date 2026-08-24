@@ -7,6 +7,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
 		isDarkMode: false,
 		onThemeToggle: vi.fn(),
+		ghosttyTerminalStateEnabled: false,
+		onGhosttyTerminalStateChange: vi.fn(),
 		...overrides,
 	}
 }
@@ -59,6 +61,25 @@ describe('SettingsPreferencesCard', () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
 			expect(screen.getByText('Switch between light and dark theme')).toBeTruthy()
+		})
+	})
+
+	describe('Ghostty terminal state', () => {
+		it('offers the experimental cutover disabled by default', async () => {
+			const onGhosttyTerminalStateChange = vi.fn()
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ onGhosttyTerminalStateChange }),
+			})
+
+			const toggle = requireElement(
+				screen.getByTestId('ghostty-terminal-state-toggle'),
+				HTMLInputElement,
+			)
+			expect(toggle.checked).toBe(false)
+
+			await fireEvent.click(toggle)
+
+			expect(onGhosttyTerminalStateChange).toHaveBeenCalledWith(true)
 		})
 	})
 })

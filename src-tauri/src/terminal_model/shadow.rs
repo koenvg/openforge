@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
-#[cfg(test)]
 use std::time::Duration;
 
 const COMMAND_QUEUE_CAPACITY: usize = 64;
@@ -17,7 +16,6 @@ const REPLY_CAPACITY: usize = 64;
 const REPLY_BYTES_CAPACITY: usize = 64 * 1024;
 const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
-#[cfg(test)]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,15 +46,46 @@ pub(crate) struct ShadowDiagnostic {
     pub(crate) message: String,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TerminalModelOutputFrame {
+    pub(crate) instance_id: u64,
+    pub(crate) sequence: u64,
+    pub(crate) bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TerminalModelEvent {
+    Output(TerminalModelOutputFrame),
+    Disabled { instance_id: u64 },
+}
+
+pub(crate) type TerminalModelEventSink = Arc<dyn Fn(TerminalModelEvent) + Send + Sync>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PortableTerminalSnapshot {
+    pub(crate) instance_id: u64,
+    pub(crate) watermark: u64,
+    pub(crate) portable_vt: Vec<u8>,
+}
+
 struct ShadowState {
     disabled: AtomicBool,
     diagnostics: Mutex<VecDeque<ShadowDiagnostic>>,
     replies: Mutex<VecDeque<Vec<u8>>>,
     reply_bytes: Mutex<usize>,
+    event_sink: Option<TerminalModelEventSink>,
 }
 
 impl ShadowState {
+    fn new(event_sink: Option<TerminalModelEventSink>) -> Self {
+        Self {
+            disabled: AtomicBool::new(false),
+            diagnostics: Mutex::new(VecDeque::new()),
+            replies: Mutex::new(VecDeque::new()),
+            reply_bytes: Mutex::new(0),
+            event_sink,
+        }
+    }
     fn disable(&self, session_key: &str, instance_id: u64, phase: &'static str, message: String) {
         if self.disabled.swap(true, Ordering::AcqRel) {
             return;
@@ -65,6 +94,9 @@ impl ShadowState {
             "[terminal-shadow] key={} instance={} phase={} disabled: {}",
             session_key, instance_id, phase, message
         );
+        if let Some(event_sink) = &self.event_sink {
+            event_sink(TerminalModelEvent::Disabled { instance_id });
+        }
         let mut diagnostics = self
             .diagnostics
             .lock()
@@ -112,6 +144,7 @@ enum ShadowCommand {
         cols: u16,
         rows: u16,
     },
+    PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
     #[cfg(test)]
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     #[cfg(test)]
@@ -176,6 +209,18 @@ impl ShadowTerminalFeeder {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct TerminalModelSnapshotClient {
+    tx: mpsc::SyncSender<ShadowCommand>,
+    state: Arc<ShadowState>,
+}
+
+impl TerminalModelSnapshotClient {
+    pub(crate) fn portable_snapshot(&self) -> Result<PortableTerminalSnapshot, String> {
+        request_portable_snapshot(&self.tx, &self.state)
+    }
+}
+
 pub(crate) struct ShadowTerminalSession {
     session_key: Arc<str>,
     instance_id: u64,
@@ -190,8 +235,26 @@ impl ShadowTerminalSession {
         instance_id: u64,
         options: TerminalModelOptions,
     ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+        Self::start_internal(session_key, instance_id, options, None)
+    }
+
+    pub(crate) fn start_with_event_sink(
+        session_key: String,
+        instance_id: u64,
+        options: TerminalModelOptions,
+        event_sink: TerminalModelEventSink,
+    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+        Self::start_internal(session_key, instance_id, options, Some(event_sink))
+    }
+
+    fn start_internal(
+        session_key: String,
+        instance_id: u64,
+        options: TerminalModelOptions,
+        event_sink: Option<TerminalModelEventSink>,
+    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
         let session_key: Arc<str> = Arc::from(session_key);
-        let state = Arc::new(ShadowState::default());
+        let state = Arc::new(ShadowState::new(event_sink));
         let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
         let worker_key = Arc::clone(&session_key);
         let worker_state = Arc::clone(&state);
@@ -245,6 +308,18 @@ impl ShadowTerminalSession {
     }
 
     #[cfg(test)]
+    pub(crate) fn portable_snapshot(&self) -> Result<PortableTerminalSnapshot, String> {
+        request_portable_snapshot(&self.tx, &self.state)
+    }
+
+    pub(crate) fn snapshot_client(&self) -> TerminalModelSnapshotClient {
+        TerminalModelSnapshotClient {
+            tx: self.tx.clone(),
+            state: Arc::clone(&self.state),
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, String> {
         self.request(ShadowCommand::Snapshot)
     }
@@ -293,6 +368,21 @@ impl ShadowTerminalSession {
     }
 }
 
+fn request_portable_snapshot(
+    tx: &mpsc::SyncSender<ShadowCommand>,
+    state: &ShadowState,
+) -> Result<PortableTerminalSnapshot, String> {
+    if state.disabled.load(Ordering::Acquire) {
+        return Err("terminal model is disabled".to_string());
+    }
+    let (response_tx, response_rx) = mpsc::sync_channel(1);
+    tx.send(ShadowCommand::PortableSnapshot(response_tx))
+        .map_err(|error| format!("terminal model snapshot request failed: {error}"))?;
+    response_rx
+        .recv_timeout(REQUEST_TIMEOUT)
+        .map_err(|error| format!("terminal model snapshot response failed: {error}"))?
+}
+
 impl Drop for ShadowTerminalSession {
     fn drop(&mut self) {
         if !self.state.disabled.load(Ordering::Acquire) {
@@ -329,6 +419,7 @@ fn run_worker(
 
     let mut bytes_since_checkpoint = 0usize;
     let mut checkpoint_due = true;
+    let mut output_sequence = 0u64;
     loop {
         let command = match rx.recv_timeout(CHECKPOINT_IDLE_INTERVAL) {
             Ok(command) => command,
@@ -351,9 +442,32 @@ fn run_worker(
         let result = match command {
             ShadowCommand::Feed(bytes) => {
                 bytes_since_checkpoint = bytes_since_checkpoint.saturating_add(bytes.len());
-                model.feed(&bytes)
+                let result = model.feed(&bytes);
+                if result.is_ok() {
+                    output_sequence = output_sequence.saturating_add(1);
+                    if let Some(event_sink) = &state.event_sink {
+                        event_sink(TerminalModelEvent::Output(TerminalModelOutputFrame {
+                            instance_id,
+                            sequence: output_sequence,
+                            bytes,
+                        }));
+                    }
+                }
+                result
             }
             ShadowCommand::Resize { cols, rows } => model.resize(cols, rows),
+            ShadowCommand::PortableSnapshot(response) => {
+                let result = model
+                    .format_portable_vt()
+                    .map(|portable_vt| PortableTerminalSnapshot {
+                        instance_id,
+                        watermark: output_sequence,
+                        portable_vt,
+                    })
+                    .map_err(model_error);
+                let _ = response.send(result);
+                continue;
+            }
             #[cfg(test)]
             ShadowCommand::Snapshot(response) => {
                 let result = model.encode_snapshot().map_err(model_error);
@@ -412,6 +526,65 @@ mod tests {
             .any(|part| part == b"before"));
         assert_eq!(session.take_protocol_replies().len(), 1);
         assert!(session.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn portable_snapshot_watermark_separates_bootstrap_from_later_frames() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_events = Arc::clone(&captured);
+        let sink: TerminalModelEventSink = Arc::new(move |event| {
+            captured_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(event);
+        });
+        let (session, feeder) = ShadowTerminalSession::start_with_event_sink(
+            "cutover-shell".to_string(),
+            77,
+            TerminalModelOptions::new(20, 4),
+            sink,
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"bootstrap");
+        let snapshot = session
+            .portable_snapshot()
+            .expect("portable snapshot should be available");
+        feeder.feed(b"later");
+        let final_snapshot = session
+            .portable_snapshot()
+            .expect("later feed should cross the actor barrier");
+
+        assert_eq!(snapshot.instance_id, 77);
+        assert_eq!(snapshot.watermark, 1);
+        assert!(snapshot
+            .portable_vt
+            .windows(b"bootstrap".len())
+            .any(|part| part == b"bootstrap"));
+        assert!(!snapshot
+            .portable_vt
+            .windows(b"later".len())
+            .any(|part| part == b"later"));
+        assert_eq!(final_snapshot.watermark, 2);
+
+        let events = captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(
+            events.as_slice(),
+            [
+                TerminalModelEvent::Output(TerminalModelOutputFrame {
+                    instance_id: 77,
+                    sequence: 1,
+                    bytes: b"bootstrap".to_vec(),
+                }),
+                TerminalModelEvent::Output(TerminalModelOutputFrame {
+                    instance_id: 77,
+                    sequence: 2,
+                    bytes: b"later".to_vec(),
+                }),
+            ]
+        );
     }
 
     #[test]

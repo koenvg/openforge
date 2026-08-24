@@ -1,7 +1,10 @@
 import { terminalLogMessage } from './terminalLogging'
+import { createTerminalModelView } from './terminalModelView'
 import {
   ptyExitEventName,
   ptyOutputEventName,
+  terminalModelOutputEventName,
+  terminalModelDisabledEventName,
   type PoolEntry,
   type TerminalRuntimeHost,
   type TerminalRuntimeUnlistenFn,
@@ -55,6 +58,11 @@ export function createTerminalAcquisition({
   reconnectReplay,
 }: TerminalAcquisitionOptions) {
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
+  const terminalModelView = createTerminalModelView({
+    host,
+    resetEntry,
+    markOutput: lifecycle.markPtyOutput,
+  })
 
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
     if (isShellTerminalKey(entry.taskId)) return
@@ -108,35 +116,32 @@ export function createTerminalAcquisition({
     await preloadEntry()
     if (disposeReleasedAcquisition(operation)) return entry
 
-    try {
-      const { buffer, isLive } = await host.getPtyBuffer(terminalKey)
-      entry.ptyActive = isLive
-      if (buffer) {
-        entry.terminal.write(buffer)
-        entry.hasOutput = true
-      }
-    } catch (error) {
-      console.error(terminalLogMessage(host.loggerName, 'Failed to get PTY buffer:'), error)
-    }
-    if (disposeReleasedAcquisition(operation)) return entry
-
     const outputListenerRetained = await retainAcquisitionListener(
       operation,
       entry,
       host.listenEvent(ptyOutputEventName(terminalKey), (event) => {
-        const instanceId = event.payload.instance_id
-        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
-        if (!event.payload.data) return
-
-        if (entry.needsClear) {
-          resetEntry(entry)
-          entry.needsClear = false
-        }
-        entry.terminal.write(event.payload.data)
-        lifecycle.markPtyOutput(entry)
+        terminalModelView.handlePtyOutput(entry, event.payload)
       }),
     )
     if (!outputListenerRetained || disposeReleasedAcquisition(operation)) return entry
+
+    const modelOutputListenerRetained = await retainAcquisitionListener(
+      operation,
+      entry,
+      host.listenEvent(terminalModelOutputEventName(terminalKey), (event) => {
+        terminalModelView.handleModelOutput(entry, event.payload)
+      }),
+    )
+    if (!modelOutputListenerRetained || disposeReleasedAcquisition(operation)) return entry
+
+    const modelDisabledListenerRetained = await retainAcquisitionListener(
+      operation,
+      entry,
+      host.listenEvent(terminalModelDisabledEventName(terminalKey), (event) => {
+        terminalModelView.handleModelDisabled(entry, event.payload)
+      }),
+    )
+    if (!modelDisabledListenerRetained || disposeReleasedAcquisition(operation)) return entry
 
     const exitListenerRetained = await retainAcquisitionListener(
       operation,
@@ -148,6 +153,13 @@ export function createTerminalAcquisition({
       }),
     )
     if (!exitListenerRetained || disposeReleasedAcquisition(operation)) return entry
+
+    try {
+      await terminalModelView.recover(entry, false)
+    } catch (error) {
+      console.error(terminalLogMessage(host.loggerName, 'Failed to get PTY buffer:'), error)
+    }
+    if (disposeReleasedAcquisition(operation)) return entry
 
     attachAgentTerminalKeyHandler(entry)
     entry.terminal.onData((data: string) => {
@@ -241,5 +253,11 @@ export function createTerminalAcquisition({
     return keysToRelease.size
   }
 
-  return { acquire, release, releaseAll, releaseAllForTask }
+  return {
+    acquire,
+    recoverTerminalState: (entry: PoolEntry) => terminalModelView.recover(entry),
+    release,
+    releaseAll,
+    releaseAllForTask,
+  }
 }

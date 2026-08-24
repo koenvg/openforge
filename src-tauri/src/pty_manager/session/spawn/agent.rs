@@ -53,6 +53,7 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_event_tx: Option<AppEventSender>,
 }
 
 struct AgentEventStreamRequest<'a> {
@@ -368,6 +369,7 @@ impl PtyManager {
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
+            app_event_tx: request.app_event_tx,
         })?;
         info!(
             "{} PTY for task {} started (PID: {})",
@@ -655,6 +657,7 @@ impl PtyManager {
                 cols,
                 rows,
                 terminal_image_protocol,
+                app_event_tx: app_event_tx.clone(),
             },
         )?;
         let instance_id = spawned.instance_id();

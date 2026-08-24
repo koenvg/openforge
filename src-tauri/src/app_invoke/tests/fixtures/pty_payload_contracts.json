@@ -61,6 +61,13 @@
       "payload": {
         "taskId": "T-pty"
       }
+    },
+    {
+      "name": "get_terminal_view_snapshot",
+      "command": "get_terminal_view_snapshot",
+      "payload": {
+        "taskId": "T-pty"
+      }
     }
   ],
   "invalid": [

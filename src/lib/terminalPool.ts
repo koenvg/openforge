@@ -7,7 +7,7 @@ import {
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
 import { listenDesktopEvent } from './desktopIpc'
-import { getPtyBuffer, resizePty, writePty } from './ipc'
+import { getPtyBuffer, getTerminalViewSnapshot, resizePty, writePty } from './ipc'
 import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
 
@@ -18,6 +18,7 @@ function taskIdFromTerminalKey(terminalKey: string): string {
 const terminalRuntime = createTerminalRuntime({
   listenEvent: listenDesktopEvent,
   getPtyBuffer,
+  getTerminalViewSnapshot,
   writePty,
   resizePty,
   openLink: (terminalKey, url) => taskLinkRouter.open({

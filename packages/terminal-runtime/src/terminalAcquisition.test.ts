@@ -22,6 +22,12 @@ function createEntry(terminalKey: string): PoolEntry {
     needsClear: false,
     unlisteners: [],
     currentPtyInstance: null,
+    terminalStateSource: 'bootstrapping',
+    terminalModelSequence: null,
+    terminalModelRejectedInstance: null,
+    pendingPtyOutput: [],
+    pendingTerminalModelOutput: [],
+    terminalModelRecovery: null,
     hasOutput: false,
   } as unknown as PoolEntry
 }
@@ -63,6 +69,6 @@ describe('terminal acquisition', () => {
     await expect(second).resolves.toBe(entry)
     expect(createEntryForKey).toHaveBeenCalledOnce()
     expect(pool.get('T-1')).toBe(entry)
-    expect(host.listenEvent).toHaveBeenCalledTimes(2)
+    expect(host.listenEvent).toHaveBeenCalledTimes(4)
   })
 })

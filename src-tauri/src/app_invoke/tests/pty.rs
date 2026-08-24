@@ -1,4 +1,5 @@
 use super::*;
+use base64::Engine;
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -80,6 +81,80 @@ async fn spawns_without_backend_app_emitter() {
             .await;
     }
     assert!(saw_exit, "sidecar should publish PTY exit events");
+}
+
+#[tokio::test]
+async fn ghostty_terminal_view_snapshot_and_live_frames_share_one_watermark() {
+    let (state, _temp_dir) = test_state("app_invoke_ghostty_terminal_view");
+    invoke_ok(
+        &state,
+        "set_config",
+        json!({
+            "key": crate::pty_manager::GHOSTTY_TERMINAL_VIEW_CONFIG,
+            "value": "true",
+        }),
+    )
+    .await;
+    let instance_id = invoke_ok(
+        &state,
+        "pty_spawn_shell",
+        json!({
+            "taskId": "T-model",
+            "cwd": "/tmp",
+            "cols": 80,
+            "rows": 24,
+            "terminalIndex": 0,
+        }),
+    )
+    .await
+    .as_u64()
+    .expect("instance id");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+
+    invoke_ok(
+        &state,
+        "pty_write",
+        json!({ "taskId": "T-model-shell-0", "data": "printf ghostty-cutover\\n\n" }),
+    )
+    .await;
+
+    let model_event = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.expect("model event stream");
+            if event.event_name == "pty-model-output-T-model-shell-0" {
+                break event;
+            }
+        }
+    })
+    .await
+    .expect("model output event");
+    let snapshot = invoke_ok(
+        &state,
+        "get_terminal_view_snapshot",
+        json!({ "taskId": "T-model-shell-0" }),
+    )
+    .await;
+
+    assert_eq!(snapshot["instanceId"], instance_id);
+    assert!(snapshot["watermark"].as_u64().expect("watermark") >= 1);
+    assert!(model_event.payload["sequence"].as_u64().expect("sequence") >= 1);
+    let portable_vt = base64::engine::general_purpose::STANDARD
+        .decode(snapshot["data"].as_str().expect("snapshot data"))
+        .expect("snapshot base64");
+    assert!(portable_vt
+        .windows(b"ghostty-cutover".len())
+        .any(|part| part == b"ghostty-cutover"));
+
+    let _ = state
+        .pty_manager
+        .as_ref()
+        .expect("PTY manager")
+        .kill_shells_for_task("T-model")
+        .await;
 }
 
 #[tokio::test]

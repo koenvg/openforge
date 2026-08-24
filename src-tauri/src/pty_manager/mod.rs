@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -94,6 +95,8 @@ impl From<std::io::Error> for PtyError {
 // PTY Manager
 // ============================================================================
 
+pub(crate) const GHOSTTY_TERMINAL_VIEW_CONFIG: &str = "ghostty_terminal_state_enabled";
+
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
 pub struct PtyManager {
@@ -105,6 +108,7 @@ pub struct PtyManager {
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: LifecycleLockRegistry,
     shadow_mode: ShadowMode,
+    terminal_view_enabled: Arc<AtomicBool>,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
@@ -115,6 +119,14 @@ pub struct PtyBufferState {
     pub buffer: Option<String>,
     #[serde(rename = "isLive")]
     pub is_live: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalViewSnapshot {
+    pub instance_id: u64,
+    pub watermark: u64,
+    pub data: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -168,10 +180,23 @@ impl PtyManager {
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
             lifecycle_locks: LifecycleLockRegistry::default(),
             shadow_mode: ShadowMode::from_environment(),
+            terminal_view_enabled: Arc::new(AtomicBool::new(false)),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    pub(crate) fn set_terminal_view_enabled(&self, enabled: bool) {
+        self.terminal_view_enabled.store(enabled, Ordering::Release);
+    }
+
+    pub(crate) fn terminal_view_enabled(&self) -> bool {
+        self.terminal_view_enabled.load(Ordering::Acquire)
+    }
+
+    fn terminal_model_enabled(&self) -> bool {
+        self.shadow_mode.is_enabled() || self.terminal_view_enabled()
     }
 }
 

@@ -2,7 +2,10 @@ mod shadow;
 
 #[cfg(test)]
 pub(crate) use shadow::SHADOW_BUFFERED_BYTES_CAPACITY;
-pub(crate) use shadow::{ShadowMode, ShadowTerminalFeeder, ShadowTerminalSession};
+pub(crate) use shadow::{
+    ShadowMode, ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelEvent,
+    TerminalModelEventSink,
+};
 
 use libghostty_vt::{
     fmt::{Format, Formatter, FormatterOptions},

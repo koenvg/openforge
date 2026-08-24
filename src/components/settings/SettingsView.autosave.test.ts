@@ -213,6 +213,7 @@ describe('SettingsView auto-save', () => {
       resolvers.get('use_worktrees')?.('true')
       resolvers.get('ai_provider')?.('claude-code')
       resolvers.get('pr_walkthrough_prompt')?.('Prompt')
+      resolvers.get('ghostty_terminal_state_enabled')?.('false')
 
       await vi.waitFor(() => {
         expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)

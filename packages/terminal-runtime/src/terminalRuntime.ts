@@ -20,13 +20,22 @@ import { themeMode as defaultThemeMode } from './theme'
 
 export { APP_EVENTS_RECONNECTED_EVENT } from './terminalReconnectReplay'
 export type { TerminalImageProtocol } from './terminalImages'
-export { ptyExitEventName, ptyOutputEventName } from './terminalRuntimeTypes'
+export {
+  ptyExitEventName,
+  ptyOutputEventName,
+  terminalModelOutputEventName,
+  terminalModelDisabledEventName,
+} from './terminalRuntimeTypes'
 export type {
   AppEventsReconnectedPayload,
   PoolEntry,
   PtyBufferState,
   PtyExitEventPayload,
   PtyOutputEventPayload,
+  TerminalModelDisabledEventPayload,
+  TerminalModelOutputEventPayload,
+  TerminalStateSource,
+  TerminalViewSnapshot,
   ShellLifecycleState,
   TaskTerminalTabsSession,
   TerminalRuntimeEvent,
@@ -61,12 +70,14 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     entry.terminal.dispose()
   }
 
+  let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
   const reconnectReplay = createTerminalReconnectReplay({
     host,
     getEntries: () => pool.values(),
     hasEntries: () => pool.size > 0,
     resetEntry: resetTerminal,
     notifyLifecycle: sessionLifecycle.notifyShellLifecycle,
+    recoverEntry: entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
   })
   const acquisition = createTerminalAcquisition({
     host,
@@ -78,6 +89,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     lifecycle: sessionLifecycle,
     reconnectReplay,
   })
+  recoverTerminalState = acquisition.recoverTerminalState
 
   const unsubscribeThemeMode = activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
 

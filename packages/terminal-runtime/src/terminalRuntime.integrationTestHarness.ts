@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 import { writable } from 'svelte/store'
 import type { TerminalRuntimeEvent, TerminalRuntimeHost } from './terminalRuntime'
+import type { TerminalViewSnapshot } from './terminalRuntimeTypes'
 
 const hoistedTerminalMocks = vi.hoisted(() => ({
   failCompatibilityAddon: false,
@@ -122,6 +123,8 @@ vi.mock('@xterm/addon-image', () => ({
 export interface TestHost extends TerminalRuntimeHost {
   emit<TPayload>(eventName: string, payload: TPayload): void
   setBuffer(taskId: string, buffer: string | null): void
+  setTerminalViewSnapshot(taskId: string, snapshot: TerminalViewSnapshot | null): void
+  deferTerminalViewSnapshot(taskId: string): () => void
   getListenerCount(eventName: string): number
   deferBufferRead(taskId: string): () => void
   deferListenerRegistration(eventName: string): () => void
@@ -140,6 +143,8 @@ export function createHost(): TestHost {
   const listeners = new Map<string, Set<(event: TerminalRuntimeEvent<unknown>) => void>>()
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
+  const terminalViewSnapshots = new Map<string, TerminalViewSnapshot | null>()
+  const terminalViewSnapshotGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationFailures = new Set<string>()
   const openLink = vi.fn(async () => undefined)
@@ -161,6 +166,10 @@ export function createHost(): TestHost {
       const buffer = buffers.get(taskId) ?? null
       return { buffer, isLive: buffer !== null }
     },
+    async getTerminalViewSnapshot(taskId: string) {
+      await terminalViewSnapshotGates.get(taskId)?.promise
+      return terminalViewSnapshots.get(taskId) ?? null
+    },
     async writePty() {},
     async resizePty() {},
     openLink,
@@ -171,6 +180,17 @@ export function createHost(): TestHost {
     },
     setBuffer(taskId: string, buffer: string | null) {
       buffers.set(taskId, buffer)
+    },
+    setTerminalViewSnapshot(taskId: string, snapshot: TerminalViewSnapshot | null) {
+      terminalViewSnapshots.set(taskId, snapshot)
+    },
+    deferTerminalViewSnapshot(taskId: string) {
+      const gate = createDeferredGate()
+      terminalViewSnapshotGates.set(taskId, gate)
+      return () => {
+        if (terminalViewSnapshotGates.get(taskId) === gate) terminalViewSnapshotGates.delete(taskId)
+        gate.release()
+      }
     },
     deferBufferRead(taskId: string) {
       const gate = createDeferredGate()
