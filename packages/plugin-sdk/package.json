@@ -93,17 +93,17 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.4.13",
-    "marked": "^18.0.10"
+    "dompurify": "catalog:",
+    "marked": "catalog:"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
-    "svelte": "5.56.9",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11",
+    "@types/node": "catalog:pinned",
+    "svelte": "catalog:pinned",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "vscode-material-icons": "^0.1.1"
   }
 }
