@@ -18,6 +18,14 @@ cd openforge
 pnpm install
 ```
 
+## Managing JavaScript dependency versions
+
+Shared dependency versions belong in the pnpm catalogs in `pnpm-workspace.yaml`. Use `catalog:` in package manifests for the normal shared range. Use a named catalog such as `catalog:pinned` when a package intentionally needs an exact version instead of the default caret range.
+
+Keep peer dependency ranges explicit in each package manifest. They describe consumer compatibility, not the version installed in this workspace. Dependencies used by only one workspace package can also remain local to that manifest.
+
+To upgrade a shared dependency, change its catalog entry and run `pnpm install` to update `pnpm-lock.yaml`.
+
 ## Running locally
 
 Run the full Electron app with the Rust sidecar:

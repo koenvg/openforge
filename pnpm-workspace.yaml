@@ -3,6 +3,33 @@ packages:
   - '!apps/mobile_companion'
   - packages/*
   - plugins/*
+
+catalog:
+  '@git-diff-view/core': 0.1.7
+  '@git-diff-view/lowlight': ^0.1.7
+  '@git-diff-view/svelte': ^0.1.7
+  '@lucide/svelte': ^1.32.0
+  '@sveltejs/vite-plugin-svelte': ^7.3.0
+  '@tanstack/virtual-core': ^3.17.8
+  '@testing-library/svelte': ^5.4.2
+  '@types/node': ^26.2.0
+  '@xterm/addon-fit': ^0.11.0
+  '@xterm/addon-image': ^0.9.0
+  '@xterm/addon-web-links': ^0.12.0
+  '@xterm/addon-webgl': ^0.19.0
+  '@xterm/xterm': ^6.0.0
+  dompurify: ^3.4.13
+  marked: ^18.0.10
+  svelte: ^5.56.9
+  typescript: ^6.0.3
+  vite: ^8.2.1
+  vitest: ^4.1.11
+
+catalogs:
+  pinned:
+    '@types/node': 26.2.0
+    svelte: 5.56.9
+
 # pnpm minimumReleaseAge is in minutes; 7200 minutes equals 5 days.
 # Keep Renovate's npm minimumReleaseAge in renovate.json aligned with this value,
 # because Renovate does not infer pnpm's release-age policy.

@@ -9,19 +9,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.32.0",
+    "@lucide/svelte": "catalog:",
     "@openforge-app/plugin-sdk": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.3.0",
-    "@testing-library/svelte": "^5.4.2",
-    "svelte": "^5.56.9",
-    "typescript": "^6.0.3",
-    "vite": "^8.2.1",
-    "vitest": "^4.1.11"
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@testing-library/svelte": "catalog:",
+    "svelte": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "openforge": {
     "id": "com.openforge.task-browser",
