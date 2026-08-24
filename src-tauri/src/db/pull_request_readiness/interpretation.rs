@@ -141,10 +141,7 @@ fn persisted_readiness_view(
     input: &PullRequestReadinessInput<'_>,
 ) -> Option<PullRequestReadinessView> {
     let status = PullRequestReadinessStatus::parse(input.merge_readiness_status?)?;
-    if !matches!(
-        input.merge_readiness_action?,
-        "merge" | "enqueue" | "wait_for_queue" | "wait_for_github" | "resolve_blockers"
-    ) {
+    if !status.matches_action(input.merge_readiness_action) {
         return None;
     }
     if input.readiness_source_head_sha != Some(input.head_sha)
@@ -283,6 +280,30 @@ mod tests {
         let fallback = PullRequestReadinessView::from(&pr);
         assert_eq!(fallback.status(), PullRequestReadinessStatus::ReadyToMerge);
         assert!(!fallback.has_blocker("checks_failed"));
+    }
+
+    #[test]
+    fn current_persisted_readiness_rejects_mismatched_status_and_action() {
+        let mut pr = make_github_readiness_pr();
+        pr.merge_readiness_status = Some("ready_to_merge".to_string());
+        pr.merge_readiness_action = Some("enqueue".to_string());
+        pr.readiness_source_head_sha = Some("head-sha".to_string());
+        pr.readiness_updated_at = Some(pr.updated_at);
+
+        assert!(PullRequestReadinessView::current_persisted(&pr).is_none());
+    }
+
+    #[test]
+    fn readiness_view_falls_back_from_mismatched_persisted_status_and_action() {
+        let mut pr = make_github_readiness_pr();
+        pr.merge_readiness_status = Some("ready_to_enqueue".to_string());
+        pr.merge_readiness_action = Some("merge".to_string());
+        pr.readiness_source_head_sha = Some("head-sha".to_string());
+        pr.readiness_updated_at = Some(pr.updated_at);
+
+        let readiness = PullRequestReadinessView::from(&pr);
+
+        assert_eq!(readiness.status(), PullRequestReadinessStatus::ReadyToMerge);
     }
 
     #[test]
