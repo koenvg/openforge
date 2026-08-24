@@ -23,6 +23,7 @@
   let recordingDuration = $state(0)
   let errorMessage = $state<string | null>(null)
 
+  let isStarting = false
   let recorder: AudioRecorder | null = null
   let durationInterval: ReturnType<typeof setInterval> | null = null
   let errorTimer: ReturnType<typeof setTimeout> | null = null
@@ -95,8 +96,8 @@
       return
     }
 
-    if (voiceState !== 'idle') return
-
+    if (voiceState !== 'idle' || isStarting) return
+    isStarting = true
     try {
       const status = await getWhisperModelStatus()
       if (!status.downloaded) {
@@ -121,6 +122,8 @@
       recorder = null
       clearDurationInterval()
       showError('Failed to start voice recording. Check microphone permissions.')
+    } finally {
+      isStarting = false
     }
   }
 
