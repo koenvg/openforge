@@ -228,7 +228,9 @@
   $effect(() => {
     const projectId = $activeProjectId
     if (projectId !== previousPluginProjectId) {
-      void loadEnabledForProject(projectId)
+      void loadEnabledForProject(projectId).catch((error) => {
+        console.error(`[plugins] Failed to load enabled plugins for visible project ${projectId ?? 'none'}:`, error)
+      })
     }
 
     previousPluginProjectId = projectId
