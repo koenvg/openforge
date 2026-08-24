@@ -385,9 +385,9 @@ impl PtyManager {
 
         let mut failures = Vec::new();
         for key in keys_to_kill {
+            self.agent_spawn_generations.lock().await.remove(&key);
             let lifecycle_lock = self.lifecycle_lock_for(&key).await;
             let _lifecycle_guard = lifecycle_lock.lock().await;
-            self.agent_spawn_generations.lock().await.remove(&key);
             let session = self.sessions.lock().await.remove(&key);
             let Some(mut session) = session else {
                 continue;
