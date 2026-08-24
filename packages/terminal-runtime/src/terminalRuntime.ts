@@ -74,7 +74,15 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     reconnectReplay,
   })
 
-  activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
+  const unsubscribeThemeMode = activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
+
+  function dispose(): void {
+    try {
+      releaseAll()
+    } finally {
+      unsubscribeThemeMode()
+    }
+  }
 
   function releaseAll(): void {
     acquisition.releaseAll()
@@ -124,6 +132,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
     updateTaskTerminalTabsSession: sessionLifecycle.updateTaskTerminalTabsSession,
     clearTaskTerminalTabsSession: sessionLifecycle.clearTaskTerminalTabsSession,
     releaseAll,
+    dispose,
     releaseAllForTask: acquisition.releaseAllForTask,
     focusTerminal,
     hasTerminal,
