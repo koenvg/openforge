@@ -1,8 +1,10 @@
 mod artifact_path;
+mod error;
 mod folder_discovery;
 mod package_metadata;
 mod plugin_row;
 
+pub(super) use error::{PluginPackageValidationError, ValidationResult};
 use package_metadata::{LoadedPluginPackage, ValidatedPluginPackage};
 use std::path::Path;
 
@@ -18,7 +20,7 @@ pub(super) use package_metadata::{
 pub(super) fn validate_package(
     loaded: LoadedPluginPackage,
     dir: &Path,
-) -> Result<ValidatedPluginPackage, String> {
+) -> ValidationResult<ValidatedPluginPackage> {
     let package = loaded.validate()?;
     package_metadata::validate_package_metadata(&package.package_json)?;
     artifact_path::validate_artifact_paths(&package.package_json, dir)?;

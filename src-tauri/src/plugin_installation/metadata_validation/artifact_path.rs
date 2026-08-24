@@ -1,7 +1,12 @@
-use super::package_metadata::PackageJsonFile;
+use super::{
+    error::ValidationResult, package_metadata::PackageJsonFile, PluginPackageValidationError,
+};
 use std::path::{Component, Path};
 
-pub(super) fn validate_artifact_paths(package: &PackageJsonFile, dir: &Path) -> Result<(), String> {
+pub(super) fn validate_artifact_paths(
+    package: &PackageJsonFile,
+    dir: &Path,
+) -> ValidationResult<()> {
     if let Some(frontend) = package.openforge.frontend.as_deref() {
         validate_relative_entry_path(
             dir,
@@ -44,58 +49,61 @@ fn validate_relative_entry_path(
     entry: &str,
     field_name: &str,
     allowed_extensions: &[&str],
-    artifact_description: &str,
-) -> Result<(), String> {
+    artifact_description: &'static str,
+) -> ValidationResult<()> {
     let entry_path = Path::new(entry);
     if entry_path.is_absolute()
         || entry_path
             .components()
             .any(|component| matches!(component, Component::ParentDir))
     {
-        return Err(format!(
-            "package.json openforge.{field_name} entry must stay within the plugin package directory"
-        ));
+        return Err(PluginPackageValidationError::ArtifactOutsidePackage {
+            field: field_name.to_string(),
+        });
     }
 
     let candidate = dir.join(entry_path);
     if !candidate.is_file() {
-        return Err(format!(
-            "OpenForge plugin {field_name} entry is missing at {}; run the package build first",
-            candidate.display()
-        ));
+        return Err(PluginPackageValidationError::MissingArtifact {
+            field: field_name.to_string(),
+            path: candidate,
+        });
     }
 
     let extension = candidate
         .extension()
         .and_then(|extension| extension.to_str());
     if !extension.is_some_and(|extension| allowed_extensions.contains(&extension)) {
-        let extension_label = allowed_extensions
+        let extensions = allowed_extensions
             .iter()
             .map(|extension| format!(".{extension}"))
             .collect::<Vec<_>>()
             .join(", ");
-        return Err(format!(
-            "package.json openforge.{field_name} must point to a {artifact_description} ({extension_label})"
-        ));
+        return Err(PluginPackageValidationError::InvalidArtifactType {
+            field: field_name.to_string(),
+            description: artifact_description,
+            extensions,
+        });
     }
 
     let canonical_dir = dir.canonicalize().map_err(|error| {
-        format!(
-            "failed to canonicalize plugin package directory {}: {error}",
-            dir.display()
-        )
+        PluginPackageValidationError::CanonicalizePackageDirectory {
+            path: dir.to_path_buf(),
+            source: error,
+        }
     })?;
     let canonical_candidate = candidate.canonicalize().map_err(|error| {
-        format!(
-            "failed to canonicalize OpenForge plugin {field_name} entry {}: {error}",
-            candidate.display()
-        )
+        PluginPackageValidationError::CanonicalizeArtifact {
+            field: field_name.to_string(),
+            path: candidate.clone(),
+            source: error,
+        }
     })?;
 
     if !canonical_candidate.starts_with(&canonical_dir) {
-        return Err(format!(
-            "package.json openforge.{field_name} entry must stay within the plugin package directory"
-        ));
+        return Err(PluginPackageValidationError::ArtifactOutsidePackage {
+            field: field_name.to_string(),
+        });
     }
 
     Ok(())
