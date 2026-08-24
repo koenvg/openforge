@@ -10,11 +10,7 @@ pub(in crate::plugin_installation) const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON:
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(in crate::plugin_installation) struct PackageJsonFile {
-    #[serde(rename = "name")]
-    _name: String,
     pub(in crate::plugin_installation) version: String,
-    #[serde(default, rename = "peerDependencies")]
-    _peer_dependencies: Option<Value>,
     pub(in crate::plugin_installation) openforge: OpenForgePackageMetadata,
 }
 
@@ -471,9 +467,4 @@ fn schema_i64_array_field(
                 .ok_or_else(|| format!("{label} entries must be integers"))
         })
         .collect()
-}
-
-#[allow(dead_code)]
-fn _package_metadata_schema_json() -> &'static str {
-    OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON
 }
