@@ -247,7 +247,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -261,6 +261,14 @@ jobs:
         run: |
           set +e -o pipefail
           cargo fmt -- --check 2>&1 | tee /tmp/rust-format.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Run Clippy
+        id: clippy
+        working-directory: ${{ steps.backend-layout.outputs.backend-crate-root }}
+        run: |
+          set +e -o pipefail
+          cargo clippy --all-targets -- -D warnings 2>&1 | tee /tmp/rust-clippy.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
@@ -278,6 +286,7 @@ jobs:
           name: rust-logs
           path: |
             /tmp/rust-format.log
+            /tmp/rust-clippy.log
             /tmp/rust-tests.log
           retention-days: 1
           if-no-files-found: ignore
@@ -287,6 +296,7 @@ jobs:
         run: |
           mkdir -p /tmp/ci-results
           echo "${{ steps.format.outputs.exit_code }}" > /tmp/ci-results/format-exit-code
+          echo "${{ steps.clippy.outputs.exit_code }}" > /tmp/ci-results/clippy-exit-code
           echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
 
       - name: Upload results
@@ -298,7 +308,7 @@ jobs:
           retention-days: 1
 
       - name: Fail if checks failed
-        if: steps.format.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
+        if: steps.format.outputs.exit_code != '0' || steps.clippy.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
   packaged-electron-smoke:

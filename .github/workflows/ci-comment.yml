@@ -173,16 +173,21 @@ jobs:
               return error && typeof error === 'object' && error.code === 'ENOENT';
             }
 
-            let testsFailed = false;
-            try {
-              testsFailed = fs.readFileSync('/tmp/rust-results/tests-exit-code', 'utf8').trim() !== '0';
-            } catch (error) {
-              if (isMissingFile(error)) {
-                core.info('Rust test exit code file was not found at /tmp/rust-results/tests-exit-code; assuming that check did not fail.');
-              } else {
-                core.warning(`Unable to read rust test exit code file at /tmp/rust-results/tests-exit-code; assuming that check did not fail. ${describeError(error)}`);
+            function readExitCodeFile(path, label) {
+              try {
+                return fs.readFileSync(path, 'utf8').trim() !== '0';
+              } catch (error) {
+                if (isMissingFile(error)) {
+                  core.info(`${label} exit code file was not found at ${path}; assuming that check did not fail.`);
+                } else {
+                  core.warning(`Unable to read ${label} exit code file at ${path}; assuming that check did not fail. ${describeError(error)}`);
+                }
+                return false;
               }
             }
+
+            const clippyFailed = readExitCodeFile('/tmp/rust-results/clippy-exit-code', 'Rust Clippy');
+            const testsFailed = readExitCodeFile('/tmp/rust-results/tests-exit-code', 'Rust test');
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -191,7 +196,7 @@ jobs:
             });
             const existing = comments.find(c => c.body.startsWith(marker));
 
-            if (!testsFailed) {
+            if (!clippyFailed && !testsFailed) {
               if (existing) {
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -203,19 +208,34 @@ jobs:
             }
 
             let body = '## ❌ Rust CI Failures\n\n';
-            try {
-              const log = fs.readFileSync('/tmp/rust-logs/rust-tests.log', 'utf8');
-              const lines = log.split('\n');
-              const errorLines = lines.filter(l =>
-                l.includes('error[') || l.includes('error:') ||
-                l.includes('FAILED') || l.includes('panicked')
-              );
-              const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
-              const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
-              body += '```\n' + errors.slice(0, 30000) + '\n```\n';
-            } catch (error) {
-              core.warning(`Unable to read rust test log: ${describeError(error)}`);
-              body += '_Failed (logs unavailable)_\n';
+
+            if (clippyFailed) {
+              body += '### Clippy\n\n';
+              try {
+                const log = fs.readFileSync('/tmp/rust-logs/rust-clippy.log', 'utf8');
+                body += '```\n' + log.slice(-30000) + '\n```\n\n';
+              } catch (error) {
+                core.warning(`Unable to read Rust Clippy log: ${describeError(error)}`);
+                body += '_Failed (logs unavailable)_\n\n';
+              }
+            }
+
+            if (testsFailed) {
+              body += '### Tests\n\n';
+              try {
+                const log = fs.readFileSync('/tmp/rust-logs/rust-tests.log', 'utf8');
+                const lines = log.split('\n');
+                const errorLines = lines.filter(l =>
+                  l.includes('error[') || l.includes('error:') ||
+                  l.includes('FAILED') || l.includes('panicked')
+                );
+                const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
+                const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
+                body += '```\n' + errors.slice(0, 30000) + '\n```\n';
+              } catch (error) {
+                core.warning(`Unable to read rust test log: ${describeError(error)}`);
+                body += '_Failed (logs unavailable)_\n';
+              }
             }
 
             body = marker + '\n' + body;

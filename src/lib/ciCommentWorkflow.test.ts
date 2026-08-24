@@ -23,4 +23,13 @@ describe('CI comment workflow', () => {
 
     expect(getPrNumberStep).not.toContain('listWorkflowRunArtifacts');
   });
+
+  it('reports Clippy failures in the Rust CI comment', () => {
+    const workflow = readWorkflow();
+    const rustCommentStep = getStep(workflow, 'Post or clean rust comment');
+
+    expect(rustCommentStep).toContain('/tmp/rust-results/clippy-exit-code');
+    expect(rustCommentStep).toContain('/tmp/rust-logs/rust-clippy.log');
+    expect(rustCommentStep).toContain('### Clippy');
+  });
 });
