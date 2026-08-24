@@ -670,6 +670,24 @@ impl PtyManager {
         }
     }
 
+    async fn remove_agent_last_output_if_registered(
+        &self,
+        task_id: &str,
+        registered_last_output: Option<&Arc<AtomicU64>>,
+    ) {
+        let Some(registered_last_output) = registered_last_output else {
+            return;
+        };
+
+        let mut times = self.last_output.lock().await;
+        if times
+            .get(task_id)
+            .is_some_and(|stored| Arc::ptr_eq(stored, registered_last_output))
+        {
+            times.remove(task_id);
+        }
+    }
+
     async fn register_agent_last_output_tracking(
         &self,
         task_id: &str,
@@ -694,15 +712,8 @@ impl PtyManager {
             )
             .await
         {
-            if let Some(last_output_time) = &last_output_time {
-                let mut times = self.last_output.lock().await;
-                if times
-                    .get(task_id)
-                    .is_some_and(|stored| Arc::ptr_eq(stored, last_output_time))
-                {
-                    times.remove(task_id);
-                }
-            }
+            self.remove_agent_last_output_if_registered(task_id, last_output_time.as_ref())
+                .await;
             return Err(error);
         }
 
@@ -743,15 +754,8 @@ impl PtyManager {
             )
             .await
         {
-            if let Some(stale_last_output) = &last_output_time {
-                let mut times = self.last_output.lock().await;
-                if times
-                    .get(task_id)
-                    .is_some_and(|stored| Arc::ptr_eq(stored, stale_last_output))
-                {
-                    times.remove(task_id);
-                }
-            }
+            self.remove_agent_last_output_if_registered(task_id, last_output_time.as_ref())
+                .await;
             let mut buffers = self.output_buffers.lock().await;
             if buffers
                 .get(task_id)
@@ -798,15 +802,11 @@ impl PtyManager {
         task_id: &str,
         stream_state: &AgentStreamState,
     ) {
-        if let Some(stale_last_output) = &stream_state.last_output_time {
-            let mut times = self.last_output.lock().await;
-            if times
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, stale_last_output))
-            {
-                times.remove(task_id);
-            }
-        }
+        self.remove_agent_last_output_if_registered(
+            task_id,
+            stream_state.last_output_time.as_ref(),
+        )
+        .await;
         {
             let mut buffers = self.output_buffers.lock().await;
             if buffers
