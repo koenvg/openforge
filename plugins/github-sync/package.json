@@ -8,7 +8,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.31.0",
+    "@lucide/svelte": "^1.32.0",
     "@openforge-app/plugin-sdk": "workspace:*",
     "@openforge-app/pr-review-ui": "workspace:*"
   },
@@ -19,10 +19,10 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@testing-library/svelte": "^5.4.2",
     "@types/node": "^26.2.0",
-    "svelte": "^5.56.8",
+    "svelte": "^5.56.9",
     "typescript": "^6.0.3",
     "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "openforge": {
     "id": "com.openforge.github-sync",
@@ -32,7 +32,9 @@
     "icon": "git-pull-request",
     "frontend": "./dist/frontend.js",
     "backend": "./dist/backend.js",
-    "frontendStyles": ["./dist/plugin-github-sync.css"],
+    "frontendStyles": [
+      "./dist/plugin-github-sync.css"
+    ],
     "requires": [
       "taskPane",
       "views",
