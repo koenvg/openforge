@@ -1,3 +1,4 @@
+use super::error::{PluginPackageValidationError, ValidationResult};
 use crate::plugin_enablement::PluginEnablement;
 use regex::Regex;
 use serde::Deserialize;
@@ -102,19 +103,19 @@ impl PackageMetadataSchemaRules {
 
 pub(in crate::plugin_installation) fn load_package_from_dir(
     dir: &Path,
-) -> Result<LoadedPluginPackage, String> {
+) -> ValidationResult<LoadedPluginPackage> {
     let package_json_path = dir.join("package.json");
     let raw = fs::read_to_string(&package_json_path).map_err(|error| {
-        format!(
-            "failed to read OpenForge plugin package.json {}: {error}",
-            package_json_path.display()
-        )
+        PluginPackageValidationError::ReadPackageJson {
+            path: package_json_path.clone(),
+            source: error,
+        }
     })?;
     let raw_value = serde_json::from_str(&raw).map_err(|error| {
-        format!(
-            "failed to parse OpenForge plugin package.json {}: {error}",
-            package_json_path.display()
-        )
+        PluginPackageValidationError::ParsePackageJson {
+            path: package_json_path.clone(),
+            source: error,
+        }
     })?;
 
     Ok(LoadedPluginPackage {
@@ -154,13 +155,15 @@ impl LoadedPluginPackage {
         })
     }
 
-    pub(in crate::plugin_installation) fn validate(self) -> Result<ValidatedPluginPackage, String> {
+    pub(in crate::plugin_installation) fn validate(
+        self,
+    ) -> ValidationResult<ValidatedPluginPackage> {
         validate_package_json_shape(&self.raw_value)?;
         let package_json = serde_json::from_value(self.raw_value.clone()).map_err(|error| {
-            format!(
-                "failed to parse OpenForge plugin package metadata {}: {error}",
-                self.package_json_path.display()
-            )
+            PluginPackageValidationError::ParsePackageMetadata {
+                path: self.package_json_path,
+                source: error,
+            }
         })?;
         let package_metadata_json = package_metadata_json(&self.raw_value)?;
 
@@ -197,31 +200,31 @@ fn declared_entries(openforge: &Map<String, Value>) -> Vec<String> {
     entries
 }
 
-fn validate_package_json_shape(value: &Value) -> Result<(), String> {
+fn validate_package_json_shape(value: &Value) -> ValidationResult<()> {
     let object = value
         .as_object()
-        .ok_or_else(|| "OpenForge plugin package.json must be an object".to_string())?;
+        .ok_or(PluginPackageValidationError::PackageJsonMustBeObject)?;
 
     validate_non_empty_json_string(object, "name", "package.json name")?;
     validate_non_empty_json_string(object, "version", "package.json version")?;
 
     let openforge = object
         .get("openforge")
-        .ok_or_else(|| "OpenForge plugin package.json must include openforge metadata".to_string())?
+        .ok_or(PluginPackageValidationError::MissingOpenForgeMetadata)?
         .as_object()
-        .ok_or_else(|| "package.json openforge metadata must be an object".to_string())?;
+        .ok_or(PluginPackageValidationError::OpenForgeMetadataMustBeObject)?;
 
     if openforge.contains_key("contributes") {
-        return Err("package.json openforge.contributes is not supported; register contributions at runtime".to_string());
+        return Err(PluginPackageValidationError::ContributionsUnsupported);
     }
 
     let schema_rules = package_metadata_schema_rules()?;
 
     for key in openforge.keys() {
         if !schema_rules.allows_metadata_field(key) {
-            return Err(format!(
-                "package.json openforge.{key} is not supported by the OpenForge package metadata schema"
-            ));
+            return Err(PluginPackageValidationError::UnsupportedMetadataField {
+                field: key.clone(),
+            });
         }
     }
 
@@ -230,9 +233,7 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
             continue;
         }
         if !openforge.contains_key(key) {
-            return Err(format!(
-                "package.json openforge.{key} is required by the OpenForge package metadata schema"
-            ));
+            return Err(PluginPackageValidationError::MissingMetadataField { field: key.clone() });
         }
     }
 
@@ -250,7 +251,7 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
         .get("enablement")
         .is_some_and(|value| !matches!(value.as_str(), Some("app" | "project")))
     {
-        return Err("package.json openforge.enablement must be \"app\" or \"project\"".to_string());
+        return Err(PluginPackageValidationError::InvalidEnablement);
     }
 
     if let Some(icon) = openforge.get("icon") {
@@ -260,16 +261,15 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
     match openforge.get("apiVersion").and_then(Value::as_i64) {
         Some(version) if schema_rules.supports_api_version(version) => {}
         Some(version) => {
-            return Err(format!(
-                "package.json openforge.apiVersion {version} is not supported (supported: {})",
-                schema_rules.supported_api_versions_label()
-            ));
+            return Err(PluginPackageValidationError::UnsupportedApiVersion {
+                version,
+                supported: schema_rules.supported_api_versions_label(),
+            });
         }
         None if schema_rules.requires_metadata_field("apiVersion") => {
-            return Err(format!(
-                "package.json openforge.apiVersion must be {}",
-                schema_rules.supported_api_versions_label()
-            ));
+            return Err(PluginPackageValidationError::InvalidApiVersion {
+                supported: schema_rules.supported_api_versions_label(),
+            });
         }
         None => {}
     }
@@ -277,29 +277,20 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
     if let Some(frontend_styles) = openforge.get("frontendStyles") {
         let frontend_styles = frontend_styles
             .as_array()
-            .ok_or_else(|| "package.json openforge.frontendStyles must be an array".to_string())?;
+            .ok_or(PluginPackageValidationError::FrontendStylesMustBeArray)?;
         if frontend_styles.is_empty() {
-            return Err(
-                "package.json openforge.frontendStyles must contain at least one stylesheet path"
-                    .to_string(),
-            );
+            return Err(PluginPackageValidationError::EmptyFrontendStyles);
         }
         for (index, stylesheet) in frontend_styles.iter().enumerate() {
             let stylesheet = stylesheet
                 .as_str()
                 .filter(|stylesheet| !stylesheet.trim().is_empty())
-                .ok_or_else(|| {
-                    format!(
-                        "package.json openforge.frontendStyles[{index}] must be a non-empty string"
-                    )
-                })?;
+                .ok_or(PluginPackageValidationError::InvalidFrontendStyle { index })?;
             if frontend_styles[..index]
                 .iter()
                 .any(|previous| previous.as_str() == Some(stylesheet))
             {
-                return Err(format!(
-                    "package.json openforge.frontendStyles[{index}] duplicates an earlier stylesheet path"
-                ));
+                return Err(PluginPackageValidationError::DuplicateFrontendStyle { index });
             }
         }
     }
@@ -307,15 +298,16 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
     if let Some(requires) = openforge.get("requires") {
         let requires = requires
             .as_array()
-            .ok_or_else(|| "package.json openforge.requires must be an array".to_string())?;
+            .ok_or(PluginPackageValidationError::RequiresMustBeArray)?;
         for (index, capability) in requires.iter().enumerate() {
-            let capability = capability.as_str().ok_or_else(|| {
-                format!("package.json openforge.requires[{index}] must be a string")
-            })?;
+            let capability = capability
+                .as_str()
+                .ok_or(PluginPackageValidationError::InvalidCapability { index })?;
             if !schema_rules.supports_capability(capability) {
-                return Err(format!(
-                    "package.json openforge.requires[{index}] has unknown capability \"{capability}\""
-                ));
+                return Err(PluginPackageValidationError::UnknownCapability {
+                    index,
+                    capability: capability.to_string(),
+                });
             }
         }
     }
@@ -324,22 +316,20 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
 
 pub(in crate::plugin_installation) fn validate_package_metadata(
     package: &PackageJsonFile,
-) -> Result<(), String> {
+) -> ValidationResult<()> {
     let schema_rules = package_metadata_schema_rules()?;
 
     if !schema_rules.id_pattern.is_match(&package.openforge.id) {
-        return Err(format!(
-            "package.json openforge.id \"{}\" must match the OpenForge package metadata schema",
-            package.openforge.id
-        ));
+        return Err(PluginPackageValidationError::InvalidPluginId {
+            id: package.openforge.id.clone(),
+        });
     }
 
     if !schema_rules.supports_api_version(package.openforge.api_version) {
-        return Err(format!(
-            "package.json openforge.apiVersion {} is not supported (supported: {})",
-            package.openforge.api_version,
-            schema_rules.supported_api_versions_label()
-        ));
+        return Err(PluginPackageValidationError::UnsupportedApiVersion {
+            version: package.openforge.api_version,
+            supported: schema_rules.supported_api_versions_label(),
+        });
     }
 
     if package.openforge.enablement == PluginEnablement::App
@@ -351,38 +341,32 @@ pub(in crate::plugin_installation) fn validate_package_metadata(
             .iter()
             .any(|capability| capability == "appEnablement")
     {
-        return Err(
-            "package.json openforge.enablement \"app\" requires the appEnablement capability"
-                .to_string(),
-        );
+        return Err(PluginPackageValidationError::AppEnablementCapabilityRequired);
     }
 
     if package.openforge.frontend.is_none() && package.openforge.backend.is_none() {
-        return Err(
-            "package.json openforge metadata requires a frontend or backend built JavaScript entry"
-                .to_string(),
-        );
+        return Err(PluginPackageValidationError::MissingRuntimeEntry);
     }
 
     if package.openforge.frontend.is_none() && package.openforge.frontend_styles.is_some() {
-        return Err("package.json openforge.frontendStyles requires a frontend entry".to_string());
+        return Err(PluginPackageValidationError::FrontendStylesRequireFrontend);
     }
 
     Ok(())
 }
 
-fn package_metadata_json(value: &Value) -> Result<String, String> {
+fn package_metadata_json(value: &Value) -> ValidationResult<String> {
     let object = value
         .as_object()
-        .ok_or_else(|| "OpenForge plugin package.json must be an object".to_string())?;
-    let metadata = object.get("openforge").ok_or_else(|| {
-        "OpenForge plugin package.json must include openforge metadata".to_string()
-    })?;
+        .ok_or(PluginPackageValidationError::PackageJsonMustBeObject)?;
+    let metadata = object
+        .get("openforge")
+        .ok_or(PluginPackageValidationError::MissingOpenForgeMetadata)?;
     serde_json::to_string(metadata)
-        .map_err(|error| format!("failed to serialize OpenForge package metadata: {error}"))
+        .map_err(|error| PluginPackageValidationError::SerializeMetadata { source: error })
 }
 
-fn validate_plugin_icon(value: &Value) -> Result<(), String> {
+fn validate_plugin_icon(value: &Value) -> ValidationResult<()> {
     let valid_name = value.as_str().is_some_and(|name| !name.trim().is_empty());
     let valid_svg = value.as_object().is_some_and(|icon| {
         icon.len() == 2
@@ -397,35 +381,42 @@ fn validate_plugin_icon(value: &Value) -> Result<(), String> {
         return Ok(());
     }
 
-    Err("package.json openforge.icon must be a non-empty Lucide icon name or { type: \"svg\", svg }".to_string())
+    Err(PluginPackageValidationError::InvalidIcon)
 }
 
 fn validate_non_empty_json_string(
     object: &Map<String, Value>,
     key: &str,
     label: &str,
-) -> Result<(), String> {
+) -> ValidationResult<()> {
     match object.get(key).and_then(Value::as_str) {
         Some(value) if !value.trim().is_empty() => Ok(()),
-        _ => Err(format!("{label} must be a non-empty string")),
+        _ => Err(PluginPackageValidationError::InvalidNonEmptyString {
+            label: label.to_string(),
+        }),
     }
 }
 
 pub(in crate::plugin_installation) fn package_metadata_schema_rules(
-) -> Result<&'static PackageMetadataSchemaRules, String> {
-    static RULES: OnceLock<Result<PackageMetadataSchemaRules, String>> = OnceLock::new();
-    match RULES.get_or_init(parse_package_metadata_schema_rules) {
-        Ok(rules) => Ok(rules),
-        Err(error) => Err(error.clone()),
+) -> ValidationResult<&'static PackageMetadataSchemaRules> {
+    static RULES: OnceLock<PackageMetadataSchemaRules> = OnceLock::new();
+    if let Some(rules) = RULES.get() {
+        return Ok(rules);
     }
+
+    let rules = parse_package_metadata_schema_rules()?;
+    Ok(RULES.get_or_init(|| rules))
 }
 
-fn parse_package_metadata_schema_rules() -> Result<PackageMetadataSchemaRules, String> {
+fn parse_package_metadata_schema_rules() -> ValidationResult<PackageMetadataSchemaRules> {
     let schema: Value = serde_json::from_str(OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON)
-        .map_err(|error| format!("failed to parse OpenForge package metadata schema: {error}"))?;
-    let schema = schema
-        .as_object()
-        .ok_or_else(|| "OpenForge package metadata schema must be an object".to_string())?;
+        .map_err(|error| PluginPackageValidationError::ParseMetadataSchema { source: error })?;
+    let schema = schema.as_object().ok_or_else(|| {
+        PluginPackageValidationError::InvalidMetadataSchemaField {
+            label: "OpenForge package metadata schema".to_string(),
+            expected: "an object",
+        }
+    })?;
     let properties = schema_object_field(
         schema,
         "properties",
@@ -453,12 +444,14 @@ fn parse_package_metadata_schema_rules() -> Result<PackageMetadataSchemaRules, S
     let id_pattern = id_schema
         .get("pattern")
         .and_then(Value::as_str)
-        .ok_or_else(|| {
-            "OpenForge package metadata schema.properties.id.pattern must be a string".to_string()
-        })?;
-    let id_pattern = Regex::new(id_pattern).map_err(|error| {
-        format!("failed to compile OpenForge package id schema pattern: {error}")
-    })?;
+        .ok_or_else(
+            || PluginPackageValidationError::InvalidMetadataSchemaField {
+                label: "OpenForge package metadata schema.properties.id.pattern".to_string(),
+                expected: "a string",
+            },
+        )?;
+    let id_pattern = Regex::new(id_pattern)
+        .map_err(|error| PluginPackageValidationError::CompilePluginIdPattern { source: error })?;
 
     let api_version_schema = schema_property(properties, "apiVersion")?;
     let supported_api_versions = schema_i64_array_field(
@@ -492,43 +485,56 @@ fn parse_package_metadata_schema_rules() -> Result<PackageMetadataSchemaRules, S
 fn schema_property<'a>(
     properties: &'a Map<String, Value>,
     property_name: &str,
-) -> Result<&'a Map<String, Value>, String> {
+) -> ValidationResult<&'a Map<String, Value>> {
     properties
         .get(property_name)
         .and_then(Value::as_object)
-        .ok_or_else(|| {
-            format!(
-                "OpenForge package metadata schema.properties.{property_name} must be an object"
-            )
-        })
+        .ok_or_else(
+            || PluginPackageValidationError::InvalidMetadataSchemaField {
+                label: format!("OpenForge package metadata schema.properties.{property_name}"),
+                expected: "an object",
+            },
+        )
 }
 
 fn schema_object_field<'a>(
     object: &'a Map<String, Value>,
     field_name: &str,
     label: &str,
-) -> Result<&'a Map<String, Value>, String> {
+) -> ValidationResult<&'a Map<String, Value>> {
     object
         .get(field_name)
         .and_then(Value::as_object)
-        .ok_or_else(|| format!("{label} must be an object"))
+        .ok_or_else(
+            || PluginPackageValidationError::InvalidMetadataSchemaField {
+                label: label.to_string(),
+                expected: "an object",
+            },
+        )
 }
 
 fn schema_string_array_field(
     object: &Map<String, Value>,
     field_name: &str,
     label: &str,
-) -> Result<Vec<String>, String> {
+) -> ValidationResult<Vec<String>> {
     object
         .get(field_name)
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("{label} must be an array"))?
+        .ok_or_else(
+            || PluginPackageValidationError::InvalidMetadataSchemaField {
+                label: label.to_string(),
+                expected: "an array",
+            },
+        )?
         .iter()
         .map(|value| {
-            value
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| format!("{label} entries must be strings"))
+            value.as_str().map(str::to_string).ok_or_else(|| {
+                PluginPackageValidationError::InvalidMetadataSchemaEntry {
+                    label: label.to_string(),
+                    expected: "strings",
+                }
+            })
         })
         .collect()
 }
@@ -537,16 +543,24 @@ fn schema_i64_array_field(
     object: &Map<String, Value>,
     field_name: &str,
     label: &str,
-) -> Result<Vec<i64>, String> {
+) -> ValidationResult<Vec<i64>> {
     object
         .get(field_name)
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("{label} must be an array"))?
+        .ok_or_else(
+            || PluginPackageValidationError::InvalidMetadataSchemaField {
+                label: label.to_string(),
+                expected: "an array",
+            },
+        )?
         .iter()
         .map(|value| {
-            value
-                .as_i64()
-                .ok_or_else(|| format!("{label} entries must be integers"))
+            value.as_i64().ok_or_else(
+                || PluginPackageValidationError::InvalidMetadataSchemaEntry {
+                    label: label.to_string(),
+                    expected: "integers",
+                },
+            )
         })
         .collect()
 }

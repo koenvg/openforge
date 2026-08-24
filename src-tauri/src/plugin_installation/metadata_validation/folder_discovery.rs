@@ -1,4 +1,6 @@
-use super::{package_metadata::load_package_from_dir, validate_package};
+use super::{
+    package_metadata::load_package_from_dir, validate_package, PluginPackageValidationError,
+};
 use std::path::Path;
 
 /// One candidate plugin package directory as seen by folder discovery.
@@ -31,7 +33,9 @@ pub(crate) fn inspect_plugin_package_dir(dir: &Path) -> Option<InspectedPluginPa
         .into_iter()
         .filter(|entry| !dir.join(entry).is_file())
         .collect();
-    let problem = validate_package(loaded, dir).err();
+    let problem = validate_package(loaded, dir)
+        .err()
+        .map(PluginPackageValidationError::into_installer_message);
 
     Some(InspectedPluginPackage {
         id: fields.id,

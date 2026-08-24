@@ -12,7 +12,9 @@ pub(crate) use managed_artifact::{
 // Preserve the facade API even though production currently reaches this path indirectly.
 #[allow(unused_imports)]
 pub use managed_artifact::managed_plugins_dir;
-use metadata_validation::{build_plugin_row, load_package_from_dir, validate_package};
+use metadata_validation::{
+    build_plugin_row, load_package_from_dir, validate_package, PluginPackageValidationError,
+};
 pub(crate) use metadata_validation::{inspect_plugin_package_dir, InspectedPluginPackage};
 use package_source::{
     acquire_git_package, acquire_local_package, acquire_npm_package, AcquiredPackage,
@@ -135,8 +137,10 @@ fn prepare_acquired_package(
     mut acquired: AcquiredPackage,
     managed_base_dir: &Path,
 ) -> Result<PreparedPluginInstallation, String> {
-    let loaded = load_package_from_dir(&acquired.package_dir)?;
-    let loaded = validate_package(loaded, &acquired.package_dir)?;
+    let loaded = load_package_from_dir(&acquired.package_dir)
+        .map_err(PluginPackageValidationError::into_installer_message)?;
+    let loaded = validate_package(loaded, &acquired.package_dir)
+        .map_err(PluginPackageValidationError::into_installer_message)?;
 
     let destination = if acquired.source.kind() == "local" {
         None
