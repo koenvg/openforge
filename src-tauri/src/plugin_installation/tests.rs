@@ -152,16 +152,15 @@ fn install_package_source_enforces_app_enablement_contract() {
     fs::write(source.path().join("dist/frontend.js"), "export default {};")
         .expect("frontend should write");
 
-    write_package_json(
-        source.path(),
-        r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js","requires":["appEnablement"]}"#,
-    );
+    let app_metadata = r#"{"id":"acme.app","apiVersion":1,"displayName":"App","description":"App","enablement":"app","frontend":"dist/frontend.js","requires":["appEnablement"]}"#;
+    write_package_json(source.path(), app_metadata);
     let row =
         install_plugin_package_from_source_spec(&source.path().to_string_lossy(), managed.path())
             .expect("app-enabled package should install with capability gating");
-    let metadata: Value =
-        serde_json::from_str(&row.package_metadata).expect("stored package metadata should parse");
-    assert_eq!(metadata["enablement"], "app");
+    assert_eq!(
+        row.package_metadata,
+        r#"{"apiVersion":1,"description":"App","displayName":"App","enablement":"app","frontend":"dist/frontend.js","id":"acme.app","requires":["appEnablement"]}"#
+    );
 
     write_package_json(
         source.path(),
