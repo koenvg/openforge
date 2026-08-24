@@ -5,6 +5,8 @@ packages:
   - plugins/*
 
 catalog:
+  '@babel/parser': ^7.29.8
+  '@babel/types': ^7.29.8
   '@git-diff-view/core': 0.1.7
   '@git-diff-view/lowlight': ^0.1.7
   '@git-diff-view/svelte': ^0.1.7
@@ -21,7 +23,7 @@ catalog:
   dompurify: ^3.4.13
   marked: ^18.0.10
   svelte: ^5.56.9
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   vite: ^8.2.1
   vitest: ^4.1.11
 

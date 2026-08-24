@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -6,7 +7,6 @@ import { describe, expect, it, afterEach } from 'vitest'
 import { build as viteBuild } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { get } from 'svelte/store'
-import ts from 'typescript'
 import { OPENFORGE_HOST_RUNTIME_SVELTE_SPECIFIERS, openforgePluginViteExternals } from '../packages/plugin-sdk/src/vite.ts'
 import { handlePluginProtocolRequest } from '../src/electron/pluginProtocol.ts'
 import { activatePlugin } from '../src/lib/plugin/pluginRegistry.ts'
@@ -195,15 +195,13 @@ describe('Electron build host-runtime assets', () => {
   it('excludes Vitest-only Electron helpers from the production compilation graph', () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
     const configPath = join(repoRoot, 'tsconfig.electron.json')
-    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile)
-    expect(error).toBeUndefined()
-
-    const parsedConfig = ts.parseJsonConfigFileContent(config, ts.sys, repoRoot)
-    expect(parsedConfig.errors).toEqual([])
-    expect(parsedConfig.fileNames).toContain(join(repoRoot, 'src', 'electron', 'main.ts'))
-
-    const productionProgram = ts.createProgram(parsedConfig.fileNames, parsedConfig.options)
-    const productionSources = productionProgram.getSourceFiles().map(sourceFile => sourceFile.fileName)
+    const tscPath = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc')
+    const productionSources = execFileSync(
+      process.execPath,
+      [tscPath, '--project', configPath, '--listFilesOnly'],
+      { cwd: repoRoot, encoding: 'utf8' },
+    ).trim().split(/\r?\n/)
+    expect(productionSources).toContain(join(repoRoot, 'src', 'electron', 'main.ts'))
     expect(productionSources.some(file => file.endsWith('.testUtils.ts'))).toBe(false)
     expect(productionSources.some(file => file.includes('/node_modules/vitest/'))).toBe(false)
   })
