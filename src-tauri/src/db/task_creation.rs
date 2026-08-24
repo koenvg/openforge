@@ -4,7 +4,7 @@ use super::{
     tasks::TaskRow,
     TaskLabelPersistenceError,
 };
-use rusqlite::{OptionalExtension, Result};
+use rusqlite::{types::Type, OptionalExtension, Result};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -189,14 +189,37 @@ fn normalize_task_options<'a>(
     })
 }
 
+#[derive(Debug, Error)]
+#[error(
+    "invalid next_task_id config value '{0}': expected a positive 64-bit integer with room for the next ID"
+)]
+struct InvalidTaskIdCounter(String);
+
+fn parse_next_task_id(value: String) -> Result<(i64, i64)> {
+    let parsed = value
+        .parse::<i64>()
+        .ok()
+        .filter(|next_id| *next_id > 0)
+        .and_then(|next_id| {
+            next_id
+                .checked_add(1)
+                .map(|following_id| (next_id, following_id))
+        });
+
+    parsed.ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            Type::Text,
+            Box::new(InvalidTaskIdCounter(value)),
+        )
+    })
+}
+
 fn allocate_task_id(conn: &rusqlite::Connection, project_id: Option<&str>) -> Result<String> {
-    let next_id: i64 = conn.query_row(
+    let (next_id, following_id) = conn.query_row(
         "SELECT value FROM config WHERE key = 'next_task_id'",
         [],
-        |row| {
-            let val: String = row.get(0)?;
-            Ok(val.parse::<i64>().unwrap_or(1))
-        },
+        |row| parse_next_task_id(row.get(0)?),
     )?;
 
     // Resolve the task-ID prefix as project_config ?? config ?? "T". The
@@ -227,7 +250,7 @@ fn allocate_task_id(conn: &rusqlite::Connection, project_id: Option<&str>) -> Re
 
     conn.execute(
         "UPDATE config SET value = ?1 WHERE key = 'next_task_id'",
-        [&(next_id + 1).to_string()],
+        [&following_id.to_string()],
     )?;
 
     Ok(task_id)
@@ -939,6 +962,76 @@ mod tests {
         assert_eq!(task3.id, "T-3");
 
         drop(db);
+    }
+
+    #[test]
+    fn test_create_task_rejects_malformed_next_task_id_values() {
+        for (case, value) in [
+            ("blank", ""),
+            ("non-numeric", "not-a-number"),
+            ("zero", "0"),
+            ("negative", "-7"),
+            ("overflow", "9223372036854775808"),
+            ("exhausted", "9223372036854775807"),
+        ] {
+            let (db, _temp_dir) = make_test_db(&format!("malformed_task_counter_{case}"));
+            db.set_config("next_task_id", value)
+                .expect("set malformed task counter");
+
+            let error = db
+                .create_task("Must not be created", "backlog", None, None, None)
+                .expect_err("malformed task counter must fail task creation");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("invalid next_task_id config value"),
+                "unexpected error for {case}: {error}"
+            );
+            assert!(
+                db.get_all_tasks()
+                    .expect("get tasks after failed creation")
+                    .is_empty(),
+                "task was created for {case}"
+            );
+            assert_eq!(
+                db.get_config("next_task_id")
+                    .expect("get malformed task counter")
+                    .as_deref(),
+                Some(value),
+                "task counter changed for {case}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_create_task_reports_malformed_counter_before_duplicate_id_collision() {
+        let (db, _temp_dir) = make_test_db("malformed_counter_duplicate_collision");
+        let existing = db
+            .create_task("Existing task", "backlog", None, None, None)
+            .expect("create existing task");
+        db.set_config("next_task_id", "not-a-number")
+            .expect("set malformed task counter");
+
+        let error = db
+            .create_task("Must not collide", "backlog", None, None, None)
+            .expect_err("malformed task counter must fail before task insertion");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid next_task_id config value"),
+            "unexpected error: {error}"
+        );
+        let tasks = db.get_all_tasks().expect("get tasks after failed creation");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, existing.id);
+        assert_eq!(
+            db.get_config("next_task_id")
+                .expect("get malformed task counter")
+                .as_deref(),
+            Some("not-a-number")
+        );
     }
 
     #[test]
