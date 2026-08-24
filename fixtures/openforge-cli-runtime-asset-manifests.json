@@ -1,0 +1,114 @@
+{
+  "cases": [
+    {
+      "name": "accepts one runtime filename",
+      "manifest": {
+        "runtimeFiles": ["cli.js"]
+      },
+      "valid": true,
+      "runtimeFiles": ["cli.js"]
+    },
+    {
+      "name": "accepts multiple distinct runtime filenames",
+      "manifest": {
+        "runtimeFiles": ["cli.js", "plugin-commands.js"]
+      },
+      "valid": true,
+      "runtimeFiles": ["cli.js", "plugin-commands.js"]
+    },
+    {
+      "name": "rejects an empty runtime file list",
+      "manifest": {
+        "runtimeFiles": []
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects duplicate runtime filenames",
+      "manifest": {
+        "runtimeFiles": ["cli.js", "cli.js"]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a nested Unix path",
+      "manifest": {
+        "runtimeFiles": ["commands/plugin.js"]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a parent Unix path",
+      "manifest": {
+        "runtimeFiles": ["../cli.js"]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a nested Windows path",
+      "manifest": {
+        "runtimeFiles": ["commands\\plugin.js"]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects the current directory path",
+      "manifest": {
+        "runtimeFiles": ["."]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects the parent directory path",
+      "manifest": {
+        "runtimeFiles": [".."]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects an empty filename",
+      "manifest": {
+        "runtimeFiles": [""]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a missing runtime file list",
+      "manifest": {},
+      "valid": false
+    },
+    {
+      "name": "rejects a non-array runtime file list",
+      "manifest": {
+        "runtimeFiles": "cli.js"
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a null manifest",
+      "manifest": null,
+      "valid": false
+    },
+    {
+      "name": "rejects a null runtime file entry",
+      "manifest": {
+        "runtimeFiles": [null]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects a numeric runtime file entry",
+      "manifest": {
+        "runtimeFiles": [42]
+      },
+      "valid": false
+    },
+    {
+      "name": "rejects an object runtime file entry",
+      "manifest": {
+        "runtimeFiles": [{ "name": "cli.js" }]
+      },
+      "valid": false
+    }
+  ]
+}

@@ -124,10 +124,8 @@ export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
 export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
 const OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE = 'runtime-assets.json'
 
-async function readOpenForgeCliRuntimeFiles(cliSourceDir) {
-  const manifestPath = join(cliSourceDir, OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE)
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  const { runtimeFiles } = manifest
+export function validateOpenForgeCliRuntimeAssetManifest(manifest, manifestPath = OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE) {
+  const runtimeFiles = manifest?.runtimeFiles
 
   if (!Array.isArray(runtimeFiles) || runtimeFiles.length === 0) {
     throw new Error(`OpenForge CLI runtime asset manifest must declare at least one runtime file at ${manifestPath}`)
@@ -149,6 +147,12 @@ async function readOpenForgeCliRuntimeFiles(cliSourceDir) {
   }
 
   return runtimeFiles
+}
+
+async function readOpenForgeCliRuntimeFiles(cliSourceDir) {
+  const manifestPath = join(cliSourceDir, OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE)
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  return validateOpenForgeCliRuntimeAssetManifest(manifest, manifestPath)
 }
 
 function isBuiltinPluginCatalogEntry(value) {

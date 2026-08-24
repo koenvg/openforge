@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 const RUNTIME_ASSET_MANIFEST_PATH: &str = "src/openforge-cli/runtime-assets.json";
 const GENERATED_RUNTIME_ASSETS_FILE: &str = "openforge_cli_runtime_assets.rs";
 
-fn runtime_file_names(manifest: &Value) -> Result<Vec<&str>, Box<dyn Error>> {
+pub(crate) fn runtime_file_names(manifest: &Value) -> Result<Vec<&str>, Box<dyn Error>> {
     let runtime_files = manifest
         .get("runtimeFiles")
         .and_then(Value::as_array)
