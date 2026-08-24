@@ -58,7 +58,6 @@ fn select_and_persist_model(
     payload: &serde_json::Value,
 ) -> AppResult<()> {
     let size = parse_model_size(payload)?;
-    whisper.set_active_model(size);
     let db = crate::db::acquire_db(&state.db);
     db.set_config("whisper_model_size", size.as_str())
         .map_err(|error| {
@@ -66,7 +65,9 @@ fn select_and_persist_model(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to save model size to config: {error}"),
             )
-        })
+        })?;
+    whisper.set_active_model(size);
+    Ok(())
 }
 
 async fn download_model_and_publish_progress(

@@ -43,6 +43,47 @@ async fn selects_and_persists_whisper_model() {
 }
 
 #[tokio::test]
+async fn leaves_whisper_model_unchanged_when_persistence_fails() {
+    let (state, _temp_dir) = test_state("app_invoke_whisper_selection_persistence_failure");
+    {
+        let db = crate::db::acquire_db(&state.db);
+        db.set_config("whisper_model_size", "small")
+            .expect("seed persisted Whisper model size");
+        db.connection()
+            .lock()
+            .expect("database connection lock")
+            .execute_batch(
+                "CREATE TRIGGER fail_whisper_model_size_update
+                 BEFORE INSERT ON config
+                 WHEN NEW.key = 'whisper_model_size'
+                 BEGIN
+                   SELECT RAISE(FAIL, 'simulated config persistence failure');
+                 END;",
+            )
+            .expect("install config persistence failure trigger");
+    }
+
+    let error = invoke(&state, "set_whisper_model", json!({ "modelSize": "tiny" }))
+        .await
+        .expect_err("config persistence failure should reject model selection");
+
+    assert_eq!(error.0, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(error
+        .1
+        .contains("Failed to save model size to config: simulated config persistence failure"));
+    let active_status =
+        invoke_ok(&state, "get_whisper_model_status", serde_json::Value::Null).await;
+    assert_eq!(active_status["size"], "small");
+    let persisted_size = state
+        .db
+        .lock()
+        .expect("db lock")
+        .get_config("whisper_model_size")
+        .expect("read persisted Whisper model size");
+    assert_eq!(persisted_size.as_deref(), Some("small"));
+}
+
+#[tokio::test]
 async fn reports_transcription_failures() {
     let (state, _temp_dir) = test_state("app_invoke_whisper_transcription_error");
 
