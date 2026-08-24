@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { ChevronDown, ChevronRight, File, Folder } from '@lucide/svelte'
+  import { ChevronDown, ChevronRight } from '@lucide/svelte'
   import Checkbox from '@openforge-app/plugin-sdk/ui/Checkbox.svelte'
+  import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
   import type { PrFileDiff } from '@openforge-app/plugin-sdk/domain'
   import { getFileStatusPresentation } from './fileStatus'
   import type { FileTreeNode } from './fileTreeModel'
@@ -73,7 +74,7 @@
     {:else}
       <ChevronRight size={14} strokeWidth={2} class="shrink-0 text-base-content/45" aria-hidden="true" />
     {/if}
-    <Folder size={16} strokeWidth={1.8} class="shrink-0 text-base-content/50" data-testid="file-tree-folder-icon" aria-hidden="true" />
+    <span class="shrink-0" data-testid="file-tree-folder-icon" aria-hidden="true"><FileTypeIcon folder open={expanded} class="h-4 w-4" /></span>
     <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap text-left" title={node.fullPath}>
       {#each node.name.split('/') as segment, index}
         {#if index > 0}<span class="px-1 text-base-content/30" aria-hidden="true">/</span>{/if}
@@ -108,7 +109,7 @@
       aria-selected={selected}
       onclick={() => node.file && onSelectFile(node.file)}
     >
-      <File size={16} strokeWidth={1.8} class="shrink-0 text-base-content/45" aria-hidden="true" />
+      <FileTypeIcon filename={node.file.filename} class="h-4 w-4" />
       <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-[13px] {reviewed ? 'line-through text-base-content/50' : ''}" aria-label={reviewed ? `Reviewed file ${node.file.filename}` : undefined} title={node.file.filename}>{node.name}</span>
       <span
         class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] font-semibold leading-none {statusPresentation.badgeClass}"
