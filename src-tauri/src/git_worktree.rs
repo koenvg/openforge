@@ -1868,7 +1868,6 @@ mod tests {
     async fn list_git_branches_returns_local_refs_while_the_origin_fetch_hangs() {
         use crate::git_origin_fetch::hanging_fetch_test_support::*;
 
-        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let repo_path = temp.path().join("repo");
         let pid_file = init_repo_with_hanging_origin(&repo_path);

@@ -105,7 +105,6 @@ async fn sidecar_runtime_shutdown_terminates_live_indexed_shell() {
 async fn sidecar_shutdown_signals_a_running_git_fetch_before_bounded_cleanup() {
     use crate::git_origin_fetch::hanging_fetch_test_support::*;
 
-    let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
     let (mut state, _path) = test_state("sidecar_shutdown_hung_git_fetch");
     let repo = tempfile::tempdir().expect("repo temp dir");
     let repo_path = repo.path().join("repo");

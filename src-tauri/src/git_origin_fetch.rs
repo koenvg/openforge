@@ -131,6 +131,10 @@ pub(crate) fn spawn_background_origin_refresh(repo_path: &Path) {
 }
 
 async fn run_fetch(repo_path: &Path, timeout: Duration) -> bool {
+    #[cfg(all(test, unix))]
+    let _serialized = hanging_fetch_test_support::PROCESS_WIDE_FETCH_LOCK
+        .lock()
+        .await;
     let mut command = git_command();
     command
         .arg("-C")
@@ -277,11 +281,9 @@ pub(crate) mod hanging_fetch_test_support {
     use std::path::PathBuf;
     use std::process::Command as StdCommand;
 
-    /// Serializes every test whose outcome depends on which fetches are running
-    /// process-wide: ones that leave a fetch hanging, ones that sweep all running
-    /// fetches (directly or through sidecar shutdown cleanup), and ones that need
-    /// a fetch of their own to succeed. Any new test in either group has to take
-    /// this, because the registry the sweep reads is process-global.
+    /// Serializes every fetch process in the test binary. Shutdown sweeps read a
+    /// process-wide registry, so `run_fetch` takes this before spawning a child and
+    /// prevents unrelated parallel tests from changing the registry mid-assertion.
     pub(crate) static PROCESS_WIDE_FETCH_LOCK: Mutex<()> = Mutex::const_new(());
 
     fn run_git(repo_path: &Path, args: &[&str]) {
@@ -420,7 +422,6 @@ mod tests {
     async fn a_fetch_that_never_returns_is_bounded_and_its_process_tree_killed() {
         use hanging_fetch_test_support::*;
 
-        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let repo_path = temp.path().join("repo");
         let pid_file = init_repo_with_hanging_origin(&repo_path);
@@ -448,7 +449,6 @@ mod tests {
     async fn an_abandoned_fetch_takes_its_process_tree_with_it() {
         use hanging_fetch_test_support::*;
 
-        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let repo_path = temp.path().join("repo");
         let pid_file = init_repo_with_hanging_origin(&repo_path);
@@ -475,7 +475,6 @@ mod tests {
     async fn shutdown_signals_the_process_group_of_a_running_fetch() {
         use hanging_fetch_test_support::*;
 
-        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let repo_path = temp.path().join("repo");
         let pid_file = init_repo_with_hanging_origin(&repo_path);
@@ -510,7 +509,6 @@ mod tests {
     async fn a_recent_fetch_is_reused_instead_of_repeated() {
         use hanging_fetch_test_support::*;
 
-        let _serialized = PROCESS_WIDE_FETCH_LOCK.lock().await;
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let origin_path = temp.path().join("origin");
         let clone_path = temp.path().join("clone");
