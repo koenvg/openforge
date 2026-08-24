@@ -1,12 +1,15 @@
 import { render, screen } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach } from 'vitest'
-import { resetAgentTerminalTestState, setActiveSession } from './agentTerminalShell.testUtils'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { resetAgentIpcMocks } from './agentIpcMocks.testUtils'
+import { resetActiveSessions, setActiveSession } from './activeAgentSessions.testUtils'
 import { createAgentSession } from './agentSession.testFixtures'
 import AgentStatusPill from './AgentStatusPill.svelte'
 
 describe('AgentStatusPill', () => {
   beforeEach(() => {
-    resetAgentTerminalTestState()
+    resetActiveSessions()
+    resetAgentIpcMocks()
+    vi.clearAllMocks()
   })
 
   it('renders nothing when there is no active session', () => {
