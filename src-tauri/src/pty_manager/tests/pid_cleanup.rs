@@ -3,20 +3,17 @@ use super::*;
 #[tokio::test]
 async fn test_cleanup_stale_pids_invalid_content() {
     let mut manager = PtyManager::new();
-    let tmp_dir = std::env::temp_dir().join("test_pty_cleanup_invalid");
-    std::fs::create_dir_all(&tmp_dir).unwrap();
-    manager.set_pid_dir(tmp_dir.clone());
+    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(tmp_dir.path().to_path_buf());
 
     // Only -pty.pid files are processed by pty cleanup
-    let pid_file = tmp_dir.join("task123-pty.pid");
+    let pid_file = tmp_dir.path().join("task123-pty.pid");
     std::fs::write(&pid_file, "not_a_number").unwrap();
     assert!(pid_file.exists());
 
     let result = manager.cleanup_stale_pids().await;
     assert!(result.is_ok());
     assert!(!pid_file.exists(), "Invalid PTY PID file should be removed");
-
-    let _ = std::fs::remove_dir_all(&tmp_dir);
 }
 
 #[tokio::test]
