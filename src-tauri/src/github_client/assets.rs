@@ -76,11 +76,10 @@ pub(crate) fn is_github_attachment_url(url: &str) -> bool {
         return false;
     }
 
-    match segments.as_slice() {
-        ["user-attachments", "assets", _] => true,
-        [_, _, "assets", _, _] => true,
-        _ => false,
-    }
+    matches!(
+        segments.as_slice(),
+        ["user-attachments", "assets", _] | [_, _, "assets", _, _]
+    )
 }
 
 /// Read the `src` of the first `<tag>` element in an HTML fragment.
@@ -98,9 +97,7 @@ fn first_html_tag_src(html: &str, tag: &str) -> Option<String> {
             continue;
         }
 
-        let Some(tag_end) = after.find('>') else {
-            return None;
-        };
+        let tag_end = after.find('>')?;
         let attributes = &after[..tag_end];
         rest = &after[tag_end..];
 
