@@ -24,7 +24,7 @@ Use canonical nested command groups (`openforge task create`, `openforge task up
 
 `openforge task start --task-id <id>` starts the native configured implementation flow using persisted task and project configuration. Dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain authoritative; the command does not accept runtime overrides.
 
-Plugin management commands are local-only for agent-facing use: install from a local source path with `openforge plugin install --path <local-plugin-source>`, separately enable or disable an installed plugin for a project with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`, and explicitly reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Do not pass npm, git, source-spec, watch, or rebuild inputs to these commands.
+Plugin management commands are local-only for agent-facing use. Install from a local source path with `openforge plugin install --path <local-plugin-source>`. Enable or disable project-enabled packages with `openforge plugin enable|disable --plugin-id <id> --project-id <id>`. Enable or disable app-enabled packages with `openforge plugin app enable|disable --plugin-id <id>`. Reload installed artifacts with `openforge plugin reload --plugin-id <id> [--project-id <id>]`. Installation never enables a plugin. Pass no npm, git, source-spec, watch, or rebuild inputs to these commands.
 
 ## Agent-facing Plugin Commands
 

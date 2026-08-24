@@ -324,6 +324,8 @@ describe('OpenForge CLI', () => {
       'openforge plugin install --path <local-plugin-source>',
       'openforge plugin enable --plugin-id <id> --project-id <id>',
       'openforge plugin disable --plugin-id <id> --project-id <id>',
+      'openforge plugin app enable --plugin-id <id>',
+      'openforge plugin app disable --plugin-id <id>',
       'openforge plugin reload --plugin-id <id> [--project-id <id>]',
       'openforge task plan apply --file <plan.json>',
     ]) {
@@ -332,6 +334,7 @@ describe('OpenForge CLI', () => {
 
     expect(stdout).toContain('Plugin Installation is local-only for now');
     expect(stdout).toContain('Local Plugin Source');
+    expect(stdout).toContain('Plugin Installation never enables a plugin automatically.');
     expect(stdout).not.toContain('Flat compatibility aliases:');
     expect(stdout).not.toContain('openforge create-task');
     expect(stdout).not.toContain('openforge list-projects');
@@ -1551,6 +1554,61 @@ describe('OpenForge CLI', () => {
       expectedBody: { pluginId: 'review-helper', projectId: 'P-1', enabled: false },
       response: { plugin_id: 'review-helper', project_id: 'P-1', enabled: false },
     })).resolves.toEqual({ plugin_id: 'review-helper', project_id: 'P-1', enabled: false });
+  });
+
+  it('enables and disables app-enabled plugins without a project scope', async () => {
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'app',
+      'enable',
+      '--plugin-id',
+      'account-usage',
+    ], {
+      method: 'POST',
+      url: '/set_app_plugin_enabled',
+      expectedBody: { pluginId: 'account-usage', enabled: true },
+      response: { plugin_id: 'account-usage', enabled: true },
+    })).resolves.toEqual({ plugin_id: 'account-usage', enabled: true });
+
+    await expect(runCliAgainstJsonBridge([
+      'plugin',
+      'app',
+      'disable',
+      '--plugin-id',
+      'account-usage',
+    ], {
+      method: 'POST',
+      url: '/set_app_plugin_enabled',
+      expectedBody: { pluginId: 'account-usage', enabled: false },
+      response: { plugin_id: 'account-usage', enabled: false },
+    })).resolves.toEqual({ plugin_id: 'account-usage', enabled: false });
+  });
+
+  it('rejects project scope flags for app plugin enablement before contacting the HTTP bridge', async () => {
+    let requestCount = 0;
+    const server = createServer((_req, res) => {
+      requestCount += 1;
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('should not be called');
+    });
+    const port = await listen(server);
+
+    try {
+      await expect(runCli([
+        'plugin',
+        'app',
+        'enable',
+        '--plugin-id',
+        'account-usage',
+        '--project-id',
+        'P-1',
+      ], { OPENFORGE_HTTP_PORT: String(port) })).rejects.toMatchObject({
+        stderr: expect.stringContaining('plugin app enable does not support --project-id'),
+      });
+      expect(requestCount).toBe(0);
+    } finally {
+      await close(server);
+    }
   });
 
   it('reloads installed plugin artifacts globally or for one project through nested plugin reload', async () => {

@@ -72,6 +72,7 @@ pub(crate) fn plugin_platform_error_status(
         || message.contains("backend not configured")
         || message.contains("backend entry")
         || message.contains("install root")
+        || message.contains("enablement is required")
     {
         StatusCode::BAD_REQUEST
     } else if message.contains("plugin host state is not available") {

@@ -440,6 +440,14 @@ async function setPluginEnabled(flags, enabled) {
   }));
 }
 
+async function setAppPluginEnabled(flags, enabled) {
+  const pluginId = requireFlag(flags, 'pluginId');
+  printJson(await requestJson('/set_app_plugin_enabled', {
+    method: 'POST',
+    body: JSON.stringify({ pluginId, enabled }),
+  }));
+}
+
 async function reloadPlugin(flags) {
   const payload = {
     pluginId: requireFlag(flags, 'pluginId'),
@@ -644,6 +652,18 @@ const COMMAND_SPECS = [
     handler: (flags) => setPluginEnabled(flags, false),
   },
   {
+    path: ['plugin', 'app', 'enable'],
+    flags: ['pluginId'],
+    usage: 'openforge plugin app enable --plugin-id <id>',
+    handler: (flags) => setAppPluginEnabled(flags, true),
+  },
+  {
+    path: ['plugin', 'app', 'disable'],
+    flags: ['pluginId'],
+    usage: 'openforge plugin app disable --plugin-id <id>',
+    handler: (flags) => setAppPluginEnabled(flags, false),
+  },
+  {
     path: ['plugin', 'reload'],
     flags: ['pluginId', 'projectId', 'path', 'npm', 'git', 'source'],
     allowPositionals: true,
@@ -727,6 +747,8 @@ ${COMMAND_SPECS.map((spec) => `  ${spec.usage}`).join('\n')}
 Plugin Installation is local-only for now:
   Local Plugin Source: use openforge plugin install --path <local-plugin-source>
   Project Plugin Enablement is separate: use plugin enable/disable with --project-id.
+  App Plugin Enablement is separate: use plugin app enable/disable without --project-id.
+  Plugin Installation never enables a plugin automatically.
   Plugin reload explicitly reloads installed artifacts only; it does not watch or rebuild source.
 
 Task prompt semantics:

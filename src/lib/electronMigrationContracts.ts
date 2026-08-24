@@ -222,6 +222,7 @@ export const appShellEventContracts = [
   { eventName: 'openforge.open-url', payload: '{ url: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'openforge.write-clipboard-text', payload: '{ text: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-installation-changed', payload: '{ plugin_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
+  { eventName: 'app-plugin-enablement-changed', payload: '{ plugin_id: string; enabled: boolean }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'project-plugin-enablement-changed', payload: '{ plugin_id: string; project_id: string; enabled: boolean }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'plugin-reload-requested', payload: '{ plugin_id: string; project_id?: string | null }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'plugins' },
   { eventName: 'task-changed', payload: '{ action: "created" | "updated" | "deleted"; task_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'tasks-projects' },

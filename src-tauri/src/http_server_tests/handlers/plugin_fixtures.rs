@@ -29,6 +29,17 @@ pub(super) fn seed_http_plugin(state: &AppState, plugin_id: &str) {
         .expect("seed plugin");
 }
 
+pub(super) fn seed_http_app_plugin(state: &AppState, plugin_id: &str) {
+    let mut plugin = sample_http_plugin(plugin_id);
+    plugin.package_metadata = r#"{"enablement":"app"}"#.to_string();
+    state
+        .db
+        .lock()
+        .expect("lock db")
+        .install_plugin(&plugin)
+        .expect("seed app plugin");
+}
+
 pub(super) fn assert_no_app_event(
     receiver: &mut tokio::sync::broadcast::Receiver<AppEventEnvelope>,
 ) {
@@ -39,7 +50,16 @@ pub(super) fn assert_no_app_event(
     ));
 }
 
-pub(super) fn write_local_plugin_package(source_dir: &std::path::Path, plugin_id: &str) {
+pub(super) fn write_local_plugin_package(
+    source_dir: &std::path::Path,
+    plugin_id: &str,
+    enablement: &str,
+) {
+    let requires = if enablement == "app" {
+        "    \"requires\": [\"appEnablement\"],\n"
+    } else {
+        ""
+    };
     std::fs::create_dir_all(source_dir.join("dist")).expect("create plugin dist");
     std::fs::write(
         source_dir.join("dist/index.js"),
@@ -57,7 +77,8 @@ pub(super) fn write_local_plugin_package(source_dir: &std::path::Path, plugin_id
     "apiVersion": 1,
     "displayName": "HTTP Test Plugin",
     "description": "Installed by HTTP bridge tests",
-    "frontend": "dist/index.js"
+    "enablement": "{enablement}",
+{requires}    "frontend": "dist/index.js"
   }}
 }}"#
         ),

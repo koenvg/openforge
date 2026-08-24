@@ -275,6 +275,7 @@ impl<'a> PluginPlatform<'a> {
         enabled: bool,
     ) -> Result<(), String> {
         let db = db::acquire_db(self.db);
+        require_plugin_enablement(&db, plugin_id, PluginEnablement::Project)?;
         db.set_plugin_enabled(project_id, plugin_id, enabled)
             .map_err(|error| format!("Failed to set plugin enabled: {error}"))
     }
@@ -291,6 +292,7 @@ impl<'a> PluginPlatform<'a> {
         enabled: bool,
     ) -> Result<(), String> {
         let db = db::acquire_db(self.db);
+        require_plugin_enablement(&db, plugin_id, PluginEnablement::App)?;
         db.set_app_plugin_enabled(plugin_id, enabled)
             .map_err(|error| format!("Failed to set app plugin enabled: {error}"))
     }
@@ -472,6 +474,51 @@ impl<'a> PluginPlatform<'a> {
             .as_deref()
             .ok_or_else(|| "app data directory is required for this plugin operation".to_string())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PluginEnablement {
+    App,
+    Project,
+}
+
+impl PluginEnablement {
+    fn label(self) -> &'static str {
+        match self {
+            Self::App => "app",
+            Self::Project => "project",
+        }
+    }
+}
+
+fn require_plugin_enablement(
+    database: &db::Database,
+    plugin_id: &str,
+    expected: PluginEnablement,
+) -> Result<(), String> {
+    let plugin = database
+        .get_plugin(plugin_id)
+        .map_err(|error| format!("Failed to get plugin: {error}"))?
+        .ok_or_else(|| format!("Unknown plugin: {plugin_id}"))?;
+    let metadata: Value = serde_json::from_str(&plugin.package_metadata)
+        .map_err(|error| format!("Failed to parse plugin metadata for {plugin_id}: {error}"))?;
+    let actual = match metadata.get("enablement").and_then(Value::as_str) {
+        Some("app") => PluginEnablement::App,
+        None | Some("project") => PluginEnablement::Project,
+        Some(value) => {
+            return Err(format!(
+                "Unsupported plugin enablement '{value}': {plugin_id}"
+            ))
+        }
+    };
+    if actual != expected {
+        return Err(format!(
+            "Plugin {plugin_id} uses {} enablement; {} enablement is required",
+            actual.label(),
+            expected.label()
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_plugin_storage_scope(

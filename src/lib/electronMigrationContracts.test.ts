@@ -180,6 +180,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
       'openforge.open-url',
       'openforge.write-clipboard-text',
       'plugin-installation-changed',
+      'app-plugin-enablement-changed',
       'project-plugin-enablement-changed',
       'plugin-reload-requested',
       'task-changed',
