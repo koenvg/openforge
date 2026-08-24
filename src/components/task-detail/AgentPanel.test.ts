@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../../lib/types'
+import { createAgentSession } from './agentSession.testFixtures'
 
 type DesktopEventCallback = (event: { payload: unknown }) => void
 
@@ -137,22 +138,7 @@ describe('AgentPanel (router)', () => {
   })
 
   it('shows OpenCode panel for opencode provider session', async () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-      pi_session_id: null,
-      grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -163,22 +149,7 @@ describe('AgentPanel (router)', () => {
   })
 
   it('routes pi provider sessions through the shared terminal shell', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'pi',
-      claude_session_id: null,
-      pi_session_id: 'pi-sess-1',
-      grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-1' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -189,22 +160,7 @@ describe('AgentPanel (router)', () => {
   })
 
   it('routes codex provider sessions through the shared terminal shell', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'codex-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'codex',
-      claude_session_id: null,
-      pi_session_id: null,
-      grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'codex', opencode_session_id: 'codex-sess-1' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -215,22 +171,7 @@ describe('AgentPanel (router)', () => {
   })
 
   it('resolves the grok session key for grok provider sessions', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'grok',
-      claude_session_id: null,
-      pi_session_id: null,
-      grok_session_id: 'grok-sess-1',
-    }
+    const session = createAgentSession({ provider: 'grok', grok_session_id: 'grok-sess-1' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -272,22 +213,7 @@ describe('AgentPanel starting animation', () => {
   })
 
   it('hides starting animation when session exists', async () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -313,22 +239,7 @@ describe('OpenCode shared shell (via router)', () => {
   it('calls attach with the pooled terminal entry for OpenCode sessions', async () => {
     const { attach } = await import('../../lib/terminalPool')
 
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 
     activeSessions.set(new Map([['T-1', session]]))
 
@@ -342,22 +253,7 @@ describe('OpenCode shared shell (via router)', () => {
   it('does not expose an Abort action for a running agent session', async () => {
     const { attach } = await import('../../lib/terminalPool')
 
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-      pi_session_id: null,
-      grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode', opencode_session_id: 'oc-sess-1' })
 
     activeSessions.set(new Map([['T-1', session]]))
 
@@ -370,22 +266,11 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('shows question banner when session is paused with checkpoint_data', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
+    const session = createAgentSession({
+      provider: 'opencode',
       status: 'paused',
       checkpoint_data: '{"properties":{"description":"Allow file write to src/main.ts?"}}',
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -396,22 +281,11 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('shows generic fallback banner when checkpoint_data has no known fields', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
+    const session = createAgentSession({
+      provider: 'opencode',
       status: 'paused',
       checkpoint_data: '{"unknown":"data"}',
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -422,22 +296,7 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('does not show question banner for dedicated PTY instance metadata', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: 42,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-      pi_session_id: null,
-      grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode', pty_instance_id: 42 })
 
     activeSessions.set(new Map([['T-1', session]]))
 
@@ -446,22 +305,7 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('does not show question banner when session is running', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    const session = createAgentSession({ provider: 'opencode' })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
@@ -479,29 +323,18 @@ describe('OpenCode shared shell (via router)', () => {
   })
 
   it('shows question text from question.asked event format', () => {
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
+    const session = createAgentSession({
+      provider: 'opencode',
       status: 'paused',
       checkpoint_data: JSON.stringify({
         type: 'question.asked',
         properties: {
           id: 'que_abc',
           sessionID: 'ses_xyz',
-          questions: [{ question: 'Run or Bike?', header: 'Run or Bike', options: [] }]
-        }
+          questions: [{ question: 'Run or Bike?', header: 'Run or Bike', options: [] }],
+        },
       }),
-      pty_instance_id: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    grok_session_id: null,
-    }
+    })
 
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', session)
