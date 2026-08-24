@@ -31,6 +31,8 @@ catalogs:
   pinned:
     '@types/node': 26.2.0
     svelte: 5.56.9
+  typescript6:
+    typescript: ^6.0.3
 
 # pnpm minimumReleaseAge is in minutes; 7200 minutes equals 5 days.
 # Keep Renovate's npm minimumReleaseAge in renovate.json aligned with this value,
