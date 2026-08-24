@@ -14,19 +14,46 @@ typedef _RunTaskMutation =
       CompanionTrustRecord trust,
     );
 typedef _TaskMutation = ({String path, _RunTaskMutation run});
+typedef _NoFailoverMutation = ({
+  String name,
+  String path,
+  SocketException failure,
+  CompanionV1HttpResponse fallbackResponse,
+  _RunTaskMutation run,
+});
 
 void main() {
-  test(
-    'Complete makes one request and never falls through to another endpoint',
-    () async {
+  final noFailoverMutations = <_NoFailoverMutation>[
+    (
+      name:
+          'Complete makes one request and never falls through to another endpoint',
+      path: '/companion/v1/tasks/KVG-3033/complete',
+      failure: const SocketException('uncertain response'),
+      fallbackResponse: const CompanionV1HttpResponse(
+        statusCode: 200,
+        body:
+            '{"taskId":"KVG-3033","boardStatus":"done","cleanupScheduled":false}',
+      ),
+      run: (client, trust) => client.completeTask(trust, 'KVG-3033'),
+    ),
+    (
+      name: 'Task Delete never retries across endpoint candidates',
+      path: '/companion/v1/tasks/T-1/delete',
+      failure: const SocketException('uncertain outcome'),
+      fallbackResponse: const CompanionV1HttpResponse(
+        statusCode: 200,
+        body: '{"taskId":"T-1","outcome":"deleted"}',
+      ),
+      run: (client, trust) => client.deleteBacklogTask(trust, 'T-1'),
+    ),
+  ];
+
+  for (final mutation in noFailoverMutations) {
+    test(mutation.name, () async {
       final requests = <({Uri uri, Map<String, String> headers})>[];
       final transport = EndpointCompanionTransport(<String, Object>{
-        '192.168.1.20': const SocketException('uncertain response'),
-        'openforge.tailnet': const CompanionV1HttpResponse(
-          statusCode: 200,
-          body:
-              '{"taskId":"KVG-3033","boardStatus":"done","cleanupScheduled":false}',
-        ),
+        '192.168.1.20': mutation.failure,
+        'openforge.tailnet': mutation.fallbackResponse,
       }, requests: requests);
       final client = GeneratedCompanionClient(
         transportFactory: (_) =>
@@ -44,47 +71,15 @@ void main() {
       );
 
       await expectLater(
-        client.completeTask(trust, 'KVG-3033'),
+        mutation.run(client, trust),
         throwsA(isA<SocketException>()),
+        reason: mutation.name,
       );
-      expect(requests, hasLength(1));
-      expect(requests.single.uri.host, '192.168.1.20');
-      expect(requests.single.uri.path, '/companion/v1/tasks/KVG-3033/complete');
-    },
-  );
-
-  test('Task Delete never retries across endpoint candidates', () async {
-    final requests = <({Uri uri, Map<String, String> headers})>[];
-    final transport = EndpointCompanionTransport(<String, Object>{
-      '192.168.1.20': const SocketException('uncertain outcome'),
-      'openforge.tailnet': const CompanionV1HttpResponse(
-        statusCode: 200,
-        body: '{"taskId":"T-1","outcome":"deleted"}',
-      ),
-    }, requests: requests);
-    final client = GeneratedCompanionClient(
-      transportFactory: (_) =>
-          CompanionEndpointTransport(transport: transport, close: () {}),
-    );
-    final trust = CompanionTrustRecord(
-      hostId: '65d91f21-6732-45a6-9418-3dfaf4c93f52',
-      certificateSha256: 'trusted-pin',
-      endpointCandidates: <Uri>[
-        Uri.parse('https://192.168.1.20:17424'),
-        Uri.parse('https://openforge.tailnet:17424'),
-      ],
-      deviceId: 'device-1',
-      deviceCredential: 'credential-1',
-    );
-
-    await expectLater(
-      client.deleteBacklogTask(trust, 'T-1'),
-      throwsA(isA<SocketException>()),
-    );
-    expect(requests, hasLength(1));
-    expect(requests.single.uri.host, '192.168.1.20');
-    expect(requests.single.uri.path, '/companion/v1/tasks/T-1/delete');
-  });
+      expect(requests, hasLength(1), reason: mutation.name);
+      expect(requests.single.uri.host, '192.168.1.20', reason: mutation.name);
+      expect(requests.single.uri.path, mutation.path, reason: mutation.name);
+    });
+  }
 
   test(
     'Task mutations reject missing endpoints before opening transport',
