@@ -5,6 +5,7 @@ import {
 } from '../ipc'
 import { activeProjectId } from '../stores'
 import {
+  clearProjectEnabledPluginIds,
   enabledPluginIds,
   disableAppPlugin as disableAppPluginInStore,
   disablePlugin as disablePluginInStore,
@@ -19,6 +20,20 @@ import { installFromLocal, setPluginRuntimeError, upsertInstalledPlugin } from '
 import { ensurePluginBackendReady, updatePluginBackendContext } from './pluginHostCommands'
 
 const manualLifecyclePluginIds = new Set<string>()
+let boundProjectRuntimeProjectId: string | null = null
+let projectRuntimeTransition: Promise<void> = Promise.resolve()
+
+async function deactivatePlugins(pluginIds: string[]): Promise<void> {
+  let firstError: unknown = null
+  for (const pluginId of pluginIds) {
+    try {
+      await deactivatePluginById(pluginId)
+    } catch (error) {
+      firstError ??= error
+    }
+  }
+  if (firstError) throw firstError
+}
 
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   await deactivatePluginById(pluginId)
@@ -35,15 +50,7 @@ export async function deactivateAllPlugins(): Promise<void> {
     .filter(([, entry]) => entry.state === 'active')
     .map(([pluginId]) => pluginId)
     .reverse()
-  let firstError: unknown = null
-  for (const pluginId of activePluginIds) {
-    try {
-      await deactivatePluginById(pluginId)
-    } catch (error) {
-      firstError ??= error
-    }
-  }
-  if (firstError) throw firstError
+  await deactivatePlugins(activePluginIds)
 }
 
 async function activateEnabledPlugin(
@@ -51,7 +58,7 @@ async function activateEnabledPlugin(
   projectId: string | null,
 ): Promise<boolean> {
   const wasActive = get(installedPlugins).get(pluginId)?.state === 'active'
-  const activated = await activatePlugin(pluginId)
+  const activated = await activatePlugin(pluginId, projectId)
   if (!activated) return false
 
   const entry = get(installedPlugins).get(pluginId)
@@ -66,11 +73,50 @@ async function activateEnabledPlugin(
   }
 }
 
-export async function loadEnabledForProject(projectId: string): Promise<void> {
-  await loadEnabledPluginIdsForProject(projectId)
+async function transitionProjectScopedRuntime(projectId: string | null): Promise<void> {
+  if (boundProjectRuntimeProjectId !== projectId || projectId === null) {
+    const projectRuntimePluginIds = Array.from(get(installedPlugins).entries())
+      .filter(([, entry]) =>
+        entry.packageMetadata?.enablement !== 'app'
+        && (entry.state === 'active' || entry.state === 'error'))
+      .map(([pluginId]) => pluginId)
+      .reverse()
+    await deactivatePlugins(projectRuntimePluginIds)
+  }
 
+  if (projectId === null) {
+    clearProjectEnabledPluginIds()
+    boundProjectRuntimeProjectId = null
+    return
+  }
+
+  await loadEnabledPluginIdsForProject(projectId)
   await Promise.all(Array.from(get(enabledPluginIds)).map((pluginId) =>
     activateEnabledPlugin(pluginId, projectId)))
+  boundProjectRuntimeProjectId = projectId
+}
+
+async function transitionProjectRuntime(projectId: string | null): Promise<void> {
+  let firstError: unknown = null
+  try {
+    await transitionProjectScopedRuntime(projectId)
+  } catch (error) {
+    firstError = error
+  }
+
+  try {
+    await updateAppPluginContexts(projectId)
+  } catch (error) {
+    firstError ??= error
+  }
+
+  if (firstError) throw firstError
+}
+
+export async function loadEnabledForProject(projectId: string | null): Promise<void> {
+  const transition = projectRuntimeTransition.then(() => transitionProjectRuntime(projectId))
+  projectRuntimeTransition = transition.catch(() => undefined)
+  return transition
 }
 
 export async function loadEnabledForApp(): Promise<void> {

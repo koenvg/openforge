@@ -16,11 +16,13 @@ import {
   loadPluginFrontendMock,
   makeManifest,
   makeNormalized,
+  pluginBackendDeactivateMock,
   pluginBackendWhenReadyMock,
   registryLoadEnabledForProject,
   resetPluginRegistryTestState,
   runtimeContributionSources,
 } from './pluginRegistryTestSupport'
+import { activeProjectId } from '../stores'
 
 describe('pluginRegistry project enablement', () => {
   beforeEach(resetPluginRegistryTestState)
@@ -56,6 +58,56 @@ describe('pluginRegistry project enablement', () => {
     expect(loadPluginFrontendMock).toHaveBeenCalledWith('scheduler-plugin', 'plugin://scheduler-plugin/index.js')
     expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('scheduler-plugin', 'P-1')
     expect(get(installedPlugins).get('scheduler-plugin')).toMatchObject({ state: 'active', error: null })
+  })
+
+  it('rebinds an enabled project Plugin runtime when the visible Project changes', async () => {
+    const activationProjectIds: Array<string | null> = []
+    const dispose = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        activationProjectIds.push(openforge.context.getSnapshot().projectId)
+        context.subscriptions.add({ dispose })
+      },
+    })
+    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['project-runtime-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'project-runtime-plugin', module: frontendPlugin })
+
+    activeProjectId.set('P-1')
+    await registryLoadEnabledForProject('P-1')
+    activeProjectId.set('P-2')
+    await registryLoadEnabledForProject('P-2')
+
+    expect(activationProjectIds).toEqual(['P-1', 'P-2'])
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledTimes(1)
+    expect(pluginBackendWhenReadyMock).toHaveBeenNthCalledWith(1, 'project-runtime-plugin', 'P-1')
+    expect(pluginBackendWhenReadyMock).toHaveBeenNthCalledWith(2, 'project-runtime-plugin', 'P-2')
+  })
+
+  it('deactivates project-scoped Plugin runtimes when no Project is visible', async () => {
+    const dispose = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(_openforge, context) {
+        context.subscriptions.add({ dispose })
+      },
+    })
+    const manifest = makeManifest({ id: 'project-runtime-plugin', frontend: 'index.js', backend: 'backend.js' })
+    installedPlugins.set(new Map([['project-runtime-plugin', { manifest, state: 'installed', error: null }]]))
+    getEnabledPluginsMock.mockResolvedValue([{ ...makeNormalized('project-runtime-plugin'), backendEntry: 'backend.js' }])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'project-runtime-plugin', module: frontendPlugin })
+
+    activeProjectId.set('P-1')
+    await registryLoadEnabledForProject('P-1')
+    activeProjectId.set(null)
+    await registryLoadEnabledForProject(null)
+
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(pluginBackendDeactivateMock).toHaveBeenCalledTimes(1)
+    expect(get(installedPlugins).get('project-runtime-plugin')).toMatchObject({ state: 'installed', error: null })
+    expect(get(runtimeContributionSources).has('project-runtime-plugin')).toBe(false)
+    expect(get(enabledPluginIds)).toEqual(new Set())
   })
 
   it('does not request backend readiness for enabled frontend-only plugins', async () => {
