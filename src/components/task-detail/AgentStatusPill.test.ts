@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createAgentSession, resetAgentTerminalTestState, setActiveSession } from './agentTerminalShell.testUtils'
+import { resetAgentTerminalTestState, setActiveSession } from './agentTerminalShell.testUtils'
+import { createAgentSession } from './agentSession.testFixtures'
 import AgentStatusPill from './AgentStatusPill.svelte'
 
 describe('AgentStatusPill', () => {
