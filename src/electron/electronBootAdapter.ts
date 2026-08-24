@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
+import {
+  ACKNOWLEDGE_BROWSER_SESSION_PURGE_INTENT_COMMAND,
+  LIST_BROWSER_SESSION_PURGE_INTENTS_COMMAND,
+} from './internalSidecarCommandRegistrations.js'
 import { handleElectronInvoke } from './backendBridge.js'
 import { FileTaskBrowserCaptureArtifactStore } from './taskBrowserCaptureArtifactStore.js'
 import { FileTaskBrowserPartitionRegistry } from './taskBrowserPartitionRegistry.js'
@@ -167,7 +171,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       async listPending() {
         if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
         const value = await handleElectronInvoke(
-          { command: 'list_browser_session_purge_intents', payload: null },
+          { command: LIST_BROWSER_SESSION_PURGE_INTENTS_COMMAND, payload: null },
           createInvokeDeps(backendInvokeContext),
         )
         return taskBrowserSessionPurgeIntents(value)
@@ -175,7 +179,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       async acknowledge(intentId) {
         if (!backendInvokeContext) throw new Error('Rust sidecar is not available')
         await handleElectronInvoke(
-          { command: 'acknowledge_browser_session_purge_intent', payload: { intentId } },
+          { command: ACKNOWLEDGE_BROWSER_SESSION_PURGE_INTENT_COMMAND, payload: { intentId } },
           createInvokeDeps(backendInvokeContext),
         )
       },

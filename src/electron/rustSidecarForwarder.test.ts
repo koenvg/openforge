@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { desktopCommandOwnershipContracts } from '../lib/desktopIpcContract'
-import { SIDECAR_BACKED_COMMANDS } from './generatedRustSidecarCommands'
+import { SIDECAR_BACKED_COMMANDS } from './generatedDesktopIpcRegistry'
 import { isSidecarBackedCommand } from './rustSidecarForwarder'
 
 const rustOwnedCommands = desktopCommandOwnershipContracts
