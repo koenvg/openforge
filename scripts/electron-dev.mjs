@@ -10,6 +10,7 @@ import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv, parsePort } from 
 import { OPENFORGE_APP_DATA_IDENTIFIER, databaseFilenameForBuildMode } from './data-identity.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 import { ensureDevPluginArtifacts as defaultEnsureDevPluginArtifacts } from './build-dev-plugin-artifacts.mjs'
+import { prepareGhosttyVt as defaultPrepareGhosttyVt } from './prepare-ghostty-vt.mjs'
 
 export const DEFAULT_VITE_PORT = 1420
 export const ELECTRON_DEV_SEED_APP_DATA_DIR_ENV = 'OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR'
@@ -293,6 +294,13 @@ export async function prepareElectronDevArtifacts(deps = {}) {
   await ensureDevPluginArtifacts()
 }
 
+export async function prepareElectronDevCargoEnv(cargoEnv, deps = {}) {
+  const prepareGhosttyVt = deps.prepareGhosttyVt ?? defaultPrepareGhosttyVt
+  const logger = deps.logger ?? (message => logStep(message))
+  const ghosttyEnv = await prepareGhosttyVt({ logger })
+  return { ...cargoEnv, ...ghosttyEnv }
+}
+
 export async function assertVitePortAvailable(portOrDeps = VITE_PORT, deps = { isPortOpen }) {
   const port = typeof portOrDeps === 'number' ? portOrDeps : VITE_PORT
   const portDeps = typeof portOrDeps === 'number' ? deps : portOrDeps
@@ -574,11 +582,12 @@ async function main() {
     logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
     await assertVitePortAvailable(runtimeOptions.rendererPort)
     await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
-    const devBackend = await resolveElectronDevBackendEnv()
+    const { env: baseCargoEnv, cargoTargetDir, source } = await resolveElectronDevBackendEnv()
+    logStep('Preparing pinned Ghostty dependencies for the Rust sidecar ...')
+    const cargoEnv = await prepareElectronDevCargoEnv(baseCargoEnv)
     vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'])
     logStep('Waiting for Vite readiness ...')
     await waitForVite(runtimeOptions.rendererUrl, vite)
-    const { env: cargoEnv, cargoTargetDir, source } = devBackend
     const rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: repoRoot() })
     const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir, rustSidecarLayout)
     logStep(`Vite is ready; building Rust sidecar (${source} target dir: ${cargoTargetDir}) ...`)

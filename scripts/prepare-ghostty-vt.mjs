@@ -3,6 +3,7 @@
 import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { execFileSync } from 'node:child_process'
@@ -31,12 +32,21 @@ function requireZig() {
 
 function prepareGhosttySource() {
   mkdirSync(cacheRoot, { recursive: true })
-  if (!existsSync(join(sourceDir, '.git'))) {
+  const sourceWasCloned = !existsSync(join(sourceDir, '.git'))
+  if (sourceWasCloned) {
+    rmSync(sourceDir, { recursive: true, force: true })
     run('git', ['clone', '--filter=blob:none', '--no-checkout', GHOSTTY_REPOSITORY, sourceDir])
   }
-  run('git', ['fetch', '--filter=blob:none', 'origin', GHOSTTY_REVISION], { cwd: sourceDir })
-  run('git', ['checkout', '--detach', GHOSTTY_REVISION], { cwd: sourceDir })
-  const actual = run('git', ['rev-parse', 'HEAD'], { cwd: sourceDir })
+
+  let actual = run('git', ['rev-parse', 'HEAD'], { cwd: sourceDir })
+  const revisionChanged = actual !== GHOSTTY_REVISION
+  if (revisionChanged) {
+    run('git', ['fetch', '--filter=blob:none', 'origin', GHOSTTY_REVISION], { cwd: sourceDir })
+  }
+  if (sourceWasCloned || revisionChanged) {
+    run('git', ['checkout', '--detach', GHOSTTY_REVISION], { cwd: sourceDir })
+    actual = run('git', ['rev-parse', 'HEAD'], { cwd: sourceDir })
+  }
   if (actual !== GHOSTTY_REVISION) {
     throw new Error(`Ghostty revision mismatch: expected ${GHOSTTY_REVISION}, found ${actual}`)
   }
@@ -144,27 +154,51 @@ function prepareRustDependencies() {
   if (!lockfile.includes(lockedSource)) {
     throw new Error(`Cargo.lock does not pin libghostty-vt to ${WRAPPER_REVISION}`)
   }
-  run(
-    'cargo',
-    ['fetch', '--locked', '--manifest-path', join(repositoryRoot, 'src-tauri', 'Cargo.toml')],
-    {
-      cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        GHOSTTY_SOURCE_DIR: sourceDir,
-        GHOSTTY_ZIG_SYSTEM_DIR: systemDir,
-      },
+  const manifestArgs = [
+    'fetch',
+    '--locked',
+    '--manifest-path',
+    join(repositoryRoot, 'src-tauri', 'Cargo.toml'),
+  ]
+  const options = {
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      GHOSTTY_SOURCE_DIR: sourceDir,
+      GHOSTTY_ZIG_SYSTEM_DIR: systemDir,
     },
-  )
+  }
+  try {
+    run('cargo', [...manifestArgs, '--offline'], {
+      ...options,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    run('cargo', manifestArgs, options)
+  }
 }
 
-requireZig()
-prepareGhosttySource()
-const packageCount = await prepareZigPackages()
-prepareRustDependencies()
+export async function prepareGhosttyVt({ logger = null } = {}) {
+  requireZig()
+  prepareGhosttySource()
+  const packageCount = await prepareZigPackages()
+  prepareRustDependencies()
 
-console.log(`libghostty-vt wrapper revision: ${WRAPPER_REVISION}`)
-console.log(`Ghostty source revision: ${GHOSTTY_REVISION}`)
-console.log(`Prepared Zig packages: ${packageCount}`)
-console.log(`GHOSTTY_SOURCE_DIR=${sourceDir}`)
-console.log(`GHOSTTY_ZIG_SYSTEM_DIR=${systemDir}`)
+  logger?.(`libghostty-vt wrapper revision: ${WRAPPER_REVISION}`)
+  logger?.(`Ghostty source revision: ${GHOSTTY_REVISION}`)
+  logger?.(`Prepared Zig packages: ${packageCount}`)
+  logger?.(`GHOSTTY_SOURCE_DIR=${sourceDir}`)
+  logger?.(`GHOSTTY_ZIG_SYSTEM_DIR=${systemDir}`)
+
+  return {
+    GHOSTTY_SOURCE_DIR: sourceDir,
+    GHOSTTY_ZIG_SYSTEM_DIR: systemDir,
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  prepareGhosttyVt({ logger: message => console.log(message) }).catch((error) => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}
