@@ -149,4 +149,31 @@ describe('DiffViewer accessibility', () => {
     expect(screen.getByText(/Large diff — 12 files, 6012 total changes\. 12 files auto-collapsed/)).toBeTruthy()
     expect(screen.getAllByRole('button', { name: /Expand diff for src\/large-/ })).toHaveLength(12)
   })
+  it('keeps the auto-collapse count unchanged after manual and Reviewed File collapses', async () => {
+    const largeDiffFiles = Array.from({ length: 11 }, (_, index) => ({
+      ...files[0],
+      sha: `sha-${index}`,
+      filename: `src/large-diff-${index}.ts`,
+      additions: index < 2 ? 501 : 500,
+      deletions: 0,
+      changes: index < 2 ? 501 : 500,
+    }))
+    const warningCopy = 'Large diff — 11 files, 5502 total changes. 2 files auto-collapsed for performance.'
+
+    render(DiffViewer, {
+      props: {
+        files: largeDiffFiles,
+        reviewedFileShas: new Map(),
+        onToggleFileReviewed: vi.fn(),
+      },
+    })
+
+    expect(screen.getByText(warningCopy)).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse diff for src/large-diff-2.ts' }))
+    expect(screen.getByText(warningCopy)).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark src/large-diff-3.ts reviewed' }))
+    expect(screen.getByText(warningCopy)).toBeTruthy()
+  })
 })

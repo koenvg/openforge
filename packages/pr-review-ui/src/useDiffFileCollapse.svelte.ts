@@ -9,6 +9,7 @@ interface DiffFileCollapseDependencies {
 
 export function createDiffFileCollapse(deps: DiffFileCollapseDependencies) {
   let collapsedFiles = $state(new Set<string>())
+  let autoCollapsedFileCount = $state(0)
   let hasAutoCollapsed = false
   let previousReviewedFileIdentities = new Map<string, string>()
 
@@ -34,11 +35,13 @@ export function createDiffFileCollapse(deps: DiffFileCollapseDependencies) {
     const files = deps.getFiles()
     if (files.length === 0) return
 
-    collapsedFiles = new Set(
+    const autoCollapsedFiles = new Set(
       files
         .filter(file => file.additions + file.deletions > 500 || file.is_truncated)
         .map(file => file.filename),
     )
+    collapsedFiles = autoCollapsedFiles
+    autoCollapsedFileCount = autoCollapsedFiles.size
     hasAutoCollapsed = true
   })
 
@@ -95,6 +98,9 @@ export function createDiffFileCollapse(deps: DiffFileCollapseDependencies) {
   return {
     get collapsedFiles() {
       return collapsedFiles
+    },
+    get autoCollapsedFileCount() {
+      return autoCollapsedFileCount
     },
     isFileReviewed,
     handleReviewedChange,
