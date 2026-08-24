@@ -339,17 +339,18 @@ mod tests {
 
     #[tokio::test]
     async fn doing_task_completed_session_remains_available_to_companion_terminal() {
-        let (database, task_id, path) =
+        let (database, task_id, _database_dir) =
             completed_session_fixture("completed_session_companion_attachment");
         database
             .lock()
             .expect("database lock")
             .save_completed_agent_terminal_replay(&task_id, "captured output")
             .expect("seed captured replay");
-        let manager = PtyManager::new();
-        let temp_dir = tempfile::tempdir().expect("temp directory");
+        let mut manager = PtyManager::new();
+        let pty_dir = tempfile::tempdir().expect("PTY temp directory");
+        manager.set_pid_dir(pty_dir.path().join("pids"));
         manager
-            .spawn_companion_test_agent_pty(&task_id, temp_dir.path(), "sleep 5")
+            .spawn_companion_test_agent_pty(&task_id, pty_dir.path(), "sleep 5")
             .await
             .expect("spawn Agent Session PTY");
         let reaper = CompletedSessionReaper::with_runtime(
@@ -380,8 +381,6 @@ mod tests {
             .expect("attach Companion Terminal");
 
         manager.kill_pty(&task_id).await.expect("stop Agent PTY");
-        drop(database);
-        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
