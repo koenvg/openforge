@@ -27,8 +27,6 @@ use metadata_validation::{package_metadata_schema_rules, OPENFORGE_PACKAGE_METAD
 use package_source::{
     command_output_details, resolve_requested_package_dir_name, GIT_PATH_ENV, NPM_PATH_ENV,
 };
-#[cfg(test)]
-use std::{fs, path::PathBuf};
 
 pub(crate) fn prepare_local_plugin_bundle(
     source_path: &Path,
