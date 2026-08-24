@@ -186,6 +186,18 @@ jobs:
               }
             }
 
+            function renderLogSection(heading, logPath, warningLabel) {
+              let section = `${heading}\n\n`;
+              try {
+                const log = fs.readFileSync(logPath, 'utf8');
+                section += '```\n' + log.slice(-30000) + '\n```\n\n';
+              } catch (error) {
+                core.warning(`Unable to read ${warningLabel} log: ${describeError(error)}`);
+                section += '_Failed (logs unavailable)_\n\n';
+              }
+              return section;
+            }
+
             const formatFailed = readExitCodeFile('/tmp/rust-results/format-exit-code', 'Rust formatting');
             const clippyFailed = readExitCodeFile('/tmp/rust-results/clippy-exit-code', 'Rust Clippy');
             const testsFailed = readExitCodeFile('/tmp/rust-results/tests-exit-code', 'Rust test');
@@ -211,25 +223,11 @@ jobs:
             let body = '## ❌ Rust CI Failures\n\n';
 
             if (formatFailed) {
-              body += '### Formatting\n\n';
-              try {
-                const log = fs.readFileSync('/tmp/rust-logs/rust-format.log', 'utf8');
-                body += '```\n' + log.slice(-30000) + '\n```\n\n';
-              } catch (error) {
-                core.warning(`Unable to read Rust formatting log: ${describeError(error)}`);
-                body += '_Failed (logs unavailable)_\n\n';
-              }
+              body += renderLogSection('### Formatting', '/tmp/rust-logs/rust-format.log', 'Rust formatting');
             }
 
             if (clippyFailed) {
-              body += '### Clippy\n\n';
-              try {
-                const log = fs.readFileSync('/tmp/rust-logs/rust-clippy.log', 'utf8');
-                body += '```\n' + log.slice(-30000) + '\n```\n\n';
-              } catch (error) {
-                core.warning(`Unable to read Rust Clippy log: ${describeError(error)}`);
-                body += '_Failed (logs unavailable)_\n\n';
-              }
+              body += renderLogSection('### Clippy', '/tmp/rust-logs/rust-clippy.log', 'Rust Clippy');
             }
 
             if (testsFailed) {
