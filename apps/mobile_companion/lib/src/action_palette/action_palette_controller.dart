@@ -5,6 +5,9 @@ import 'action_palette.dart';
 
 typedef PaletteAuthoritativeRefresh = Future<void> Function();
 
+String mobileActionFailureMessage(Object error, {required String fallback}) =>
+    error is generated.CompanionV1Exception ? error.message : fallback;
+
 final class ActionPaletteAuthorizationRequired implements Exception {
   const ActionPaletteAuthorizationRequired();
 }
@@ -73,8 +76,9 @@ final class MobileActionPaletteController {
 
   Future<void> executeTaskAction(
     String taskId,
-    CompanionActionId action,
-  ) async {
+    CompanionActionId action, {
+    MobileMergeMethod? mergeMethod,
+  }) async {
     final trustRecord = await _trustRecord();
     await _runMutation(() async {
       switch (action) {
@@ -105,7 +109,15 @@ final class MobileActionPaletteController {
         case CompanionActionId.returnToBoard:
           await _paletteClient.returnTaskToBoard(trustRecord, taskId);
         case CompanionActionId.mergePullRequest:
-          await _paletteClient.mergeTaskPullRequest(trustRecord, taskId);
+          final selectedMergeMethod = mergeMethod;
+          if (selectedMergeMethod == null) {
+            throw const FormatException('Merge method is required.');
+          }
+          await _paletteClient.mergeTaskPullRequest(
+            trustRecord,
+            taskId,
+            selectedMergeMethod,
+          );
         case CompanionActionId.enqueuePullRequest:
           await _paletteClient.enqueueTaskPullRequest(trustRecord, taskId);
         case CompanionActionId.runApp:

@@ -1,6 +1,10 @@
-use crate::db::{needs_rest_ci_for_snapshot, queued_validation_sha, MergeReadinessInputs, PrRow};
+use crate::db::{
+    needs_rest_ci_for_snapshot, queued_validation_sha, MergeReadinessInputs, PrMergeReadinessFacts,
+    PrRow,
+};
 use crate::github_client::{
-    CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubReadinessSnapshot, PrReview,
+    CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubReadinessSnapshot, PolicyValue,
+    PrReview, PullRequestMergeMethod,
 };
 use log::warn;
 
@@ -26,6 +30,40 @@ pub(super) struct BranchPolicyInputs {
     pub(super) requires_up_to_date_branch: bool,
     pub(super) conversations_blocking: bool,
     pub(super) merge_queue_required_by_policy: bool,
+    pub(super) merge_methods_policy_known: bool,
+    pub(super) allowed_merge_methods: Vec<PullRequestMergeMethod>,
+    pub(super) default_merge_method: Option<PullRequestMergeMethod>,
+}
+
+pub(super) fn enforce_merge_method_policy(
+    mut facts: PrMergeReadinessFacts,
+    policy: &BranchPolicyInputs,
+) -> PrMergeReadinessFacts {
+    if facts.status.as_deref() != Some("ready_to_merge") {
+        return facts;
+    }
+    if !policy.merge_methods_policy_known {
+        facts.status = Some("readiness_unknown".to_string());
+        facts.action = Some("wait_for_github".to_string());
+        facts.blockers_json = Some(
+            serde_json::json!([{
+                "code": "merge_method_policy_unknown",
+                "message": "GitHub merge methods are not available yet."
+            }])
+            .to_string(),
+        );
+    } else if policy.allowed_merge_methods.is_empty() {
+        facts.status = Some("blocked".to_string());
+        facts.action = Some("resolve_blockers".to_string());
+        facts.blockers_json = Some(
+            serde_json::json!([{
+                "code": "no_allowed_merge_method",
+                "message": "Repository and branch rules do not allow a common merge method."
+            }])
+            .to_string(),
+        );
+    }
+    facts
 }
 
 pub(super) async fn fetch_graphql_readiness_snapshot(
@@ -306,6 +344,7 @@ pub(super) async fn collect_branch_policy_sources(
 ) -> (
     crate::github_client::RequiredChecksPolicy,
     crate::github_client::RequiredReviewsPolicy,
+    PolicyValue<Option<Vec<PullRequestMergeMethod>>>,
 ) {
     match pr_details_result {
         Ok(details) => {
@@ -327,6 +366,12 @@ pub(super) async fn collect_branch_policy_sources(
                     &pr.repo_name,
                     base_ref,
                     github_token
+                ),
+                github_client.get_branch_merge_method_restriction_policy(
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    base_ref,
+                    github_token,
                 )
             )
         }
@@ -337,6 +382,7 @@ pub(super) async fn collect_branch_policy_sources(
             crate::github_client::RequiredReviewsPolicy::unknown(
                 "PR details unavailable for branch protection lookup",
             ),
+            PolicyValue::unknown("PR details unavailable for active branch rules lookup"),
         ),
     }
 }
@@ -345,6 +391,7 @@ pub(super) fn select_branch_policy_inputs(
     graphql_snapshot: Option<&GitHubReadinessSnapshot>,
     rest_required_checks_policy: &crate::github_client::RequiredChecksPolicy,
     rest_required_reviews_policy: &crate::github_client::RequiredReviewsPolicy,
+    rest_merge_method_restriction: &PolicyValue<Option<Vec<PullRequestMergeMethod>>>,
 ) -> BranchPolicyInputs {
     let required_check_names = graphql_snapshot
         .filter(|snapshot| snapshot.policy.required_checks.known)
@@ -378,6 +425,28 @@ pub(super) fn select_branch_policy_inputs(
         .filter(|snapshot| snapshot.policy.merge_queue_required.known)
         .and_then(|snapshot| snapshot.policy.merge_queue_required.value)
         .unwrap_or(false);
+    let repository_merge_methods = graphql_snapshot
+        .filter(|snapshot| snapshot.policy.allowed_merge_methods.known)
+        .map(|snapshot| snapshot.policy.allowed_merge_methods.value.clone());
+    let merge_methods_policy_known =
+        repository_merge_methods.is_some() && rest_merge_method_restriction.known;
+    let allowed_merge_methods = if merge_methods_policy_known {
+        let repository_methods = repository_merge_methods.unwrap_or_default();
+        match &rest_merge_method_restriction.value {
+            Some(restriction) => repository_methods
+                .into_iter()
+                .filter(|method| restriction.contains(method))
+                .collect(),
+            None => repository_methods,
+        }
+    } else {
+        Vec::new()
+    };
+    let default_merge_method = graphql_snapshot
+        .filter(|snapshot| snapshot.policy.default_merge_method.known)
+        .and_then(|snapshot| snapshot.policy.default_merge_method.value)
+        .filter(|method| allowed_merge_methods.contains(method))
+        .or_else(|| allowed_merge_methods.first().copied());
 
     BranchPolicyInputs {
         required_check_names,
@@ -387,6 +456,9 @@ pub(super) fn select_branch_policy_inputs(
         requires_up_to_date_branch,
         conversations_blocking,
         merge_queue_required_by_policy,
+        merge_methods_policy_known,
+        allowed_merge_methods,
+        default_merge_method,
     }
 }
 

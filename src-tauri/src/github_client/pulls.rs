@@ -59,6 +59,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
+        merge_method: PullRequestMergeMethod,
         expected_head_sha: Option<&str>,
     ) -> Result<MergePrResponse, GitHubError> {
         let url = format!(
@@ -69,7 +70,7 @@ impl GitHubClient {
         let request_body = MergePrRequest {
             commit_title: None,
             commit_message: None,
-            merge_method: Some("merge".to_string()),
+            merge_method,
             sha: expected_head_sha.map(ToOwned::to_owned),
         };
 

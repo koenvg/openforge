@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Task, PullRequestInfo } from '../../lib/types'
+  import type { Task, PullRequestInfo, PullRequestMergeMethod } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { activeProjectId, outOfFocusTaskIdsByProject } from '../../lib/stores'
   import PaletteFooter from '../shared/ui/PaletteFooter.svelte'
@@ -12,12 +12,13 @@
     taskPrs: PullRequestInfo[]
     canRunApp?: boolean
     onClose: () => void
-    onExecute: (actionId: string) => void
+    onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => void
   }
 
   let { task, taskPrs, canRunApp = false, onClose, onExecute }: Props = $props()
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
+  let pendingConfirmation = $state<PaletteAction | null>(null)
   let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
 
   let outOfFocusTaskIds = $derived.by(() => {
@@ -51,7 +52,33 @@
     }
   })
 
+  function executePendingConfirmation(): void {
+    const action = pendingConfirmation
+    if (!action) return
+    pendingConfirmation = null
+    onExecute(action.id, action.mergeMethod)
+  }
+
+  function selectAction(action: PaletteAction): void {
+    if (action.mergeMethod !== undefined) {
+      pendingConfirmation = action
+      return
+    }
+    onExecute(action.id)
+  }
+
   function handleKeyDown(event: KeyboardEvent): boolean {
+    if (pendingConfirmation !== null) {
+      if (event.key === 'Escape') {
+        pendingConfirmation = null
+        return true
+      }
+      if (event.key === 'Enter' && !event.repeat) {
+        executePendingConfirmation()
+        return true
+      }
+      return false
+    }
     return paletteListbox?.handleKeydown(event) ?? false
   }
 
@@ -62,12 +89,23 @@
 </script>
 
 <PaletteModal ariaLabel="Action palette" testId="action-palette-backdrop" {onClose} onKeydown={handleKeyDown}>
+  {#if pendingConfirmation}
+    <section class="p-5" aria-labelledby="merge-confirmation-title">
+      <h2 id="merge-confirmation-title" class="text-base font-semibold">{pendingConfirmation.label}?</h2>
+      <p class="mt-2 text-sm text-base-content/70">GitHub will use this repository's configured commit message.</p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" type="button" onclick={() => { pendingConfirmation = null }}>Cancel</button>
+        <button class="btn btn-primary btn-sm" type="button" onclick={executePendingConfirmation}>Confirm</button>
+      </div>
+    </section>
+    <PaletteFooter actionLabel="confirm" cancelLabel="cancel" />
+  {:else}
   <PaletteListbox
     bind:this={paletteListbox}
     items={orderedActions}
     {selectedIndex}
     onSelectedIndexChange={(index) => { selectedActionId = orderedActions[index]?.id ?? null }}
-    onSelect={(action) => onExecute(action.id)}
+    onSelect={selectAction}
     getKey={(action) => action.id}
     {groupLabel}
     idPrefix="action-palette"
@@ -84,10 +122,14 @@
     {/snippet}
     {#snippet item(action)}
       <span class="flex-1">{action.label}</span>
+      {#if action.isDefaultMergeMethod}
+        <span class="badge badge-ghost badge-sm">GitHub default</span>
+      {/if}
       {#if action.shortcut}
         <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
       {/if}
     {/snippet}
   </PaletteListbox>
   <PaletteFooter actionLabel="execute" trailingKey="⌘K" trailingLabel="toggle" />
+  {/if}
 </PaletteModal>

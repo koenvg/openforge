@@ -74,6 +74,9 @@ fn make_github_readiness_pr() -> PrRow {
         merge_queue_state: None,
         readiness_updated_at: None,
         github_node_id: None,
+        merge_methods_policy_known: None,
+        allowed_merge_methods: None,
+        default_merge_method: None,
         unaddressed_comment_count: 0,
     }
 }
@@ -97,6 +100,12 @@ fn known_readiness_policy(
             requires_conversation_resolution,
         ),
         merge_queue_required: crate::github_client::PolicyValue::known(merge_queue_required),
+        allowed_merge_methods: crate::github_client::PolicyValue::known(vec![
+            crate::github_client::PullRequestMergeMethod::Merge,
+        ]),
+        default_merge_method: crate::github_client::PolicyValue::known(Some(
+            crate::github_client::PullRequestMergeMethod::Merge,
+        )),
         required_deployments: crate::github_client::PolicyValue::known(Vec::new()),
         unknown_reasons: Vec::new(),
     }
@@ -160,7 +169,12 @@ fn select_branch_policy_inputs_prefers_known_graphql_policy_over_rest_fallbacks(
         crate::github_client::RequiredChecksPolicy::known(vec!["rest-ci".to_string()], Some(false));
     let rest_reviews = crate::github_client::RequiredReviewsPolicy::known(1);
 
-    let inputs = select_branch_policy_inputs(Some(&snapshot), &rest_checks, &rest_reviews);
+    let inputs = select_branch_policy_inputs(
+        Some(&snapshot),
+        &rest_checks,
+        &rest_reviews,
+        &crate::github_client::PolicyValue::known(None),
+    );
 
     assert_eq!(inputs.required_check_names, vec!["graphql-ci".to_string()]);
     assert_eq!(inputs.required_approving_count, Some(2));
@@ -169,6 +183,81 @@ fn select_branch_policy_inputs_prefers_known_graphql_policy_over_rest_fallbacks(
     assert!(inputs.requires_up_to_date_branch);
     assert!(inputs.conversations_blocking);
     assert!(inputs.merge_queue_required_by_policy);
+}
+
+#[test]
+fn select_branch_policy_inputs_intersects_repository_and_branch_merge_methods() {
+    let mut snapshot = readiness_snapshot_with_policy(
+        Some("graphql-head-sha"),
+        Some("graphql-head-sha"),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(false)),
+    );
+    snapshot.policy.allowed_merge_methods = crate::github_client::PolicyValue::known(vec![
+        crate::github_client::PullRequestMergeMethod::Merge,
+        crate::github_client::PullRequestMergeMethod::Squash,
+    ]);
+    snapshot.policy.default_merge_method = crate::github_client::PolicyValue::known(Some(
+        crate::github_client::PullRequestMergeMethod::Merge,
+    ));
+    let branch_methods = crate::github_client::PolicyValue::known(Some(vec![
+        crate::github_client::PullRequestMergeMethod::Squash,
+        crate::github_client::PullRequestMergeMethod::Rebase,
+    ]));
+
+    let inputs = select_branch_policy_inputs(
+        Some(&snapshot),
+        &crate::github_client::RequiredChecksPolicy::known(vec![], Some(false)),
+        &crate::github_client::RequiredReviewsPolicy::known(0),
+        &branch_methods,
+    );
+
+    assert!(inputs.merge_methods_policy_known);
+    assert_eq!(
+        inputs.allowed_merge_methods,
+        vec![crate::github_client::PullRequestMergeMethod::Squash]
+    );
+    assert_eq!(
+        inputs.default_merge_method,
+        Some(crate::github_client::PullRequestMergeMethod::Squash)
+    );
+}
+
+#[test]
+fn merge_readiness_waits_when_merge_method_policy_is_unknown() {
+    let facts = crate::db::PrMergeReadinessFacts {
+        status: Some("ready_to_merge".to_string()),
+        action: Some("merge".to_string()),
+        blockers_json: Some("[]".to_string()),
+        warnings_json: Some("[]".to_string()),
+        source_head_sha: Some("head-sha".to_string()),
+        merge_group_sha: None,
+        required_checks_policy_known: Some(true),
+        required_reviews_policy_known: Some(true),
+        merge_queue_required: Some(false),
+        merge_queue_state: None,
+        updated_at: 1,
+    };
+    let inputs = BranchPolicyInputs {
+        required_check_names: Vec::new(),
+        required_approving_count: Some(0),
+        required_checks_policy_known: true,
+        required_reviews_policy_known: true,
+        requires_up_to_date_branch: false,
+        conversations_blocking: false,
+        merge_queue_required_by_policy: false,
+        merge_methods_policy_known: false,
+        allowed_merge_methods: Vec::new(),
+        default_merge_method: None,
+    };
+
+    let facts = enforce_merge_method_policy(facts, &inputs);
+
+    assert_eq!(facts.status.as_deref(), Some("readiness_unknown"));
+    assert_eq!(facts.action.as_deref(), Some("wait_for_github"));
+    assert!(facts
+        .blockers_json
+        .unwrap_or_default()
+        .contains("merge_method_policy_unknown"));
 }
 
 #[test]
@@ -222,7 +311,12 @@ fn select_branch_policy_inputs_uses_rest_when_graphql_policy_is_unknown() {
         crate::github_client::RequiredChecksPolicy::known(vec!["rest-ci".to_string()], Some(true));
     let rest_reviews = crate::github_client::RequiredReviewsPolicy::known(1);
 
-    let inputs = select_branch_policy_inputs(Some(&snapshot), &rest_checks, &rest_reviews);
+    let inputs = select_branch_policy_inputs(
+        Some(&snapshot),
+        &rest_checks,
+        &rest_reviews,
+        &crate::github_client::PolicyValue::unknown("active branch rules unavailable"),
+    );
 
     assert_eq!(inputs.required_check_names, vec!["rest-ci".to_string()]);
     assert_eq!(inputs.required_approving_count, Some(1));

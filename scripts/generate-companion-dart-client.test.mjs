@@ -38,6 +38,12 @@ describe('Companion OpenAPI Dart generator', () => {
     expect(first).toContain(
       'List<DependentTask> dependentTasks = const <DependentTask>[]',
     )
+    expect(first).toContain('List<PullRequestMergeMethod>? mergeMethods,')
+    expect(first).toContain(
+      'mergeMethods = mergeMethods == null ? null : List<PullRequestMergeMethod>.unmodifiable(mergeMethods)',
+    )
+    expect(first).toContain('this.defaultMergeMethod,')
+    expect(first).not.toContain('required this.defaultMergeMethod,')
   })
 
   it('projects model fields, operations, and error codes from the contract', async () => {

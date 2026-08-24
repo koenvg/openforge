@@ -134,6 +134,8 @@ export interface PrComment {
   created_at: number;
 }
 
+export type PullRequestMergeMethod = 'merge' | 'squash' | 'rebase';
+
 export interface PullRequestInfo {
   id: number;
   pr_number: number;
@@ -166,6 +168,9 @@ export interface PullRequestInfo {
   merge_queue_required: boolean | null;
   merge_queue_state: string | null;
   readiness_updated_at: number | null;
+  merge_methods_policy_known?: boolean | null;
+  allowed_merge_methods?: string | PullRequestMergeMethod[] | null;
+  default_merge_method?: PullRequestMergeMethod | null;
 }
 
 export type PollOutcome =

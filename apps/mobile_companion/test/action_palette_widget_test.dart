@@ -10,6 +10,8 @@ MobilePaletteAction _taskAction(
   CompanionActionIcon icon, {
   bool requiresConfirmation = false,
   bool destructive = false,
+  List<PullRequestMergeMethod>? mergeMethods,
+  PullRequestMergeMethod? defaultMergeMethod,
 }) => MobilePaletteActionContractAdapter.fromTaskPresentation(
   CompanionTaskActionPresentation(
     id: id,
@@ -18,6 +20,8 @@ MobilePaletteAction _taskAction(
     icon: icon,
     requiresConfirmation: requiresConfirmation,
     destructive: destructive,
+    mergeMethods: mergeMethods,
+    defaultMergeMethod: defaultMergeMethod,
   ),
 );
 
@@ -129,10 +133,10 @@ void main() {
   );
 
   testWidgets(
-    'merge executes immediately while destructive actions require confirmation',
+    'merge picker confirms an explicit method while destructive actions use the generic confirmation',
     (tester) async {
       final confirmed = <CompanionActionId>[];
-      final executed = <CompanionActionId>[];
+      final executed = <MobilePaletteAction>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -144,6 +148,12 @@ void main() {
                   'Merge Pull Request',
                   <String>['merge'],
                   CompanionActionIcon.merge,
+                  requiresConfirmation: true,
+                  mergeMethods: <PullRequestMergeMethod>[
+                    PullRequestMergeMethod.squash,
+                    PullRequestMergeMethod.rebase,
+                  ],
+                  defaultMergeMethod: PullRequestMergeMethod.squash,
                 ),
                 _taskAction(
                   CompanionTaskActionId.completeTask,
@@ -158,7 +168,7 @@ void main() {
                 confirmed.add(action.id);
                 return false;
               },
-              onExecute: (action) async => executed.add(action.id),
+              onExecute: (action) async => executed.add(action),
             ),
           ),
         ),
@@ -166,11 +176,19 @@ void main() {
 
       await tester.tap(find.text('Merge Pull Request'));
       await tester.pumpAndSettle();
+      expect(find.text('Choose merge method'), findsOneWidget);
+      expect(find.text('GitHub default'), findsOneWidget);
+
+      await tester.tap(find.text('Rebase and merge'));
+      await tester.pump();
+      await tester.tap(find.text('Confirm rebase and merge'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Complete'));
       await tester.pumpAndSettle();
 
       expect(confirmed, <CompanionActionId>[CompanionActionId.completeTask]);
-      expect(executed, <CompanionActionId>[CompanionActionId.mergePullRequest]);
+      expect(executed.single.id, CompanionActionId.mergePullRequest);
+      expect(executed.single.selectedMergeMethod, MobileMergeMethod.rebase);
     },
   );
 }

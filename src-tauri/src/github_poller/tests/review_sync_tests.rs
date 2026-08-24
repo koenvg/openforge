@@ -96,6 +96,9 @@ fn test_stale_authored_pr_candidates_preserve_repo_local_pr_identity() {
             merge_queue_state: None,
             readiness_updated_at: None,
             github_node_id: None,
+            merge_methods_policy_known: None,
+            allowed_merge_methods: None,
+            default_merge_method: None,
             unaddressed_comment_count: 0,
         },
         PrRow {
@@ -130,6 +133,9 @@ fn test_stale_authored_pr_candidates_preserve_repo_local_pr_identity() {
             merge_queue_state: None,
             readiness_updated_at: None,
             github_node_id: None,
+            merge_methods_policy_known: None,
+            allowed_merge_methods: None,
+            default_merge_method: None,
             unaddressed_comment_count: 0,
         },
     ];

@@ -7,6 +7,7 @@ vi.mock('./ipc', () => ({
   getProjectConfig: vi.fn(),
   getSessionStatus: vi.fn(),
   mergePullRequest: vi.fn(),
+  refreshTaskGithubStatus: vi.fn(),
   enqueuePullRequest: vi.fn(),
   startImplementation: vi.fn(),
   inspectExistingBranch: vi.fn(),
@@ -37,7 +38,7 @@ import {
   tasks,
   ticketPrs,
 } from './stores'
-import { deleteTask, enqueuePullRequest, getProjectConfig, getSessionStatus, inspectExistingBranch, mergePullRequest, setProjectConfig, startImplementation } from './ipc'
+import { deleteTask, enqueuePullRequest, getProjectConfig, getSessionStatus, inspectExistingBranch, mergePullRequest, refreshTaskGithubStatus, setProjectConfig, startImplementation } from './ipc'
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { acquire, focusTerminal, getTerminalImageProtocol, hasTerminal, isPtyActive, release } from './terminalPool'
 import { writePtyWithSubmit } from './ptySubmit'
@@ -329,7 +330,7 @@ describe('createTaskActionRunner', () => {
     const secondReadyPr = createPullRequest({ id: 2, title: 'Second ready PR', head_sha: 'def' })
     ticketPrs.set(new Map([[task.id, [firstReadyPr, secondReadyPr]]]))
 
-    await runner.mergeReadyPullRequest(task)
+    await runner.mergeReadyPullRequest(task, 'squash')
 
     expect(mergePullRequest).not.toHaveBeenCalled()
     expect(get(ticketPrs).get(task.id)).toEqual([firstReadyPr, secondReadyPr])
@@ -345,11 +346,37 @@ describe('createTaskActionRunner', () => {
     ticketPrs.set(new Map([[task.id, [readyPr]]]))
     vi.mocked(mergePullRequest).mockResolvedValue(undefined)
 
-    await runner.mergeReadyPullRequest(task)
+    await runner.mergeReadyPullRequest(task, 'squash')
 
-    expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha)
+    expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha, 'squash')
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
+  })
+
+  it('refreshes GitHub policy after a rejected merge without trying another method', async () => {
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+    })
+    const readyPr = createPullRequest({ id: 9001, pr_number: 42 })
+    ticketPrs.set(new Map([[task.id, [readyPr]]]))
+    vi.mocked(mergePullRequest).mockRejectedValue(new Error('Merge commits are not allowed'))
+    vi.mocked(refreshTaskGithubStatus).mockResolvedValue({
+      new_comments: 0,
+      ci_changes: 0,
+      review_changes: 0,
+      pr_changes: 0,
+      errors: 0,
+      rate_limited: false,
+      rate_limit_reset_at: null,
+      outcome: 'completed',
+    })
+
+    await runner.mergeReadyPullRequest(task, 'merge')
+
+    expect(mergePullRequest).toHaveBeenCalledOnce()
+    expect(refreshTaskGithubStatus).toHaveBeenCalledWith(task.id)
+    expect(get(error)).toContain('Merge commits are not allowed')
   })
 
   it('marks a single ready-to-enqueue PR queued locally', async () => {
@@ -492,7 +519,7 @@ describe('createTaskActionRunner', () => {
     const blockedPr = createPullRequest(overrides)
     ticketPrs.set(new Map([[task.id, [blockedPr]]]))
 
-    await runner.mergeReadyPullRequest(task)
+    await runner.mergeReadyPullRequest(task, 'squash')
 
     expect(mergePullRequest).not.toHaveBeenCalled()
     expect(get(ticketPrs).get(task.id)).toEqual([blockedPr])

@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PullRequestInfo, Task } from './lib/types'
+import type { PullRequestInfo, PullRequestMergeMethod, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 
 describe('App action palette shortcuts', () => {
@@ -68,6 +68,9 @@ describe('App action palette shortcuts', () => {
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: '["squash"]',
+    default_merge_method: 'squash',
       }
 
       vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
@@ -110,16 +113,17 @@ describe('App action palette shortcuts', () => {
           if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
           return [arg]
         })
-        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
       if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
 
-      await propsCandidate.onExecute('merge-pr')
+      await propsCandidate.onExecute('merge-pr:squash', 'squash')
 
       expect(ipc.mergePullRequest).toHaveBeenCalledWith(
         selectedTask.id,
         readyPr.id,
         'abc123',
+        'squash',
       )
       expect(ipc.forceGithubSync).not.toHaveBeenCalled()
 
@@ -186,6 +190,9 @@ describe('App action palette shortcuts', () => {
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: '["squash"]',
+    default_merge_method: 'squash',
       }
 
       let resolveMerge!: () => void
@@ -232,11 +239,11 @@ describe('App action palette shortcuts', () => {
           if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
           return [arg]
         })
-        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
       if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
 
-      const execution = propsCandidate.onExecute('merge-pr')
+      const execution = propsCandidate.onExecute('merge-pr:squash', 'squash')
 
       await vi.waitFor(() => {
         expect(get(stores.mergingTaskIds).has(selectedTask.id)).toBe(true)
@@ -312,6 +319,9 @@ describe('App action palette shortcuts', () => {
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: '["squash"]',
+    default_merge_method: 'squash',
       }
 
       const secondReadyPr: PullRequestInfo = {
@@ -362,11 +372,11 @@ describe('App action palette shortcuts', () => {
           if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
           return [arg]
         })
-        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
       if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
 
-      await propsCandidate.onExecute('merge-pr')
+      await propsCandidate.onExecute('merge-pr:squash', 'squash')
 
       expect(ipc.mergePullRequest).not.toHaveBeenCalled()
       expect(ipc.forceGithubSync).not.toHaveBeenCalled()

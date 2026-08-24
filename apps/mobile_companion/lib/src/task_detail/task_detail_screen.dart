@@ -346,7 +346,11 @@ class _TaskDetailViewState extends State<TaskDetailView>
           // The desktop lifecycle remains authoritative and closes the channel.
         }
       }
-      await palette.executeTaskAction(detail.taskId, action.id);
+      await palette.executeTaskAction(
+        detail.taskId,
+        action.id,
+        mergeMethod: action.selectedMergeMethod,
+      );
       if (!mounted) return;
       if (action.id == CompanionActionId.completeTask) {
         await widget.onCompleted?.call();
@@ -363,13 +367,18 @@ class _TaskDetailViewState extends State<TaskDetailView>
           context,
         ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
       }
-    } on Object {
+    } on Object catch (error) {
       if (!mounted) return;
       await widget.onRefresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${action.label} failed. Task state was refreshed.'),
+            content: Text(
+              mobileActionFailureMessage(
+                error,
+                fallback: '${action.label} failed. Task state was refreshed.',
+              ),
+            ),
           ),
         );
       }

@@ -219,17 +219,26 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
     );
     if (!mounted || action == null) return;
     try {
-      await palette.executeTaskAction(task.taskId, action.id);
+      await palette.executeTaskAction(
+        task.taskId,
+        action.id,
+        mergeMethod: action.selectedMergeMethod,
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('${action.label} completed.')));
       }
-    } on Object {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${action.label} failed. Task state was refreshed.'),
+            content: Text(
+              mobileActionFailureMessage(
+                error,
+                fallback: '${action.label} failed. Task state was refreshed.',
+              ),
+            ),
           ),
         );
       }

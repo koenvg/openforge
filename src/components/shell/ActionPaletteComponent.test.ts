@@ -59,6 +59,9 @@ function makePullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestI
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: '["squash","rebase"]',
+    default_merge_method: 'squash',
     ...overrides,
   }
 }
@@ -202,18 +205,27 @@ describe('ActionPalette component', () => {
     expect(screen.getByText('⌘⇧P')).toBeTruthy()
   })
 
-  it('shows Merge Pull Request when the selected task has a merge-ready PR', async () => {
+  it('shows allowed merge methods and confirms the selected method before execution', async () => {
     const { default: ActionPalette } = await import('./ActionPalette.svelte')
+    const onExecute = vi.fn()
 
     render(ActionPalette, {
       props: {
         task: makeTask({ id: 'T-100', status: 'doing' }),
         taskPrs: [makePullRequest()],
         onClose: vi.fn(),
-        onExecute: vi.fn(),
+        onExecute,
       },
     })
 
-    expect(screen.getByText('Merge Pull Request')).toBeTruthy()
+    expect(screen.getByText('GitHub default')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('option', { name: /squash and merge PR #42/i }))
+
+    expect(onExecute).not.toHaveBeenCalled()
+    expect(screen.getByText('Squash and merge PR #42?')).toBeTruthy()
+
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+
+    expect(onExecute).toHaveBeenCalledWith('merge-pr:squash', 'squash')
   })
 })

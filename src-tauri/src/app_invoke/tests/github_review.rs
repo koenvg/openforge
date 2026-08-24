@@ -174,6 +174,7 @@ async fn task_merge_rejects_changed_expected_head_without_pre_action_sync() {
             "repo": "repo",
             "prNumber": 42,
             "expectedHeadSha": "old-head",
+            "mergeMethod": "squash",
         }),
     )
     .await
@@ -181,6 +182,79 @@ async fn task_merge_rejects_changed_expected_head_without_pre_action_sync() {
 
     assert_eq!(error.0, StatusCode::CONFLICT);
     assert_eq!(error.1, "Pull request is no longer ready to merge");
+}
+
+#[tokio::test]
+async fn task_merge_rejects_unknown_merge_method_before_github_access() {
+    let (state, _temp_dir) = test_state("app_invoke_task_merge_unknown_method");
+
+    let error = invoke(
+        &state,
+        "merge_task_pull_request",
+        json!({
+            "taskId": "T-missing",
+            "prId": 42,
+            "expectedHeadSha": "current-head",
+            "mergeMethod": "octopus",
+        }),
+    )
+    .await
+    .expect_err("unknown merge method must reject before GitHub access");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert!(error.1.contains("mergeMethod"));
+}
+
+#[tokio::test]
+async fn task_merge_rejects_method_not_allowed_for_pull_request() {
+    let (state, _temp_dir) = test_state("app_invoke_task_merge_disallowed_method");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        let task = db
+            .create_task("Merge PR", "doing", None, None, None)
+            .expect("create task");
+        db.insert_pull_request(
+            42, &task.id, "owner", "repo", "PR", "url", "open", 1, 1, false,
+        )
+        .expect("insert PR");
+        db.update_pr_head_sha(42, "current-head").expect("set head");
+        db.update_pr_merge_readiness(
+            42,
+            &crate::db::PrMergeReadinessFacts {
+                status: Some("ready_to_merge".to_string()),
+                action: Some("merge".to_string()),
+                blockers_json: Some("[]".to_string()),
+                warnings_json: Some("[]".to_string()),
+                source_head_sha: Some("current-head".to_string()),
+                merge_group_sha: None,
+                required_checks_policy_known: Some(true),
+                required_reviews_policy_known: Some(true),
+                merge_queue_required: Some(false),
+                merge_queue_state: None,
+                updated_at: 1,
+            },
+        )
+        .expect("set readiness");
+        db.update_pr_merge_method_policy(42, true, r#"["squash"]"#, Some("squash"))
+            .expect("set merge methods");
+        task.id
+    };
+
+    let error = invoke(
+        &state,
+        "merge_task_pull_request",
+        json!({
+            "taskId": task_id,
+            "prId": 42,
+            "expectedHeadSha": "current-head",
+            "mergeMethod": "merge",
+        }),
+    )
+    .await
+    .expect_err("disallowed merge method must reject before GitHub access");
+
+    assert_eq!(error.0, StatusCode::CONFLICT);
+    assert!(error.1.contains("not allowed"));
 }
 
 #[tokio::test]

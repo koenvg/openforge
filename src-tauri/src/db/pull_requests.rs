@@ -38,6 +38,9 @@ pub struct PrRow {
     pub merge_queue_state: Option<String>,
     pub readiness_updated_at: Option<i64>,
     pub github_node_id: Option<String>,
+    pub merge_methods_policy_known: Option<bool>,
+    pub allowed_merge_methods: Option<String>,
+    pub default_merge_method: Option<String>,
     pub unaddressed_comment_count: i64,
 }
 
@@ -74,7 +77,10 @@ fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
         merge_queue_state: row.get(28)?,
         readiness_updated_at: row.get(29)?,
         github_node_id: row.get(30)?,
-        unaddressed_comment_count: row.get(31)?,
+        merge_methods_policy_known: row.get(31)?,
+        allowed_merge_methods: row.get(32)?,
+        default_merge_method: row.get(33)?,
+        unaddressed_comment_count: row.get(34)?,
     })
 }
 
@@ -100,6 +106,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
+                    merge_methods_policy_known, allowed_merge_methods, default_merge_method,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
@@ -125,6 +132,7 @@ impl super::Database {
         let sql = format!(
             "SELECT id, pr_number, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, mergeable, mergeable_state, merged_at, created_at, updated_at, draft, is_queued,
                     merge_readiness_status, merge_readiness_action, merge_readiness_blockers, merge_readiness_warnings, readiness_source_head_sha, merge_group_sha, required_checks_policy_known, required_reviews_policy_known, merge_queue_required, merge_queue_state, readiness_updated_at, github_node_id,
+                    merge_methods_policy_known, allowed_merge_methods, default_merge_method,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests{task_filter}
              ORDER BY updated_at DESC"
@@ -344,6 +352,30 @@ impl super::Database {
         conn.execute(
             "UPDATE pull_requests SET mergeable = ?1, mergeable_state = ?2 WHERE id = ?3",
             rusqlite::params![mergeable, mergeable_state, pr_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pr_merge_method_policy(
+        &self,
+        pr_id: i64,
+        policy_known: bool,
+        allowed_merge_methods: &str,
+        default_merge_method: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.lock_conn()?;
+        conn.execute(
+            "UPDATE pull_requests SET
+                merge_methods_policy_known = ?1,
+                allowed_merge_methods = ?2,
+                default_merge_method = ?3
+             WHERE id = ?4",
+            rusqlite::params![
+                policy_known,
+                allowed_merge_methods,
+                default_merge_method,
+                pr_id
+            ],
         )?;
         Ok(())
     }
@@ -1200,6 +1232,8 @@ mod tests {
         };
 
         db.update_pr_merge_readiness(42, &facts).unwrap();
+        db.update_pr_merge_method_policy(42, true, r#"["squash","rebase"]"#, Some("squash"))
+            .unwrap();
 
         let prs = db.get_open_prs().unwrap();
         let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
@@ -1220,6 +1254,12 @@ mod tests {
         assert_eq!(pr.merge_queue_required, Some(true));
         assert_eq!(pr.merge_queue_state.as_deref(), Some("not_queued"));
         assert_eq!(pr.readiness_updated_at, Some(1704067200));
+        assert_eq!(pr.merge_methods_policy_known, Some(true));
+        assert_eq!(
+            pr.allowed_merge_methods.as_deref(),
+            Some(r#"["squash","rebase"]"#)
+        );
+        assert_eq!(pr.default_merge_method.as_deref(), Some("squash"));
 
         drop(db);
     }

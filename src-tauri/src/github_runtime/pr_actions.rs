@@ -227,12 +227,39 @@ fn current_unix_timestamp() -> i64 {
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0)
 }
+fn validate_pull_request_merge_method(
+    pr: &db::PrRow,
+    merge_method: crate::github_client::PullRequestMergeMethod,
+) -> Result<(), String> {
+    if pr.merge_methods_policy_known != Some(true) {
+        return Err(
+            "Pull request merge methods are unavailable; refresh GitHub status and try again"
+                .to_string(),
+        );
+    }
+    let allowed = pr
+        .allowed_merge_methods
+        .as_deref()
+        .ok_or_else(|| "Pull request merge methods are unavailable".to_string())
+        .and_then(|json| {
+            serde_json::from_str::<Vec<crate::github_client::PullRequestMergeMethod>>(json)
+                .map_err(|_| "Pull request merge methods are unavailable".to_string())
+        })?;
+    if !allowed.contains(&merge_method) {
+        return Err(format!(
+            "Pull request merge method '{}' is not allowed; refresh GitHub status and choose another method",
+            merge_method.as_str()
+        ));
+    }
+    Ok(())
+}
 
 pub async fn merge_task_pull_request(
     db: &Arc<Mutex<db::Database>>,
     github_client: &GitHubClient,
     task_id: &str,
     pr_id: i64,
+    merge_method: crate::github_client::PullRequestMergeMethod,
     expected_head_sha: &str,
 ) -> Result<db::PrRow, String> {
     let pr = task_pull_request_action_target(
@@ -242,6 +269,7 @@ pub async fn merge_task_pull_request(
         expected_head_sha,
         TaskPullRequestAction::Merge,
     )?;
+    validate_pull_request_merge_method(&pr, merge_method)?;
     let token = github_token().await?;
     let response = github_client
         .merge_pr(
@@ -249,6 +277,7 @@ pub async fn merge_task_pull_request(
             &pr.repo_name,
             pr.pr_number,
             &token,
+            merge_method,
             Some(expected_head_sha),
         )
         .await

@@ -58,6 +58,9 @@ function makePR(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: '["merge"]',
+    default_merge_method: 'merge',
     ...overrides,
   }
 }
@@ -131,20 +134,34 @@ describe('getTaskActions', () => {
     expect(ids).not.toContain('start-task')
   })
 
-  it('returns Merge Pull Request action when there is a ready-to-merge PR', () => {
+  it('returns allowed merge methods with the GitHub default first', () => {
     const task = makeTask({ status: 'doing' })
-    const pr = makePR({ mergeable: true, mergeable_state: 'clean', state: 'open', draft: false, review_status: 'APPROVED', ci_status: 'success' })
-    const actions = getTaskActions(task, [pr])
-    const ids = actions.map(a => a.id)
-    expect(ids).toContain('merge-pr')
+    const pr = makePR({
+      pr_number: 42,
+      mergeable: true,
+      mergeable_state: 'clean',
+      state: 'open',
+      draft: false,
+      review_status: 'APPROVED',
+      ci_status: 'success',
+      allowed_merge_methods: '["merge","squash","rebase"]',
+      default_merge_method: 'squash',
+    })
+    const mergeActions = getTaskActions(task, [pr]).filter(action => action.mergeMethod !== undefined)
+
+    expect(mergeActions).toMatchObject([
+      { id: 'merge-pr:squash', label: 'Squash and merge PR #42', mergeMethod: 'squash', isDefaultMergeMethod: true },
+      { id: 'merge-pr:merge', label: 'Create a merge commit for PR #42', mergeMethod: 'merge', isDefaultMergeMethod: false },
+      { id: 'merge-pr:rebase', label: 'Rebase and merge PR #42', mergeMethod: 'rebase', isDefaultMergeMethod: false },
+    ])
+    expect(mergeActions.every(action => action.requiresConfirmation)).toBe(true)
   })
 
   it('does not return Merge Pull Request action when PR has merge conflicts', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR({ mergeable: false, mergeable_state: 'dirty' })
     const actions = getTaskActions(task, [pr])
-    const ids = actions.map(a => a.id)
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('returns Merge Pull Request action from current persisted ready_to_merge readiness', () => {
@@ -152,23 +169,21 @@ describe('getTaskActions', () => {
     const pr = makePR({ mergeable: null, mergeable_state: null, merge_readiness_status: 'ready_to_merge', merge_readiness_action: 'merge', readiness_source_head_sha: 'abc', readiness_updated_at: 0 })
     const actions = getTaskActions(task, [pr])
     const ids = actions.map(a => a.id)
-    expect(ids).toContain('merge-pr')
+    expect(ids).toContain('merge-pr:merge')
   })
 
   it('does not return Merge Pull Request action from stale persisted ready_to_merge readiness', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR({ head_sha: 'new-head', mergeable: null, mergeable_state: 'unknown', merge_readiness_status: 'ready_to_merge', merge_readiness_action: 'merge', readiness_source_head_sha: 'old-head', readiness_updated_at: 1 })
     const actions = getTaskActions(task, [pr])
-    const ids = actions.map(a => a.id)
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('does not return Merge Pull Request action when PR is already queued', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR({ is_queued: true })
     const actions = getTaskActions(task, [pr])
-    const ids = actions.map(a => a.id)
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('returns Enqueue Pull Request action from current persisted ready_to_enqueue readiness', () => {
@@ -177,7 +192,7 @@ describe('getTaskActions', () => {
     const actions = getTaskActions(task, [pr])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('enqueue-pr')
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('does not return Enqueue Pull Request action from stale persisted ready_to_enqueue readiness', () => {
@@ -186,7 +201,7 @@ describe('getTaskActions', () => {
     const actions = getTaskActions(task, [pr])
     const ids = actions.map(a => a.id)
     expect(ids).not.toContain('enqueue-pr')
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('does not return Enqueue Pull Request action when PR is already queued', () => {
@@ -206,8 +221,7 @@ describe('getTaskActions', () => {
     const task = makeTask({ status: 'doing' })
     const pr = makePR(overrides)
     const actions = getTaskActions(task, [pr])
-    const ids = actions.map(a => a.id)
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 
   it('does not return Merge Pull Request action when multiple PRs are ready to merge', () => {
@@ -215,8 +229,7 @@ describe('getTaskActions', () => {
     const firstPr = makePR({ id: 1, title: 'First ready PR' })
     const secondPr = makePR({ id: 2, title: 'Second ready PR', head_sha: 'def' })
     const actions = getTaskActions(task, [firstPr, secondPr])
-    const ids = actions.map(a => a.id)
-    expect(ids).not.toContain('merge-pr')
+    expect(actions.some(action => action.mergeMethod !== undefined)).toBe(false)
   })
 })
 

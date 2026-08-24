@@ -44,6 +44,9 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
         is_queued: false,
         required_check_names: vec![],
         required_approving_count: None,
+        merge_methods_policy_known: false,
+        allowed_merge_methods: Vec::new(),
+        default_merge_method: None,
         readiness_facts: PrMergeReadinessFacts {
             status: None,
             action: None,
@@ -98,6 +101,9 @@ fn make_review_comment_poll_result(
         is_queued: false,
         required_check_names: vec![],
         required_approving_count: None,
+        merge_methods_policy_known: false,
+        allowed_merge_methods: Vec::new(),
+        default_merge_method: None,
         readiness_facts: PrMergeReadinessFacts {
             status: None,
             action: None,

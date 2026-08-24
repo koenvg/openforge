@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../action_palette/action_palette_models.dart';
 import '../generated/companion_v1_client.dart';
 import '../pairing/pairing_bootstrap.dart';
 import '../storage/companion_secure_storage.dart';
@@ -119,6 +120,7 @@ abstract interface class CompanionActionPaletteClient {
   Future<void> mergeTaskPullRequest(
     CompanionTrustRecord trustRecord,
     String taskId,
+    MobileMergeMethod mergeMethod,
   );
   Future<void> enqueueTaskPullRequest(
     CompanionTrustRecord trustRecord,
@@ -378,10 +380,16 @@ final class GeneratedCompanionClient
   Future<void> mergeTaskPullRequest(
     CompanionTrustRecord trustRecord,
     String taskId,
+    MobileMergeMethod mergeMethod,
   ) => _singleAttemptMutation(
     trustRecord,
     (client) => client.mergeCompanionTaskPullRequest(
       taskId: taskId,
+      mergeMethod: switch (mergeMethod) {
+        MobileMergeMethod.merge => PullRequestMergeMethod.merge,
+        MobileMergeMethod.squash => PullRequestMergeMethod.squash,
+        MobileMergeMethod.rebase => PullRequestMergeMethod.rebase,
+      },
       credential: trustRecord.deviceCredential,
     ),
   );
