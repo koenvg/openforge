@@ -16,17 +16,10 @@ describe('OpenForge Plugin Commands', () => {
   it('runs installed CLI Plugin Command discovery using explicit or Agent Session Task context', async () => {
     const installDir = await mkdtemp(join(tmpdir(), 'openforge-installed-cli-'));
     const installedCliPath = join(installDir, 'cli.js');
-    for (const filename of [
-      'cli.js',
-      'command-line.js',
-      'debug-commands.js',
-      'help.js',
-      'http-transport.js',
-      'plugin-commands.js',
-      'plugin-management-commands.js',
-      'project-commands.js',
-      'task-commands.js',
-    ]) {
+    const { runtimeFiles } = JSON.parse(
+      await readFile(new URL('./runtime-assets.json', import.meta.url), 'utf8'),
+    );
+    for (const filename of runtimeFiles) {
       await writeFile(
         join(installDir, filename),
         await readFile(join(dirname(CLI_PATH), filename), 'utf8'),

@@ -122,17 +122,34 @@ export async function hydrateElectronTemplate({
 
 export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
 export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
-export const OPENFORGE_CLI_RUNTIME_FILES = Object.freeze([
-  'cli.js',
-  'command-line.js',
-  'debug-commands.js',
-  'help.js',
-  'http-transport.js',
-  'plugin-commands.js',
-  'plugin-management-commands.js',
-  'project-commands.js',
-  'task-commands.js',
-])
+const OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE = 'runtime-assets.json'
+
+async function readOpenForgeCliRuntimeFiles(cliSourceDir) {
+  const manifestPath = join(cliSourceDir, OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE)
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  const { runtimeFiles } = manifest
+
+  if (!Array.isArray(runtimeFiles) || runtimeFiles.length === 0) {
+    throw new Error(`OpenForge CLI runtime asset manifest must declare at least one runtime file at ${manifestPath}`)
+  }
+
+  const invalidFilename = runtimeFiles.find(filename => (
+    typeof filename !== 'string'
+    || filename.length === 0
+    || filename === '.'
+    || filename === '..'
+    || filename.includes('/')
+    || filename.includes('\\')
+  ))
+  if (invalidFilename !== undefined) {
+    throw new Error(`OpenForge CLI runtime asset manifest contains an invalid filename at ${manifestPath}`)
+  }
+  if (new Set(runtimeFiles).size !== runtimeFiles.length) {
+    throw new Error(`OpenForge CLI runtime asset manifest contains duplicate filenames at ${manifestPath}`)
+  }
+
+  return runtimeFiles
+}
 
 function isBuiltinPluginCatalogEntry(value) {
   return Boolean(value && typeof value.id === 'string' && typeof value.directoryName === 'string')
@@ -249,9 +266,9 @@ async function copyIcon(rustSidecarLayout, resourcesDir) {
 
 async function copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout = resolveRustSidecarLayout({ repoRoot })) {
   const cliSourceDir = join(rustSidecarLayout.backendCrateRootPath, 'src', 'openforge-cli')
-  const cliSourcePath = join(cliSourceDir, 'cli.js')
-  if (!(await pathExists(cliSourcePath))) return
-  for (const filename of OPENFORGE_CLI_RUNTIME_FILES) {
+  if (!(await pathExists(cliSourceDir))) return
+  const runtimeFiles = await readOpenForgeCliRuntimeFiles(cliSourceDir)
+  for (const filename of runtimeFiles) {
     await assertExists(join(cliSourceDir, filename), `OpenForge CLI runtime module ${filename}`)
   }
 
@@ -263,7 +280,7 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir, rustSidecarLayout 
   const cliResourcesDir = join(resourcesDir, 'openforge-cli')
   await rm(cliResourcesDir, { recursive: true, force: true })
   await mkdir(cliResourcesDir, { recursive: true })
-  for (const filename of OPENFORGE_CLI_RUNTIME_FILES) {
+  for (const filename of runtimeFiles) {
     await cp(join(cliSourceDir, filename), join(cliResourcesDir, filename))
   }
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
