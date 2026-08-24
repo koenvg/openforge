@@ -23,85 +23,105 @@ fn payload_float32_pcm_base64(payload: &serde_json::Value) -> AppResult<Vec<f32>
         .collect())
 }
 
+fn parse_model_size(payload: &serde_json::Value) -> AppResult<WhisperModelSize> {
+    let model_size = payload_string(payload, "modelSize")?;
+    WhisperModelSize::from_str(&model_size).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Invalid model size: {model_size}"),
+        )
+    })
+}
+
+async fn handle_transcription(
+    whisper: &std::sync::Arc<crate::whisper_manager::WhisperManager>,
+    payload: &serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let audio_data = payload_float32_pcm_base64(payload)?;
+    let whisper = std::sync::Arc::clone(whisper);
+    let transcription = whisper
+        .transcribe_async(audio_data)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Transcription failed: {error}"),
+            )
+        })?;
+
+    json_value(transcription)
+}
+
+fn select_and_persist_model(
+    state: &AppState,
+    whisper: &crate::whisper_manager::WhisperManager,
+    payload: &serde_json::Value,
+) -> AppResult<()> {
+    let size = parse_model_size(payload)?;
+    whisper.set_active_model(size);
+    let db = crate::db::acquire_db(&state.db);
+    db.set_config("whisper_model_size", size.as_str())
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to save model size to config: {error}"),
+            )
+        })
+}
+
+async fn download_model_and_publish_progress(
+    state: &AppState,
+    whisper: &crate::whisper_manager::WhisperManager,
+    payload: &serde_json::Value,
+) -> AppResult<()> {
+    let size = parse_model_size(payload)?;
+    let app = state.app.clone();
+    let event_tx = state.app_event_tx.clone();
+    let path = whisper
+        .download_model_with_progress(size, move |progress| {
+            if let Ok(payload) = serde_json::to_value(&progress) {
+                publish_app_event_to_runtime(
+                    app.as_ref(),
+                    &event_tx,
+                    "whisper-download-progress",
+                    &payload,
+                );
+            }
+        })
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Model download failed: {error}"),
+            )
+        })?;
+    let db = crate::db::acquire_db(&state.db);
+    db.set_config("whisper_model_path", &path).map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to save model path to config: {error}"),
+        )
+    })
+}
+
 pub(super) async fn handle_app_whisper_command(
     state: &AppState,
     request: &AppInvokeRequest,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+) -> AppResult<Option<serde_json::Value>> {
     let Some(whisper) = state.whisper.as_ref() else {
         return Ok(None);
     };
 
     let value = match request.command.as_str() {
-        "transcribe_audio" => {
-            let audio_data = payload_float32_pcm_base64(&request.payload)?;
-            let whisper = std::sync::Arc::clone(whisper);
-            let transcription = whisper
-                .transcribe_async(audio_data)
-                .await
-                .map_err(|error| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Transcription failed: {error}"),
-                    )
-                })?;
-            json_value(transcription)?
-        }
+        "transcribe_audio" => handle_transcription(whisper, &request.payload).await?,
         "get_whisper_model_status" => json_value(whisper.get_model_status())?,
         "get_all_whisper_model_statuses" => json_value(whisper.get_all_model_statuses())?,
         "set_whisper_model" => {
-            let model_size = payload_string(&request.payload, "modelSize")?;
-            let size = WhisperModelSize::from_str(&model_size).ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid model size: {model_size}"),
-                )
-            })?;
-            whisper.set_active_model(size);
-            let db = crate::db::acquire_db(&state.db);
-            db.set_config("whisper_model_size", size.as_str())
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to save model size to config: {e}"),
-                    )
-                })?;
+            select_and_persist_model(state, whisper, &request.payload)?;
             serde_json::Value::Null
         }
         "download_whisper_model" => {
-            let model_size = payload_string(&request.payload, "modelSize")?;
-            let size = WhisperModelSize::from_str(&model_size).ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid model size: {model_size}"),
-                )
-            })?;
-            let app = state.app.clone();
-            let event_tx = state.app_event_tx.clone();
-            let path = whisper
-                .download_model_with_progress(size, move |progress| {
-                    if let Ok(payload) = serde_json::to_value(&progress) {
-                        publish_app_event_to_runtime(
-                            app.as_ref(),
-                            &event_tx,
-                            "whisper-download-progress",
-                            &payload,
-                        );
-                    }
-                })
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Model download failed: {e}"),
-                    )
-                })?;
-            let db = crate::db::acquire_db(&state.db);
-            db.set_config("whisper_model_path", &path).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to save model path to config: {e}"),
-                )
-            })?;
+            download_model_and_publish_progress(state, whisper, &request.payload).await?;
             serde_json::Value::Null
         }
         _ => return Ok(None),
