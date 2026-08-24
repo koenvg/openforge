@@ -186,6 +186,7 @@ jobs:
               }
             }
 
+            const formatFailed = readExitCodeFile('/tmp/rust-results/format-exit-code', 'Rust formatting');
             const clippyFailed = readExitCodeFile('/tmp/rust-results/clippy-exit-code', 'Rust Clippy');
             const testsFailed = readExitCodeFile('/tmp/rust-results/tests-exit-code', 'Rust test');
 
@@ -196,7 +197,7 @@ jobs:
             });
             const existing = comments.find(c => c.body.startsWith(marker));
 
-            if (!clippyFailed && !testsFailed) {
+            if (!formatFailed && !clippyFailed && !testsFailed) {
               if (existing) {
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -208,6 +209,17 @@ jobs:
             }
 
             let body = '## ❌ Rust CI Failures\n\n';
+
+            if (formatFailed) {
+              body += '### Formatting\n\n';
+              try {
+                const log = fs.readFileSync('/tmp/rust-logs/rust-format.log', 'utf8');
+                body += '```\n' + log.slice(-30000) + '\n```\n\n';
+              } catch (error) {
+                core.warning(`Unable to read Rust formatting log: ${describeError(error)}`);
+                body += '_Failed (logs unavailable)_\n\n';
+              }
+            }
 
             if (clippyFailed) {
               body += '### Clippy\n\n';
@@ -238,7 +250,7 @@ jobs:
               }
             }
 
-            body = marker + '\n' + body;
+            body = (marker + '\n' + body).slice(0, 65000);
 
             if (existing) {
               await github.rest.issues.updateComment({
