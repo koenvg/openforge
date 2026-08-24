@@ -1355,8 +1355,7 @@ mod tests {
         .expect("session teardown should evict its lifecycle lock");
     }
 
-    #[tokio::test]
-    async fn newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
+    async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
         let mut manager = PtyManager::new();
         let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
         manager.set_pid_dir(tmp_dir.path().to_path_buf());
@@ -1452,6 +1451,13 @@ mod tests {
             .kill_pty(task_id)
             .await
             .expect("newer test PTY should be cleaned up");
+    }
+
+    #[tokio::test]
+    async fn newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
+        for _ in 0..10 {
+            assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late().await;
+        }
     }
 
     #[tokio::test]
