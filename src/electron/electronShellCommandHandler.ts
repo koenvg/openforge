@@ -23,6 +23,9 @@ const electronShellCommandHandlers = {
     if (!path) throw new Error('open_in_editor requires a path payload')
     return openPathInEditor(path, deps.openExternal)
   },
+  has_vscode_protocol_handler: (_payload, deps) => {
+    return Boolean(deps.getApplicationNameForProtocol?.('vscode:').trim())
+  },
   quit_app: async (_payload, deps) => {
     if (!deps.quitApp) throw new Error('quit_app is not available')
     await deps.quitApp()

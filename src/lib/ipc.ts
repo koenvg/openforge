@@ -264,6 +264,10 @@ export async function openInEditor(path: string): Promise<void> {
   return invoke("open_in_editor", { path });
 }
 
+export async function hasVsCodeProtocolHandler(): Promise<boolean> {
+  return invoke<boolean>("has_vscode_protocol_handler");
+}
+
 export async function openUrl(url: string): Promise<void> {
   return invoke("open_url", { url });
 }

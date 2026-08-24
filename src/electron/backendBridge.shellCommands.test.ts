@@ -29,6 +29,33 @@ describe('Electron backend bridge shell commands', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('reports whether VS Code handles vscode URLs without involving the sidecar', async () => {
+    const fetch = vi.fn()
+    const getApplicationNameForProtocol = vi.fn(() => 'Visual Studio Code')
+
+    await expect(handleElectronInvoke(
+      { command: 'has_vscode_protocol_handler', payload: null },
+      {
+        sidecarConfig: sidecarConfig(),
+        fetch,
+        openExternal: vi.fn(),
+        getApplicationNameForProtocol,
+      },
+    )).resolves.toBe(true)
+
+    expect(getApplicationNameForProtocol).toHaveBeenCalledWith('vscode:')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it.each(['', '   '])('reports no VS Code protocol handler for application name %p', async (applicationName) => {
+    const getApplicationNameForProtocol = vi.fn(() => applicationName)
+    await expect(handleElectronInvoke(
+      { command: 'has_vscode_protocol_handler', payload: null },
+      { sidecarConfig: sidecarConfig(), fetch: vi.fn(), openExternal: vi.fn(), getApplicationNameForProtocol },
+    )).resolves.toBe(false)
+    expect(getApplicationNameForProtocol).toHaveBeenCalledWith('vscode:')
+  })
+
   it('keeps quit_app shell-owned so Electron before-quit shutdown cleanup runs', async () => {
     const fetch = vi.fn()
     const openExternal = vi.fn(async () => undefined)
