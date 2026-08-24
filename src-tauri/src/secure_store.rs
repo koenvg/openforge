@@ -16,6 +16,44 @@ const INTERACTIVE_KEYCHAIN_READ_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 pub(crate) const COMPANION_HOST_IDENTITY_SECRET: &str = "companion_host_identity";
 const SECRET_STORE_LOCK_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
+#[cfg(test)]
+#[derive(Clone)]
+struct TestSecretRead {
+    key: String,
+    result: Result<Option<String>, String>,
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    static TEST_SECRET_READ: TestSecretRead;
+}
+
+/// Overrides one async secret read only within `future`, without mutating process-wide state.
+#[cfg(test)]
+pub(crate) async fn with_test_secret_read<T>(
+    key: &str,
+    result: Result<Option<String>, String>,
+    future: impl std::future::Future<Output = T>,
+) -> T {
+    TEST_SECRET_READ
+        .scope(
+            TestSecretRead {
+                key: key.to_string(),
+                result,
+            },
+            future,
+        )
+        .await
+}
+
+#[cfg(test)]
+fn test_secret_read(key: &str) -> Option<Result<Option<String>, String>> {
+    TEST_SECRET_READ
+        .try_with(|read| (read.key == key).then(|| read.result.clone()))
+        .ok()
+        .flatten()
+}
+
 fn process_secret_cache() -> &'static ProcessSecretCache {
     static PROCESS_SECRET_CACHE: OnceLock<ProcessSecretCache> = OnceLock::new();
     PROCESS_SECRET_CACHE.get_or_init(ProcessSecretCache::default)
@@ -158,6 +196,10 @@ where
 }
 
 pub async fn get_secret_async(key: &str) -> Result<Option<String>, String> {
+    #[cfg(test)]
+    if let Some(result) = test_secret_read(key) {
+        return result;
+    }
     let key = key.to_string();
     spawn_blocking_secret_store_operation("Secret read", move || get_secret(&key)).await
 }

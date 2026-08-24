@@ -85,8 +85,15 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
 #[tokio::test]
 async fn force_github_sync_uses_sidecar_managed_client_state() {
     let (state, _temp_dir) = test_state("app_invoke_force_github_sync");
+    state.github_client.set_last_rate_limit_reset(Some(123));
 
-    let body = invoke_ok(&state, "force_github_sync", serde_json::Value::Null).await;
+    let body = crate::secure_store::with_test_secret_read(
+        "github_token",
+        Ok(None),
+        invoke_ok(&state, "force_github_sync", serde_json::Value::Null),
+    )
+    .await;
+    assert_eq!(state.github_client.get_last_rate_limit_reset(), None);
     assert_eq!(body["new_comments"], 0);
     assert_eq!(body["ci_changes"], 0);
     assert_eq!(body["review_changes"], 0);
