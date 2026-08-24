@@ -291,6 +291,36 @@ fn test_rate_limit_sleep_duration_uses_poll_interval_after_past_reset() {
 }
 
 #[test]
+fn scheduled_pr_selection_recovers_from_poisoned_database_lock() {
+    let (db, _temp_dir) = make_test_db("scheduled_pr_selection_poisoned_lock");
+    let db = Mutex::new(db);
+    poison_mutex(&db);
+
+    let prs =
+        get_scheduled_prs_for_project(&db, "P-1").expect("select scheduled PRs after lock poison");
+    let snapshot = poll_scheduler_snapshot(&db, false, None, false);
+
+    assert!(prs.is_empty());
+    assert!(snapshot.linked_prs.is_empty());
+}
+
+#[test]
+fn scheduled_pr_selection_reports_malformed_out_of_focus_configuration() {
+    let (db, _temp_dir) = make_test_db("scheduled_pr_selection_malformed_config");
+    let project = db
+        .create_project("Project", "/tmp/scheduled-pr-selection")
+        .expect("create project");
+    db.set_project_config(&project.id, "low_fire_task_ids", "not-json")
+        .expect("set project config");
+    let db = Mutex::new(db);
+
+    let error = get_scheduled_prs_for_project(&db, &project.id)
+        .expect_err("malformed out-of-focus configuration should fail");
+
+    assert!(error.contains("Failed to parse out-of-focus Task IDs"));
+}
+
+#[test]
 fn test_rate_limit_sleep_duration_keeps_longer_poll_interval() {
     assert_eq!(
         rate_limit_sleep_duration_secs(120, Some(1_700_000_030), 1_700_000_000),

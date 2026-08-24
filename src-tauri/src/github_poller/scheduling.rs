@@ -1,4 +1,4 @@
-use crate::db::{Database, PrRow, ProjectRow};
+use crate::db::{acquire_db, Database, PrRow, ProjectRow};
 use log::warn;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -328,15 +328,25 @@ pub(super) fn poll_scheduler_snapshot(
     global_review_due: bool,
 ) -> PollSchedulerSnapshot {
     let projects = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         db_lock.get_all_projects()
     };
 
     let linked_prs = match projects {
         Ok(projects) => projects
             .into_iter()
-            .filter_map(|project| get_scheduled_prs_for_project(db, &project.id).ok())
-            .flatten()
+            .flat_map(
+                |project| match get_scheduled_prs_for_project(db, &project.id) {
+                    Ok(prs) => prs,
+                    Err(e) => {
+                        warn!(
+                            "[GitHub Poller] Failed to build scheduler snapshot for Project {}: {}",
+                            project.id, e
+                        );
+                        Vec::new()
+                    }
+                },
+            )
             .collect(),
         Err(e) => {
             warn!(
@@ -359,7 +369,7 @@ pub(super) fn get_scheduled_prs_for_project(
     db: &Mutex<Database>,
     project_id: &str,
 ) -> Result<Vec<ScheduledPr>, String> {
-    let db_lock = db.lock().unwrap();
+    let db_lock = acquire_db(db);
     let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
 
     let tasks = db_lock
@@ -369,9 +379,12 @@ pub(super) fn get_scheduled_prs_for_project(
     let task_rows = tasks;
     let out_of_focus_task_ids: HashSet<String> = db_lock
         .get_project_config(project_id, "low_fire_task_ids")
-        .ok()
-        .flatten()
-        .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+        .map_err(|e| format!("Failed to get out-of-focus Task IDs: {e}"))?
+        .map(|raw| {
+            serde_json::from_str::<Vec<String>>(&raw)
+                .map_err(|e| format!("Failed to parse out-of-focus Task IDs: {e}"))
+        })
+        .transpose()?
         .unwrap_or_default()
         .into_iter()
         .collect();

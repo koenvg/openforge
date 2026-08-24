@@ -1,5 +1,5 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
-use crate::db::{Database, PrRow};
+use crate::db::{acquire_db, Database, PrRow};
 use crate::github_client::GitHubClient;
 use log::{error, warn};
 use std::collections::{HashMap, HashSet};
@@ -135,7 +135,7 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     open_search_ids: &[i64],
 ) -> Result<usize, SyncOpenPrsError> {
     let candidates = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         let open_prs = db_lock
             .get_open_prs()
             .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get open PRs: {}", e)))?;
@@ -164,7 +164,7 @@ pub(super) async fn reconcile_stale_authored_task_prs(
         return Ok(0);
     }
 
-    let db_lock = db.lock().unwrap();
+    let db_lock = acquire_db(db);
     let mut updated = 0;
     for (pr_id, terminal_state) in terminal_states {
         match terminal_state {
@@ -199,7 +199,7 @@ pub(super) async fn sync_authored_task_prs(
         .map_err(SyncOpenPrsError::GitHub)?;
 
     let task_ids: Vec<String> = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         db_lock
             .get_all_tasks()
             .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get task data: {}", e)))?
@@ -216,7 +216,7 @@ pub(super) async fn sync_authored_task_prs(
     let mut synced = 0;
     let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         for pr in &github_prs {
             if let Some(task_id) =
                 find_authoritative_task_id(&pr.title, &pr.head_ref, pr.body.as_deref(), &task_ids)
@@ -268,7 +268,7 @@ pub(super) async fn read_or_fetch_github_username(
         .await
         .map_err(SyncOpenPrsError::GitHub)?;
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         db_lock
             .set_config("github_username", &username)
             .map_err(|e| SyncOpenPrsError::Db(format!("Failed to cache GitHub username: {}", e)))?;
@@ -375,7 +375,7 @@ pub(super) async fn poll_review_prs(
     github_token: &str,
 ) -> Result<(), PollPhaseError> {
     let username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         db_lock
             .get_config("github_username")
             .map_err(|e| PollPhaseError::Db(e.to_string()))?
@@ -391,7 +391,7 @@ pub(super) async fn poll_review_prs(
         .map_err(PollPhaseError::GitHub)?;
 
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         for pr in &prs {
             let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
                 .map(|dt| dt.timestamp())
@@ -400,43 +400,53 @@ pub(super) async fn poll_review_prs(
                 .map(|dt| dt.timestamp())
                 .unwrap_or(0);
 
-            let _ = db_lock.upsert_review_pr(
-                pr.id,
-                pr.number,
-                &pr.title,
-                pr.body.as_deref(),
-                &pr.state,
-                pr.draft,
-                &pr.html_url,
-                &pr.user_login,
-                pr.user_avatar_url.as_deref(),
-                &pr.repo_owner,
-                &pr.repo_name,
-                &pr.head_ref,
-                &pr.base_ref,
-                &pr.head_sha,
-                pr.additions,
-                pr.deletions,
-                pr.changed_files,
-                &pr.labels,
-                created_at,
-                updated_at,
-            );
-            let _ = db_lock.update_review_pr_mergeability(
-                pr.id,
-                pr.mergeable,
-                pr.mergeable_state.as_deref(),
-            );
+            db_lock
+                .upsert_review_pr(
+                    pr.id,
+                    pr.number,
+                    &pr.title,
+                    pr.body.as_deref(),
+                    &pr.state,
+                    pr.draft,
+                    &pr.html_url,
+                    &pr.user_login,
+                    pr.user_avatar_url.as_deref(),
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    &pr.head_ref,
+                    &pr.base_ref,
+                    &pr.head_sha,
+                    pr.additions,
+                    pr.deletions,
+                    pr.changed_files,
+                    &pr.labels,
+                    created_at,
+                    updated_at,
+                )
+                .map_err(|e| PollPhaseError::Db(format!("Failed to upsert review PR: {e}")))?;
+            db_lock
+                .update_review_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
+                .map_err(|e| {
+                    PollPhaseError::Db(format!("Failed to update review PR mergeability: {e}"))
+                })?;
         }
 
         if !all_search_ids.is_empty() || prs.is_empty() {
-            let _ = db_lock.delete_stale_review_prs(&all_search_ids);
+            db_lock
+                .delete_stale_review_prs(&all_search_ids)
+                .map_err(|e| {
+                    PollPhaseError::Db(format!("Failed to delete stale review PRs: {e}"))
+                })?;
         }
         let count = db_lock
             .get_all_review_prs()
-            .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
-            .unwrap_or(0);
-        let _ = events.emit("review-pr-count-changed", serde_json::json!(count));
+            .map_err(|e| PollPhaseError::Db(format!("Failed to get review PRs: {e}")))?
+            .iter()
+            .filter(|pr| pr.viewed_at.is_none())
+            .count();
+        if let Err(e) = events.emit("review-pr-count-changed", serde_json::json!(count)) {
+            warn!("[GitHub Poller] Failed to emit review-pr-count-changed: {e}");
+        }
     }
 
     Ok(())
@@ -449,7 +459,7 @@ pub(super) async fn poll_authored_prs(
     github_token: &str,
 ) -> Result<(), PollPhaseError> {
     let username = {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         db_lock
             .get_config("github_username")
             .map_err(|e| PollPhaseError::Db(e.to_string()))?
@@ -491,26 +501,26 @@ pub(super) async fn poll_authored_prs(
             github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
         );
 
-        let (ci_status, ci_check_runs) = match (check_runs_result, combined_status_result) {
-            (Ok(check_runs), Ok(combined_status)) => {
-                let status =
-                    crate::github_client::aggregate_ci_status(&check_runs, &combined_status);
-                let check_runs_json = serde_json::to_string(&check_runs.check_runs)
-                    .unwrap_or_else(|_| "[]".to_string());
-                (Some(status), Some(check_runs_json))
-            }
-            _ => (None, None),
-        };
+        let check_runs = check_runs_result.map_err(PollPhaseError::GitHub)?;
+        let combined_status = combined_status_result.map_err(PollPhaseError::GitHub)?;
+        let reviews = reviews_result.map_err(PollPhaseError::GitHub)?;
+        let pr_details = pr_details_result.map_err(PollPhaseError::GitHub)?;
 
-        let review_status = reviews_result
-            .ok()
-            .map(|reviews| crate::github_client::aggregate_review_status(&reviews, false, None));
-
-        let pr_details = pr_details_result.ok();
+        let ci_status = Some(crate::github_client::aggregate_ci_status(
+            &check_runs,
+            &combined_status,
+        ));
+        let ci_check_runs = Some(
+            serde_json::to_string(&check_runs.check_runs).unwrap_or_else(|_| "[]".to_string()),
+        );
+        let review_status = Some(crate::github_client::aggregate_review_status(
+            &reviews, false, None,
+        ));
 
         let is_queued = pr_details
-            .as_ref()
-            .and_then(|details| details.extra.get("merge_queue_entry").map(|v| !v.is_null()))
+            .extra
+            .get("merge_queue_entry")
+            .map(|value| !value.is_null())
             .unwrap_or(false);
 
         enriched.insert(
@@ -520,17 +530,15 @@ pub(super) async fn poll_authored_prs(
                 ci_status,
                 ci_check_runs,
                 review_status,
-                pr_details.as_ref().and_then(|details| details.mergeable),
-                pr_details
-                    .as_ref()
-                    .and_then(|details| details.mergeable_state.clone()),
+                pr_details.mergeable,
+                pr_details.mergeable_state,
                 is_queued,
             ),
         );
     }
 
     {
-        let db_lock = db.lock().unwrap();
+        let db_lock = acquire_db(db);
         for pr in &prs {
             let (
                 created_at,
@@ -549,48 +557,58 @@ pub(super) async fn poll_authored_prs(
                 .map(|dt| dt.timestamp())
                 .unwrap_or(0);
 
-            let task_id = db_lock.get_task_id_for_pr(pr.id).ok().flatten();
+            let task_id = db_lock
+                .get_task_id_for_pr(pr.id)
+                .map_err(|e| PollPhaseError::Db(format!("Failed to get Task ID for PR: {e}")))?;
 
-            let _ = db_lock.upsert_authored_pr(
-                pr.id,
-                pr.number,
-                &pr.title,
-                pr.body.as_deref(),
-                &pr.state,
-                pr.draft,
-                &pr.html_url,
-                &pr.user_login,
-                pr.user_avatar_url.as_deref(),
-                &pr.repo_owner,
-                &pr.repo_name,
-                &pr.head_ref,
-                &pr.base_ref,
-                &pr.head_sha,
-                pr.additions,
-                pr.deletions,
-                pr.changed_files,
-                ci_status.as_deref(),
-                ci_check_runs.as_deref(),
-                review_status.as_deref(),
-                None,
-                *is_queued,
-                task_id.as_deref(),
-                &pr.labels,
-                *created_at,
-                updated_at,
-            );
-            let _ = db_lock.update_authored_pr_mergeability(
-                pr.id,
-                *mergeable,
-                mergeable_state.as_deref(),
-            );
+            db_lock
+                .upsert_authored_pr(
+                    pr.id,
+                    pr.number,
+                    &pr.title,
+                    pr.body.as_deref(),
+                    &pr.state,
+                    pr.draft,
+                    &pr.html_url,
+                    &pr.user_login,
+                    pr.user_avatar_url.as_deref(),
+                    &pr.repo_owner,
+                    &pr.repo_name,
+                    &pr.head_ref,
+                    &pr.base_ref,
+                    &pr.head_sha,
+                    pr.additions,
+                    pr.deletions,
+                    pr.changed_files,
+                    ci_status.as_deref(),
+                    ci_check_runs.as_deref(),
+                    review_status.as_deref(),
+                    None,
+                    *is_queued,
+                    task_id.as_deref(),
+                    &pr.labels,
+                    *created_at,
+                    updated_at,
+                )
+                .map_err(|e| PollPhaseError::Db(format!("Failed to upsert authored PR: {e}")))?;
+            db_lock
+                .update_authored_pr_mergeability(pr.id, *mergeable, mergeable_state.as_deref())
+                .map_err(|e| {
+                    PollPhaseError::Db(format!("Failed to update authored PR mergeability: {e}"))
+                })?;
         }
 
         if !all_search_ids.is_empty() || prs.is_empty() {
-            let _ = db_lock.delete_stale_authored_prs(&all_search_ids);
+            db_lock
+                .delete_stale_authored_prs(&all_search_ids)
+                .map_err(|e| {
+                    PollPhaseError::Db(format!("Failed to delete stale authored PRs: {e}"))
+                })?;
         }
 
-        let _ = events.emit("authored-prs-updated", serde_json::Value::Null);
+        if let Err(e) = events.emit("authored-prs-updated", serde_json::Value::Null) {
+            warn!("[GitHub Poller] Failed to emit authored-prs-updated: {e}");
+        }
     }
 
     Ok(())
