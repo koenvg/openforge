@@ -263,6 +263,10 @@ _Avoid_: One-off timestamp, timezone policy, provider automation type, project s
 A PR-visible Git branch OpenForge creates for a **Task** workspace.
 _Avoid_: Prompt branch, run branch, title branch
 
+**Pull Request Merge Method**:
+The GitHub-approved way a pull request enters its base branch: merge commit, squash, or rebase. OpenForge follows the authenticated GitHub identity's default while limiting choices to methods GitHub permits for the target branch.
+_Avoid_: Merge mode, merge strategy
+
 **Merge Readiness**:
 OpenForge's strict assessment that a pull request has a currently valid merge or enqueue action according to known GitHub requirements.
 _Avoid_: Review readiness, mergeable state, ready for review
@@ -444,6 +448,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A supported **Diff File Section** defaults to its source diff and may switch independently to a **Rich Diff View** of the post-change result.
 - A **Review Feedback Prompt** instructs the agent to evaluate and fix the feedback only; it never instructs version-control actions (commit, push, PR) — those decisions stay with the user.
 - A **Task Branch** identifies the **Task**; human-readable context belongs in the **Task**, PR title, or PR body rather than in prompt-derived branch text.
+- A direct merge uses an explicitly selected **Pull Request Merge Method**. OpenForge places the authenticated GitHub identity's default first, never substitutes another method after confirmation, and limits choices to methods GitHub permits for the target branch.
 - **Merge Readiness** is stricter than review readiness; it should not mark a pull request ready only because a human could start reviewing it.
 - **Ready to Merge** and **Ready to Enqueue** are distinct first-class **Merge Readiness** outcomes because merge queues replace direct merge action with queue entry.
 - **Ready to Enqueue** remains a first-class handoff even before OpenForge can perform the enqueue action itself.

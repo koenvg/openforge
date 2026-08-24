@@ -54,7 +54,7 @@ export const desktopCommandContracts = [
   {"functionName":"writeClipboardText","ipcCommand":"write_clipboard_text","payloadKeys":["text"],"owner":"electron-main","domain":"app-shell"},
   {"functionName":"getPrComments","ipcCommand":"get_pr_comments","payloadKeys":["prId"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"markCommentAddressed","ipcCommand":"mark_comment_addressed","payloadKeys":["commentId"],"owner":"rust-sidecar","domain":"github-review"},
-  {"functionName":"mergePullRequest","ipcCommand":"merge_task_pull_request","payloadKeys":["taskId","prId","expectedHeadSha"],"owner":"rust-sidecar","domain":"github-review"},
+  {"functionName":"mergePullRequest","ipcCommand":"merge_task_pull_request","payloadKeys":["taskId","prId","expectedHeadSha","mergeMethod"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"enqueuePullRequest","ipcCommand":"enqueue_task_pull_request","payloadKeys":["taskId","prId","expectedHeadSha"],"owner":"rust-sidecar","domain":"github-review"},
   {"functionName":"checkOpenCodeInstalled","ipcCommand":"check_opencode_installed","payloadKeys":[],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"checkPiInstalled","ipcCommand":"check_pi_installed","payloadKeys":[],"owner":"rust-sidecar","domain":"config"},

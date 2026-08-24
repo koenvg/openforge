@@ -1,0 +1,164 @@
+use serde_json::Value;
+
+use super::types::PullRequestMergeMethod;
+
+fn parse_branch_merge_method_restriction(
+    payload: &Value,
+) -> Result<Option<Vec<PullRequestMergeMethod>>, String> {
+    let rules = payload
+        .as_array()
+        .ok_or_else(|| "branch rules response must be an array".to_string())?;
+    let mut restriction: Option<Vec<PullRequestMergeMethod>> = None;
+
+    for rule in rules
+        .iter()
+        .filter(|rule| rule.get("type").and_then(Value::as_str) == Some("pull_request"))
+    {
+        let values = rule
+            .pointer("/parameters/allowed_merge_methods")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "pull request rule is missing allowed_merge_methods".to_string())?;
+        let methods = values
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .and_then(PullRequestMergeMethod::from_github_value)
+                    .ok_or_else(|| "pull request rule has an unknown merge method".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        restriction = Some(match restriction {
+            Some(current) => current
+                .into_iter()
+                .filter(|method| methods.contains(method))
+                .collect(),
+            None => methods,
+        });
+    }
+
+    Ok(restriction)
+}
+fn branch_rules_url(owner: &str, repo: &str, branch: &str) -> String {
+    let mut url = reqwest::Url::parse("https://api.github.com/")
+        .expect("static GitHub API base URL must be valid");
+    url.path_segments_mut()
+        .expect("GitHub API base URL must support path segments")
+        .extend(["repos", owner, repo, "rules", "branches", branch]);
+    url.query_pairs_mut().append_pair("per_page", "100");
+    url.to_string()
+}
+fn link_header_has_next_page(value: &str) -> bool {
+    value
+        .split(',')
+        .any(|link| link.split(';').any(|part| part.trim() == "rel=\"next\""))
+}
+
+impl super::GitHubClient {
+    pub async fn get_branch_merge_method_restriction_policy(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        token: &str,
+    ) -> super::types::PolicyValue<Option<Vec<PullRequestMergeMethod>>> {
+        let url = branch_rules_url(owner, repo, branch);
+        let response = match self.conditional_get(&url, token).await {
+            Ok(super::ConditionalResponse::NotModified(Some(cached_body))) => {
+                return serde_json::from_str::<Value>(&cached_body)
+                    .map_err(|error| error.to_string())
+                    .and_then(|payload| parse_branch_merge_method_restriction(&payload))
+                    .map(super::types::PolicyValue::known)
+                    .unwrap_or_else(super::types::PolicyValue::unknown);
+            }
+            Ok(super::ConditionalResponse::NotModified(None)) => {
+                return super::types::PolicyValue::unknown(
+                    "304 without cached active branch rules response",
+                );
+            }
+            Ok(super::ConditionalResponse::Fresh(response)) => response,
+            Err(error) => return super::types::PolicyValue::unknown(error.to_string()),
+        };
+
+        if !response.status().is_success() {
+            return super::types::PolicyValue::unknown(format!(
+                "active branch rules unavailable ({})",
+                response.status()
+            ));
+        }
+        if response
+            .headers()
+            .get("link")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(link_header_has_next_page)
+        {
+            return super::types::PolicyValue::unknown(
+                "active branch rules exceed the supported 100-rule page",
+            );
+        }
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|value| value.to_str().ok())
+            .map(String::from);
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(error) => return super::types::PolicyValue::unknown(error.to_string()),
+        };
+        self.cache_response_body(&url, etag, &body);
+
+        serde_json::from_str::<Value>(&body)
+            .map_err(|error| error.to_string())
+            .and_then(|payload| parse_branch_merge_method_restriction(&payload))
+            .map(super::types::PolicyValue::known)
+            .unwrap_or_else(super::types::PolicyValue::unknown)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::github_client::PullRequestMergeMethod;
+
+    #[test]
+    fn active_branch_rules_intersect_allowed_pull_request_merge_methods() {
+        let payload = serde_json::json!([
+            {
+                "type": "pull_request",
+                "parameters": {
+                    "allowed_merge_methods": ["merge", "squash"]
+                }
+            },
+            {
+                "type": "pull_request",
+                "parameters": {
+                    "allowed_merge_methods": ["squash", "rebase"]
+                }
+            },
+            { "type": "required_status_checks" }
+        ]);
+
+        let restriction = parse_branch_merge_method_restriction(&payload)
+            .expect("active branch rules should parse");
+
+        assert_eq!(restriction, Some(vec![PullRequestMergeMethod::Squash]));
+    }
+
+    #[test]
+    fn branch_rules_url_encodes_branch_name_and_requests_max_page() {
+        assert_eq!(
+            branch_rules_url("acme", "repo", "release/1.0"),
+            "https://api.github.com/repos/acme/repo/rules/branches/release%2F1.0?per_page=100"
+        );
+    }
+
+    #[test]
+    fn link_header_detects_truncated_active_rules() {
+        assert!(link_header_has_next_page(
+            "<https://api.github.com/rules?page=2>; rel=\"next\", <https://api.github.com/rules?page=3>; rel=\"last\""
+        ));
+        assert!(!link_header_has_next_page(
+            "<https://api.github.com/rules?page=1>; rel=\"last\""
+        ));
+    }
+}

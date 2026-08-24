@@ -1,5 +1,5 @@
 import { confirmTerminalTaskAction, isTaskCompleting } from './completeTask'
-import type { Task } from './types'
+import type { PullRequestMergeMethod, Task } from './types'
 import type { TaskActionRunner } from './taskActionRunner'
 
 interface ActionPaletteControllerOptions {
@@ -38,10 +38,18 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
     showActionPalette = true
   }
 
-  async function executeAction(actionId: string): Promise<void> {
+  async function executeAction(
+    actionId: string,
+    mergeMethod?: PullRequestMergeMethod,
+  ): Promise<void> {
     const task = actionPaletteTask
     const runApp = actionPaletteRunApp
     closeActionPalette()
+
+    if (task && mergeMethod !== undefined) {
+      await options.taskActions.mergeReadyPullRequest(task, mergeMethod)
+      return
+    }
 
     switch (actionId) {
       case 'run-app':
@@ -58,11 +66,6 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
       case 'complete-task':
         if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Complete')) {
           await options.taskActions.deleteTaskAndReload(task.id)
-        }
-        break
-      case 'merge-pr':
-        if (task) {
-          await options.taskActions.mergeReadyPullRequest(task)
         }
         break
       case 'enqueue-pr':

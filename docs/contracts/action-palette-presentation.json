@@ -15,7 +15,7 @@
       "label": "Merge Pull Request",
       "keywords": ["merge", "pull request", "pr", "github"],
       "icon": "merge",
-      "requiresConfirmation": false,
+      "requiresConfirmation": true,
       "destructive": false
     },
     {

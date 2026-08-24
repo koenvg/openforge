@@ -540,6 +540,14 @@
               }
             }
           ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CompanionMergeRequest" }
+              }
+            }
+          },
           "responses": {
             "204": {
               "description": "Action accepted"
@@ -879,6 +887,18 @@
           }
         }
       },
+      "PullRequestMergeMethod": {
+        "type": "string",
+        "enum": ["merge", "squash", "rebase"]
+      },
+      "CompanionMergeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mergeMethod"],
+        "properties": {
+          "mergeMethod": { "$ref": "#/components/schemas/PullRequestMergeMethod" }
+        }
+      },
       "CompanionTaskActionId": {
         "type": "string",
         "enum": [
@@ -907,7 +927,13 @@
           },
           "icon": { "$ref": "#/components/schemas/CompanionActionIcon" },
           "requiresConfirmation": { "type": "boolean" },
-          "destructive": { "type": "boolean" }
+          "destructive": { "type": "boolean" },
+          "mergeMethods": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/PullRequestMergeMethod" }
+          },
+          "defaultMergeMethod": { "$ref": "#/components/schemas/PullRequestMergeMethod" }
         }
       },
       "TaskActionsSnapshot": {

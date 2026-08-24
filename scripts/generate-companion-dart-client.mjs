@@ -260,14 +260,20 @@ function renderObject(name, schema, schemas) {
         name === 'TaskDetail' && TASK_DETAIL_EMPTY_LIST_DEFAULTS.has(property)
       return defaultsToEmpty
         ? `    List<${itemType}> ${field} = const <${itemType}>[],`
-        : `    required List<${itemType}> ${field},`
+        : required.has(property)
+          ? `    required List<${itemType}> ${field},`
+          : `    List<${itemType}>? ${field},`
     }
-    return `    required this.${lowerCamel(property)},`
+    return required.has(property)
+      ? `    required this.${lowerCamel(property)},`
+      : `    this.${lowerCamel(property)},`
   })
   const initializers = listProperties.map(([property, propertySchema]) => {
     const field = lowerCamel(property)
     const itemType = dartType(propertySchema.items, { owner: name, property: `${property}Item` })
-    return `${field} = List<${itemType}>.unmodifiable(${field})`
+    return required.has(property)
+      ? `${field} = List<${itemType}>.unmodifiable(${field})`
+      : `${field} = ${field} == null ? null : List<${itemType}>.unmodifiable(${field})`
   })
   const constructor = initializers.length
     ? `  ${name}({\n${constructorArguments.join('\n')}\n  }) : ${initializers.join(',\n       ')};`

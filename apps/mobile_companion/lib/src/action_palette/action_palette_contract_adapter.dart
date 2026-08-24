@@ -14,6 +14,14 @@ abstract final class MobilePaletteActionContractAdapter {
     icon: _materialIcon(presentation.icon),
     requiresConfirmation: presentation.requiresConfirmation,
     destructive: presentation.destructive,
+    mergeMethods:
+        (presentation.mergeMethods ??
+                const <generated.PullRequestMergeMethod>[])
+            .map(_mergeMethod)
+            .toList(growable: false),
+    defaultMergeMethod: presentation.defaultMergeMethod == null
+        ? null
+        : _mergeMethod(presentation.defaultMergeMethod!),
   );
 
   static MobilePaletteAction fromProjectPresentation(
@@ -27,6 +35,14 @@ abstract final class MobilePaletteActionContractAdapter {
     requiresConfirmation: presentation.requiresConfirmation,
     destructive: presentation.destructive,
   );
+
+  static MobileMergeMethod _mergeMethod(
+    generated.PullRequestMergeMethod method,
+  ) => switch (method) {
+    generated.PullRequestMergeMethod.merge => MobileMergeMethod.merge,
+    generated.PullRequestMergeMethod.squash => MobileMergeMethod.squash,
+    generated.PullRequestMergeMethod.rebase => MobileMergeMethod.rebase,
+  };
 
   static CompanionActionId _taskActionId(
     generated.CompanionTaskActionId id,

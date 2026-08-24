@@ -1,7 +1,8 @@
 use super::super::test_support::make_github_readiness_pr;
 use super::*;
 use crate::github_client::{
-    CheckRun, GitHubHead, GitHubUser, PolicyValue, PullRequest, RepositoryPolicyFacts,
+    CheckRun, GitHubHead, GitHubUser, PolicyValue, PullRequest, PullRequestMergeMethod,
+    RepositoryPolicyFacts,
 };
 
 #[test]
@@ -379,6 +380,8 @@ fn known_readiness_policy(
         requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
         requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
         merge_queue_required: PolicyValue::known(merge_queue_required),
+        allowed_merge_methods: PolicyValue::known(vec![PullRequestMergeMethod::Merge]),
+        default_merge_method: PolicyValue::known(Some(PullRequestMergeMethod::Merge)),
         required_deployments: PolicyValue::known(Vec::new()),
         unknown_reasons: Vec::new(),
     }

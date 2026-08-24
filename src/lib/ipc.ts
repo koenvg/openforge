@@ -4,6 +4,7 @@ import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type { PtyBufferState, TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, PrWalkthrough, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
+import type { PullRequestMergeMethod } from './types'
 import type { ResolvedMarkdownMedia } from './markdown'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
@@ -305,8 +306,13 @@ export async function markCommentAddressed(commentId: number): Promise<void> {
   return invoke("mark_comment_addressed", { commentId });
 }
 
-export async function mergePullRequest(taskId: string, prId: number, expectedHeadSha: string): Promise<void> {
-  return invoke<void>("merge_task_pull_request", { taskId, prId, expectedHeadSha });
+export async function mergePullRequest(
+  taskId: string,
+  prId: number,
+  expectedHeadSha: string,
+  mergeMethod: PullRequestMergeMethod,
+ ): Promise<void> {
+  return invoke<void>("merge_task_pull_request", { taskId, prId, expectedHeadSha, mergeMethod });
 }
 
 export async function enqueuePullRequest(taskId: string, prId: number, expectedHeadSha: string): Promise<void> {

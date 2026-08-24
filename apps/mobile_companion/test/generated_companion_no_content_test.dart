@@ -50,6 +50,7 @@ void main() {
           path: '/companion/v1/tasks/T-1/merge',
           run: () => client.mergeCompanionTaskPullRequest(
             taskId: 'T-1',
+            mergeMethod: PullRequestMergeMethod.squash,
             credential: 'credential-1',
           ),
         ),

@@ -361,6 +361,20 @@ pub(super) async fn poll_prs_for_project(
                 error_count += 1;
             }
         }
+        let allowed_merge_methods = serde_json::to_string(&result.allowed_merge_methods)
+            .unwrap_or_else(|_| "[]".to_string());
+        if let Err(e) = db_lock.update_pr_merge_method_policy(
+            result.pr_id,
+            result.merge_methods_policy_known,
+            &allowed_merge_methods,
+            result.default_merge_method.map(|method| method.as_str()),
+        ) {
+            error!(
+                "[GitHub Poller] Failed to update merge method policy for PR #{}: {}",
+                result.pr_id, e
+            );
+            error_count += 1;
+        }
 
         if let Err(e) = db_lock.update_pr_is_queued(result.pr_id, result.is_queued) {
             error!(

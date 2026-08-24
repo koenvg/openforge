@@ -1,7 +1,7 @@
 use super::pr_readiness::{
     collect_branch_policy_sources, collect_rest_readiness_sources, current_graphql_mergeable_state,
-    current_graphql_review_status, fetch_graphql_readiness_snapshot, poll_result_ci_validation_sha,
-    poll_result_pr_head_sha, select_branch_policy_inputs,
+    current_graphql_review_status, enforce_merge_method_policy, fetch_graphql_readiness_snapshot,
+    poll_result_ci_validation_sha, poll_result_pr_head_sha, select_branch_policy_inputs,
 };
 use super::review_sync::{terminal_state_for_pr_details, StaleAuthoredPrTerminalState};
 use crate::db::{
@@ -46,6 +46,9 @@ pub(super) struct PollSinglePrResult {
     pub(super) is_queued: bool,
     pub(super) required_check_names: Vec<String>,
     pub(super) required_approving_count: Option<usize>,
+    pub(super) merge_methods_policy_known: bool,
+    pub(super) allowed_merge_methods: Vec<crate::github_client::PullRequestMergeMethod>,
+    pub(super) default_merge_method: Option<crate::github_client::PullRequestMergeMethod>,
     pub(super) readiness_facts: PrMergeReadinessFacts,
     pub(super) terminal_state: Option<StaleAuthoredPrTerminalState>,
     pub(super) error: Option<String>,
@@ -78,6 +81,9 @@ pub(super) fn comment_fetch_error_result(
         is_queued: false,
         required_check_names: vec![],
         required_approving_count: None,
+        merge_methods_policy_known: false,
+        allowed_merge_methods: Vec::new(),
+        default_merge_method: None,
         readiness_facts: PrMergeReadinessFacts {
             status: None,
             action: None,
@@ -179,7 +185,7 @@ pub(super) async fn poll_single_pr(
         .map(|inputs| inputs.combined_status.clone())
         .or(rest_sources.combined_status);
 
-    let (rest_required_checks_policy, rest_required_reviews_policy) =
+    let (rest_required_checks_policy, rest_required_reviews_policy, rest_merge_method_restriction) =
         collect_branch_policy_sources(
             &github_client,
             &github_token,
@@ -191,6 +197,7 @@ pub(super) async fn poll_single_pr(
         graphql_snapshot.as_ref(),
         &rest_required_checks_policy,
         &rest_required_reviews_policy,
+        &rest_merge_method_restriction,
     );
 
     let readiness_ci_status = ci_status_for_readiness(
@@ -254,6 +261,7 @@ pub(super) async fn poll_single_pr(
         rest_sources.pr_details_result.as_ref().ok(),
         configured_github_username.as_deref(),
     );
+    readiness_facts = enforce_merge_method_policy(readiness_facts, &branch_policy_inputs);
     let terminal_state = rest_sources
         .pr_details_result
         .as_ref()
@@ -282,6 +290,9 @@ pub(super) async fn poll_single_pr(
         is_queued: readiness_is_queued,
         required_check_names: branch_policy_inputs.required_check_names,
         required_approving_count: branch_policy_inputs.required_approving_count,
+        merge_methods_policy_known: branch_policy_inputs.merge_methods_policy_known,
+        allowed_merge_methods: branch_policy_inputs.allowed_merge_methods,
+        default_merge_method: branch_policy_inputs.default_merge_method,
         readiness_facts,
         terminal_state,
         error: None,

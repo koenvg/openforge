@@ -23,6 +23,11 @@ pub(crate) enum CompanionTaskActionId {
     RunApp,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompanionMergeMethodPolicy {
+    pub(crate) allowed: Vec<crate::github_client::PullRequestMergeMethod>,
+    pub(crate) default: Option<crate::github_client::PullRequestMergeMethod>,
+}
 /// Task action that `CompanionActionPaletteService` is allowed to execute directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CompanionActionPaletteTaskAction {
@@ -98,7 +103,7 @@ pub(crate) enum CompanionProjectActionId {
     RefreshGithub,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CompanionActionPaletteError {
     NotFound,
     InvalidTaskState,
@@ -107,6 +112,7 @@ pub(crate) enum CompanionActionPaletteError {
     GithubTokenUnavailable,
     GithubSyncFailed { errors: usize },
     GithubRateLimited,
+    MergeRejected(String),
 }
 
 pub(crate) type CompanionActionPaletteFuture<'a> =
@@ -123,6 +129,16 @@ pub(crate) trait CompanionActionPaletteService: Send + Sync {
         task_id: &str,
     ) -> Result<Vec<CompanionTaskActionId>, CompanionActionPaletteError>;
 
+    fn merge_method_policy(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<CompanionMergeMethodPolicy>, CompanionActionPaletteError>;
+
+    fn merge_pull_request<'a>(
+        &'a self,
+        task_id: &'a str,
+        merge_method: crate::github_client::PullRequestMergeMethod,
+    ) -> CompanionActionPaletteFuture<'a>;
     fn available_project_actions(
         &self,
         project_id: &str,
@@ -199,6 +215,21 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
         availability::task_actions(self, task_id)
     }
 
+    fn merge_method_policy(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<CompanionMergeMethodPolicy>, CompanionActionPaletteError> {
+        pull_requests::merge_method_policy(self, task_id)
+    }
+
+    fn merge_pull_request<'a>(
+        &'a self,
+        task_id: &'a str,
+        merge_method: crate::github_client::PullRequestMergeMethod,
+    ) -> CompanionActionPaletteFuture<'a> {
+        Box::pin(pull_requests::merge(self, task_id, merge_method))
+    }
+
     fn available_project_actions(
         &self,
         project_id: &str,
@@ -214,7 +245,7 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
         Box::pin(async move {
             match action {
                 CompanionActionPaletteTaskAction::MergePullRequest => {
-                    pull_requests::merge(self, task_id).await
+                    Err(CompanionActionPaletteError::InvalidTaskState)
                 }
                 CompanionActionPaletteTaskAction::EnqueuePullRequest => {
                     pull_requests::enqueue(self, task_id).await
@@ -246,6 +277,21 @@ impl CompanionActionPaletteService for UnavailableCompanionActionPaletteService 
         _task_id: &str,
     ) -> Result<Vec<CompanionTaskActionId>, CompanionActionPaletteError> {
         Err(CompanionActionPaletteError::TemporarilyUnavailable)
+    }
+
+    fn merge_method_policy(
+        &self,
+        _task_id: &str,
+    ) -> Result<Option<CompanionMergeMethodPolicy>, CompanionActionPaletteError> {
+        Err(CompanionActionPaletteError::TemporarilyUnavailable)
+    }
+
+    fn merge_pull_request<'a>(
+        &'a self,
+        _task_id: &'a str,
+        _merge_method: crate::github_client::PullRequestMergeMethod,
+    ) -> CompanionActionPaletteFuture<'a> {
+        Box::pin(async { Err(CompanionActionPaletteError::TemporarilyUnavailable) })
     }
 
     fn available_project_actions(

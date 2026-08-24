@@ -24,7 +24,9 @@ fn link_pull_request_error(error: String) -> (StatusCode, String) {
 fn task_pull_request_action_error(error: String) -> (StatusCode, String) {
     if error == "Pull request not found for task" {
         (StatusCode::NOT_FOUND, error)
-    } else if error.starts_with("Pull request is no longer ready") {
+    } else if error.starts_with("Pull request is no longer ready")
+        || error.starts_with("Pull request merge method")
+    {
         (StatusCode::CONFLICT, error)
     } else {
         runtime_error(error)
@@ -194,11 +196,13 @@ pub(super) async fn handle_app_github_review_command(
             let task_id = payload_string(&request.payload, "taskId")?;
             let pr_id = payload_i64(&request.payload, "prId")?;
             let expected_head_sha = payload_string(&request.payload, "expectedHeadSha")?;
+            let merge_method = payload_field(&request.payload, "mergeMethod")?;
             let pr = crate::github_runtime::merge_task_pull_request(
                 &state.db,
                 &state.github_client,
                 &task_id,
                 pr_id,
+                merge_method,
                 &expected_head_sha,
             )
             .await

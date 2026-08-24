@@ -13,6 +13,7 @@ import {
   enqueuePullRequest,
   getSessionStatus,
   mergePullRequest,
+  refreshTaskGithubStatus,
   startImplementation,
 } from './ipc'
 import { runCompleteTask } from './completeTask'
@@ -21,7 +22,7 @@ import { writePtyWithSubmit } from './ptySubmit'
 import { acquire, focusTerminal, getTerminalImageProtocol, hasTerminal, isPtyActive, release } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
 import { getMergeReadiness } from './types'
-import type { DivergenceResolution, Project, Task } from './types'
+import type { DivergenceResolution, Project, PullRequestMergeMethod, Task } from './types'
 
 export interface RunActionData {
   taskId: string
@@ -183,7 +184,10 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
     }
   }
 
-  async function mergeReadyPullRequest(task: Task): Promise<void> {
+  async function mergeReadyPullRequest(
+    task: Task,
+    mergeMethod: PullRequestMergeMethod,
+  ): Promise<void> {
     const prs = get(ticketPrs).get(task.id) || []
     const readyPrs = prs.filter((pr) => {
       const readiness = getMergeReadiness(pr)
@@ -194,7 +198,7 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       const pr = readyPrs[0]
       try {
         setTaskMerging(task.id, true)
-        await mergePullRequest(task.id, pr.id, pr.head_sha)
+        await mergePullRequest(task.id, pr.id, pr.head_sha, mergeMethod)
         const nextMap = new Map(get(ticketPrs))
         const taskPrs = nextMap.get(task.id) || []
         nextMap.set(task.id, taskPrs.map(p =>
@@ -203,6 +207,11 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
         ticketPrs.set(nextMap)
       } catch (e) {
         logError('Failed to merge PR:', e)
+        try {
+          await refreshTaskGithubStatus(task.id)
+        } catch (refreshError) {
+          logError('Failed to refresh GitHub status after rejected merge:', refreshError)
+        }
         setError(e)
       } finally {
         setTaskMerging(task.id, false)

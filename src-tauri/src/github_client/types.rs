@@ -247,14 +247,40 @@ pub(crate) struct CreateReviewCommentRequest {
     pub side: String,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PullRequestMergeMethod {
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl PullRequestMergeMethod {
+    pub(crate) fn from_github_value(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "merge" => Some(Self::Merge),
+            "squash" => Some(Self::Squash),
+            "rebase" => Some(Self::Rebase),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Merge => "merge",
+            Self::Squash => "squash",
+            Self::Rebase => "rebase",
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct MergePrRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub merge_method: Option<String>,
+    pub merge_method: PullRequestMergeMethod,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha: Option<String>,
 }
@@ -566,6 +592,8 @@ pub struct RepositoryPolicyFacts {
     pub requires_up_to_date_branch: PolicyValue<Option<bool>>,
     pub requires_conversation_resolution: PolicyValue<Option<bool>>,
     pub merge_queue_required: PolicyValue<Option<bool>>,
+    pub allowed_merge_methods: PolicyValue<Vec<PullRequestMergeMethod>>,
+    pub default_merge_method: PolicyValue<Option<PullRequestMergeMethod>>,
     pub required_deployments: PolicyValue<Vec<String>>,
     pub unknown_reasons: Vec<String>,
 }
@@ -578,6 +606,8 @@ impl RepositoryPolicyFacts {
             requires_up_to_date_branch: PolicyValue::known(Some(false)),
             requires_conversation_resolution: PolicyValue::known(Some(false)),
             merge_queue_required: PolicyValue::known(Some(false)),
+            allowed_merge_methods: PolicyValue::unknown("repository merge methods unavailable"),
+            default_merge_method: PolicyValue::unknown("default merge method unavailable"),
             required_deployments: PolicyValue::known(Vec::new()),
             unknown_reasons: Vec::new(),
         }
@@ -591,6 +621,8 @@ impl RepositoryPolicyFacts {
             requires_up_to_date_branch: PolicyValue::unknown(reason.clone()),
             requires_conversation_resolution: PolicyValue::unknown(reason.clone()),
             merge_queue_required: PolicyValue::unknown(reason.clone()),
+            allowed_merge_methods: PolicyValue::unknown(reason.clone()),
+            default_merge_method: PolicyValue::unknown(reason.clone()),
             required_deployments: PolicyValue::unknown(reason.clone()),
             unknown_reasons: vec![reason],
         }
@@ -674,7 +706,16 @@ impl GitHubReadinessSnapshot {
         // did get so the poller keeps a valid head SHA instead of falling back to
         // REST on every poll; only when pullRequest data is absent do we return a
         // fully-unknown snapshot.
-        let Some(pr) = payload.pointer("/data/repository/pullRequest") else {
+        let Some(repository) = payload.pointer("/data/repository") else {
+            return match error_reason {
+                Some(reason) => Ok(Self::unknown(reason)),
+                None => Err("GraphQL response missing repository".to_string()),
+            };
+        };
+        let Some(pr) = repository
+            .get("pullRequest")
+            .filter(|value| !value.is_null())
+        else {
             return match error_reason {
                 Some(reason) => Ok(Self::unknown(reason)),
                 None => Err("GraphQL response missing pullRequest".to_string()),
@@ -734,6 +775,7 @@ impl GitHubReadinessSnapshot {
             });
 
         let mut policy = parse_repository_policy(pr.pointer("/baseRef/branchProtectionRule"));
+        apply_repository_merge_method_policy(repository, &mut policy);
         if check_rollup_truncated {
             warnings.push(
                 "statusCheckRollup contexts are paginated; REST check fallback required"
@@ -755,7 +797,11 @@ impl GitHubReadinessSnapshot {
         // cannot tell those apart, so treat all policy coverage as unknown and let
         // the REST fallback fill only that gap.
         if let Some(reason) = error_reason {
+            let allowed_merge_methods = policy.allowed_merge_methods.clone();
+            let default_merge_method = policy.default_merge_method.clone();
             policy = RepositoryPolicyFacts::unknown(reason.clone());
+            policy.allowed_merge_methods = allowed_merge_methods;
+            policy.default_merge_method = default_merge_method;
             warnings.push(reason);
         }
 
@@ -803,6 +849,62 @@ fn is_known_merge_state_status(status: &str) -> bool {
         status,
         "BEHIND" | "BLOCKED" | "CLEAN" | "DIRTY" | "DRAFT" | "HAS_HOOKS" | "UNKNOWN" | "UNSTABLE"
     )
+}
+
+fn merge_method_from_graphql(value: &str) -> Option<PullRequestMergeMethod> {
+    match value {
+        "MERGE" => Some(PullRequestMergeMethod::Merge),
+        "SQUASH" => Some(PullRequestMergeMethod::Squash),
+        "REBASE" => Some(PullRequestMergeMethod::Rebase),
+        _ => None,
+    }
+}
+
+fn apply_repository_merge_method_policy(
+    repository: &serde_json::Value,
+    policy: &mut RepositoryPolicyFacts,
+) {
+    let configured_methods = [
+        ("mergeCommitAllowed", PullRequestMergeMethod::Merge),
+        ("squashMergeAllowed", PullRequestMergeMethod::Squash),
+        ("rebaseMergeAllowed", PullRequestMergeMethod::Rebase),
+    ];
+    if configured_methods.iter().all(|(field, _)| {
+        repository
+            .get(field)
+            .and_then(|value| value.as_bool())
+            .is_some()
+    }) {
+        policy.allowed_merge_methods = PolicyValue::known(
+            configured_methods
+                .iter()
+                .filter_map(|(field, method)| {
+                    repository
+                        .get(field)
+                        .and_then(|value| value.as_bool())
+                        .filter(|allowed| *allowed)
+                        .map(|_| *method)
+                })
+                .collect(),
+        );
+    } else {
+        let reason = "repository merge methods unavailable from GraphQL".to_string();
+        policy.allowed_merge_methods = PolicyValue::unknown(reason.clone());
+        policy.unknown_reasons.push(reason);
+    }
+
+    match repository
+        .get("viewerDefaultMergeMethod")
+        .and_then(|value| value.as_str())
+        .and_then(merge_method_from_graphql)
+    {
+        Some(method) => policy.default_merge_method = PolicyValue::known(Some(method)),
+        None => {
+            let reason = "default merge method unavailable from GraphQL".to_string();
+            policy.default_merge_method = PolicyValue::unknown(reason.clone());
+            policy.unknown_reasons.push(reason);
+        }
+    }
 }
 
 fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicyFacts {
@@ -864,6 +966,8 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
         requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
         requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
         merge_queue_required: PolicyValue::known(requires_merge_queue),
+        allowed_merge_methods: PolicyValue::unknown("repository merge methods unavailable"),
+        default_merge_method: PolicyValue::unknown("default merge method unavailable"),
         required_deployments,
         unknown_reasons,
     }
@@ -1119,7 +1223,7 @@ mod tests {
         let request = MergePrRequest {
             commit_title: Some("Merge feature branch".to_string()),
             commit_message: None,
-            merge_method: Some("squash".to_string()),
+            merge_method: PullRequestMergeMethod::Squash,
             sha: Some("expected-head".to_string()),
         };
 
@@ -1138,7 +1242,7 @@ mod tests {
         let request = MergePrRequest {
             commit_title: None,
             commit_message: None,
-            merge_method: Some("squash".to_string()),
+            merge_method: PullRequestMergeMethod::Squash,
             sha: None,
         };
 
@@ -1493,6 +1597,10 @@ mod tests {
         let payload = serde_json::json!({
             "data": {
                 "repository": {
+                    "viewerDefaultMergeMethod": "SQUASH",
+                    "mergeCommitAllowed": true,
+                    "squashMergeAllowed": true,
+                    "rebaseMergeAllowed": false,
                     "pullRequest": {
                         "id": "PR_node_42",
                         "headRefOid": "head-sha-1",
@@ -1530,6 +1638,17 @@ mod tests {
 
         let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
         assert_eq!(snapshot.github_node_id.as_deref(), Some("PR_node_42"));
+        assert_eq!(
+            snapshot.policy.allowed_merge_methods.value,
+            vec![
+                PullRequestMergeMethod::Merge,
+                PullRequestMergeMethod::Squash
+            ]
+        );
+        assert_eq!(
+            snapshot.policy.default_merge_method.value,
+            Some(PullRequestMergeMethod::Squash)
+        );
         assert_eq!(snapshot.source_head_sha, Some("head-sha-1".to_string()));
         assert_eq!(snapshot.merge_state_status.as_deref(), Some("FUTURE_STATE"));
         assert_eq!(
@@ -1570,6 +1689,10 @@ mod tests {
         let payload = serde_json::json!({
             "data": {
                 "repository": {
+                    "viewerDefaultMergeMethod": "MERGE",
+                    "mergeCommitAllowed": true,
+                    "squashMergeAllowed": true,
+                    "rebaseMergeAllowed": true,
                     "pullRequest": {
                         "headRefOid": "head-sha-1",
                         "commits": {
@@ -1746,6 +1869,10 @@ mod tests {
             }],
             "data": {
                 "repository": {
+                    "viewerDefaultMergeMethod": "SQUASH",
+                    "mergeCommitAllowed": false,
+                    "squashMergeAllowed": true,
+                    "rebaseMergeAllowed": true,
                     "pullRequest": {
                         "headRefOid": "head-sha-9",
                         "mergeStateStatus": "CLEAN",
@@ -1787,6 +1914,17 @@ mod tests {
         assert!(!snapshot.policy.required_checks.known);
         assert!(!snapshot.policy.required_reviews.known);
         assert!(!snapshot.policy.merge_queue_required.known);
+        assert_eq!(
+            snapshot.policy.allowed_merge_methods.value,
+            vec![
+                PullRequestMergeMethod::Squash,
+                PullRequestMergeMethod::Rebase
+            ]
+        );
+        assert_eq!(
+            snapshot.policy.default_merge_method.value,
+            Some(PullRequestMergeMethod::Squash)
+        );
 
         // The error message is surfaced for diagnostics.
         assert!(snapshot

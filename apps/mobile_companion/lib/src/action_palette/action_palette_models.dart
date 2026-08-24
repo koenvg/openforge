@@ -14,6 +14,8 @@ enum CompanionActionId {
   refreshGithub,
 }
 
+enum MobileMergeMethod { merge, squash, rebase }
+
 enum MobilePaletteCategory { task, general }
 
 final class MobilePaletteAction {
@@ -25,6 +27,9 @@ final class MobilePaletteAction {
     this.category = MobilePaletteCategory.general,
     this.requiresConfirmation = false,
     this.destructive = false,
+    this.mergeMethods = const <MobileMergeMethod>[],
+    this.defaultMergeMethod,
+    this.selectedMergeMethod,
   });
 
   final CompanionActionId id;
@@ -34,6 +39,23 @@ final class MobilePaletteAction {
   final IconData icon;
   final bool requiresConfirmation;
   final bool destructive;
+  final List<MobileMergeMethod> mergeMethods;
+  final MobileMergeMethod? defaultMergeMethod;
+  final MobileMergeMethod? selectedMergeMethod;
+
+  MobilePaletteAction withSelectedMergeMethod(MobileMergeMethod mergeMethod) =>
+      MobilePaletteAction(
+        id: id,
+        category: category,
+        label: label,
+        keywords: keywords,
+        icon: icon,
+        requiresConfirmation: requiresConfirmation,
+        destructive: destructive,
+        mergeMethods: mergeMethods,
+        defaultMergeMethod: defaultMergeMethod,
+        selectedMergeMethod: mergeMethod,
+      );
 
   @override
   bool operator ==(Object other) =>

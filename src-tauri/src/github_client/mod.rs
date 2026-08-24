@@ -24,6 +24,7 @@ mod pulls;
 mod repos;
 mod response_cache;
 mod reviews;
+mod rules;
 pub mod types;
 
 pub use assets::ResolvedGithubAsset;

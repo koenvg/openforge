@@ -7,6 +7,10 @@ use super::GitHubClient;
 const PR_READINESS_QUERY: &str = r#"
 query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
+    viewerDefaultMergeMethod
+    mergeCommitAllowed
+    squashMergeAllowed
+    rebaseMergeAllowed
     pullRequest(number: $number) {
       id
       headRefOid
@@ -52,6 +56,10 @@ query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: In
 const PR_READINESS_CORE_QUERY: &str = r#"
 query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
+    viewerDefaultMergeMethod
+    mergeCommitAllowed
+    squashMergeAllowed
+    rebaseMergeAllowed
     pullRequest(number: $number) {
       id
       headRefOid

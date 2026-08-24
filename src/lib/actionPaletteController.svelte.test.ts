@@ -64,6 +64,30 @@ describe('useActionPaletteController', () => {
     expect(triggerGithubSync).toHaveBeenCalledOnce()
   })
 
+  it('delegates the selected pull request merge method', async () => {
+    const taskActions = {
+      handleRunAction: vi.fn(async () => undefined),
+      deleteTaskAndReload: vi.fn(async () => undefined),
+      mergeReadyPullRequest: vi.fn(async () => undefined),
+      enqueueReadyPullRequest: vi.fn(async () => undefined),
+      setTaskOutOfFocus: vi.fn(async () => undefined),
+    }
+    const controller = useActionPaletteController({
+      getSelectedTask: () => selectedTask,
+      taskActions,
+      goBack: vi.fn(),
+      showSearchTasks: vi.fn(),
+      showNewTask: vi.fn(),
+      showProjectSwitcher: vi.fn(),
+      triggerGithubSync: vi.fn(async () => undefined),
+    })
+
+    controller.openActionPalette()
+    await controller.executeAction('merge-pr:squash', 'squash')
+
+    expect(taskActions.mergeReadyPullRequest).toHaveBeenCalledWith(selectedTask, 'squash')
+  })
+
   it.each([
     {
       action: 'Complete',

@@ -3,8 +3,10 @@ use std::{collections::HashSet, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 
 use super::action_palette::{
-    CompanionActionPaletteError, CompanionProjectActionId, CompanionTaskActionId,
+    CompanionActionPaletteError, CompanionMergeMethodPolicy, CompanionProjectActionId,
+    CompanionTaskActionId,
 };
+use crate::github_client::PullRequestMergeMethod;
 
 const PRESENTATION_CONTRACT: &str =
     include_str!("../../../docs/contracts/action-palette-presentation.json");
@@ -34,6 +36,10 @@ pub(crate) struct CompanionActionPresentation<ActionId> {
     pub(crate) icon: CompanionActionIcon,
     pub(crate) requires_confirmation: bool,
     pub(crate) destructive: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) merge_methods: Vec<PullRequestMergeMethod>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) default_merge_method: Option<PullRequestMergeMethod>,
 }
 
 pub(crate) type CompanionTaskActionPresentation =
@@ -82,8 +88,20 @@ where
 
 pub(crate) fn task_action_presentations(
     available: &[CompanionTaskActionId],
+    merge_method_policy: Option<&CompanionMergeMethodPolicy>,
 ) -> Result<Vec<CompanionTaskActionPresentation>, CompanionActionPaletteError> {
-    select_presentations(available, &presentations()?.task_actions)
+    let mut selected = select_presentations(available, &presentations()?.task_actions)?;
+    if let Some(merge_action) = selected
+        .iter_mut()
+        .find(|action| action.id == CompanionTaskActionId::MergePullRequest)
+    {
+        let policy =
+            merge_method_policy.ok_or(CompanionActionPaletteError::TemporarilyUnavailable)?;
+        merge_action.requires_confirmation = true;
+        merge_action.merge_methods = policy.allowed.clone();
+        merge_action.default_merge_method = policy.default;
+    }
+    Ok(selected)
 }
 
 pub(crate) fn project_action_presentations(

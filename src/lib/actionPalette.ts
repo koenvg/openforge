@@ -10,12 +10,14 @@ import type {
   ActionPresentationMetadata,
   TaskPaletteActionId,
 } from './actionPalettePresentation'
-import type { PullRequestInfo, Task } from './types'
+import type { PullRequestInfo, PullRequestMergeMethod, Task } from './types'
 
 export interface PaletteAction extends ActionPresentationMetadata {
   id: string
   shortcut: string | null
   category: 'task' | 'navigation' | 'general'
+  mergeMethod?: PullRequestMergeMethod
+  isDefaultMergeMethod?: boolean
 }
 
 export interface TaskActionCapabilities {
@@ -35,6 +37,54 @@ function taskPaletteAction(id: TaskPaletteActionId): PaletteAction {
   }
 }
 
+const MERGE_METHOD_LABELS: Record<PullRequestMergeMethod, (prNumber: number) => string> = {
+  merge: prNumber => `Create a merge commit for PR #${prNumber}`,
+  squash: prNumber => `Squash and merge PR #${prNumber}`,
+  rebase: prNumber => `Rebase and merge PR #${prNumber}`,
+}
+
+
+function parseAllowedMergeMethods(pr: PullRequestInfo): PullRequestMergeMethod[] {
+  if (pr.merge_methods_policy_known !== true || pr.allowed_merge_methods === null) return []
+  let values: unknown = pr.allowed_merge_methods
+  if (typeof values === 'string') {
+    try {
+      values = JSON.parse(values)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(values)) return []
+  return [...new Set(values.filter(
+    (value): value is PullRequestMergeMethod => value === 'merge' || value === 'squash' || value === 'rebase',
+  ))]
+}
+
+function mergePaletteActions(pr: PullRequestInfo): PaletteAction[] {
+  const allowed = parseAllowedMergeMethods(pr)
+  const configuredDefault = pr.default_merge_method
+  const defaultMethod = configuredDefault !== null && configuredDefault !== undefined
+    && allowed.includes(configuredDefault)
+    ? configuredDefault
+    : null
+  const ordered = defaultMethod === null
+    ? allowed
+    : [defaultMethod, ...allowed.filter(method => method !== defaultMethod)]
+  const presentation = getTaskActionPresentation('merge-pr')
+
+  return ordered.map(mergeMethod => ({
+    ...presentation,
+    id: `merge-pr:${mergeMethod}`,
+    label: MERGE_METHOD_LABELS[mergeMethod](pr.pr_number),
+    keywords: [...presentation.keywords, mergeMethod],
+    shortcut: null,
+    category: 'task',
+    requiresConfirmation: true,
+    mergeMethod,
+    isDefaultMergeMethod: mergeMethod === defaultMethod,
+  }))
+}
+
 export function getTaskActions(
   task: Task,
   taskPrs: PullRequestInfo[] = [],
@@ -51,7 +101,10 @@ export function getTaskActions(
     const readiness = getMergeReadiness(pr)
     return readiness.status === 'ready_to_merge' && readiness.action === 'merge'
   })
-  if (readyToMergePrs.length === 1) {
+  const mergeActions = readyToMergePrs.length === 1
+    ? mergePaletteActions(readyToMergePrs[0])
+    : []
+  if (mergeActions.length > 0) {
     availableActionIds.add('merge-pr')
   }
 
@@ -80,7 +133,7 @@ export function getTaskActions(
 
   return [...TASK_ACTION_PRESENTATION.keys()]
     .filter((id) => availableActionIds.has(id))
-    .map(taskPaletteAction)
+    .flatMap(id => id === 'merge-pr' ? mergeActions : [taskPaletteAction(id)])
 }
 
 interface GlobalActionDefinition extends ActionPresentationMetadata {

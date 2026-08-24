@@ -98,6 +98,9 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     merge_queue_required INTEGER,
     merge_queue_state TEXT,
     readiness_updated_at INTEGER,
+    merge_methods_policy_known INTEGER,
+    allowed_merge_methods TEXT,
+    default_merge_method TEXT,
     FOREIGN KEY (ticket_id) REFERENCES tasks(id)
 );
 
@@ -1600,6 +1603,50 @@ INSERT OR IGNORE INTO config (key, value)
     VALUES ('completed_session_idle_timeout_seconds', '600');
         "#,
     ),
+    // Persist the effective GitHub merge methods used by desktop and Companion actions.
+    M::up_with_hook("", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+
+        for (column, sql) in [
+            (
+                "merge_methods_policy_known",
+                "ALTER TABLE pull_requests ADD COLUMN merge_methods_policy_known INTEGER",
+            ),
+            (
+                "allowed_merge_methods",
+                "ALTER TABLE pull_requests ADD COLUMN allowed_merge_methods TEXT",
+            ),
+            (
+                "default_merge_method",
+                "ALTER TABLE pull_requests ADD COLUMN default_merge_method TEXT",
+            ),
+        ] {
+            let exists: bool = tx
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = '{}'",
+                        column
+                    ),
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                tx.execute(sql, [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets

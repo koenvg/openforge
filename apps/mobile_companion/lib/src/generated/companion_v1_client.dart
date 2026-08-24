@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '30111970216497a292f9be125dbca013ccc99d245437f2d5562c552928265a50';
+    '1cd6617e54a42e50ef5f18370e98e97482eeacc94da1cf126dc7f8501e48a554';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '3';
 
@@ -94,6 +94,28 @@ enum CompanionProjectActionId {
       (throw FormatException('Invalid CompanionProjectActionId value: $value.'));
 
   static CompanionProjectActionId? tryFromWire(String value) {
+    for (final candidate in values) {
+      if (candidate.wireValue == value) return candidate;
+    }
+    return null;
+  }
+}
+
+enum PullRequestMergeMethod {
+  merge('merge'),
+  squash('squash'),
+  rebase('rebase'),
+  ;
+
+  const PullRequestMergeMethod(this.wireValue);
+
+  final String wireValue;
+
+  static PullRequestMergeMethod fromWire(String value) =>
+      tryFromWire(value) ??
+      (throw FormatException('Invalid PullRequestMergeMethod value: $value.'));
+
+  static PullRequestMergeMethod? tryFromWire(String value) {
     for (final candidate in values) {
       if (candidate.wireValue == value) return candidate;
     }
@@ -360,6 +382,26 @@ final class ProjectActionsSnapshot {
   final List<CompanionProjectActionPresentation> actions;
 }
 
+final class CompanionMergeRequest {
+  const CompanionMergeRequest({
+    required this.mergeMethod,
+  });
+
+  factory CompanionMergeRequest.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'mergeMethod'});
+    final model = CompanionMergeRequest(
+      mergeMethod: _required(json, 'mergeMethod', (value) => PullRequestMergeMethod.fromWire(_asString(value, 'mergeMethod'))),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'mergeMethod': mergeMethod.wireValue,
+  };
+
+  final PullRequestMergeMethod mergeMethod;
+}
+
 final class CompanionTaskActionPresentation {
   CompanionTaskActionPresentation({
     required this.id,
@@ -368,10 +410,13 @@ final class CompanionTaskActionPresentation {
     required this.icon,
     required this.requiresConfirmation,
     required this.destructive,
-  }) : keywords = List<String>.unmodifiable(keywords);
+    List<PullRequestMergeMethod>? mergeMethods,
+    this.defaultMergeMethod,
+  }) : keywords = List<String>.unmodifiable(keywords),
+       mergeMethods = mergeMethods == null ? null : List<PullRequestMergeMethod>.unmodifiable(mergeMethods);
 
   factory CompanionTaskActionPresentation.fromJson(Map<String, Object?> json) {
-    _expectOnly(json, const <String>{'id', 'label', 'keywords', 'icon', 'requiresConfirmation', 'destructive'});
+    _expectOnly(json, const <String>{'id', 'label', 'keywords', 'icon', 'requiresConfirmation', 'destructive', 'mergeMethods', 'defaultMergeMethod'});
     final model = CompanionTaskActionPresentation(
       id: _required(json, 'id', (value) => CompanionTaskActionId.fromWire(_asString(value, 'id'))),
       label: _required(json, 'label', (value) => _asString(value, 'label', minLength: 1)),
@@ -379,6 +424,8 @@ final class CompanionTaskActionPresentation {
       icon: _required(json, 'icon', (value) => CompanionActionIcon.fromWire(_asString(value, 'icon'))),
       requiresConfirmation: _required(json, 'requiresConfirmation', (value) => _asBool(value, 'requiresConfirmation')),
       destructive: _required(json, 'destructive', (value) => _asBool(value, 'destructive')),
+      mergeMethods: _optional(json, 'mergeMethods', (value) => _asList(value, 'mergeMethods').map((item) => PullRequestMergeMethod.fromWire(_asString(item, 'mergeMethodsItem'))).toList()),
+      defaultMergeMethod: _optional(json, 'defaultMergeMethod', (value) => PullRequestMergeMethod.fromWire(_asString(value, 'defaultMergeMethod'))),
     );
     return model;
   }
@@ -390,6 +437,8 @@ final class CompanionTaskActionPresentation {
       'icon': icon.wireValue,
       'requiresConfirmation': requiresConfirmation,
       'destructive': destructive,
+      if (mergeMethods != null) 'mergeMethods': mergeMethods!.map((item) => item.wireValue).toList(),
+      if (defaultMergeMethod != null) 'defaultMergeMethod': defaultMergeMethod!.wireValue,
   };
 
   final CompanionTaskActionId id;
@@ -398,6 +447,8 @@ final class CompanionTaskActionPresentation {
   final CompanionActionIcon icon;
   final bool requiresConfirmation;
   final bool destructive;
+  final List<PullRequestMergeMethod>? mergeMethods;
+  final PullRequestMergeMethod? defaultMergeMethod;
 }
 
 final class TaskActionsSnapshot {
@@ -483,8 +534,8 @@ final class PairingSubmissionStatus {
 final class PairingPoll {
   const PairingPoll({
     required this.status,
-    required this.deviceId,
-    required this.credential,
+    this.deviceId,
+    this.credential,
   });
 
   factory PairingPoll.fromJson(Map<String, Object?> json) {
@@ -1471,15 +1522,22 @@ final class CompanionV1Client {
 
   Future<void> mergeCompanionTaskPullRequest({
     required String taskId,
+    required PullRequestMergeMethod mergeMethod,
     required String credential,
   }) async {
     final response = await transport.send(
       method: 'POST',
       uri: baseUrl.resolve('/companion/v1/tasks/${Uri.encodeComponent(taskId)}/merge'),
       headers: <String, String>{
+      'content-type': 'application/json',
       'authorization': 'Bearer $credential',
       companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
       },
+      body: jsonEncode(
+        CompanionMergeRequest(
+          mergeMethod: mergeMethod,
+        ).toJson(),
+      ),
     );
     _expectSuccessWithoutBody(response, const <int>{204});
   }

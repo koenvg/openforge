@@ -11,6 +11,8 @@ CompanionTaskActionPresentation _taskAction(
   CompanionActionIcon icon, {
   bool requiresConfirmation = false,
   bool destructive = false,
+  List<PullRequestMergeMethod>? mergeMethods,
+  PullRequestMergeMethod? defaultMergeMethod,
 }) => CompanionTaskActionPresentation(
   id: id,
   label: label,
@@ -18,6 +20,8 @@ CompanionTaskActionPresentation _taskAction(
   icon: icon,
   requiresConfirmation: requiresConfirmation,
   destructive: destructive,
+  mergeMethods: mergeMethods,
+  defaultMergeMethod: defaultMergeMethod,
 );
 
 CompanionProjectActionPresentation _projectAction(
@@ -85,7 +89,12 @@ final class _Client
         CompanionTaskActionId.mergePullRequest,
         'Merge Pull Request',
         CompanionActionIcon.merge,
-        requiresConfirmation: false,
+        requiresConfirmation: true,
+        mergeMethods: <PullRequestMergeMethod>[
+          PullRequestMergeMethod.squash,
+          PullRequestMergeMethod.rebase,
+        ],
+        defaultMergeMethod: PullRequestMergeMethod.squash,
       ),
       _taskAction(
         CompanionTaskActionId.setAsideTask,
@@ -106,8 +115,9 @@ final class _Client
   Future<void> mergeTaskPullRequest(
     CompanionTrustRecord trustRecord,
     String taskId,
+    MobileMergeMethod mergeMethod,
   ) async {
-    calls.add('merge:$taskId');
+    calls.add('merge:$taskId:${mergeMethod.name}');
     final error = taskMutationError;
     if (error != null) {
       throw error;
@@ -149,6 +159,22 @@ final class _Client
 }
 
 void main() {
+  test(
+    'surfaces Companion rejection messages instead of generic action errors',
+    () {
+      const error = CompanionV1Exception(
+        statusCode: 409,
+        code: 'invalid_task_state',
+        message: 'Merge commits are not allowed on this repository.',
+      );
+
+      expect(
+        mobileActionFailureMessage(error, fallback: 'Merge failed.'),
+        'Merge commits are not allowed on this repository.',
+      );
+    },
+  );
+
   test('loads server-advertised Task actions in authoritative order', () async {
     final client = _Client();
     final controller = MobileActionPaletteController(
@@ -167,7 +193,12 @@ void main() {
     ]);
     expect(actions.first.label, 'Merge Pull Request');
     expect(actions.first.keywords, <String>['merge pull request']);
-    expect(actions.first.requiresConfirmation, isFalse);
+    expect(actions.first.requiresConfirmation, isTrue);
+    expect(actions.first.mergeMethods, <MobileMergeMethod>[
+      MobileMergeMethod.squash,
+      MobileMergeMethod.rebase,
+    ]);
+    expect(actions.first.defaultMergeMethod, MobileMergeMethod.squash);
     expect(actions.last.destructive, isTrue);
   });
 
@@ -208,10 +239,11 @@ void main() {
       await controller.executeTaskAction(
         'T-1',
         CompanionActionId.mergePullRequest,
+        mergeMethod: MobileMergeMethod.squash,
       );
       await controller.executeTaskAction('T-1', CompanionActionId.completeTask);
 
-      expect(client.calls, <String>['merge:T-1', 'complete:T-1']);
+      expect(client.calls, <String>['merge:T-1:squash', 'complete:T-1']);
       expect(refreshes, 2);
     },
   );
@@ -257,7 +289,11 @@ void main() {
       );
 
       await expectLater(
-        controller.executeTaskAction('T-1', CompanionActionId.mergePullRequest),
+        controller.executeTaskAction(
+          'T-1',
+          CompanionActionId.mergePullRequest,
+          mergeMethod: MobileMergeMethod.squash,
+        ),
         throwsA(same(error)),
       );
 
@@ -281,7 +317,11 @@ void main() {
       );
 
       await expectLater(
-        controller.executeTaskAction('T-1', CompanionActionId.mergePullRequest),
+        controller.executeTaskAction(
+          'T-1',
+          CompanionActionId.mergePullRequest,
+          mergeMethod: MobileMergeMethod.squash,
+        ),
         throwsA(same(error)),
       );
 

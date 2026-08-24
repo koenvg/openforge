@@ -1774,7 +1774,6 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
             "/tasks/{taskId}/return-to-board",
             "returnCompanionTaskToBoard",
         ),
-        ("/tasks/{taskId}/merge", "mergeCompanionTaskPullRequest"),
         ("/tasks/{taskId}/enqueue", "enqueueCompanionTaskPullRequest"),
         ("/tasks/{taskId}/run-app", "runCompanionTaskApp"),
         ("/refresh-github", "refreshCompanionGithub"),
@@ -1788,6 +1787,15 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         assert_eq!(item["post"]["operationId"], operation_id);
         assert!(item["post"].get("requestBody").is_none());
     }
+    let merge_operation = &paths["/tasks/{taskId}/merge"]["post"];
+    assert_eq!(
+        merge_operation["operationId"],
+        "mergeCompanionTaskPullRequest"
+    );
+    assert_eq!(
+        merge_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/CompanionMergeRequest"
+    );
     assert_eq!(
         paths["/refresh-github"]["post"]["security"],
         serde_json::json!([{ "companionDeviceBearer": [] }]),

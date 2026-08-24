@@ -1,5 +1,6 @@
 use super::{
-    CompanionActionPaletteError, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
+    CompanionActionPaletteError, CompanionMergeMethodPolicy, CompanionTaskActionId,
+    DatabaseCompanionActionPaletteService,
 };
 use crate::db::{PullRequestReadinessStatus, PullRequestReadinessView};
 
@@ -11,6 +12,27 @@ fn matches_current_readiness(
         readiness.status() == status
             && status.matches_action(pull_request.merge_readiness_action.as_deref())
     })
+}
+
+fn merge_method_policy_from_pr(
+    pull_request: &crate::db::PrRow,
+) -> Option<CompanionMergeMethodPolicy> {
+    if pull_request.merge_methods_policy_known != Some(true) {
+        return None;
+    }
+    let allowed = serde_json::from_str::<Vec<crate::github_client::PullRequestMergeMethod>>(
+        pull_request.allowed_merge_methods.as_deref()?,
+    )
+    .ok()?;
+    if allowed.is_empty() {
+        return None;
+    }
+    let default = pull_request
+        .default_merge_method
+        .as_deref()
+        .and_then(crate::github_client::PullRequestMergeMethod::from_github_value)
+        .filter(|method| allowed.contains(method));
+    Some(CompanionMergeMethodPolicy { allowed, default })
 }
 
 pub(super) fn available_actions(
@@ -30,7 +52,19 @@ pub(super) fn available_actions(
     };
 
     let mut actions = Vec::new();
-    if ready_count(PullRequestReadinessStatus::ReadyToMerge) == 1 {
+    if ready_count(PullRequestReadinessStatus::ReadyToMerge) == 1
+        && pull_requests
+            .iter()
+            .find(|pull_request| {
+                pull_request.ticket_id == task_id
+                    && matches_current_readiness(
+                        pull_request,
+                        PullRequestReadinessStatus::ReadyToMerge,
+                    )
+            })
+            .and_then(merge_method_policy_from_pr)
+            .is_some()
+    {
         actions.push(CompanionTaskActionId::MergePullRequest);
     }
     if ready_count(PullRequestReadinessStatus::ReadyToEnqueue) == 1 {
@@ -58,6 +92,14 @@ fn unique_ready_pull_request(
         _ => Err(CompanionActionPaletteError::InvalidTaskState),
     }
 }
+pub(super) fn merge_method_policy(
+    service: &DatabaseCompanionActionPaletteService,
+    task_id: &str,
+) -> Result<Option<CompanionMergeMethodPolicy>, CompanionActionPaletteError> {
+    let pull_request =
+        unique_ready_pull_request(service, task_id, PullRequestReadinessStatus::ReadyToMerge)?;
+    Ok(merge_method_policy_from_pr(&pull_request))
+}
 
 fn publish_action(
     service: &DatabaseCompanionActionPaletteService,
@@ -80,18 +122,34 @@ fn publish_action(
 pub(super) async fn merge(
     service: &DatabaseCompanionActionPaletteService,
     task_id: &str,
+    merge_method: crate::github_client::PullRequestMergeMethod,
 ) -> Result<(), CompanionActionPaletteError> {
     let pull_request =
         unique_ready_pull_request(service, task_id, PullRequestReadinessStatus::ReadyToMerge)?;
-    crate::github_runtime::merge_task_pull_request(
+    let merge_result = crate::github_runtime::merge_task_pull_request(
         &service.database,
         &service.github_client,
         task_id,
         pull_request.id,
+        merge_method,
         &pull_request.head_sha,
     )
-    .await
-    .map_err(|_| CompanionActionPaletteError::TemporarilyUnavailable)?;
+    .await;
+    if let Err(error) = merge_result {
+        if let Err(refresh_error) = crate::github_poller::refresh_task_github_status_for_sidecar(
+            service.database.clone(),
+            &service.github_client,
+            service.app_event_tx.clone(),
+            task_id,
+        )
+        .await
+        {
+            log::warn!(
+                "[Companion] Failed to refresh GitHub policy after rejected merge: {refresh_error}"
+            );
+        }
+        return Err(CompanionActionPaletteError::MergeRejected(error));
+    }
     publish_action(service, task_id, pull_request.id, "merged");
     Ok(())
 }
@@ -182,6 +240,16 @@ mod tests {
                     )
                     .expect("insert pull request");
                 set_readiness(&database, id, status, action, "");
+                if status == "ready_to_merge" {
+                    database
+                        .update_pr_merge_method_policy(
+                            id,
+                            true,
+                            r#"["squash","rebase"]"#,
+                            Some("squash"),
+                        )
+                        .expect("set merge method policy");
+                }
             }
             task.id
         };

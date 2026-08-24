@@ -57,10 +57,28 @@ async fn task_actions_handler(
         return authorization_error_response(code);
     }
     match state.action_palette.available_actions(&task_id) {
-        Ok(available) => match task_action_presentations(&available) {
-            Ok(actions) => Json(CompanionTaskActionsResponse { task_id, actions }).into_response(),
-            Err(error) => action_error_response(error),
-        },
+        Ok(available) => {
+            let merge_method_policy =
+                if available.contains(&CompanionTaskActionId::MergePullRequest) {
+                    match state.action_palette.merge_method_policy(&task_id) {
+                        Ok(Some(policy)) => Some(policy),
+                        Ok(None) => {
+                            return action_error_response(
+                                CompanionActionPaletteError::TemporarilyUnavailable,
+                            )
+                        }
+                        Err(error) => return action_error_response(error),
+                    }
+                } else {
+                    None
+                };
+            match task_action_presentations(&available, merge_method_policy.as_ref()) {
+                Ok(actions) => {
+                    Json(CompanionTaskActionsResponse { task_id, actions }).into_response()
+                }
+                Err(error) => action_error_response(error),
+            }
+        }
         Err(error) => action_error_response(error),
     }
 }
@@ -85,6 +103,41 @@ async fn project_actions_handler(
         Err(error) => action_error_response(error),
     }
 }
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompanionMergeRequest {
+    merge_method: crate::github_client::PullRequestMergeMethod,
+}
+
+async fn merge_handler(
+    State(state): State<CompanionRouterState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+    let request = match serde_json::from_slice::<CompanionMergeRequest>(&body) {
+        Ok(request) => request,
+        Err(_) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                CompanionErrorCode::InvalidRequest,
+                "Companion merge action requires a valid mergeMethod",
+            )
+        }
+    };
+    match state
+        .action_palette
+        .merge_pull_request(&task_id, request.merge_method)
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => action_error_response(error),
+    }
+}
+
 macro_rules! task_action_handler {
     ($name:ident, $action:expr) => {
         async fn $name(
@@ -116,7 +169,6 @@ task_action_handler!(
     return_to_board_handler,
     CompanionTaskActionId::ReturnToBoard
 );
-task_action_handler!(merge_handler, CompanionTaskActionId::MergePullRequest);
 task_action_handler!(enqueue_handler, CompanionTaskActionId::EnqueuePullRequest);
 task_action_handler!(run_app_handler, CompanionTaskActionId::RunApp);
 
@@ -152,6 +204,11 @@ fn action_error_response(error: CompanionActionPaletteError) -> Response {
             StatusCode::CONFLICT,
             CompanionErrorCode::InvalidTaskState,
             "Action is no longer available for the current Task state",
+        ),
+        CompanionActionPaletteError::MergeRejected(message) => error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::InvalidTaskState,
+            &message,
         ),
         CompanionActionPaletteError::TemporarilyUnavailable => error_response(
             StatusCode::SERVICE_UNAVAILABLE,

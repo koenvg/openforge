@@ -57,6 +57,7 @@ final class MobileActionPalettePresentationModel extends ChangeNotifier {
     if (_pendingActionId != null) return;
     final confirm = _onConfirm;
     if (action.requiresConfirmation &&
+        action.selectedMergeMethod == null &&
         (confirm == null || !await confirm(action))) {
       return;
     }

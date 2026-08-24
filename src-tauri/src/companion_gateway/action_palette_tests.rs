@@ -1,9 +1,9 @@
 use super::{
     action_palette::{
         execute_task_action, CompanionActionPaletteError, CompanionActionPaletteFuture,
-        CompanionActionPaletteService, CompanionActionPaletteTaskAction, CompanionProjectActionId,
-        CompanionTaskActionExecutionOwner, CompanionTaskActionId,
-        DatabaseCompanionActionPaletteService,
+        CompanionActionPaletteService, CompanionActionPaletteTaskAction,
+        CompanionMergeMethodPolicy, CompanionProjectActionId, CompanionTaskActionExecutionOwner,
+        CompanionTaskActionId, DatabaseCompanionActionPaletteService,
     },
     attention::UnavailableCompanionAttentionSource,
     contract::{
@@ -44,6 +44,7 @@ use tower::ServiceExt;
 struct RecordingActionPalette {
     calls: Mutex<Vec<(String, String)>>,
     refresh_error: Option<CompanionActionPaletteError>,
+    merge_error: Option<CompanionActionPaletteError>,
 }
 
 impl RecordingActionPalette {
@@ -55,6 +56,15 @@ impl RecordingActionPalette {
         Self {
             calls: Mutex::new(Vec::new()),
             refresh_error: Some(error),
+            merge_error: None,
+        }
+    }
+
+    fn with_merge_error(error: CompanionActionPaletteError) -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+            refresh_error: None,
+            merge_error: Some(error),
         }
     }
 }
@@ -72,6 +82,36 @@ impl CompanionActionPaletteService for RecordingActionPalette {
             CompanionTaskActionId::SetAsideTask,
             CompanionTaskActionId::CompleteTask,
         ])
+    }
+
+    fn merge_method_policy(
+        &self,
+        _task_id: &str,
+    ) -> Result<Option<CompanionMergeMethodPolicy>, CompanionActionPaletteError> {
+        Ok(Some(CompanionMergeMethodPolicy {
+            allowed: vec![
+                crate::github_client::PullRequestMergeMethod::Squash,
+                crate::github_client::PullRequestMergeMethod::Rebase,
+            ],
+            default: Some(crate::github_client::PullRequestMergeMethod::Squash),
+        }))
+    }
+
+    fn merge_pull_request<'a>(
+        &'a self,
+        task_id: &'a str,
+        merge_method: crate::github_client::PullRequestMergeMethod,
+    ) -> CompanionActionPaletteFuture<'a> {
+        Box::pin(async move {
+            if let Some(error) = self.merge_error.clone() {
+                return Err(error);
+            }
+            self.calls.lock().expect("calls lock").push((
+                task_id.to_string(),
+                format!("merge_pull_request:{}", merge_method.as_str()),
+            ));
+            Ok(())
+        })
     }
 
     fn available_project_actions(
@@ -103,7 +143,7 @@ impl CompanionActionPaletteService for RecordingActionPalette {
 
     fn refresh_github(&self) -> CompanionActionPaletteFuture<'_> {
         Box::pin(async move {
-            if let Some(error) = self.refresh_error {
+            if let Some(error) = self.refresh_error.clone() {
                 return Err(error);
             }
             self.calls
@@ -385,8 +425,10 @@ async fn task_actions_snapshot_is_typed_ordered_and_task_scoped() {
                     "label": "Merge Pull Request",
                     "keywords": ["merge", "pull request", "pr", "github"],
                     "icon": "merge",
-                    "requiresConfirmation": false,
-                    "destructive": false
+                    "requiresConfirmation": true,
+                    "destructive": false,
+                    "mergeMethods": ["squash", "rebase"],
+                    "defaultMergeMethod": "squash"
                 },
                 {
                     "id": "complete_task",
@@ -406,6 +448,56 @@ async fn task_actions_snapshot_is_typed_ordered_and_task_scoped() {
                 }
             ]
         })
+    );
+}
+
+#[tokio::test]
+async fn companion_merge_route_requires_and_dispatches_selected_method() {
+    let actions = Arc::new(RecordingActionPalette::default());
+    let response = router(actions.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/companion/v1/tasks/T-merge/merge")
+                .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"mergeMethod":"squash"}"#))
+                .expect("merge request"),
+        )
+        .await
+        .expect("router response");
+
+    assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
+    assert!(actions.calls().contains(&(
+        "T-merge".to_string(),
+        "merge_pull_request:squash".to_string()
+    )));
+}
+
+#[tokio::test]
+async fn companion_merge_route_surfaces_github_rejection_message() {
+    let actions = Arc::new(RecordingActionPalette::with_merge_error(
+        CompanionActionPaletteError::MergeRejected(
+            "Merge commits are not allowed on this repository.".to_string(),
+        ),
+    ));
+    let response = router(actions)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/companion/v1/tasks/T-merge/merge")
+                .header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"mergeMethod":"merge"}"#))
+                .expect("merge request"),
+        )
+        .await
+        .expect("router response");
+
+    assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(response).await["error"]["message"],
+        "Merge commits are not allowed on this repository."
     );
 }
 
@@ -444,7 +536,6 @@ async fn explicit_task_and_global_action_routes_dispatch_without_request_bodies(
             "T-2",
             "return_to_board",
         ),
-        ("/companion/v1/tasks/T-3/merge", "T-3", "merge_pull_request"),
         (
             "/companion/v1/tasks/T-4/enqueue",
             "T-4",
