@@ -22,6 +22,7 @@ import { assertLocalId, isNonEmptyString, requireAgentInvocationContext, Runtime
 export class PluginHostRuntime {
   private readonly lifecycle: BackendLifecycle
   private readonly hostCallbacks: HostCallbackHandler | null
+  private readonly invocationTails = new Map<string, Promise<void>>()
 
   constructor(options: RuntimeOptions = {}) {
     this.hostCallbacks = options.hostCallbacks ?? null
@@ -153,6 +154,27 @@ export class PluginHostRuntime {
     return this.lifecycle.snapshot(pluginId)
   }
 
+  private async serializePluginInvocation<T>(
+    pluginId: string,
+    invoke: () => Promise<T>,
+  ): Promise<T> {
+    const preceding = this.invocationTails.get(pluginId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => { release = resolve })
+    const tail = preceding.catch(() => undefined).then(() => current)
+    this.invocationTails.set(pluginId, tail)
+
+    await preceding.catch(() => undefined)
+    try {
+      return await invoke()
+    } finally {
+      release()
+      if (this.invocationTails.get(pluginId) === tail) {
+        this.invocationTails.delete(pluginId)
+      }
+    }
+  }
+
   async handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
     if (request.jsonrpc !== '2.0' || typeof request.id !== 'number') {
       return { jsonrpc: '2.0', id: request.id, error: { code: -32600, message: 'Invalid request' } }
@@ -172,12 +194,21 @@ export class PluginHostRuntime {
           return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
         case 'plugin.commands.list':
           return { jsonrpc: '2.0', id: request.id, result: await this.listAgentCommands(this.requireActivationParams(params)) }
-        case 'plugin.commands.invoke':
-          return { jsonrpc: '2.0', id: request.id, result: await this.invokeAgentCommand(this.requireAgentCommandParams(params)) }
-        case 'plugin.backend.invoke':
-          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
-        default:
-          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
+        case 'plugin.commands.invoke': {
+          const input = this.requireAgentCommandParams(params)
+          const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeAgentCommand(input))
+          return { jsonrpc: '2.0', id: request.id, result }
+        }
+        case 'plugin.backend.invoke': {
+          const input = this.requireInvokeParams(params, method)
+          const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeBackend(input))
+          return { jsonrpc: '2.0', id: request.id, result }
+        }
+        default: {
+          const input = this.requireInvokeParams(params, method)
+          const result = await this.serializePluginInvocation(input.pluginId, () => this.invokeBackend(input))
+          return { jsonrpc: '2.0', id: request.id, result }
+        }
       }
     } catch (error) {
       return {

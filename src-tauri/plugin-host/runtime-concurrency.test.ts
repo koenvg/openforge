@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPluginHostRuntime } from './index'
 import { writeBackendModule } from './backend-module.test-fixtures'
 
@@ -77,7 +77,64 @@ describe('plugin-host backend concurrency', () => {
     })
   })
 
-  it('does not let a long-running backend handler block another plugin from becoming ready', async () => {
+  it('serializes backend invocations for one plugin', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('work', {
+            async handler(payload) {
+              globalThis.__samePluginInvocationOrder.push('start:' + payload.label)
+              if (payload.label === 'first') await globalThis.__samePluginInvocationGate
+              globalThis.__samePluginInvocationOrder.push('end:' + payload.label)
+              return payload.label
+            }
+          }))
+        }
+      }
+    `)
+    const globals = globalThis as typeof globalThis & {
+      __samePluginInvocationOrder: string[]
+      __samePluginInvocationGate?: Promise<void>
+    }
+    let releaseFirst: () => void = () => undefined
+    globals.__samePluginInvocationOrder = []
+    globals.__samePluginInvocationGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const runtime = createPluginHostRuntime()
+    const request = (id: number, label: string) => runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id,
+      method: 'plugin.backend.invoke',
+      params: { pluginId: 'bounded', backendPath, command: 'work', payload: { label } },
+    })
+
+    const first = request(1, 'first')
+    const second = request(2, 'second')
+    try {
+      await vi.waitFor(() => {
+        expect(globals.__samePluginInvocationOrder).toEqual(['start:first'])
+      })
+      expect(globals.__samePluginInvocationOrder).toEqual(['start:first'])
+
+      releaseFirst()
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        { jsonrpc: '2.0', id: 1, result: 'first' },
+        { jsonrpc: '2.0', id: 2, result: 'second' },
+      ])
+      expect(globals.__samePluginInvocationOrder).toEqual([
+        'start:first',
+        'end:first',
+        'start:second',
+        'end:second',
+      ])
+    } finally {
+      releaseFirst()
+      await Promise.allSettled([first, second])
+      delete globals.__samePluginInvocationGate
+      delete (globals as Partial<typeof globals>).__samePluginInvocationOrder
+    }
+  })
+
+  it('does not let a long-running backend handler block another plugin invocation', async () => {
     const blockingBackendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
@@ -107,14 +164,20 @@ describe('plugin-host backend concurrency', () => {
     const started = new Promise<void>((resolve) => { markStarted = resolve })
     globals.__markBlockingHandlerStarted = markStarted
 
-    const blockingCall = runtime.invokeBackend({
-      pluginId: 'blocking',
-      backendPath: blockingBackendPath,
-      command: 'block',
+    const blockingCall = runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 10,
+      method: 'plugin.backend.invoke',
+      params: { pluginId: 'blocking', backendPath: blockingBackendPath, command: 'block' },
     })
     await started
 
-    const readiness = runtime.whenBackendReady({ pluginId: 'ready', backendPath: readyBackendPath })
+    const readiness = runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 11,
+      method: 'plugin.backend.invoke',
+      params: { pluginId: 'ready', backendPath: readyBackendPath, command: 'ping' },
+    })
     let readinessOutcome: 'ready' | 'blocked'
     let blockedTimer: ReturnType<typeof setTimeout> | undefined
     try {
@@ -128,7 +191,7 @@ describe('plugin-host backend concurrency', () => {
       if (blockedTimer) clearTimeout(blockedTimer)
       globals.__releaseBlockingHandler?.()
       await blockingCall
-      await readiness
+      await expect(readiness).resolves.toEqual({ jsonrpc: '2.0', id: 11, result: 'pong' })
       delete globals.__markBlockingHandlerStarted
       delete globals.__releaseBlockingHandler
     }
