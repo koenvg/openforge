@@ -1,41 +1,16 @@
 use super::task_labels::TaskLabelRow;
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TaskInitialPromptUpdateError {
+    #[error("task {0} does not exist")]
     NotFound(String),
+    #[error("task {0} has already started; create a replacement task instead")]
     AlreadyStarted(String),
-    Database(rusqlite::Error),
-}
-
-impl fmt::Display for TaskInitialPromptUpdateError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotFound(task_id) => write!(formatter, "task {task_id} does not exist"),
-            Self::AlreadyStarted(task_id) => write!(
-                formatter,
-                "task {task_id} has already started; create a replacement task instead"
-            ),
-            Self::Database(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for TaskInitialPromptUpdateError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Database(error) => Some(error),
-            Self::NotFound(_) | Self::AlreadyStarted(_) => None,
-        }
-    }
-}
-
-impl From<rusqlite::Error> for TaskInitialPromptUpdateError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Database(error)
-    }
+    #[error("{0}")]
+    Database(#[from] rusqlite::Error),
 }
 
 /// Task row from database
@@ -188,9 +163,28 @@ impl super::Database {
 mod tests {
     use crate::db::test_helpers::*;
     use std::{
+        error::Error as _,
         sync::{Arc, Barrier},
         thread,
     };
+    #[test]
+    fn task_initial_prompt_update_error_preserves_sources_and_from_conversion() {
+        let error = super::TaskInitialPromptUpdateError::from(rusqlite::Error::InvalidQuery);
+        assert!(matches!(
+            &error,
+            super::TaskInitialPromptUpdateError::Database(rusqlite::Error::InvalidQuery)
+        ));
+        assert_eq!(error.to_string(), rusqlite::Error::InvalidQuery.to_string());
+        assert!(error
+            .source()
+            .expect("database error must be the source")
+            .downcast_ref::<rusqlite::Error>()
+            .is_some());
+
+        let domain_error = super::TaskInitialPromptUpdateError::NotFound("T-404".to_string());
+        assert!(domain_error.source().is_none());
+    }
+
     #[test]
     fn test_update_task_initial_prompt_replaces_prompt_atomically_and_preserves_relationships() {
         let (db, _temp_dir) = make_test_db("update_task_initial_prompt_preserves_metadata");

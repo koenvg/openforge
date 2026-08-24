@@ -5,13 +5,16 @@ use super::{
     TaskLabelPersistenceError,
 };
 use rusqlite::{OptionalExtension, Result};
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TaskCreationError {
-    Storage(rusqlite::Error),
-    Dependencies(TaskDependencyPersistenceError),
-    Labels(TaskLabelPersistenceError),
+    #[error("{0}")]
+    Storage(#[from] rusqlite::Error),
+    #[error("{0}")]
+    Dependencies(#[source] TaskDependencyPersistenceError),
+    #[error("{0}")]
+    Labels(#[source] TaskLabelPersistenceError),
 }
 
 impl TaskCreationError {
@@ -35,32 +38,6 @@ impl TaskCreationError {
             Self::Dependencies(error) => error.into_database_error(),
             Self::Labels(error) => error.into_database_error(),
         }
-    }
-}
-
-impl fmt::Display for TaskCreationError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Storage(error) => error.fmt(formatter),
-            Self::Dependencies(error) => error.fmt(formatter),
-            Self::Labels(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for TaskCreationError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Storage(error) => Some(error),
-            Self::Dependencies(error) => Some(error),
-            Self::Labels(error) => Some(error),
-        }
-    }
-}
-
-impl From<rusqlite::Error> for TaskCreationError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Storage(error)
     }
 }
 
@@ -378,7 +355,44 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::test_helpers::*;
+    use crate::db::{test_helpers::*, TaskDependencyPersistenceError, TaskLabelPersistenceError};
+    use std::error::Error as _;
+
+    #[test]
+    fn task_creation_error_preserves_sources_and_from_conversion() {
+        let storage_error = super::TaskCreationError::from(rusqlite::Error::InvalidQuery);
+        assert!(matches!(
+            &storage_error,
+            super::TaskCreationError::Storage(rusqlite::Error::InvalidQuery)
+        ));
+        assert_eq!(
+            storage_error.to_string(),
+            rusqlite::Error::InvalidQuery.to_string()
+        );
+        assert!(storage_error
+            .source()
+            .expect("storage error must be the source")
+            .downcast_ref::<rusqlite::Error>()
+            .is_some());
+
+        let dependency_error = super::TaskCreationError::Dependencies(
+            TaskDependencyPersistenceError::TaskNotFound("T-404".to_string()),
+        );
+        assert_eq!(dependency_error.to_string(), "task T-404 does not exist");
+        assert!(dependency_error
+            .source()
+            .expect("dependency error must be the source")
+            .downcast_ref::<TaskDependencyPersistenceError>()
+            .is_some());
+
+        let label_error = super::TaskCreationError::Labels(TaskLabelPersistenceError::BlankName);
+        assert_eq!(label_error.to_string(), "label name is required");
+        assert!(label_error
+            .source()
+            .expect("label error must be the source")
+            .downcast_ref::<TaskLabelPersistenceError>()
+            .is_some());
+    }
 
     #[test]
     fn test_create_task_with_prompt() {
