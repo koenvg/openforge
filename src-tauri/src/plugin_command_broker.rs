@@ -167,7 +167,11 @@ impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
         plugin_id: &'a str,
         project_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<AgentCommandDescriptor>, String>> {
-        Box::pin(async move { self.agent_command_descriptors(plugin_id, project_id).await })
+        Box::pin(async move {
+            self.agent_command_descriptors(plugin_id, project_id)
+                .await
+                .map_err(|error| error.to_string())
+        })
     }
 
     fn invoke_agent_command<'a>(
@@ -181,6 +185,7 @@ impl BackendAgentCommandCatalog for crate::plugin_platform::PluginPlatform<'_> {
         Box::pin(async move {
             self.invoke_agent_command(plugin_id, project_id, command_id, input, context)
                 .await
+                .map_err(|error| error.to_string())
         })
     }
 }

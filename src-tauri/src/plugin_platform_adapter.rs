@@ -1,4 +1,7 @@
-use crate::{http_server::AppState, plugin_platform::PluginPlatform};
+use crate::{
+    http_server::AppState,
+    plugin_platform::{PluginPlatform, PluginPlatformError},
+};
 use axum::http::StatusCode;
 use std::path::PathBuf;
 
@@ -60,38 +63,30 @@ fn missing_app_data_message(transport: PluginPlatformTransport) -> String {
 }
 
 pub(crate) fn plugin_platform_error_status(
-    message: &str,
+    error: &PluginPlatformError,
     transport: PluginPlatformTransport,
 ) -> StatusCode {
-    if message.starts_with("Unknown plugin:") {
-        StatusCode::NOT_FOUND
-    } else if message.contains("built-in plugin")
-        || message.contains("sourceKind builtin")
-        || message.contains("sourceSpec to match")
-        || http_only_app_data_error(message, transport)
-        || message.contains("backend not configured")
-        || message.contains("backend entry")
-        || message.contains("install root")
-        || message.contains("enablement is required")
-    {
-        StatusCode::BAD_REQUEST
-    } else if message.contains("plugin host state is not available") {
-        StatusCode::SERVICE_UNAVAILABLE
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
+    match error {
+        PluginPlatformError::NotFound(_) => StatusCode::NOT_FOUND,
+        PluginPlatformError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+        PluginPlatformError::AppDataDirRequired(_)
+            if transport == PluginPlatformTransport::HttpPluginManagement =>
+        {
+            StatusCode::BAD_REQUEST
+        }
+        PluginPlatformError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+        PluginPlatformError::AppDataDirRequired(_) | PluginPlatformError::Internal(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
-fn http_only_app_data_error(message: &str, transport: PluginPlatformTransport) -> bool {
-    transport == PluginPlatformTransport::HttpPluginManagement
-        && message.contains("app data directory is required")
-}
-
 pub(crate) fn map_plugin_platform_error(
-    message: String,
+    error: PluginPlatformError,
     transport: PluginPlatformTransport,
 ) -> (StatusCode, String) {
-    (plugin_platform_error_status(&message, transport), message)
+    let status = plugin_platform_error_status(&error, transport);
+    (status, error.to_string())
 }
 
 #[cfg(test)]
@@ -99,63 +94,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn error_status_maps_common_plugin_platform_messages_for_both_transports() {
+    fn error_status_follows_the_error_variant_not_its_message() {
+        let message = "Unknown plugin: misleading text";
+        let cases = [
+            (
+                PluginPlatformError::not_found(message),
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                PluginPlatformError::invalid_request(message),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                PluginPlatformError::unavailable(message),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                PluginPlatformError::internal(message),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+
         for transport in [
             PluginPlatformTransport::AppInvoke,
             PluginPlatformTransport::HttpPluginManagement,
         ] {
-            assert_eq!(
-                plugin_platform_error_status("Unknown plugin: plugin.test", transport),
-                StatusCode::NOT_FOUND
-            );
-            assert_eq!(
-                plugin_platform_error_status("built-in plugin registration rejected", transport),
-                StatusCode::BAD_REQUEST
-            );
-            assert_eq!(
-                plugin_platform_error_status("sourceKind builtin is reserved", transport),
-                StatusCode::BAD_REQUEST
-            );
-            assert_eq!(
-                plugin_platform_error_status("sourceSpec to match plugin id", transport),
-                StatusCode::BAD_REQUEST
-            );
-            assert_eq!(
-                plugin_platform_error_status("backend not configured for plugin.test", transport),
-                StatusCode::BAD_REQUEST
-            );
-            assert_eq!(
-                plugin_platform_error_status(
-                    "backend entry must stay within the plugin install root",
-                    transport,
-                ),
-                StatusCode::BAD_REQUEST
-            );
-            assert_eq!(
-                plugin_platform_error_status("plugin host state is not available", transport),
-                StatusCode::SERVICE_UNAVAILABLE
-            );
-            assert_eq!(
-                plugin_platform_error_status("unexpected plugin failure", transport),
-                StatusCode::INTERNAL_SERVER_ERROR
-            );
+            for (error, expected_status) in &cases {
+                assert_eq!(
+                    plugin_platform_error_status(error, transport),
+                    *expected_status
+                );
+            }
         }
     }
 
     #[test]
     fn error_status_preserves_http_only_app_data_directory_contract() {
+        let error = PluginPlatformError::app_data_dir_required(
+            "app data directory is required to install plugins",
+        );
+
         assert_eq!(
-            plugin_platform_error_status(
-                "app data directory is required to install plugins",
-                PluginPlatformTransport::HttpPluginManagement,
-            ),
+            plugin_platform_error_status(&error, PluginPlatformTransport::HttpPluginManagement,),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            plugin_platform_error_status(
-                "app data directory is required to install plugins",
-                PluginPlatformTransport::AppInvoke,
-            ),
+            plugin_platform_error_status(&error, PluginPlatformTransport::AppInvoke),
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }

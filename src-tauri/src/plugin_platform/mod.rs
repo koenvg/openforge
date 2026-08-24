@@ -1,6 +1,7 @@
 mod asset_resolution;
 mod backend_runtime;
 mod enablement;
+mod error;
 mod lifecycle;
 mod storage;
 
@@ -12,6 +13,7 @@ use std::{path::PathBuf, sync::Mutex};
     reason = "preserve the existing plugin_platform::PluginAssetRoot path"
 )]
 pub(crate) use asset_resolution::PluginAssetRoot;
+pub(crate) use error::{PluginPlatformError, PluginPlatformResult};
 pub(crate) use lifecycle::PluginLifecycleLocks;
 pub(crate) use storage::PluginStorageScope;
 

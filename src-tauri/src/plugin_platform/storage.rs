@@ -1,4 +1,4 @@
-use super::PluginPlatform;
+use super::{PluginPlatform, PluginPlatformError, PluginPlatformResult};
 use crate::db;
 use serde_json::Value;
 
@@ -13,7 +13,7 @@ enum PluginStorageScopeKind<'a> {
 }
 
 impl<'a> PluginStorageScope<'a> {
-    pub(crate) fn parse(scope: &'a str, scope_id: Option<&'a str>) -> Result<Self, String> {
+    pub(crate) fn parse(scope: &'a str, scope_id: Option<&'a str>) -> PluginPlatformResult<Self> {
         match (scope, scope_id) {
             ("global", _) => Ok(Self(PluginStorageScopeKind::Global)),
             ("project", Some(scope_id)) if !scope_id.is_empty() => {
@@ -22,10 +22,12 @@ impl<'a> PluginStorageScope<'a> {
             ("task", Some(scope_id)) if !scope_id.is_empty() => {
                 Ok(Self(PluginStorageScopeKind::Task(scope_id)))
             }
-            ("project" | "task", _) => {
-                Err(format!("Plugin storage scope '{scope}' requires scopeId"))
-            }
-            _ => Err(format!("Unsupported plugin storage scope: {scope}")),
+            ("project" | "task", _) => Err(PluginPlatformError::internal(format!(
+                "Plugin storage scope '{scope}' requires scopeId"
+            ))),
+            _ => Err(PluginPlatformError::internal(format!(
+                "Unsupported plugin storage scope: {scope}"
+            ))),
         }
     }
 
@@ -44,12 +46,14 @@ impl PluginPlatform<'_> {
         plugin_id: &str,
         scope: &PluginStorageScope<'_>,
         key: &str,
-    ) -> Result<Option<Value>, String> {
+    ) -> PluginPlatformResult<Option<Value>> {
         let (scope, scope_id) = scope.as_db_parts();
         let db = db::acquire_db(self.db);
         let raw = db
             .get_plugin_storage(plugin_id, scope, scope_id, key)
-            .map_err(|error| format!("Failed to get plugin storage: {error}"))?;
+            .map_err(|error| {
+                PluginPlatformError::internal(format!("Failed to get plugin storage: {error}"))
+            })?;
         Ok(raw.map(|value| serde_json::from_str(&value).unwrap_or(Value::String(value))))
     }
 
@@ -59,13 +63,18 @@ impl PluginPlatform<'_> {
         scope: &PluginStorageScope<'_>,
         key: &str,
         value: &Value,
-    ) -> Result<(), String> {
+    ) -> PluginPlatformResult<()> {
         let (scope, scope_id) = scope.as_db_parts();
-        let serialized = serde_json::to_string(value)
-            .map_err(|error| format!("Failed to serialize plugin storage value: {error}"))?;
+        let serialized = serde_json::to_string(value).map_err(|error| {
+            PluginPlatformError::internal(format!(
+                "Failed to serialize plugin storage value: {error}"
+            ))
+        })?;
         let db = db::acquire_db(self.db);
         db.set_plugin_storage(plugin_id, scope, scope_id, key, &serialized)
-            .map_err(|error| format!("Failed to set plugin storage: {error}"))
+            .map_err(|error| {
+                PluginPlatformError::internal(format!("Failed to set plugin storage: {error}"))
+            })
     }
 
     pub(crate) fn delete_plugin_storage(
@@ -73,11 +82,13 @@ impl PluginPlatform<'_> {
         plugin_id: &str,
         scope: &PluginStorageScope<'_>,
         key: &str,
-    ) -> Result<(), String> {
+    ) -> PluginPlatformResult<()> {
         let (scope, scope_id) = scope.as_db_parts();
         let db = db::acquire_db(self.db);
         db.delete_plugin_storage(plugin_id, scope, scope_id, key)
-            .map_err(|error| format!("Failed to delete plugin storage: {error}"))
+            .map_err(|error| {
+                PluginPlatformError::internal(format!("Failed to delete plugin storage: {error}"))
+            })
     }
 }
 
@@ -123,9 +134,11 @@ mod tests {
             ("task", None),
             ("task", Some("")),
         ] {
+            let error = PluginStorageScope::parse(kind, scope_id)
+                .expect_err("scoped storage without an id should fail");
             assert_eq!(
-                PluginStorageScope::parse(kind, scope_id),
-                Err(format!("Plugin storage scope '{kind}' requires scopeId"))
+                error.to_string(),
+                format!("Plugin storage scope '{kind}' requires scopeId")
             );
         }
     }

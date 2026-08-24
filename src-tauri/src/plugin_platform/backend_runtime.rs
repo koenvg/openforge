@@ -1,4 +1,4 @@
-use super::PluginPlatform;
+use super::{PluginPlatform, PluginPlatformError, PluginPlatformResult};
 use crate::plugin_host::PluginHost;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -9,12 +9,12 @@ struct InstalledBackend<'a> {
 }
 
 impl PluginPlatform<'_> {
-    fn plugin_host(&self) -> Result<&PluginHost, String> {
+    fn plugin_host(&self) -> PluginPlatformResult<&PluginHost> {
         self.plugin_host
-            .ok_or_else(|| "plugin host state is not available".to_string())
+            .ok_or_else(|| PluginPlatformError::unavailable("plugin host state is not available"))
     }
 
-    fn installed_backend(&self, plugin_id: &str) -> Result<InstalledBackend<'_>, String> {
+    fn installed_backend(&self, plugin_id: &str) -> PluginPlatformResult<InstalledBackend<'_>> {
         let path = self.resolve_installed_backend_path(plugin_id)?;
         let plugin_host = self.plugin_host()?;
 
@@ -26,13 +26,14 @@ impl PluginPlatform<'_> {
         plugin_id: &str,
         command: &str,
         payload: Value,
-    ) -> Result<Value, String> {
+    ) -> PluginPlatformResult<Value> {
         let backend = self.installed_backend(plugin_id)?;
 
         backend
             .plugin_host
             .invoke_backend(plugin_id, command, &backend.path, payload)
             .await
+            .map_err(PluginPlatformError::internal)
     }
 
     pub(crate) async fn backend_when_ready(
@@ -40,7 +41,7 @@ impl PluginPlatform<'_> {
         plugin_id: &str,
         project_id: Option<&str>,
         preserve_activation: bool,
-    ) -> Result<Value, String> {
+    ) -> PluginPlatformResult<Value> {
         let backend_path = self.resolve_installed_backend_path(plugin_id)?;
         let package_metadata = self
             .plugin(plugin_id)?
@@ -56,18 +57,20 @@ impl PluginPlatform<'_> {
                 package_metadata.as_ref(),
             )
             .await
+            .map_err(PluginPlatformError::internal)
     }
 
     pub(crate) async fn agent_command_descriptors(
         &self,
         plugin_id: &str,
         project_id: &str,
-    ) -> Result<Vec<crate::plugin_command_broker::AgentCommandDescriptor>, String> {
+    ) -> PluginPlatformResult<Vec<crate::plugin_command_broker::AgentCommandDescriptor>> {
         let backend = self.installed_backend(plugin_id)?;
         backend
             .plugin_host
             .list_agent_commands(plugin_id, &backend.path, project_id)
             .await
+            .map_err(PluginPlatformError::internal)
     }
 
     pub(crate) async fn invoke_agent_command(
@@ -77,7 +80,7 @@ impl PluginPlatform<'_> {
         command_id: &str,
         input: Option<Value>,
         context: crate::plugin_command_broker::PluginCommandInvocationContext,
-    ) -> Result<Value, String> {
+    ) -> PluginPlatformResult<Value> {
         let backend = self.installed_backend(plugin_id)?;
         backend
             .plugin_host
@@ -90,16 +93,23 @@ impl PluginPlatform<'_> {
                 context,
             )
             .await
+            .map_err(PluginPlatformError::internal)
     }
 
-    pub(crate) async fn deactivate_backend(&self, plugin_id: &str) -> Result<Value, String> {
+    pub(crate) async fn deactivate_backend(&self, plugin_id: &str) -> PluginPlatformResult<Value> {
         let plugin_host = self.plugin_host()?;
 
-        plugin_host.deactivate_backend(plugin_id).await
+        plugin_host
+            .deactivate_backend(plugin_id)
+            .await
+            .map_err(PluginPlatformError::internal)
     }
 
-    pub(crate) async fn stop_sidecar(&self) -> Result<(), String> {
+    pub(crate) async fn stop_sidecar(&self) -> PluginPlatformResult<()> {
         let plugin_host = self.plugin_host()?;
-        plugin_host.stop_sidecar().await
+        plugin_host
+            .stop_sidecar()
+            .await
+            .map_err(PluginPlatformError::internal)
     }
 }
