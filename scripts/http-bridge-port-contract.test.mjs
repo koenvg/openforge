@@ -41,7 +41,7 @@ describe('OpenForge HTTP bridge port contract', () => {
     expect(read(`${layout.backendCrateRootPath}/src/http_bridge_port_contract.rs`)).toContain(
       `pub const DEFAULT_HTTP_BRIDGE_PORT: u16 = ${DEFAULT_HTTP_BRIDGE_PORT};`,
     )
-    expect(read(`${layout.backendCrateRootPath}/src/openforge-cli/cli.js`)).toContain(
+    expect(read(`${layout.backendCrateRootPath}/src/openforge-cli/http-transport.js`)).toContain(
       `const DEFAULT_OPENFORGE_HTTP_PORT = '${DEFAULT_HTTP_BRIDGE_PORT_STRING}';`,
     )
     expect(read(`${layout.backendCrateRootPath}/src/openforge-cli/openforge-skill.md`)).toContain(
@@ -86,7 +86,8 @@ describe('OpenForge HTTP bridge port contract', () => {
     expect(targets).toEqual([
       '/repo/openforge/src/electron/httpBridgePortContract.ts',
       '/repo/openforge/crates/openforge-backend/src/http_bridge_port_contract.rs',
-      '/repo/openforge/crates/openforge-backend/src/openforge-cli/cli.js',
+      '/repo/openforge/crates/openforge-backend/src/openforge-cli/http-transport.js',
+      '/repo/openforge/crates/openforge-backend/src/openforge-cli/help.js',
       '/repo/openforge/crates/openforge-backend/src/openforge-cli/openforge-skill.md',
       '/repo/openforge/crates/openforge-backend/src/pi-extension/openforge.ts',
     ])
