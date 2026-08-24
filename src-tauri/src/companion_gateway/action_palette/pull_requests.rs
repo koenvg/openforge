@@ -108,7 +108,9 @@ pub(super) async fn enqueue(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{CompanionActionPaletteService, DatabaseCompanionActionPaletteService};
+    use super::super::{
+        execute_task_action, CompanionActionPaletteService, DatabaseCompanionActionPaletteService,
+    };
     use super::*;
     use std::sync::{Arc, Mutex};
 
@@ -201,9 +203,7 @@ mod tests {
         assert!(!actions.contains(&CompanionTaskActionId::MergePullRequest));
         assert!(actions.contains(&CompanionTaskActionId::EnqueuePullRequest));
         assert_eq!(
-            service
-                .execute(&task_id, CompanionTaskActionId::MergePullRequest)
-                .await,
+            execute_task_action(&service, &task_id, CompanionTaskActionId::MergePullRequest,).await,
             Err(CompanionActionPaletteError::InvalidTaskState)
         );
     }

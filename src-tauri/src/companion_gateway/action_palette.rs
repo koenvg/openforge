@@ -23,7 +23,60 @@ pub(crate) enum CompanionTaskActionId {
     RunApp,
 }
 
+/// Task action that `CompanionActionPaletteService` is allowed to execute directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompanionActionPaletteTaskAction {
+    MergePullRequest,
+    EnqueuePullRequest,
+    ReturnToBoard,
+    SetAsideTask,
+    RunApp,
+}
+
+impl CompanionActionPaletteTaskAction {
+    #[cfg(test)]
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::MergePullRequest => "merge_pull_request",
+            Self::EnqueuePullRequest => "enqueue_pull_request",
+            Self::ReturnToBoard => "return_to_board",
+            Self::SetAsideTask => "set_aside_task",
+            Self::RunApp => "run_app",
+        }
+    }
+}
+
+/// Service boundary responsible for executing an advertised Companion Task action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompanionTaskActionExecutionOwner {
+    ActionPalette(CompanionActionPaletteTaskAction),
+    TaskStarter,
+    TaskActions,
+}
+
 impl CompanionTaskActionId {
+    pub(crate) const fn execution_owner(self) -> CompanionTaskActionExecutionOwner {
+        match self {
+            Self::StartTask => CompanionTaskActionExecutionOwner::TaskStarter,
+            Self::MergePullRequest => CompanionTaskActionExecutionOwner::ActionPalette(
+                CompanionActionPaletteTaskAction::MergePullRequest,
+            ),
+            Self::EnqueuePullRequest => CompanionTaskActionExecutionOwner::ActionPalette(
+                CompanionActionPaletteTaskAction::EnqueuePullRequest,
+            ),
+            Self::ReturnToBoard => CompanionTaskActionExecutionOwner::ActionPalette(
+                CompanionActionPaletteTaskAction::ReturnToBoard,
+            ),
+            Self::DeleteTask | Self::CompleteTask => CompanionTaskActionExecutionOwner::TaskActions,
+            Self::SetAsideTask => CompanionTaskActionExecutionOwner::ActionPalette(
+                CompanionActionPaletteTaskAction::SetAsideTask,
+            ),
+            Self::RunApp => CompanionTaskActionExecutionOwner::ActionPalette(
+                CompanionActionPaletteTaskAction::RunApp,
+            ),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
@@ -59,6 +112,11 @@ pub(crate) enum CompanionActionPaletteError {
 pub(crate) type CompanionActionPaletteFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), CompanionActionPaletteError>> + Send + 'a>>;
 
+/// Advertises the full Mobile Action Palette and executes palette-owned actions.
+///
+/// `available_actions` also returns actions owned by `CompanionTaskStarter` and
+/// `CompanionTaskActionService`. `execute_task_action` rejects those actions so their
+/// dedicated HTTP routes must dispatch to the owning service instead.
 pub(crate) trait CompanionActionPaletteService: Send + Sync {
     fn available_actions(
         &self,
@@ -70,13 +128,29 @@ pub(crate) trait CompanionActionPaletteService: Send + Sync {
         project_id: &str,
     ) -> Result<Vec<CompanionProjectActionId>, CompanionActionPaletteError>;
 
-    fn execute<'a>(
+    fn execute_palette_action<'a>(
         &'a self,
         task_id: &'a str,
-        action: CompanionTaskActionId,
+        action: CompanionActionPaletteTaskAction,
     ) -> CompanionActionPaletteFuture<'a>;
 
     fn refresh_github(&self) -> CompanionActionPaletteFuture<'_>;
+}
+
+pub(crate) fn execute_task_action<'a>(
+    service: &'a dyn CompanionActionPaletteService,
+    task_id: &'a str,
+    action: CompanionTaskActionId,
+) -> CompanionActionPaletteFuture<'a> {
+    match action.execution_owner() {
+        CompanionTaskActionExecutionOwner::ActionPalette(action) => {
+            service.execute_palette_action(task_id, action)
+        }
+        CompanionTaskActionExecutionOwner::TaskStarter
+        | CompanionTaskActionExecutionOwner::TaskActions => {
+            Box::pin(async { Err(CompanionActionPaletteError::InvalidTaskState) })
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -132,28 +206,25 @@ impl CompanionActionPaletteService for DatabaseCompanionActionPaletteService {
         availability::project_actions(self, project_id)
     }
 
-    fn execute<'a>(
+    fn execute_palette_action<'a>(
         &'a self,
         task_id: &'a str,
-        action: CompanionTaskActionId,
+        action: CompanionActionPaletteTaskAction,
     ) -> CompanionActionPaletteFuture<'a> {
         Box::pin(async move {
             match action {
-                CompanionTaskActionId::MergePullRequest => {
+                CompanionActionPaletteTaskAction::MergePullRequest => {
                     pull_requests::merge(self, task_id).await
                 }
-                CompanionTaskActionId::EnqueuePullRequest => {
+                CompanionActionPaletteTaskAction::EnqueuePullRequest => {
                     pull_requests::enqueue(self, task_id).await
                 }
-                CompanionTaskActionId::RunApp => run_app::execute(self, task_id).await,
-                CompanionTaskActionId::SetAsideTask => task_lifecycle::set_aside(self, task_id),
-                CompanionTaskActionId::ReturnToBoard => {
-                    task_lifecycle::return_to_board(self, task_id)
+                CompanionActionPaletteTaskAction::RunApp => run_app::execute(self, task_id).await,
+                CompanionActionPaletteTaskAction::SetAsideTask => {
+                    task_lifecycle::set_aside(self, task_id)
                 }
-                CompanionTaskActionId::StartTask
-                | CompanionTaskActionId::DeleteTask
-                | CompanionTaskActionId::CompleteTask => {
-                    Err(CompanionActionPaletteError::InvalidTaskState)
+                CompanionActionPaletteTaskAction::ReturnToBoard => {
+                    task_lifecycle::return_to_board(self, task_id)
                 }
             }
         })
@@ -184,10 +255,10 @@ impl CompanionActionPaletteService for UnavailableCompanionActionPaletteService 
         Err(CompanionActionPaletteError::TemporarilyUnavailable)
     }
 
-    fn execute<'a>(
+    fn execute_palette_action<'a>(
         &'a self,
         _task_id: &'a str,
-        _action: CompanionTaskActionId,
+        _action: CompanionActionPaletteTaskAction,
     ) -> CompanionActionPaletteFuture<'a> {
         Box::pin(async { Err(CompanionActionPaletteError::TemporarilyUnavailable) })
     }

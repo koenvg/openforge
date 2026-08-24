@@ -4,7 +4,7 @@ use super::{
 };
 use crate::companion_gateway::{
     action_diagnostics::record_task_action,
-    action_palette::{CompanionActionPaletteError, CompanionTaskActionId},
+    action_palette::{execute_task_action, CompanionActionPaletteError, CompanionTaskActionId},
     action_presentation::{project_action_presentations, task_action_presentations},
 };
 use axum::{
@@ -103,7 +103,7 @@ macro_rules! task_action_handler {
                     "Companion action does not accept a request body",
                 );
             }
-            match state.action_palette.execute(&task_id, $action).await {
+            match execute_task_action(state.action_palette.as_ref(), &task_id, $action).await {
                 Ok(()) => StatusCode::NO_CONTENT.into_response(),
                 Err(error) => action_error_response(error),
             }

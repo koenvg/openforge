@@ -84,7 +84,7 @@ pub(super) async fn execute(
 #[cfg(test)]
 mod tests {
     use super::super::{
-        CompanionActionPaletteService, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
+        execute_task_action, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
     };
     use super::*;
     use std::sync::{Arc, Mutex};
@@ -133,8 +133,7 @@ mod tests {
             None,
         );
 
-        service
-            .execute(&task_id, CompanionTaskActionId::RunApp)
+        execute_task_action(&service, &task_id, CompanionTaskActionId::RunApp)
             .await
             .expect("Run app");
         let shell_key = format!("{task_id}-shell-0");

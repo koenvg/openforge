@@ -80,7 +80,7 @@ pub(super) fn return_to_board(
 #[cfg(test)]
 mod tests {
     use super::super::{
-        CompanionActionPaletteService, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
+        execute_task_action, CompanionTaskActionId, DatabaseCompanionActionPaletteService,
     };
     use super::*;
     use std::sync::{Arc, Mutex};
@@ -113,8 +113,7 @@ mod tests {
             Some(events.sender()),
         );
 
-        service
-            .execute(&doing_id, CompanionTaskActionId::SetAsideTask)
+        execute_task_action(&service, &doing_id, CompanionTaskActionId::SetAsideTask)
             .await
             .expect("set aside");
         let crate::app_events::AppEventFrame::Event(event) =
@@ -134,8 +133,7 @@ mod tests {
             vec![doing_id.clone()]
         );
 
-        service
-            .execute(&doing_id, CompanionTaskActionId::ReturnToBoard)
+        execute_task_action(&service, &doing_id, CompanionTaskActionId::ReturnToBoard)
             .await
             .expect("return to Board");
         assert_eq!(
@@ -146,9 +144,7 @@ mod tests {
             Some("[]")
         );
         assert_eq!(
-            service
-                .execute(&backlog_id, CompanionTaskActionId::SetAsideTask)
-                .await,
+            execute_task_action(&service, &backlog_id, CompanionTaskActionId::SetAsideTask,).await,
             Err(CompanionActionPaletteError::InvalidTaskState)
         );
     }
