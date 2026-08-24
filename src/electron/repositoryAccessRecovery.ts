@@ -1,11 +1,6 @@
+import { payloadString } from './ipcPayloadReaders.js'
 import { forwardToSidecar } from './rustSidecarForwarder.js'
 import type { ElectronInvokeDeps } from './backendBridge.js'
-
-function payloadString(payload: unknown, key: string): string | null {
-  if (typeof payload !== 'object' || payload === null) return null
-  const value = (payload as Record<string, unknown>)[key]
-  return typeof value === 'string' && value.trim() !== '' ? value : null
-}
 
 function isRepositoryAccessFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
