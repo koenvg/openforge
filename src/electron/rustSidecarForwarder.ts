@@ -93,6 +93,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_file_content_base64',
   'get_file_at_ref',
   'get_file_at_ref_base64',
+  'resolve_github_asset',
   'get_review_comments',
   'get_pr_overview_comments',
   'submit_pr_review',

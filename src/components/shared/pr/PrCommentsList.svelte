@@ -6,10 +6,13 @@
   import { openUrl } from '../../../lib/ipc'
   import { timeAgo } from '../../../lib/timeAgo'
   import MarkdownContent from '../adapters/MarkdownContent.svelte'
+  import type { ResolvedMarkdownMedia } from '../../../lib/markdown'
 
   interface Props {
     comments: PrComment[]
     imageBaseUrlForComment?: (comment: PrComment) => string | null
+    /** Exchange a GitHub upload URL for one this app can render (images and recordings). */
+    resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onMarkAddressed?: (commentId: number) => void | Promise<void>
     showLocation?: boolean
     showMarkAddressed?: boolean
@@ -41,6 +44,7 @@
   let {
     comments,
     imageBaseUrlForComment = () => null,
+    resolveRemoteMedia,
     onMarkAddressed,
     showLocation = false,
     showMarkAddressed = false,
@@ -160,7 +164,7 @@
     <div class={density === 'compact'
       ? 'text-xs text-base-content/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0'
       : 'text-xs text-base-content/75 leading-relaxed break-words [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:my-1'}>
-      <MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrlForComment(comment)} />
+      <MarkdownContent content={comment.body} imageBaseUrl={imageBaseUrlForComment(comment)} {resolveRemoteMedia} />
     </div>
     {#if addressingError(comment.id)}
       <p class="m-0 text-xs text-error" role="alert">{addressingError(comment.id)}</p>

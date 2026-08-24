@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import type { PrComment } from '../../../lib/types'
 import PrCommentsList from './PrCommentsList.svelte'
@@ -60,5 +60,23 @@ describe('PrCommentsList author filter', () => {
       },
     })
     expect(screen.getByText('Outdated')).toBeTruthy()
+  })
+
+  it('shows uploads pasted into a comment once they are resolved', async () => {
+    const uploadUrl = 'https://github.com/user-attachments/assets/upload-id'
+    const signedUrl = 'https://cdn.example.com/shot.png?jwt=signed'
+    const resolveRemoteMedia = vi.fn(async () => ({ url: signedUrl, kind: 'image' as const }))
+
+    render(PrCommentsList, {
+      props: {
+        comments: [makeComment({ id: 4, body: `![Screenshot](${uploadUrl})` })],
+        resolveRemoteMedia,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'Screenshot' }).getAttribute('src')).toBe(signedUrl)
+    })
+    expect(resolveRemoteMedia).toHaveBeenCalledWith(uploadUrl)
   })
 })

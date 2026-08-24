@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import type { ReviewPullRequest, PrOverviewComment } from '@openforge-app/plugin-sdk/domain'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import { timeAgo, timeAgoFromSeconds } from './timeAgo'
   import { getGitHubMarkdownImageBaseUrl } from './githubMarkdown'
 
@@ -10,10 +11,11 @@
     comments?: PrOverviewComment[]
     onCommentsChange: (comments: PrOverviewComment[]) => void
     loadComments: (pr: ReviewPullRequest) => Promise<PrOverviewComment[]>
+    resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onOpenUrl?: (url: string) => void
   }
 
-  let { pr, comments = [], onCommentsChange, loadComments, onOpenUrl }: Props = $props()
+  let { pr, comments = [], onCommentsChange, loadComments, resolveRemoteMedia, onOpenUrl }: Props = $props()
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -75,7 +77,7 @@
       </div>
       <div class="px-5 py-4">
         {#if pr.body}
-          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} {onOpenUrl} />
+          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} {resolveRemoteMedia} {onOpenUrl} />
         {:else}
           <p class="text-sm text-base-content/50 italic m-0">No description provided.</p>
         {/if}
@@ -130,7 +132,7 @@
               </div>
             {/if}
             <div class="px-5 py-4">
-              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} {onOpenUrl} />
+              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} {resolveRemoteMedia} {onOpenUrl} />
             </div>
           </div>
         {/each}

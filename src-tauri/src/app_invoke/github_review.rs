@@ -306,6 +306,21 @@ pub(super) async fn handle_app_github_review_command(
                 )?
             }
         }
+        "resolve_github_asset" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let url = payload_string(&request.payload, "url")?;
+            to_app_value(
+                crate::github_runtime::resolve_github_asset(
+                    &state.github_client,
+                    &owner,
+                    &repo,
+                    &url,
+                )
+                .await
+                .map_err(runtime_error)?,
+            )?
+        }
         "get_review_comments" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;

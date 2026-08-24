@@ -490,6 +490,14 @@
   border-radius: 6px;
 }
 
+/* Uploaded screen recordings, swapped in for their bare GitHub link. */
+.markdown-body video {
+  display: block;
+  max-width: 100%;
+  max-height: 640px;
+  border-radius: 6px;
+}
+
 .markdown-body input[type="checkbox"] {
   margin-right: 0.35em;
   vertical-align: middle;

@@ -6,6 +6,7 @@
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import PrStatusChip from '@openforge-app/pr-review-ui/PrStatusChip.svelte'
   import { getGitHubMarkdownImageBaseUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
+  import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
   import type { MergeFeedback } from './useMergeOrchestration.svelte'
 
   interface Props {
@@ -14,6 +15,7 @@
     feedback?: MergeFeedback
     pendingPrId: number | null
     taskActionPending: boolean
+    resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onOpenUrl: (url: string) => void
     onMarkAddressed: (commentId: number) => void | Promise<void>
     onRequestAction: (pr: PullRequestInfo, action: 'merge' | 'enqueue') => void
@@ -25,6 +27,7 @@
     feedback,
     pendingPrId,
     taskActionPending,
+    resolveRemoteMedia,
     onOpenUrl,
     onMarkAddressed,
     onRequestAction,
@@ -125,7 +128,7 @@
             <span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
             <button class="btn btn-ghost btn-xs text-success" onclick={() => void onMarkAddressed(comment.id)}>✓ Mark addressed</button>
           </div>
-          <div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {onOpenUrl} /></div>
+          <div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {resolveRemoteMedia} {onOpenUrl} /></div>
         </article>
       {/each}
     </div>

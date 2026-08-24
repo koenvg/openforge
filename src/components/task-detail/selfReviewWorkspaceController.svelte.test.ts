@@ -28,6 +28,7 @@ vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
+  resolveGithubAsset: vi.fn().mockResolvedValue(null),
   addSelfReviewComment: vi.fn().mockResolvedValue(undefined),
   deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
   archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),

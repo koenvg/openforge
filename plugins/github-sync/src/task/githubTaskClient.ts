@@ -1,5 +1,6 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
 import type { PollResult, PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
+import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 
 export interface GithubTaskClient {
   listPullRequests(taskId: string): Promise<PullRequestInfo[]>
@@ -9,6 +10,7 @@ export interface GithubTaskClient {
   markCommentAddressed(commentId: number): Promise<void>
   mergePullRequest(pr: PullRequestInfo): Promise<void>
   enqueuePullRequest(pr: PullRequestInfo): Promise<void>
+  resolveGithubAsset(request: { owner: string; repo: string; url: string }): Promise<ResolvedMarkdownMedia | null>
 }
 
 export function createGithubTaskClient(api: FrontendOpenForgeAPI): GithubTaskClient {
@@ -35,5 +37,6 @@ export function createGithubTaskClient(api: FrontendOpenForgeAPI): GithubTaskCli
       prId: pr.id,
       expectedHeadSha: pr.head_sha,
     }),
+    resolveGithubAsset: ({ owner, repo, url }) => invoke('resolveGithubAsset', { owner, repo, url }),
   }
 }

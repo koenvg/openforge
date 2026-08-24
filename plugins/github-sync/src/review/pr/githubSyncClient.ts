@@ -1,4 +1,5 @@
 import type { Disposable, FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
+import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 import type {
   AgentReviewComment,
   AiThread,
@@ -29,6 +30,12 @@ export type FileAtRefRequest = {
   repo: string
   path: string
   refSha: string
+}
+
+export type GithubAssetRequest = {
+  owner: string
+  repo: string
+  url: string
 }
 
 export type SubmitPullRequestReviewRequest = PullRequestRepositoryRequest & {
@@ -64,6 +71,7 @@ export interface GithubSyncPrReviewClient {
   getFileContentBase64(request: FileContentRequest): Promise<string>
   getFileAtRef(request: FileAtRefRequest): Promise<string>
   getFileAtRefBase64(request: FileAtRefRequest): Promise<string>
+  resolveGithubAsset(request: GithubAssetRequest): Promise<ResolvedMarkdownMedia | null>
   listReviewComments(request: PullRequestRepositoryRequest): Promise<ReviewComment[]>
   listPullRequestOverviewComments(request: PullRequestRepositoryRequest): Promise<PrOverviewComment[]>
   submitPullRequestReview(request: SubmitPullRequestReviewRequest): Promise<void>
@@ -130,6 +138,7 @@ export function createGithubSyncPrReviewClient(api: Pick<FrontendOpenForgeAPI, '
     getFileContentBase64: ({ owner, repo, sha }) => invokeBackend<string>(api, 'getFileContentBase64', { owner, repo, sha }),
     getFileAtRef: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRef', { owner, repo, path, refSha }),
     getFileAtRefBase64: ({ owner, repo, path, refSha }) => invokeBackend<string>(api, 'getFileAtRefBase64', { owner, repo, path, refSha }),
+    resolveGithubAsset: ({ owner, repo, url }) => invokeBackend<ResolvedMarkdownMedia | null>(api, 'resolveGithubAsset', { owner, repo, url }),
     listReviewComments: ({ owner, repo, prNumber }) => invokeBackend<ReviewComment[]>(api, 'getReviewComments', { owner, repo, prNumber }),
     listPullRequestOverviewComments: ({ owner, repo, prNumber }) => invokeBackend<PrOverviewComment[]>(api, 'getPrOverviewComments', { owner, repo, prNumber }),
     submitPullRequestReview: ({ owner, repo, prNumber, event, body, comments, commitId }) => invokeBackend<void>(api, 'submitPrReview', {

@@ -1,3 +1,6 @@
+// One source of truth for which upload URLs the sidecar is allowed to resolve.
+export { isGitHubAttachmentUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
+
 interface GitHubMarkdownImageBaseParts {
   repo_owner: string
   repo_name: string

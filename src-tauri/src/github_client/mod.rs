@@ -15,6 +15,7 @@
 //! Uses Personal Access Token (PAT) in Authorization header
 //! Authorization header format: `token {personal_access_token}`
 
+mod assets;
 mod checks;
 pub mod error;
 mod events;
@@ -25,6 +26,7 @@ mod response_cache;
 mod reviews;
 pub mod types;
 
+pub use assets::{GithubAssetKind, ResolvedGithubAsset};
 pub use checks::{aggregate_ci_status, deduplicate_check_runs, filter_to_required};
 pub use error::GitHubError;
 pub use events::{dedupe_pr_refs, extract_authored_pr_refs_from_user_events};

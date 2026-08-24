@@ -1,6 +1,8 @@
 use crate::{
     db,
-    github_client::{GitHubClient, PrComment, PrReviewComment, ReviewSubmitComment},
+    github_client::{
+        GitHubClient, PrComment, PrReviewComment, ResolvedGithubAsset, ReviewSubmitComment,
+    },
 };
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -109,6 +111,22 @@ pub async fn get_file_at_ref_base64(
         .get_file_at_ref_base64(owner, repo, path, ref_sha, &token)
         .await
         .map_err(|e| format!("Failed to get file at ref: {e}"))
+}
+
+/// Exchange a GitHub upload URL from PR Markdown for one the renderer can load,
+/// along with how GitHub renders it (picture vs. video player).
+/// Returns `None` when the URL is not an attachment GitHub will resolve for us.
+pub async fn resolve_github_asset(
+    github_client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    url: &str,
+) -> Result<Option<ResolvedGithubAsset>, String> {
+    let token = github_token().await?;
+    github_client
+        .resolve_attachment(owner, repo, url, &token)
+        .await
+        .map_err(|e| format!("Failed to resolve GitHub attachment: {e}"))
 }
 
 fn map_pr_review_comments_for_frontend(

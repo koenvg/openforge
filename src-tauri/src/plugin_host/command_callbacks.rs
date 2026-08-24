@@ -81,6 +81,7 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         "getFileAtRefBase64" => Ok(ResolvedGlobalCommand::github_review(
             "get_file_at_ref_base64",
         )),
+        "resolveGithubAsset" => Ok(ResolvedGlobalCommand::github_review("resolve_github_asset")),
         "getReviewComments" => Ok(ResolvedGlobalCommand::github_review("get_review_comments")),
         "getPrOverviewComments" => Ok(ResolvedGlobalCommand::github_review(
             "get_pr_overview_comments",

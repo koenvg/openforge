@@ -3,6 +3,8 @@
   import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
   import type { PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
+  import { isGitHubAttachmentUrl } from '@openforge-app/pr-review-ui/githubMarkdown'
   import { createGithubTaskClient } from './githubTaskClient'
   import PullRequestCard from './PullRequestCard.svelte'
   import PullRequestLinkForm from './PullRequestLinkForm.svelte'
@@ -35,6 +37,21 @@
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+  }
+
+  // Uploads pasted into a review comment live behind a github.com URL only a
+  // signed-in browser session can fetch; the sidecar trades it for a URL the app
+  // can render. See PrReviewView for the same exchange on the review screen.
+  function resolveCommentMedia(pr: PullRequestInfo) {
+    return async (url: string): Promise<ResolvedMarkdownMedia | null> => {
+      if (!isGitHubAttachmentUrl(url)) return null
+
+      try {
+        return await client.resolveGithubAsset({ owner: pr.repo_owner, repo: pr.repo_name, url })
+      } catch {
+        return null
+      }
+    }
   }
 
   async function refreshCompletedAction(pr: PullRequestInfo): Promise<void> {
@@ -126,6 +143,7 @@
         feedback={orchestration.feedbackByPr.get(pr.id)}
         pendingPrId={orchestration.pendingPrId}
         {taskActionPending}
+        resolveRemoteMedia={resolveCommentMedia(pr)}
         onOpenUrl={openExternal}
         onMarkAddressed={markAddressed}
         onRequestAction={requestAction}

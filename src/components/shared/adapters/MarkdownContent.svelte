@@ -1,28 +1,16 @@
 <script lang="ts">
+  import SdkMarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { openUrl } from '../../../lib/ipc'
-  import { renderMarkdownHtml } from '../../../lib/markdown'
+  import type { ResolvedMarkdownMedia } from '../../../lib/markdown'
 
   interface Props {
     content: string
     imageBaseUrl?: string | null
+    /** Exchange an upload URL for one this app can render (see ipc.resolveGithubAsset). */
+    resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
   }
 
-  let { content, imageBaseUrl = null }: Props = $props()
-
-  let html = $derived(renderMarkdownHtml(content, { imageBaseUrl }))
-
-  function handleClick(e: MouseEvent) {
-    if (!(e.target instanceof Element)) return
-
-    const anchor = e.target.closest('a')
-    if (anchor?.href) {
-      e.preventDefault()
-      openUrl(anchor.href)
-    }
-  }
+  let { content, imageBaseUrl = null, resolveRemoteMedia }: Props = $props()
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div role="presentation" class="markdown-body" onclick={handleClick}>
-  {@html html}
-</div>
+<SdkMarkdownContent {content} {imageBaseUrl} {resolveRemoteMedia} onOpenUrl={openUrl} />

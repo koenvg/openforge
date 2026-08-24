@@ -23,6 +23,7 @@
   let generalCommentCount = $derived(pane.general.commentCount)
   let pendingInlineComments = $derived(pane.composer.pendingInlineComments)
   let markdownImageBaseUrl = $derived(pane.pullRequest.markdownImageBaseUrl)
+  let resolveRemoteMedia = $derived(pane.pullRequest.resolveRemoteMedia)
   let onPendingInlineCommentsChange = $derived(pane.composer.onPendingInlineCommentsChange)
   let onSendComplete = $derived(pane.composer.onSendComplete)
   let onCommentClick = $derived(pane.pullRequest.onCommentClick)
@@ -105,6 +106,7 @@
             <PrCommentsList
               comments={visibleComments}
               imageBaseUrlForComment={() => markdownImageBaseUrl}
+              {resolveRemoteMedia}
               showLocation={true}
               showMarkAddressed={true}
               onMarkAddressed={commentSelection.markAddressed}
