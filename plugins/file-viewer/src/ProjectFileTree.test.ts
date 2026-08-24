@@ -234,4 +234,30 @@ describe('plugin ProjectFileTree accessibility', () => {
 
     expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /utils\.ts/ }))
   })
+
+  it('renders file-type icons for files and open and closed folder icons for directories', async () => {
+    const { rerender } = renderTree({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+      ],
+      expandedDirs: new Set(['src']),
+    })
+
+    expect(document.querySelector('[data-icon="folder-open"]')).not.toBeNull()
+    expect(document.querySelector('[data-icon="typescript"]')).not.toBeNull()
+
+    await rerender({
+      entries: [
+        makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
+        makeEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false }),
+      ],
+      expandedDirs: new Set<string>(),
+      selectedPath: null,
+      onToggleDir: () => {},
+      onSelectFile: () => {},
+    })
+
+    expect(document.querySelector('[data-icon="folder"]')).not.toBeNull()
+  })
 })
