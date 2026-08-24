@@ -1,0 +1,89 @@
+import { terminalLogMessage } from './terminalLogging'
+import type {
+  PoolEntry,
+  TerminalRuntimeHost,
+  TerminalRuntimeUnlistenFn,
+} from './terminalRuntimeTypes'
+
+export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
+
+interface TerminalReconnectReplayOptions {
+  host: TerminalRuntimeHost
+  getEntries(): Iterable<PoolEntry>
+  hasEntries(): boolean
+  resetEntry(entry: PoolEntry): void
+  notifyLifecycle(terminalKey: string): void
+}
+
+export function createTerminalReconnectReplay({
+  host,
+  getEntries,
+  hasEntries,
+  resetEntry,
+  notifyLifecycle,
+}: TerminalReconnectReplayOptions) {
+  let appEventsReconnectUnlisten: TerminalRuntimeUnlistenFn | null = null
+  let appEventsReconnectListenerPending: Promise<void> | null = null
+
+  async function replayEntry(entry: PoolEntry): Promise<void> {
+    if (entry.needsClear) return
+
+    try {
+      const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
+      entry.ptyActive = isLive
+      if (!buffer) {
+        notifyLifecycle(entry.taskId)
+        return
+      }
+
+      resetEntry(entry)
+      entry.needsClear = false
+      entry.terminal.write(buffer)
+      entry.hasOutput = true
+      notifyLifecycle(entry.taskId)
+      if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+    } catch (error) {
+      console.error(
+        terminalLogMessage(host.loggerName, 'Failed to replay PTY buffer after app event reconnect:'),
+        error,
+      )
+    }
+  }
+
+  async function replayActiveTerminals(): Promise<void> {
+    await Promise.all([...getEntries()].map(entry => replayEntry(entry)))
+  }
+
+  async function retainListener(): Promise<void> {
+    if (appEventsReconnectUnlisten) return
+    if (appEventsReconnectListenerPending) return appEventsReconnectListenerPending
+
+    appEventsReconnectListenerPending = host.listenEvent(APP_EVENTS_RECONNECTED_EVENT, () => {
+      void replayActiveTerminals()
+    })
+      .then((unlisten) => {
+        if (!hasEntries()) {
+          unlisten()
+          return
+        }
+        appEventsReconnectUnlisten = unlisten
+      })
+      .finally(() => {
+        appEventsReconnectListenerPending = null
+      })
+
+    return appEventsReconnectListenerPending
+  }
+
+  function releaseListenerIfIdle(): void {
+    if (hasEntries()) return
+    appEventsReconnectUnlisten?.()
+    appEventsReconnectUnlisten = null
+  }
+
+  return {
+    releaseListenerIfIdle,
+    replayActiveTerminals,
+    retainListener,
+  }
+}
