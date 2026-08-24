@@ -32,4 +32,15 @@ describe('CI comment workflow', () => {
     expect(rustCommentStep).toContain('/tmp/rust-logs/rust-clippy.log');
     expect(rustCommentStep).toContain('### Clippy');
   });
+
+  it('reports formatting failures in the Rust CI comment', () => {
+    const workflow = readWorkflow();
+    const rustCommentStep = getStep(workflow, 'Post or clean rust comment');
+
+    expect(rustCommentStep).toContain('/tmp/rust-results/format-exit-code');
+    expect(rustCommentStep).toContain('/tmp/rust-logs/rust-format.log');
+    expect(rustCommentStep).toContain('### Formatting');
+    expect(rustCommentStep).toContain('!formatFailed && !clippyFailed && !testsFailed');
+    expect(rustCommentStep).toContain("(marker + '\\n' + body).slice(0, 65000)");
+  });
 });
