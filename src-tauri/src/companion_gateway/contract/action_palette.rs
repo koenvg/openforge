@@ -162,5 +162,30 @@ fn action_error_response(error: CompanionActionPaletteError) -> Response {
             CompanionErrorCode::TemporarilyUnavailable,
             "Companion action is temporarily unavailable",
         ),
+        CompanionActionPaletteError::GithubTokenMissing => error_response(
+            StatusCode::CONFLICT,
+            CompanionErrorCode::InvalidState,
+            "GitHub token is not configured. Add one in desktop Settings, then try again.",
+        ),
+        CompanionActionPaletteError::GithubTokenUnavailable => error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            CompanionErrorCode::TemporarilyUnavailable,
+            "OpenForge could not read the GitHub token. Check desktop developer logs and try again.",
+        ),
+        CompanionActionPaletteError::GithubSyncFailed { errors } => {
+            let noun = if errors == 1 { "error" } else { "errors" };
+            error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                CompanionErrorCode::TemporarilyUnavailable,
+                &format!(
+                    "GitHub sync encountered {errors} {noun}. Check desktop developer logs and try again."
+                ),
+            )
+        }
+        CompanionActionPaletteError::GithubRateLimited => error_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            CompanionErrorCode::RateLimited,
+            "GitHub rate limit reached. Try again after it resets.",
+        ),
     }
 }

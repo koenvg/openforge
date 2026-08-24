@@ -81,6 +81,7 @@ describe('App action palette shortcuts', () => {
         errors: 0,
         rate_limited: false,
         rate_limit_reset_at: null,
+        outcome: 'completed',
       })
 
       stores.tasks.set([selectedTask])
@@ -201,6 +202,7 @@ describe('App action palette shortcuts', () => {
         errors: 0,
         rate_limited: false,
         rate_limit_reset_at: null,
+        outcome: 'completed',
       })
 
       stores.tasks.set([selectedTask])
@@ -331,6 +333,7 @@ describe('App action palette shortcuts', () => {
         errors: 0,
         rate_limited: false,
         rate_limit_reset_at: null,
+        outcome: 'completed',
       })
 
       stores.tasks.set([selectedTask])

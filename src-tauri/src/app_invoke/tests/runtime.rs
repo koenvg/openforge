@@ -96,6 +96,7 @@ async fn force_github_sync_uses_sidecar_managed_client_state() {
     assert_eq!(body["errors"], 0);
     assert_eq!(body["rate_limited"], false);
     assert_eq!(body["rate_limit_reset_at"], serde_json::Value::Null);
+    assert_eq!(body["outcome"], "missing_github_token");
 
     let _ = std::fs::remove_file(path);
 }

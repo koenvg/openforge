@@ -24,6 +24,7 @@ final class _WidgetClient
   final List<(String, String)> creationRequests = <(String, String)>[];
   final List<String> actionRequests = <String>[];
   Object? creationError;
+  Object? githubRefreshError;
   @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
     CompanionTrustRecord trustRecord,
@@ -144,7 +145,10 @@ final class _WidgetClient
   Future<void> refreshProjectGithub(
     CompanionTrustRecord trustRecord,
     String projectId,
-  ) async => actionRequests.add('refresh-github:$projectId');
+  ) async {
+    actionRequests.add('refresh-github:$projectId');
+    if (githubRefreshError case final Object error) throw error;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
@@ -680,6 +684,50 @@ void main() {
       expect(find.text('Complete'), findsOneWidget);
     },
   );
+
+  testWidgets('shows the Companion GitHub refresh failure message', (
+    tester,
+  ) async {
+    final client = _WidgetClient()
+      ..githubRefreshError = const CompanionV1Exception(
+        statusCode: 409,
+        code: 'invalid_state',
+        message:
+            'GitHub token is not configured. Add one in desktop Settings, then try again.',
+      );
+    final storage = _WidgetStorage();
+    final controller = ProjectBoardController(client: client, storage: storage);
+    await controller.refresh();
+    final paletteController = MobileActionPaletteController(
+      taskClient: client,
+      completionClient: client,
+      paletteClient: client,
+      storage: storage,
+      onRefresh: controller.refresh,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProjectBoardHome(
+          controller: controller,
+          actionPaletteController: paletteController,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refresh GitHub'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'GitHub token is not configured. Add one in desktop Settings, then try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Refresh GitHub completed.'), findsNothing);
+  });
 }
 
 final class _LongTitleWidgetClient extends _WidgetClient {

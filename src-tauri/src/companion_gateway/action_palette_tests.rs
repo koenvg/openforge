@@ -24,11 +24,19 @@ use tower::ServiceExt;
 #[derive(Default)]
 struct RecordingActionPalette {
     calls: Mutex<Vec<(String, String)>>,
+    refresh_error: Option<CompanionActionPaletteError>,
 }
 
 impl RecordingActionPalette {
     fn calls(&self) -> Vec<(String, String)> {
         self.calls.lock().expect("calls lock").clone()
+    }
+
+    fn with_refresh_error(error: CompanionActionPaletteError) -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+            refresh_error: Some(error),
+        }
     }
 }
 
@@ -76,6 +84,9 @@ impl CompanionActionPaletteService for RecordingActionPalette {
 
     fn refresh_github<'a>(&'a self, project_id: &'a str) -> CompanionActionPaletteFuture<'a> {
         Box::pin(async move {
+            if let Some(error) = self.refresh_error {
+                return Err(error);
+            }
             self.calls
                 .lock()
                 .expect("calls lock")
@@ -230,6 +241,48 @@ async fn explicit_task_and_project_action_routes_dispatch_without_request_bodies
     assert!(actions
         .calls()
         .contains(&("P-1".to_string(), "refresh_github".to_string())));
+}
+
+#[tokio::test]
+async fn github_refresh_failures_return_typed_actionable_errors() {
+    let cases = [
+        (
+            CompanionActionPaletteError::GithubTokenMissing,
+            axum::http::StatusCode::CONFLICT,
+            "invalid_state",
+            "GitHub token is not configured. Add one in desktop Settings, then try again.",
+        ),
+        (
+            CompanionActionPaletteError::GithubTokenUnavailable,
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "OpenForge could not read the GitHub token. Check desktop developer logs and try again.",
+        ),
+        (
+            CompanionActionPaletteError::GithubSyncFailed { errors: 2 },
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "GitHub sync encountered 2 errors. Check desktop developer logs and try again.",
+        ),
+        (
+            CompanionActionPaletteError::GithubRateLimited,
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "GitHub rate limit reached. Try again after it resets.",
+        ),
+    ];
+
+    for (error, status, code, message) in cases {
+        let response = router(Arc::new(RecordingActionPalette::with_refresh_error(error)))
+            .oneshot(request("POST", "/companion/v1/projects/P-1/refresh-github"))
+            .await
+            .expect("router response");
+
+        assert_eq!(response.status(), status);
+        let body = response_json(response).await;
+        assert_eq!(body["error"]["code"], code);
+        assert_eq!(body["error"]["message"], message);
+    }
 }
 
 #[tokio::test]

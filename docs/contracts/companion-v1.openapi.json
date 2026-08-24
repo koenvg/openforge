@@ -725,7 +725,7 @@
         "post": {
           "operationId": "refreshCompanionProjectGithub",
           "summary": "Refresh GitHub status for the selected Project",
-          "description": "Explicit Project-scoped mutation. The client makes one attempt and then refreshes authoritative resources.",
+          "description": "Runs one full GitHub sync attempt. A 204 response means every scheduled phase completed without polling errors; configuration, rate-limit, and sync failures use the typed Companion error response.",
           "security": [
             {
               "companionDeviceBearer": []
@@ -748,7 +748,7 @@
           ],
           "responses": {
             "204": {
-              "description": "Project GitHub refresh accepted"
+              "description": "Project GitHub refresh completed without errors"
             },
             "400": {
               "$ref": "#/components/responses/CompanionError"
