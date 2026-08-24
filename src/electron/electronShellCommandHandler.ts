@@ -1,4 +1,5 @@
 import { developerLogStore } from './developerLogs.js'
+import { payloadNumber, payloadString } from './ipcPayloadReaders.js'
 import { openExternalUrl, openPathInEditor } from './shellCommands.js'
 import type { ElectronInvokeDeps } from './backendBridge.js'
 
@@ -14,18 +15,6 @@ const ELECTRON_SHELL_COMMANDS = new Set([
 
 export function isElectronShellCommand(command: string): boolean {
   return ELECTRON_SHELL_COMMANDS.has(command)
-}
-
-function payloadString(payload: unknown, key: string): string | null {
-  if (typeof payload !== 'object' || payload === null) return null
-  const value = (payload as Record<string, unknown>)[key]
-  return typeof value === 'string' && value.trim() !== '' ? value : null
-}
-
-function payloadNumber(payload: unknown, key: string): number | undefined {
-  if (typeof payload !== 'object' || payload === null) return undefined
-  const value = (payload as Record<string, unknown>)[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 export async function handleElectronShellCommand(
