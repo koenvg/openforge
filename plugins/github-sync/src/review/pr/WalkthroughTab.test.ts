@@ -99,7 +99,7 @@ function makeGithubSync(): GithubSyncPrReviewClient {
 function renderWalkthrough(overrides: Record<string, unknown> = {}) {
   const onPendingCommentsChange = vi.fn()
   const onSubmitReview = vi.fn(async () => {})
-  render(WalkthroughTab, {
+  const rendered = render(WalkthroughTab, {
     props: {
       api: {} as unknown as FrontendOpenForgeAPI,
       githubSync: makeGithubSync(),
@@ -119,7 +119,7 @@ function renderWalkthrough(overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
   })
-  return { onPendingCommentsChange, onSubmitReview }
+  return { onPendingCommentsChange, onSubmitReview, unmount: rendered.unmount }
 }
 
 describe('WalkthroughTab comment sync', () => {
@@ -190,5 +190,25 @@ describe('WalkthroughTab review/submit step', () => {
         repoName: basePr.repo_name,
       }),
     )
+  })
+})
+
+describe('WalkthroughTab step-details collapse', () => {
+  it('hides the step summary so the diff gets the vertical space back, and remembers the choice', async () => {
+    globalThis.localStorage?.clear()
+    const { unmount } = renderWalkthrough()
+    await screen.findByText('Step one')
+    expect(screen.getByText('First concept')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse step details' }))
+
+    expect(screen.queryByText('First concept')).toBeNull()
+    // The title stays visible so the reviewer still knows which step they are on.
+    expect(screen.getByText('Step one')).toBeTruthy()
+
+    unmount()
+    renderWalkthrough()
+    await screen.findByText('Step one')
+    expect(screen.queryByText('First concept')).toBeNull()
   })
 })
