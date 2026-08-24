@@ -22,6 +22,7 @@ import { assertLocalId, isNonEmptyString, requireAgentInvocationContext, Runtime
 export class PluginHostRuntime {
   private readonly lifecycle: BackendLifecycle
   private readonly hostCallbacks: HostCallbackHandler | null
+  private readonly activationTails = new Map<string, Promise<void>>()
   private readonly invocationTails = new Map<string, Promise<void>>()
 
   constructor(options: RuntimeOptions = {}) {
@@ -41,7 +42,7 @@ export class PluginHostRuntime {
   }
 
   async activateBackend(input: ActivateBackendInput): Promise<BackendStateSnapshot> {
-    return await this.lifecycle.activate(input)
+    return this.serializePluginActivation(input.pluginId, async () => await this.lifecycle.activate(input))
   }
 
   async deactivateBackend(pluginId: string): Promise<BackendStateSnapshot> {
@@ -49,7 +50,7 @@ export class PluginHostRuntime {
   }
 
   async whenBackendReady(input: ReadyBackendInput): Promise<BackendStateSnapshot> {
-    return await this.lifecycle.whenReady(input)
+    return this.serializePluginActivation(input.pluginId, async () => await this.lifecycle.whenReady(input))
   }
 
   async invokeBackend(input: InvokeBackendInput): Promise<unknown> {
@@ -146,31 +147,48 @@ export class PluginHostRuntime {
   }
 
   async listAgentCommands(input: ActivateBackendInput): Promise<AgentCommandDescriptor[]> {
-    await this.whenBackendReady(input)
-    return globalContributionRegistry.listAgentCommands(this.lifecycle.getState(input.pluginId))
+    return this.serializePluginActivation(input.pluginId, async () => {
+      await this.lifecycle.whenReady(input)
+      return globalContributionRegistry.listAgentCommands(this.lifecycle.getState(input.pluginId))
+    })
   }
 
   async getBackendState(pluginId: string): Promise<BackendStateSnapshot> {
     return this.lifecycle.snapshot(pluginId)
   }
 
-  private async serializePluginInvocation<T>(
-    invocationKey: string,
-    invoke: () => Promise<T>,
+  private serializePluginActivation<T>(
+    pluginId: string,
+    operation: () => Promise<T>,
   ): Promise<T> {
-    const preceding = this.invocationTails.get(invocationKey) ?? Promise.resolve()
+    return this.serializePluginOperation(this.activationTails, pluginId, operation)
+  }
+
+  private serializePluginInvocation<T>(
+    invocationKey: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.serializePluginOperation(this.invocationTails, invocationKey, operation)
+  }
+
+  private async serializePluginOperation<T>(
+    tails: Map<string, Promise<void>>,
+    operationKey: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const preceding = tails.get(operationKey) ?? Promise.resolve()
     let release!: () => void
     const current = new Promise<void>((resolve) => { release = resolve })
     const tail = preceding.catch(() => undefined).then(() => current)
-    this.invocationTails.set(invocationKey, tail)
+    tails.set(operationKey, tail)
 
     await preceding.catch(() => undefined)
     try {
-      return await invoke()
+      return await operation()
     } finally {
       release()
-      if (this.invocationTails.get(invocationKey) === tail) {
-        this.invocationTails.delete(invocationKey)
+      if (tails.get(operationKey) === tail) {
+        tails.delete(operationKey)
       }
     }
   }

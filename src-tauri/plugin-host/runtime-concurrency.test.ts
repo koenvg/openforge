@@ -169,20 +169,27 @@ describe('plugin-host backend concurrency', () => {
 
     const firstDiscovery = runtime.listAgentCommands({ pluginId, backendPath: firstBackendPath, projectId: 'P-1' })
     let secondDiscovery: typeof firstDiscovery | undefined
+    let followingActivation: ReturnType<typeof runtime.whenBackendReady> | undefined
     try {
       await vi.waitFor(() => {
         expect(globals.__discoveryActivationProjects).toEqual(['P-1'])
       })
       secondDiscovery = runtime.listAgentCommands({ pluginId, backendPath: secondBackendPath, projectId: 'P-2' })
+      followingActivation = runtime.whenBackendReady({ pluginId, backendPath: firstBackendPath, projectId: 'P-3' })
       releaseFirstActivation()
-      await expect(Promise.all([firstDiscovery, secondDiscovery])).resolves.toEqual([
-        expect.any(Array),
+      await expect(Promise.all([firstDiscovery, secondDiscovery, followingActivation])).resolves.toEqual([
+        [expect.objectContaining({ description: 'First backend command for P-1' })],
         [expect.objectContaining({ description: 'Second backend command for P-2' })],
+        expect.objectContaining({ state: 'ready' }),
       ])
-      expect(globals.__discoveryActivationProjects).toEqual(['P-1', 'P-2'])
+      expect(globals.__discoveryActivationProjects).toEqual(['P-1', 'P-2', 'P-3'])
     } finally {
       releaseFirstActivation()
-      await Promise.allSettled([firstDiscovery, ...(secondDiscovery ? [secondDiscovery] : [])])
+      await Promise.allSettled([
+        firstDiscovery,
+        ...(secondDiscovery ? [secondDiscovery] : []),
+        ...(followingActivation ? [followingActivation] : []),
+      ])
       delete globals.__discoveryActivationGate
       delete globals.__discoveryActivationProjects
     }
