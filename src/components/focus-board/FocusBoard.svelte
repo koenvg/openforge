@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
-  import { Plus, Search } from '@lucide/svelte'
+  import { onMount, tick, untrack } from 'svelte'
+  import { Plus, Search, X } from '@lucide/svelte'
   import { get } from 'svelte/store'
   import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from '../../lib/boardFilters'
+  import { filterTasks, getFilterCounts, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds, taskMatchesTextFilter } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -91,6 +91,9 @@
   let labelLoadRequest = 0
   let labelLoadProjectId: string | null = null
   let outOfFocusLoadRequest = 0
+  let textFilterQuery = $state('')
+  let isTextFilterEditing = $state(false)
+  let textFilterInput: HTMLInputElement | null = $state(null)
 
   let activeFilter = $derived.by(() => {
     if (!projectId) return fallbackFilter
@@ -127,14 +130,15 @@
     const labelFiltered = activeFilter === 'backlog'
       ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
       : filtered
+    const textFiltered = labelFiltered.filter((task) => taskMatchesTextFilter(task, textFilterQuery))
 
     if (activeFilter === 'focus') {
-      return labelFiltered.slice().sort((left, right) =>
+      return textFiltered.slice().sort((left, right) =>
         (attentionOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
           - (attentionOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
       )
     }
-    return sortBySessionActivity(labelFiltered, activeSessions)
+    return sortBySessionActivity(textFiltered, activeSessions)
   })
 
   let visibleRows = $derived.by<TaskRow[]>(() =>
@@ -179,6 +183,7 @@
     if (!isInitialProject && currentProjectId !== previousProjectId) {
       backlogLabelFilters.set(new Map())
       selectedTaskIdLocal = null
+      clearTextFilter()
     }
     previousProjectId = currentProjectId
 
@@ -324,8 +329,33 @@
       })
   })
 
+  async function editTextFilter() {
+    isTextFilterEditing = true
+    await tick()
+    textFilterInput?.focus()
+  }
+
+  function clearTextFilter() {
+    textFilterQuery = ''
+    isTextFilterEditing = false
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (isInputFocused()) return
+    const activeElement = document.activeElement
+    if (activeElement instanceof HTMLElement && activeElement.closest('[role="dialog"], [role="menu"]')) return
+
+    if (e.key === 'Escape' && textFilterQuery.trim()) {
+      e.preventDefault()
+      clearTextFilter()
+      return
+    }
+
+    if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !contextMenu.visible) {
+      e.preventDefault()
+      void editTextFilter()
+      return
+    }
 
     // CMD+1/2/3/4 filter chip shortcuts (works even when pane has focus)
     if (e.metaKey && !e.shiftKey && !e.altKey) {
@@ -479,7 +509,13 @@
           <span class="text-sm text-base-content/45">Select a task to keep its context visible</span>
         </div>
 
-        {#if visibleTasks.length === 0}
+        {#if visibleTasks.length === 0 && textFilterQuery.trim()}
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center" role="status">
+            <Search size={24} class="text-base-content/35" aria-hidden="true" />
+            <p class="text-sm font-medium text-base-content/70">No tasks match ‘{textFilterQuery.trim()}’.</p>
+            <p class="text-xs text-base-content/45">Try a different filter or press Escape to clear it.</p>
+          </div>
+        {:else if visibleTasks.length === 0}
           <FocusEmptyState filter={activeFilter} />
         {:else}
           {#each visibleRows as row (row.task.id)}
@@ -531,6 +567,53 @@
       />
     </div>
   </div>
+
+  {#if isTextFilterEditing}
+    <div class="flex h-11 shrink-0 items-center gap-2 border-t border-base-300 bg-base-100 px-4" role="search">
+      <Search size={15} class="shrink-0 text-base-content/45" aria-hidden="true" />
+      <span class="font-mono text-sm text-primary" aria-hidden="true">/</span>
+      <input
+        bind:this={textFilterInput}
+        bind:value={textFilterQuery}
+        type="search"
+        aria-label="Filter tasks"
+        aria-keyshortcuts="/"
+        placeholder="Filter tasks…"
+        class="min-w-0 flex-1 bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/35"
+        onkeydown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            isTextFilterEditing = false
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            clearTextFilter()
+          }
+        }}
+      />
+      <span class="text-xs text-base-content/45">Enter to apply · Esc to clear</span>
+    </div>
+  {:else if textFilterQuery.trim()}
+    <div class="flex h-11 shrink-0 items-center gap-2 border-t border-base-300 bg-base-100 px-4" aria-label="Active task filter">
+      <Search size={15} class="shrink-0 text-base-content/45" aria-hidden="true" />
+      <button
+        type="button"
+        class="min-w-0 flex-1 truncate rounded px-1 py-1 text-left font-mono text-sm text-base-content hover:bg-base-200/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        aria-label={`Edit task filter: ${textFilterQuery}`}
+        onclick={() => void editTextFilter()}
+      >
+        / {textFilterQuery}
+      </button>
+      <span class="text-xs text-base-content/45" aria-live="polite">{visibleTasks.length} matching</span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-square"
+        aria-label="Clear task filter"
+        onclick={clearTextFilter}
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+  {/if}
 
   <TaskContextMenu
     visible={contextMenu.visible}

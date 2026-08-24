@@ -1,6 +1,7 @@
 import type { Task } from './types'
 import type { TaskState } from './taskState'
 import { getProjectConfig, setProjectConfig } from './ipc'
+import { getTaskLabels } from './taskLabels'
 
 export type BoardFilter = 'focus' | 'in-flight' | 'out-of-focus' | 'backlog'
 
@@ -62,6 +63,18 @@ function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
     states.length === legacyStates.length
       && legacyStates.every((state, index) => states[index] === state),
   )
+}
+
+export function taskMatchesTextFilter(task: Task, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  if (!normalizedQuery) return true
+
+  return [
+    task.title,
+    task.initial_prompt,
+    task.prompt,
+    ...getTaskLabels(task).map((label) => label.name),
+  ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery))
 }
 
 /**
