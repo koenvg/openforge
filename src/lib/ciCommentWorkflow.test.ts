@@ -43,4 +43,21 @@ describe('CI comment workflow', () => {
     expect(rustCommentStep).toContain('!formatFailed && !clippyFailed && !testsFailed');
     expect(rustCommentStep).toContain("(marker + '\\n' + body).slice(0, 65000)");
   });
+
+  it('renders simple Rust log sections through a shared helper', () => {
+    const workflow = readWorkflow();
+    const rustCommentStep = getStep(workflow, 'Post or clean rust comment');
+
+    expect(rustCommentStep).toContain('function renderLogSection');
+    expect(rustCommentStep.match(/log\.slice\(-30000\)/g)).toHaveLength(1);
+    expect(rustCommentStep).toContain(
+      'core.warning(`Unable to read ${warningLabel} log: ${describeError(error)}`)',
+    );
+    expect(rustCommentStep).toContain(
+      "renderLogSection('### Formatting', '/tmp/rust-logs/rust-format.log', 'Rust formatting')",
+    );
+    expect(rustCommentStep).toContain(
+      "renderLogSection('### Clippy', '/tmp/rust-logs/rust-clippy.log', 'Rust Clippy')",
+    );
+  });
 });
