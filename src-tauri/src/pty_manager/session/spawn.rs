@@ -150,6 +150,16 @@ struct AgentProcessRequest<'a> {
     terminal_image_protocol: Option<TerminalImageProtocol>,
 }
 
+struct ShellProcessRequest<'a> {
+    task_id: &'a str,
+    session_key: &'a str,
+    cwd: &'a Path,
+    cols: u16,
+    rows: u16,
+    terminal_image_protocol: Option<TerminalImageProtocol>,
+    command: CommandBuilder,
+}
+
 struct PtyEventSink {
     app_handle: Option<crate::backend_runtime::AppHandle>,
     app_event_tx: Option<AppEventSender>,
@@ -972,15 +982,18 @@ impl PtyManager {
 
     fn create_shell_process(
         &self,
-        task_id: &str,
-        session_key: &str,
-        cwd: &Path,
-        cols: u16,
-        rows: u16,
-        terminal_image_protocol: Option<TerminalImageProtocol>,
+        request: ShellProcessRequest<'_>,
     ) -> Result<SpawnedPty, PtyError> {
+        let ShellProcessRequest {
+            task_id,
+            session_key,
+            cwd,
+            cols,
+            rows,
+            terminal_image_protocol,
+            mut command,
+        } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
-        let mut command = CommandBuilder::new(get_shell_path());
         Self::configure_pty_command(&mut command, cwd, terminal_image_protocol);
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
@@ -1071,6 +1084,22 @@ impl PtyManager {
         terminal_index: Option<u32>,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
+        self.spawn_shell_pty_with_command(
+            context,
+            terminal_index,
+            terminal_image_protocol,
+            CommandBuilder::new(get_shell_path()),
+        )
+        .await
+    }
+
+    async fn spawn_shell_pty_with_command(
+        &self,
+        context: PtySpawnContext<'_>,
+        terminal_index: Option<u32>,
+        terminal_image_protocol: Option<TerminalImageProtocol>,
+        command: CommandBuilder,
+    ) -> Result<u64, PtyError> {
         let PtySpawnContext {
             task_id,
             cwd,
@@ -1093,14 +1122,15 @@ impl PtyManager {
 
         self.replace_existing_shell_session(&session_key, task_id)
             .await?;
-        let spawned = self.create_shell_process(
+        let spawned = self.create_shell_process(ShellProcessRequest {
             task_id,
-            &session_key,
-            &resolved_cwd,
+            session_key: &session_key,
+            cwd: &resolved_cwd,
             cols,
             rows,
             terminal_image_protocol,
-        )?;
+            command,
+        })?;
         let instance_id = spawned.instance_id();
         let managed_process = spawned.managed_process().clone();
         let SpawnedPty {
@@ -1217,6 +1247,13 @@ mod tests {
     use std::path::Path;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    fn long_running_shell_command() -> CommandBuilder {
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.arg("-c");
+        command.arg("exec sleep 30");
+        command
+    }
 
     struct LockCheckingAgentAdapter {
         sessions: PtySessions,
@@ -1568,7 +1605,7 @@ mod tests {
         let pid_file = pid_dir.join(format!("{session_key}.pid"));
 
         let instance_id = manager
-            .spawn_shell_pty(
+            .spawn_shell_pty_with_command(
                 PtySpawnContext {
                     task_id,
                     cwd: tmp_dir.path(),
@@ -1579,6 +1616,7 @@ mod tests {
                 },
                 Some(2),
                 None,
+                long_running_shell_command(),
             )
             .await
             .expect("shell PTY should spawn");
@@ -1655,7 +1693,7 @@ mod tests {
             .expect("unresolved identity should persist");
 
         let result = manager
-            .spawn_shell_pty(
+            .spawn_shell_pty_with_command(
                 PtySpawnContext {
                     task_id,
                     cwd: tmp_dir.path(),
@@ -1666,6 +1704,7 @@ mod tests {
                 },
                 Some(0),
                 None,
+                long_running_shell_command(),
             )
             .await;
 
@@ -1805,7 +1844,7 @@ mod tests {
         let spawn_task_id = task_id.to_string();
         let spawn_task = tokio::spawn(async move {
             spawn_manager
-                .spawn_shell_pty(
+                .spawn_shell_pty_with_command(
                     PtySpawnContext {
                         task_id: &spawn_task_id,
                         cwd: &spawn_cwd,
@@ -1816,6 +1855,7 @@ mod tests {
                     },
                     Some(0),
                     None,
+                    long_running_shell_command(),
                 )
                 .await
         });
