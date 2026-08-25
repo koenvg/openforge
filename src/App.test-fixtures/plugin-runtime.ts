@@ -1,20 +1,6 @@
 import { vi } from 'vitest'
 import type { RuntimeContributionSource } from '../lib/plugin/contributionResolver'
-
-export const installedPluginRows: Array<{
-  id: string
-  name: string
-  version: string
-  apiVersion: number
-  description: string
-  permissions: string
-  contributes: string
-  frontendEntry: string
-  backendEntry: string | null
-  installPath: string
-  installedAt: number
-  isBuiltin: boolean
-}> = []
+import { installedPluginRows } from './ipc'
 
 function builtinRuntimeContributionSourceForTest(
   pluginId: string,
@@ -79,42 +65,6 @@ function builtinRuntimeContributionSourceForTest(
   }
 }
 
-export function persistInstalledPluginRow(plugin: {
-  id: string
-  name: string
-  version: string
-  apiVersion: number
-  description: string
-  permissions: string
-  contributes: string
-  frontendEntry: string
-  backendEntry: string | null
-  installPath: string
-  installedAt: number
-  isBuiltin: boolean
-}) {
-  const nextRow = {
-    id: plugin.id,
-    name: plugin.name,
-    version: plugin.version,
-    apiVersion: plugin.apiVersion,
-    description: plugin.description,
-    permissions: plugin.permissions,
-    contributes: plugin.contributes,
-    frontendEntry: plugin.frontendEntry,
-    backendEntry: plugin.backendEntry,
-    installPath: plugin.installPath,
-    installedAt: plugin.installedAt,
-    isBuiltin: plugin.isBuiltin,
-  }
-
-  const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
-  if (existingIndex >= 0) {
-    installedPluginRows.splice(existingIndex, 1, nextRow)
-  } else {
-    installedPluginRows.push(nextRow)
-  }
-}
 
 const {
   mockActivatePlugin,
@@ -151,8 +101,6 @@ vi.mock('../lib/plugin/pluginRegistry', async () => {
 })
 
 export async function resetPluginRuntimeFixtures() {
-  installedPluginRows.length = 0
-
   const pluginStore = await import('../lib/plugin/pluginStore')
   pluginStore.installedPlugins.set(new Map())
   pluginStore.appEnabledPluginIds.set(new Set())
