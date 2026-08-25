@@ -33,6 +33,21 @@ describe('BoardTextFilter', () => {
     expect(screen.getByRole('button', { name: 'Clear task filter' })).toBeTruthy()
   })
 
+  it('keeps the Enter used to commit the filter from reaching board shortcuts', async () => {
+    render(BoardTextFilter, { props: defaultProps })
+
+    await fireEvent.keyDown(window, { key: '/' })
+    const input = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(input, { target: { value: 'focus' } })
+    const boardShortcut = vi.fn()
+    window.addEventListener('keydown', boardShortcut)
+
+    await fireEvent.keyDown(input, { key: 'Enter' })
+
+    window.removeEventListener('keydown', boardShortcut)
+    expect(boardShortcut).not.toHaveBeenCalled()
+  })
+
   it('clears an applied query when the user presses Escape', async () => {
     render(BoardTextFilter, { props: { ...defaultProps, query: 'focus' } })
 
