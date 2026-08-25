@@ -1,4 +1,4 @@
-import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
+import { invokeDesktopCommand as invoke } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type { PtyBufferState, TerminalImageProtocol, TerminalViewSnapshot } from '@openforge-app/terminal-runtime'
