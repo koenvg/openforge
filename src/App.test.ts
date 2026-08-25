@@ -3,11 +3,10 @@ import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { Project, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
-import { callOrder } from './App.test-fixtures/ipc'
+import { callOrder, persistInstalledPluginRow } from './App.test-fixtures/ipc'
 import {
   mockActivatePlugin,
   mockLoadEnabledForProject,
-  persistInstalledPluginRow,
 } from './App.test-fixtures/plugin-runtime'
 import {
   mockRouterNavigate,

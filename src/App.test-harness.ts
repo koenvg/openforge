@@ -2,10 +2,9 @@ import { cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, vi } from 'vitest'
 import {
   mockExecutePluginCommand,
-  persistInstalledPluginRow,
   resetPluginRuntimeFixtures,
 } from './App.test-fixtures/plugin-runtime'
-import { resetIpcFixtures } from './App.test-fixtures/ipc'
+import { persistInstalledPluginRow, resetIpcFixtures } from './App.test-fixtures/ipc'
 import { resetStoreFixtures } from './App.test-fixtures/stores'
 import { resetDesktopLifecycleFixtures } from './App.test-fixtures/desktop-lifecycle'
 import './App.test-fixtures/routing'

@@ -1,5 +1,27 @@
 import { vi } from 'vitest'
-import { installedPluginRows, persistInstalledPluginRow } from './plugin-runtime'
+import type { NormalizedPluginRow } from '../lib/ipc'
+
+type RegisterBuiltinPluginInput = Parameters<
+  typeof import('../lib/ipc').registerBuiltinPlugin
+>[0]
+
+export const installedPluginRows: NormalizedPluginRow[] = []
+
+export function persistInstalledPluginRow(plugin: RegisterBuiltinPluginInput): void {
+  const nextRow: NormalizedPluginRow = {
+    sourceKind: 'legacy',
+    sourceSpec: '',
+    packageMetadata: '{}',
+    ...plugin,
+  }
+
+  const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
+  if (existingIndex >= 0) {
+    installedPluginRows.splice(existingIndex, 1, nextRow)
+  } else {
+    installedPluginRows.push(nextRow)
+  }
+}
 
 export const callOrder: string[] = []
 export const eventListeners = new Map<string, Function>()
@@ -122,5 +144,6 @@ vi.mock('../lib/ipc', () => ({
 
 export function resetIpcFixtures() {
   callOrder.length = 0
+  installedPluginRows.length = 0
   eventListeners.clear()
 }
