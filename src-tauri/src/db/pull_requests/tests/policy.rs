@@ -1,3 +1,5 @@
+use super::fixtures::PullRequestFixture;
+
 use crate::db::test_helpers::*;
 use crate::db::PrMergeReadinessFacts;
 
@@ -6,19 +8,12 @@ fn test_pr_merge_readiness_round_trip() {
     let (db, _temp_dir) = make_test_db("pr_merge_readiness_round_trip");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://github.com/pr/42",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://github.com/pr/42")
+        .insert(&db)
+        .unwrap();
 
     let facts = PrMergeReadinessFacts {
         status: Some("ready_to_enqueue".to_string()),

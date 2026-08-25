@@ -1,3 +1,5 @@
+use super::fixtures::{PrCommentFixture, PullRequestFixture};
+
 use crate::db::test_helpers::*;
 
 #[test]
@@ -10,32 +12,20 @@ fn pull_requests_can_be_queried_for_one_task() {
         .create_task("Other task", "backlog", None, None, None)
         .expect("create other task failed");
 
-    db.insert_pull_request(
-        42,
-        &requested_task.id,
-        "acme",
-        "repo",
-        "Requested task PR",
-        "https://github.com/acme/repo/pull/42",
-        "open",
-        1000,
-        2000,
-        false,
-    )
-    .expect("insert requested task PR failed");
-    db.insert_pull_request(
-        43,
-        &other_task.id,
-        "acme",
-        "repo",
-        "Other task PR",
-        "https://github.com/acme/repo/pull/43",
-        "open",
-        1000,
-        3000,
-        false,
-    )
-    .expect("insert other task PR failed");
+    PullRequestFixture::new(42)
+        .ticket_id(&requested_task.id)
+        .title("Requested task PR")
+        .url("https://github.com/acme/repo/pull/42")
+        .updated_at(2000)
+        .insert(&db)
+        .expect("insert requested task PR failed");
+    PullRequestFixture::new(43)
+        .ticket_id(&other_task.id)
+        .title("Other task PR")
+        .url("https://github.com/acme/repo/pull/43")
+        .updated_at(3000)
+        .insert(&db)
+        .expect("insert other task PR failed");
 
     let pull_requests = db
         .get_pull_requests_for_task(&requested_task.id)
@@ -52,56 +42,26 @@ fn test_get_pr_comments_by_ids() {
     let (db, _temp_dir) = make_test_db("pr_comments_by_ids");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        20,
-        "T-100",
-        "acme",
-        "repo",
-        "PR",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(20)
+        .insert(&db)
+        .expect("insert pr failed");
 
-    db.insert_pr_comment(
-        601,
-        20,
-        "alice",
-        "Comment 1",
-        "review_comment",
-        None,
-        None,
-        false,
-        3000,
-    )
-    .expect("insert 1 failed");
-    db.insert_pr_comment(
-        602,
-        20,
-        "bob",
-        "Comment 2",
-        "review_comment",
-        None,
-        None,
-        false,
-        3001,
-    )
-    .expect("insert 2 failed");
-    db.insert_pr_comment(
-        603,
-        20,
-        "carol",
-        "Comment 3",
-        "issue_comment",
-        None,
-        None,
-        false,
-        3002,
-    )
-    .expect("insert 3 failed");
+    PrCommentFixture::new(601, 20, "Comment 1")
+        .author("alice")
+        .created_at(3000)
+        .insert(&db)
+        .expect("insert 1 failed");
+    PrCommentFixture::new(602, 20, "Comment 2")
+        .author("bob")
+        .created_at(3001)
+        .insert(&db)
+        .expect("insert 2 failed");
+    PrCommentFixture::new(603, 20, "Comment 3")
+        .author("carol")
+        .comment_type("issue_comment")
+        .created_at(3002)
+        .insert(&db)
+        .expect("insert 3 failed");
 
     let result = db
         .get_pr_comments_by_ids(&[601, 603])
@@ -121,56 +81,25 @@ fn test_get_existing_comment_ids() {
     let (db, _temp_dir) = make_test_db("existing_comment_ids");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        50,
-        "T-100",
-        "acme",
-        "repo",
-        "PR",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(50)
+        .insert(&db)
+        .expect("insert pr failed");
 
-    db.insert_pr_comment(
-        801,
-        50,
-        "alice",
-        "c1",
-        "review_comment",
-        None,
-        None,
-        false,
-        5000,
-    )
-    .expect("insert c1 failed");
-    db.insert_pr_comment(
-        802,
-        50,
-        "bob",
-        "c2",
-        "review_comment",
-        None,
-        None,
-        false,
-        5001,
-    )
-    .expect("insert c2 failed");
-    db.insert_pr_comment(
-        803,
-        50,
-        "carol",
-        "c3",
-        "review_comment",
-        None,
-        None,
-        false,
-        5002,
-    )
-    .expect("insert c3 failed");
+    PrCommentFixture::new(801, 50, "c1")
+        .author("alice")
+        .created_at(5000)
+        .insert(&db)
+        .expect("insert c1 failed");
+    PrCommentFixture::new(802, 50, "c2")
+        .author("bob")
+        .created_at(5001)
+        .insert(&db)
+        .expect("insert c2 failed");
+    PrCommentFixture::new(803, 50, "c3")
+        .author("carol")
+        .created_at(5002)
+        .insert(&db)
+        .expect("insert c3 failed");
 
     let existing = db
         .get_existing_comment_ids(50)
@@ -194,70 +123,31 @@ fn test_unaddressed_comment_count_subquery() {
     let (db, _temp_dir) = make_test_db("unaddressed_count");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        101,
-        "T-100",
-        "acme",
-        "repo",
-        "PR 1",
-        "https://example.com/1",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr 1 failed");
+    PullRequestFixture::new(101)
+        .title("PR 1")
+        .url("https://example.com/1")
+        .insert(&db)
+        .expect("insert pr 1 failed");
 
-    db.insert_pr_comment(
-        711,
-        101,
-        "bot",
-        "Check passed",
-        "review_comment",
-        None,
-        None,
-        false,
-        2000,
-    )
-    .expect("insert comment 1 failed");
-    db.insert_pr_comment(
-        712,
-        101,
-        "reviewer",
-        "Fix this",
-        "review_comment",
-        None,
-        None,
-        false,
-        2001,
-    )
-    .expect("insert comment 2 failed");
-    db.insert_pr_comment(
-        713,
-        101,
-        "reviewer",
-        "Also fix that",
-        "review_comment",
-        None,
-        None,
-        false,
-        2002,
-    )
-    .expect("insert comment 3 failed");
+    PrCommentFixture::new(711, 101, "Check passed")
+        .author("bot")
+        .created_at(2000)
+        .insert(&db)
+        .expect("insert comment 1 failed");
+    PrCommentFixture::new(712, 101, "Fix this")
+        .created_at(2001)
+        .insert(&db)
+        .expect("insert comment 2 failed");
+    PrCommentFixture::new(713, 101, "Also fix that")
+        .created_at(2002)
+        .insert(&db)
+        .expect("insert comment 3 failed");
 
-    db.insert_pull_request(
-        102,
-        "T-100",
-        "acme",
-        "repo",
-        "PR 2",
-        "https://example.com/2",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr 2 failed");
+    PullRequestFixture::new(102)
+        .title("PR 2")
+        .url("https://example.com/2")
+        .insert(&db)
+        .expect("insert pr 2 failed");
 
     let prs = db.get_all_pull_requests().expect("get prs failed");
     let pr1 = prs.iter().find(|p| p.id == 101).expect("pr 1 not found");
