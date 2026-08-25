@@ -1,13 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { installedPluginEntry, defaultProps, resetSettingsViewTest } from './SettingsView.testUtils'
+import { defaultProps } from './SettingsView.testUtils'
+import { installedPluginEntry, resetSettingsViewPluginTest } from './SettingsView.plugins.testFixture'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import SettingsView from './SettingsView.svelte'
 
 describe('SettingsView plugin integration', () => {
-  beforeEach(resetSettingsViewTest)
+  beforeEach(resetSettingsViewPluginTest)
 
   async function openPluginsCategory() {
     await fireEvent.click(screen.getByRole('button', { name: /^Plugins/ }))
