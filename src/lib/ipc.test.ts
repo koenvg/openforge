@@ -228,7 +228,7 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenLastCalledWith(spawnShell.command, spawnShell.payload);
 
 		const write = ptyFixture("pty_write", "write_pty");
-		await writePty("T-pty", "echo ready\n");
+		await writePty("T-pty-shell-2", "echo ready\n");
 		expect(invokeMock).toHaveBeenLastCalledWith(write.command, write.payload);
 
 		const queryResponse = ptyFixture("pty_write_terminal_query_response", "write_terminal_query_response");
@@ -240,11 +240,11 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenLastCalledWith(queryResponse.command, queryResponse.payload);
 
 		const resize = ptyFixture("pty_resize", "resize_pty");
-		await resizePty("T-pty", 120, 40);
+		await resizePty("T-pty-shell-2", 120, 40);
 		expect(invokeMock).toHaveBeenLastCalledWith(resize.command, resize.payload);
 
 		const kill = ptyFixture("pty_kill", "kill_pty");
-		await killPty("T-pty");
+		await killPty("T-pty-shell-2");
 		expect(invokeMock).toHaveBeenLastCalledWith(kill.command, kill.payload);
 
 		const killShells = ptyFixture("pty_kill_shells_for_task", "kill_shells_for_task");
@@ -252,7 +252,7 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenLastCalledWith(killShells.command, killShells.payload);
 
 		const buffer = ptyFixture("get_pty_buffer", "get_pty_buffer");
-		await getPtyBuffer("T-pty");
+		await getPtyBuffer("T-pty-shell-2");
 		expect(invokeMock).toHaveBeenLastCalledWith(buffer.command, buffer.payload);
 	});
 

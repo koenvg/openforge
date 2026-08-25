@@ -28,10 +28,10 @@ function toUnlisten(disposable: Disposable): OpenForgeEventUnlistenFn {
   }
 }
 
-function parseIndexedTerminalKey(terminalKey: string): IndexedShellSessionKeyParts {
-  const parsed = parsePtySessionKey(terminalKey)
+function parseShellSessionKey(shellSessionKey: string): IndexedShellSessionKeyParts {
+  const parsed = parsePtySessionKey(shellSessionKey)
   if (parsed.kind !== 'indexed-shell') {
-    throw new Error(`[terminal plugin] Expected indexed terminal key, received: ${terminalKey}`)
+    throw new Error(`[terminal plugin] Expected indexed Shell Session Key, received: ${shellSessionKey}`)
   }
 
   return { taskId: parsed.taskId, terminalIndex: parsed.terminalIndex }
@@ -59,7 +59,7 @@ export async function getTaskWorkspace(taskId: string): Promise<TaskWorkspaceInf
 }
 
 export async function openTerminalLink(terminalKey: string, url: string): Promise<void> {
-  const { taskId } = parseIndexedTerminalKey(terminalKey)
+  const { taskId } = parseShellSessionKey(terminalKey)
   const api = getTerminalOpenForgeApi()
   if (taskId.startsWith('project-')) {
     await api.system.openUrl(url)
@@ -86,28 +86,28 @@ export async function spawnShellPty(
   })
 }
 
-export async function writePty(taskId: string, data: string): Promise<void> {
-  await getTerminalOpenForgeApi().shell.write({ ...parseIndexedTerminalKey(taskId), data })
+export async function writePty(shellSessionKey: string, data: string): Promise<void> {
+  await getTerminalOpenForgeApi().shell.write({ ...parseShellSessionKey(shellSessionKey), data })
 }
 
 export async function writeTerminalQueryResponse(
   response: TerminalQueryResponseWrite,
 ): Promise<void> {
   await getTerminalOpenForgeApi().shell.writeTerminalQueryResponse({
-    ...parseIndexedTerminalKey(response.shellSessionKey),
+    ...parseShellSessionKey(response.shellSessionKey),
     ptyInstanceId: response.ptyInstanceId,
     data: response.data,
   })
 }
 
-export async function resizePty(taskId: string, cols: number, rows: number): Promise<void> {
-  await getTerminalOpenForgeApi().shell.resize({ ...parseIndexedTerminalKey(taskId), cols, rows })
+export async function resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void> {
+  await getTerminalOpenForgeApi().shell.resize({ ...parseShellSessionKey(shellSessionKey), cols, rows })
 }
 
-export async function killPty(taskId: string): Promise<void> {
-  await getTerminalOpenForgeApi().shell.kill(parseIndexedTerminalKey(taskId))
+export async function killPty(shellSessionKey: string): Promise<void> {
+  await getTerminalOpenForgeApi().shell.kill(parseShellSessionKey(shellSessionKey))
 }
 
-export async function getPtyBuffer(taskId: string): Promise<PtyBufferState> {
-  return getTerminalOpenForgeApi().shell.getBuffer(parseIndexedTerminalKey(taskId))
+export async function getPtyBuffer(shellSessionKey: string): Promise<PtyBufferState> {
+  return getTerminalOpenForgeApi().shell.getBuffer(parseShellSessionKey(shellSessionKey))
 }

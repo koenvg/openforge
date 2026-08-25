@@ -434,10 +434,10 @@ impl PtyManager {
             .remove(session_key);
     }
 
-    pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), PtyError> {
+    pub async fn write_pty(&self, session_key: &str, data: &[u8]) -> Result<(), PtyError> {
         self.terminal_sessions
             .operate(
-                SessionTarget::Current(task_id),
+                SessionTarget::Current(session_key),
                 SessionOperation::Write(data),
             )
             .await
@@ -464,16 +464,21 @@ impl PtyManager {
             .map_err(|failure| failure.into_pty_error())
     }
 
-    /// Resizes the PTY for the given task_id
+    /// Resizes the PTY for the given session key.
     ///
     /// # Arguments
-    /// * `task_id` - Unique identifier for the task
+    /// * `session_key` - Stable identifier for the current terminal session
     /// * `cols` - New terminal width in columns
     /// * `rows` - New terminal height in rows
-    pub async fn resize_pty(&self, task_id: &str, cols: u16, rows: u16) -> Result<(), PtyError> {
+    pub async fn resize_pty(
+        &self,
+        session_key: &str,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), PtyError> {
         self.terminal_sessions
             .operate(
-                SessionTarget::Current(task_id),
+                SessionTarget::Current(session_key),
                 SessionOperation::Resize {
                     columns: cols,
                     rows,
@@ -527,33 +532,39 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Kills the PTY process for the given task_id
+    /// Kills the PTY process for the given session key.
     ///
     /// # Arguments
-    /// * `task_id` - Unique identifier for the task
-    pub async fn kill_pty(&self, task_id: &str) -> Result<(), PtyError> {
+    /// * `session_key` - Stable identifier for the current terminal session
+    pub async fn kill_pty(&self, session_key: &str) -> Result<(), PtyError> {
         self.terminal_sessions
             .agent_spawn_generations
             .lock()
             .await
-            .remove(task_id);
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
+            .remove(session_key);
+        let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
 
-        let session = self.terminal_sessions.sessions.lock().await.remove(task_id);
+        let session = self
+            .terminal_sessions
+            .sessions
+            .lock()
+            .await
+            .remove(session_key);
         if let Some(mut session) = session {
-            info!("Killing PTY for task {}", task_id);
+            info!("Killing PTY for session {}", session_key);
             if let Err(error) = self
-                .terminate_current_session_process(task_id, &mut session, true)
+                .terminate_current_session_process(session_key, &mut session, true)
                 .await
             {
-                self.retain_failed_current_cleanup(task_id, session).await;
+                self.retain_failed_current_cleanup(session_key, session)
+                    .await;
                 return Err(error);
             }
-            info!("PTY for task {} killed", task_id);
+            info!("PTY for session {} killed", session_key);
         }
-        self.terminate_managed_recoveries(task_id).await?;
-        self.clear_session_tracking(task_id).await;
+        self.terminate_managed_recoveries(session_key).await?;
+        self.clear_session_tracking(session_key).await;
 
         Ok(())
     }
@@ -742,24 +753,24 @@ impl PtyManager {
         diagnostics
     }
 
-    pub async fn pty_buffer_state(&self, task_id: &str) -> PtyBufferState {
+    pub async fn pty_buffer_state(&self, session_key: &str) -> PtyBufferState {
         let instance_id = self
             .terminal_sessions
             .sessions
             .lock()
             .await
-            .get(task_id)
+            .get(session_key)
             .map(|session| session.instance_id);
         PtyBufferState {
-            buffer: self.get_pty_buffer(task_id).await,
+            buffer: self.get_pty_buffer(session_key).await,
             is_live: instance_id.is_some(),
             instance_id,
         }
     }
 
-    pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {
+    pub async fn get_pty_buffer(&self, session_key: &str) -> Option<String> {
         let buffers = self.terminal_sessions.output_buffers.lock().await;
-        let buffer = buffers.get(task_id)?;
+        let buffer = buffers.get(session_key)?;
         let buf = buffer.lock().unwrap();
         let content = buf.snapshot();
         if content.is_empty() {

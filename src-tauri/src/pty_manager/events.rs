@@ -268,7 +268,7 @@ impl PtyOutputBatcher {
 
         let event_name = format!("pty-output-{}", self.session_key);
         let payload = serde_json::json!({
-            "task_id": &self.session_key,
+            "shell_session_key": &self.session_key,
             "data": &data,
             "instance_id": self.instance_id,
         });

@@ -21,7 +21,7 @@ describe('renderer-neutral terminal view runtime', () => {
 
     expect(firstView.bootstrap).toHaveBeenCalledWith('first replay', 5)
     host.emit(`pty-output-${terminalKey}`, {
-      task_id: terminalKey,
+      shell_session_key: terminalKey,
       instance_id: 5,
       data: ' first live bytes',
     })
@@ -35,14 +35,14 @@ describe('renderer-neutral terminal view runtime', () => {
     await runtime.acquire(terminalKey)
 
     host.emit(`pty-output-${terminalKey}`, {
-      task_id: terminalKey,
+      shell_session_key: terminalKey,
       instance_id: 5,
       data: 'stale bytes',
     })
     expect(successorView.writeLive).not.toHaveBeenCalled()
 
     host.emit(`pty-output-${terminalKey}`, {
-      task_id: terminalKey,
+      shell_session_key: terminalKey,
       instance_id: 6,
       data: 'successor live bytes',
     })

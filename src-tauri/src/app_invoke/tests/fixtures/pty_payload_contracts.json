@@ -28,7 +28,7 @@
       "name": "write_pty",
       "command": "pty_write",
       "payload": {
-        "taskId": "T-pty",
+        "shellSessionKey": "T-pty-shell-2",
         "data": "echo ready\n"
       }
     },
@@ -45,7 +45,7 @@
       "name": "resize_pty",
       "command": "pty_resize",
       "payload": {
-        "taskId": "T-pty",
+        "shellSessionKey": "T-pty-shell-2",
         "cols": 120,
         "rows": 40
       }
@@ -54,7 +54,7 @@
       "name": "kill_pty",
       "command": "pty_kill",
       "payload": {
-        "taskId": "T-pty"
+        "shellSessionKey": "T-pty-shell-2"
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "get_pty_buffer",
       "command": "get_pty_buffer",
       "payload": {
-        "taskId": "T-pty"
+        "shellSessionKey": "T-pty-shell-2"
       }
     }
   ],
@@ -86,12 +86,21 @@
       "errorContains": "terminal_index"
     },
     {
-      "name": "missing_task_id_is_rejected",
+      "name": "missing_shell_session_key_is_rejected",
       "command": "pty_write",
       "payload": {
         "data": "echo ready\n"
       },
-      "errorContains": "taskId"
+      "errorContains": "shellSessionKey"
+    },
+    {
+      "name": "snake_case_shell_session_key_is_rejected",
+      "command": "pty_write",
+      "payload": {
+        "shell_session_key": "T-pty-shell-2",
+        "data": "echo ready\n"
+      },
+      "errorContains": "shell_session_key"
     },
     {
       "name": "missing_query_response_instance_is_rejected",
@@ -106,7 +115,7 @@
       "name": "out_of_range_cols_is_rejected",
       "command": "pty_resize",
       "payload": {
-        "taskId": "T-pty",
+        "shellSessionKey": "T-pty-shell-2",
         "cols": 70000,
         "rows": 24
       },
