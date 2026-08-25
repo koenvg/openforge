@@ -3,7 +3,7 @@
 use crate::app_events::{publish_app_event, AppEventSender};
 use crate::terminal_model::{
     ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelEvent, TerminalModelEventSink,
-    TerminalModelOptions,
+    TerminalModelOptions, TerminalModelReplySink,
 };
 use crate::user_environment::user_environment;
 use base64::Engine;
@@ -15,6 +15,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
+use super::super::super::ordered_writer::OrderedPtyWriter;
 use super::super::super::pids::pid_file_name_for_session_key;
 use super::super::super::{terminal_environment, PtyError, PtyManager, TerminalImageProtocol};
 use super::super::invalid_workspace_cwd;
@@ -161,11 +162,15 @@ impl PtyManager {
             .master
             .try_clone_reader()
             .map_err(|error| PtyError::SpawnFailed(format!("Failed to clone reader: {error}")))?;
-        let writer = pair
+        let raw_writer = pair
             .master
             .take_writer()
             .map_err(|error| PtyError::SpawnFailed(format!("Failed to take writer: {error}")))?;
-
+        let writer =
+            OrderedPtyWriter::start(request.session_key.clone(), request.instance_id, raw_writer)
+                .map_err(|error| {
+                PtyError::SpawnFailed(format!("Failed to start ordered PTY writer: {error}"))
+            })?;
         let mut child = pair
             .slave
             .spawn_command(request.command)
@@ -188,9 +193,25 @@ impl PtyManager {
 
         let (shadow_model, shadow_feeder) = if self.terminal_model_enabled() {
             let options = TerminalModelOptions::new(request.cols, request.rows);
-            let started =
-                match terminal_model_event_sink(&request.session_key, request.app_event_tx.clone())
-                {
+            let event_sink =
+                terminal_model_event_sink(&request.session_key, request.app_event_tx.clone());
+            let started = if self.terminal_view_enabled() {
+                let reply_writer = writer.model_reply_writer();
+                let reply_sink: TerminalModelReplySink =
+                    Arc::new(move |session_key, instance_id, bytes| {
+                        reply_writer
+                            .write(session_key, instance_id, bytes)
+                            .map_err(|error| error.to_string())
+                    });
+                ShadowTerminalSession::start_authoritative(
+                    request.session_key.clone(),
+                    request.instance_id,
+                    options,
+                    event_sink,
+                    reply_sink,
+                )
+            } else {
+                match event_sink {
                     Some(event_sink) => ShadowTerminalSession::start_with_event_sink(
                         request.session_key.clone(),
                         request.instance_id,
@@ -202,7 +223,8 @@ impl PtyManager {
                         request.instance_id,
                         options,
                     ),
-                };
+                }
+            };
             match started {
                 Ok((session, feeder)) => (Some(session), Some(feeder)),
                 Err(error) => {

@@ -47,6 +47,12 @@ function isShellTerminalKey(terminalKey: string): boolean {
   return /-shell-\d+$/.test(terminalKey)
 }
 
+function isTerminalProtocolReply(data: string): boolean {
+  return /^\u001b\[(?:[?>]?[\d;]*c|\??\d+(?:;\d+)?[nR]|\??\d+;\d+\$y|[468];\d+;\d+t)$/.test(data)
+    || /^\u001bP[01]\$r[\s\S]*\u001b\\$/.test(data)
+    || /^\u001b\](?:4;\d+|1[012]);rgb:[^\u001b]*(?:\u0007|\u001b\\)$/.test(data)
+}
+
 export function createTerminalAcquisition({
   host,
   pool,
@@ -163,7 +169,7 @@ export function createTerminalAcquisition({
 
     attachAgentTerminalKeyHandler(entry)
     entry.viewSubscriptions.push(entry.view.onUserInput((data: string) => {
-      if (!entry.ptyActive) return
+      if (!entry.ptyActive || (entry.terminalStateSource === 'ghostty' && isTerminalProtocolReply(data))) return
       host.writePty(terminalKey, data).catch(error => {
         console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
       })

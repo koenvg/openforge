@@ -82,6 +82,69 @@ describe('terminal runtime acquisition', () => {
     )
   })
 
+  it('forwards only user input from a Ghostty-backed browser replica', async () => {
+    const terminalKey = 'T-ghostty-shell-0'
+    const host = createHost()
+    const writePty = vi.spyOn(host, 'writePty')
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 7,
+      watermark: 0,
+      data: '',
+    })
+    const runtime = createTerminalRuntime(host)
+
+    await runtime.acquire(terminalKey)
+    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
+    onData('\u001b[?1;2c')
+    onData('\u001b[7;9R')
+    onData('\u001b[0n')
+    onData('\u001b[?25;1$y')
+    onData('\u001b[8;24;80t')
+    onData('\u001bP1$r0m\u001b\\')
+    onData('\u001b]10;rgb:ffff/ffff/ffff\u001b\\')
+    onData('user input')
+    onData('\u001b[A')
+
+    expect(writePty).toHaveBeenCalledTimes(2)
+    expect(writePty).toHaveBeenCalledWith(terminalKey, 'user input')
+    expect(writePty).toHaveBeenCalledWith(terminalKey, '\u001b[A')
+  })
+
+  it('keeps forwarding xterm protocol replies for legacy sessions', async () => {
+    const terminalKey = 'T-legacy-shell-0'
+    const host = createHost()
+    const writePty = vi.spyOn(host, 'writePty')
+    host.setBuffer(terminalKey, '')
+    const runtime = createTerminalRuntime(host)
+
+    await runtime.acquire(terminalKey)
+    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
+    onData('\u001b[?1;2c')
+
+    expect(writePty).toHaveBeenCalledWith(terminalKey, '\u001b[?1;2c')
+  })
+
+  it('falls back only the Ghostty replica whose model path is disabled', async () => {
+    const failedKey = 'T-failed-shell-0'
+    const healthyKey = 'T-healthy-shell-0'
+    const host = createHost()
+    host.setTerminalViewSnapshot(failedKey, { instanceId: 21, watermark: 0, data: '' })
+    host.setTerminalViewSnapshot(healthyKey, { instanceId: 22, watermark: 0, data: '' })
+    const runtime = createTerminalRuntime(host)
+    const failedEntry = await runtime.acquire(failedKey)
+    const healthyEntry = await runtime.acquire(healthyKey)
+
+    host.setBuffer(failedKey, 'legacy fallback')
+    host.setTerminalViewSnapshot(failedKey, null)
+    host.emit(`pty-model-disabled-${failedKey}`, { instance_id: 21 })
+
+    await vi.waitFor(() => expect(failedEntry.terminalStateSource).toBe('legacy'))
+    expect(healthyEntry.terminalStateSource).toBe('ghostty')
+    expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('legacy fallback')
+    expect(terminalMocks.instances[1].reset).not.toHaveBeenCalled()
+  })
+
   it('switches a legacy view when a newly created Terminal Session starts publishing model frames', async () => {
     const terminalKey = 'T-late-model-shell-0'
     const host = createHost()

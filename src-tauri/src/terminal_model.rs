@@ -5,7 +5,7 @@ mod shadow;
 pub(crate) use shadow::SHADOW_BUFFERED_BYTES_CAPACITY;
 pub(crate) use shadow::{
     ShadowMode, ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelEvent,
-    TerminalModelEventSink,
+    TerminalModelEventSink, TerminalModelReplySink,
 };
 
 use libghostty_vt::{
