@@ -5,7 +5,7 @@ import {
   getTaskActionPresentation,
   TASK_ACTION_PRESENTATION,
 } from './actionPalettePresentation'
-import { getMergeReadiness } from './types'
+import { getPullRequestMergeMethodSelections, selectPullRequestForAction } from './pullRequestActionPolicy'
 import type {
   ActionPaletteIcon,
   ActionPresentationMetadata,
@@ -38,36 +38,11 @@ function taskPaletteAction(id: TaskPaletteActionId): PaletteAction {
   }
 }
 
-
-function parseAllowedMergeMethods(pr: PullRequestInfo): PullRequestMergeMethod[] {
-  if (pr.merge_methods_policy_known !== true || pr.allowed_merge_methods === null) return []
-  let values: unknown = pr.allowed_merge_methods
-  if (typeof values === 'string') {
-    try {
-      values = JSON.parse(values)
-    } catch {
-      return []
-    }
-  }
-  if (!Array.isArray(values)) return []
-  return [...new Set(values.filter(
-    (value): value is PullRequestMergeMethod => value === 'merge' || value === 'squash' || value === 'rebase',
-  ))]
-}
-
 function mergePaletteActions(pr: PullRequestInfo): PaletteAction[] {
-  const allowed = parseAllowedMergeMethods(pr)
-  const configuredDefault = pr.default_merge_method
-  const defaultMethod = configuredDefault !== null && configuredDefault !== undefined
-    && allowed.includes(configuredDefault)
-    ? configuredDefault
-    : null
-  const ordered = defaultMethod === null
-    ? allowed
-    : [defaultMethod, ...allowed.filter(method => method !== defaultMethod)]
+  const mergeMethods = getPullRequestMergeMethodSelections(pr)
   const presentation = getTaskActionPresentation('merge-pr')
 
-  return ordered.map(mergeMethod => ({
+  return mergeMethods.map(({ mergeMethod, isDefault }) => ({
     ...presentation,
     id: `merge-pr:${mergeMethod}`,
     label: getPullRequestMergeActionLabel(mergeMethod, pr.pr_number),
@@ -76,7 +51,7 @@ function mergePaletteActions(pr: PullRequestInfo): PaletteAction[] {
     category: 'task',
     requiresConfirmation: true,
     mergeMethod,
-    isDefaultMergeMethod: mergeMethod === defaultMethod,
+    isDefaultMergeMethod: isDefault,
   }))
 }
 
@@ -92,22 +67,16 @@ export function getTaskActions(
     availableActionIds.add('start-task')
   }
 
-  const readyToMergePrs = taskPrs.filter((pr) => {
-    const readiness = getMergeReadiness(pr)
-    return readiness.status === 'ready_to_merge' && readiness.action === 'merge'
-  })
-  const mergeActions = readyToMergePrs.length === 1
-    ? mergePaletteActions(readyToMergePrs[0])
+  const mergeSelection = selectPullRequestForAction(taskPrs, 'merge')
+  const mergeActions = mergeSelection.status === 'eligible'
+    ? mergePaletteActions(mergeSelection.pullRequest)
     : []
   if (mergeActions.length > 0) {
     availableActionIds.add('merge-pr')
   }
 
-  const readyToEnqueuePrs = taskPrs.filter((pr) => {
-    const readiness = getMergeReadiness(pr)
-    return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue'
-  })
-  if (readyToEnqueuePrs.length === 1) {
+  const enqueueSelection = selectPullRequestForAction(taskPrs, 'enqueue')
+  if (enqueueSelection.status === 'eligible') {
     availableActionIds.add('enqueue-pr')
   }
 

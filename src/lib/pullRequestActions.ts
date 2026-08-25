@@ -5,7 +5,7 @@ import {
   refreshTaskGithubStatus,
 } from './ipc'
 import { error, setTaskMerging, ticketPrs } from './stores'
-import { getMergeReadiness } from './types'
+import { getPullRequestMergeMethodSelections, selectPullRequestForAction } from './pullRequestActionPolicy'
 import type { PullRequestMergeMethod, Task } from './types'
 
 export interface PullRequestActionOptions {
@@ -21,14 +21,15 @@ export function createPullRequestActions(options: PullRequestActionOptions) {
     task: Task,
     mergeMethod: PullRequestMergeMethod,
   ): Promise<void> {
-    const prs = get(ticketPrs).get(task.id) || []
-    const readyPrs = prs.filter((pr) => {
-      const readiness = getMergeReadiness(pr)
-      return readiness.status === 'ready_to_merge' && readiness.action === 'merge'
-    })
-
-    if (readyPrs.length === 1) {
-      const pr = readyPrs[0]
+    const selection = selectPullRequestForAction(get(ticketPrs).get(task.id) || [], 'merge')
+    if (selection.status === 'eligible') {
+      const pr = selection.pullRequest
+      const mergeMethodAvailable = getPullRequestMergeMethodSelections(pr)
+        .some(methodSelection => methodSelection.mergeMethod === mergeMethod)
+      if (!mergeMethodAvailable) {
+        error.set('The selected merge method is not available for this pull request.')
+        return
+      }
       try {
         setTaskMerging(task.id, true)
         await mergePullRequest(task.id, pr.id, pr.head_sha, mergeMethod)
@@ -51,20 +52,15 @@ export function createPullRequestActions(options: PullRequestActionOptions) {
       } finally {
         setTaskMerging(task.id, false)
       }
-    } else if (readyPrs.length > 1) {
+    } else if (selection.status === 'ambiguous') {
       error.set('Multiple pull requests are ready to merge. Open the task details to choose the correct PR.')
     }
   }
 
   async function enqueueReadyPullRequest(task: Task): Promise<void> {
-    const prs = get(ticketPrs).get(task.id) || []
-    const readyPrs = prs.filter((pr) => {
-      const readiness = getMergeReadiness(pr)
-      return readiness.status === 'ready_to_enqueue' && readiness.action === 'enqueue'
-    })
-
-    if (readyPrs.length === 1) {
-      const pr = readyPrs[0]
+    const selection = selectPullRequestForAction(get(ticketPrs).get(task.id) || [], 'enqueue')
+    if (selection.status === 'eligible') {
+      const pr = selection.pullRequest
       try {
         setTaskMerging(task.id, true)
         await enqueuePullRequest(task.id, pr.id, pr.head_sha)
@@ -88,7 +84,7 @@ export function createPullRequestActions(options: PullRequestActionOptions) {
       } finally {
         setTaskMerging(task.id, false)
       }
-    } else if (readyPrs.length > 1) {
+    } else if (selection.status === 'ambiguous') {
       error.set('Multiple pull requests are ready to enqueue. Open the task details to choose the correct PR.')
     }
   }
