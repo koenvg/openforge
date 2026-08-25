@@ -31,7 +31,6 @@ export const desktopCommandContracts = [
   {"functionName":"removeTaskLabel","ipcCommand":"remove_task_label","payloadKeys":["taskId","labelId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"deleteTaskLabel","ipcCommand":"delete_task_label","payloadKeys":["labelId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"startImplementation","ipcCommand":"start_implementation","payloadKeys":["taskId","repoPath","divergenceResolution","terminalImageProtocol","promptPrefix"],"owner":"rust-sidecar","domain":"tasks-projects"},
-  {"functionName":"resumeStartupSessions","ipcCommand":"resume_startup_sessions","payloadKeys":[],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getWorktreeForTask","ipcCommand":"get_worktree_for_task","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"listGitBranches","ipcCommand":"list_git_branches","payloadKeys":["repoPath"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"repoHasCommits","ipcCommand":"repo_has_commits","payloadKeys":["repoPath"],"owner":"rust-sidecar","domain":"tasks-projects"},

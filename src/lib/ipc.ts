@@ -186,10 +186,6 @@ export async function startImplementation(
   });
 }
 
-export async function resumeStartupSessions(): Promise<void> {
-  if (!isElectronDesktopBridgeAvailable()) return
-  return invoke("resume_startup_sessions");
-}
 
 export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo | null> {
   return invoke<WorktreeInfo | null>("get_worktree_for_task", { taskId });

@@ -4,7 +4,7 @@
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
-  import { getAppMode, getConfig, resumeStartupSessions, setPollContext, getProjectRepo } from './lib/ipc'
+  import { getAppMode, getConfig, setPollContext, getProjectRepo } from './lib/ipc'
   import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
@@ -374,8 +374,7 @@
       getActiveProjectId: () => get(activeProjectId),
       loadEnabledPluginsForProject: loadEnabledForProject,
     }),
-    resumeStartupSessions,
-    loadStartupData: () => loadAppStartupData({
+    loadRendererStartupData: () => loadAppStartupData({
       initializePluginRuntime: async () => {
         await initializePluginRuntime()
         await loadEnabledForApp()
