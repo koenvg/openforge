@@ -1,25 +1,19 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
   import { Plus, Search } from '@lucide/svelte'
-  import { get } from 'svelte/store'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, taskMatchesTextFilter } from '../../lib/boardFilters'
+  import { commandHeld, mergingTaskIds } from '../../lib/stores'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
-  import { sortBySessionActivity } from '../../lib/taskSort'
-  import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
-  import { getHTMLElementAt } from '../../lib/domUtils'
-  import { getProjectTaskLabels } from '../../lib/ipc'
-  import { getBacklogLabelCounts, getLabelsWithBacklogItems, getTaskLabels, pruneSelectedBacklogLabelIds, taskMatchesAnySelectedLabel } from '../../lib/taskLabels'
   import TaskListItem from './TaskListItem.svelte'
   import TaskInspectorPanel from '../task-detail/TaskInspectorPanel.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
   import BoardTextFilter from './BoardTextFilter.svelte'
   import { createOutOfFocusController } from './outOfFocusController.svelte'
-  import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, TaskLabel } from '../../lib/types'
+  import { createFocusBoardFilterController } from './focusBoardFilterController.svelte'
+  import { createFocusBoardInteractionController } from './focusBoardInteractionController.svelte'
+  import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo } from '../../lib/types'
 
   interface Props {
     projectId: string | null
@@ -79,33 +73,6 @@
     backlog: 'Backlog',
   }
 
-
-  let selectedTaskIdLocal: string | null = $state(null)
-  // Which card the user just returned from — snapshot once at init (before it's
-  // cleared), used both to seed selection/focus on mount and to play the one-shot pop.
-  // The {#each} is keyed by task.id, so existing cards aren't remounted on data
-  // refresh and the pop won't replay.
-  let recentlyViewedTaskId = $state<string | null>(get(lastViewedTaskId))
-  let restoredRecentlyViewedTask = $state(false)
-  let paneHasFocus = $state(false)
-  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
-  let projectLabels = $state<TaskLabel[]>([])
-  let fallbackFilter: BoardFilter = $state('focus')
-  let previousProjectId: string | null | undefined = undefined
-  let labelLoadRequest = 0
-  let labelLoadProjectId: string | null = null
-  let textFilterQuery = $state('')
-
-  let activeFilter = $derived.by(() => {
-    if (!projectId) return fallbackFilter
-    return $focusBoardFilters.get(projectId) ?? 'focus'
-  })
-
-  let selectedLabelIds = $derived.by(() => {
-    if (!projectId) return new Set<number>()
-    return $backlogLabelFilters.get(projectId) ?? new Set<number>()
-  })
-
   let outOfFocusTaskIds = $derived(outOfFocusController.taskIds)
   let projectAttentionRows = $derived(
     projectId ? attentionRows.filter((row) => row.project_id === projectId) : [],
@@ -113,229 +80,47 @@
   let attentionTaskIds = $derived(new Set(projectAttentionRows.map((row) => row.task_id)))
   let attentionByTaskId = $derived(new Map(projectAttentionRows.map((row) => [row.task_id, row])))
   let attentionOrder = $derived(new Map(projectAttentionRows.map((row, index) => [row.task_id, index])))
-
   let boardMetadataReady = $derived(outOfFocusController.isReadyFor(projectId) && attentionRowsLoaded)
-
   let tasksWithReadyAttentionMetadata = $derived.by(() =>
     boardMetadataReady ? tasks : tasks.filter((task) => task.status === 'backlog'),
   )
 
-  let visibleTasks = $derived.by(() => {
-    const tasksToFilter = activeFilter === 'backlog' ? tasks : tasksWithReadyAttentionMetadata
-    const filtered = filterTasks(tasksToFilter, activeFilter, attentionTaskIds, outOfFocusTaskIds)
-    const labelFiltered = activeFilter === 'backlog'
-      ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
-      : filtered
-    const textFiltered = labelFiltered.filter((task) => taskMatchesTextFilter(task, textFilterQuery))
-
-    if (activeFilter === 'focus') {
-      return textFiltered.slice().sort((left, right) =>
-        (attentionOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
-          - (attentionOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
-      )
-    }
-    return sortBySessionActivity(textFiltered, activeSessions)
+  const filterController = createFocusBoardFilterController({
+    getProjectId: () => projectId,
+    getTasks: () => tasks,
+    getTasksWithReadyAttentionMetadata: () => tasksWithReadyAttentionMetadata,
+    getActiveSessions: () => activeSessions,
+    getAttentionTaskIds: () => attentionTaskIds,
+    getAttentionOrder: () => attentionOrder,
+    getOutOfFocusTaskIds: () => outOfFocusTaskIds,
   })
 
+  let activeFilter = $derived(filterController.activeFilter)
+  let selectedLabelIds = $derived(filterController.selectedLabelIds)
+  let visibleTasks = $derived(filterController.visibleTasks)
+  let filterCounts = $derived(filterController.filterCounts)
+  let labelCounts = $derived(filterController.labelCounts)
+  let visibleFilterLabels = $derived(filterController.visibleFilterLabels)
   let visibleRows = $derived.by<TaskRow[]>(() =>
     visibleTasks.map((task, taskIndex) => ({ task, taskIndex })),
   )
 
-  let navigableCount = $derived(visibleTasks.length)
-
-  let filterCounts = $derived.by(() =>
-    getFilterCounts(tasksWithReadyAttentionMetadata, attentionTaskIds, outOfFocusTaskIds),
-  )
-  let displayProjectLabels = $derived.by(() => {
-    const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
-    for (const task of tasks) {
-      for (const label of getTaskLabels(task)) {
-        labelsById.set(label.id, label)
-      }
-    }
-    return Array.from(labelsById.values()).sort((a, b) => a.name.localeCompare(b.name))
-  })
-  let labelCounts = $derived.by(() => getBacklogLabelCounts(tasks, displayProjectLabels))
-  let visibleFilterLabels = $derived.by(() => getLabelsWithBacklogItems(displayProjectLabels, labelCounts))
-
-  let selectedTask = $derived.by(() => {
-    if (!selectedTaskIdLocal) return null
-    return visibleTasks.find(t => t.id === selectedTaskIdLocal) ?? null
+  const interactionController = createFocusBoardInteractionController({
+    getProjectId: () => projectId,
+    getVisibleTasks: () => visibleTasks,
+    setActiveFilter: filterController.setActiveFilter,
+    onOpenTask: (taskId) => onOpenTask(taskId),
+    onRunAction: (data) => onRunAction(data),
   })
 
-  function setActiveFilter(filter: BoardFilter) {
-    if (!projectId) {
-      fallbackFilter = filter
-      return
-    }
-    const nextFilters = new Map($focusBoardFilters)
-    nextFilters.set(projectId, filter)
-    focusBoardFilters.set(nextFilters)
-  }
-
-  $effect(() => {
-    const currentProjectId = projectId
-    const isInitialProject = previousProjectId === undefined
-    if (!isInitialProject && currentProjectId !== previousProjectId) {
-      backlogLabelFilters.set(new Map())
-      selectedTaskIdLocal = null
-      textFilterQuery = ''
-    }
-    previousProjectId = currentProjectId
-
-    if (!currentProjectId) {
-      labelLoadProjectId = null
-      projectLabels = []
-      return
-    }
-    if (labelLoadProjectId === currentProjectId) return
-
-    labelLoadProjectId = currentProjectId
-    projectLabels = []
-    const requestId = ++labelLoadRequest
-    getProjectTaskLabels(currentProjectId)
-      .then((labels) => {
-        if (requestId === labelLoadRequest && labelLoadProjectId === currentProjectId) projectLabels = labels
-      })
-      .catch(() => {
-        if (requestId === labelLoadRequest && labelLoadProjectId === currentProjectId) projectLabels = []
-      })
-  })
-
-  $effect(() => {
-    if (selectedTaskIdLocal && !visibleTasks.find(t => t.id === selectedTaskIdLocal)) {
-      selectedTaskIdLocal = null
-    }
-  })
-
-  $effect(() => {
-    if (!projectId || selectedLabelIds.size === 0) return
-
-    const prunedSelectedIds = pruneSelectedBacklogLabelIds(selectedLabelIds, visibleFilterLabels)
-    if (prunedSelectedIds.size === selectedLabelIds.size) return
-
-    const nextFilters = new Map($backlogLabelFilters)
-    if (prunedSelectedIds.size > 0) {
-      nextFilters.set(projectId, prunedSelectedIds)
-    } else {
-      nextFilters.delete(projectId)
-    }
-    backlogLabelFilters.set(nextFilters)
-  })
-
-  const vim = useVimNavigation({
-    getItemCount: () => navigableCount,
-    onSelect: (index) => {
-      const task = visibleTasks[index]
-      if (task) onOpenTask(task.id)
-    },
-    onBack: () => {
-      selectedTaskIdLocal = null
-    },
-    onAction: (index) => {
-      const task = visibleTasks[index]
-      if (task) onRunAction({ taskId: task.id, actionPrompt: '' })
-    },
-  })
-
-  onMount(() => {
-    // Returning from a task detail view: focus that task so it becomes the selected
-    // card. The focusedIndex effects below sync selectedTaskIdLocal and scroll it into
-    // view. Falls back to the default first-card focus when it isn't currently visible.
-    if (recentlyViewedTaskId) {
-      const idx = visibleTasks.findIndex((t) => t.id === recentlyViewedTaskId)
-      if (idx >= 0) {
-        vim.setFocusedIndex(idx)
-        restoredRecentlyViewedTask = true
-      }
-    }
-    if (get(lastViewedTaskId) !== null) {
-      lastViewedTaskId.set(null)
-    }
-  })
-
-  $effect(() => {
-    if (restoredRecentlyViewedTask || !recentlyViewedTaskId) return
-
-    const idx = visibleTasks.findIndex((t) => t.id === recentlyViewedTaskId)
-    if (idx >= 0) {
-      vim.setFocusedIndex(idx)
-      restoredRecentlyViewedTask = true
-    }
-  })
-
-  $effect(() => {
-    const count = navigableCount
-    if (count === 0) return
-    if (vim.focusedIndex >= count) {
-      vim.setFocusedIndex(count - 1)
-    }
-  })
-
-  $effect(() => {
-    const idx = vim.focusedIndex
-    untrack(() => {
-      const items = document.querySelectorAll('[data-vim-item]')
-      const el = getHTMLElementAt(items, idx)
-      el?.scrollIntoView?.({ block: 'nearest' })
-    })
-  })
-
-  $effect(() => {
-    const idx = vim.focusedIndex
-    const task = visibleTasks[idx]
-    if (task) {
-      selectedTaskIdLocal = task.id
-    }
-  })
-
+  let selectedTaskIdLocal = $derived(interactionController.selectedTaskId)
+  let selectedTask = $derived(interactionController.selectedTask)
+  let recentlyViewedTaskId = $derived(interactionController.recentlyViewedTaskId)
+  let contextMenu = $derived(interactionController.contextMenu)
 
   $effect(() => {
     outOfFocusController.selectProject(projectId)
   })
-
-  function handleBoardKeydown(e: KeyboardEvent) {
-    // CMD+1/2/3/4 filter chip shortcuts (works even when pane has focus)
-    if (e.metaKey && !e.shiftKey && !e.altKey) {
-      const filterMap: Record<string, BoardFilter> = { '1': 'focus', '2': 'in-flight', '3': 'out-of-focus', '4': 'backlog' }
-      const filter = filterMap[e.key]
-      if (filter) {
-        e.preventDefault()
-        setActiveFilter(filter)
-        selectedTaskIdLocal = null
-        vim.setFocusedIndex(0)
-        return
-      }
-    }
-
-    if (paneHasFocus) return
-    vim.handleKeydown(e)
-  }
-
-  function toggleLabelFilter(labelId: number) {
-    if (!projectId) return
-    const nextSelectedIds = new Set(selectedLabelIds)
-    if (nextSelectedIds.has(labelId)) {
-      nextSelectedIds.delete(labelId)
-    } else {
-      nextSelectedIds.add(labelId)
-    }
-    const nextFilters = new Map($backlogLabelFilters)
-    if (nextSelectedIds.size > 0) {
-      nextFilters.set(projectId, nextSelectedIds)
-    } else {
-      nextFilters.delete(projectId)
-    }
-    backlogLabelFilters.set(nextFilters)
-    selectedTaskIdLocal = null
-    vim.setFocusedIndex(0)
-  }
-
-  function handleContextMenu(event: MouseEvent, taskId: string) {
-    event.preventDefault()
-    contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
-  }
-
 
 </script>
 
@@ -374,11 +159,7 @@
                 ? 'z-10 border-primary bg-primary/[0.03] text-primary ring-1 ring-primary/20'
                 : 'text-base-content/65 hover:bg-base-200/60 hover:text-base-content'}"
               aria-pressed={activeFilter === opt.value}
-              onclick={() => {
-                setActiveFilter(opt.value)
-                selectedTaskIdLocal = null
-                vim.setFocusedIndex(0)
-              }}
+              onclick={() => interactionController.activateFilter(opt.value)}
             >
               <span>{opt.label} <span class="ml-1 text-[10px] opacity-60">{filterCounts[opt.value]}</span></span>
               {#if $commandHeld}
@@ -400,7 +181,10 @@
             <button
               class="badge badge-sm gap-1 {selectedLabelIds.has(label.id) ? 'badge-primary' : 'badge-ghost'}"
               aria-pressed={selectedLabelIds.has(label.id)}
-              onclick={() => toggleLabelFilter(label.id)}
+              onclick={() => {
+                filterController.toggleLabelFilter(label.id)
+                interactionController.resetToFirstTask()
+              }}
             >
               <span>{label.name}</span>
               <span class="opacity-70">{labelCounts.get(label.id) ?? 0}</span>
@@ -418,10 +202,10 @@
           <span class="text-sm text-base-content/45">Select a task to keep its context visible</span>
         </div>
 
-        {#if visibleTasks.length === 0 && textFilterQuery.trim()}
+        {#if visibleTasks.length === 0 && filterController.textFilterQuery.trim()}
           <div class="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center" role="status">
             <Search size={24} class="text-base-content/35" aria-hidden="true" />
-            <p class="text-sm font-medium text-base-content/70">No tasks match ‘{textFilterQuery.trim()}’.</p>
+            <p class="text-sm font-medium text-base-content/70">No tasks match ‘{filterController.textFilterQuery.trim()}’.</p>
             <p class="text-xs text-base-content/45">Try a different filter or press Escape to clear it.</p>
           </div>
         {:else if visibleTasks.length === 0}
@@ -443,18 +227,11 @@
                 dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, dependencyResolutionTasks) : null}
                 showLabels={activeFilter === 'backlog'}
                 isSelected={selectedTaskIdLocal === task.id}
-                isFocused={vim.focusedIndex === row.taskIndex}
+                isFocused={interactionController.focusedIndex === row.taskIndex}
                 justViewed={recentlyViewedTaskId === task.id}
                 isMerging={$mergingTaskIds.has(task.id)}
-                onSelect={() => {
-                  if (selectedTaskIdLocal === task.id) {
-                    onOpenTask(task.id)
-                  } else {
-                    selectedTaskIdLocal = task.id
-                    vim.setFocusedIndex(row.taskIndex)
-                  }
-                }}
-                onContextMenu={(e) => handleContextMenu(e, task.id)}
+                onSelect={() => interactionController.selectTask(task, row.taskIndex)}
+                onContextMenu={(event) => interactionController.openContextMenu(event, task.id)}
                 {onTaskUpdated}
               />
             </div>
@@ -463,7 +240,11 @@
       </div>
     </div>
 
-    <div class="w-[clamp(420px,31vw,820px)] flex-shrink-0" onfocusin={() => paneHasFocus = true} onfocusout={() => paneHasFocus = false}>
+    <div
+      class="w-[clamp(420px,31vw,820px)] flex-shrink-0"
+      onfocusin={() => interactionController.setPaneHasFocus(true)}
+      onfocusout={() => interactionController.setPaneHasFocus(false)}
+    >
       <TaskInspectorPanel
         task={selectedTask}
         allTasks={tasks}
@@ -479,10 +260,10 @@
 
   {#key projectId}
     <BoardTextFilter
-      bind:query={textFilterQuery}
+      bind:query={filterController.textFilterQuery}
       matchingCount={visibleTasks.length}
       shortcutBlocked={contextMenu.visible}
-      onBoardKeydown={handleBoardKeydown}
+      onBoardKeydown={interactionController.handleBoardKeydown}
     />
   {/key}
 
@@ -491,10 +272,10 @@
     x={contextMenu.x}
     y={contextMenu.y}
     taskId={contextMenu.taskId}
-    onClose={() => contextMenu = { ...contextMenu, visible: false }}
+    onClose={interactionController.closeContextMenu}
     onStart={(taskId, promptPrefix) => onRunAction({ taskId, actionPrompt: '', promptPrefix })}
     onEdit={onEditTask}
-    onDelete={() => contextMenu = { ...contextMenu, visible: false }}
+    onDelete={interactionController.closeContextMenu}
     {outOfFocusTaskIds}
     onMoveToOutOfFocus={outOfFocusController.setAside}
     onReturnToBoard={outOfFocusController.returnToBoard}
