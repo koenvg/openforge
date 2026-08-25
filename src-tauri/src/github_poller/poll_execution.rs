@@ -5,8 +5,9 @@ use super::review_sync::{
 };
 use super::scheduling::{
     build_poll_plan, current_unix_timestamp, get_scheduled_prs_for_project,
-    parse_poll_interval_seconds, poll_scheduler_snapshot, rate_limit_sleep_duration_secs,
-    scheduled_pr_in_scope, select_projects, PollContext, PollScope,
+    parse_poll_interval_seconds, poll_scheduler_snapshot,
+    rate_limit_sleep_duration_with_optional_now, scheduled_pr_in_scope, select_projects,
+    PollContext, PollScope,
 };
 use super::sync_logging::{
     format_rate_limit_pause_log, format_sync_phase_log, format_sync_scope_log, poll_scope_log_name,
@@ -69,7 +70,16 @@ async fn start_github_poller_with_state(
             parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
-        let now = current_unix_timestamp();
+        let now = match current_unix_timestamp() {
+            Ok(now) => now,
+            Err(error) => {
+                warn!(
+                    "[GitHub Poller] Failed to read current time: {error}; retrying in {poll_interval}s"
+                );
+                sleep(Duration::from_secs(poll_interval)).await;
+                continue;
+            }
+        };
         let global_review_interval = (poll_interval * 4) as i64;
         let global_review_due = now.saturating_sub(last_global_review_at) >= global_review_interval;
         let scheduler_snapshot = poll_scheduler_snapshot(&db, false, None, global_review_due);
@@ -122,18 +132,45 @@ async fn start_github_poller_with_state(
         }
 
         if ran_global_review {
-            last_global_review_at = current_unix_timestamp();
+            match current_unix_timestamp() {
+                Ok(now) => last_global_review_at = now,
+                Err(error) => warn!("[GitHub Poller] Failed to record global review time: {error}"),
+            }
         }
 
         let sleep_secs = if result.rate_limited {
-            let now = current_unix_timestamp();
-            let sleep_secs =
-                rate_limit_sleep_duration_secs(poll_interval, result.rate_limit_reset_at, now);
+            let now = match current_unix_timestamp() {
+                Ok(now) => Some(now),
+                Err(error) => {
+                    warn!(
+                        "[GitHub Poller] Failed to read current time while rate limited: {error}"
+                    );
+                    None
+                }
+            };
+            let sleep_secs = rate_limit_sleep_duration_with_optional_now(
+                poll_interval,
+                result.rate_limit_reset_at,
+                now,
+            );
             if let Some(scope) = &last_scope {
-                warn!(
-                    "{}",
-                    format_rate_limit_pause_log(result.rate_limit_reset_at, now, scope, sleep_secs)
-                );
+                if let Some(now) = now {
+                    warn!(
+                        "{}",
+                        format_rate_limit_pause_log(
+                            result.rate_limit_reset_at,
+                            now,
+                            scope,
+                            sleep_secs
+                        )
+                    );
+                } else {
+                    warn!(
+                        "[GitHub Poller] Rate limited in scope={}; current time unavailable, retrying in {} seconds",
+                        poll_scope_log_name(scope),
+                        sleep_secs
+                    );
+                }
             }
             sleep_secs
         } else {
@@ -447,13 +484,18 @@ pub(super) async fn poll_github_once_with_state(
                 total_new_comments, total_ci_changes, total_review_changes
             );
         } else if let Some(reset_at) = rate_limit_reset {
-            let now = current_unix_timestamp();
-            let seconds_until_reset = (reset_at - now).max(0);
-
-            warn!(
-                "[GitHub Poller] Rate limit detected, no changes this cycle (resets in {} seconds)",
-                seconds_until_reset
-            );
+            match current_unix_timestamp() {
+                Ok(now) => {
+                    let seconds_until_reset = (reset_at - now).max(0);
+                    warn!(
+                        "[GitHub Poller] Rate limit detected, no changes this cycle (resets in {} seconds)",
+                        seconds_until_reset
+                    );
+                }
+                Err(error) => warn!(
+                    "[GitHub Poller] Rate limit detected, no changes this cycle (current time unavailable: {error})"
+                ),
+            }
         } else {
             warn!(
                 "[GitHub Poller] Rate limit detected, no changes this cycle (reset time unknown)"
