@@ -1,0 +1,11 @@
+[package]
+name = "openforge-ghostty-compat"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.95"
+publish = false
+
+[dependencies]
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", rev = "de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec", version = "=0.2.1" }
+log = "0.4"
+thiserror = "2"

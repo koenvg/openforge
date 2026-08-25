@@ -272,7 +272,7 @@ jobs:
       - name: Build and run the compatibility gate offline
         working-directory: src-tauri
         shell: bash
-        run: 'cargo test --locked --offline terminal_model::'
+        run: 'cargo test --manifest-path ghostty-compat/Cargo.toml --locked --offline terminal_model::'
 
   rust:
     name: Rust Tests

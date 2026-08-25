@@ -34,6 +34,7 @@ ctrlc = "3"
 libc = "0.2"
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs.git", rev = "de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec", version = "=0.2.1" }
 portable-pty = "0.9"
+whisper-rs = { version = "0.15", features = ["metal"] }
 hound = "3.5"
 sha1 = "0.11"
 axum = { version = "0.7", features = ["ws"] }
@@ -48,12 +49,6 @@ subtle = "2.6.1"
 mdns-sd = "0.17.1"
 tempfile = "3"
 thiserror = "2"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-whisper-rs = { version = "0.15", features = ["metal"] }
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-whisper-rs = "0.15"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

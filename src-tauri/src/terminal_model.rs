@@ -1,3 +1,4 @@
+#[path = "terminal_model/shadow.rs"]
 mod shadow;
 
 #[cfg(test)]
