@@ -48,6 +48,29 @@ describe('FocusBoard filtering and labels', () => {
     expect(within(taskList).queryByText('Billing cleanup')).toBeNull()
   })
 
+  it('commits the quick filter without opening a Task, then restores board navigation', async () => {
+    const authTask = { ...makeTask('T-10', 'doing', 'Update login flow'), title: 'Authentication overhaul' }
+    const billingTask = { ...makeTask('T-11', 'doing', 'Update invoices'), title: 'Billing cleanup' }
+    renderBoard({
+      tasks: [authTask, billingTask],
+      sessions: new Map([
+        [authTask.id, makeSession(authTask.id, 'paused', null)],
+        [billingTask.id, makeSession(billingTask.id, 'paused', null)],
+      ]),
+    })
+
+    await fireEvent.keyDown(window, { key: '/' })
+    const filterInput = await screen.findByRole('searchbox', { name: 'Filter tasks' })
+    await fireEvent.input(filterInput, { target: { value: 'billing' } })
+    await fireEvent.keyDown(filterInput, { key: 'Enter' })
+
+    expect(onOpenTask).not.toHaveBeenCalled()
+
+    await fireEvent.keyDown(window, { key: 'Enter' })
+
+    expect(onOpenTask).toHaveBeenCalledWith(billingTask.id)
+  })
+
   it('leaves slash available while the user is typing in another editable control', async () => {
     renderBoard()
     const editor = document.createElement('textarea')

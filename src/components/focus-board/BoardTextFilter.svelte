@@ -32,6 +32,7 @@
 
   function handleInputKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
+      event.stopPropagation()
       event.preventDefault()
       isEditing = false
     } else if (event.key === 'Escape') {
