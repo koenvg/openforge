@@ -1,7 +1,8 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
-import { installAppTestLifecycle, mockLoadEnabledForProject } from './App.test-harness'
+import { installAppTestLifecycle } from './App.test-harness'
+import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
 
 function getLatestComponentProps<T extends Record<string, unknown>>(
   mockComponent: { mock: { calls: unknown[][] } },

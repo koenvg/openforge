@@ -2,7 +2,8 @@ import { render } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { PullRequestInfo } from './lib/types'
 import { requireDefined } from './test-utils/dom'
-import { eventListeners, installAppTestLifecycle } from './App.test-harness'
+import { installAppTestLifecycle } from './App.test-harness'
+import { eventListeners } from './App.test-fixtures/ipc'
 
 describe('App desktop events', { timeout: 15_000 }, () => {
   installAppTestLifecycle()

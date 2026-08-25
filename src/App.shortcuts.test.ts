@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
+import { installAppTestLifecycle } from './App.test-harness'
 import {
   installedPluginRows,
-  installAppTestLifecycle,
   mockExecutePluginCommand,
-} from './App.test-harness'
+} from './App.test-fixtures/plugin-runtime'
 
 describe('App shortcut behavior', () => {
   installAppTestLifecycle()

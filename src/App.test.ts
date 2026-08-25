@@ -2,7 +2,19 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { Project, Task } from './lib/types'
-import { callOrder, installAppTestLifecycle, mockActivatePlugin, mockCurrentViewStore, mockLoadEnabledForProject, mockRouterNavigate, mockRouterNavigateToTask, mockRouterResetToBoard, persistInstalledPluginRow } from './App.test-harness'
+import { installAppTestLifecycle } from './App.test-harness'
+import { callOrder } from './App.test-fixtures/ipc'
+import {
+  mockActivatePlugin,
+  mockLoadEnabledForProject,
+  persistInstalledPluginRow,
+} from './App.test-fixtures/plugin-runtime'
+import {
+  mockRouterNavigate,
+  mockRouterNavigateToTask,
+  mockRouterResetToBoard,
+} from './App.test-fixtures/routing'
+import { mockCurrentViewStore } from './App.test-fixtures/stores'
 
 async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockInstance<typeof console.error>) => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
