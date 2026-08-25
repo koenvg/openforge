@@ -1,7 +1,7 @@
 use rusqlite::Result;
 
 use super::super::pull_request_readiness::terminal_readiness_blockers_json;
-use super::super::{current_unix_timestamp, Database};
+use super::super::{current_unix_timestamp, sqlite::sqlite_id_list, Database};
 
 impl Database {
     /// Insert a PR comment into the database
@@ -322,27 +322,17 @@ impl Database {
     }
 
     pub fn mark_comments_addressed(&self, ids: &[i64]) -> Result<()> {
-        if ids.is_empty() {
+        let Some(id_list) = sqlite_id_list(ids) else {
             return Ok(());
-        }
+        };
+
         let conn = self.lock_conn()?;
-        let placeholders: Vec<String> = ids
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("?{}", i + 1))
-            .collect();
         let sql = format!(
             "UPDATE pr_comments SET addressed = 1 WHERE id IN ({})",
-            placeholders.join(", ")
+            id_list.placeholders
         );
         let mut stmt = conn.prepare(&sql)?;
-        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
-            .iter()
-            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
-            .collect();
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
-        stmt.execute(param_refs.as_slice())?;
+        stmt.execute(id_list.params.as_slice())?;
         Ok(())
     }
 }

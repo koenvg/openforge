@@ -94,3 +94,18 @@ pub struct PrCommentRow {
     pub outdated: i32,
     pub created_at: i64,
 }
+
+pub(super) fn read_pr_comment_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrCommentRow> {
+    Ok(PrCommentRow {
+        id: row.get(0)?,
+        pr_id: row.get(1)?,
+        author: row.get(2)?,
+        body: row.get(3)?,
+        comment_type: row.get(4)?,
+        file_path: row.get(5)?,
+        line_number: row.get(6)?,
+        addressed: row.get(7)?,
+        outdated: row.get(8)?,
+        created_at: row.get(9)?,
+    })
+}
