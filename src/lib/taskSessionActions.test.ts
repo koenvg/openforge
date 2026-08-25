@@ -121,7 +121,7 @@ describe('createTaskSessionActions', () => {
     const actions = createActions(loadTasks)
 
     tasks.set([task])
-    await actions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(inspectExistingBranch).not.toHaveBeenCalled()
     expect(acquire).toHaveBeenCalledWith(task.id)
@@ -141,7 +141,6 @@ describe('createTaskSessionActions', () => {
     await actions.handleRunAction({
       taskId: task.id,
       actionPrompt: '',
-      agent: null,
       promptPrefix: 'Verify this is still relevant.',
     })
 
@@ -153,7 +152,7 @@ describe('createTaskSessionActions', () => {
     const actions = createActions()
 
     tasks.set([task])
-    await actions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(vi.mocked(startImplementation).mock.calls[0][4]).toBeNull()
   })
@@ -166,7 +165,6 @@ describe('createTaskSessionActions', () => {
     await actions.handleRunAction({
       taskId: task.id,
       actionPrompt: 'continue',
-      agent: null,
       promptPrefix: 'Verify this is still relevant.',
     })
 
@@ -178,7 +176,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(startImplementation).mockRejectedValue(new Error('start failed'))
     const actions = createActions()
 
-    await actions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(release).toHaveBeenCalledWith(task.id)
   })
@@ -188,7 +186,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(startImplementation).mockRejectedValue(new Error('start failed'))
     const actions = createActions()
 
-    await actions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+    await actions.handleRunAction({ taskId: task.id, actionPrompt: '' })
 
     expect(release).not.toHaveBeenCalled()
   })
@@ -201,7 +199,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: branchTask.id, status: 'running' } as never)
     const actions = createActions()
 
-    await actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+    await actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '' })
 
     expect(inspectExistingBranch).toHaveBeenCalledWith(activeProject.path, 'origin/foo')
     expect(get(branchDivergenceRequest)).toBeNull()
@@ -218,7 +216,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(getSessionStatus).mockResolvedValue({ ticket_id: branchTask.id, status: 'running' } as never)
     const actions = createActions()
 
-    const started = actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+    const started = actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '' })
     await vi.waitFor(() => expect(get(branchDivergenceRequest)).not.toBeNull())
     get(branchDivergenceRequest)!.resolve('keepLocal')
     branchDivergenceRequest.set(null)
@@ -233,7 +231,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(inspectExistingBranch).mockResolvedValue(plan('diverged'))
     const actions = createActions()
 
-    const started = actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '', agent: null })
+    const started = actions.handleRunAction({ taskId: branchTask.id, actionPrompt: '' })
     await vi.waitFor(() => expect(get(branchDivergenceRequest)).not.toBeNull())
     get(branchDivergenceRequest)!.resolve('cancel')
     branchDivergenceRequest.set(null)
@@ -246,7 +244,7 @@ describe('createTaskSessionActions', () => {
     vi.mocked(isPtyActive).mockReturnValue(true)
     const actions = createActions()
 
-    await actions.handleRunAction({ taskId: task.id, actionPrompt: 'continue', agent: null })
+    await actions.handleRunAction({ taskId: task.id, actionPrompt: 'continue' })
 
     expect(writePtyWithSubmit).toHaveBeenCalledWith(task.id, 'continue')
     expect(startImplementation).not.toHaveBeenCalled()

@@ -56,7 +56,7 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
         await runApp?.()
         break
       case 'start-task':
-        if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+        if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '' })
         break
       case 'delete-task':
         if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Delete')) {

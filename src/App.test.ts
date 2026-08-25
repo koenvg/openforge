@@ -246,7 +246,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
 
       return getLatestComponentProps<{
         onTaskSaved: (task?: Task) => Promise<void> | void
-        onRunAction: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
+        onRunAction: (taskId: string, actionPrompt: string) => Promise<void>
       }>(vi.mocked(addTaskDialogModule.default), 'onRunAction')
     }
 
@@ -262,7 +262,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
 
       const dialogProps = await openCreateTaskDialog()
-      const runPromise = dialogProps.onRunAction(createdTask.id, '', null)
+      const runPromise = dialogProps.onRunAction(createdTask.id, '')
 
       await vi.waitFor(() => {
         expect(mockRouterNavigateToTask).toHaveBeenCalledWith(createdTask.id)
@@ -282,7 +282,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
 
       const dialogProps = await openCreateTaskDialog('plugin:com.openforge.file-viewer:files')
-      await dialogProps.onRunAction(createdTask.id, '', null)
+      await dialogProps.onRunAction(createdTask.id, '')
 
       expect(mockRouterResetToBoard).toHaveBeenCalled()
       expect(mockRouterNavigateToTask).toHaveBeenCalledWith(createdTask.id)

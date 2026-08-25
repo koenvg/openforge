@@ -34,7 +34,7 @@ describe('TaskDetailView — completion', () => {
   it('Start Task calls onRunAction with empty prompt', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     fireEvent.click(screen.getByText('Start Task'))
-    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '' })
   })
 
   it('shows Complete without a flag for doing tasks and no Start Task', () => {

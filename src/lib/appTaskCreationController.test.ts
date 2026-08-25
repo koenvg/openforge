@@ -49,7 +49,7 @@ describe('App task creation controller', () => {
       settleCompose: vi.fn(),
     })
 
-    const starting = controller.runTask(backlogTask.id, 'Start now', 'pi')
+    const starting = controller.runTask(backlogTask.id, 'Start now')
     await vi.waitFor(() => expect(calls).toEqual(['load', 'board', 'navigate', 'run']))
 
     finishRun()

@@ -34,7 +34,7 @@ describe('TaskDetailToolbar', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Start Task' }))
 
     expect(onBack).toHaveBeenCalledTimes(1)
-    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '' })
   })
 
   it('owns task-keyed inspector visibility persistence', async () => {

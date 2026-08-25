@@ -23,7 +23,6 @@ import type { DivergenceResolution, Project } from './types'
 export interface RunActionData {
   taskId: string
   actionPrompt: string
-  agent: string | null
   /**
    * A one-off prefix for this start only. It is never written back to the task.
    * A live PTY ignores the prefix because that path writes to a running agent.

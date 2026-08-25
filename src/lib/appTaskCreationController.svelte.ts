@@ -36,9 +36,9 @@ export function useAppTaskCreationController(options: AppTaskCreationControllerO
     await options.runAction(data)
   }
 
-  async function runTask(taskId: string, actionPrompt: string, agent: string | null): Promise<void> {
+  async function runTask(taskId: string, actionPrompt: string): Promise<void> {
     await options.loadTasks()
-    await navigateAndRun({ taskId, actionPrompt, agent })
+    await navigateAndRun({ taskId, actionPrompt })
   }
 
   async function taskSaved(): Promise<void> {
@@ -56,8 +56,8 @@ export function useAppTaskCreationController(options: AppTaskCreationControllerO
     }
   }
 
-  async function runComposedTask(taskId: string, actionPrompt: string, agent: string | null): Promise<void> {
-    await navigateAndRun({ taskId, actionPrompt, agent })
+  async function runComposedTask(taskId: string, actionPrompt: string): Promise<void> {
+    await navigateAndRun({ taskId, actionPrompt })
   }
 
   return {
