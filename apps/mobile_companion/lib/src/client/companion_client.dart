@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../action_palette/action_palette_models.dart';
+import '../action_palette/merge_method_conversions.dart';
 import '../generated/companion_v1_client.dart';
 import '../pairing/pairing_bootstrap.dart';
 import '../storage/companion_secure_storage.dart';
@@ -385,11 +386,7 @@ final class GeneratedCompanionClient
     trustRecord,
     (client) => client.mergeCompanionTaskPullRequest(
       taskId: taskId,
-      mergeMethod: switch (mergeMethod) {
-        MobileMergeMethod.merge => PullRequestMergeMethod.merge,
-        MobileMergeMethod.squash => PullRequestMergeMethod.squash,
-        MobileMergeMethod.rebase => PullRequestMergeMethod.rebase,
-      },
+      mergeMethod: mergeMethod.toGeneratedMergeMethod(),
       credential: trustRecord.deviceCredential,
     ),
   );

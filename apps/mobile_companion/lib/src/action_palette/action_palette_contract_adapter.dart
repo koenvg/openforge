@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../generated/companion_v1_client.dart' as generated;
 import 'action_palette_models.dart';
+import 'merge_method_conversions.dart';
 
 abstract final class MobilePaletteActionContractAdapter {
   static MobilePaletteAction fromTaskPresentation(
@@ -17,11 +18,9 @@ abstract final class MobilePaletteActionContractAdapter {
     mergeMethods:
         (presentation.mergeMethods ??
                 const <generated.PullRequestMergeMethod>[])
-            .map(_mergeMethod)
+            .map((method) => method.toMobileMergeMethod())
             .toList(growable: false),
-    defaultMergeMethod: presentation.defaultMergeMethod == null
-        ? null
-        : _mergeMethod(presentation.defaultMergeMethod!),
+    defaultMergeMethod: presentation.defaultMergeMethod?.toMobileMergeMethod(),
   );
 
   static MobilePaletteAction fromProjectPresentation(
@@ -35,14 +34,6 @@ abstract final class MobilePaletteActionContractAdapter {
     requiresConfirmation: presentation.requiresConfirmation,
     destructive: presentation.destructive,
   );
-
-  static MobileMergeMethod _mergeMethod(
-    generated.PullRequestMergeMethod method,
-  ) => switch (method) {
-    generated.PullRequestMergeMethod.merge => MobileMergeMethod.merge,
-    generated.PullRequestMergeMethod.squash => MobileMergeMethod.squash,
-    generated.PullRequestMergeMethod.rebase => MobileMergeMethod.rebase,
-  };
 
   static CompanionActionId _taskActionId(
     generated.CompanionTaskActionId id,
