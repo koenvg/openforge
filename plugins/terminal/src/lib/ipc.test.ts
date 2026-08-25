@@ -81,6 +81,9 @@ describe('terminal plugin IPC shell callbacks', () => {
     const shell = installShellApi()
 
     await expect(writePty('project-P-1', 'echo hi\n')).rejects.toThrow('indexed terminal key')
+    await expect(writePty('project-P-1-shell-4294967296', 'echo hi\n')).rejects.toThrow(
+      'indexed terminal key',
+    )
 
     expect(shell.write).not.toHaveBeenCalled()
   })

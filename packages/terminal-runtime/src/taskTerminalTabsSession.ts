@@ -1,8 +1,13 @@
+import { createIndexedShellSessionKey } from './ptySessionKey'
 import type { TaskTerminalTabsSession } from './terminalRuntimeTypes'
 
 function createDefaultTaskTerminalTabsSession(taskId: string): TaskTerminalTabsSession {
   return {
-    tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
+    tabs: [{
+      index: 0,
+      key: createIndexedShellSessionKey({ taskId, terminalIndex: 0 }),
+      label: 'Shell 1',
+    }],
     activeTabIndex: 0,
     nextIndex: 1,
   }

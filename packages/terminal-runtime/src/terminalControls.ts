@@ -1,3 +1,4 @@
+import { createIndexedShellSessionKey } from './ptySessionKey'
 import type {
   ShellLifecycleState,
   TaskTerminalTabsSession,
@@ -213,7 +214,7 @@ export function createTerminalTabsController(options: TerminalTabsControllerOpti
     nextIndex = nextIndex + 1
     return {
       index,
-      key: `${getTaskId()}-shell-${index}`,
+      key: createIndexedShellSessionKey({ taskId: getTaskId(), terminalIndex: index }),
       label: getShellLabel(index),
     }
   }

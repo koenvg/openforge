@@ -1,6 +1,7 @@
 import {
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
+  parsePtySessionKey,
   type PoolEntry,
   type ShellLifecycleState,
   type TaskTerminalTabsSession,
@@ -12,10 +13,6 @@ import { getPtyBuffer, resizePty, writePty, writeTerminalQueryResponse } from '.
 import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
 
-function taskIdFromTerminalKey(terminalKey: string): string {
-  return terminalKey.replace(/-shell-\d+$/, '')
-}
-
 const terminalRuntime = createTerminalRuntime({
   listenEvent: listenDesktopEvent,
   getPtyBuffer,
@@ -23,7 +20,7 @@ const terminalRuntime = createTerminalRuntime({
   writePty,
   resizePty,
   openLink: (terminalKey, url) => taskLinkRouter.open({
-    taskId: taskIdFromTerminalKey(terminalKey),
+    taskId: parsePtySessionKey(terminalKey).taskId,
     url,
   }),
   themeMode,
