@@ -11,10 +11,8 @@ import {
   tasks,
 } from '../stores'
 import {
-  getShellLifecycleState,
   release as releaseTerminal,
   restorePtyInstance,
-  updateShellLifecycleState,
 } from '../terminalPool'
 import { getTaskPromptText } from '../taskPrompt'
 import type { AgentSession } from '../types'
@@ -53,12 +51,7 @@ function hydratePtyInstanceFromStatusMetadata(
   if (typeof ptyInstanceId !== 'number') return
   if (!shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)) return
 
-  updateShellLifecycleState(taskId, {
-    ...getShellLifecycleState(taskId),
-    ptyActive: true,
-    shellExited: false,
-    currentPtyInstance: ptyInstanceId,
-  })
+  restorePtyInstance(taskId, ptyInstanceId)
 }
 
 function setAgentNeedsPermissionNotification(taskId: string, session: AgentSession): boolean {

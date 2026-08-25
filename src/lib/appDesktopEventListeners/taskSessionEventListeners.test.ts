@@ -2,20 +2,13 @@ import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { finalizeAgentSession, getLatestSession } from '../ipc'
 import { activeSessions, checkpointNotification, taskRuntimeInfo } from '../stores'
-import { getShellLifecycleState, release, restorePtyInstance, updateShellLifecycleState } from '../terminalPool'
+import { release, restorePtyInstance } from '../terminalPool'
 import { createTaskSessionEventListeners } from './taskSessionEventListeners'
 import { createAppDesktopEventHarness, createSession, registerEventListenerGroup } from './testUtils'
 
 vi.mock('../terminalPool', () => ({
-  getShellLifecycleState: vi.fn().mockReturnValue({
-    ptyActive: true,
-    shellExited: false,
-    currentPtyInstance: null,
-    hasOutput: false,
-  }),
   release: vi.fn(),
   restorePtyInstance: vi.fn(),
-  updateShellLifecycleState: vi.fn(),
 }))
 
 vi.mock('../ipc', async (importOriginal) => {
@@ -34,12 +27,6 @@ describe('createTaskSessionEventListeners', () => {
     checkpointNotification.set(null)
     taskRuntimeInfo.set(new Map())
     vi.clearAllMocks()
-    vi.mocked(getShellLifecycleState).mockReturnValue({
-      ptyActive: true,
-      shellExited: false,
-      currentPtyInstance: null,
-      hasOutput: false,
-    })
   })
 
   it('marks action-complete sessions completed and clears checkpoint notification', async () => {
@@ -114,12 +101,7 @@ describe('createTaskSessionEventListeners', () => {
       payload: { task_id: 'task-1', status: 'running', pty_instance_id: 42 },
     })
 
-    expect(updateShellLifecycleState).toHaveBeenCalledWith('task-1', {
-      ptyActive: true,
-      shellExited: false,
-      currentPtyInstance: 42,
-      hasOutput: false,
-    })
+    expect(restorePtyInstance).toHaveBeenCalledWith('task-1', 42)
     expect(get(activeSessions).get('task-1')?.status).toBe('running')
   })
 
@@ -210,12 +192,6 @@ describe('createTaskSessionEventListeners', () => {
 
   it('does not reactivate an exited PTY from completed status metadata', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
-    vi.mocked(getShellLifecycleState).mockReturnValue({
-      ptyActive: false,
-      shellExited: true,
-      currentPtyInstance: 42,
-      hasOutput: false,
-    })
     activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
     await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
 
@@ -223,7 +199,7 @@ describe('createTaskSessionEventListeners', () => {
       payload: { task_id: 'task-1', status: 'completed', kind: 'ended', pty_instance_id: 42 },
     })
 
-    expect(updateShellLifecycleState).not.toHaveBeenCalled()
+    expect(restorePtyInstance).not.toHaveBeenCalled()
     expect(get(activeSessions).get('task-1')?.status).toBe('completed')
   })
 

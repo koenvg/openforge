@@ -88,9 +88,6 @@ vi.mock('../../lib/terminalPool', () => ({
   clearPtySpawnPending: vi.fn((entry) => {
     entry.spawnPending = false
   }),
-  setCurrentPtyInstance: vi.fn((entry, instanceId) => {
-    entry.currentPtyInstance = instanceId
-  }),
   markShellPtyStarted: vi.fn((entry, instanceId) => {
     entry.currentPtyInstance = instanceId
     entry.ptyActive = true

@@ -34,6 +34,14 @@ describe('terminal runtime tab sessions', () => {
   })
 })
 
+describe('terminal runtime PTY activation API', () => {
+  it('does not expose direct PTY instance mutation', () => {
+    const runtime = createTerminalRuntime(createHost())
+
+    expect(runtime).not.toHaveProperty('setCurrentPtyInstance')
+  })
+})
+
 describe('terminal runtime resumed agent input', () => {
   beforeEach(resetTerminalRuntimeIntegrationHarness)
 
@@ -43,7 +51,11 @@ describe('terminal runtime resumed agent input', () => {
     const runtime = createTerminalRuntime(host)
 
     runtime.restorePtyInstance('T-1', 42)
-    await runtime.acquire('T-1')
+    const entry = await runtime.acquire('T-1')
+    expect(entry.authority).toMatchObject({
+      shellSessionKey: 'T-1',
+      ptyInstanceId: 42,
+    })
 
     const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
       | ((data: string) => void)
@@ -179,6 +191,10 @@ describe('terminal runtime shell output lifecycle', () => {
 
     runtime.markPtySpawnPending(entry)
     runtime.markShellPtyStarted(entry, 2)
+    expect(entry.authority).toMatchObject({
+      shellSessionKey: 'T-1-shell-0',
+      ptyInstanceId: 2,
+    })
 
     expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
       ptyActive: true,
