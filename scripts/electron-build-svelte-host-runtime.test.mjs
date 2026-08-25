@@ -1,9 +1,6 @@
-import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
-import { describe, expect, it, afterEach } from 'vitest'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { build as viteBuild } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { get } from 'svelte/store'
@@ -13,9 +10,10 @@ import { activatePlugin } from '../src/lib/plugin/pluginRegistry.ts'
 import { _resetPluginLoaderForTests, _setModuleLoader } from '../src/lib/plugin/pluginLoader.ts'
 import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../src/lib/plugin/pluginStore.ts'
 import { activeProjectId } from '../src/lib/stores.ts'
-import { rendererImportMapHtml, svelteHostRuntimeBuildEntries } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
-import { buildBackendPluginHostRuntime, buildPreloadBundle, buildSvelteHostRuntimeAssets, copyElectronMainRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
-import { BACKEND_LAYOUT_CONFIG_FILE } from './rust-sidecar-layout.mjs'
+import { rendererImportMapHtml } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
+import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
+import { writeMinimalHostRuntimeInputs } from './electron-build-host-runtime.test-fixtures.mjs'
+import { repoRoot, temporaryTestPath } from './electron-build.test-fixtures.mjs'
 
 const sidecarConfig = {
   command: 'openforge-sidecar',
@@ -28,40 +26,6 @@ const sidecarConfig = {
   healthUrl: 'http://127.0.0.1:17642/app/health',
   readinessUrl: 'http://127.0.0.1:17642/app/readiness',
   eventUrl: 'http://127.0.0.1:17642/app/events',
-}
-
-async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src-tauri' } = {}) {
-  await mkdir(repoRoot, { recursive: true })
-  await writeFile(join(repoRoot, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify({
-    backendCrateRoot,
-    manifestPath: `${backendCrateRoot}/Cargo.toml`,
-    binaryName: backendCrateRoot === 'src-tauri' ? 'openforge' : 'openforge-backend',
-    iconPath: `${backendCrateRoot}/icons/icon.icns`,
-    electronBundleRoot: `${backendCrateRoot}/target/release/bundle/electron/macos`,
-  }))
-  await mkdir(join(repoRoot, 'packages', 'plugin-sdk', 'src'), { recursive: true })
-  await mkdir(join(repoRoot, 'packages', 'plugin-runtime', 'src'), { recursive: true })
-  await mkdir(join(repoRoot, 'packages', 'terminal-runtime', 'src'), { recursive: true })
-  await mkdir(join(repoRoot, backendCrateRoot, 'plugin-host'), { recursive: true })
-  await writeFile(join(repoRoot, 'packages', 'plugin-sdk', 'src', 'index.ts'), 'export const pluginSdk = true; export function resolveExternalTextFileChunkSize() { return 2048; }')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'index.ts'), 'export const terminalRuntime = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalRuntime.ts'), 'export const terminalRuntimeCore = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalOptions.ts'), 'export const terminalOptions = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'theme.ts'), 'export const terminalTheme = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcuts.ts'), 'export const terminalShortcuts = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
-  await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'TerminalTabsShell.svelte'), '<script>export const terminalTabsShell = true;</script>')
-  await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
-  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'\nimport { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'\nconsole.log({ validation: validateSchemaValue(), chunkSize: resolveExternalTextFileChunkSize() })\n")
-
-  const svelteFiles = Object.fromEntries(
-    Object.values(svelteHostRuntimeBuildEntries()).map(relPath => [relPath, `export const stub = ${JSON.stringify(`svelte:${relPath}`)};`]),
-  )
-  for (const [relPath, content] of Object.entries(svelteFiles)) {
-    const filePath = join(repoRoot, 'node_modules', 'svelte', 'src', relPath)
-    await mkdir(dirname(filePath), { recursive: true })
-    await writeFile(filePath, content)
-  }
 }
 
 async function writeMinimalSveltePlugin(root) {
@@ -143,7 +107,7 @@ function svelteHostRuntimeTestStub(url) {
 }
 
 function replaceModuleSpecifier(code, specifier, replacement) {
-  return code.replace(new RegExp(`([\"'])${escapeRegExp(specifier)}\\1`, 'g'), JSON.stringify(replacement))
+  return code.replace(new RegExp(`(["'])${escapeRegExp(specifier)}\\1`, 'g'), JSON.stringify(replacement))
 }
 
 function createProtocolBackedModuleLoader({ repoRoot, pluginId, pluginRoot, sidecarConfig }) {
@@ -191,21 +155,7 @@ function createProtocolBackedModuleLoader({ repoRoot, pluginId, pluginRoot, side
   return async (url) => import(await loadModuleUrl(url))
 }
 
-describe('Electron build host-runtime assets', () => {
-  it('excludes Vitest-only Electron helpers from the production compilation graph', () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const configPath = join(repoRoot, 'tsconfig.electron.json')
-    const tscPath = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc')
-    const productionSources = execFileSync(
-      process.execPath,
-      [tscPath, '--project', configPath, '--listFilesOnly'],
-      { cwd: repoRoot, encoding: 'utf8' },
-    ).trim().split(/\r?\n/)
-    expect(productionSources).toContain(join(repoRoot, 'src', 'electron', 'main.ts'))
-    expect(productionSources.some(file => file.endsWith('.testUtils.ts'))).toBe(false)
-    expect(productionSources.some(file => file.includes('/node_modules/vitest/'))).toBe(false)
-  })
-
+describe('Electron build Svelte host-runtime integration', () => {
   afterEach(() => {
     _resetPluginLoaderForTests()
     installedPlugins.set(new Map())
@@ -226,20 +176,36 @@ describe('Electron build host-runtime assets', () => {
   })
 
   it('bundles Svelte host runtime entrypoints without unresolved package-private imports', async () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const outDir = join(tmpdir(), `openforge-svelte-runtime-${process.pid}-${Date.now()}`)
+    const outDir = temporaryTestPath('svelte-runtime')
 
     await buildSvelteHostRuntimeAssets(repoRoot, outDir)
 
     const internalClient = await readFile(join(outDir, 'internal', 'client', 'index.js'), 'utf8')
-    expect(internalClient).not.toMatch(/^\s*import\s+.*from\s+['\"](?:#|esm-env|clsx|svelte)/m)
-    expect(internalClient).not.toMatch(/^\s*export\s+.*from\s+['\"](?:#|esm-env|clsx|svelte)/m)
+    expect(internalClient).not.toMatch(/^\s*import\s+.*from\s+['"](?:#|esm-env|clsx|svelte)/m)
+    expect(internalClient).not.toMatch(/^\s*export\s+.*from\s+['"](?:#|esm-env|clsx|svelte)/m)
+  })
+
+  it('builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
+    const fixtureRoot = temporaryTestPath('electron-build-svelte-assets')
+    const outDir = join(fixtureRoot, 'dist-electron')
+    await writeMinimalHostRuntimeInputs(fixtureRoot)
+
+    await copyHostRuntimeAssets(fixtureRoot, outDir)
+
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'index.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'client', 'index.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'flags', 'async.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'reactivity', 'window', 'index.js'))).resolves.toBeTruthy()
+    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'store.js'))).resolves.toBeTruthy()
+    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'index.js'), 'utf8')).resolves.toContain('svelte')
+    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'internal.js'), 'utf8')).resolves.toContain('internal')
+    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'store.js'), 'utf8')).resolves.toContain('store')
   })
 
   it('resolves Svelte plugin bundle runtime imports through the renderer import map and host protocol', async () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const pluginRoot = join(tmpdir(), `openforge-svelte-plugin-${process.pid}-${Date.now()}`)
-    const hostRuntimeRoot = join(tmpdir(), `openforge-plugin-host-runtime-${process.pid}-${Date.now()}`)
+    const pluginRoot = temporaryTestPath('svelte-plugin')
+    const hostRuntimeRoot = temporaryTestPath('plugin-host-runtime')
 
     try {
       const bundle = await buildMinimalSveltePluginBundle(pluginRoot)
@@ -274,10 +240,9 @@ describe('Electron build host-runtime assets', () => {
   })
 
   it('activates a built Svelte plugin artifact through plugin protocol rewritten host runtime imports', async () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
     const pluginId = 'com.example.task-scheduler'
-    const pluginRoot = join(tmpdir(), `openforge-svelte-plugin-enable-${process.pid}-${Date.now()}`)
-    const hostRuntimeRoot = join(tmpdir(), `openforge-plugin-host-runtime-enable-${process.pid}-${Date.now()}`)
+    const pluginRoot = temporaryTestPath('svelte-plugin-enable')
+    const hostRuntimeRoot = temporaryTestPath('plugin-host-runtime-enable')
 
     try {
       await buildMinimalSveltePluginBundle(pluginRoot)
@@ -346,85 +311,5 @@ describe('Electron build host-runtime assets', () => {
       await rm(pluginRoot, { recursive: true, force: true })
       await rm(hostRuntimeRoot, { recursive: true, force: true })
     }
-  })
-
-  it('copies shared runtime assets next to compiled Electron main assets', async () => {
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const outDir = join(tmpdir(), `openforge-electron-main-runtime-${process.pid}-${Date.now()}`)
-    await mkdir(outDir, { recursive: true })
-
-    await copyElectronMainRuntimeAssets(repoRoot, outDir)
-
-    const copiedContract = await readFile(join(outDir, 'svelteHostRuntimeContract.mjs'), 'utf8')
-    expect(copiedContract).toContain('SVELTE_HOST_RUNTIME_MODULES')
-    expect(copiedContract).not.toContain('packages/plugin-sdk')
-
-    const copiedPreloadBridge = await readFile(join(outDir, 'preloadBridge.cjs'), 'utf8')
-    expect(copiedPreloadBridge).toContain('createOpenForgePreloadApi')
-    expect(copiedPreloadBridge).toContain('openforge:event')
-  })
-
-  it('bundles the sandbox preload into a self-contained preload.cjs', async () => {
-    // Electron's sandboxed preload uses a restricted require that cannot resolve
-    // relative sibling modules, so the bridge must be inlined into preload.cjs
-    // rather than pulled in via `require('./preloadBridge.cjs')` at runtime.
-    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-    const outDir = join(tmpdir(), `openforge-preload-bundle-${process.pid}-${Date.now()}`)
-    await mkdir(outDir, { recursive: true })
-
-    try {
-      await buildPreloadBundle(repoRoot, outDir)
-
-      const preload = await readFile(join(outDir, 'preload.cjs'), 'utf8')
-      expect(preload).toContain('createOpenForgePreloadApi')
-      expect(preload).toContain('openforge:invoke')
-      expect(preload).toContain('exposeInMainWorld')
-      expect(preload).not.toMatch(/require\(\s*['"]\.\/preloadBridge\.cjs['"]\s*\)/)
-    } finally {
-      await rm(outDir, { recursive: true, force: true })
-    }
-  })
-
-  it('builds the backend plugin-host runtime from workspace sources without generated package artifacts', async () => {
-    const repoRoot = join(tmpdir(), `openforge-electron-build-alt-backend-${process.pid}-${Date.now()}`)
-    const outDir = join(repoRoot, 'dist-electron', 'plugin-host')
-    await writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot: 'crates/openforge-backend' })
-    await expect(stat(join(repoRoot, 'packages', 'plugin-sdk', 'dist', 'index.js'))).rejects.toMatchObject({ code: 'ENOENT' })
-
-    await buildBackendPluginHostRuntime(repoRoot, outDir)
-
-    const backendHost = await readFile(join(outDir, 'index.js'), 'utf8')
-    expect(backendHost).toContain('bundledRuntimeMarker')
-    expect(backendHost).toContain('resolveExternalTextFileChunkSize')
-    expect(backendHost).not.toContain('@openforge-app/plugin-runtime')
-    expect(backendHost).not.toContain('@openforge-app/plugin-sdk')
-  })
-
-  it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
-    const repoRoot = join(tmpdir(), `openforge-electron-build-${process.pid}-${Date.now()}`)
-    const outDir = join(repoRoot, 'dist-electron')
-    await writeMinimalHostRuntimeInputs(repoRoot)
-
-    await copyHostRuntimeAssets(repoRoot, outDir)
-
-    await expect(stat(join(outDir, 'plugin-host', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'shortcuts.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'terminal-runtime', 'TerminalTabsShell.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'client', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'internal', 'flags', 'async.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'reactivity', 'window', 'index.js'))).resolves.toBeTruthy()
-    await expect(stat(join(outDir, 'plugin-host', 'svelte', 'store.js'))).resolves.toBeTruthy()
-    const backendHost = await readFile(join(outDir, 'plugin-host', 'index.js'), 'utf8')
-    expect(backendHost).toContain('bundledRuntimeMarker')
-    expect(backendHost).not.toContain('@openforge-app/plugin-runtime')
-    await expect(readFile(join(outDir, 'plugin-host', 'plugin-sdk', 'index.js'), 'utf8')).resolves.toContain('pluginSdk')
-    await expect(readFile(join(outDir, 'plugin-host', 'terminal-runtime', 'index.js'), 'utf8')).resolves.toContain('terminalRuntime')
-    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'index.js'), 'utf8')).resolves.toContain('svelte')
-    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'internal.js'), 'utf8')).resolves.toContain('internal')
-    await expect(readFile(join(outDir, 'plugin-host', 'svelte', 'store.js'), 'utf8')).resolves.toContain('store')
   })
 })
