@@ -277,9 +277,6 @@ vi.mock('./lib/ipc', () => ({
   getProjectConfig: vi.fn(async () => null),
   setProjectConfig: vi.fn(),
   startImplementation: vi.fn(),
-  resumeStartupSessions: vi.fn(async () => {
-    callOrder.push('resumeStartupSessions')
-  }),
   mergePullRequest: vi.fn(),
   getWorktreeForTask: vi.fn(),
   getSessionStatus: vi.fn(),

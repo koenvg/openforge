@@ -1,4 +1,4 @@
-import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
+import { invokeDesktopCommand as invoke } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type { PtyBufferState, TerminalImageProtocol, TerminalViewSnapshot } from '@openforge-app/terminal-runtime'
@@ -186,10 +186,6 @@ export async function startImplementation(
   });
 }
 
-export async function resumeStartupSessions(): Promise<void> {
-  if (!isElectronDesktopBridgeAvailable()) return
-  return invoke("resume_startup_sessions");
-}
 
 export async function getWorktreeForTask(taskId: string): Promise<WorktreeInfo | null> {
   return invoke<WorktreeInfo | null>("get_worktree_for_task", { taskId });

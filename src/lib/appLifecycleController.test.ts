@@ -24,8 +24,7 @@ describe('App lifecycle controller', () => {
         calls.push('desktop-events')
         return [desktopUnlisten]
       }),
-      resumeStartupSessions: vi.fn(async () => { calls.push('resume') }),
-      loadStartupData: vi.fn(async () => { calls.push('startup') }),
+      loadRendererStartupData: vi.fn(async () => { calls.push('renderer-startup') }),
       onWindowFocusChange: vi.fn(),
     })
     controllers.push(controller)
@@ -33,7 +32,7 @@ describe('App lifecycle controller', () => {
     await controller.start()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }))
 
-    expect(calls).toEqual(['shortcuts', 'desktop-events', 'resume', 'startup', 'keydown'])
+    expect(calls).toEqual(['shortcuts', 'desktop-events', 'renderer-startup', 'keydown'])
 
     controller.dispose()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }))
@@ -48,8 +47,7 @@ describe('App lifecycle controller', () => {
       finishRegistration = resolve
     })
     const desktopUnlisten = vi.fn()
-    const resumeStartupSessions = vi.fn()
-    const loadStartupData = vi.fn()
+    const loadRendererStartupData = vi.fn()
     const controller = createAppLifecycleController({
       createWindow: vi.fn(() => ({ destroy: vi.fn() } as never)),
       createShortcuts: vi.fn(() => ({
@@ -59,8 +57,7 @@ describe('App lifecycle controller', () => {
       })),
       registerShortcuts: vi.fn(),
       registerDesktopEvents: vi.fn(() => registration),
-      resumeStartupSessions,
-      loadStartupData,
+      loadRendererStartupData,
       onWindowFocusChange: vi.fn(),
     })
     controllers.push(controller)
@@ -71,45 +68,13 @@ describe('App lifecycle controller', () => {
     await starting
 
     expect(desktopUnlisten).toHaveBeenCalledOnce()
-    expect(resumeStartupSessions).not.toHaveBeenCalled()
-    expect(loadStartupData).not.toHaveBeenCalled()
+    expect(loadRendererStartupData).not.toHaveBeenCalled()
   })
 
-  it('does not load startup data after unmounting during session resume', async () => {
-    let finishResume: () => void = () => {}
-    const resume = new Promise<void>((resolve) => {
-      finishResume = resolve
-    })
-    const resumeStartupSessions = vi.fn(() => resume)
-    const loadStartupData = vi.fn()
-    const controller = createAppLifecycleController({
-      createWindow: vi.fn(() => ({ destroy: vi.fn() } as never)),
-      createShortcuts: vi.fn(() => ({
-        register: vi.fn(),
-        unregister: vi.fn(),
-        handleKeydown: vi.fn(),
-      })),
-      registerShortcuts: vi.fn(),
-      registerDesktopEvents: vi.fn(async () => []),
-      resumeStartupSessions,
-      loadStartupData,
-      onWindowFocusChange: vi.fn(),
-    })
-    controllers.push(controller)
-
-    const starting = controller.start()
-    await vi.waitFor(() => expect(resumeStartupSessions).toHaveBeenCalledOnce())
-    controller.dispose()
-    finishResume()
-    await starting
-
-    expect(loadStartupData).not.toHaveBeenCalled()
-  })
 
   it('reports desktop event registration failures and continues startup', async () => {
     const registrationError = new Error('desktop bridge unavailable')
-    const resumeStartupSessions = vi.fn(async () => undefined)
-    const loadStartupData = vi.fn(async () => undefined)
+    const loadRendererStartupData = vi.fn(async () => undefined)
     const logError = vi.fn()
     const controller = createAppLifecycleController({
       createWindow: vi.fn(() => ({ destroy: vi.fn() } as never)),
@@ -120,8 +85,7 @@ describe('App lifecycle controller', () => {
       })),
       registerShortcuts: vi.fn(),
       registerDesktopEvents: vi.fn(async () => { throw registrationError }),
-      resumeStartupSessions,
-      loadStartupData,
+      loadRendererStartupData,
       onWindowFocusChange: vi.fn(),
       logError,
     })
@@ -133,7 +97,6 @@ describe('App lifecycle controller', () => {
       '[App] Failed to register desktop event listeners:',
       registrationError,
     )
-    expect(resumeStartupSessions).toHaveBeenCalledOnce()
-    expect(loadStartupData).toHaveBeenCalledOnce()
+    expect(loadRendererStartupData).toHaveBeenCalledOnce()
   })
 })

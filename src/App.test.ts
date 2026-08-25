@@ -135,7 +135,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     })
   }, 15000)
 
-  it('registers event listeners before making IPC data-loading calls', async () => {
+  it('registers event listeners before loading renderer startup data', async () => {
     const App = (await import('./App.svelte')).default
 
     render(App)
@@ -147,12 +147,10 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     })
 
     const firstListen = callOrder.indexOf('listen')
-    const firstResumeStartupSessions = callOrder.indexOf('resumeStartupSessions')
     const firstGetProjects = callOrder.indexOf('getProjects')
     const firstGetAppMode = callOrder.indexOf('getAppMode')
 
-    expect(firstListen).toBeLessThan(firstResumeStartupSessions)
-    expect(firstResumeStartupSessions).toBeLessThan(firstGetProjects)
+    expect(firstListen).toBeLessThan(firstGetProjects)
     expect(firstListen).toBeLessThan(firstGetAppMode)
   }, 15000)
 

@@ -32,7 +32,6 @@ export const desktopIpcFunctionDomains = {
   removeTaskLabel: 'tasks-projects',
   deleteTaskLabel: 'tasks-projects',
   startImplementation: 'tasks-projects',
-  resumeStartupSessions: 'agent-session-pty',
   getWorktreeForTask: 'tasks-projects',
   listGitBranches: 'tasks-projects',
   repoHasCommits: 'tasks-projects',

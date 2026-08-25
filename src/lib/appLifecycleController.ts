@@ -7,8 +7,7 @@ interface AppLifecycleControllerOptions {
   createShortcuts(): ShortcutRegistry
   registerShortcuts(shortcuts: ShortcutRegistry): void
   registerDesktopEvents(appWindow: DesktopWindowTarget): Promise<DesktopUnlistenFn[]>
-  resumeStartupSessions(): Promise<void>
-  loadStartupData(): Promise<void>
+  loadRendererStartupData(): Promise<void>
   onWindowFocusChange(focused: boolean): void
   logError?: (message: string, error: unknown) => void
 }
@@ -63,13 +62,9 @@ export function createAppLifecycleController(options: AppLifecycleControllerOpti
     }
     unlisteners.push(...registeredUnlisteners)
 
-    try {
-      await options.resumeStartupSessions()
-    } catch (error) {
-      logError('[App] Failed to resume startup sessions:', error)
-    }
-    if (!started || generation !== startGeneration) return
-    await options.loadStartupData()
+    // Electron establishes Rust Sidecar readiness before creating the renderer.
+    // Renderer startup only needs desktop listeners in place before loading its data.
+    await options.loadRendererStartupData()
   }
 
   function dispose(): void {
