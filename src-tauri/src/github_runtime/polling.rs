@@ -134,22 +134,28 @@ fn key_for_row(row: &db::AuthoredPrRow) -> String {
     format!("{}/{}/{}", row.repo_owner, row.repo_name, row.number)
 }
 
+fn covered_event_signal_refs<'a>(
+    event_refs: &'a [PrRef],
+    existing_id_by_ref: &HashMap<String, i64>,
+) -> Vec<(&'a PrRef, i64)> {
+    event_refs
+        .iter()
+        .filter_map(|pr_ref| {
+            existing_id_by_ref
+                .get(&key_for_pr_ref(pr_ref))
+                .copied()
+                .map(|id| (pr_ref, id))
+        })
+        .collect()
+}
+
 async fn fetch_event_signal_prs(
     github_client: &GitHubClient,
     token: &str,
     event_refs: &[PrRef],
     existing_id_by_ref: &HashMap<String, i64>,
 ) -> Vec<SearchPrResult> {
-    let detail_futures: Vec<_> = event_refs
-        .iter()
-        .filter_map(|pr_ref| {
-            let id = existing_id_by_ref.get(&key_for_pr_ref(pr_ref)).copied()?;
-            Some(async move { (pr_ref, id) })
-        })
-        .collect();
-
-    let signal_refs = join_all(detail_futures).await;
-
+    let signal_refs = covered_event_signal_refs(event_refs, existing_id_by_ref);
     let fetch_futures: Vec<_> = signal_refs
         .iter()
         .map(|(pr_ref, _)| {
@@ -353,7 +359,43 @@ pub async fn fetch_authored_prs(
 
 #[cfg(test)]
 mod tests {
-    use super::should_fallback_to_search;
+    use super::{covered_event_signal_refs, should_fallback_to_search};
+    use crate::github_client::PrRef;
+    use std::collections::HashMap;
+
+    fn pr_ref(repo_owner: &str, repo_name: &str, number: i64) -> PrRef {
+        PrRef {
+            repo_owner: repo_owner.to_string(),
+            repo_name: repo_name.to_string(),
+            number,
+        }
+    }
+
+    #[test]
+    fn selects_only_event_refs_covered_by_the_authored_pr_cache() {
+        let event_refs = vec![
+            pr_ref("acme", "api", 11),
+            pr_ref("acme", "web", 22),
+            pr_ref("other", "cli", 33),
+        ];
+        let existing_id_by_ref = HashMap::from([
+            ("acme/api/11".to_string(), 101),
+            ("other/cli/33".to_string(), 303),
+        ]);
+
+        let covered_refs = covered_event_signal_refs(&event_refs, &existing_id_by_ref);
+
+        assert_eq!(covered_refs.len(), 2);
+        assert_eq!(covered_refs[0].0.number, 11);
+        assert_eq!(covered_refs[0].1, 101);
+        assert_eq!(covered_refs[1].0.number, 33);
+        assert_eq!(covered_refs[1].1, 303);
+    }
+
+    #[test]
+    fn falls_back_to_authored_search_when_events_include_an_uncached_pr() {
+        assert!(should_fallback_to_search(4, 3, 1, Some(100), 120));
+    }
 
     #[test]
     fn falls_back_to_authored_search_when_db_is_empty() {
