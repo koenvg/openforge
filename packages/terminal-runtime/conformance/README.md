@@ -22,7 +22,7 @@ Baselines live under `baselines/<os>-<arch>/<renderer>`. Review changed PNG file
 
 ## CI
 
-The `terminal-presentation` CI job installs Chromium, runs `pnpm terminal:presentation` on Ubuntu, and uploads the report and screenshots. Linux currently has no checked-in pixel baseline, so CI enforces semantic results, interactions, compositor drain evidence, and the blank-terminal rejection. Add reviewed Linux baselines to enable bounded pixel diffs there as well.
+The `terminal-presentation` CI job installs Chromium on a pinned macOS 14 ARM64 runner, runs `pnpm terminal:presentation`, and uploads the report and screenshots. Its `darwin-arm64/xterm` baselines are authoritative, so bounded pixel differences fail the build alongside semantic, interaction, compositor-drain, and blank-terminal checks.
 
 ## What it checks
 
