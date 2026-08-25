@@ -59,6 +59,7 @@
   }
 
   function readinessText(value: PullRequestInfo): string | null {
+    if (isMergedPullRequest(value)) return null
     const readiness = getMergeReadiness(value)
     if (readiness.status === 'ready_to_enqueue') return 'Ready to enqueue in the merge queue.'
     if (readiness.status === 'queued_pull_request') return 'Queued pull request — waiting for merge queue validation.'

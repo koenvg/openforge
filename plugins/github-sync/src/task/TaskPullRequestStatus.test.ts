@@ -104,6 +104,29 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('owner/other')).toBeTruthy()
   })
 
+  it('does not show merge-readiness blockers after the pull request is merged', async () => {
+    const merged = createPullRequest({
+      state: 'merged',
+      merged_at: 3000,
+      merge_readiness_status: 'blocked',
+      merge_readiness_action: 'resolve_blockers',
+      merge_readiness_blockers: [{ code: 'already_merged', message: 'Pull request is already merged.' }],
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 3000,
+    })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [merged]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+
+    expect(await screen.findByText('Test PR')).toBeTruthy()
+    expect(screen.getByText('merged')).toBeTruthy()
+    expect(screen.queryByText('Pull request is already merged.')).toBeNull()
+  })
+
   it('renders cached pull requests immediately while revalidating them when returning to a task', async () => {
     let resolveTaskARefresh!: (pullRequests: PullRequestInfo[]) => void
     const taskARefresh = new Promise<PullRequestInfo[]>((resolve) => { resolveTaskARefresh = resolve })
