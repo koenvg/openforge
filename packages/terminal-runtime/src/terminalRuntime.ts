@@ -5,15 +5,12 @@ import type { TerminalImageProtocol } from './terminalImages'
 import { terminalLogMessage } from './terminalLogging'
 import { preloadTerminalFonts } from './terminalOptions'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
-import {
-  createTerminalEntry,
-  disposeWebglContextLossListener,
-  resetTerminal,
-} from './terminalRendering'
+import { createXtermTerminalView } from './xtermTerminalView'
 import type {
   PoolEntry,
   TerminalRuntimeHost,
 } from './terminalRuntimeTypes'
+import type { TerminalViewFactory } from './terminalView'
 import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import { themeMode as defaultThemeMode } from './theme'
@@ -45,12 +42,65 @@ export type {
   TerminalRuntimeUnlistenFn,
   TerminalTab,
 } from './terminalRuntimeTypes'
+export type {
+  TerminalView,
+  TerminalViewData,
+  TerminalViewLiveOutput,
+  TerminalViewDisposable,
+  TerminalViewFactory,
+  TerminalViewFactoryOptions,
+  TerminalViewGeometry,
+  TerminalViewRendererFailure,
+  TerminalViewTheme,
+} from './terminalView'
 
-export function createTerminalRuntime(host: TerminalRuntimeHost) {
+export interface TerminalRuntimeOptions {
+  createTerminalView?: TerminalViewFactory
+}
+
+export function createTerminalRuntime(
+  host: TerminalRuntimeHost,
+  options: TerminalRuntimeOptions = {},
+) {
   const activeThemeMode = host.themeMode ?? defaultThemeMode
+  const createView = options.createTerminalView ?? createXtermTerminalView
   const pool = new Map<string, PoolEntry>()
   const attachments = createTerminalAttachmentController(host)
   const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key))
+
+  function createEntry(terminalKey: string): PoolEntry {
+    return {
+      taskId: terminalKey,
+      view: createView({
+        terminalKey,
+        themeMode: get(activeThemeMode),
+        openLink: url => host.openLink(terminalKey, url),
+        enableImages: host.enableImages,
+        loggerName: host.loggerName,
+      }),
+      ptyActive: false,
+      needsClear: false,
+      unlisteners: [],
+      viewSubscriptions: [],
+      resizeObserver: null,
+      visibilityObserver: null,
+      resizeTimeout: null,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+      terminalStateSource: 'bootstrapping',
+      terminalModelSequence: null,
+      terminalModelRejectedInstance: null,
+      pendingPtyOutput: [],
+      pendingTerminalModelOutput: [],
+      terminalModelRecovery: null,
+      hasOutput: false,
+    }
+  }
+
+  function resetTerminal(entry: PoolEntry): void {
+    entry.view.reset()
+  }
 
   function disposeTerminalEntry(entry: PoolEntry): void {
     attachments.detach(entry)
@@ -66,8 +116,18 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
       }
     }
 
-    disposeWebglContextLossListener(entry)
-    entry.terminal.dispose()
+    for (const subscription of entry.viewSubscriptions.splice(0)) {
+      try {
+        subscription.dispose()
+      } catch (error) {
+        console.warn(
+          terminalLogMessage(host.loggerName, 'Failed to remove terminal view listener:'),
+          error,
+        )
+      }
+    }
+
+    entry.view.dispose()
   }
 
   let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
@@ -82,7 +142,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   const acquisition = createTerminalAcquisition({
     host,
     pool,
-    createEntry: terminalKey => createTerminalEntry(host, terminalKey, get(activeThemeMode)),
+    createEntry,
     preloadEntry: preloadTerminalFonts,
     disposeEntry: disposeTerminalEntry,
     resetEntry: resetTerminal,
@@ -120,7 +180,7 @@ export function createTerminalRuntime(host: TerminalRuntimeHost) {
   }
 
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
-    return entry.imageProtocol
+    return entry.view.imageProtocol
   }
 
   function _getPool(): Map<string, PoolEntry> {

@@ -34,7 +34,7 @@ export function createTerminalReconnectReplay({
       if (recoverEntry) {
         await recoverEntry(entry)
         notifyLifecycle(entry.taskId)
-        if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+        if (entry.attached) entry.view.refresh()
         return
       }
       const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
@@ -46,10 +46,10 @@ export function createTerminalReconnectReplay({
 
       resetEntry(entry)
       entry.needsClear = false
-      entry.terminal.write(buffer)
+      entry.view.bootstrap(buffer)
       entry.hasOutput = true
       notifyLifecycle(entry.taskId)
-      if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+      if (entry.attached) entry.view.refresh()
     } catch (error) {
       console.error(
         terminalLogMessage(host.loggerName, 'Failed to replay PTY buffer after app event reconnect:'),

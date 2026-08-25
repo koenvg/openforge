@@ -97,8 +97,8 @@
       const instanceId = await spawnShellPty(
         context.taskId,
         context.workspacePath,
-        entry.terminal.cols,
-        entry.terminal.rows,
+        entry.view.geometry.cols,
+        entry.view.geometry.rows,
         context.terminalIndex,
         getTerminalImageProtocol(entry),
       )
@@ -170,7 +170,7 @@
 
     syncLifecycleState(boundTerminalKey)
 
-    const needsActiveHostRestore = isActive && entry.hostDiv.parentNode !== terminalEl
+    const needsActiveHostRestore = isActive && !entry.view.isMountedIn(terminalEl)
     if (previousIsActive === null) {
       if (needsActiveHostRestore) void activateTerminal(entry, context)
       previousIsActive = isActive
@@ -205,8 +205,8 @@
       const instanceId = await spawnShellPty(
         context.taskId,
         context.workspacePath,
-        entry.terminal.cols,
-        entry.terminal.rows,
+        entry.view.geometry.cols,
+        entry.view.geometry.rows,
         context.terminalIndex,
         getTerminalImageProtocol(entry),
       )

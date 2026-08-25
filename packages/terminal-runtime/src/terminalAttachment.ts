@@ -1,5 +1,4 @@
 import { terminalLogMessage } from './terminalLogging'
-import { loadWebglAddon } from './terminalRendering'
 import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
 
 function isModalOpen(): boolean {
@@ -15,29 +14,19 @@ export function isValidTerminalDimensions(
 }
 
 export function safeFit(entry: PoolEntry): boolean {
-  if (!entry.fitAddon || !entry.hostDiv) return false
-  if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return false
-  const proposed = entry.fitAddon.proposeDimensions()
-  if (!isValidTerminalDimensions(proposed)) return false
-  entry.fitAddon.fit()
-  return true
-}
-
-function refreshTerminal(entry: PoolEntry): void {
-  entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+  return isValidTerminalDimensions(entry.view.fit())
 }
 
 function refreshAndFocus(entry: PoolEntry): void {
-  refreshTerminal(entry)
-  if (!isModalOpen()) entry.terminal.focus()
+  entry.view.refresh()
+  if (!isModalOpen()) entry.view.focus()
 }
 
 export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
-  const openedTerminals = new WeakSet<PoolEntry['terminal']>()
-
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
-    host.resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
+    const { cols, rows } = entry.view.geometry
+    host.resizePty(entry.taskId, cols, rows)
       .catch(error => console.error(terminalLogMessage(host.loggerName, 'resize failed:'), error))
   }
 
@@ -60,20 +49,10 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
   }
 
   async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
-    if (entry.attached && entry.hostDiv.parentNode === wrapperEl) return
+    if (entry.attached && entry.view.isMountedIn(wrapperEl)) return
 
-    wrapperEl.appendChild(entry.hostDiv)
+    entry.view.mount(wrapperEl)
     entry.attached = true
-
-    if (!openedTerminals.has(entry.terminal)) {
-      entry.terminal.open(entry.hostDiv)
-      openedTerminals.add(entry.terminal)
-      loadWebglAddon(entry, () => {
-        if (!entry.attached) return
-        safeFit(entry)
-        refreshTerminal(entry)
-      })
-    }
 
     if (!entry.resizeObserver) {
       entry.resizeObserver = new ResizeObserver((entries) => {
@@ -86,8 +65,9 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
           syncPtySize(entry)
         }, 100)
       })
-      entry.resizeObserver.observe(entry.hostDiv)
     }
+    entry.resizeObserver.disconnect()
+    entry.resizeObserver.observe(wrapperEl)
 
     if (!entry.visibilityObserver) {
       entry.visibilityObserver = new IntersectionObserver((entries) => {
@@ -99,8 +79,9 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
           refreshAndFocus(entry)
         })
       }, { threshold: 0 })
-      entry.visibilityObserver.observe(entry.hostDiv)
     }
+    entry.visibilityObserver.disconnect()
+    entry.visibilityObserver.observe(wrapperEl)
 
     await waitForInitialFit(entry)
   }
@@ -119,12 +100,12 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
     entry.resizeObserver = null
     entry.visibilityObserver?.disconnect()
     entry.visibilityObserver = null
-    entry.hostDiv.parentNode?.removeChild(entry.hostDiv)
+    entry.view.unmount()
     entry.attached = false
   }
 
   function focus(entry: PoolEntry | undefined): void {
-    if (entry?.attached && !isModalOpen()) entry.terminal.focus()
+    if (entry?.attached && !isModalOpen()) entry.view.focus()
   }
 
   return { attach, detach, focus, recoverActiveTerminal }

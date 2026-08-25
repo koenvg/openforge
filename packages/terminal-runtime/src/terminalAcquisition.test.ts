@@ -13,14 +13,15 @@ function createDeferredGate(): { promise: Promise<void>; release(): void } {
 function createEntry(terminalKey: string): PoolEntry {
   return {
     taskId: terminalKey,
-    terminal: {
-      attachCustomKeyEventHandler: vi.fn(),
-      onData: vi.fn(),
-      write: vi.fn(),
+    view: {
+      setKeyEventHandler: vi.fn(),
+      onUserInput: vi.fn(() => ({ dispose: vi.fn() })),
+      bootstrap: vi.fn(),
     },
     ptyActive: false,
     needsClear: false,
     unlisteners: [],
+    viewSubscriptions: [],
     currentPtyInstance: null,
     terminalStateSource: 'bootstrapping',
     terminalModelSequence: null,

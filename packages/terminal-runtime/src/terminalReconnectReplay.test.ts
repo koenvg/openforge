@@ -11,16 +11,15 @@ function createEntry(): PoolEntry {
     needsClear: false,
     ptyActive: false,
     attached: true,
-    terminal: {
-      rows: 24,
-      write: vi.fn(),
+    view: {
+      bootstrap: vi.fn(),
       refresh: vi.fn(),
     },
   } as unknown as PoolEntry
 }
 
 describe('terminal reconnect replay', () => {
-  it('replays retained output and refreshes an attached terminal', async () => {
+  it('replays retained output and refreshes an attached terminal view', async () => {
     const entry = createEntry()
     const host = {
       getPtyBuffer: vi.fn().mockResolvedValue({ buffer: 'retained output', isLive: true }),
@@ -38,8 +37,8 @@ describe('terminal reconnect replay', () => {
     await replay.replayActiveTerminals()
 
     expect(resetEntry).toHaveBeenCalledWith(entry)
-    expect(entry.terminal.write).toHaveBeenCalledWith('retained output')
-    expect(entry.terminal.refresh).toHaveBeenCalledWith(0, 23)
+    expect(entry.view.bootstrap).toHaveBeenCalledWith('retained output')
+    expect(entry.view.refresh).toHaveBeenCalledOnce()
     expect(entry).toMatchObject({ ptyActive: true, needsClear: false, hasOutput: true })
     expect(notifyLifecycle).toHaveBeenCalledWith('T-1')
   })

@@ -3,19 +3,14 @@ import { vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   poolEntry: {
     taskId: '',
-    terminal: {
-      write: vi.fn(),
-      dispose: vi.fn(),
+    view: {
+      geometry: { cols: 80, rows: 24 },
       reset: vi.fn(),
-      cols: 80,
-      rows: 24,
-      options: { theme: {} as Record<string, string> },
+      dispose: vi.fn(),
+      fit: vi.fn(() => ({ cols: 80, rows: 24 })),
+      setTheme: vi.fn(),
+      isMountedIn: vi.fn(() => mocks.poolEntry.attached),
     },
-    fitAddon: {
-      fit: vi.fn(),
-      proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
-    },
-    hostDiv: document.createElement('div'),
     ptyActive: false,
     needsClear: false,
     unlisteners: [] as Array<() => void>,
@@ -89,7 +84,7 @@ export function resetAgentTerminalMocks() {
   mocks.poolEntry.ptyActive = false
   mocks.poolEntry.needsClear = false
   mocks.poolEntry.attached = false
-  mocks.poolEntry.terminal.options.theme = {}
+  mocks.poolEntry.view.setTheme.mockClear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false
   mocks.shellLifecycleState.currentPtyInstance = null

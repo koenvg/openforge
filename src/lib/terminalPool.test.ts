@@ -62,6 +62,32 @@ interface TerminalMockOptions {
 	};
 }
 
+interface TerminalMock {
+	options: TerminalMockOptions;
+	open: Mock;
+	write: Mock;
+	dispose: Mock;
+	loadAddon: Mock;
+	attachCustomKeyEventHandler: Mock;
+	refresh: Mock;
+	focus: Mock;
+	reset: Mock;
+	cols: number;
+	rows: number;
+}
+
+interface FitAddonMock {
+	fit: Mock;
+}
+
+interface WebglAddonMock {
+	dispose: Mock;
+}
+
+const terminalInstances: TerminalMock[] = [];
+const fitAddonInstances: FitAddonMock[] = [];
+const webglAddonInstances: WebglAddonMock[] = [];
+
 function getTerminalFontFamily(terminal: unknown): string | undefined {
 	if (
 		typeof terminal !== "object" ||
@@ -107,29 +133,39 @@ function getWebLinksHandler(): (event: MouseEvent, uri: string) => void {
 	);
 }
 
+function getEntryIndex(entry: TerminalPoolEntry): number {
+	const index = [..._getPool().values()].indexOf(entry);
+	if (index < 0) throw new Error(`Terminal entry ${entry.taskId} is not pooled`);
+	return index;
+}
+
+function getTerminalMock(entry: TerminalPoolEntry): TerminalMock {
+	return requireValue(terminalInstances[getEntryIndex(entry)], "Expected xterm adapter instance");
+}
+
 function getTerminalMocks(entry: TerminalPoolEntry) {
+	const terminal = getTerminalMock(entry);
 	return {
-		open: vi.mocked(entry.terminal.open),
-		write: vi.mocked(entry.terminal.write),
-		dispose: vi.mocked(entry.terminal.dispose),
-		loadAddon: vi.mocked(entry.terminal.loadAddon),
-		attachCustomKeyEventHandler: vi.mocked(entry.terminal.attachCustomKeyEventHandler),
-		refresh: vi.mocked(entry.terminal.refresh),
-		focus: vi.mocked(entry.terminal.focus),
-		reset: vi.mocked(entry.terminal.reset),
+		open: vi.mocked(terminal.open),
+		write: vi.mocked(terminal.write),
+		dispose: vi.mocked(terminal.dispose),
+		loadAddon: vi.mocked(terminal.loadAddon),
+		attachCustomKeyEventHandler: vi.mocked(terminal.attachCustomKeyEventHandler),
+		refresh: vi.mocked(terminal.refresh),
+		focus: vi.mocked(terminal.focus),
+		reset: vi.mocked(terminal.reset),
 	};
 }
 
 function getFitAddonMocks(entry: TerminalPoolEntry) {
-	return {
-		fit: vi.mocked(entry.fitAddon.fit),
-	};
+	const fitAddon = requireValue(fitAddonInstances[getEntryIndex(entry)], "Expected fit addon instance");
+	return { fit: vi.mocked(fitAddon.fit) };
 }
 
 function getLoadedAddonNames(entry: TerminalPoolEntry): string[] {
 	return vi
-		.mocked(entry.terminal.loadAddon)
-		.mock.calls.map(([addon]) => Object.getPrototypeOf(addon)?.constructor?.name ?? "");
+		.mocked(getTerminalMock(entry).loadAddon)
+		.mock.calls.map(call => Object.getPrototypeOf(call[0])?.constructor?.name ?? "");
 }
 
 vi.mock("./desktopIpc", () => ({
@@ -146,6 +182,7 @@ vi.mock("@xterm/xterm", () => {
 		options: TerminalMockOptions;
 		constructor(options: TerminalMockOptions = {}) {
 			this.options = options;
+			terminalInstances.push(this);
 		}
 		open = vi.fn();
 		write = vi.fn();
@@ -176,6 +213,9 @@ vi.mock("@xterm/xterm", () => {
 
 vi.mock("@xterm/addon-fit", () => {
 	class FitAddon {
+		constructor() {
+			fitAddonInstances.push(this);
+		}
 		fit = vi.fn();
 		proposeDimensions = vi.fn().mockReturnValue({ cols: 80, rows: 24 });
 	}
@@ -201,6 +241,7 @@ vi.mock("@xterm/addon-webgl", () => {
 			if (webglConstructorShouldThrow) {
 				throw new Error("WebGL renderer unavailable");
 			}
+			webglAddonInstances.push(this);
 		}
 
 		onContextLoss = vi.fn((listener: () => void) => {
@@ -279,6 +320,9 @@ describe("terminalPool", () => {
 		webglLoadShouldTriggerContextLoss = false;
 		webglContextLossListeners.length = 0;
 		webglContextLossDisposables.length = 0;
+		terminalInstances.length = 0;
+		fitAddonInstances.length = 0;
+		webglAddonInstances.length = 0;
 		fontLoadMock = vi.fn().mockResolvedValue([]);
 		Object.defineProperty(document, "fonts", {
 			configurable: true,
@@ -302,16 +346,16 @@ describe("terminalPool", () => {
 		const entry = await acquire("task-1");
 		expect(entry).toBeDefined();
 		expect(entry.taskId).toBe("task-1");
-		expect(entry.terminal).toBeDefined();
-		expect(entry.fitAddon).toBeDefined();
-		expect(entry.hostDiv).toBeInstanceOf(HTMLDivElement);
+		expect(getTerminalMock(entry)).toBeDefined();
+		expect(entry.view).toBeDefined();
+		expect(entry.view.geometry).toEqual({ cols: 80, rows: 24 });
 		expect(entry.attached).toBe(false);
 		expect(_getPool().has("task-1")).toBe(true);
 	});
 
 	it("initializes terminal with the correct font family stack including JetBrains Mono and Nerd Font fallback", async () => {
 		const entry = await acquire("task-font-check");
-		expect(getTerminalFontFamily(entry.terminal)).toBe(TERMINAL_FONT_FAMILY);
+		expect(getTerminalFontFamily(getTerminalMock(entry))).toBe(TERMINAL_FONT_FAMILY);
 	});
 
 	it("acquire preloads the bundled terminal web fonts before open", async () => {
@@ -346,7 +390,7 @@ describe("terminalPool", () => {
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
 		expect(getLoadedAddonNames(entry).slice(0, 2)).toEqual(["FitAddon", "WebLinksAddon"]);
-		expect(entry.imageProtocol).toBe("iterm2");
+		expect(entry.view.imageProtocol).toBe("iterm2");
 		expect(loadAddonSpy).toHaveBeenCalledTimes(4);
 		expect(webLinksHandler).not.toBeNull();
 
@@ -363,7 +407,7 @@ describe("terminalPool", () => {
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
-		entry.terminal.options.linkHandler?.activate(
+		getTerminalMock(entry).options.linkHandler?.activate(
 			event,
 			"https://example.com/osc8",
 			{ start: { x: 1, y: 1 }, end: { x: 10, y: 1 } },
@@ -380,7 +424,7 @@ describe("terminalPool", () => {
 
 		await attach(entry, wrapper);
 
-		expect(wrapper.contains(entry.hostDiv)).toBe(true);
+		expect(wrapper.childElementCount).toBe(1);
 		expect(entry.attached).toBe(true);
 	});
 
@@ -394,7 +438,7 @@ describe("terminalPool", () => {
 		const wrapper = document.createElement("div");
 		await attach(entry, wrapper);
 
-		expect(openSpy).toHaveBeenCalledWith(entry.hostDiv);
+		expect(openSpy).toHaveBeenCalledWith(wrapper.firstElementChild);
 		expect(getLoadedAddonNames(entry)).toContain("WebglAddon");
 		expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(
 			loadAddonSpy.mock.invocationCallOrder[4],
@@ -415,8 +459,8 @@ describe("terminalPool", () => {
 		const { open: shellOpenSpy, loadAddon: shellLoadAddonSpy } =
 			getTerminalMocks(shellEntry);
 
-		expect(agentOpenSpy).toHaveBeenCalledWith(agentEntry.hostDiv);
-		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
+		expect(agentOpenSpy).toHaveBeenCalledWith(agentWrapper.firstElementChild);
+		expect(shellOpenSpy).toHaveBeenCalledWith(shellWrapper.firstElementChild);
 		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(5);
 		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(5);
 		expect(getLoadedAddonNames(agentEntry)).toContain("WebglAddon");
@@ -476,8 +520,7 @@ describe("terminalPool", () => {
 			await attach(entry, wrapper);
 
 			expect(webglContextLossDisposables[0]).toHaveBeenCalled();
-			expect(entry.webglAddon).toBeNull();
-			expect(entry.webglUnavailable).toBe(true);
+			expect(webglAddonInstances[0]?.dispose).toHaveBeenCalled();
 			expect(warnSpy).toHaveBeenCalledWith(
 				"[terminalPool] WebGL renderer context lost; falling back to the default renderer.",
 			);
@@ -495,7 +538,7 @@ describe("terminalPool", () => {
 
 			await attach(entry, wrapper);
 
-			const webglAddon = requireValue(entry.webglAddon, "Expected WebGL addon to be loaded");
+			const webglAddon = requireValue(webglAddonInstances[getEntryIndex(entry)], "Expected WebGL addon to be loaded");
 			const { loadAddon: loadAddonSpy, refresh: refreshSpy, reset: resetSpy } = getTerminalMocks(entry);
 			entry.ptyActive = true;
 			entry.currentPtyInstance = 42;
@@ -505,8 +548,6 @@ describe("terminalPool", () => {
 
 			expect(webglContextLossDisposables[0]).toHaveBeenCalled();
 			expect(webglAddon.dispose).toHaveBeenCalled();
-			expect(entry.webglAddon).toBeNull();
-			expect(entry.webglUnavailable).toBe(true);
 			expect(entry.ptyActive).toBe(true);
 			expect(entry.currentPtyInstance).toBe(42);
 			expect(resetSpy).not.toHaveBeenCalled();
@@ -559,8 +600,8 @@ describe("terminalPool", () => {
 
 		await attach(entry, activeWrapper);
 
-		expect(hiddenWrapper.contains(entry.hostDiv)).toBe(false);
-		expect(activeWrapper.contains(entry.hostDiv)).toBe(true);
+		expect(hiddenWrapper.childElementCount).toBe(0);
+		expect(activeWrapper.childElementCount).toBe(1);
 		expect(entry.attached).toBe(true);
 		expect(refreshSpy).toHaveBeenCalled();
 		expect(focusSpy).toHaveBeenCalled();
@@ -583,15 +624,10 @@ describe("terminalPool", () => {
 			},
 		);
 
-		Object.defineProperty(entry.hostDiv, "clientWidth", {
-			configurable: true,
-			get: () => (frame >= 6 ? 800 : 0),
-		});
-		Object.defineProperty(entry.hostDiv, "clientHeight", {
-			configurable: true,
-			get: () => (frame >= 6 ? 600 : 0),
-		});
-
+		const widthSpy = vi.spyOn(HTMLDivElement.prototype, "clientWidth", "get")
+			.mockImplementation(() => (frame >= 6 ? 800 : 0));
+		const heightSpy = vi.spyOn(HTMLDivElement.prototype, "clientHeight", "get")
+			.mockImplementation(() => (frame >= 6 ? 600 : 0));
 		const flushFrame = () => {
 			frame += 1;
 			const callbacks = rafCallbacks.splice(0);
@@ -618,6 +654,8 @@ describe("terminalPool", () => {
 			expect(refreshSpy).toHaveBeenCalled();
 			expect(focusSpy).toHaveBeenCalled();
 		} finally {
+			widthSpy.mockRestore();
+			heightSpy.mockRestore();
 			globalThis.requestAnimationFrame = originalRaf;
 		}
 	});
@@ -627,10 +665,10 @@ describe("terminalPool", () => {
 		const wrapper = document.createElement("div");
 
 		await attach(entry, wrapper);
-		expect(wrapper.contains(entry.hostDiv)).toBe(true);
+		expect(wrapper.childElementCount).toBe(1);
 
 		detach(entry);
-		expect(wrapper.contains(entry.hostDiv)).toBe(false);
+		expect(wrapper.childElementCount).toBe(0);
 		expect(entry.attached).toBe(false);
 	});
 
@@ -875,7 +913,7 @@ describe("terminalPool", () => {
 
 		// Re-attach to different wrapper
 		await attach(reacquired, wrapper2);
-		expect(wrapper2.contains(entry.hostDiv)).toBe(true);
+		expect(wrapper2.childElementCount).toBe(1);
 		expect(entry.attached).toBe(true);
 	});
 
@@ -895,7 +933,7 @@ describe("terminalPool", () => {
 		await recoverActiveTerminal(entry);
 
 		expect(fitSpy).toHaveBeenCalledTimes(1);
-		expect(resizePty).toHaveBeenCalledWith("task-reactivate", entry.terminal.cols, entry.terminal.rows);
+		expect(resizePty).toHaveBeenCalledWith("task-reactivate", getTerminalMock(entry).cols, getTerminalMock(entry).rows);
 		expect(refreshSpy).toHaveBeenCalled();
 		expect(focusSpy).toHaveBeenCalled();
 	});
@@ -1134,9 +1172,6 @@ describe("terminalPool", () => {
 			const wrapper = document.createElement("div");
 			document.body.appendChild(wrapper);
 
-			// Give hostDiv real dimensions so safeFit doesn't bail
-			Object.defineProperty(entry.hostDiv, "clientWidth", { value: 800 });
-			Object.defineProperty(entry.hostDiv, "clientHeight", { value: 600 });
 
 			const { focus: focusSpy } = getTerminalMocks(entry);
 			focusSpy.mockClear();
@@ -1158,8 +1193,6 @@ describe("terminalPool", () => {
 			const wrapper = document.createElement("div");
 			document.body.appendChild(wrapper);
 
-			Object.defineProperty(entry.hostDiv, "clientWidth", { value: 800 });
-			Object.defineProperty(entry.hostDiv, "clientHeight", { value: 600 });
 
 			const { focus: focusSpy } = getTerminalMocks(entry);
 			focusSpy.mockClear();

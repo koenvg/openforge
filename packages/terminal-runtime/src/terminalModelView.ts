@@ -41,7 +41,7 @@ export function createTerminalModelView({
       resetEntry(entry)
       entry.needsClear = false
     }
-    entry.terminal.write(payload.data)
+    entry.view.writeLive({ data: payload.data, sequence: null })
     markOutput(entry)
   }
 
@@ -50,7 +50,7 @@ export function createTerminalModelView({
     const currentSequence = entry.terminalModelSequence
     if (currentSequence == null || payload.sequence <= currentSequence) return true
     if (payload.sequence !== currentSequence + 1) return false
-    entry.terminal.write(decodeBase64(payload.data))
+    entry.view.writeLive({ data: decodeBase64(payload.data), sequence: payload.sequence })
     entry.terminalModelSequence = payload.sequence
     markOutput(entry)
     return true
@@ -67,7 +67,7 @@ export function createTerminalModelView({
     entry.terminalModelSequence = null
     entry.terminalModelRejectedInstance = entry.pendingTerminalModelOutput.at(-1)?.instance_id ?? null
     if (state.buffer) {
-      entry.terminal.write(state.buffer)
+      entry.view.bootstrap(state.buffer)
       entry.hasOutput = true
     }
     const pending = entry.pendingPtyOutput.splice(0)
@@ -92,7 +92,7 @@ export function createTerminalModelView({
     entry.terminalStateSource = 'ghostty'
     const data = decodeBase64(snapshot.data)
     if (data.length > 0) {
-      entry.terminal.write(data)
+      entry.view.bootstrap(data)
       entry.hasOutput = true
     }
     entry.pendingPtyOutput.length = 0

@@ -61,8 +61,8 @@ describe('AgentTerminalShell', () => {
     expect(detach).toHaveBeenCalledWith(mockPoolEntry)
     expect(release).not.toHaveBeenCalled()
     expect(killPty).not.toHaveBeenCalled()
-    expect(mockPoolEntry.terminal.reset).not.toHaveBeenCalled()
-    expect(mockPoolEntry.terminal.dispose).not.toHaveBeenCalled()
+    expect(mockPoolEntry.view.reset).not.toHaveBeenCalled()
+    expect(mockPoolEntry.view.dispose).not.toHaveBeenCalled()
 
     render(AgentTerminalShell, {
       props: {
@@ -78,8 +78,8 @@ describe('AgentTerminalShell', () => {
     })
     expect(release).not.toHaveBeenCalled()
     expect(killPty).not.toHaveBeenCalled()
-    expect(mockPoolEntry.terminal.reset).not.toHaveBeenCalled()
-    expect(mockPoolEntry.terminal.dispose).not.toHaveBeenCalled()
+    expect(mockPoolEntry.view.reset).not.toHaveBeenCalled()
+    expect(mockPoolEntry.view.dispose).not.toHaveBeenCalled()
   })
 
   it('hydrates PTY instance metadata from status events while preserving active pooled terminal state', async () => {
@@ -219,7 +219,7 @@ describe('AgentTerminalShell', () => {
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
-    expect(mockPoolEntry.terminal.options.theme).toEqual({})
+    expect(mockPoolEntry.view.setTheme).not.toHaveBeenCalled()
   })
 
   it('keeps an active pooled PTY visible without persisted session state', () => {
@@ -358,9 +358,9 @@ describe('AgentTerminalShell', () => {
 
     expect(await screen.findByText('Agent is waiting for input')).toBeTruthy()
     await vi.waitFor(() => {
-      expect(mockPoolEntry.fitAddon.fit).toHaveBeenCalled()
+      expect(mockPoolEntry.view.fit).toHaveBeenCalled()
     })
-    vi.mocked(mockPoolEntry.fitAddon.fit).mockClear()
+    vi.mocked(mockPoolEntry.view.fit).mockClear()
 
     setActiveSession(createAgentSession({
       provider: 'opencode',
@@ -373,7 +373,7 @@ describe('AgentTerminalShell', () => {
       expect(screen.queryByText('Agent is waiting for input')).toBeNull()
     })
     await vi.waitFor(() => {
-      expect(mockPoolEntry.fitAddon.fit).toHaveBeenCalled()
+      expect(mockPoolEntry.view.fit).toHaveBeenCalled()
     })
   })
 })
