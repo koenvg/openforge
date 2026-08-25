@@ -13,6 +13,8 @@ const { killPtyMock, releaseMock, taskTabSessions, shellLifecycleCallbacks, shel
 }))
 
 vi.mock('./lib/ipc', () => ({
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
+  spawnShellPty: vi.fn().mockResolvedValue(1),
   killPty: killPtyMock,
 }))
 

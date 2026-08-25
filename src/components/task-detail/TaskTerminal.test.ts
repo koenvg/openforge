@@ -29,6 +29,7 @@ vi.mock('@xterm/addon-fit', () => {
 vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('../../lib/ipc', () => ({
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
   spawnShellPty: vi.fn().mockResolvedValue(1),
   killPty: vi.fn().mockResolvedValue(undefined),
   writePty: vi.fn().mockResolvedValue(undefined),

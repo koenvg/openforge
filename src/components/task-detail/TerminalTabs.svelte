@@ -1,15 +1,7 @@
 <script lang="ts">
-  import TerminalTabsShell from '@openforge-app/terminal-runtime/TerminalTabsShell'
+  import TerminalTabsSurface from '@openforge-app/terminal-runtime/TerminalTabsSurface'
   import { commandHeld } from '../../lib/stores'
-  import { killPty } from '../../lib/ipc'
-  import {
-    release,
-    focusTerminal,
-    getTaskTerminalTabsSession,
-    getShellLifecycleState,
-    subscribeShellLifecycle,
-    updateTaskTerminalTabsSession,
-  } from '../../lib/terminalPool'
+  import { desktopTerminalSurfaceAdapter } from './terminalSurfaceAdapter'
   import TaskTerminal from './TaskTerminal.svelte'
 
   interface Props {
@@ -19,46 +11,30 @@
     onTabCountChange: ((count: number) => void) | null
   }
 
-  interface TerminalTabsShellHandle {
-    addTab(): void
-    switchToTab(tabPosition: number): void
-    focusActiveTab(): void
-    closeActiveTab(): Promise<void>
-  }
-
-  let { taskId, workspacePath, onTabChange, onTabCountChange }: Props = $props()
-  let terminalTabsShell = $state<TerminalTabsShellHandle | null>(null)
+  let props: Props = $props()
+  let terminalTabsSurface = $state<TerminalTabsSurface | null>(null)
 
   export function addTab() {
-    terminalTabsShell?.addTab()
+    terminalTabsSurface?.addTab()
   }
 
   export function switchToTab(tabPosition: number) {
-    terminalTabsShell?.switchToTab(tabPosition)
+    terminalTabsSurface?.switchToTab(tabPosition)
   }
 
   export function focusActiveTab() {
-    terminalTabsShell?.focusActiveTab()
+    terminalTabsSurface?.focusActiveTab()
   }
 
   export async function closeActiveTab() {
-    await terminalTabsShell?.closeActiveTab()
+    await terminalTabsSurface?.closeActiveTab()
   }
 </script>
 
-<TerminalTabsShell
-  bind:this={terminalTabsShell}
-  {taskId}
-  {workspacePath}
+<TerminalTabsSurface
+  bind:this={terminalTabsSurface}
+  {...props}
+  adapter={desktopTerminalSurfaceAdapter}
   shortcutHintsVisible={$commandHeld}
   TaskTerminalComponent={TaskTerminal}
-  {getTaskTerminalTabsSession}
-  {updateTaskTerminalTabsSession}
-  {getShellLifecycleState}
-  {subscribeShellLifecycle}
-  {killPty}
-  releaseTerminal={release}
-  {focusTerminal}
-  onTabChange={(index) => onTabChange?.(index)}
-  onTabCountChange={(count) => onTabCountChange?.(count)}
 />
