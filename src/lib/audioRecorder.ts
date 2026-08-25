@@ -83,6 +83,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
   let processorNode: AudioWorkletNode | null = null;
   let chunks: Float32Array[] = [];
   let recording = false;
+  let starting = false;
   let disposed = false;
   let startTime = 0;
   let maxDurationTimer: ReturnType<typeof setTimeout> | null = null;
@@ -130,61 +131,63 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
       if (disposed) {
         throw new Error('AudioRecorder: disposed');
       }
-      if (recording || autoStopPromise !== null) {
+      if (starting || recording || autoStopPromise !== null) {
         throw new Error('AudioRecorder: already recording');
       }
 
-      // macOS permission prompts are scoped to the installed app bundle. Local
-      // replacement builds may require the user to grant microphone access again.
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (disposed) {
-        cleanup();
-        throw new Error('AudioRecorder: disposed');
-      }
-
-      const context = new AudioContext();
-      audioContext = context;
+      starting = true;
       try {
+        // macOS permission prompts are scoped to the installed app bundle. Local
+        // replacement builds may require the user to grant microphone access again.
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (disposed) {
+          throw new Error('AudioRecorder: disposed');
+        }
+
+        const context = new AudioContext();
+        audioContext = context;
         await context.audioWorklet.addModule(audioRecorderWorkletUrl);
+        if (disposed) {
+          throw new Error('AudioRecorder: disposed');
+        }
+
+        sourceNode = context.createMediaStreamSource(mediaStream);
+        processorNode = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME, {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          channelCount: 1,
+          channelCountMode: 'explicit',
+        });
+
+        chunks = [];
+        recording = true;
+        startTime = Date.now();
+
+        processorNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          if (!recording) return;
+          chunks.push(event.data);
+        };
+
+        // Both nodes must be connected to destination to keep the audio graph active.
+        // processorNode outputs silence since we never write to outputBuffer.
+        sourceNode.connect(processorNode);
+        processorNode.connect(audioContext.destination);
+
+        maxDurationTimer = setTimeout(() => {
+          maxDurationTimer = null;
+          if (!recording) return;
+          recording = false;
+          autoStopPromise = performStop();
+          onMaxDuration?.();
+        }, maxDurationMs);
       } catch (error) {
+        recording = false;
         cleanup();
         throw error;
+      } finally {
+        starting = false;
       }
-      if (disposed) {
-        cleanup();
-        throw new Error('AudioRecorder: disposed');
-      }
-
-      sourceNode = context.createMediaStreamSource(mediaStream);
-      processorNode = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME, {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [1],
-        channelCount: 1,
-        channelCountMode: 'explicit',
-      });
-
-      chunks = [];
-      recording = true;
-      startTime = Date.now();
-
-      processorNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
-        if (!recording) return;
-        chunks.push(event.data);
-      };
-
-      // Both nodes must be connected to destination to keep the audio graph active.
-      // processorNode outputs silence since we never write to outputBuffer.
-      sourceNode.connect(processorNode);
-      processorNode.connect(audioContext.destination);
-
-      maxDurationTimer = setTimeout(() => {
-        maxDurationTimer = null;
-        if (!recording) return;
-        recording = false;
-        autoStopPromise = performStop();
-        onMaxDuration?.();
-      }, maxDurationMs);
     },
 
     async stop(): Promise<Float32Array> {

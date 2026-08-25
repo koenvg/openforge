@@ -119,6 +119,27 @@ describe('audioRecorder', () => {
     expect(OfflineAudioContext).toHaveBeenCalledWith(1, 1, 16000)
   })
 
+  it('rejects a concurrent start without requesting another microphone stream', async () => {
+    let resolveMediaStream!: (stream: MediaStream) => void
+    const stream = {
+      getTracks: vi.fn().mockReturnValue([mediaTrack]),
+    } as unknown as MediaStream
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveMediaStream = resolve
+    }))
+    const recorder = createAudioRecorder()
+
+    const startup = recorder.start()
+    await expect(recorder.start()).rejects.toThrow('AudioRecorder: already recording')
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce()
+    expect(AudioContext).not.toHaveBeenCalled()
+
+    resolveMediaStream(stream)
+    await startup
+    recorder.dispose()
+  })
+
   it('automatically stops at the maximum duration and returns the captured audio', async () => {
     vi.useFakeTimers()
     const onMaxDuration = vi.fn()
@@ -141,6 +162,23 @@ describe('audioRecorder', () => {
     }
   })
 
+  it('releases the microphone stream when AudioContext construction throws', async () => {
+    vi.mocked(AudioContext).mockImplementationOnce(function () {
+      throw new Error('audio context failed')
+    })
+    const recorder = createAudioRecorder()
+
+    await expect(recorder.start()).rejects.toThrow('audio context failed')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(mediaTrack.stop).toHaveBeenCalledOnce()
+    expect(mockAudioContext.close).not.toHaveBeenCalled()
+
+    await expect(recorder.start()).resolves.toBeUndefined()
+    expect(recorder.isRecording()).toBe(true)
+    recorder.dispose()
+  })
+
   it('releases microphone resources when audio worklet startup fails', async () => {
     mockAudioContext.audioWorklet.addModule.mockRejectedValueOnce(new Error('worklet load failed'))
     const recorder = createAudioRecorder()
@@ -148,6 +186,53 @@ describe('audioRecorder', () => {
     await expect(recorder.start()).rejects.toThrow('worklet load failed')
 
     expect(recorder.isRecording()).toBe(false)
+    expect(mediaTrack.stop).toHaveBeenCalledOnce()
+    expect(mockAudioContext.close).toHaveBeenCalledOnce()
+  })
+
+  it('releases microphone and audio graph resources when AudioWorkletNode construction throws', async () => {
+    vi.mocked(AudioWorkletNode).mockImplementationOnce(function () {
+      throw new Error('worklet node failed')
+    })
+    const recorder = createAudioRecorder()
+
+    await expect(recorder.start()).rejects.toThrow('worklet node failed')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(sourceNode.disconnect).toHaveBeenCalledOnce()
+    expect(mediaTrack.stop).toHaveBeenCalledOnce()
+    expect(mockAudioContext.close).toHaveBeenCalledOnce()
+  })
+
+  it('releases resources when connecting the media source throws', async () => {
+    sourceNode.connect.mockImplementationOnce(() => {
+      throw new Error('source connection failed')
+    })
+    const recorder = createAudioRecorder()
+
+    await expect(recorder.start()).rejects.toThrow('source connection failed')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(workletPort.close).toHaveBeenCalledOnce()
+    expect(workletNode.disconnect).toHaveBeenCalledOnce()
+    expect(sourceNode.disconnect).toHaveBeenCalledOnce()
+    expect(mediaTrack.stop).toHaveBeenCalledOnce()
+    expect(mockAudioContext.close).toHaveBeenCalledOnce()
+  })
+
+  it('releases resources when connecting the worklet node throws', async () => {
+    workletNode.connect.mockImplementationOnce(() => {
+      throw new Error('worklet connection failed')
+    })
+    const recorder = createAudioRecorder()
+
+    await expect(recorder.start()).rejects.toThrow('worklet connection failed')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(sourceNode.connect).toHaveBeenCalledWith(workletNode)
+    expect(workletPort.close).toHaveBeenCalledOnce()
+    expect(workletNode.disconnect).toHaveBeenCalledOnce()
+    expect(sourceNode.disconnect).toHaveBeenCalledOnce()
     expect(mediaTrack.stop).toHaveBeenCalledOnce()
     expect(mockAudioContext.close).toHaveBeenCalledOnce()
   })
