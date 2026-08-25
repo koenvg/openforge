@@ -27,6 +27,7 @@
 
 mod common;
 mod persistence;
+mod poll_events;
 mod poll_execution;
 mod pr_execution;
 mod pr_readiness;

@@ -126,9 +126,8 @@ fn make_review_comment_poll_result(
 fn poll_comment_persistence_records_database_failures() {
     let (db, _temp_dir) = make_test_db("persist_comment_database_failure");
     let result = make_review_comment_poll_result(999, 900, false);
-    let events = GitHubEventTarget::sidecar(None);
 
-    let persist_result = persist_polled_comments(&events, &db, &result, &HashSet::new(), 1_000);
+    let persist_result = persist_polled_comments(&db, &result, &HashSet::new(), 1_000, |_| {});
 
     assert_eq!(persist_result.new_comment_count, 0);
     assert_eq!(persist_result.failed_insert_count, 1);
@@ -153,12 +152,10 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     )
     .expect("insert pr failed");
 
-    let events = GitHubEventTarget::sidecar(None);
-
     // First poll: the comment arrives outdated.
     let result = make_review_comment_poll_result(142, 900, true);
     let existing = db.get_existing_comment_ids(142).expect("existing ids");
-    let first = persist_polled_comments(&events, &db, &result, &existing, 1000);
+    let first = persist_polled_comments(&db, &result, &existing, 1000, |_| {});
     assert_eq!(first.new_comment_count, 1);
     let comments = db.get_comments_for_pr(142).expect("get comments");
     assert_eq!(comments.len(), 1);
@@ -170,7 +167,7 @@ fn test_persist_polled_comments_stores_and_refreshes_outdated_without_clobbering
     // Second poll: the line came back, comment is no longer outdated.
     let result2 = make_review_comment_poll_result(142, 900, false);
     let existing2 = db.get_existing_comment_ids(142).expect("existing ids 2");
-    let second = persist_polled_comments(&events, &db, &result2, &existing2, 2000);
+    let second = persist_polled_comments(&db, &result2, &existing2, 2000, |_| {});
     assert_eq!(
         second.new_comment_count, 0,
         "existing comment is not re-counted"
@@ -207,9 +204,8 @@ fn test_persist_polled_comments_does_not_fail_when_review_body_exists_in_both_so
     let existing_ids = db
         .get_existing_comment_ids(42)
         .expect("get existing ids failed");
-    let events = GitHubEventTarget::sidecar(None);
 
-    let persist_result = persist_polled_comments(&events, &db, &result, &existing_ids, 1000);
+    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, |_| {});
     let comments = db.get_comments_for_pr(42).expect("get comments failed");
 
     assert_eq!(persist_result.failed_insert_count, 0);
@@ -240,17 +236,16 @@ fn test_persist_polled_comments_is_idempotent_across_poll_cycles_for_review_bodi
     .expect("insert pr failed");
 
     let result = make_review_body_poll_result(84);
-    let events = GitHubEventTarget::sidecar(None);
 
     let first_existing_ids = db
         .get_existing_comment_ids(84)
         .expect("get initial existing ids failed");
-    let first_persist = persist_polled_comments(&events, &db, &result, &first_existing_ids, 1000);
+    let first_persist = persist_polled_comments(&db, &result, &first_existing_ids, 1000, |_| {});
 
     let second_existing_ids = db
         .get_existing_comment_ids(84)
         .expect("get second existing ids failed");
-    let second_persist = persist_polled_comments(&events, &db, &result, &second_existing_ids, 1000);
+    let second_persist = persist_polled_comments(&db, &result, &second_existing_ids, 1000, |_| {});
 
     let comments = db.get_comments_for_pr(84).expect("get comments failed");
 
@@ -294,9 +289,8 @@ fn test_persist_polled_comments_deduplicates_repeated_ids_within_batch() {
     let existing_ids = db
         .get_existing_comment_ids(126)
         .expect("get existing ids failed");
-    let events = GitHubEventTarget::sidecar(None);
 
-    let persist_result = persist_polled_comments(&events, &db, &result, &existing_ids, 1000);
+    let persist_result = persist_polled_comments(&db, &result, &existing_ids, 1000, |_| {});
     let comments = db.get_comments_for_pr(126).expect("get comments failed");
 
     assert_eq!(persist_result.failed_insert_count, 0);
@@ -392,27 +386,86 @@ fn refresh_task_github_status_reconciles_terminal_pr_state() {
 }
 
 #[tokio::test]
-async fn github_poller_task_changed_event_matches_renderer_contract() {
+async fn github_poller_events_match_renderer_contracts() {
     let bus = crate::app_events::AppEventBus::new(16, 8);
     let mut subscription = bus.subscribe(None).expect("subscribe to app events");
     let events = GitHubEventTarget::sidecar(Some(bus.sender()));
 
+    emit_new_pr_comment(&events, "T-100", 42).expect("emit new comment");
+    emit_ci_status_changed(
+        &events,
+        "T-100",
+        Some("P-4"),
+        7,
+        "Update poller",
+        "success",
+        1_000,
+    )
+    .expect("emit CI status update");
+    emit_review_status_changed(
+        &events,
+        "T-100",
+        Some("P-4"),
+        7,
+        "Update poller",
+        "approved",
+        1_000,
+    )
+    .expect("emit review status update");
     emit_task_updated(&events, "T-100", "P-4").expect("emit task update");
 
-    let crate::app_events::AppEventFrame::Event(event) = subscription
-        .recv()
-        .await
-        .expect("task-changed event should arrive")
-    else {
-        panic!("expected task-changed event");
-    };
-    assert_eq!(event.event_name, "task-changed");
+    let mut received = Vec::new();
+    for _ in 0..4 {
+        let crate::app_events::AppEventFrame::Event(event) = subscription
+            .recv()
+            .await
+            .expect("GitHub poller event should arrive")
+        else {
+            panic!("expected GitHub poller event");
+        };
+        received.push((event.event_name, event.payload));
+    }
+
     assert_eq!(
-        event.payload,
-        serde_json::json!({
-            "action": "updated",
-            "task_id": "T-100",
-            "project_id": "P-4",
-        })
+        received,
+        vec![
+            (
+                "new-pr-comment".to_string(),
+                serde_json::json!({
+                    "ticket_id": "T-100",
+                    "comment_id": 42,
+                }),
+            ),
+            (
+                "ci-status-changed".to_string(),
+                serde_json::json!({
+                    "task_id": "T-100",
+                    "project_id": "P-4",
+                    "pr_id": 7,
+                    "pr_title": "Update poller",
+                    "ci_status": "success",
+                    "timestamp": 1_000,
+                }),
+            ),
+            (
+                "review-status-changed".to_string(),
+                serde_json::json!({
+                    "task_id": "T-100",
+                    "project_id": "P-4",
+                    "pr_id": 7,
+                    "pr_title": "Update poller",
+                    "review_status": "approved",
+                    "timestamp": 1_000,
+                }),
+            ),
+            (
+                "task-changed".to_string(),
+                serde_json::json!({
+                    "action": "updated",
+                    "task_id": "T-100",
+                    "project_id": "P-4",
+                }),
+            ),
+        ]
     );
 }
