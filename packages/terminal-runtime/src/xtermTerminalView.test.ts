@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createXtermTerminalView } from './xtermTerminalView'
 
+const READY_FONT_READINESS = { status: 'ready' } as const
+
 const mocks = vi.hoisted(() => ({
   terminal: {
     open: vi.fn(),
@@ -102,6 +104,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
 
     view.mount(firstContainer)
@@ -123,6 +126,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
     const onInput = vi.fn()
     const theme = { background: '#000000' }
@@ -189,6 +193,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
 
     view.mount(container)
@@ -231,6 +236,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
 
     view.mount(container)
@@ -272,6 +278,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
 
     expect(view.capturePresentation()).toMatchObject({

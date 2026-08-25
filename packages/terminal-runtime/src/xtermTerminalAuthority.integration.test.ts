@@ -8,6 +8,7 @@ describe('xterm terminal authority adapter', () => {
       themeMode: 'dark',
       openLink: async () => undefined,
       enableImages: false,
+      fontReadiness: { status: 'ready' },
     })
     const responses: Array<{ data: string; ptyInstanceId: number | null }> = []
     view.onQueryResponse(response => responses.push(response))

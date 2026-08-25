@@ -1,4 +1,5 @@
 import type { TerminalImageProtocol } from './terminalImages'
+import type { TerminalFontReadiness } from './terminalOptions'
 import type { ThemeMode } from './theme'
 
 export type TerminalViewData = string | Uint8Array
@@ -132,6 +133,7 @@ export interface TerminalViewFactoryOptions {
   openLink(url: string): Promise<void>
   enableImages?: boolean
   loggerName?: string
+  fontReadiness: TerminalFontReadiness
 }
 
 export type TerminalViewFactory = (options: TerminalViewFactoryOptions) => TerminalView
