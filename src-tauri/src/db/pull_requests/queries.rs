@@ -1,8 +1,8 @@
 use rusqlite::Result;
 use std::collections::HashSet;
 
-use super::super::Database;
-use super::rows::{read_pr_row, PrCommentRow, PrRow};
+use super::super::{sqlite::sqlite_id_list, Database};
+use super::rows::{read_pr_comment_row, read_pr_row, PrCommentRow, PrRow};
 
 impl Database {
     /// Get all open pull requests from the database
@@ -129,20 +129,7 @@ impl Database {
              ORDER BY created_at ASC"
         )?;
 
-        let comments = stmt.query_map([pr_id], |row| {
-            Ok(PrCommentRow {
-                id: row.get(0)?,
-                pr_id: row.get(1)?,
-                author: row.get(2)?,
-                body: row.get(3)?,
-                comment_type: row.get(4)?,
-                file_path: row.get(5)?,
-                line_number: row.get(6)?,
-                addressed: row.get(7)?,
-                outdated: row.get(8)?,
-                created_at: row.get(9)?,
-            })
-        })?;
+        let comments = stmt.query_map([pr_id], read_pr_comment_row)?;
 
         let mut result = Vec::new();
         for comment in comments {
@@ -152,40 +139,17 @@ impl Database {
     }
 
     pub fn get_pr_comments_by_ids(&self, ids: &[i64]) -> Result<Vec<PrCommentRow>> {
-        if ids.is_empty() {
+        let Some(id_list) = sqlite_id_list(ids) else {
             return Ok(Vec::new());
-        }
+        };
+
         let conn = self.lock_conn()?;
-        let placeholders: Vec<String> = ids
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("?{}", i + 1))
-            .collect();
         let sql = format!(
             "SELECT id, pr_id, author, body, comment_type, file_path, line_number, addressed, outdated, created_at FROM pr_comments WHERE id IN ({}) ORDER BY created_at ASC",
-            placeholders.join(", ")
+            id_list.placeholders
         );
         let mut stmt = conn.prepare(&sql)?;
-        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
-            .iter()
-            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
-            .collect();
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
-        let comments = stmt.query_map(param_refs.as_slice(), |row| {
-            Ok(PrCommentRow {
-                id: row.get(0)?,
-                pr_id: row.get(1)?,
-                author: row.get(2)?,
-                body: row.get(3)?,
-                comment_type: row.get(4)?,
-                file_path: row.get(5)?,
-                line_number: row.get(6)?,
-                addressed: row.get(7)?,
-                outdated: row.get(8)?,
-                created_at: row.get(9)?,
-            })
-        })?;
+        let comments = stmt.query_map(id_list.params.as_slice(), read_pr_comment_row)?;
         let mut result = Vec::new();
         for comment in comments {
             result.push(comment?);
