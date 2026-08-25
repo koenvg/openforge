@@ -596,10 +596,15 @@ while True:
             });
         }
         let mut root = command.spawn().expect("TERM handler root should spawn");
-        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let identity = match ManagedProcessIdentity::capture(root.id()) {
+            Ok(identity) => identity,
+            Err(error) => {
+                kill_and_reap_spawned_root(&mut root);
+                panic!("identity should capture: {error}");
+            }
+        };
         if !wait_for_file(&ready_file) {
-            force_kill_unverified_spawn(root.id());
-            let _ = root.wait();
+            kill_and_reap_spawned_root(&mut root);
             panic!("TERM handler did not become ready");
         }
 
