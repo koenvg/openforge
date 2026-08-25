@@ -97,6 +97,19 @@ async function download(url, destination) {
   await pipeline(Readable.fromWeb(response.body), createWriteStream(destination))
 }
 
+export function tarExtractionArgs(archive, destination, { platform = process.platform } = {}) {
+  const localArchive = platform === 'win32' ? archive.replaceAll('\\', '/') : archive
+  const localDestination = platform === 'win32' ? destination.replaceAll('\\', '/') : destination
+  return [
+    ...(platform === 'win32' ? ['--force-local'] : []),
+    '-xf',
+    localArchive,
+    '-C',
+    localDestination,
+    '--strip-components=1',
+  ]
+}
+
 async function preparePackage(hash, url) {
   const destination = join(systemDir, hash)
   if (existsSync(destination)) return false
@@ -116,7 +129,7 @@ async function preparePackage(hash, url) {
     }
     mkdirSync(destination, { recursive: true })
     try {
-      run('tar', ['-xf', archive, '-C', destination, '--strip-components=1'])
+      run('tar', tarExtractionArgs(archive, destination))
     } catch (error) {
       rmSync(destination, { recursive: true, force: true })
       throw error
