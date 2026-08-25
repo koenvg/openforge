@@ -61,7 +61,7 @@ impl PtyManager {
         session_key: &str,
         registered_buffer: &SharedRingBuffer,
     ) {
-        let mut buffers = self.output_buffers.lock().await;
+        let mut buffers = self.terminal_sessions.output_buffers.lock().await;
         if buffers
             .get(session_key)
             .is_some_and(|stored| Arc::ptr_eq(stored, registered_buffer))
@@ -75,7 +75,7 @@ impl PtyManager {
         session_key: &str,
         registered_hub: &Arc<PtyAttachmentHub>,
     ) {
-        let mut hubs = self.attachment_hubs.lock().await;
+        let mut hubs = self.terminal_sessions.attachment_hubs.lock().await;
         if hubs
             .get(session_key)
             .is_some_and(|stored| Arc::ptr_eq(stored, registered_hub))
@@ -93,7 +93,7 @@ impl PtyManager {
             return;
         };
 
-        let mut times = self.last_output.lock().await;
+        let mut times = self.terminal_sessions.last_output.lock().await;
         if times
             .get(task_id)
             .is_some_and(|stored| Arc::ptr_eq(stored, registered_last_output))
@@ -111,7 +111,8 @@ impl PtyManager {
     ) -> Result<Option<Arc<AtomicU64>>, PtyError> {
         let last_output_time = enabled.then(|| Arc::new(AtomicU64::new(0)));
         if let Some(last_output_time) = &last_output_time {
-            self.last_output
+            self.terminal_sessions
+                .last_output
                 .lock()
                 .await
                 .insert(task_id.to_string(), Arc::clone(last_output_time));
@@ -144,7 +145,8 @@ impl PtyManager {
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
-        self.output_buffers
+        self.terminal_sessions
+            .output_buffers
             .lock()
             .await
             .insert(task_id.to_string(), Arc::clone(&ring_buffer));
@@ -154,7 +156,8 @@ impl PtyManager {
             CLAUDE_BUFFER_CAPACITY,
             COMPANION_ATTACHMENT_EVENT_CAPACITY,
         ));
-        self.attachment_hubs
+        self.terminal_sessions
+            .attachment_hubs
             .lock()
             .await
             .insert(task_id.to_string(), Arc::clone(&attachment_hub));
@@ -262,11 +265,8 @@ impl PtyManager {
                 app_event_tx: event_sink.app_event_tx,
                 ring_buffer: stream_state.ring_buffer,
                 attachment_hub: Some(stream_state.attachment_hub),
-                attachment_hubs: Some(Arc::clone(&self.attachment_hubs)),
+                terminal_sessions: self.terminal_sessions.clone(),
                 exit_action: PtyExitAction::Cleanup {
-                    sessions: Arc::clone(&self.sessions),
-                    last_output: Arc::clone(&self.last_output),
-                    output_buffers: Arc::clone(&self.output_buffers),
                     lifecycle_lock,
                     pid_file,
                     emit_agent_exit: true,
@@ -278,14 +278,16 @@ impl PtyManager {
 
     pub(super) async fn register_shell_stream_state(&self, session_key: &str) -> ShellStreamState {
         let last_output_time = Arc::new(AtomicU64::new(0));
-        self.last_output
+        self.terminal_sessions
+            .last_output
             .lock()
             .await
             .insert(session_key.to_string(), Arc::clone(&last_output_time));
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
-        self.output_buffers
+        self.terminal_sessions
+            .output_buffers
             .lock()
             .await
             .insert(session_key.to_string(), Arc::clone(&ring_buffer));
@@ -322,11 +324,8 @@ impl PtyManager {
                 app_event_tx: event_sink.app_event_tx,
                 ring_buffer: stream_state.ring_buffer,
                 attachment_hub: None,
-                attachment_hubs: None,
+                terminal_sessions: self.terminal_sessions.clone(),
                 exit_action: PtyExitAction::Cleanup {
-                    sessions: Arc::clone(&self.sessions),
-                    last_output: Arc::clone(&self.last_output),
-                    output_buffers: Arc::clone(&self.output_buffers),
                     lifecycle_lock,
                     pid_file,
                     emit_agent_exit: false,

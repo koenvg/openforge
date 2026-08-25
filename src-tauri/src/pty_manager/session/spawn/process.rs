@@ -7,6 +7,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use super::super::super::ordered_writer::OrderedPtyWriter;
@@ -180,13 +181,13 @@ impl PtyManager {
             reader,
             session: PtySession {
                 child,
-                master: pair.master,
-                writer,
+                master: Arc::new(std::sync::Mutex::new(pair.master)),
+                writer: Arc::new(writer),
                 instance_id: request.instance_id,
                 authority: self.terminal_authority_contract(),
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
-                shadow_model,
+                shadow_model: shadow_model.map(Arc::new),
                 managed_process,
             },
             pid_file,

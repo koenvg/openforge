@@ -2,7 +2,7 @@ use crate::pty_manager::commands::get_shell_path;
 use crate::pty_manager::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use crate::pty_manager::pids::{shell_session_key, write_managed_process_identity};
 use crate::pty_manager::session::lifecycle::{PtySession, PtySessionKind};
-use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
+use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext, TerminalSessionLifecycleState};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::time::Duration;
 
@@ -178,13 +178,15 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
         .expect("writer should be available");
     let session = PtySession {
         child,
-        master: pair.master,
-        writer: crate::pty_manager::ordered_writer::OrderedPtyWriter::start(
-            session_key.to_string(),
-            instance_id,
-            writer,
-        )
-        .expect("ordered writer should start"),
+        master: std::sync::Arc::new(std::sync::Mutex::new(pair.master)),
+        writer: std::sync::Arc::new(
+            crate::pty_manager::ordered_writer::OrderedPtyWriter::start(
+                session_key.to_string(),
+                instance_id,
+                writer,
+            )
+            .expect("ordered writer should start"),
+        ),
         instance_id,
         authority: manager.terminal_authority_contract(),
         kind: PtySessionKind::Shell {
@@ -208,11 +210,42 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
     )
     .expect("recovery metadata should parse");
     assert_eq!(persisted, mismatched_identity);
+    let blocked_spawn = manager
+        .spawn_shell_pty_with_command(
+            PtySpawnContext {
+                task_id: "failed-shell-cleanup",
+                cwd: tmp_dir.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            Some(0),
+            None,
+            long_running_shell_command(),
+        )
+        .await;
+    assert!(
+        matches!(
+            blocked_spawn,
+            Err(PtyError::CleanupFailed(ref message))
+                if message.contains("managed cleanup is still pending")
+        ),
+        "managed recovery must block another Terminal Session under the same key"
+    );
+    let diagnostics = manager.process_diagnostic_sessions().await;
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.session_key == recovery_key
+                && diagnostic.lifecycle_state == TerminalSessionLifecycleState::ManagedRecovery
+                && diagnostic.pty_instance_id == instance_id
+        }),
+        "managed recovery should be visible as a read-only lifecycle snapshot"
+    );
     let retained = manager
-        .sessions
-        .lock()
+        .terminal_sessions
+        .take_managed_recovery_for_test(session_key, instance_id)
         .await
-        .remove(&recovery_key)
         .expect("failed shell cleanup should retain in-memory ownership");
 
     let blocked_pid_dir = tmp_dir.path().join("blocked-pid-dir");
@@ -227,12 +260,10 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
         "metadata persistence failure must be propagated"
     );
 
-    let failed_recovery_key = format!("metadata-write-failure-cleanup-{instance_id}");
     let mut retained = manager
-        .sessions
-        .lock()
+        .terminal_sessions
+        .take_managed_recovery_for_test("metadata-write-failure", instance_id)
         .await
-        .remove(&failed_recovery_key)
         .expect("ownership must remain in memory when metadata persistence fails");
     force_kill_unverified_spawn(pid);
     let _ = retained.child.kill();

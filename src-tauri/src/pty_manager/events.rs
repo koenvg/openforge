@@ -2,74 +2,44 @@ use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
 use crate::terminal_model::ShadowTerminalFeeder;
 use log::{info, warn};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use super::attachment::{PtyAttachmentHub, PtyAttachmentHubs};
-use super::pids::terminate_and_remove_managed_process;
-use super::session::{LastOutputTimes, LifecycleLockLease, PtyOutputBuffers, PtySessions};
+use super::attachment::PtyAttachmentHub;
+use super::session::{LifecycleLockLease, PassiveExitOutcome, TerminalSessions};
 
+#[cfg(test)]
 pub(super) struct PtyExitCleanupContext<'a> {
-    pub(super) sessions: &'a PtySessions,
-    pub(super) last_output: &'a LastOutputTimes,
-    pub(super) output_buffers: &'a PtyOutputBuffers,
+    pub(super) terminal_sessions: &'a TerminalSessions,
     pub(super) lifecycle_lock: &'a tokio::sync::Mutex<()>,
     pub(super) pid_file: &'a Path,
 }
 
+#[cfg(test)]
 pub(super) async fn finalize_pty_exit(
     context: PtyExitCleanupContext<'_>,
     session_key: &str,
     instance_id: u64,
     remove_output_buffer: bool,
 ) -> bool {
-    let _lifecycle_guard = context.lifecycle_lock.lock().await;
-    let removed_session = {
-        let mut sessions = context.sessions.lock().await;
-        let matches_instance = sessions
-            .get(session_key)
-            .map(|session| session.instance_id == instance_id)
-            .unwrap_or(false);
-        if matches_instance {
-            sessions.remove(session_key)
-        } else {
-            None
-        }
-    };
-
-    let Some(mut session) = removed_session else {
-        return false;
-    };
-    if let Err(error) = terminate_and_remove_managed_process(
-        &session.managed_process,
-        context.pid_file,
-        &format!("PTY EOF cleanup for {session_key}"),
-    )
-    .await
-    {
-        warn!("[PTY] Failed to finalize process tree for {session_key}: {error}");
+    matches!(
         context
-            .sessions
-            .lock()
-            .await
-            .entry(session_key.to_string())
-            .or_insert(session);
-        return false;
-    }
-    let process_succeeded = session
-        .child
-        .try_wait()
-        .ok()
-        .flatten()
-        .map(|status| status.success())
-        .unwrap_or(false);
-
-    context.last_output.lock().await.remove(session_key);
-    if remove_output_buffer {
-        context.output_buffers.lock().await.remove(session_key);
-    }
-    process_succeeded
+            .terminal_sessions
+            .finalize_exit(
+                session_key,
+                instance_id,
+                context.lifecycle_lock,
+                context.pid_file,
+                remove_output_buffer,
+            )
+            .await,
+        PassiveExitOutcome::Finalized {
+            process_succeeded: true
+        }
+    )
 }
 
 // ============================================================================
@@ -314,9 +284,6 @@ impl PtyOutputBatcher {
 
 pub(super) enum PtyExitAction {
     Cleanup {
-        sessions: PtySessions,
-        last_output: LastOutputTimes,
-        output_buffers: PtyOutputBuffers,
         lifecycle_lock: LifecycleLockLease,
         pid_file: PathBuf,
         emit_agent_exit: bool,
@@ -330,7 +297,7 @@ pub(super) struct PtyEventEmitterConfig {
     pub(super) app_event_tx: Option<AppEventSender>,
     pub(super) ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
     pub(super) attachment_hub: Option<Arc<PtyAttachmentHub>>,
-    pub(super) attachment_hubs: Option<PtyAttachmentHubs>,
+    pub(super) terminal_sessions: TerminalSessions,
     pub(super) exit_action: PtyExitAction,
 }
 
@@ -346,7 +313,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
             app_event_tx,
             ring_buffer,
             attachment_hub,
-            attachment_hubs,
+            terminal_sessions,
             exit_action,
         } = config;
         let mut batcher = PtyOutputBatcher::new(
@@ -369,64 +336,79 @@ pub(super) fn spawn_batched_pty_event_emitter(
                 msg = rx.recv() => {
                     match msg {
                         Some(Some(text)) => {
-                            batcher.push_output(&text, &mut emit_pty_event);
+                            if terminal_sessions
+                                .accepts_passive_output(&session_key, instance_id)
+                                .await
+                            {
+                                batcher.push_output(&text, &mut emit_pty_event);
+                            }
                         }
-                        Some(None) | None => {
-                            batcher.flush_pending(&mut emit_pty_event);
-
-                            let agent_success = match exit_action {
-                                PtyExitAction::Cleanup {
-                                    sessions,
-                                    last_output,
-                                    output_buffers,
-                                    lifecycle_lock,
-                                    pid_file,
-                                    emit_agent_exit,
-                                } => {
-                                    let success = finalize_pty_exit(
-                                        PtyExitCleanupContext {
-                                            sessions: &sessions,
-                                            last_output: &last_output,
-                                            output_buffers: &output_buffers,
-                                            lifecycle_lock: &lifecycle_lock,
-                                            pid_file: &pid_file,
-                                        },
-                                        &session_key,
-                                        instance_id,
-                                        !emit_agent_exit,
-                                    ).await;
-                                    emit_agent_exit.then_some(success)
-                                }
-                            };
-                            if let Some(hub) = attachment_hub.as_ref() {
-                                hub.publish_exit(instance_id);
-                            }
-                            if let Some(hubs) = attachment_hubs.as_ref() {
-                                let mut hubs = hubs.lock().await;
-                                if hubs
-                                    .get(&session_key)
-                                    .is_some_and(|hub| hub.instance_id() == instance_id)
-                                {
-                                    hubs.remove(&session_key);
-                                }
-                            }
-
-                            info!("[PTY] key={} emitter received exit signal", session_key);
-                            let exit_event_name = format!("pty-exit-{}", session_key);
-                            let exit_payload = serde_json::json!({"instance_id": instance_id});
-                            publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, &exit_event_name, &exit_payload);
-                            if let Some(success) = agent_success {
-                                let payload = serde_json::json!({"task_id": &session_key, "success": success, "instance_id": instance_id});
-                                publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, "agent-pty-exited", &payload);
-                            }
-                            break;
-                        }
+                        Some(None) | None => break,
                     }
                 }
                 _ = interval.tick() => {
                     batcher.flush_pending(&mut emit_pty_event);
                 }
             }
+        }
+
+        batcher.flush_pending(&mut emit_pty_event);
+        let (exit_outcome, emit_agent_exit) = match exit_action {
+            PtyExitAction::Cleanup {
+                lifecycle_lock,
+                pid_file,
+                emit_agent_exit,
+            } => {
+                let outcome = terminal_sessions
+                    .finalize_exit(
+                        &session_key,
+                        instance_id,
+                        &lifecycle_lock,
+                        &pid_file,
+                        !emit_agent_exit,
+                    )
+                    .await;
+                (outcome, emit_agent_exit)
+            }
+        };
+        if let Some(hub) = attachment_hub.as_ref() {
+            hub.publish_exit(instance_id);
+        }
+        if matches!(exit_outcome, PassiveExitOutcome::IgnoredStale) {
+            info!(
+                "[PTY] key={} ignored stale exit for instance={}",
+                session_key, instance_id
+            );
+            return;
+        }
+
+        info!("[PTY] key={} emitter received exit signal", session_key);
+        let exit_event_name = format!("pty-exit-{}", session_key);
+        let exit_payload = serde_json::json!({"instance_id": instance_id});
+        publish_app_event_to_runtime(
+            app_handle.as_ref(),
+            &app_event_tx,
+            &exit_event_name,
+            &exit_payload,
+        );
+        if emit_agent_exit {
+            let success = matches!(
+                exit_outcome,
+                PassiveExitOutcome::Finalized {
+                    process_succeeded: true
+                }
+            );
+            let payload = serde_json::json!({
+                "task_id": &session_key,
+                "success": success,
+                "instance_id": instance_id
+            });
+            publish_app_event_to_runtime(
+                app_handle.as_ref(),
+                &app_event_tx,
+                "agent-pty-exited",
+                &payload,
+            );
         }
     });
 }

@@ -1,7 +1,7 @@
 use crate::pty_manager::session::provider_adapter::AgentPtyProviderAdapter;
 use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
@@ -360,6 +360,142 @@ async fn newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
     for _ in 0..10 {
         assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late().await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
+    let mut manager = PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let task_id = "agent-lock-order-race";
+    manager
+        .spawn_agent_pty(
+            LockCheckingAgentAdapter {
+                sessions: Arc::clone(&manager.sessions),
+                prepared_tx: None,
+                command_delay: Duration::ZERO,
+                script: "while true; do sleep 1; done",
+                check_lock: false,
+            },
+            PtySpawnContext {
+                task_id,
+                cwd: temp_dir.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            None,
+        )
+        .await
+        .expect("initial Terminal Session should spawn");
+
+    let lifecycle_lock = manager.lifecycle_lock_for(task_id).await;
+    let lifecycle_guard = lifecycle_lock.lock().await;
+    let spawn_in_thread = |spawn_manager: PtyManager,
+                           spawn_task_id: String,
+                           spawn_cwd: PathBuf,
+                           script: &'static str| {
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("spawn runtime should build");
+            runtime.block_on(spawn_manager.spawn_agent_pty(
+                LockCheckingAgentAdapter {
+                    sessions: Arc::clone(&spawn_manager.sessions),
+                    prepared_tx: None,
+                    command_delay: Duration::ZERO,
+                    script,
+                    check_lock: false,
+                },
+                PtySpawnContext {
+                    task_id: &spawn_task_id,
+                    cwd: &spawn_cwd,
+                    cols: 80,
+                    rows: 24,
+                    app_handle: None,
+                    app_event_tx: None,
+                },
+                None,
+            ))
+        })
+    };
+
+    let old_spawn = spawn_in_thread(
+        manager.clone(),
+        task_id.to_string(),
+        temp_dir.path().to_path_buf(),
+        "printf old-should-not-win; while true; do sleep 1; done",
+    );
+    let old_generation = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let Some(generation) = manager
+                .agent_spawn_generations
+                .lock()
+                .await
+                .get(task_id)
+                .copied()
+            {
+                break generation;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("older spawn should publish its claim");
+
+    let new_spawn = spawn_in_thread(
+        manager.clone(),
+        task_id.to_string(),
+        temp_dir.path().to_path_buf(),
+        "printf new-winner; while true; do sleep 1; done",
+    );
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if manager
+                .agent_spawn_generations
+                .lock()
+                .await
+                .get(task_id)
+                .is_some_and(|generation| *generation != old_generation)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("newer spawn should supersede the older claim");
+    drop(lifecycle_guard);
+
+    let old_result = old_spawn.join().expect("older spawn thread should join");
+    let new_instance_id = new_spawn
+        .join()
+        .expect("newer spawn thread should join")
+        .expect("newer spawn should win");
+    assert!(
+        matches!(
+            old_result,
+            Err(PtyError::SpawnFailed(ref message))
+                if message.contains("cancelled before spawn")
+        ),
+        "older waiter must stop before replacing the newer Terminal Session: {old_result:?}"
+    );
+    assert_eq!(
+        manager
+            .sessions
+            .lock()
+            .await
+            .get(task_id)
+            .expect("newer Terminal Session should remain current")
+            .instance_id,
+        new_instance_id
+    );
+    manager
+        .kill_pty(task_id)
+        .await
+        .expect("winning Terminal Session should clean up");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -3,6 +3,13 @@ use super::*;
 #[tokio::test]
 async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_share_bus() {
     let manager = PtyManager::new();
+    register_emitter_test_session(
+        &manager,
+        "task-dedupe-shell-0",
+        7,
+        "task-dedupe-shell-0.pid",
+    )
+    .await;
     let bus = crate::app_events::AppEventBus::new(16, 16);
     let app = crate::backend_runtime::AppHandle::new();
     app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
@@ -22,11 +29,8 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
             app_event_tx: Some(bus.sender()),
             ring_buffer: ring,
             attachment_hub: None,
-            attachment_hubs: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
-                sessions: Arc::clone(&manager.sessions),
-                last_output: Arc::clone(&manager.last_output),
-                output_buffers: Arc::clone(&manager.output_buffers),
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
                 emit_agent_exit: false,
@@ -114,6 +118,21 @@ fn count_events(events: &[crate::app_events::AppEventEnvelope], event_name: &str
         .count()
 }
 
+async fn register_emitter_test_session(
+    manager: &PtyManager,
+    session_key: &str,
+    instance_id: u64,
+    pid_file_name: &str,
+) {
+    let mut session = test_pty_session(PtySessionKind::Agent, pid_file_name.to_string());
+    session.instance_id = instance_id;
+    manager
+        .sessions
+        .lock()
+        .await
+        .insert(session_key.to_string(), session);
+}
+
 async fn release_test_child_and_wait_for_exit(
     child: &mut (dyn portable_pty::Child + Send + Sync),
     exit_gate: &Path,
@@ -144,6 +163,13 @@ async fn release_test_child_and_wait_for_exit(
 #[tokio::test]
 async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
     let manager = PtyManager::new();
+    register_emitter_test_session(
+        &manager,
+        "task-dedupe-exit-shell-0",
+        8,
+        "task-dedupe-exit-shell-0.pid",
+    )
+    .await;
     let bus = crate::app_events::AppEventBus::new(16, 16);
     let app = crate::backend_runtime::AppHandle::new();
     app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
@@ -163,11 +189,8 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
             app_event_tx: Some(bus.sender()),
             ring_buffer: ring,
             attachment_hub: None,
-            attachment_hubs: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
-                sessions: Arc::clone(&manager.sessions),
-                last_output: Arc::clone(&manager.last_output),
-                output_buffers: Arc::clone(&manager.output_buffers),
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
                 emit_agent_exit: false,
@@ -198,6 +221,7 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
 #[tokio::test]
 async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() {
     let manager = PtyManager::new();
+    register_emitter_test_session(&manager, "agent-dedupe-exit", 9, "agent-dedupe-exit.pid").await;
     let bus = crate::app_events::AppEventBus::new(16, 16);
     let app = crate::backend_runtime::AppHandle::new();
     app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
@@ -217,11 +241,8 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
             app_event_tx: Some(bus.sender()),
             ring_buffer: ring,
             attachment_hub: None,
-            attachment_hubs: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
-                sessions: Arc::clone(&manager.sessions),
-                last_output: Arc::clone(&manager.last_output),
-                output_buffers: Arc::clone(&manager.output_buffers),
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
                 emit_agent_exit: true,
@@ -253,6 +274,13 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
 #[tokio::test]
 async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
     let manager = PtyManager::new();
+    register_emitter_test_session(
+        &manager,
+        "agent-fallback-exit",
+        10,
+        "agent-fallback-exit.pid",
+    )
+    .await;
     let app = crate::backend_runtime::AppHandle::new();
     let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
     let (output_tx, output_rx) = pty_output_channel();
@@ -268,11 +296,8 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
             app_event_tx: Some(app_event_tx),
             ring_buffer: ring,
             attachment_hub: None,
-            attachment_hubs: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
-                sessions: Arc::clone(&manager.sessions),
-                last_output: Arc::clone(&manager.last_output),
-                output_buffers: Arc::clone(&manager.output_buffers),
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
                 emit_agent_exit: true,
@@ -340,9 +365,11 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
             PtySession {
                 managed_process,
                 child,
-                master: pair.master,
-                writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
-                    .expect("ordered writer should start"),
+                master: std::sync::Arc::new(std::sync::Mutex::new(pair.master)),
+                writer: Arc::new(
+                    ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
+                        .expect("ordered writer should start"),
+                ),
                 instance_id: 1,
                 authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Shell {
@@ -378,11 +405,8 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
             app_event_tx: Some(app_event_tx),
             ring_buffer: ring,
             attachment_hub: None,
-            attachment_hubs: None,
+            terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
-                sessions: Arc::clone(&manager.sessions),
-                last_output: Arc::clone(&manager.last_output),
-                output_buffers: Arc::clone(&manager.output_buffers),
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
                 pid_file: pid_file.clone(),
                 emit_agent_exit: false,
@@ -466,9 +490,11 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
             PtySession {
                 managed_process,
                 child,
-                master: pair.master,
-                writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
-                    .expect("ordered writer should start"),
+                master: std::sync::Arc::new(std::sync::Mutex::new(pair.master)),
+                writer: Arc::new(
+                    ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
+                        .expect("ordered writer should start"),
+                ),
                 instance_id: 1,
                 authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Agent,
@@ -498,9 +524,7 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
 
     let success = finalize_pty_exit(
         PtyExitCleanupContext {
-            sessions: &manager.sessions,
-            last_output: &manager.last_output,
-            output_buffers: &manager.output_buffers,
+            terminal_sessions: &manager.terminal_sessions,
             lifecycle_lock: &lifecycle_lock,
             pid_file: &pid_file,
         },
@@ -541,9 +565,7 @@ async fn test_finalize_pty_exit_terminates_live_root_before_nonblocking_reap() {
         std::time::Duration::from_secs(5),
         finalize_pty_exit(
             PtyExitCleanupContext {
-                sessions: &manager.sessions,
-                last_output: &manager.last_output,
-                output_buffers: &manager.output_buffers,
+                terminal_sessions: &manager.terminal_sessions,
                 lifecycle_lock: &lifecycle_lock,
                 pid_file: &pid_file,
             },
@@ -600,9 +622,11 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
                 )
                 .expect("test process identity"),
                 child,
-                master: pair.master,
-                writer: ordered_writer::OrderedPtyWriter::start("task-1".to_string(), 2, writer)
-                    .expect("ordered writer should start"),
+                master: std::sync::Arc::new(std::sync::Mutex::new(pair.master)),
+                writer: Arc::new(
+                    ordered_writer::OrderedPtyWriter::start("task-1".to_string(), 2, writer)
+                        .expect("ordered writer should start"),
+                ),
                 instance_id: 2,
                 authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Agent,
@@ -633,9 +657,7 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
 
     let success = finalize_pty_exit(
         PtyExitCleanupContext {
-            sessions: &manager.sessions,
-            last_output: &manager.last_output,
-            output_buffers: &manager.output_buffers,
+            terminal_sessions: &manager.terminal_sessions,
             lifecycle_lock: &lifecycle_lock,
             pid_file: &pid_file,
         },
@@ -672,4 +694,66 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
         pid_file.exists(),
         "stale cleanup must not remove the active pid file"
     );
+}
+
+#[tokio::test]
+async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
+    let mut manager = PtyManager::new();
+    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let session_key = "passive-cleanup-recovery";
+    let mut session = test_agent_pty_session(session_key);
+    let instance_id = session.instance_id;
+    let pid = session.child.process_id().expect("test child PID");
+    session.managed_process.root_start_time += 1;
+    manager
+        .sessions
+        .lock()
+        .await
+        .insert(session_key.to_string(), session);
+
+    let lifecycle_lock = manager.lifecycle_lock_for(session_key).await;
+    let pid_file = temp_dir.path().join(format!("{session_key}-pty.pid"));
+    let success = finalize_pty_exit(
+        PtyExitCleanupContext {
+            terminal_sessions: &manager.terminal_sessions,
+            lifecycle_lock: &lifecycle_lock,
+            pid_file: &pid_file,
+        },
+        session_key,
+        instance_id,
+        false,
+    )
+    .await;
+
+    assert!(!success, "failed cleanup must not report success");
+    assert!(!manager
+        .get_session_keys()
+        .await
+        .contains(&session_key.to_string()));
+    assert!(manager
+        .process_diagnostic_sessions()
+        .await
+        .iter()
+        .any(|diagnostic| {
+            diagnostic.session_key == session_key
+                && diagnostic.lifecycle_state == TerminalSessionLifecycleState::ManagedRecovery
+        }));
+    let spawn_result = manager
+        .spawn_companion_test_agent_pty(session_key, temp_dir.path(), "printf should-not-spawn")
+        .await;
+    assert!(matches!(
+        spawn_result,
+        Err(PtyError::CleanupFailed(ref message))
+            if message.contains("managed cleanup is still pending")
+    ));
+
+    let mut recovery = manager
+        .terminal_sessions
+        .take_managed_recovery_for_test(session_key, instance_id)
+        .await
+        .expect("failed passive cleanup should retain ownership");
+    crate::pty_manager::managed_process::force_kill_unverified_spawn(pid);
+    let _ = recovery.child.kill();
+    let _ = recovery.child.try_wait();
 }

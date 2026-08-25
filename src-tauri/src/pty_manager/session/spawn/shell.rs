@@ -42,9 +42,20 @@ impl PtyManager {
         } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         let session_key = shell_session_key(task_id, terminal_index);
+        self.terminal_sessions
+            .ensure_no_managed_recovery(&session_key)
+            .await?;
         let (token, _pending_spawn, lifecycle_lock) =
             self.begin_shell_spawn(&session_key, task_id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
+        if let Err(error) = self
+            .terminal_sessions
+            .ensure_no_managed_recovery(&session_key)
+            .await
+        {
+            self.finish_shell_spawn(&token).await;
+            return Err(error);
+        }
         if !self
             .is_current_spawn(&token.session_key, token.generation)
             .await

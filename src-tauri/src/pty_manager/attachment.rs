@@ -1,10 +1,9 @@
-use portable_pty::PtySize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
 use super::events::RingBuffer;
-use super::session::PtySessionKind;
+use super::session::{SessionOperation, SessionTarget, TerminalSessionFailure, TerminalSessions};
 use super::PtyManager;
 
 pub(super) const COMPANION_ATTACHMENT_EVENT_CAPACITY: usize = 64;
@@ -176,7 +175,9 @@ impl PtyAttachmentHub {
         (replay, receiver)
     }
 
-    fn attach_with_status(&self) -> (Vec<u8>, broadcast::Receiver<AgentTerminalEvent>, bool) {
+    pub(super) fn attach_with_status(
+        &self,
+    ) -> (Vec<u8>, broadcast::Receiver<AgentTerminalEvent>, bool) {
         let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         let receiver = state.events.subscribe();
         (state.replay.snapshot_bytes(), receiver, state.failed)
@@ -230,10 +231,28 @@ pub(crate) struct AgentTerminalAttachment {
     replay: Vec<u8>,
     protocol_error_pending: bool,
     events: broadcast::Receiver<AgentTerminalEvent>,
-    manager: PtyManager,
+    terminal_sessions: TerminalSessions,
 }
 
 impl AgentTerminalAttachment {
+    pub(super) fn new(
+        task_id: String,
+        instance_id: u64,
+        replay: Vec<u8>,
+        protocol_error_pending: bool,
+        events: broadcast::Receiver<AgentTerminalEvent>,
+        terminal_sessions: TerminalSessions,
+    ) -> Self {
+        Self {
+            task_id,
+            instance_id,
+            replay,
+            protocol_error_pending,
+            events,
+            terminal_sessions,
+        }
+    }
+
     pub(crate) fn has_protocol_error(&self) -> bool {
         self.protocol_error_pending
     }
@@ -262,9 +281,23 @@ impl AgentTerminalAttachment {
         input: &[u8],
     ) -> Result<(), AgentTerminalAttachmentError> {
         std::str::from_utf8(input).map_err(|_| AgentTerminalAttachmentError::InvalidUtf8)?;
-        self.manager
-            .write_agent_attachment(&self.task_id, self.instance_id, input)
+        self.terminal_sessions
+            .operate(
+                SessionTarget::Exact {
+                    session_key: &self.task_id,
+                    instance_id: self.instance_id,
+                },
+                SessionOperation::WriteAttachment(input),
+            )
             .await
+            .map_err(|failure| match failure {
+                TerminalSessionFailure::Missing { .. } | TerminalSessionFailure::Stale { .. } => {
+                    AgentTerminalAttachmentError::StaleAttachment
+                }
+                TerminalSessionFailure::Write(_) | TerminalSessionFailure::Resize(_) => {
+                    AgentTerminalAttachmentError::WriteFailed
+                }
+            })
     }
 
     pub(crate) async fn resize(
@@ -275,111 +308,37 @@ impl AgentTerminalAttachment {
         if columns == 0 || rows == 0 {
             return Err(AgentTerminalAttachmentError::InvalidDimensions);
         }
-        self.manager
-            .resize_agent_attachment(&self.task_id, self.instance_id, columns, rows)
+        self.terminal_sessions
+            .operate(
+                SessionTarget::Exact {
+                    session_key: &self.task_id,
+                    instance_id: self.instance_id,
+                },
+                SessionOperation::ResizeAttachment { columns, rows },
+            )
             .await
+            .map_err(|failure| match failure {
+                TerminalSessionFailure::Missing { .. } | TerminalSessionFailure::Stale { .. } => {
+                    AgentTerminalAttachmentError::StaleAttachment
+                }
+                TerminalSessionFailure::Write(_) | TerminalSessionFailure::Resize(_) => {
+                    AgentTerminalAttachmentError::ResizeFailed
+                }
+            })
     }
 }
 
 impl PtyManager {
     pub(crate) async fn agent_terminal_available(&self, task_id: &str) -> bool {
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
-        let _lifecycle_guard = lifecycle_lock.lock().await;
-        let instance_id = {
-            let sessions = self.sessions.lock().await;
-            sessions.get(task_id).and_then(|session| {
-                matches!(session.kind, PtySessionKind::Agent).then_some(session.instance_id)
-            })
-        };
-        let Some(instance_id) = instance_id else {
-            return false;
-        };
-        self.attachment_hubs
-            .lock()
+        self.terminal_sessions
+            .agent_terminal_available(task_id)
             .await
-            .get(task_id)
-            .is_some_and(|hub| hub.instance_id() == instance_id)
     }
 
     pub(crate) async fn attach_agent_terminal(
         &self,
         task_id: &str,
     ) -> Result<AgentTerminalAttachment, AgentTerminalAttachmentError> {
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
-        let _lifecycle_guard = lifecycle_lock.lock().await;
-        let instance_id = {
-            let sessions = self.sessions.lock().await;
-            let session = sessions
-                .get(task_id)
-                .ok_or(AgentTerminalAttachmentError::NoActiveAgentTerminal)?;
-            if !matches!(session.kind, PtySessionKind::Agent) {
-                return Err(AgentTerminalAttachmentError::NoActiveAgentTerminal);
-            }
-            session.instance_id
-        };
-        let hub = self
-            .attachment_hubs
-            .lock()
-            .await
-            .get(task_id)
-            .filter(|hub| hub.instance_id() == instance_id)
-            .cloned()
-            .ok_or(AgentTerminalAttachmentError::NoActiveAgentTerminal)?;
-        let (replay, events, protocol_error_pending) = hub.attach_with_status();
-        Ok(AgentTerminalAttachment {
-            task_id: task_id.to_string(),
-            instance_id,
-            replay,
-            protocol_error_pending,
-            events,
-            manager: self.clone(),
-        })
-    }
-    async fn write_agent_attachment(
-        &self,
-        task_id: &str,
-        instance_id: u64,
-        input: &[u8],
-    ) -> Result<(), AgentTerminalAttachmentError> {
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
-        let _lifecycle_guard = lifecycle_lock.lock().await;
-        let mut sessions = self.sessions.lock().await;
-        let session = sessions
-            .get_mut(task_id)
-            .ok_or(AgentTerminalAttachmentError::StaleAttachment)?;
-        if session.instance_id != instance_id || !matches!(session.kind, PtySessionKind::Agent) {
-            return Err(AgentTerminalAttachmentError::StaleAttachment);
-        }
-        session
-            .writer
-            .write_user_input(task_id, instance_id, input)
-            .map_err(|_| AgentTerminalAttachmentError::WriteFailed)
-    }
-
-    async fn resize_agent_attachment(
-        &self,
-        task_id: &str,
-        instance_id: u64,
-        columns: u16,
-        rows: u16,
-    ) -> Result<(), AgentTerminalAttachmentError> {
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
-        let _lifecycle_guard = lifecycle_lock.lock().await;
-        let sessions = self.sessions.lock().await;
-        let session = sessions
-            .get(task_id)
-            .ok_or(AgentTerminalAttachmentError::StaleAttachment)?;
-        if session.instance_id != instance_id || !matches!(session.kind, PtySessionKind::Agent) {
-            return Err(AgentTerminalAttachmentError::StaleAttachment);
-        }
-        session
-            .master
-            .resize(PtySize {
-                rows,
-                cols: columns,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|_| AgentTerminalAttachmentError::ResizeFailed)
+        self.terminal_sessions.attach_agent_terminal(task_id).await
     }
 }
