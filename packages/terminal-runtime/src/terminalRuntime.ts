@@ -50,6 +50,10 @@ export type {
   TerminalViewFactory,
   TerminalViewFactoryOptions,
   TerminalViewGeometry,
+  TerminalViewPresentationCell,
+  TerminalViewPresentationEvidence,
+  TerminalViewPresentationLine,
+  TerminalViewPresentationSnapshot,
   TerminalViewRendererFailure,
   TerminalViewTheme,
 } from './terminalView'

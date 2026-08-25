@@ -5,6 +5,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['packages/terminal-runtime/src/**/*.test.ts'],
+    include: [
+      'packages/terminal-runtime/src/**/*.test.ts',
+      'packages/terminal-runtime/conformance/**/*.test.ts',
+      'packages/terminal-runtime/conformance/**/*.test.mjs',
+    ],
   },
 })

@@ -37,6 +37,8 @@
     "packages:metadata:check": "node scripts/check-workspace-package-metadata.mjs",
     "packages:pack:dry-run": "pnpm packages:metadata:check && node scripts/pack-npm-packages-dry-run.mjs",
     "preview": "vite preview",
+    "terminal:presentation": "node packages/terminal-runtime/conformance/run.mjs",
+    "terminal:presentation:update": "node packages/terminal-runtime/conformance/run.mjs --update-baselines",
     "test": "vitest run"
   },
   "dependencies": {
@@ -76,7 +78,9 @@
     "@types/qrcode": "^1.5.6",
     "electron": "^43.4.1",
     "jsdom": "^30.0.1",
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.62.1",
+    "pngjs": "^7.0.0",
     "semver": "^7.8.5",
     "typescript": "catalog:",
     "vite": "catalog:",

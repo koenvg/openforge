@@ -17,6 +17,7 @@
   },
   "files": [
     "src",
+    "fixtures",
     "README.md",
     "LICENSE"
   ],
@@ -35,6 +36,7 @@
   },
   "scripts": {
     "test": "cd ../.. && vitest run --config packages/terminal-runtime/vitest.config.ts",
+    "conformance": "cd ../.. && node packages/terminal-runtime/conformance/run.mjs",
     "build": "tsc --noEmit"
   },
   "devDependencies": {

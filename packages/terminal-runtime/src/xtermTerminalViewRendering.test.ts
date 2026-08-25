@@ -21,6 +21,8 @@ vi.mock('@xterm/xterm', () => ({
       focus: vi.fn(),
       write: vi.fn(),
       onData: vi.fn(() => ({ dispose: vi.fn() })),
+      onWriteParsed: vi.fn(() => ({ dispose: vi.fn() })),
+      onRender: vi.fn(() => ({ dispose: vi.fn() })),
       attachCustomKeyEventHandler: vi.fn(),
       getSelection: vi.fn(() => ''),
       cols: 80,

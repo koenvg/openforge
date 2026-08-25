@@ -15,6 +15,8 @@ const hoistedTerminalMocks = vi.hoisted(() => ({
     focus: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
     onData: ReturnType<typeof vi.fn>
+    onWriteParsed: ReturnType<typeof vi.fn>
+    onRender: ReturnType<typeof vi.fn>
     attachCustomKeyEventHandler: ReturnType<typeof vi.fn>
     cols: number
     rows: number
@@ -72,6 +74,8 @@ vi.mock('@xterm/xterm', () => ({
         loadedAddons.push(addon)
       }),
       onData: vi.fn(() => ({ dispose: vi.fn() })),
+      onWriteParsed: vi.fn(() => ({ dispose: vi.fn() })),
+      onRender: vi.fn(() => ({ dispose: vi.fn() })),
       attachCustomKeyEventHandler: vi.fn(),
       cols: 80,
       rows: 24,
@@ -244,6 +248,23 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     isMountedIn: vi.fn(() => false),
     bootstrap: vi.fn(),
     writeLive: vi.fn(),
+    drainPresentation: vi.fn(async () => ({
+      writeGeneration: 0,
+      parsedGeneration: 0,
+      renderFrame: 1,
+      renderedRows: { start: 0, end: 23 },
+      renderer: 'fake',
+      presentedAt: 0,
+      devicePixelRatio: 1,
+      geometry: { cols: 80, rows: 24 },
+    })),
+    capturePresentation: vi.fn(() => ({
+      geometry: { cols: 80, rows: 24 },
+      activeBuffer: 'normal' as const,
+      cursor: { x: 0, y: 0 },
+      selectionText: '',
+      lines: [],
+    })),
     focus: vi.fn(),
     reset: vi.fn(),
     refresh: vi.fn(),

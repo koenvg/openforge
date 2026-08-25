@@ -193,9 +193,15 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
+      pixelmatch:
+        specifier: ^7.2.0
+        version: 7.2.0
       playwright:
         specifier: ^1.62.1
         version: 1.62.1
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -2499,6 +2505,10 @@ packages:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
 
+  pixelmatch@7.2.0:
+    resolution: {integrity: sha512-xhcb4yHu9sM/G7foGzoLtXYcC0zHEaOXXjRKhGup0fw78Nf2Tkiapv4EQyMzrbcmQPsllAI7DbFY2UT7PlI9Pg==}
+    hasBin: true
+
   playwright-core@1.62.1:
     resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
     engines: {node: '>=20'}
@@ -2512,6 +2522,10 @@ packages:
   pngjs@5.0.0:
     resolution: {integrity: sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==}
     engines: {node: '>=10.13.0'}
+
+  pngjs@7.0.0:
+    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
+    engines: {node: '>=14.19.0'}
 
   postcss@8.5.26:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
@@ -5001,6 +5015,10 @@ snapshots:
 
   picomatch@4.0.5: {}
 
+  pixelmatch@7.2.0:
+    dependencies:
+      pngjs: 7.0.0
+
   playwright-core@1.62.1: {}
 
   playwright@1.62.1:
@@ -5010,6 +5028,8 @@ snapshots:
       fsevents: 2.3.2
 
   pngjs@5.0.0: {}
+
+  pngjs@7.0.0: {}
 
   postcss@8.5.26:
     dependencies:
