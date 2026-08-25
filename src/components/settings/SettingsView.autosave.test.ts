@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
-import { defaultProps, resetSettingsViewTest } from './SettingsView.testUtils'
+import { defaultProps } from './SettingsView.testUtils'
+import { resetSettingsViewAutosaveTest } from './SettingsView.autosave.testFixture'
 import {
   checkClaudeInstalled,
   checkPiInstalled,
@@ -17,7 +18,7 @@ import { activeProjectId, projects } from '../../lib/stores'
 import SettingsView from './SettingsView.svelte'
 
 describe('SettingsView auto-save', () => {
-  beforeEach(resetSettingsViewTest)
+  beforeEach(resetSettingsViewAutosaveTest)
 
   async function openGithubCategory() {
     await fireEvent.click(screen.getByRole('button', { name: /GitHub & Credentials/ }))
