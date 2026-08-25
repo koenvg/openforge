@@ -7,7 +7,10 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 
+use super::super::attachment::PtyAttachmentHub;
+use super::super::events::SharedRingBuffer;
 use super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use super::super::pids::write_managed_process_identity;
 use super::super::{terminal_environment, PtyError, PtyManager, TerminalImageProtocol};
@@ -100,6 +103,34 @@ impl PtyManager {
             .get(session_key)
             .map(|current| *current == generation)
             .unwrap_or(false)
+    }
+
+    async fn remove_output_buffer_if_registered(
+        &self,
+        session_key: &str,
+        registered_buffer: &SharedRingBuffer,
+    ) {
+        let mut buffers = self.output_buffers.lock().await;
+        if buffers
+            .get(session_key)
+            .is_some_and(|stored| Arc::ptr_eq(stored, registered_buffer))
+        {
+            buffers.remove(session_key);
+        }
+    }
+
+    async fn remove_attachment_hub_if_registered(
+        &self,
+        session_key: &str,
+        registered_hub: &Arc<PtyAttachmentHub>,
+    ) {
+        let mut hubs = self.attachment_hubs.lock().await;
+        if hubs
+            .get(session_key)
+            .is_some_and(|stored| Arc::ptr_eq(stored, registered_hub))
+        {
+            hubs.remove(session_key);
+        }
     }
 
     fn configure_pty_command(

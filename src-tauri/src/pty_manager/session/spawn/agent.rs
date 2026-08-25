@@ -478,20 +478,10 @@ impl PtyManager {
         {
             self.remove_agent_last_output_if_registered(task_id, last_output_time.as_ref())
                 .await;
-            let mut buffers = self.output_buffers.lock().await;
-            if buffers
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &ring_buffer))
-            {
-                buffers.remove(task_id);
-            }
-            let mut hubs = self.attachment_hubs.lock().await;
-            if hubs
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &attachment_hub))
-            {
-                hubs.remove(task_id);
-            }
+            self.remove_output_buffer_if_registered(task_id, &ring_buffer)
+                .await;
+            self.remove_attachment_hub_if_registered(task_id, &attachment_hub)
+                .await;
             return Err(error);
         }
 
@@ -529,24 +519,10 @@ impl PtyManager {
             stream_state.last_output_time.as_ref(),
         )
         .await;
-        {
-            let mut buffers = self.output_buffers.lock().await;
-            if buffers
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &stream_state.ring_buffer))
-            {
-                buffers.remove(task_id);
-            }
-        }
-        {
-            let mut hubs = self.attachment_hubs.lock().await;
-            if hubs
-                .get(task_id)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &stream_state.attachment_hub))
-            {
-                hubs.remove(task_id);
-            }
-        }
+        self.remove_output_buffer_if_registered(task_id, &stream_state.ring_buffer)
+            .await;
+        self.remove_attachment_hub_if_registered(task_id, &stream_state.attachment_hub)
+            .await;
     }
 
     async fn start_agent_event_stream(
