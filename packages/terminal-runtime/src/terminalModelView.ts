@@ -103,24 +103,33 @@ export function createTerminalModelView({
     return true
   }
 
+  async function recoverGhosttySnapshot(entry: PoolEntry, reset: boolean): Promise<boolean> {
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const snapshot = await host.getTerminalViewSnapshot?.(entry.taskId) ?? null
+        if (!snapshot) return false
+        if (activateGhostty(entry, snapshot, reset || attempt > 0)) return true
+        entry.terminalStateSource = 'bootstrapping'
+      }
+    } catch (error) {
+      console.warn(
+        terminalLogMessage(host.loggerName, 'Ghostty terminal snapshot unavailable; using legacy replay:'),
+        error,
+      )
+    }
+    return false
+  }
+
   async function recover(entry: PoolEntry, reset = true): Promise<void> {
     if (entry.terminalModelRecovery) return entry.terminalModelRecovery
     entry.terminalStateSource = 'bootstrapping'
     const recovery = (async () => {
-      try {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          const snapshot = await host.getTerminalViewSnapshot?.(entry.taskId) ?? null
-          if (!snapshot) break
-          if (activateGhostty(entry, snapshot, reset || attempt > 0)) return
-          entry.terminalStateSource = 'bootstrapping'
-        }
-      } catch (error) {
-        console.warn(
-          terminalLogMessage(host.loggerName, 'Ghostty terminal snapshot unavailable; using legacy replay:'),
-          error,
-        )
-      }
+      if (await recoverGhosttySnapshot(entry, reset)) return
+
       const state = await host.getPtyBuffer(entry.taskId)
+      if (entry.pendingTerminalModelOutput.length > 0
+        && await recoverGhosttySnapshot(entry, reset)) return
+
       activateLegacy(entry, state, reset)
     })()
     entry.terminalModelRecovery = recovery

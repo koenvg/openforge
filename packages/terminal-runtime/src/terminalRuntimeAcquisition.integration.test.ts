@@ -170,6 +170,41 @@ describe('terminal runtime acquisition', () => {
     expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
   })
 
+  it('recovers Ghostty state when session reattachment races with legacy fallback', async () => {
+    const terminalKey = 'T-resumed-shell-0'
+    const host = createHost()
+    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
+    const writePty = vi.spyOn(host, 'writePty')
+    const resumeBufferRead = host.deferBufferRead(terminalKey)
+    const runtime = createTerminalRuntime(host)
+
+    const acquisition = runtime.acquire(terminalKey)
+    await vi.waitFor(() => expect(getPtyBuffer).toHaveBeenCalledOnce())
+    runtime.restorePtyInstance(terminalKey, 13)
+
+    host.setTerminalViewSnapshot(terminalKey, {
+      instanceId: 13,
+      watermark: 1,
+      data: btoa('resumed agent session'),
+    })
+    host.emit(`pty-model-output-${terminalKey}`, {
+      instance_id: 13,
+      sequence: 1,
+      data: btoa('resumed agent session'),
+    })
+    resumeBufferRead()
+
+    const entry = await acquisition
+
+    expect(entry.terminalStateSource).toBe('ghostty')
+    expect(entry.currentPtyInstance).toBe(13)
+
+    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
+    onData('continue resumed session')
+
+    expect(writePty).toHaveBeenCalledWith(terminalKey, 'continue resumed session')
+  })
+
   it('requests a fresh Ghostty snapshot when a live-frame sequence has a gap', async () => {
     const terminalKey = 'T-gap-shell-0'
     const host = createHost()
