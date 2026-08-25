@@ -219,13 +219,18 @@ describe('ActionPalette component', () => {
     })
 
     expect(screen.getByText('GitHub default')).toBeTruthy()
-    await fireEvent.click(screen.getByRole('option', { name: /squash and merge PR #42/i }))
+    const searchInput = screen.getByPlaceholderText('Type an action...')
+    expect(document.activeElement).toBe(searchInput)
+
+    await fireEvent.keyDown(searchInput, { key: 'Enter' })
 
     expect(onExecute).not.toHaveBeenCalled()
     expect(screen.getByText('Squash and merge PR #42?')).toBeTruthy()
 
-    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+    const confirmButton = screen.getByRole('button', { name: 'Confirm' })
+    expect(document.activeElement).toBe(confirmButton)
 
+    await fireEvent.keyDown(confirmButton, { key: 'Enter' })
     expect(onExecute).toHaveBeenCalledWith('merge-pr:squash', 'squash')
   })
 })
