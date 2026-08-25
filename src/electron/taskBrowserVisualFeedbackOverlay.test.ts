@@ -28,6 +28,26 @@ function dispatchPointer(target: Element, type: string, properties: {
   target.dispatchEvent(event)
 }
 
+function openFeedbackComposer(nextAnnotationNumber: number): {
+  selection: ReturnType<typeof runTaskBrowserVisualFeedbackOverlay>
+  composer: HTMLFormElement
+  textarea: HTMLTextAreaElement
+} {
+  const selection = runTaskBrowserVisualFeedbackOverlay(executeInPage, {
+    savedAnnotations: [],
+    nextAnnotationNumber,
+  })
+  const interaction = document.querySelector<HTMLElement>('#__openforge_visual_feedback_selector__ > div:last-child')
+  if (!interaction) throw new Error('Expected visual feedback interaction layer')
+  interaction.setPointerCapture = () => undefined
+  dispatchPointer(interaction, 'pointerdown', { clientX: 100, clientY: 120 })
+  dispatchPointer(interaction, 'pointerup', { clientX: 300, clientY: 280 })
+  const composer = document.querySelector<HTMLFormElement>('form[aria-label="Visual feedback comment"]')
+  const textarea = composer?.querySelector('textarea')
+  if (!composer || !textarea) throw new Error('Expected visual feedback comment composer')
+  return { selection, composer, textarea }
+}
+
 beforeEach(() => {
   document.documentElement.replaceChildren(document.createElement('head'), document.createElement('body'))
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_000 })
@@ -89,26 +109,13 @@ describe('Task Browser visual feedback overlay', () => {
   })
 
   it('selects a dragged live-page rectangle and anchors its composer beside the selection', async () => {
-    const selection = runTaskBrowserVisualFeedbackOverlay(executeInPage, {
-      savedAnnotations: [],
-      nextAnnotationNumber: 7,
-    })
-    const interaction = document.querySelector<HTMLElement>('#__openforge_visual_feedback_selector__ > div:last-child')
-    expect(interaction).not.toBeNull()
-    if (!interaction) throw new Error('Expected visual feedback interaction layer')
-    interaction.setPointerCapture = () => undefined
+    const { selection, composer, textarea } = openFeedbackComposer(7)
+    expect(composer.style.left).toBe('308px')
+    expect(composer.style.top).toBe('288px')
 
-    dispatchPointer(interaction, 'pointerdown', { clientX: 100, clientY: 120 })
-    dispatchPointer(interaction, 'pointerup', { clientX: 300, clientY: 280 })
-
-    const composer = document.querySelector<HTMLFormElement>('form[aria-label="Visual feedback comment"]')
-    expect(composer?.style.left).toBe('308px')
-    expect(composer?.style.top).toBe('288px')
-    const textarea = composer?.querySelector('textarea')
-    if (!textarea) throw new Error('Expected visual feedback comment field')
     textarea.value = '  Clarify the selected navigation  '
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    composer?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
+    composer.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }))
 
     await expect(selection).resolves.toEqual({
       region: { x: 0.1, y: 0.15, width: 0.2, height: 0.2 },
@@ -156,6 +163,66 @@ describe('Task Browser visual feedback overlay', () => {
         x: 50, y: 60, width: 250, height: 100,
       },
     })
+  })
+
+  it('hides composer typing from live-page key handlers', async () => {
+    const pageKeys: string[] = []
+    const swallowKeys = (event: Event) => {
+      pageKeys.push((event as KeyboardEvent).key)
+      event.preventDefault()
+    }
+    document.addEventListener('keydown', swallowKeys, true)
+    document.addEventListener('keydown', swallowKeys)
+    try {
+      const { selection, textarea } = openFeedbackComposer(3)
+      const typed = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })
+      textarea.dispatchEvent(typed)
+
+      expect(pageKeys).toEqual([])
+      expect(typed.defaultPrevented).toBe(false)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await expect(selection).resolves.toBeNull()
+    } finally {
+      document.removeEventListener('keydown', swallowKeys, true)
+      document.removeEventListener('keydown', swallowKeys)
+    }
+  })
+
+  it('keeps composer focus when the live page traps focus, and releases the trap on teardown', async () => {
+    const trapped = document.createElement('button')
+    document.body.append(trapped)
+    trapped.focus()
+    const stealFocus = () => trapped.focus()
+    document.addEventListener('focus', stealFocus, true)
+    document.addEventListener('focusin', stealFocus, true)
+    try {
+      const { selection, textarea } = openFeedbackComposer(4)
+      expect(document.activeElement).toBe(textarea)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await expect(selection).resolves.toBeNull()
+
+      const pageField = document.createElement('input')
+      document.body.append(pageField)
+      pageField.focus()
+      expect(document.activeElement).toBe(trapped)
+    } finally {
+      document.removeEventListener('focus', stealFocus, true)
+      document.removeEventListener('focusin', stealFocus, true)
+    }
+  })
+
+  it('dismisses only the composer when Escape is pressed while commenting', async () => {
+    const { selection, composer, textarea } = openFeedbackComposer(5)
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+
+    expect(composer.isConnected).toBe(false)
+    expect(document.getElementById('__openforge_visual_feedback_selector__')).not.toBeNull()
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await expect(selection).resolves.toBeNull()
   })
 
   it('rejects malformed results returned across the live-page execution seam', async () => {

@@ -4,6 +4,7 @@ import type { DownloadItem, Event as ElectronEvent, Session, WebContents } from 
 import { TaskBrowserSurfaceError, integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
 import {
   buildTaskBrowserVisualFeedbackAnnotationsScript,
+  buildTaskBrowserVisualFeedbackDismissScript,
   runTaskBrowserVisualFeedbackOverlay,
 } from './taskBrowserVisualFeedbackOverlay.js'
 import type { TaskBrowserVisualFeedbackAnnotation } from './taskBrowserVisualFeedbackOverlay.js'
@@ -342,13 +343,9 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     cancel?.()
     this.cancelSelection = null
     if (this.destroyed || this.view.webContents.isDestroyed()) return
-    await this.view.webContents.executeJavaScript(`(() => {
-      const overlay = document.getElementById('__openforge_visual_feedback_selector__');
-      if (overlay) {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        overlay.remove();
-      }
-    })()`, true).catch(() => undefined)
+    await this.view.webContents
+      .executeJavaScript(buildTaskBrowserVisualFeedbackDismissScript(), true)
+      .catch(() => undefined)
   }
 
   async clearVisualFeedback(): Promise<void> {
@@ -443,8 +440,8 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     this.cancelSelection?.()
     this.cancelSelection = null
     if (this.destroyed || this.view.webContents.isDestroyed()) return
-    void this.view.webContents.executeJavaScript(`(() => {
-      document.getElementById('__openforge_visual_feedback_selector__')?.remove();
+    void this.view.webContents.executeJavaScript(`${buildTaskBrowserVisualFeedbackDismissScript()};
+    (() => {
       document.getElementById('__openforge_visual_feedback_annotations__')?.remove();
     })()`, true).catch(() => undefined)
   }

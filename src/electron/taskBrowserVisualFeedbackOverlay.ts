@@ -94,10 +94,19 @@ export function buildTaskBrowserVisualFeedbackAnnotationsScript(
     savedAnnotations.forEach(renderAnnotation);`
 }
 
+export function buildTaskBrowserVisualFeedbackDismissScript(): string {
+  return `(() => {
+    const overlay = document.getElementById('__openforge_visual_feedback_selector__');
+    if (!overlay) return;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    overlay.remove();
+  })()`
+}
+
 function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInput): string {
   return `(() => new Promise((resolve) => {
     const overlayId = '__openforge_visual_feedback_selector__';
-    document.getElementById(overlayId)?.remove();
+    ${buildTaskBrowserVisualFeedbackDismissScript()};
     ${buildTaskBrowserVisualFeedbackAnnotationsScript({ savedAnnotations: input.savedAnnotations })}
     const nextAnnotationNumber = ${input.nextAnnotationNumber};
 
@@ -119,6 +128,11 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
     interaction.style.cssText = 'position:fixed;inset:0;cursor:crosshair;pointer-events:auto;background:transparent;';
     root.append(hint, hover, selection, interaction);
     document.documentElement.append(root);
+    // Live-page handlers cancel keystrokes and steal focus from the overlay, so overlay events stop here.
+    const hidePageEventHandling = (event) => event.stopPropagation();
+    ['beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend', 'paste', 'cut', 'copy',
+      'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'contextmenu', 'submit']
+      .forEach(type => root.addEventListener(type, hidePageEventHandling));
 
     let start = null;
     let pointerId = null;
@@ -154,8 +168,14 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
         height: Math.min(rect.height, window.innerHeight - clamp(rect.top, window.innerHeight)),
       };
     };
+    const isInsideOverlay = (node) => node instanceof Node && root.contains(node);
+    const hidePageKeyHandling = (event) => { if (isInsideOverlay(event.target)) event.stopPropagation(); };
+    const hidePageFocusHandling = (event) => {
+      const movingIntoOverlay = (event.type === 'blur' || event.type === 'focusout') && isInsideOverlay(event.relatedTarget);
+      if (isInsideOverlay(event.target) || movingIntoOverlay) event.stopPropagation();
+    };
     const cleanup = () => {
-      document.removeEventListener('keydown', onKeyDown, true);
+      pageShields.forEach(([type, handler]) => window.removeEventListener(type, handler, true));
       root.remove();
     };
     const finish = (value) => {
@@ -167,13 +187,30 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       pointerId = null;
       selection.style.display = 'none';
     };
+    let onComposerKeyDown = null;
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
+      if (isInsideOverlay(event.target)) {
         event.stopPropagation();
-        finish(null);
+        if (onComposerKeyDown !== null) {
+          onComposerKeyDown(event);
+          return;
+        }
       }
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      finish(null);
     };
+    // Key and focus shields run at window capture, ahead of page handlers bound to the document.
+    const pageShields = [
+      ['keydown', onKeyDown],
+      ['keypress', hidePageKeyHandling],
+      ['keyup', hidePageKeyHandling],
+      ['focus', hidePageFocusHandling],
+      ['blur', hidePageFocusHandling],
+      ['focusin', hidePageFocusHandling],
+      ['focusout', hidePageFocusHandling],
+    ];
     const openComposer = (rect) => {
       interaction.style.pointerEvents = 'none';
       hover.style.display = 'none';
@@ -207,6 +244,7 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       composer.append(label, textarea, actions);
       root.append(composer);
       const dismiss = () => {
+        onComposerKeyDown = null;
         composer.remove();
         selection.style.display = 'none';
         interaction.style.pointerEvents = 'auto';
@@ -228,16 +266,15 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
         renderAnnotation(annotationData);
         finish({ region: normalizedRegion, comment, annotation: annotationData });
       };
-      textarea.addEventListener('keydown', (event) => {
+      onComposerKeyDown = (event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
-          event.stopPropagation();
           dismiss();
         } else if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           saveFeedback();
         }
-      });
+      };
       composer.addEventListener('submit', (event) => {
         event.preventDefault();
         saveFeedback();
@@ -245,7 +282,7 @@ function visualFeedbackOverlayScript(input: TaskBrowserVisualFeedbackOverlayInpu
       textarea.focus();
     };
 
-    document.addEventListener('keydown', onKeyDown, true);
+    pageShields.forEach(([type, handler]) => window.addEventListener(type, handler, true));
     interaction.addEventListener('pointermove', (event) => {
       if (start && event.pointerId === pointerId) {
         const x = clamp(event.clientX, window.innerWidth);
