@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { Task, PullRequestInfo, PullRequestMergeMethod } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { activeProjectId, outOfFocusTaskIdsByProject } from '../../lib/stores'
@@ -19,6 +20,7 @@
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
   let pendingConfirmation = $state<PaletteAction | null>(null)
+  let confirmButton: HTMLButtonElement | null = $state(null)
   let paletteListbox: { handleKeydown: (event: KeyboardEvent) => boolean } | null = $state(null)
 
   let outOfFocusTaskIds = $derived.by(() => {
@@ -52,6 +54,11 @@
     }
   })
 
+  $effect(() => {
+    if (pendingConfirmation === null) return
+    void tick().then(() => confirmButton?.focus())
+  })
+
   function executePendingConfirmation(): void {
     const action = pendingConfirmation
     if (!action) return
@@ -74,6 +81,7 @@
         return true
       }
       if (event.key === 'Enter' && !event.repeat) {
+        event.preventDefault()
         executePendingConfirmation()
         return true
       }
@@ -95,7 +103,7 @@
       <p class="mt-2 text-sm text-base-content/70">GitHub will use this repository's configured commit message.</p>
       <div class="mt-5 flex justify-end gap-2">
         <button class="btn btn-ghost btn-sm" type="button" onclick={() => { pendingConfirmation = null }}>Cancel</button>
-        <button class="btn btn-primary btn-sm" type="button" onclick={executePendingConfirmation}>Confirm</button>
+        <button bind:this={confirmButton} class="btn btn-primary btn-sm" type="button" onclick={executePendingConfirmation}>Confirm</button>
       </div>
     </section>
     <PaletteFooter actionLabel="confirm" cancelLabel="cancel" />
