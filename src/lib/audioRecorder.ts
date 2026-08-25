@@ -1,9 +1,11 @@
+import audioRecorderWorkletUrl from './audioRecorder.worklet.ts?worker&url';
+
 // Audio recorder utility — captures microphone audio and resamples to 16kHz
 // mono float32 PCM, the input format required by Whisper.
 
 const TARGET_SAMPLE_RATE = 16_000;
 const DEFAULT_MAX_DURATION_MS = 180_000;
-const BUFFER_SIZE = 4096;
+const WORKLET_PROCESSOR_NAME = 'openforge-audio-recorder';
 
 export interface AudioRecorderOptions {
   /** Maximum recording duration in milliseconds. Defaults to 180000 (3 min). */
@@ -78,7 +80,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
   let audioContext: AudioContext | null = null;
   let mediaStream: MediaStream | null = null;
   let sourceNode: MediaStreamAudioSourceNode | null = null;
-  let processorNode: ScriptProcessorNode | null = null;
+  let processorNode: AudioWorkletNode | null = null;
   let chunks: Float32Array[] = [];
   let recording = false;
   let disposed = false;
@@ -94,7 +96,8 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
       maxDurationTimer = null;
     }
     if (processorNode) {
-      processorNode.onaudioprocess = null;
+      processorNode.port.onmessage = null;
+      processorNode.port.close();
       processorNode.disconnect();
       processorNode = null;
     }
@@ -139,22 +142,35 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
         throw new Error('AudioRecorder: disposed');
       }
 
-      audioContext = new AudioContext();
-      sourceNode = audioContext.createMediaStreamSource(mediaStream);
+      const context = new AudioContext();
+      audioContext = context;
+      try {
+        await context.audioWorklet.addModule(audioRecorderWorkletUrl);
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+      if (disposed) {
+        cleanup();
+        throw new Error('AudioRecorder: disposed');
+      }
 
-      // ScriptProcessorNode is deprecated but widely supported across browsers.
-      // AudioWorklet is the modern alternative but significantly more complex.
-      // Arguments: bufferSize, numberOfInputChannels, numberOfOutputChannels
-      processorNode = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+      sourceNode = context.createMediaStreamSource(mediaStream);
+      processorNode = new AudioWorkletNode(context, WORKLET_PROCESSOR_NAME, {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        channelCount: 1,
+        channelCountMode: 'explicit',
+      });
 
       chunks = [];
       recording = true;
       startTime = Date.now();
 
-      processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+      processorNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
         if (!recording) return;
-        const inputData = event.inputBuffer.getChannelData(0);
-        chunks.push(new Float32Array(inputData));
+        chunks.push(event.data);
       };
 
       // Both nodes must be connected to destination to keep the audio graph active.
