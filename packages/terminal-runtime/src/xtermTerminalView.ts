@@ -106,6 +106,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   let renderedRows = { start: 0, end: 0 }
   const pendingPresentationDrains: PendingPresentationDrain[] = []
   let presentationRefreshRequested = false
+  let presentationFrameScheduled = false
   function notifyRendererFailure(failure: TerminalViewRendererFailure): void {
     for (const listener of rendererFailureListeners) listener(failure)
   }
@@ -208,6 +209,18 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     for (const pending of pendingPresentationDrains.splice(0)) pending.reject(error)
   }
 
+  function schedulePresentationFrame(): void {
+    if (presentationFrameScheduled) return
+    presentationFrameScheduled = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        presentationFrameScheduled = false
+        resolvePresentationDrains()
+        requestPresentationRefresh()
+      })
+    })
+  }
+
   function requestPresentationRefresh(): void {
     if (presentationRefreshRequested
       || pendingPresentationDrains.length === 0
@@ -226,8 +239,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     renderFrame += 1
     renderedRows = range
     presentationRefreshRequested = false
-    resolvePresentationDrains()
-    requestPresentationRefresh()
+    schedulePresentationFrame()
   })
 
   function fitAndRefresh(): void {

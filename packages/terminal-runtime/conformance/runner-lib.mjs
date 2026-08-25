@@ -47,6 +47,31 @@ export function assertPresentation(recording, presentation) {
   }
 }
 
+export function assertTerminalScreenshotHasInk(screenshotBuffer, options) {
+  const image = PNG.sync.read(screenshotBuffer)
+  const inset = options.insetPixels ?? 0
+  const inspectedEndY = Math.min(
+    image.height - inset,
+    Math.max(inset + 1, Math.floor(image.height * options.topFraction)),
+  )
+  const inspectedWidth = Math.max(1, image.width - inset * 2)
+  const colorCounts = new Map()
+  const inspectedPixels = inspectedWidth * (inspectedEndY - inset)
+  for (let y = inset; y < inspectedEndY; y += 1) {
+    for (let x = inset; x < image.width - inset; x += 1) {
+      const offset = (y * image.width + x) * 4
+      const color = `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]},${image.data[offset + 3]}`
+      colorCounts.set(color, (colorCounts.get(color) ?? 0) + 1)
+    }
+  }
+  const backgroundPixels = Math.max(...colorCounts.values())
+  const inkPixels = inspectedPixels - backgroundPixels
+  if (inkPixels < options.minimumInkPixels) {
+    throw new Error(`no visible terminal text: found ${inkPixels} non-background pixels, expected at least ${options.minimumInkPixels}`)
+  }
+  return { inkPixels, inspectedPixels }
+}
+
 export function comparePngBuffers(baselineBuffer, actualBuffer, bounds) {
   const baseline = PNG.sync.read(baselineBuffer)
   const actual = PNG.sync.read(actualBuffer)

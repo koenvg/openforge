@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PNG } from 'pngjs'
 import {
   assertPresentation,
+  assertTerminalScreenshotHasInk,
   comparePngBuffers,
   summarizeChromiumProcessMemory,
 } from './runner-lib.mjs'
@@ -54,6 +55,30 @@ describe('terminal presentation harness runner', () => {
     }
 
     expect(() => assertPresentation(recording, presentation)).toThrow('foreground value 1')
+  })
+
+  it('rejects screenshots whose terminal content area has no visible ink', () => {
+    const blank = png([[255, 255, 255, 255], [255, 255, 255, 255], [255, 255, 255, 255]])
+    const visible = png([[255, 255, 255, 255], [20, 20, 20, 255], [255, 255, 255, 255]])
+
+    const bordered = new PNG({ width: 3, height: 3 })
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 3; x += 1) {
+        const edge = x === 0 || x === 2 || y === 0 || y === 2
+        bordered.data.set(edge ? [0, 0, 0, 255] : [255, 255, 255, 255], (y * 3 + x) * 4)
+      }
+    }
+    const borderedBlank = PNG.sync.write(bordered)
+
+    expect(() => assertTerminalScreenshotHasInk(blank, { topFraction: 1, minimumInkPixels: 1 }))
+      .toThrow('no visible terminal text')
+    expect(() => assertTerminalScreenshotHasInk(borderedBlank, {
+      topFraction: 1,
+      insetPixels: 1,
+      minimumInkPixels: 1,
+    })).toThrow('no visible terminal text')
+    expect(() => assertTerminalScreenshotHasInk(visible, { topFraction: 1, minimumInkPixels: 1 }))
+      .not.toThrow()
   })
 
   it('applies a bounded visual pixel ratio and returns a diff image', () => {

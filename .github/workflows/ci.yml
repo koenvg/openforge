@@ -105,6 +105,40 @@ jobs:
         if: steps.plugin_build.outputs.exit_code != '0' || steps.app_build.outputs.exit_code != '0' || steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
+  terminal-presentation:
+    name: Terminal Presentation Conformance
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run terminal presentation conformance
+        run: pnpm terminal:presentation
+
+      - name: Upload terminal presentation report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: terminal-presentation-${{ runner.os }}-${{ runner.arch }}
+          path: artifacts/terminal-presentation
+          retention-days: 7
+          if-no-files-found: warn
+
   npm-packages:
     name: NPM Package Readiness
     timeout-minutes: 10

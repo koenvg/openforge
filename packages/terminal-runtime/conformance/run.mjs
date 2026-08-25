@@ -8,6 +8,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import {
   assertPresentation,
+  assertTerminalScreenshotHasInk,
   comparePngBuffers,
   parsePsProcessRows,
   summarizeChromiumProcessMemory,
@@ -59,16 +60,22 @@ async function captureVisual(page, key, report) {
   await page.evaluate(() => window.terminalConformance.drain())
   const actualPath = join(outputDirectory, `${key}.png`)
   const actual = await page.locator('main').screenshot({ animations: 'disabled' })
+  const terminalScreenshot = await page.locator('#terminal-host').screenshot({ animations: 'disabled' })
+  const ink = assertTerminalScreenshotHasInk(terminalScreenshot, {
+    topFraction: 0.25,
+    insetPixels: 8,
+    minimumInkPixels: 50,
+  })
   writeFileSync(actualPath, actual)
   const baselinePath = join(baselineDirectory, `${key}.png`)
   if (updateBaselines) {
     mkdirSync(baselineDirectory, { recursive: true })
     writeFileSync(baselinePath, actual)
-    report.visual.push({ key, status: 'updated', baselinePath })
+    report.visual.push({ key, status: 'updated', baselinePath, inkPixels: ink.inkPixels })
     return
   }
   if (!existsSync(baselinePath)) {
-    report.visual.push({ key, status: 'unbaselined', actualPath })
+    report.visual.push({ key, status: 'unbaselined', actualPath, inkPixels: ink.inkPixels })
     return
   }
   const comparison = comparePngBuffers(readFileSync(baselinePath), actual, visualBounds)
@@ -78,6 +85,7 @@ async function captureVisual(page, key, report) {
     diffPixels: comparison.diffPixels,
     diffPixelRatio: comparison.diffPixelRatio,
     bounds: visualBounds,
+    inkPixels: ink.inkPixels,
     actualPath,
     baselinePath,
   }
@@ -93,8 +101,10 @@ async function captureVisual(page, key, report) {
 
 async function runSemanticAndVisualMatrix(browser, report) {
   const matrix = [
-    { surface: 'agent', theme: 'dark', dpr: 1 },
-    { surface: 'plugin-shell', theme: 'light', dpr: 2 },
+    { surface: 'agent', theme: 'dark', dpr: 1, captureVisual: true },
+    { surface: 'plugin-shell', theme: 'light', dpr: 1, captureVisual: true },
+    { surface: 'agent', theme: 'dark', dpr: 2, captureVisual: false },
+    { surface: 'plugin-shell', theme: 'light', dpr: 2, captureVisual: false },
   ]
   for (const entry of matrix) {
     const harness = await openHarness(browser, entry)
@@ -107,12 +117,12 @@ async function runSemanticAndVisualMatrix(browser, report) {
         if (result.evidence.parsedGeneration !== result.evidence.writeGeneration || result.evidence.renderFrame < 1) {
           throw new Error(`${recording.id}: presentation drain did not reach renderer-visible output`)
         }
-        recordCheck(report, `${entry.surface}/${recording.id}`, {
+        recordCheck(report, `${entry.surface}/${entry.theme}/dpr${entry.dpr}/${recording.id}`, {
           theme: entry.theme,
           devicePixelRatio: entry.dpr,
           evidence: result.evidence,
         })
-        if (recording.presentation?.visual) {
+        if (entry.captureVisual && recording.presentation?.visual) {
           const key = `${entry.surface}-${entry.theme}-dpr${entry.dpr}-${recording.id}`
           await captureVisual(harness.page, key, report)
         }

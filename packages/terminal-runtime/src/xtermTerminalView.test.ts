@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createXtermTerminalView } from './xtermTerminalView'
 
 const mocks = vi.hoisted(() => ({
@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })),
   writeParsedCallbacks: [] as Array<() => void>,
   renderCallbacks: [] as Array<(range: { start: number; end: number }) => void>,
+  animationFrameCallbacks: [] as FrameRequestCallback[],
 }))
 
 vi.mock('@xterm/xterm', () => ({
@@ -75,6 +76,11 @@ describe('xterm TerminalView adapter', () => {
     vi.clearAllMocks()
     mocks.writeParsedCallbacks.length = 0
     mocks.renderCallbacks.length = 0
+    mocks.animationFrameCallbacks.length = 0
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      mocks.animationFrameCallbacks.push(callback)
+      return mocks.animationFrameCallbacks.length
+    }))
     mocks.terminal.buffer.active = {
       type: 'normal',
       cursorX: 0,
@@ -83,6 +89,10 @@ describe('xterm TerminalView adapter', () => {
       getLine: () => undefined,
     }
     document.body.innerHTML = ''
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('mounts one renderer host across attachments and disposes the renderer once', () => {
@@ -167,6 +177,15 @@ describe('xterm TerminalView adapter', () => {
     expect(mocks.terminal.refresh).toHaveBeenCalled()
 
     mocks.renderCallbacks[0]?.({ start: 2, end: 5 })
+
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    mocks.animationFrameCallbacks.shift()?.(1)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    mocks.animationFrameCallbacks.shift()?.(2)
 
     await expect(drained).resolves.toMatchObject({
       writeGeneration: 1,
