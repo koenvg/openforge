@@ -17,22 +17,14 @@ fn matches_current_readiness(
 fn merge_method_policy_from_pr(
     pull_request: &crate::db::PrRow,
 ) -> Option<CompanionMergeMethodPolicy> {
-    if pull_request.merge_methods_policy_known != Some(true) {
+    let policy = pull_request.merge_method_policy()?;
+    if policy.allowed.is_empty() {
         return None;
     }
-    let allowed = serde_json::from_str::<Vec<crate::github_client::PullRequestMergeMethod>>(
-        pull_request.allowed_merge_methods.as_deref()?,
-    )
-    .ok()?;
-    if allowed.is_empty() {
-        return None;
-    }
-    let default = pull_request
-        .default_merge_method
-        .as_deref()
-        .and_then(crate::github_client::PullRequestMergeMethod::from_github_value)
-        .filter(|method| allowed.contains(method));
-    Some(CompanionMergeMethodPolicy { allowed, default })
+    Some(CompanionMergeMethodPolicy {
+        allowed: policy.allowed,
+        default: policy.default,
+    })
 }
 
 pub(super) fn available_actions(

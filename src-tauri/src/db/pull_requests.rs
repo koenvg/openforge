@@ -44,6 +44,30 @@ pub struct PrRow {
     pub unaddressed_comment_count: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PersistedMergeMethodPolicy {
+    pub(crate) allowed: Vec<crate::github_client::PullRequestMergeMethod>,
+    pub(crate) default: Option<crate::github_client::PullRequestMergeMethod>,
+}
+
+impl PrRow {
+    pub(crate) fn merge_method_policy(&self) -> Option<PersistedMergeMethodPolicy> {
+        if self.merge_methods_policy_known != Some(true) {
+            return None;
+        }
+        let allowed = serde_json::from_str::<Vec<crate::github_client::PullRequestMergeMethod>>(
+            self.allowed_merge_methods.as_deref()?,
+        )
+        .ok()?;
+        let default = self
+            .default_merge_method
+            .as_deref()
+            .and_then(crate::github_client::PullRequestMergeMethod::from_github_value)
+            .filter(|method| allowed.contains(method));
+        Some(PersistedMergeMethodPolicy { allowed, default })
+    }
+}
+
 fn read_pr_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrRow> {
     Ok(PrRow {
         id: row.get(0)?,
@@ -1260,6 +1284,38 @@ mod tests {
             Some(r#"["squash","rebase"]"#)
         );
         assert_eq!(pr.default_merge_method.as_deref(), Some("squash"));
+        let policy = pr
+            .merge_method_policy()
+            .expect("persisted merge method policy should decode");
+        assert_eq!(
+            policy.allowed,
+            vec![
+                crate::github_client::PullRequestMergeMethod::Squash,
+                crate::github_client::PullRequestMergeMethod::Rebase,
+            ]
+        );
+        assert_eq!(
+            policy.default,
+            Some(crate::github_client::PullRequestMergeMethod::Squash)
+        );
+
+        let mut unavailable_policy = pr.clone();
+        unavailable_policy.merge_methods_policy_known = Some(false);
+        assert_eq!(unavailable_policy.merge_method_policy(), None);
+
+        let mut malformed_policy = pr.clone();
+        malformed_policy.allowed_merge_methods = Some("not-json".to_string());
+        assert_eq!(malformed_policy.merge_method_policy(), None);
+
+        let mut unsupported_default = pr.clone();
+        unsupported_default.default_merge_method = Some("merge".to_string());
+        assert_eq!(
+            unsupported_default
+                .merge_method_policy()
+                .expect("allowed methods should still decode")
+                .default,
+            None
+        );
 
         drop(db);
     }

@@ -238,13 +238,9 @@ fn validate_pull_request_merge_method(
         );
     }
     let allowed = pr
-        .allowed_merge_methods
-        .as_deref()
-        .ok_or_else(|| "Pull request merge methods are unavailable".to_string())
-        .and_then(|json| {
-            serde_json::from_str::<Vec<crate::github_client::PullRequestMergeMethod>>(json)
-                .map_err(|_| "Pull request merge methods are unavailable".to_string())
-        })?;
+        .merge_method_policy()
+        .ok_or_else(|| "Pull request merge methods are unavailable".to_string())?
+        .allowed;
     if !allowed.contains(&merge_method) {
         return Err(format!(
             "Pull request merge method '{}' is not allowed; refresh GitHub status and choose another method",
