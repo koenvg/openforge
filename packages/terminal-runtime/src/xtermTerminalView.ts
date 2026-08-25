@@ -172,6 +172,9 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     get imageProtocol() {
       return imageSupport.imageProtocol
     },
+    get resizeTarget() {
+      return hostDiv
+    },
     mount(container) {
       if (disposed) return
       container.appendChild(hostDiv)

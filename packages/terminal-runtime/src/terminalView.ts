@@ -57,6 +57,7 @@ export interface TerminalViewRendererFailure {
 export interface TerminalView {
   readonly geometry: TerminalViewGeometry
   readonly imageProtocol: TerminalImageProtocol | null
+  readonly resizeTarget: Element
 
   mount(container: HTMLElement): void
   unmount(): void

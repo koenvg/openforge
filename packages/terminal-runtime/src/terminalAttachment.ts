@@ -67,7 +67,7 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
       })
     }
     entry.resizeObserver.disconnect()
-    entry.resizeObserver.observe(wrapperEl)
+    entry.resizeObserver.observe(entry.view.resizeTarget)
 
     if (!entry.visibilityObserver) {
       entry.visibilityObserver = new IntersectionObserver((entries) => {
