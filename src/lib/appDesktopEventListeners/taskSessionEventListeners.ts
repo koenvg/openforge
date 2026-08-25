@@ -23,7 +23,7 @@ import type { AppDesktopEventDeps } from './types'
 
 type TaskSessionEventDeps = Pick<
   AppDesktopEventDeps,
-  'loadTasks' | 'loadSessions' | 'loadProjectAttention'
+  'loadTasks' | 'loadSessions' | 'loadPullRequests' | 'loadProjectAttention'
 >
 
 function setActiveSession(taskId: string, session: AgentSession): void {
@@ -293,6 +293,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
           }
         }
         await deps.loadTasks()
+        await deps.loadPullRequests()
         await deps.loadProjectAttention()
       },
     ),

@@ -241,6 +241,15 @@ describe('createTaskSessionEventListeners', () => {
     vi.useRealTimers()
   })
 
+  it('reloads pull requests when a task change may contain polled PR policy updates', async () => {
+    const { deps, handlers } = createAppDesktopEventHarness()
+    await registerEventListenerGroup(createTaskSessionEventListeners(deps), deps.listen!)
+
+    await handlers.get('task-changed')?.({ payload: { action: 'updated', task_id: 'task-1' } })
+
+    expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+  })
+
   it('clears active session and releases terminal when task is deleted', async () => {
     const { deps, handlers } = createAppDesktopEventHarness()
     activeSessions.set(new Map([['task-1', createSession()]]))
