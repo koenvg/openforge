@@ -7,7 +7,7 @@ import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
 
 function createEntry(): PoolEntry {
   return {
-    taskId: 'T-1',
+    shellSessionKey: 'T-1',
     needsClear: false,
     ptyActive: false,
     attached: true,
@@ -22,7 +22,7 @@ describe('terminal reconnect replay', () => {
   it('replays retained output and refreshes an attached terminal view', async () => {
     const entry = createEntry()
     const host = {
-      getPtyBuffer: vi.fn().mockResolvedValue({ buffer: 'retained output', isLive: true }),
+      getPtyBuffer: vi.fn().mockResolvedValue({ buffer: 'retained output', isLive: true, instanceId: 7 }),
     } as unknown as TerminalRuntimeHost
     const resetEntry = vi.fn()
     const notifyLifecycle = vi.fn()
@@ -37,7 +37,7 @@ describe('terminal reconnect replay', () => {
     await replay.replayActiveTerminals()
 
     expect(resetEntry).toHaveBeenCalledWith(entry)
-    expect(entry.view.bootstrap).toHaveBeenCalledWith('retained output')
+    expect(entry.view.bootstrap).toHaveBeenCalledWith('retained output', 7)
     expect(entry.view.refresh).toHaveBeenCalledOnce()
     expect(entry).toMatchObject({ ptyActive: true, needsClear: false, hasOutput: true })
     expect(notifyLifecycle).toHaveBeenCalledWith('T-1')

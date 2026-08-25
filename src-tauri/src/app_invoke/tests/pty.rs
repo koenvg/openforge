@@ -1,5 +1,4 @@
 use super::*;
-use base64::Engine;
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -11,7 +10,7 @@ async fn handles_commands_that_do_not_require_spawn() {
 
     assert_eq!(
         invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-404" })).await,
-        json!({ "buffer": null, "isLive": false })
+        json!({ "buffer": null, "isLive": false, "instanceId": null })
     );
     assert!(invoke_ok(
         &state,
@@ -36,6 +35,7 @@ async fn spawns_without_backend_app_emitter() {
 
     let live_buffer = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-1-shell-1" })).await;
     assert_eq!(live_buffer["isLive"], true);
+    assert_eq!(live_buffer["instanceId"], instance_id);
     assert!(live_buffer["buffer"].is_null());
 
     let mut events = state
@@ -84,13 +84,13 @@ async fn spawns_without_backend_app_emitter() {
 }
 
 #[tokio::test]
-async fn ghostty_terminal_view_snapshot_and_live_frames_share_one_watermark() {
-    let (state, _temp_dir) = test_state("app_invoke_ghostty_terminal_view");
+async fn xterm_authority_rejects_stale_query_responses() {
+    let (state, _temp_dir) = test_state("app_invoke_xterm_authority");
     invoke_ok(
         &state,
         "set_config",
         json!({
-            "key": crate::pty_manager::GHOSTTY_TERMINAL_VIEW_CONFIG,
+            "key": crate::pty_manager::GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG,
             "value": "true",
         }),
     )
@@ -99,7 +99,7 @@ async fn ghostty_terminal_view_snapshot_and_live_frames_share_one_watermark() {
         &state,
         "pty_spawn_shell",
         json!({
-            "taskId": "T-model",
+            "taskId": "T-authority",
             "cwd": "/tmp",
             "cols": 80,
             "rows": 24,
@@ -109,51 +109,37 @@ async fn ghostty_terminal_view_snapshot_and_live_frames_share_one_watermark() {
     .await
     .as_u64()
     .expect("instance id");
-    let mut events = state
-        .app_event_tx
-        .as_ref()
-        .expect("event sender")
-        .subscribe();
+
+    let stale = invoke(
+        &state,
+        "pty_write_terminal_query_response",
+        json!({
+            "shellSessionKey": "T-authority-shell-0",
+            "ptyInstanceId": instance_id + 1,
+            "data": "\u{1b}[1;1R",
+        }),
+    )
+    .await
+    .expect_err("stale xterm response should be rejected");
+    assert_eq!(stale.0, StatusCode::CONFLICT);
+    assert!(stale.1.contains("stale PTY instance"));
 
     invoke_ok(
         &state,
-        "pty_write",
-        json!({ "taskId": "T-model-shell-0", "data": "printf ghostty-cutover\\n\n" }),
+        "pty_write_terminal_query_response",
+        json!({
+            "shellSessionKey": "T-authority-shell-0",
+            "ptyInstanceId": instance_id,
+            "data": "\u{1b}[1;1R",
+        }),
     )
     .await;
-
-    let model_event = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            let event = events.recv().await.expect("model event stream");
-            if event.event_name == "pty-model-output-T-model-shell-0" {
-                break event;
-            }
-        }
-    })
-    .await
-    .expect("model output event");
-    let snapshot = invoke_ok(
-        &state,
-        "get_terminal_view_snapshot",
-        json!({ "taskId": "T-model-shell-0" }),
-    )
-    .await;
-
-    assert_eq!(snapshot["instanceId"], instance_id);
-    assert!(snapshot["watermark"].as_u64().expect("watermark") >= 1);
-    assert!(model_event.payload["sequence"].as_u64().expect("sequence") >= 1);
-    let portable_vt = base64::engine::general_purpose::STANDARD
-        .decode(snapshot["data"].as_str().expect("snapshot data"))
-        .expect("snapshot base64");
-    assert!(portable_vt
-        .windows(b"ghostty-cutover".len())
-        .any(|part| part == b"ghostty-cutover"));
 
     let _ = state
         .pty_manager
         .as_ref()
         .expect("PTY manager")
-        .kill_shells_for_task("T-model")
+        .kill_shells_for_task("T-authority")
         .await;
 }
 
@@ -346,7 +332,7 @@ async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
 
     assert_eq!(
         buffer,
-        json!({ "buffer": "persisted terminal output", "isLive": false })
+        json!({ "buffer": "persisted terminal output", "isLive": false, "instanceId": null })
     );
 }
 

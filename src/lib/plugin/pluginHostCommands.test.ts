@@ -248,7 +248,7 @@ describe('plugin host commands', () => {
   })
 
   it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
-    const { invoke } = installDesktopBridge({ buffer: 'buffered', isLive: true })
+    const { invoke } = installDesktopBridge({ buffer: 'buffered', isLive: true, instanceId: 42 })
     const host = createPluginRuntimeHost('test-plugin')
 
     await host.writeShell({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
@@ -260,7 +260,7 @@ describe('plugin host commands', () => {
     await host.killShell({ taskId: 'T-1', terminalIndex: 2 })
     expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
 
-    await expect(host.getShellBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true })
+    await expect(host.getShellBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true, instanceId: 42 })
     expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
   })
 
@@ -293,8 +293,8 @@ describe('plugin host commands', () => {
     await invokePluginHostCommand('killPty', { taskId: 'T-1', terminalIndex: 2 })
     expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
 
-    invoke.mockResolvedValue({ buffer: 'buffered', isLive: true })
-    await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true })
+    invoke.mockResolvedValue({ buffer: 'buffered', isLive: true, instanceId: 42 })
+    await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true, instanceId: 42 })
     expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
   })
 

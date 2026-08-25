@@ -585,6 +585,11 @@ export interface ShellWriteRequest extends ShellSessionRequest {
   data: string
 }
 
+export interface ShellTerminalQueryResponseRequest extends ShellSessionRequest {
+  ptyInstanceId: number
+  data: string
+}
+
 export interface ShellResizeRequest extends ShellSessionRequest {
   cols: number
   rows: number
@@ -593,11 +598,13 @@ export interface ShellResizeRequest extends ShellSessionRequest {
 export interface PtyBufferState {
   buffer: string | null
   isLive: boolean
+  instanceId: number | null
 }
 
 export interface ShellAPI {
   spawn(request: ShellSpawnRequest): Promise<number>
   write(request: ShellWriteRequest): Promise<void>
+  writeTerminalQueryResponse(request: ShellTerminalQueryResponseRequest): Promise<void>
   resize(request: ShellResizeRequest): Promise<void>
   kill(request: ShellSessionRequest): Promise<void>
   getBuffer(request: ShellSessionRequest): Promise<PtyBufferState>

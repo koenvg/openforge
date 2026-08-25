@@ -2,6 +2,8 @@
 
 Research date: 2026-08-24
 
+> Current production authority is defined by [ADR 0004](adr/0004-xterm-authoritative-terminal-mode.md). xterm owns parsed state and query responses. Sidecar-authoritative snapshots and sequenced model frames in this research document are prospective.
+
 ## Decision in one page
 
 OpenForge should not build a browser terminal renderer from scratch yet. There are now several credible web renderers built around native terminal engines, and official `libghostty-vt` has advanced far enough that it can supply the browser-side terminal model directly.

@@ -1,19 +1,24 @@
+import {
+  bindTerminalAuthority,
+  type TerminalAuthorityContract,
+} from './terminalAuthority'
 import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
 import { createTerminalShellLifecycleStore } from './terminalShellLifecycle'
 import type { PoolEntry, ShellLifecycleState, TaskTerminalTabsSession } from './terminalRuntimeTypes'
 
 export function createTerminalSessionLifecycle(
   getEntry: (terminalKey: string) => PoolEntry | undefined,
+  authorityContract: TerminalAuthorityContract,
 ) {
   const pendingPtyInstances = new Map<string, number>()
   const taskTabSessions = createTaskTerminalTabsSessionStore()
   const shellLifecycle = createTerminalShellLifecycleStore(getEntry)
 
   function markPtyStarted(entry: PoolEntry, instanceId: number): void {
-    entry.currentPtyInstance = instanceId
+    setCurrentPtyInstance(entry, instanceId)
     entry.ptyActive = true
     entry.needsClear = false
-    shellLifecycle.notify(entry.taskId)
+    shellLifecycle.notify(entry.shellSessionKey)
   }
 
   function restorePtyInstance(terminalKey: string, instanceId: number): void {
@@ -26,22 +31,22 @@ export function createTerminalSessionLifecycle(
   }
 
   function applyRestoredPtyInstance(entry: PoolEntry): void {
-    const restoredPtyInstance = pendingPtyInstances.get(entry.taskId)
+    const restoredPtyInstance = pendingPtyInstances.get(entry.shellSessionKey)
     if (restoredPtyInstance === undefined) return
-    pendingPtyInstances.delete(entry.taskId)
+    pendingPtyInstances.delete(entry.shellSessionKey)
     markPtyStarted(entry, restoredPtyInstance)
   }
 
   function markPtyOutput(entry: PoolEntry): void {
     entry.ptyActive = true
     entry.hasOutput = true
-    shellLifecycle.notify(entry.taskId)
+    shellLifecycle.notify(entry.shellSessionKey)
   }
 
   function markPtyExited(entry: PoolEntry): void {
     entry.ptyActive = false
     entry.needsClear = true
-    shellLifecycle.notify(entry.taskId)
+    shellLifecycle.notify(entry.shellSessionKey)
   }
 
   function shouldSpawnPty(entry: PoolEntry): boolean {
@@ -59,6 +64,9 @@ export function createTerminalSessionLifecycle(
 
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
     entry.currentPtyInstance = instanceId
+    entry.authority = instanceId === null
+      ? null
+      : bindTerminalAuthority(authorityContract, entry.shellSessionKey, instanceId)
   }
 
   function isShellExited(terminalKey: string): boolean {
@@ -71,7 +79,7 @@ export function createTerminalSessionLifecycle(
     if (!entry) return
     entry.ptyActive = state.ptyActive
     entry.needsClear = state.shellExited
-    entry.currentPtyInstance = state.currentPtyInstance
+    setCurrentPtyInstance(entry, state.currentPtyInstance)
     entry.hasOutput = state.hasOutput
     shellLifecycle.notify(terminalKey)
   }

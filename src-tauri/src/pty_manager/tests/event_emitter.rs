@@ -344,6 +344,7 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
                 writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
                     .expect("ordered writer should start"),
                 instance_id: 1,
+                authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Shell {
                     task_id: "task-1".to_string(),
                 },
@@ -469,6 +470,7 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
                 writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
                     .expect("ordered writer should start"),
                 instance_id: 1,
+                authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Agent,
                 pid_file_name: "agent-task-1-pty.pid".to_string(),
                 shadow_model: None,
@@ -602,6 +604,7 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
                 writer: ordered_writer::OrderedPtyWriter::start("task-1".to_string(), 2, writer)
                     .expect("ordered writer should start"),
                 instance_id: 2,
+                authority: authority::TerminalAuthorityContract::xterm_authoritative(),
                 kind: PtySessionKind::Agent,
                 pid_file_name: "task-1-pty.pid".to_string(),
                 shadow_model: None,

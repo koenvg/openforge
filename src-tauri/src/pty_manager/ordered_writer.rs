@@ -8,14 +8,14 @@ const WRITE_QUEUE_CAPACITY: usize = 64;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum PtyWriteSource {
     UserInput,
-    ModelReply,
+    XtermQueryResponse,
 }
 
 impl std::fmt::Display for PtyWriteSource {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UserInput => formatter.write_str("user input"),
-            Self::ModelReply => formatter.write_str("terminal model reply"),
+            Self::XtermQueryResponse => formatter.write_str("xterm query response"),
         }
     }
 }
@@ -147,10 +147,18 @@ impl OrderedPtyWriter {
             .write(session_key, instance_id, PtyWriteSource::UserInput, bytes)
     }
 
-    pub(super) fn model_reply_writer(&self) -> TerminalModelReplyWriter {
-        TerminalModelReplyWriter {
-            shared: Arc::clone(&self.shared),
-        }
+    pub(super) fn write_xterm_query_response(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+        bytes: &[u8],
+    ) -> Result<(), OrderedPtyWriteError> {
+        self.shared.write(
+            session_key,
+            instance_id,
+            PtyWriteSource::XtermQueryResponse,
+            bytes,
+        )
     }
 }
 
@@ -161,23 +169,6 @@ impl Drop for OrderedPtyWriter {
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
-    }
-}
-
-#[derive(Clone)]
-pub(super) struct TerminalModelReplyWriter {
-    shared: Arc<OrderedPtyWriterShared>,
-}
-
-impl TerminalModelReplyWriter {
-    pub(super) fn write(
-        &self,
-        session_key: &str,
-        instance_id: u64,
-        bytes: &[u8],
-    ) -> Result<(), OrderedPtyWriteError> {
-        self.shared
-            .write(session_key, instance_id, PtyWriteSource::ModelReply, bytes)
     }
 }
 
@@ -210,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn user_input_and_model_replies_are_serialized_as_distinct_writes() {
+    fn user_input_and_xterm_query_responses_are_serialized_as_distinct_writes() {
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer = Arc::new(
             OrderedPtyWriter::start(
@@ -222,7 +213,6 @@ mod tests {
             )
             .expect("ordered writer should start"),
         );
-        let reply_writer = writer.model_reply_writer();
         let barrier = Arc::new(Barrier::new(3));
 
         let user_writer = Arc::clone(&writer);
@@ -233,38 +223,27 @@ mod tests {
                 .write_user_input("task-shell-0", 41, b"user")
                 .expect("user input should write");
         });
-        let reply_barrier = Arc::clone(&barrier);
-        let reply = std::thread::spawn(move || {
-            reply_barrier.wait();
-            reply_writer
-                .write("task-shell-0", 41, b"reply")
-                .expect("model reply should write");
+        let response_writer = Arc::clone(&writer);
+        let response_barrier = Arc::clone(&barrier);
+        let response = std::thread::spawn(move || {
+            response_barrier.wait();
+            response_writer
+                .write_xterm_query_response("task-shell-0", 41, b"response")
+                .expect("xterm query response should write");
         });
 
         barrier.wait();
         user.join().expect("user writer should join");
-        reply.join().expect("reply writer should join");
+        response.join().expect("response writer should join");
         let actual = bytes
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
-        assert!(actual == b"userreply" || actual == b"replyuser");
+        assert!(actual == b"userresponse" || actual == b"responseuser");
     }
 
     #[test]
-    fn stale_or_disposed_model_reply_writers_cannot_write_to_a_successor() {
-        let old_bytes = Arc::new(Mutex::new(Vec::new()));
-        let old_writer = OrderedPtyWriter::start(
-            "shared-shell".to_string(),
-            10,
-            Box::new(RecordingWriter {
-                bytes: Arc::clone(&old_bytes),
-            }),
-        )
-        .expect("old ordered writer should start");
-        let stale_reply_writer = old_writer.model_reply_writer();
-        drop(old_writer);
-
+    fn stale_xterm_query_response_cannot_write_to_a_successor_instance() {
         let successor_bytes = Arc::new(Mutex::new(Vec::new()));
         let successor_writer = OrderedPtyWriter::start(
             "shared-shell".to_string(),
@@ -274,22 +253,14 @@ mod tests {
             }),
         )
         .expect("successor ordered writer should start");
-        let successor_reply_writer = successor_writer.model_reply_writer();
 
-        assert!(stale_reply_writer
-            .write("shared-shell", 10, b"stale")
+        assert!(successor_writer
+            .write_xterm_query_response("shared-shell", 10, b"stale")
             .is_err());
-        assert!(stale_reply_writer
-            .write("shared-shell", 11, b"wrong-instance")
-            .is_err());
-        successor_reply_writer
-            .write("shared-shell", 11, b"current")
-            .expect("current reply should write");
+        successor_writer
+            .write_xterm_query_response("shared-shell", 11, b"current")
+            .expect("current query response should write");
 
-        assert!(old_bytes
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .is_empty());
         assert_eq!(
             successor_bytes
                 .lock()

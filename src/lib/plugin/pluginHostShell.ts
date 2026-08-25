@@ -5,13 +5,14 @@ import {
   resizePty,
   spawnShellPty,
   writePty,
+  writeTerminalQueryResponse,
 } from '../ipc'
 import type { PluginHostCommandEntries, PluginHostCommandPayload } from './pluginHostCommandRegistry'
 import { waitForTerminalEventSubscriptions } from './pluginHostEvents'
 import type { RuntimeHostBridge } from './runtimeContributionTypes'
 
 type ShellHostCapabilities = Required<Pick<RuntimeHostBridge,
-  'spawnShell' | 'writeShell' | 'resizeShell' | 'killShell' | 'getShellBuffer'
+  'spawnShell' | 'writeShell' | 'writeTerminalQueryResponse' | 'resizeShell' | 'killShell' | 'getShellBuffer'
 >>
 
 type ShellSessionRequest = { taskId: string; terminalIndex: number }
@@ -54,6 +55,16 @@ function writeShell(request: ShellSessionRequest & { data: string }) {
   return writePty(shellSessionKey(request), request.data)
 }
 
+function writeShellTerminalQueryResponse(
+  request: ShellSessionRequest & { ptyInstanceId: number; data: string },
+) {
+  return writeTerminalQueryResponse({
+    shellSessionKey: shellSessionKey(request),
+    ptyInstanceId: request.ptyInstanceId,
+    data: request.data,
+  })
+}
+
 function resizeShell(request: ShellSessionRequest & { cols: number; rows: number }) {
   return resizePty(shellSessionKey(request), request.cols, request.rows)
 }
@@ -70,6 +81,7 @@ export function createPluginShellHostCapabilities(): ShellHostCapabilities {
   return {
     spawnShell,
     writeShell,
+    writeTerminalQueryResponse: writeShellTerminalQueryResponse,
     resizeShell,
     killShell,
     getShellBuffer,

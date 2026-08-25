@@ -1,3 +1,4 @@
+import { isTerminalQueryResponse } from './terminalAuthority'
 import { FitAddon } from '@xterm/addon-fit'
 import { ImageAddon } from '@xterm/addon-image'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -16,6 +17,7 @@ import type {
   TerminalView,
   TerminalViewFactoryOptions,
   TerminalViewGeometry,
+  TerminalViewQueryResponse,
   TerminalViewPresentationEvidence,
   TerminalViewPresentationLine,
   TerminalViewPresentationSnapshot,
@@ -95,6 +97,17 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   const imageSupport = loadImageSupport(options, terminal)
   const hostDiv = createHostDiv()
   const rendererFailureListeners = new Set<(failure: TerminalViewRendererFailure) => void>()
+  const userInputListeners = new Set<(data: string) => void>()
+  const queryResponseListeners = new Set<(response: TerminalViewQueryResponse) => void>()
+  const pendingWrites: Array<{ ptyInstanceId: number | null }> = []
+  const xtermDataSubscription = terminal.onData((data) => {
+    if (isTerminalQueryResponse(data)) {
+      const response = { data, ptyInstanceId: pendingWrites[0]?.ptyInstanceId ?? null }
+      for (const listener of queryResponseListeners) listener(response)
+      return
+    }
+    for (const listener of userInputListeners) listener(data)
+  })
   let webglAddon: WebglAddon | null = null
   let webglContextLossDisposable: { dispose(): void } | null = null
   let webglUnavailable = false
@@ -107,6 +120,16 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   const pendingPresentationDrains: PendingPresentationDrain[] = []
   let presentationRefreshRequested = false
   let presentationFrameScheduled = false
+
+  function writeScoped(data: string | Uint8Array, ptyInstanceId: number | null): void {
+    writeGeneration += 1
+    const pendingWrite = { ptyInstanceId }
+    pendingWrites.push(pendingWrite)
+    terminal.write(data, () => {
+      const index = pendingWrites.indexOf(pendingWrite)
+      if (index >= 0) pendingWrites.splice(index, 1)
+    })
+  }
   function notifyRendererFailure(failure: TerminalViewRendererFailure): void {
     for (const listener of rendererFailureListeners) listener(failure)
   }
@@ -310,13 +333,11 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     isMountedIn(container) {
       return hostDiv.parentNode === container
     },
-    bootstrap(data) {
-      writeGeneration += 1
-      terminal.write(data)
+    bootstrap(data, ptyInstanceId) {
+      writeScoped(data, ptyInstanceId)
     },
     writeLive(output) {
-      writeGeneration += 1
-      terminal.write(output.data)
+      writeScoped(output.data, output.ptyInstanceId)
     },
     drainPresentation() {
       if (disposed) return Promise.reject(new Error('Cannot drain a disposed TerminalView'))
@@ -344,7 +365,12 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     refresh,
     fit,
     onUserInput(listener) {
-      return terminal.onData(listener)
+      userInputListeners.add(listener)
+      return { dispose: () => userInputListeners.delete(listener) }
+    },
+    onQueryResponse(listener) {
+      queryResponseListeners.add(listener)
+      return { dispose: () => queryResponseListeners.delete(listener) }
     },
     setKeyEventHandler(handler) {
       terminal.attachCustomKeyEventHandler(handler)
@@ -367,6 +393,10 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       renderDisposable.dispose()
       hostDiv.parentNode?.removeChild(hostDiv)
       rendererFailureListeners.clear()
+      userInputListeners.clear()
+      queryResponseListeners.clear()
+      pendingWrites.length = 0
+      xtermDataSubscription.dispose()
       disposeWebgl()
       terminal.dispose()
     },

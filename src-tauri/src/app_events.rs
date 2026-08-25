@@ -523,10 +523,9 @@ fn bus_for_sender(sender: &AppEventSender) -> Option<AppEventBus> {
 }
 
 fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
-    if event_name.starts_with("pty-output-") || event_name.starts_with("pty-model-output-") {
+    if event_name.starts_with("pty-output-") {
         DeliveryClass::RealtimeLossy
     } else if event_name.starts_with("pty-exit-")
-        || event_name.starts_with("pty-model-disabled-")
         || event_name.starts_with("plugin:")
         || matches!(event_name, "session-resumed" | "startup-resume-complete")
     {
@@ -544,8 +543,6 @@ fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
 fn legacy_ordering_key(event_name: &str, payload: &serde_json::Value) -> Option<String> {
     if let Some(session_key) = event_name
         .strip_prefix("pty-output-")
-        .or_else(|| event_name.strip_prefix("pty-model-output-"))
-        .or_else(|| event_name.strip_prefix("pty-model-disabled-"))
         .or_else(|| event_name.strip_prefix("pty-exit-"))
     {
         return Some(format!("pty:{session_key}"));

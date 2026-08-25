@@ -37,6 +37,7 @@ import type {
   ProjectAttention,
   PtyBufferState,
   ShellSpawnRequest,
+  ShellTerminalQueryResponseRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
@@ -78,6 +79,7 @@ export type RuntimeHostBridge = {
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
   spawnShell?(request: ShellSpawnRequest): Promise<number>
   writeShell?(request: { taskId: string; terminalIndex: number; data: string }): Promise<void>
+  writeTerminalQueryResponse?(request: ShellTerminalQueryResponseRequest): Promise<void>
   resizeShell?(request: { taskId: string; terminalIndex: number; cols: number; rows: number }): Promise<void>
   killShell?(request: { taskId: string; terminalIndex: number }): Promise<void>
   getShellBuffer?(request: { taskId: string; terminalIndex: number }): Promise<PtyBufferState>

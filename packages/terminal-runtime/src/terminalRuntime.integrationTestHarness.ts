@@ -1,7 +1,12 @@
 import { vi } from 'vitest'
 import { writable } from 'svelte/store'
 import type { TerminalRuntimeEvent, TerminalRuntimeHost, TerminalView } from './terminalRuntime'
-import type { TerminalViewSnapshot } from './terminalRuntimeTypes'
+
+interface DiagnosticTerminalSnapshot {
+  instanceId: number
+  watermark: number
+  data: string
+}
 
 const hoistedTerminalMocks = vi.hoisted(() => ({
   failCompatibilityAddon: false,
@@ -127,7 +132,8 @@ vi.mock('@xterm/addon-image', () => ({
 export interface TestHost extends TerminalRuntimeHost {
   emit<TPayload>(eventName: string, payload: TPayload): void
   setBuffer(taskId: string, buffer: string | null): void
-  setTerminalViewSnapshot(taskId: string, snapshot: TerminalViewSnapshot | null): void
+  getTerminalViewSnapshot(taskId: string): Promise<DiagnosticTerminalSnapshot | null>
+  setTerminalViewSnapshot(taskId: string, snapshot: DiagnosticTerminalSnapshot | null): void
   deferTerminalViewSnapshot(taskId: string): () => void
   getListenerCount(eventName: string): number
   deferBufferRead(taskId: string): () => void
@@ -147,7 +153,7 @@ export function createHost(): TestHost {
   const listeners = new Map<string, Set<(event: TerminalRuntimeEvent<unknown>) => void>>()
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
-  const terminalViewSnapshots = new Map<string, TerminalViewSnapshot | null>()
+  const terminalViewSnapshots = new Map<string, DiagnosticTerminalSnapshot | null>()
   const terminalViewSnapshotGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationFailures = new Set<string>()
@@ -168,13 +174,14 @@ export function createHost(): TestHost {
     async getPtyBuffer(taskId: string) {
       await bufferReadGates.get(taskId)?.promise
       const buffer = buffers.get(taskId) ?? null
-      return { buffer, isLive: buffer !== null }
+      return { buffer, isLive: buffer !== null, instanceId: null }
     },
     async getTerminalViewSnapshot(taskId: string) {
       await terminalViewSnapshotGates.get(taskId)?.promise
       return terminalViewSnapshots.get(taskId) ?? null
     },
     async writePty() {},
+    async writeTerminalQueryResponse() {},
     async resizePty() {},
     openLink,
     emit<TPayload>(eventName: string, payload: TPayload) {
@@ -185,7 +192,7 @@ export function createHost(): TestHost {
     setBuffer(taskId: string, buffer: string | null) {
       buffers.set(taskId, buffer)
     },
-    setTerminalViewSnapshot(taskId: string, snapshot: TerminalViewSnapshot | null) {
+    setTerminalViewSnapshot(taskId: string, snapshot: DiagnosticTerminalSnapshot | null) {
       terminalViewSnapshots.set(taskId, snapshot)
     },
     deferTerminalViewSnapshot(taskId: string) {
@@ -270,6 +277,7 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     refresh: vi.fn(),
     fit: vi.fn(() => ({ cols: 80, rows: 24 })),
     onUserInput: vi.fn(() => ({ dispose: vi.fn() })),
+    onQueryResponse: vi.fn(() => ({ dispose: vi.fn() })),
     setKeyEventHandler: vi.fn(),
     getSelectionText: vi.fn(() => ''),
     setTheme: vi.fn(),

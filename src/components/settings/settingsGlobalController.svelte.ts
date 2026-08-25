@@ -42,7 +42,7 @@ export function createSettingsGlobalController() {
   let loadError = $state<string | null>(null)
   let isCodeCleanupTasksEnabled = $state(codeCleanupTasksEnabledState.current)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
-  let isGhosttyTerminalStateEnabled = $state(false)
+  let isGhosttyTerminalDiagnosticsEnabled = $state(false)
 
   const hierarchyValues = $derived<Record<string, string>>({
     code_cleanup_tasks_enabled: isCodeCleanupTasksEnabled ? 'true' : 'false',
@@ -62,7 +62,7 @@ export function createSettingsGlobalController() {
       isCodeCleanupTasksEnabled = settings.codeCleanupTasksEnabled
       codeCleanupTasksEnabled.set(isCodeCleanupTasksEnabled)
       isTaskDisplayTitleMetadataUpdatesEnabled = settings.taskDisplayTitleMetadataUpdatesEnabled
-      isGhosttyTerminalStateEnabled = settings.ghosttyTerminalStateEnabled
+      isGhosttyTerminalDiagnosticsEnabled = settings.ghosttyTerminalDiagnosticsEnabled
       githubPollInterval = settings.githubPollInterval
       useWorktrees = settings.useWorktrees
       aiProvider = settings.aiProvider
@@ -79,9 +79,9 @@ export function createSettingsGlobalController() {
     return { githubToken: value }
   }
 
-  function setGhosttyTerminalState(enabled: boolean): GlobalSettingsSavePayload {
-    isGhosttyTerminalStateEnabled = enabled
-    return { ghosttyTerminalStateEnabled: enabled }
+  function setGhosttyTerminalDiagnostics(enabled: boolean): GlobalSettingsSavePayload {
+    isGhosttyTerminalDiagnosticsEnabled = enabled
+    return { ghosttyTerminalDiagnosticsEnabled: enabled }
   }
 
   function applySettingChange(key: string, value: string): GlobalSettingsSavePayload | undefined {
@@ -116,10 +116,10 @@ export function createSettingsGlobalController() {
     get loaded() { return loaded },
     get loadError() { return loadError },
     get githubToken() { return githubToken },
-    get isGhosttyTerminalStateEnabled() { return isGhosttyTerminalStateEnabled },
+    get isGhosttyTerminalDiagnosticsEnabled() { return isGhosttyTerminalDiagnosticsEnabled },
     load,
     setGithubToken,
-    setGhosttyTerminalState,
+    setGhosttyTerminalDiagnostics,
     applySettingChange,
   }
 }

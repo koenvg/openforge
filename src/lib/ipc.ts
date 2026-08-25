@@ -1,7 +1,11 @@
 import { invokeDesktopCommand as invoke } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
-import type { PtyBufferState, TerminalImageProtocol, TerminalViewSnapshot } from '@openforge-app/terminal-runtime'
+import type {
+  PtyBufferState,
+  TerminalImageProtocol,
+  TerminalQueryResponseWrite,
+} from '@openforge-app/terminal-runtime'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 import type { PullRequestMergeMethod } from './types'
@@ -494,6 +498,16 @@ export async function writePty(taskId: string, data: string): Promise<void> {
   return invoke("pty_write", { taskId, data });
 }
 
+export async function writeTerminalQueryResponse(
+  response: TerminalQueryResponseWrite,
+): Promise<void> {
+  return invoke('pty_write_terminal_query_response', {
+    shellSessionKey: response.shellSessionKey,
+    ptyInstanceId: response.ptyInstanceId,
+    data: response.data,
+  })
+}
+
 export async function resizePty(taskId: string, cols: number, rows: number): Promise<void> {
   return invoke("pty_resize", { taskId, cols, rows });
 }
@@ -510,9 +524,6 @@ export async function getPtyBuffer(taskId: string): Promise<PtyBufferState> {
   return invoke<PtyBufferState>("get_pty_buffer", { taskId });
 }
 
-export async function getTerminalViewSnapshot(taskId: string): Promise<TerminalViewSnapshot | null> {
-  return invoke<TerminalViewSnapshot | null>("get_terminal_view_snapshot", { taskId });
-}
 
 export async function getTaskDiff(taskId: string, includeCommitted: boolean, includeUncommitted: boolean): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeCommitted, includeUncommitted });

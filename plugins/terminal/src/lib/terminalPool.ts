@@ -1,4 +1,5 @@
 import {
+  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
   type PoolEntry,
   type ShellLifecycleState,
@@ -6,18 +7,26 @@ import {
   type TerminalRuntimeUnlistenFn,
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
-import { getPtyBuffer, listenOpenForgeEvent, openTerminalLink, resizePty, writePty } from './ipc'
+import {
+  getPtyBuffer,
+  listenOpenForgeEvent,
+  openTerminalLink,
+  resizePty,
+  writePty,
+  writeTerminalQueryResponse,
+} from './ipc'
 import { themeMode } from './theme'
 
 const terminalRuntime = createTerminalRuntime({
   listenEvent: listenOpenForgeEvent,
   getPtyBuffer,
   writePty,
+  writeTerminalQueryResponse,
   resizePty,
   openLink: openTerminalLink,
   themeMode,
   loggerName: 'terminalPluginPool',
-})
+}, { authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT })
 
 export type {
   PoolEntry,

@@ -856,6 +856,7 @@ var TestingCommonApiFake = class {
 				write: async (request) => {
 					this.services.calls.shellWrites.push(request);
 				},
+				writeTerminalQueryResponse: async () => {},
 				resize: async (request) => {
 					this.services.calls.shellResizes.push(request);
 				},
@@ -866,7 +867,8 @@ var TestingCommonApiFake = class {
 					this.services.calls.shellBuffers.push(request);
 					return {
 						buffer: null,
-						isLive: false
+						isLive: false,
+						instanceId: null
 					};
 				}
 			},

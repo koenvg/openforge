@@ -1,4 +1,5 @@
 import type { Disposable, FrontendOpenForgeAPI, PtyBufferState, TerminalImageProtocol } from '@openforge-app/plugin-sdk/frontend'
+import type { TerminalQueryResponseWrite } from '@openforge-app/terminal-runtime'
 import type { TaskWorkspaceInfo } from './types'
 
 let terminalOpenForgeApi: FrontendOpenForgeAPI | null = null
@@ -83,6 +84,16 @@ export async function spawnShellPty(
 
 export async function writePty(taskId: string, data: string): Promise<void> {
   await getTerminalOpenForgeApi().shell.write({ ...parseIndexedTerminalKey(taskId), data })
+}
+
+export async function writeTerminalQueryResponse(
+  response: TerminalQueryResponseWrite,
+): Promise<void> {
+  await getTerminalOpenForgeApi().shell.writeTerminalQueryResponse({
+    ...parseIndexedTerminalKey(response.shellSessionKey),
+    ptyInstanceId: response.ptyInstanceId,
+    data: response.data,
+  })
 }
 
 export async function resizePty(taskId: string, cols: number, rows: number): Promise<void> {

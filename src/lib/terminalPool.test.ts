@@ -135,7 +135,7 @@ function getWebLinksHandler(): (event: MouseEvent, uri: string) => void {
 
 function getEntryIndex(entry: TerminalPoolEntry): number {
 	const index = [..._getPool().values()].indexOf(entry);
-	if (index < 0) throw new Error(`Terminal entry ${entry.taskId} is not pooled`);
+	if (index < 0) throw new Error(`Terminal entry ${entry.shellSessionKey} is not pooled`);
 	return index;
 }
 
@@ -261,9 +261,9 @@ vi.mock("@xterm/addon-webgl", () => {
 
 vi.mock("./ipc", () => ({
 	writePty: vi.fn().mockResolvedValue(undefined),
+	writeTerminalQueryResponse: vi.fn().mockResolvedValue(undefined),
 	resizePty: vi.fn().mockResolvedValue(undefined),
-	getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false }),
-	getTerminalViewSnapshot: vi.fn().mockResolvedValue(null),
+	getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false, instanceId: null }),
 	openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -347,7 +347,7 @@ describe("terminalPool", () => {
 	it("acquire creates a new pool entry", async () => {
 		const entry = await acquire("task-1");
 		expect(entry).toBeDefined();
-		expect(entry.taskId).toBe("task-1");
+		expect(entry.shellSessionKey).toBe("task-1");
 		expect(getTerminalMock(entry)).toBeDefined();
 		expect(entry.view).toBeDefined();
 		expect(entry.view.geometry).toEqual({ cols: 80, rows: 24 });
@@ -715,12 +715,13 @@ describe("terminalPool", () => {
 
 	it("pty-output listener writes to terminal", async () => {
 		const entry = await acquire("task-10");
+		setCurrentPtyInstance(entry, 42);
 		const { write: writeSpy } = getTerminalMocks(entry);
 
 		const outputCb = getListenCallback("pty-output-task-10");
-		outputCb({ payload: { data: "hello world" } });
+		outputCb({ payload: { data: "hello world", instance_id: 42 } });
 
-		expect(writeSpy).toHaveBeenCalledWith("hello world");
+		expect(writeSpy).toHaveBeenCalledWith("hello world", expect.any(Function));
 		expect(entry.ptyActive).toBe(true);
 	});
 
@@ -794,7 +795,7 @@ describe("terminalPool", () => {
 		outputCb({ payload: { data: "current output", instance_id: 42 } });
 
 		expect(writeSpy).toHaveBeenCalledTimes(1);
-		expect(writeSpy).toHaveBeenCalledWith("current output");
+		expect(writeSpy).toHaveBeenCalledWith("current output", expect.any(Function));
 		expect(resetSpy).not.toHaveBeenCalled();
 		expect(entry.ptyActive).toBe(true);
 		expect(entry.needsClear).toBe(false);
@@ -850,22 +851,23 @@ describe("terminalPool", () => {
 
 	it("needsClear causes terminal.reset on next pty-output", async () => {
 		const entry = await acquire("task-12");
+		setCurrentPtyInstance(entry, 42);
 		entry.needsClear = true;
 		const { reset: resetSpy, write: writeSpy } = getTerminalMocks(entry);
 
 		const outputCb = getListenCallback("pty-output-task-12");
-		outputCb({ payload: { data: "new session output" } });
+		outputCb({ payload: { data: "new session output", instance_id: 42 } });
 
 		expect(resetSpy).toHaveBeenCalled();
-		expect(writeSpy).toHaveBeenCalledWith("new session output");
+		expect(writeSpy).toHaveBeenCalledWith("new session output", expect.any(Function));
 		expect(entry.needsClear).toBe(false);
 	});
 
 	it("replays backend buffers for active terminals after the app event stream reconnects", async () => {
 		vi.mocked(getPtyBuffer).mockImplementation(async (taskId: string) => {
-			if (taskId === "task-reconnect-a") return { buffer: "latest buffer a", isLive: true };
-			if (taskId === "task-reconnect-b") return { buffer: "latest buffer b", isLive: true };
-			return { buffer: null, isLive: false };
+			if (taskId === "task-reconnect-a") return { buffer: "latest buffer a", isLive: true, instanceId: 42 };
+			if (taskId === "task-reconnect-b") return { buffer: "latest buffer b", isLive: true, instanceId: 42 };
+			return { buffer: null, isLive: false, instanceId: null };
 		});
 		const entryA = await acquire("task-reconnect-a");
 		const entryB = await acquire("task-reconnect-b");
@@ -878,11 +880,11 @@ describe("terminalPool", () => {
 
 		const reconnectCb = getListenCallback("openforge-app-events-reconnected");
 		reconnectCb({ payload: { attempt: 1 } });
-		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith("latest buffer a"));
+		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith("latest buffer a", expect.any(Function)));
 
 		expect(resetA).toHaveBeenCalled();
 		expect(resetB).toHaveBeenCalled();
-		expect(writeB).toHaveBeenCalledWith("latest buffer b");
+		expect(writeB).toHaveBeenCalledWith("latest buffer b", expect.any(Function));
 		expect(entryA.ptyActive).toBe(true);
 		expect(entryA.needsClear).toBe(false);
 		expect(entryB.ptyActive).toBe(true);
@@ -891,6 +893,7 @@ describe("terminalPool", () => {
 
 	it("terminal survives detach/re-attach cycle", async () => {
 		const entry = await acquire("task-13");
+		setCurrentPtyInstance(entry, 42);
 		const wrapper1 = document.createElement("div");
 		const wrapper2 = document.createElement("div");
 		const { write: writeSpy } = getTerminalMocks(entry);
@@ -900,14 +903,14 @@ describe("terminalPool", () => {
 
 		// Simulate pty output while attached
 		const outputCb = getListenCallback("pty-output-task-13");
-		outputCb({ payload: { data: "first output" } });
+		outputCb({ payload: { data: "first output", instance_id: 42 } });
 
 		detach(entry);
 		expect(entry.attached).toBe(false);
 
 		// Output while detached still writes to terminal
-		outputCb({ payload: { data: "background output" } });
-		expect(writeSpy).toHaveBeenCalledWith("background output");
+		outputCb({ payload: { data: "background output", instance_id: 42 } });
+		expect(writeSpy).toHaveBeenCalledWith("background output", expect.any(Function));
 
 		// Re-acquire returns same entry
 		const reacquired = await acquire("task-13");
@@ -1218,8 +1221,8 @@ describe("terminalPool", () => {
 			expect(agentEntry).toBeDefined();
 			expect(shellEntry).toBeDefined();
 			expect(agentEntry).not.toBe(shellEntry);
-			expect(agentEntry.taskId).toBe("T-42");
-			expect(shellEntry.taskId).toBe("T-42-shell");
+			expect(agentEntry.shellSessionKey).toBe("T-42");
+			expect(shellEntry.shellSessionKey).toBe("T-42-shell");
 			expect(_getPool().has("T-42")).toBe(true);
 			expect(_getPool().has("T-42-shell")).toBe(true);
 			expect(_getPool().size).toBe(2);

@@ -1,18 +1,12 @@
 //! PTY command configuration and child-process creation.
 
-use crate::app_events::{publish_app_event, AppEventSender};
-use crate::terminal_model::{
-    ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelEvent, TerminalModelEventSink,
-    TerminalModelOptions, TerminalModelReplySink,
-};
+use crate::terminal_model::{ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelOptions};
 use crate::user_environment::user_environment;
-use base64::Engine;
 use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use super::super::super::ordered_writer::OrderedPtyWriter;
@@ -59,7 +53,6 @@ struct PtyProcessRequest {
     description: String,
     pid_file_name: String,
     kind: PtySessionKind,
-    app_event_tx: Option<AppEventSender>,
 }
 
 pub(super) struct AgentProcessRequest<'a> {
@@ -68,7 +61,6 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
-    pub(super) app_event_tx: Option<AppEventSender>,
 }
 
 pub(super) struct ShellProcessRequest<'a> {
@@ -79,7 +71,6 @@ pub(super) struct ShellProcessRequest<'a> {
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
     pub(super) command: CommandBuilder,
-    pub(super) app_event_tx: Option<AppEventSender>,
 }
 
 fn require_root_pid_or_cleanup<F>(
@@ -101,31 +92,6 @@ where
     Err(PtyError::SpawnFailed(format!(
         "{description} did not expose a root PID{cleanup_context}"
     )))
-}
-
-fn terminal_model_event_sink(
-    session_key: &str,
-    app_event_tx: Option<AppEventSender>,
-) -> Option<TerminalModelEventSink> {
-    let sender = Some(app_event_tx?);
-    let output_event_name = format!("pty-model-output-{session_key}");
-    let disabled_event_name = format!("pty-model-disabled-{session_key}");
-    Some(Arc::new(move |event| match event {
-        TerminalModelEvent::Output(frame) => publish_app_event(
-            &sender,
-            &output_event_name,
-            &serde_json::json!({
-                "instance_id": frame.instance_id,
-                "sequence": frame.sequence,
-                "data": base64::engine::general_purpose::STANDARD.encode(frame.bytes),
-            }),
-        ),
-        TerminalModelEvent::Disabled { instance_id } => publish_app_event(
-            &sender,
-            &disabled_event_name,
-            &serde_json::json!({ "instance_id": instance_id }),
-        ),
-    }))
 }
 
 impl PtyManager {
@@ -192,40 +158,11 @@ impl PtyManager {
         })?;
 
         let (shadow_model, shadow_feeder) = if self.terminal_model_enabled() {
-            let options = TerminalModelOptions::new(request.cols, request.rows);
-            let event_sink =
-                terminal_model_event_sink(&request.session_key, request.app_event_tx.clone());
-            let started = if self.terminal_view_enabled() {
-                let reply_writer = writer.model_reply_writer();
-                let reply_sink: TerminalModelReplySink =
-                    Arc::new(move |session_key, instance_id, bytes| {
-                        reply_writer
-                            .write(session_key, instance_id, bytes)
-                            .map_err(|error| error.to_string())
-                    });
-                ShadowTerminalSession::start_authoritative(
-                    request.session_key.clone(),
-                    request.instance_id,
-                    options,
-                    event_sink,
-                    reply_sink,
-                )
-            } else {
-                match event_sink {
-                    Some(event_sink) => ShadowTerminalSession::start_with_event_sink(
-                        request.session_key.clone(),
-                        request.instance_id,
-                        options,
-                        event_sink,
-                    ),
-                    None => ShadowTerminalSession::start(
-                        request.session_key.clone(),
-                        request.instance_id,
-                        options,
-                    ),
-                }
-            };
-            match started {
+            match ShadowTerminalSession::start(
+                request.session_key.clone(),
+                request.instance_id,
+                TerminalModelOptions::new(request.cols, request.rows),
+            ) {
                 Ok((session, feeder)) => (Some(session), Some(feeder)),
                 Err(error) => {
                     warn!(
@@ -246,6 +183,7 @@ impl PtyManager {
                 master: pair.master,
                 writer,
                 instance_id: request.instance_id,
+                authority: self.terminal_authority_contract(),
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
                 shadow_model,
@@ -288,7 +226,6 @@ impl PtyManager {
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
-            app_event_tx: request.app_event_tx,
         })?;
         info!(
             "{} PTY for task {} started (PID: {})",
@@ -311,7 +248,6 @@ impl PtyManager {
             rows,
             terminal_image_protocol,
             mut command,
-            app_event_tx,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
         Self::configure_pty_command(&mut command, cwd, terminal_image_protocol);
@@ -326,7 +262,6 @@ impl PtyManager {
             kind: PtySessionKind::Shell {
                 task_id: task_id.to_string(),
             },
-            app_event_tx,
         })?;
         info!(
             "Shell PTY for task {} started (PID: {})",

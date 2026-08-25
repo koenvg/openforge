@@ -1,4 +1,8 @@
 import { get } from 'svelte/store'
+import {
+  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
+  type TerminalAuthorityContract,
+} from './terminalAuthority'
 import { createTerminalAcquisition } from './terminalAcquisition'
 import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
 import type { TerminalImageProtocol } from './terminalImages'
@@ -15,13 +19,18 @@ import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import { themeMode as defaultThemeMode } from './theme'
 
+export {
+  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
+  type TerminalAuthorityBinding,
+  type TerminalAuthorityContract,
+  type TerminalQueryResponseWrite,
+  type XtermAuthoritativeTerminalContract,
+} from './terminalAuthority'
 export { APP_EVENTS_RECONNECTED_EVENT } from './terminalReconnectReplay'
 export type { TerminalImageProtocol } from './terminalImages'
 export {
   ptyExitEventName,
   ptyOutputEventName,
-  terminalModelOutputEventName,
-  terminalModelDisabledEventName,
 } from './terminalRuntimeTypes'
 export type {
   AppEventsReconnectedPayload,
@@ -29,10 +38,7 @@ export type {
   PtyBufferState,
   PtyExitEventPayload,
   PtyOutputEventPayload,
-  TerminalModelDisabledEventPayload,
-  TerminalModelOutputEventPayload,
   TerminalStateSource,
-  TerminalViewSnapshot,
   ShellLifecycleState,
   TaskTerminalTabsSession,
   TerminalRuntimeEvent,
@@ -59,6 +65,7 @@ export type {
 } from './terminalView'
 
 export interface TerminalRuntimeOptions {
+  authority?: TerminalAuthorityContract
   createTerminalView?: TerminalViewFactory
 }
 
@@ -66,15 +73,16 @@ export function createTerminalRuntime(
   host: TerminalRuntimeHost,
   options: TerminalRuntimeOptions = {},
 ) {
+  const authority = options.authority ?? XTERM_AUTHORITATIVE_TERMINAL_CONTRACT
   const activeThemeMode = host.themeMode ?? defaultThemeMode
   const createView = options.createTerminalView ?? createXtermTerminalView
   const pool = new Map<string, PoolEntry>()
   const attachments = createTerminalAttachmentController(host)
-  const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key))
+  const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key), authority)
 
   function createEntry(terminalKey: string): PoolEntry {
     return {
-      taskId: terminalKey,
+      shellSessionKey: terminalKey,
       view: createView({
         terminalKey,
         themeMode: get(activeThemeMode),
@@ -92,12 +100,10 @@ export function createTerminalRuntime(
       attached: false,
       spawnPending: false,
       currentPtyInstance: null,
+      authority: null,
       terminalStateSource: 'bootstrapping',
-      terminalModelSequence: null,
-      terminalModelRejectedInstance: null,
       pendingPtyOutput: [],
-      pendingTerminalModelOutput: [],
-      terminalModelRecovery: null,
+      terminalReplayRecovery: null,
       hasOutput: false,
     }
   }
@@ -145,6 +151,7 @@ export function createTerminalRuntime(
   })
   const acquisition = createTerminalAcquisition({
     host,
+    authority,
     pool,
     createEntry,
     preloadEntry: preloadTerminalFonts,
@@ -191,6 +198,11 @@ export function createTerminalRuntime(
     if (entry && shouldRecoverAttachment) void attachments.recoverActiveTerminal(entry)
   }
 
+  function markShellPtyStarted(entry: PoolEntry, instanceId: number): void {
+    sessionLifecycle.markPtyStarted(entry, instanceId)
+    acquisition.flushPendingOutput(entry)
+  }
+
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
     return entry.view.imageProtocol
   }
@@ -212,7 +224,7 @@ export function createTerminalRuntime(
     clearPtySpawnPending: sessionLifecycle.clearPtySpawnPending,
     setCurrentPtyInstance: sessionLifecycle.setCurrentPtyInstance,
     restorePtyInstance,
-    markShellPtyStarted: sessionLifecycle.markPtyStarted,
+    markShellPtyStarted,
     subscribeShellLifecycle: sessionLifecycle.subscribeShellLifecycle,
     isShellExited: sessionLifecycle.isShellExited,
     getShellLifecycleState: sessionLifecycle.getShellLifecycleState,

@@ -54,6 +54,7 @@ import {
   updateTaskInitialPrompt,
   updateTaskSourceTicketUrl,
   writePty,
+  writeTerminalQueryResponse,
 } from "./ipc";
 
 type PtyPayloadFixture = {
@@ -229,6 +230,14 @@ describe("ipc spawnShellPty", () => {
 		const write = ptyFixture("pty_write", "write_pty");
 		await writePty("T-pty", "echo ready\n");
 		expect(invokeMock).toHaveBeenLastCalledWith(write.command, write.payload);
+
+		const queryResponse = ptyFixture("pty_write_terminal_query_response", "write_terminal_query_response");
+		await writeTerminalQueryResponse({
+			shellSessionKey: "T-pty-shell-2",
+			ptyInstanceId: 42,
+			data: "\u001b[1;1R",
+		});
+		expect(invokeMock).toHaveBeenLastCalledWith(queryResponse.command, queryResponse.payload);
 
 		const resize = ptyFixture("pty_resize", "resize_pty");
 		await resizePty("T-pty", 120, 40);

@@ -369,9 +369,10 @@ describe('runtime contribution registry', () => {
       setProjectConfig: vi.fn(async () => undefined),
       spawnShell: vi.fn(async () => 42),
       writeShell: vi.fn(async () => undefined),
+      writeTerminalQueryResponse: vi.fn(async () => undefined),
       resizeShell: vi.fn(async () => undefined),
       killShell: vi.fn(async () => undefined),
-      getShellBuffer: vi.fn(async () => ({ buffer: 'buffered', isLive: true })),
+      getShellBuffer: vi.fn(async () => ({ buffer: 'buffered', isLive: true, instanceId: 42 })),
       getAttention: vi.fn(async () => [{ project_id: 'P-1', needs_input: 0, running_agents: 1, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]),
       notify: vi.fn(async () => undefined),
     }
@@ -399,7 +400,7 @@ describe('runtime contribution registry', () => {
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
     await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
     await api.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
-    await expect(api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true })
+    await expect(api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true, instanceId: 42 })
     await api.shell.kill({ taskId: 'T-1', terminalIndex: 2 })
     await api.system.openUrl('https://example.com')
     await api.system.writeClipboardText('Reviewer brief')
