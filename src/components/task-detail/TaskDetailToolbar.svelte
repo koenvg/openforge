@@ -114,7 +114,7 @@
 
 <header
   data-testid="task-workbench-toolbar"
-  class="of-task-workbench-toolbar flex h-[52px] shrink-0 items-center overflow-x-auto overflow-y-hidden border-b border-base-300 bg-base-100 px-4"
+  class="of-task-workbench-toolbar isolate flex h-[52px] shrink-0 items-center overflow-x-auto overflow-y-hidden border-b border-base-300 bg-base-100 px-4"
 >
   <div class="relative flex h-full min-w-max flex-1 items-center gap-2">
     <button class="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content" aria-label="Back to task board" onclick={onBack}>
