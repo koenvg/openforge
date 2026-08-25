@@ -21,6 +21,8 @@ export interface AudioRecorder {
   isRecording(): boolean;
   /** Returns elapsed recording time in milliseconds. Returns 0 if not recording. */
   getDuration(): number;
+  /** Release recorder resources without producing audio. Safe during startup and after disposal. */
+  dispose(): void;
 }
 
 // ============================================================================
@@ -79,6 +81,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
   let processorNode: ScriptProcessorNode | null = null;
   let chunks: Float32Array[] = [];
   let recording = false;
+  let disposed = false;
   let startTime = 0;
   let maxDurationTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -86,6 +89,10 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
   let autoStopPromise: Promise<Float32Array> | null = null;
 
   function cleanup(): void {
+    if (maxDurationTimer !== null) {
+      clearTimeout(maxDurationTimer);
+      maxDurationTimer = null;
+    }
     if (processorNode) {
       processorNode.onaudioprocess = null;
       processorNode.disconnect();
@@ -117,6 +124,9 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
 
   return {
     async start(): Promise<void> {
+      if (disposed) {
+        throw new Error('AudioRecorder: disposed');
+      }
       if (recording || autoStopPromise !== null) {
         throw new Error('AudioRecorder: already recording');
       }
@@ -124,6 +134,10 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
       // macOS permission prompts are scoped to the installed app bundle. Local
       // replacement builds may require the user to grant microphone access again.
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (disposed) {
+        cleanup();
+        throw new Error('AudioRecorder: disposed');
+      }
 
       audioContext = new AudioContext();
       sourceNode = audioContext.createMediaStreamSource(mediaStream);
@@ -185,6 +199,14 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
     getDuration(): number {
       if (!recording) return 0;
       return Date.now() - startTime;
+    },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      recording = false;
+      chunks = [];
+      autoStopPromise = null;
+      cleanup();
     },
   };
 }

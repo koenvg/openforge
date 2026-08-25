@@ -61,6 +61,26 @@ describe('audioRecorder', () => {
     expect(typeof recorder.stop).toBe('function')
     expect(typeof recorder.isRecording).toBe('function')
     expect(typeof recorder.getDuration).toBe('function')
+    expect(typeof recorder.dispose).toBe('function')
+  })
+
+  it('releases a late media stream when disposed during startup', async () => {
+    let resolveMediaStream!: (stream: MediaStream) => void
+    const track = { stop: vi.fn() }
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementationOnce(() => new Promise<MediaStream>((resolve) => {
+      resolveMediaStream = resolve
+    }))
+
+    const recorder = createAudioRecorder()
+    const startup = recorder.start()
+    recorder.dispose()
+    resolveMediaStream({
+      getTracks: () => [track],
+    } as unknown as MediaStream)
+
+    await expect(startup).rejects.toThrow('AudioRecorder: disposed')
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(AudioContext).not.toHaveBeenCalled()
   })
 
   it('isRecording returns false initially', () => {
