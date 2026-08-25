@@ -198,17 +198,44 @@ pub mod test_helpers {
     }
 
     pub fn insert_test_task(db: &Database) {
-        let conn = db.connection();
-        let conn = conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            rusqlite::params!["T-100", "Test task", "backlog", None::<String>, 1000, 1000, "Test task", None::<String>, None::<String>],
-        ).expect("Failed to insert test task");
+        db.set_config("task_id_prefix", "T")
+            .expect("Failed to set test task ID prefix");
+        db.set_config("next_task_id", "100")
+            .expect("Failed to set next test task ID");
+        let task = db
+            .create_task("Test task", "backlog", None, Some("Test task"), None)
+            .expect("Failed to insert test task");
+        assert_eq!(task.id, "T-100");
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::test_helpers::{insert_test_task, make_test_db};
+
+    #[test]
+    fn insert_test_task_preserves_fixture_and_reserves_task_id() {
+        let (db, _temp_dir) = make_test_db("insert_test_task");
+
+        insert_test_task(&db);
+
+        let task = db
+            .get_task("T-100")
+            .expect("get test task")
+            .expect("test task should exist");
+        assert_eq!(task.id, "T-100");
+        assert_eq!(task.initial_prompt, "Test task");
+        assert_eq!(task.status, "backlog");
+        assert_eq!(task.project_id, None);
+        assert_eq!(task.prompt.as_deref(), Some("Test task"));
+        assert_eq!(task.agent, None);
+        assert_eq!(task.permission_mode, None);
+
+        let next_task = db
+            .create_task("Next task", "backlog", None, None, None)
+            .expect("create next task");
+        assert_eq!(next_task.id, "T-101");
+    }
 
     #[test]
     fn make_test_db_isolates_repeated_names() {
