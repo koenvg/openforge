@@ -1,6 +1,5 @@
 use portable_pty::PtySize;
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
@@ -353,8 +352,7 @@ impl PtyManager {
         }
         session
             .writer
-            .write_all(input)
-            .and_then(|()| session.writer.flush())
+            .write_user_input(task_id, instance_id, input)
             .map_err(|_| AgentTerminalAttachmentError::WriteFailed)
     }
 

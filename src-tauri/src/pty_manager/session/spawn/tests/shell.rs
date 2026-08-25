@@ -179,7 +179,12 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
     let session = PtySession {
         child,
         master: pair.master,
-        writer,
+        writer: crate::pty_manager::ordered_writer::OrderedPtyWriter::start(
+            session_key.to_string(),
+            instance_id,
+            writer,
+        )
+        .expect("ordered writer should start"),
         instance_id,
         kind: PtySessionKind::Shell {
             task_id: "failed-shell-cleanup".to_string(),

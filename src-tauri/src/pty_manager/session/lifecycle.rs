@@ -3,7 +3,7 @@ use base64::Engine;
 use log::{error, info, warn};
 use portable_pty::PtySize;
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Write};
+use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, Weak};
 use tokio::sync::Mutex;
@@ -12,6 +12,7 @@ use super::super::events::SharedRingBuffer;
 use super::super::managed_process::{
     terminate_managed_process_tree_with_root_reaper, ManagedProcessIdentity, RootReapMode,
 };
+use super::super::ordered_writer::OrderedPtyWriter;
 use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
     MANAGED_PROCESS_TERM_TIMEOUT,
@@ -134,7 +135,7 @@ pub(in super::super) struct PtySession {
     pub(in super::super) child: Box<dyn portable_pty::Child + Send + Sync>,
     #[allow(dead_code)]
     pub(in super::super) master: Box<dyn portable_pty::MasterPty + Send>,
-    pub(in super::super) writer: Box<dyn std::io::Write + Send>,
+    pub(in super::super) writer: OrderedPtyWriter,
     pub(in super::super) instance_id: u64,
     pub(in super::super) kind: PtySessionKind,
     pub(in super::super) pid_file_name: String,
@@ -271,13 +272,8 @@ impl PtyManager {
 
         session
             .writer
-            .write_all(data)
-            .map_err(|e| PtyError::WriteFailed(format!("write_all failed: {}", e)))?;
-
-        session
-            .writer
-            .flush()
-            .map_err(|e| PtyError::WriteFailed(format!("flush failed: {}", e)))?;
+            .write_user_input(task_id, session.instance_id, data)
+            .map_err(|error| PtyError::WriteFailed(error.to_string()))?;
 
         Ok(())
     }

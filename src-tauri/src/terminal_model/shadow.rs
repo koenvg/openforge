@@ -60,6 +60,8 @@ pub(crate) enum TerminalModelEvent {
 }
 
 pub(crate) type TerminalModelEventSink = Arc<dyn Fn(TerminalModelEvent) + Send + Sync>;
+pub(crate) type TerminalModelReplySink =
+    Arc<dyn Fn(&str, u64, &[u8]) -> Result<(), String> + Send + Sync>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PortableTerminalSnapshot {
@@ -74,16 +76,21 @@ struct ShadowState {
     replies: Mutex<VecDeque<Vec<u8>>>,
     reply_bytes: Mutex<usize>,
     event_sink: Option<TerminalModelEventSink>,
+    reply_sink: Option<TerminalModelReplySink>,
 }
 
 impl ShadowState {
-    fn new(event_sink: Option<TerminalModelEventSink>) -> Self {
+    fn new(
+        event_sink: Option<TerminalModelEventSink>,
+        reply_sink: Option<TerminalModelReplySink>,
+    ) -> Self {
         Self {
             disabled: AtomicBool::new(false),
             diagnostics: Mutex::new(VecDeque::new()),
             replies: Mutex::new(VecDeque::new()),
             reply_bytes: Mutex::new(0),
             event_sink,
+            reply_sink,
         }
     }
     fn disable(&self, session_key: &str, instance_id: u64, phase: &'static str, message: String) {
@@ -235,7 +242,7 @@ impl ShadowTerminalSession {
         instance_id: u64,
         options: TerminalModelOptions,
     ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
-        Self::start_internal(session_key, instance_id, options, None)
+        Self::start_internal(session_key, instance_id, options, None, None)
     }
 
     pub(crate) fn start_with_event_sink(
@@ -244,7 +251,23 @@ impl ShadowTerminalSession {
         options: TerminalModelOptions,
         event_sink: TerminalModelEventSink,
     ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
-        Self::start_internal(session_key, instance_id, options, Some(event_sink))
+        Self::start_internal(session_key, instance_id, options, Some(event_sink), None)
+    }
+
+    pub(crate) fn start_authoritative(
+        session_key: String,
+        instance_id: u64,
+        options: TerminalModelOptions,
+        event_sink: Option<TerminalModelEventSink>,
+        reply_sink: TerminalModelReplySink,
+    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+        Self::start_internal(
+            session_key,
+            instance_id,
+            options,
+            event_sink,
+            Some(reply_sink),
+        )
     }
 
     fn start_internal(
@@ -252,9 +275,10 @@ impl ShadowTerminalSession {
         instance_id: u64,
         options: TerminalModelOptions,
         event_sink: Option<TerminalModelEventSink>,
+        reply_sink: Option<TerminalModelReplySink>,
     ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
         let session_key: Arc<str> = Arc::from(session_key);
-        let state = Arc::new(ShadowState::new(event_sink));
+        let state = Arc::new(ShadowState::new(event_sink, reply_sink));
         let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
         let worker_key = Arc::clone(&session_key);
         let worker_state = Arc::clone(&state);
@@ -486,7 +510,17 @@ fn run_worker(
             state.disable(&session_key, instance_id, "command", model_error(error));
             return;
         }
-        state.capture_replies(model.take_protocol_replies());
+        let replies = model.take_protocol_replies();
+        if let Some(reply_sink) = &state.reply_sink {
+            for reply in replies {
+                if let Err(error) = reply_sink(&session_key, instance_id, &reply) {
+                    state.disable(&session_key, instance_id, "reply", error);
+                    return;
+                }
+            }
+        } else {
+            state.capture_replies(replies);
+        }
         if bytes_since_checkpoint >= CHECKPOINT_INTERVAL_BYTES {
             checkpoint_due = true;
         }
@@ -526,6 +560,123 @@ mod tests {
             .any(|part| part == b"before"));
         assert_eq!(session.take_protocol_replies().len(), 1);
         assert!(session.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn authoritative_replies_are_forwarded_once_with_session_scope() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_replies = Arc::clone(&captured);
+        let reply_sink: TerminalModelReplySink =
+            Arc::new(move |session_key, instance_id, bytes| {
+                captured_replies
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .push((session_key.to_string(), instance_id, bytes.to_vec()));
+                Ok(())
+            });
+        let (session, feeder) = ShadowTerminalSession::start_authoritative(
+            "authoritative-shell".to_string(),
+            73,
+            TerminalModelOptions::new(80, 24),
+            None,
+            reply_sink,
+        )
+        .expect("authoritative terminal model should start");
+
+        for byte in b"\x1b[6n\x1b[c\x1b[>c\x1b[=c\x1b[>q" {
+            feeder.feed(std::slice::from_ref(byte));
+        }
+        session
+            .portable_snapshot()
+            .expect("snapshot should cross the model command barrier");
+        session
+            .portable_snapshot()
+            .expect("second snapshot should not repeat drained replies");
+
+        let replies = captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(replies.len(), 5);
+        assert!(replies
+            .iter()
+            .all(|(key, instance_id, bytes)| key == "authoritative-shell"
+                && *instance_id == 73
+                && !bytes.is_empty()));
+    }
+
+    #[test]
+    fn reply_routing_failure_disables_only_the_affected_model() {
+        let captured_events = Arc::new(Mutex::new(Vec::new()));
+        let failure_events = Arc::clone(&captured_events);
+        let event_sink: TerminalModelEventSink = Arc::new(move |event| {
+            failure_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(event);
+        });
+        let failing_sink: TerminalModelReplySink =
+            Arc::new(|_, _, _| Err("ordered writer unavailable".to_string()));
+        let (failed_session, failed_feeder) = ShadowTerminalSession::start_authoritative(
+            "failed-shell".to_string(),
+            91,
+            TerminalModelOptions::new(80, 24),
+            Some(event_sink),
+            failing_sink,
+        )
+        .expect("failing model path should start");
+
+        failed_feeder.feed(b"\x1b[6n");
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while failed_session.diagnostics().is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        assert_eq!(failed_session.diagnostics()[0].phase, "reply");
+        assert!(captured_events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(&TerminalModelEvent::Disabled { instance_id: 91 }));
+
+        let (healthy_session, healthy_feeder) = ShadowTerminalSession::start(
+            "healthy-shell".to_string(),
+            92,
+            TerminalModelOptions::new(80, 24),
+        )
+        .expect("independent model path should start");
+        healthy_feeder.feed(b"\x1b[6n");
+        healthy_session
+            .portable_snapshot()
+            .expect("healthy model should remain available");
+        assert_eq!(healthy_session.take_protocol_replies().len(), 1);
+    }
+
+    #[test]
+    fn disposed_authoritative_model_cannot_route_late_replies() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_replies = Arc::clone(&captured);
+        let reply_sink: TerminalModelReplySink = Arc::new(move |_, _, bytes| {
+            captured_replies
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(bytes.to_vec());
+            Ok(())
+        });
+        let (session, feeder) = ShadowTerminalSession::start_authoritative(
+            "disposed-shell".to_string(),
+            100,
+            TerminalModelOptions::new(80, 24),
+            None,
+            reply_sink,
+        )
+        .expect("authoritative model should start");
+
+        drop(session);
+        feeder.feed(b"\x1b[6n");
+
+        assert!(captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_empty());
     }
 
     #[test]

@@ -51,7 +51,8 @@ fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
         .expect("test process identity"),
         child,
         master: pair.master,
-        writer,
+        writer: ordered_writer::OrderedPtyWriter::start("test-session".to_string(), 1, writer)
+            .expect("ordered test writer should start"),
         instance_id: 1,
         kind,
         pid_file_name,

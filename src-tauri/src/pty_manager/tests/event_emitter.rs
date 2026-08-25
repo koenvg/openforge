@@ -341,7 +341,8 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
                 managed_process,
                 child,
                 master: pair.master,
-                writer,
+                writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
+                    .expect("ordered writer should start"),
                 instance_id: 1,
                 kind: PtySessionKind::Shell {
                     task_id: "task-1".to_string(),
@@ -465,7 +466,8 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
                 managed_process,
                 child,
                 master: pair.master,
-                writer,
+                writer: ordered_writer::OrderedPtyWriter::start(key.to_string(), 1, writer)
+                    .expect("ordered writer should start"),
                 instance_id: 1,
                 kind: PtySessionKind::Agent,
                 pid_file_name: "agent-task-1-pty.pid".to_string(),
@@ -597,7 +599,8 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
                 .expect("test process identity"),
                 child,
                 master: pair.master,
-                writer,
+                writer: ordered_writer::OrderedPtyWriter::start("task-1".to_string(), 2, writer)
+                    .expect("ordered writer should start"),
                 instance_id: 2,
                 kind: PtySessionKind::Agent,
                 pid_file_name: "task-1-pty.pid".to_string(),

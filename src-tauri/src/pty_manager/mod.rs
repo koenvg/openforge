@@ -5,6 +5,7 @@ mod commands;
 pub(crate) use commands::PiSessionTarget;
 mod events;
 mod managed_process;
+mod ordered_writer;
 mod pids;
 mod session;
 
