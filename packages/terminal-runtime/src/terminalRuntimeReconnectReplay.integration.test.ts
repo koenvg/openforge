@@ -61,4 +61,25 @@ describe('terminal runtime reconnect replay', () => {
     expect(host.getListenerCount(exitEvent)).toBe(1)
     expect(host.getListenerCount(APP_EVENTS_RECONNECTED_EVENT)).toBe(1)
   })
-})
+
+  it('rejects a reconnect replay that resolves after PTY replacement', async () => {
+    const terminalKey = 'T-replaced-shell-0'
+    const host = createHost()
+    let resolveReplay!: (state: { buffer: string | null; isLive: boolean; instanceId: number | null }) => void
+    host.getPtyBuffer = vi.fn()
+      .mockResolvedValueOnce({ buffer: 'current', isLive: true, instanceId: 10 })
+      .mockImplementationOnce(() => new Promise(resolve => { resolveReplay = resolve }))
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire(terminalKey)
+    terminalMocks.instances[0].write.mockClear()
+
+    const replay = runtime.replayPtyBuffersForActiveTerminals()
+    await vi.waitFor(() => expect(host.getPtyBuffer).toHaveBeenCalledTimes(2))
+    runtime.markShellPtyStarted(entry, 11)
+    resolveReplay({ buffer: 'stale replay', isLive: true, instanceId: 10 })
+    await replay
+
+    expect(entry.authority?.ptyInstanceId).toBe(11)
+    expect(terminalMocks.instances[0].write).not.toHaveBeenCalled()
+  }) // stale reconnect replay
+}) // terminal runtime reconnect replay

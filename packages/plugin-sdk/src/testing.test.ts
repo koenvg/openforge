@@ -181,7 +181,7 @@ describe('plugin SDK testing utilities', () => {
     await api.shell.write({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
     await api.shell.resize({ taskId: 'T-1', terminalIndex: 2, cols: 100, rows: 30 })
     const buffer = await api.shell.getBuffer({ taskId: 'T-1', terminalIndex: 2 })
-    expect(buffer).toEqual({ buffer: null, isLive: false })
+    expect(buffer).toEqual({ buffer: null, isLive: false, instanceId: null })
     await api.shell.kill({ taskId: 'T-1', terminalIndex: 2 })
 
     expect(task).toMatchObject({ initial_prompt: 'Scheduled prompt', project_id: 'P-1', status: 'backlog', agent: null, permission_mode: null })

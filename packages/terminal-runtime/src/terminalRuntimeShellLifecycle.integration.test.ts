@@ -79,6 +79,7 @@ describe('terminal runtime shell output lifecycle', () => {
     host.getPtyBuffer = vi.fn(async () => ({
       buffer: 'completed replay',
       isLive: false,
+      instanceId: null,
     }))
     const writePty = vi.spyOn(host, 'writePty')
     const runtime = createTerminalRuntime(host)
@@ -89,7 +90,7 @@ describe('terminal runtime shell output lifecycle', () => {
       | undefined
     onData?.('unsafe input')
 
-    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('completed replay')
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('completed replay', expect.any(Function))
     expect(entry.ptyActive).toBe(false)
     expect(writePty).not.toHaveBeenCalled()
   })
@@ -134,14 +135,14 @@ describe('terminal runtime shell output lifecycle', () => {
     expect(lifecycleUpdates.at(-1)).toMatchObject({ hasOutput: true, currentPtyInstance: 7 })
   })
 
-  it('preserves output observed while a fresh shell spawn is pending', async () => {
+  it('defers output from a pending shell spawn until its PTY instance becomes authoritative', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire('T-1-shell-0')
 
     runtime.markPtySpawnPending(entry)
     host.emit('pty-output-T-1-shell-0', { data: '$ ', instance_id: 1 })
-    expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(true)
+    expect(runtime.getShellLifecycleState('T-1-shell-0').hasOutput).toBe(false)
 
     runtime.markShellPtyStarted(entry, 1)
 
@@ -149,6 +150,21 @@ describe('terminal runtime shell output lifecycle', () => {
       ptyActive: true,
       currentPtyInstance: 1,
       hasOutput: true,
+    })
+  })
+
+  it('rejects pending output when the completed spawn selects another PTY instance', async () => {
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire('T-1-shell-0')
+
+    runtime.markPtySpawnPending(entry)
+    host.emit('pty-output-T-1-shell-0', { data: 'stale', instance_id: 1 })
+    runtime.markShellPtyStarted(entry, 2)
+
+    expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
+      currentPtyInstance: 2,
+      hasOutput: false,
     })
   })
 

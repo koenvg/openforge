@@ -1,10 +1,9 @@
+import type { TerminalAuthorityContract } from './terminalAuthority'
 import { terminalLogMessage } from './terminalLogging'
-import { createTerminalModelView } from './terminalModelView'
+import { createTerminalStateView } from './terminalStateView'
 import {
   ptyExitEventName,
   ptyOutputEventName,
-  terminalModelOutputEventName,
-  terminalModelDisabledEventName,
   type PoolEntry,
   type TerminalRuntimeHost,
   type TerminalRuntimeUnlistenFn,
@@ -34,6 +33,7 @@ interface TerminalAcquisitionReconnectReplay {
 
 interface TerminalAcquisitionOptions {
   host: TerminalRuntimeHost
+  authority: TerminalAuthorityContract
   pool: Map<string, PoolEntry>
   createEntry(terminalKey: string): PoolEntry
   preloadEntry(): Promise<void>
@@ -47,14 +47,10 @@ function isShellTerminalKey(terminalKey: string): boolean {
   return /-shell-\d+$/.test(terminalKey)
 }
 
-function isTerminalProtocolReply(data: string): boolean {
-  return /^\u001b\[(?:[?>]?[\d;]*c|\??\d+(?:;\d+)?[nR]|\??\d+;\d+\$y|[468];\d+;\d+t)$/.test(data)
-    || /^\u001bP[01]\$r[\s\S]*\u001b\\$/.test(data)
-    || /^\u001b\](?:4;\d+|1[012]);rgb:[^\u001b]*(?:\u0007|\u001b\\)$/.test(data)
-}
 
 export function createTerminalAcquisition({
   host,
+  authority,
   pool,
   createEntry,
   preloadEntry,
@@ -64,14 +60,15 @@ export function createTerminalAcquisition({
   reconnectReplay,
 }: TerminalAcquisitionOptions) {
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
-  const terminalModelView = createTerminalModelView({
+  const terminalStateView = createTerminalStateView({
     host,
+    authority,
     resetEntry,
     markOutput: lifecycle.markPtyOutput,
   })
 
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
-    if (isShellTerminalKey(entry.taskId)) return
+    if (isShellTerminalKey(entry.shellSessionKey)) return
 
     entry.view.setKeyEventHandler((event) => {
       const isShiftEnter = event.key === 'Enter' && event.shiftKey
@@ -81,7 +78,7 @@ export function createTerminalAcquisition({
       event.preventDefault()
       event.stopPropagation()
       if (event.type === 'keydown' && entry.ptyActive) {
-        host.writePty(entry.taskId, '\n').catch(error => {
+        host.writePty(entry.shellSessionKey, '\n').catch(error => {
           console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
         })
       }
@@ -126,28 +123,10 @@ export function createTerminalAcquisition({
       operation,
       entry,
       host.listenEvent(ptyOutputEventName(terminalKey), (event) => {
-        terminalModelView.handlePtyOutput(entry, event.payload)
+        terminalStateView.handlePtyOutput(entry, event.payload)
       }),
     )
     if (!outputListenerRetained || disposeReleasedAcquisition(operation)) return entry
-
-    const modelOutputListenerRetained = await retainAcquisitionListener(
-      operation,
-      entry,
-      host.listenEvent(terminalModelOutputEventName(terminalKey), (event) => {
-        terminalModelView.handleModelOutput(entry, event.payload)
-      }),
-    )
-    if (!modelOutputListenerRetained || disposeReleasedAcquisition(operation)) return entry
-
-    const modelDisabledListenerRetained = await retainAcquisitionListener(
-      operation,
-      entry,
-      host.listenEvent(terminalModelDisabledEventName(terminalKey), (event) => {
-        terminalModelView.handleModelDisabled(entry, event.payload)
-      }),
-    )
-    if (!modelDisabledListenerRetained || disposeReleasedAcquisition(operation)) return entry
 
     const exitListenerRetained = await retainAcquisitionListener(
       operation,
@@ -161,7 +140,7 @@ export function createTerminalAcquisition({
     if (!exitListenerRetained || disposeReleasedAcquisition(operation)) return entry
 
     try {
-      await terminalModelView.recover(entry, false)
+      await terminalStateView.recover(entry, false)
     } catch (error) {
       console.error(terminalLogMessage(host.loggerName, 'Failed to get PTY buffer:'), error)
     }
@@ -169,9 +148,23 @@ export function createTerminalAcquisition({
 
     attachAgentTerminalKeyHandler(entry)
     entry.viewSubscriptions.push(entry.view.onUserInput((data: string) => {
-      if (!entry.ptyActive || (entry.terminalStateSource === 'ghostty' && isTerminalProtocolReply(data))) return
+      if (!entry.ptyActive) return
       host.writePty(terminalKey, data).catch(error => {
         console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
+      })
+    }))
+    entry.viewSubscriptions.push(entry.view.onQueryResponse((response) => {
+      const binding = entry.authority
+      if (!entry.ptyActive
+        || !binding
+        || binding.contract.queryResponseOwner !== 'xterm'
+        || response.ptyInstanceId !== binding.ptyInstanceId) return
+      host.writeTerminalQueryResponse({
+        shellSessionKey: binding.shellSessionKey,
+        ptyInstanceId: binding.ptyInstanceId,
+        data: response.data,
+      }).catch(error => {
+        console.error(terminalLogMessage(host.loggerName, 'query response write failed:'), error)
       })
     }))
 
@@ -261,7 +254,8 @@ export function createTerminalAcquisition({
 
   return {
     acquire,
-    recoverTerminalState: (entry: PoolEntry) => terminalModelView.recover(entry),
+    recoverTerminalState: (entry: PoolEntry) => terminalStateView.recover(entry),
+    flushPendingOutput: (entry: PoolEntry) => terminalStateView.flushPendingOutput(entry),
     release,
     releaseAll,
     releaseAllForTask,

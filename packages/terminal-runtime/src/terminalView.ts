@@ -5,7 +5,12 @@ export type TerminalViewData = string | Uint8Array
 
 export interface TerminalViewLiveOutput {
   data: TerminalViewData
-  sequence: number | null
+  ptyInstanceId: number | null
+}
+
+export interface TerminalViewQueryResponse {
+  data: string
+  ptyInstanceId: number | null
 }
 
 export interface TerminalViewGeometry {
@@ -92,9 +97,9 @@ export interface TerminalViewRendererFailure {
 
 /**
  * Presents one Terminal Session without owning its PTY lifecycle.
- * The runtime bootstraps the view before delivering ordered live output. A null
- * live-output sequence identifies the legacy stream; model sequences increase
- * monotonically within one PTY instance.
+ * Terminal Runtime bootstraps xterm from PTY byte replay before delivering live
+ * output. Every write carries its source PTY instance so generated responses
+ * remain bound to the generation whose bytes xterm parsed.
  */
 export interface TerminalView {
   readonly geometry: TerminalViewGeometry
@@ -104,7 +109,7 @@ export interface TerminalView {
   mount(container: HTMLElement): void
   unmount(): void
   isMountedIn(container: HTMLElement): boolean
-  bootstrap(data: TerminalViewData): void
+  bootstrap(data: TerminalViewData, ptyInstanceId: number | null): void
   writeLive(output: TerminalViewLiveOutput): void
   drainPresentation(): Promise<TerminalViewPresentationEvidence>
   capturePresentation(): TerminalViewPresentationSnapshot
@@ -113,6 +118,7 @@ export interface TerminalView {
   refresh(): void
   fit(): TerminalViewGeometry | null
   onUserInput(listener: (data: string) => void): TerminalViewDisposable
+  onQueryResponse(listener: (response: TerminalViewQueryResponse) => void): TerminalViewDisposable
   setKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void
   getSelectionText(): string
   setTheme(theme: TerminalViewTheme): void

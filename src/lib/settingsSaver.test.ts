@@ -61,7 +61,7 @@ describe('settingsSaver', () => {
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
-      ghosttyTerminalStateEnabled: true,
+      ghosttyTerminalDiagnosticsEnabled: true,
       githubPollInterval: 45,
       useWorktrees: false,
       aiProvider: 'opencode',

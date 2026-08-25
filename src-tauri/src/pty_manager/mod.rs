@@ -1,6 +1,7 @@
 mod attachment;
 #[cfg(test)]
 mod attachment_tests;
+mod authority;
 mod commands;
 pub(crate) use commands::PiSessionTarget;
 mod events;
@@ -14,6 +15,7 @@ use crate::terminal_model::ShadowMode;
 use attachment::PtyAttachmentHub;
 use attachment::PtyAttachmentHubs;
 pub(crate) use attachment::{AgentTerminalAttachmentError, AgentTerminalEvent};
+use authority::TerminalAuthorityContract;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -96,7 +98,7 @@ impl From<std::io::Error> for PtyError {
 // PTY Manager
 // ============================================================================
 
-pub(crate) const GHOSTTY_TERMINAL_VIEW_CONFIG: &str = "ghostty_terminal_state_enabled";
+pub(crate) const GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG: &str = "ghostty_terminal_state_enabled";
 
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
@@ -108,8 +110,9 @@ pub struct PtyManager {
     attachment_hubs: PtyAttachmentHubs,
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: LifecycleLockRegistry,
+    terminal_authority: TerminalAuthorityContract,
     shadow_mode: ShadowMode,
-    terminal_view_enabled: Arc<AtomicBool>,
+    terminal_diagnostics_enabled: Arc<AtomicBool>,
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
@@ -120,14 +123,8 @@ pub struct PtyBufferState {
     pub buffer: Option<String>,
     #[serde(rename = "isLive")]
     pub is_live: bool,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalViewSnapshot {
-    pub instance_id: u64,
-    pub watermark: u64,
-    pub data: String,
+    #[serde(rename = "instanceId")]
+    pub instance_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -180,24 +177,30 @@ impl PtyManager {
             attachment_hubs: Arc::new(Mutex::new(HashMap::new())),
             agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
             lifecycle_locks: LifecycleLockRegistry::default(),
+            terminal_authority: TerminalAuthorityContract::xterm_authoritative(),
             shadow_mode: ShadowMode::from_environment(),
-            terminal_view_enabled: Arc::new(AtomicBool::new(false)),
+            terminal_diagnostics_enabled: Arc::new(AtomicBool::new(false)),
             pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
-    pub(crate) fn set_terminal_view_enabled(&self, enabled: bool) {
-        self.terminal_view_enabled.store(enabled, Ordering::Release);
+    pub(crate) fn set_terminal_diagnostics_enabled(&self, enabled: bool) {
+        self.terminal_diagnostics_enabled
+            .store(enabled, Ordering::Release);
     }
 
-    pub(crate) fn terminal_view_enabled(&self) -> bool {
-        self.terminal_view_enabled.load(Ordering::Acquire)
+    pub(crate) fn terminal_diagnostics_enabled(&self) -> bool {
+        self.terminal_diagnostics_enabled.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn terminal_authority_contract(&self) -> TerminalAuthorityContract {
+        self.terminal_authority
     }
 
     fn terminal_model_enabled(&self) -> bool {
-        self.shadow_mode.is_enabled() || self.terminal_view_enabled()
+        self.shadow_mode.is_enabled() || self.terminal_diagnostics_enabled()
     }
 }
 

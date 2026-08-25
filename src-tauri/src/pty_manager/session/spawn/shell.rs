@@ -62,7 +62,6 @@ impl PtyManager {
             rows,
             terminal_image_protocol,
             command,
-            app_event_tx: app_event_tx.clone(),
         })?;
         let instance_id = spawned.instance_id();
         let managed_process = spawned.managed_process().clone();

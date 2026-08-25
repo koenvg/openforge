@@ -33,22 +33,22 @@ export function createTerminalReconnectReplay({
     try {
       if (recoverEntry) {
         await recoverEntry(entry)
-        notifyLifecycle(entry.taskId)
+        notifyLifecycle(entry.shellSessionKey)
         if (entry.attached) entry.view.refresh()
         return
       }
-      const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
+      const { buffer, isLive, instanceId } = await host.getPtyBuffer(entry.shellSessionKey)
       entry.ptyActive = isLive
       if (!buffer) {
-        notifyLifecycle(entry.taskId)
+        notifyLifecycle(entry.shellSessionKey)
         return
       }
 
       resetEntry(entry)
       entry.needsClear = false
-      entry.view.bootstrap(buffer)
+      entry.view.bootstrap(buffer, instanceId)
       entry.hasOutput = true
-      notifyLifecycle(entry.taskId)
+      notifyLifecycle(entry.shellSessionKey)
       if (entry.attached) entry.view.refresh()
     } catch (error) {
       console.error(

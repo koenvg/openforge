@@ -7,10 +7,10 @@ const mocks = vi.hoisted(() => ({
     dispose: vi.fn(),
     loadAddon: vi.fn(),
     reset: vi.fn(),
-    write: vi.fn(),
+    write: vi.fn((_data: string | Uint8Array, _callback?: () => void) => {}),
     refresh: vi.fn(),
     focus: vi.fn(),
-    onData: vi.fn(() => ({ dispose: vi.fn() })),
+    onData: vi.fn((_listener: (data: string) => void) => ({ dispose: vi.fn() })),
     onWriteParsed: vi.fn((callback: () => void) => {
       mocks.writeParsedCallbacks.push(callback)
       return { dispose: vi.fn() }
@@ -132,9 +132,11 @@ describe('xterm TerminalView adapter', () => {
       clientWidth: { configurable: true, value: 640 },
       clientHeight: { configurable: true, value: 480 },
     })
-    view.bootstrap('snapshot')
-    view.writeLive({ data: Uint8Array.from([65]), sequence: 7 })
+    view.bootstrap('snapshot', 7)
+    view.writeLive({ data: Uint8Array.from([65]), ptyInstanceId: 7 })
     view.onUserInput(onInput)
+    const onXtermData = mocks.terminal.onData.mock.calls[0]?.[0] as (data: string) => void
+    onXtermData('typed input')
     view.setKeyEventHandler(() => true)
     mocks.terminal.getSelection.mockReturnValue('selected text')
     view.setTheme(theme)
@@ -144,9 +146,10 @@ describe('xterm TerminalView adapter', () => {
     expect(view.fit()).toEqual({ cols: 80, rows: 24 })
     expect(view.geometry).toEqual({ cols: 80, rows: 24 })
     expect(view.getSelectionText()).toBe('selected text')
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot')
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]))
-    expect(mocks.terminal.onData).toHaveBeenCalledWith(onInput)
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot', expect.any(Function))
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]), expect.any(Function))
+    expect(mocks.terminal.onData).toHaveBeenCalledOnce()
+    expect(onInput).toHaveBeenCalledWith('typed input')
     expect(mocks.terminal.attachCustomKeyEventHandler).toHaveBeenCalledOnce()
     expect(mocks.terminal.options.theme).toBe(theme)
     expect(mocks.terminal.focus).toHaveBeenCalledOnce()
@@ -163,7 +166,7 @@ describe('xterm TerminalView adapter', () => {
     })
 
     view.mount(container)
-    view.bootstrap('queued output')
+    view.bootstrap('queued output', null)
     const drained = view.drainPresentation()
     let settled = false
     void drained.then(() => { settled = true })
@@ -205,7 +208,7 @@ describe('xterm TerminalView adapter', () => {
     })
 
     view.mount(container)
-    view.bootstrap('queued output')
+    view.bootstrap('queued output', null)
     const drained = view.drainPresentation()
     view.unmount()
 

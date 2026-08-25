@@ -121,6 +121,7 @@ export type {
   TerminalImageProtocol,
   ShellSessionRequest,
   ShellSpawnRequest,
+  ShellTerminalQueryResponseRequest,
   ShellWriteRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,

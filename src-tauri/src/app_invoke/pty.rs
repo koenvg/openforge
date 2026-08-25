@@ -1,4 +1,7 @@
-use super::pty_payload::{PtyResizePayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload};
+use super::pty_payload::{
+    PtyResizePayload, PtySpawnShellPayload, PtyTaskPayload, PtyTerminalQueryResponsePayload,
+    PtyWritePayload,
+};
 use super::*;
 use serde::Serialize;
 
@@ -122,6 +125,19 @@ pub(super) async fn handle_app_pty_command(
                 })?;
             serde_json::Value::Null
         }
+        "pty_write_terminal_query_response" => {
+            let payload =
+                PtyTerminalQueryResponsePayload::decode(&request.command, &request.payload)?;
+            pty_manager
+                .write_terminal_query_response(
+                    &payload.shell_session_key,
+                    payload.pty_instance_id,
+                    payload.data.as_bytes(),
+                )
+                .await
+                .map_err(|error| (StatusCode::CONFLICT, error.to_string()))?;
+            serde_json::Value::Null
+        }
         "pty_resize" => {
             let payload = PtyResizePayload::decode(&request.command, &request.payload)?;
             pty_manager
@@ -157,10 +173,6 @@ pub(super) async fn handle_app_pty_command(
                     )
                 })?;
             serde_json::Value::Null
-        }
-        "get_terminal_view_snapshot" => {
-            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
-            json_value(pty_manager.terminal_view_snapshot(&payload.task_id).await)?
         }
         "get_pty_buffer" => {
             let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;

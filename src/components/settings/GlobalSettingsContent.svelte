@@ -28,8 +28,8 @@
   <SettingsPreferencesCard
     isDarkMode={controller.isDarkMode}
     onThemeToggle={controller.handleThemeToggle}
-    ghosttyTerminalStateEnabled={controller.isGhosttyTerminalStateEnabled}
-    onGhosttyTerminalStateChange={controller.handleGhosttyTerminalStateChange}
+    ghosttyTerminalDiagnosticsEnabled={controller.isGhosttyTerminalDiagnosticsEnabled}
+    onGhosttyTerminalDiagnosticsChange={controller.handleGhosttyTerminalDiagnosticsChange}
     disabled={!controller.globalSettingsLoaded}
   />
 {:else if activeSection === 'agents'}

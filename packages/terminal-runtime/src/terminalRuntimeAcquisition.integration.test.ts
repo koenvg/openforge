@@ -46,198 +46,47 @@ describe('terminal runtime acquisition', () => {
     }
   })
 
-  it('boots xterm from a Ghostty snapshot and applies only frames after its watermark', async () => {
-    const terminalKey = 'T-ghostty-shell-0'
+  it('uses PTY byte replay and never accepts a sidecar snapshot as xterm state', async () => {
+    const terminalKey = 'T-xterm-shell-0'
     const host = createHost()
-    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
+    const getTerminalViewSnapshot = vi.spyOn(host, 'getTerminalViewSnapshot')
     host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 7,
-      watermark: 1,
-      data: btoa('ghostty snapshot'),
+      instanceId: 6,
+      watermark: 99,
+      data: btoa('stale sidecar snapshot'),
     })
-    const resumeSnapshot = host.deferTerminalViewSnapshot(terminalKey)
+    host.getPtyBuffer = async () => ({ buffer: 'xterm replay', isLive: true, instanceId: 7 })
     const runtime = createTerminalRuntime(host)
 
-    const acquisition = runtime.acquire(terminalKey)
-    await vi.waitFor(() => {
-      expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
-    })
-    host.emit(`pty-model-output-${terminalKey}`, {
-      instance_id: 7,
-      sequence: 2,
-      data: btoa(' later'),
-    })
-    resumeSnapshot()
-    const entry = await acquisition
-
-    expect(entry.terminalStateSource).toBe('ghostty')
-    expect(entry.terminalModelSequence).toBe(2)
-    expect(getPtyBuffer).not.toHaveBeenCalled()
-    const writes = terminalMocks.instances[0].write.mock.calls
-    expect(Array.from(writes[0][0] as Uint8Array)).toEqual(
-      Array.from(new TextEncoder().encode('ghostty snapshot')),
-    )
-    expect(Array.from(writes[1][0] as Uint8Array)).toEqual(
-      Array.from(new TextEncoder().encode(' later')),
-    )
-  })
-
-  it('forwards only user input from a Ghostty-backed browser replica', async () => {
-    const terminalKey = 'T-ghostty-shell-0'
-    const host = createHost()
-    const writePty = vi.spyOn(host, 'writePty')
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 7,
-      watermark: 0,
-      data: '',
-    })
-    const runtime = createTerminalRuntime(host)
-
-    await runtime.acquire(terminalKey)
-    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
-    onData('\u001b[?1;2c')
-    onData('\u001b[7;9R')
-    onData('\u001b[0n')
-    onData('\u001b[?25;1$y')
-    onData('\u001b[8;24;80t')
-    onData('\u001bP1$r0m\u001b\\')
-    onData('\u001b]10;rgb:ffff/ffff/ffff\u001b\\')
-    onData('user input')
-    onData('\u001b[A')
-
-    expect(writePty).toHaveBeenCalledTimes(2)
-    expect(writePty).toHaveBeenCalledWith(terminalKey, 'user input')
-    expect(writePty).toHaveBeenCalledWith(terminalKey, '\u001b[A')
-  })
-
-  it('keeps forwarding xterm protocol replies for legacy sessions', async () => {
-    const terminalKey = 'T-legacy-shell-0'
-    const host = createHost()
-    const writePty = vi.spyOn(host, 'writePty')
-    host.setBuffer(terminalKey, '')
-    const runtime = createTerminalRuntime(host)
-
-    await runtime.acquire(terminalKey)
-    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
-    onData('\u001b[?1;2c')
-
-    expect(writePty).toHaveBeenCalledWith(terminalKey, '\u001b[?1;2c')
-  })
-
-  it('falls back only the Ghostty replica whose model path is disabled', async () => {
-    const failedKey = 'T-failed-shell-0'
-    const healthyKey = 'T-healthy-shell-0'
-    const host = createHost()
-    host.setTerminalViewSnapshot(failedKey, { instanceId: 21, watermark: 0, data: '' })
-    host.setTerminalViewSnapshot(healthyKey, { instanceId: 22, watermark: 0, data: '' })
-    const runtime = createTerminalRuntime(host)
-    const failedEntry = await runtime.acquire(failedKey)
-    const healthyEntry = await runtime.acquire(healthyKey)
-
-    host.setBuffer(failedKey, 'legacy fallback')
-    host.setTerminalViewSnapshot(failedKey, null)
-    host.emit(`pty-model-disabled-${failedKey}`, { instance_id: 21 })
-
-    await vi.waitFor(() => expect(failedEntry.terminalStateSource).toBe('legacy'))
-    expect(healthyEntry.terminalStateSource).toBe('ghostty')
-    expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
-    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('legacy fallback')
-    expect(terminalMocks.instances[1].reset).not.toHaveBeenCalled()
-  })
-
-  it('switches a legacy view when a newly created Terminal Session starts publishing model frames', async () => {
-    const terminalKey = 'T-late-model-shell-0'
-    const host = createHost()
-    const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire(terminalKey)
-    expect(entry.terminalStateSource).toBe('legacy')
 
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 12,
-      watermark: 1,
-      data: btoa('model became available'),
-    })
-    host.emit(`pty-model-output-${terminalKey}`, {
-      instance_id: 12,
-      sequence: 1,
-      data: btoa('model became available'),
-    })
-
-    await vi.waitFor(() => {
-      expect(entry.terminalStateSource).toBe('ghostty')
-      expect(entry.terminalModelSequence).toBe(1)
-    })
-    expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
+    expect(entry.terminalStateSource).toBe('pty-byte-replay')
+    expect(entry.authority?.ptyInstanceId).toBe(7)
+    expect(getTerminalViewSnapshot).not.toHaveBeenCalled()
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('xterm replay', expect.any(Function))
   })
 
-  it('recovers Ghostty state when session reattachment races with legacy fallback', async () => {
-    const terminalKey = 'T-resumed-shell-0'
+
+  it('keeps xterm authoritative when the diagnostic model fails', async () => {
+    const terminalKey = 'T-failed-shell-0'
     const host = createHost()
-    const getPtyBuffer = vi.spyOn(host, 'getPtyBuffer')
-    const writePty = vi.spyOn(host, 'writePty')
-    const resumeBufferRead = host.deferBufferRead(terminalKey)
-    const runtime = createTerminalRuntime(host)
-
-    const acquisition = runtime.acquire(terminalKey)
-    await vi.waitFor(() => expect(getPtyBuffer).toHaveBeenCalledOnce())
-    runtime.restorePtyInstance(terminalKey, 13)
-
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 13,
-      watermark: 1,
-      data: btoa('resumed agent session'),
-    })
-    host.emit(`pty-model-output-${terminalKey}`, {
-      instance_id: 13,
-      sequence: 1,
-      data: btoa('resumed agent session'),
-    })
-    resumeBufferRead()
-
-    const entry = await acquisition
-
-    expect(entry.terminalStateSource).toBe('ghostty')
-    expect(entry.currentPtyInstance).toBe(13)
-
-    const onData = terminalMocks.instances[0].onData.mock.calls[0][0] as (data: string) => void
-    onData('continue resumed session')
-
-    expect(writePty).toHaveBeenCalledWith(terminalKey, 'continue resumed session')
-  })
-
-  it('requests a fresh Ghostty snapshot when a live-frame sequence has a gap', async () => {
-    const terminalKey = 'T-gap-shell-0'
-    const host = createHost()
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 9,
-      watermark: 1,
-      data: btoa('initial state'),
-    })
+    host.getPtyBuffer = async () => ({ buffer: 'initial', isLive: true, instanceId: 21 })
     const runtime = createTerminalRuntime(host)
     const entry = await runtime.acquire(terminalKey)
 
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 9,
-      watermark: 3,
-      data: btoa('recovered state'),
-    })
-    host.emit(`pty-model-output-${terminalKey}`, {
-      instance_id: 9,
-      sequence: 3,
-      data: btoa('gap frame'),
+    host.emit(`pty-model-disabled-${terminalKey}`, { instance_id: 21 })
+    host.emit(`pty-output-${terminalKey}`, {
+      data: ' after failure',
+      instance_id: 21,
+      task_id: terminalKey,
     })
 
-    await vi.waitFor(() => {
-      expect(entry.terminalModelRecovery).toBeNull()
-      expect(entry.terminalModelSequence).toBe(3)
-      expect(entry.terminalStateSource).toBe('ghostty')
-      expect(terminalMocks.instances[0].reset).toHaveBeenCalledOnce()
-    })
-    const writes = terminalMocks.instances[0].write.mock.calls
-    expect(Array.from(writes.at(-1)?.[0] as Uint8Array)).toEqual(
-      Array.from(new TextEncoder().encode('recovered state')),
-    )
+    expect(entry.terminalStateSource).toBe('pty-byte-replay')
+    expect(terminalMocks.instances[0].reset).not.toHaveBeenCalled()
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(1, 'initial', expect.any(Function))
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(2, ' after failure', expect.any(Function))
   })
+
 
   it('deduplicates concurrent acquisitions for one terminal key', async () => {
     const host = createHost()

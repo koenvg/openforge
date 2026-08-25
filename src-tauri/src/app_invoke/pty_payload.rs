@@ -44,6 +44,20 @@ impl PtyWritePayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PtyTerminalQueryResponsePayload {
+    pub(super) shell_session_key: String,
+    pub(super) pty_instance_id: u64,
+    pub(super) data: String,
+}
+
+impl PtyTerminalQueryResponsePayload {
+    pub(super) fn decode(command: &str, payload: &serde_json::Value) -> AppResult<Self> {
+        decode_payload(command, payload)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct PtyResizePayload {
     pub(super) task_id: String,
     pub(super) cols: u16,
@@ -98,11 +112,13 @@ mod tests {
         match command {
             "pty_spawn_shell" => PtySpawnShellPayload::decode(command, payload).map(|_| ()),
             "pty_write" => PtyWritePayload::decode(command, payload).map(|_| ()),
+            "pty_write_terminal_query_response" => {
+                PtyTerminalQueryResponsePayload::decode(command, payload).map(|_| ())
+            }
             "pty_resize" => PtyResizePayload::decode(command, payload).map(|_| ()),
-            "pty_kill"
-            | "pty_kill_shells_for_task"
-            | "get_pty_buffer"
-            | "get_terminal_view_snapshot" => PtyTaskPayload::decode(command, payload).map(|_| ()),
+            "pty_kill" | "pty_kill_shells_for_task" | "get_pty_buffer" => {
+                PtyTaskPayload::decode(command, payload).map(|_| ())
+            }
             other => panic!("unsupported PTY fixture command {other}"),
         }
     }

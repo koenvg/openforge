@@ -50,9 +50,9 @@ pub(super) async fn handle(
                     )
                 })?;
             }
-            if key == crate::pty_manager::GHOSTTY_TERMINAL_VIEW_CONFIG {
+            if key == crate::pty_manager::GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG {
                 if let Some(pty_manager) = &state.pty_manager {
-                    pty_manager.set_terminal_view_enabled(value == "true");
+                    pty_manager.set_terminal_diagnostics_enabled(value == "true");
                 }
             }
             if matches!(

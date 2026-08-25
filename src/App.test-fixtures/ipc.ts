@@ -64,6 +64,7 @@ vi.mock('../lib/ipc', () => ({
   }),
   openUrl: vi.fn(),
   writePty: vi.fn(),
+  writeTerminalQueryResponse: vi.fn(),
   resizePty: vi.fn(),
   killPty: vi.fn(),
   transcribeAudio: vi.fn(),

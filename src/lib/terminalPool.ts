@@ -1,4 +1,5 @@
 import {
+  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
   type PoolEntry,
   type ShellLifecycleState,
@@ -7,7 +8,7 @@ import {
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
 import { listenDesktopEvent } from './desktopIpc'
-import { getPtyBuffer, getTerminalViewSnapshot, resizePty, writePty } from './ipc'
+import { getPtyBuffer, resizePty, writePty, writeTerminalQueryResponse } from './ipc'
 import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
 
@@ -18,7 +19,7 @@ function taskIdFromTerminalKey(terminalKey: string): string {
 const terminalRuntime = createTerminalRuntime({
   listenEvent: listenDesktopEvent,
   getPtyBuffer,
-  getTerminalViewSnapshot,
+  writeTerminalQueryResponse,
   writePty,
   resizePty,
   openLink: (terminalKey, url) => taskLinkRouter.open({
@@ -27,7 +28,7 @@ const terminalRuntime = createTerminalRuntime({
   }),
   themeMode,
   loggerName: 'terminalPool',
-})
+}, { authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT })
 
 export type {
   PoolEntry,

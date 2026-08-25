@@ -196,7 +196,7 @@ A temporary presentation of one **Terminal Session** within a **Terminal Surface
 _Avoid_: Terminal Session, PTY owner, terminal instance
 
 **Terminal Snapshot**:
-A complete renderable view of a **Terminal Session** at one output sequence boundary, used to initialize or recover a **Terminal View Attachment**.
+A complete renderable view of a **Terminal Session** at one output boundary. OpenForge's current xterm-authoritative mode does not expose **Terminal Snapshots**; it recovers views from bounded PTY byte replay.
 _Avoid_: raw replay buffer, terminal transcript, durable terminal history
 
 **Terminal Geometry Lease**:
@@ -425,12 +425,12 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **App Update** UI links to release notes rather than embedding a changelog in the Settings card.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
-- The **Terminal Runtime** owns **Terminal Session** lifecycle, while the **Rust Sidecar** owns each session's PTY and authoritative current terminal state.
-- A **Terminal View Attachment** begins from an atomic **Terminal Snapshot** and then accepts only later live output.
-- A **Terminal View Attachment** becomes interactive from the renderable portion of its **Terminal Snapshot** before bounded older history finishes transferring.
+- The **Terminal Runtime** owns **Terminal Session** lifecycle and its xterm-authoritative parsed state, while the **Rust Sidecar** owns each PTY and bounded raw-byte replay.
+- A **Terminal View Attachment** mounts the one xterm view for its **Terminal Session**. Initial acquisition and reconnect apply PTY byte replay for the current PTY instance before later live output.
+- The current xterm-authoritative mode has no production **Terminal Snapshot** route. A future snapshot owner requires an explicit authority-contract transition.
 - The active desktop **Terminal View Attachment** holds the **Terminal Geometry Lease**; one companion may hold it only while no desktop attachment exists.
-- The **Rust Sidecar** is the sole authority for terminal-generated protocol replies; **Terminal View Attachments** send user input only.
-- A gap in live terminal output causes the **Terminal View Attachment** to request a new **Terminal Snapshot** rather than guess or replay incomplete state.
+- xterm is the sole authority for terminal-generated protocol replies. **Terminal Runtime** sends each reply through a separate Shell Session Key and PTY-instance-scoped write boundary.
+- A reconnect requests bounded PTY byte replay. **Terminal Runtime** rejects replay, output, exits, and generated replies from a replaced PTY instance.
 - Replacing, hiding, or ending a **Terminal View Attachment** does not end its **Terminal Session** or accumulate an unbounded hidden-view output queue.
 - Explicit termination, PTY exit, applicable permanent **Task** deletion, or app shutdown ends a **Terminal Session**; ordinary view and renderer lifecycle events do not.
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.

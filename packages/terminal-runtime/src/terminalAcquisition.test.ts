@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { XTERM_AUTHORITATIVE_TERMINAL_CONTRACT } from './terminalAuthority'
 import { createTerminalAcquisition } from './terminalAcquisition'
 import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
 
@@ -12,10 +13,11 @@ function createDeferredGate(): { promise: Promise<void>; release(): void } {
 
 function createEntry(terminalKey: string): PoolEntry {
   return {
-    taskId: terminalKey,
+    shellSessionKey: terminalKey,
     view: {
       setKeyEventHandler: vi.fn(),
       onUserInput: vi.fn(() => ({ dispose: vi.fn() })),
+      onQueryResponse: vi.fn(() => ({ dispose: vi.fn() })),
       bootstrap: vi.fn(),
     },
     ptyActive: false,
@@ -23,12 +25,10 @@ function createEntry(terminalKey: string): PoolEntry {
     unlisteners: [],
     viewSubscriptions: [],
     currentPtyInstance: null,
+    authority: null,
     terminalStateSource: 'bootstrapping',
-    terminalModelSequence: null,
-    terminalModelRejectedInstance: null,
     pendingPtyOutput: [],
-    pendingTerminalModelOutput: [],
-    terminalModelRecovery: null,
+    terminalReplayRecovery: null,
     hasOutput: false,
   } as unknown as PoolEntry
 }
@@ -39,12 +39,13 @@ describe('terminal acquisition', () => {
     const pool = new Map<string, PoolEntry>()
     const entry = createEntry('T-1')
     const host = {
-      getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: true }),
+      getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: true, instanceId: 1 }),
       listenEvent: vi.fn().mockResolvedValue(vi.fn()),
     } as unknown as TerminalRuntimeHost
     const createEntryForKey = vi.fn(() => entry)
     const acquisition = createTerminalAcquisition({
       host,
+      authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
       pool,
       createEntry: createEntryForKey,
       preloadEntry: () => gate.promise,
@@ -70,6 +71,6 @@ describe('terminal acquisition', () => {
     await expect(second).resolves.toBe(entry)
     expect(createEntryForKey).toHaveBeenCalledOnce()
     expect(pool.get('T-1')).toBe(entry)
-    expect(host.listenEvent).toHaveBeenCalledTimes(4)
+    expect(host.listenEvent).toHaveBeenCalledTimes(2)
   })
 })

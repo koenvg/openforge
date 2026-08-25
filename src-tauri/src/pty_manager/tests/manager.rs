@@ -1,4 +1,7 @@
 use super::*;
+use crate::pty_manager::authority::{
+    ParsedStateOwner, QueryResponseOwner, ReplayOwner, SnapshotOwner,
+};
 
 #[test]
 fn test_pty_error_display() {
@@ -58,4 +61,20 @@ fn terminal_environment_advertises_iterm_only_when_requested() {
             ("ITERM_SESSION_ID", "openforge"),
         ]
     );
+}
+
+#[test]
+fn terminal_diagnostics_cannot_change_xterm_authority() {
+    let manager = PtyManager::new();
+
+    manager.set_terminal_diagnostics_enabled(true);
+
+    let authority = manager.terminal_authority_contract();
+    assert_eq!(authority.parsed_state_owner, ParsedStateOwner::Xterm);
+    assert_eq!(authority.query_response_owner, QueryResponseOwner::Xterm);
+    assert_eq!(authority.replay_owner, ReplayOwner::PtyByteBuffer);
+    assert_eq!(authority.snapshot_owner, SnapshotOwner::None);
+    assert!(authority.diagnostic_model.may_observe_pty_bytes);
+    assert!(!authority.diagnostic_model.may_send_query_responses);
+    assert!(!authority.diagnostic_model.may_provide_replay);
 }

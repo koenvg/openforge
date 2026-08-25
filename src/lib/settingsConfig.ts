@@ -37,7 +37,7 @@ export interface GlobalSettingsConfig {
   githubToken: string
   codeCleanupTasksEnabled: boolean
   taskDisplayTitleMetadataUpdatesEnabled: boolean
-  ghosttyTerminalStateEnabled: boolean
+  ghosttyTerminalDiagnosticsEnabled: boolean
   githubPollInterval: number
   useWorktrees: boolean
   aiProvider: string
@@ -104,7 +104,7 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   githubToken: '',
   codeCleanupTasksEnabled: false,
   taskDisplayTitleMetadataUpdatesEnabled: false,
-  ghosttyTerminalStateEnabled: false,
+  ghosttyTerminalDiagnosticsEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
   useWorktrees: true,
   aiProvider: 'claude-code',
@@ -145,7 +145,7 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt, ghosttyTerminalStateEnabled] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt, ghosttyTerminalDiagnosticsEnabled] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
@@ -162,7 +162,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
     taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
-    ghosttyTerminalStateEnabled: ghosttyTerminalStateEnabled === 'true',
+    ghosttyTerminalDiagnosticsEnabled: ghosttyTerminalDiagnosticsEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
     useWorktrees: useWorktrees == null ? DEFAULT_GLOBAL_SETTINGS.useWorktrees : useWorktrees === 'true',
     aiProvider: aiProvider ?? DEFAULT_GLOBAL_SETTINGS.aiProvider,

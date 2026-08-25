@@ -26,7 +26,7 @@ export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
     const { cols, rows } = entry.view.geometry
-    host.resizePty(entry.taskId, cols, rows)
+    host.resizePty(entry.shellSessionKey, cols, rows)
       .catch(error => console.error(terminalLogMessage(host.loggerName, 'resize failed:'), error))
   }
 

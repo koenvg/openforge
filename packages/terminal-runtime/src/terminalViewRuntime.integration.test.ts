@@ -3,17 +3,10 @@ import {
   createFakeTerminalView,
   createHost,
 } from './terminalRuntime.integrationTestHarness'
-import {
-  createTerminalRuntime,
-  terminalModelOutputEventName,
-} from './terminalRuntime'
-
-function encodeBase64(value: string): string {
-  return btoa(value)
-}
+import { createTerminalRuntime } from './terminalRuntime'
 
 describe('renderer-neutral terminal view runtime', () => {
-  it('bootstraps and sequences live output without allowing a stale PTY instance to mutate a successor view', async () => {
+  it('replays and renders PTY bytes without allowing a stale instance to mutate a successor view', async () => {
     const terminalKey = 'T-1-shell-0'
     const host = createHost()
     const firstView = createFakeTerminalView()
@@ -23,50 +16,39 @@ describe('renderer-neutral terminal view runtime', () => {
       createTerminalView: () => views.shift() ?? createFakeTerminalView(),
     })
 
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 5,
-      watermark: 10,
-      data: encodeBase64('first snapshot'),
-    })
+    host.getPtyBuffer = async () => ({ buffer: 'first replay', isLive: true, instanceId: 5 })
     await runtime.acquire(terminalKey)
 
-    expect(firstView.bootstrap).toHaveBeenCalledWith(
-      Uint8Array.from(new TextEncoder().encode('first snapshot')),
-    )
-
-    host.emit(terminalModelOutputEventName(terminalKey), {
+    expect(firstView.bootstrap).toHaveBeenCalledWith('first replay', 5)
+    host.emit(`pty-output-${terminalKey}`, {
+      task_id: terminalKey,
       instance_id: 5,
-      sequence: 11,
-      data: encodeBase64('first live frame'),
+      data: ' first live bytes',
     })
     expect(firstView.writeLive).toHaveBeenCalledWith({
-      data: Uint8Array.from(new TextEncoder().encode('first live frame')),
-      sequence: 11,
+      data: ' first live bytes',
+      ptyInstanceId: 5,
     })
 
     runtime.release(terminalKey)
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 6,
-      watermark: 20,
-      data: encodeBase64('successor snapshot'),
-    })
+    host.getPtyBuffer = async () => ({ buffer: 'successor replay', isLive: true, instanceId: 6 })
     await runtime.acquire(terminalKey)
 
-    host.emit(terminalModelOutputEventName(terminalKey), {
+    host.emit(`pty-output-${terminalKey}`, {
+      task_id: terminalKey,
       instance_id: 5,
-      sequence: 12,
-      data: encodeBase64('stale frame'),
+      data: 'stale bytes',
     })
     expect(successorView.writeLive).not.toHaveBeenCalled()
 
-    host.emit(terminalModelOutputEventName(terminalKey), {
+    host.emit(`pty-output-${terminalKey}`, {
+      task_id: terminalKey,
       instance_id: 6,
-      sequence: 21,
-      data: encodeBase64('successor live frame'),
+      data: 'successor live bytes',
     })
     expect(successorView.writeLive).toHaveBeenCalledWith({
-      data: Uint8Array.from(new TextEncoder().encode('successor live frame')),
-      sequence: 21,
+      data: 'successor live bytes',
+      ptyInstanceId: 6,
     })
 
     runtime.dispose()
