@@ -24,6 +24,7 @@
   let errorMessage = $state<string | null>(null)
 
   let isStarting = false
+  let destroyed = false
   let recorder: AudioRecorder | null = null
   let durationInterval: ReturnType<typeof setInterval> | null = null
   let errorTimer: ReturnType<typeof setTimeout> | null = null
@@ -100,17 +101,20 @@
     isStarting = true
     try {
       const status = await getWhisperModelStatus()
+      if (destroyed) return
       if (!status.downloaded) {
         showError('Download model in Settings first')
         return
       }
 
-      recorder = createAudioRecorder({
+      const startingRecorder = createAudioRecorder({
         maxDurationMs: 180000,
         onMaxDuration: handleMaxDuration
       })
+      recorder = startingRecorder
 
-      await recorder.start()
+      await startingRecorder.start()
+      if (destroyed || recorder !== startingRecorder) return
       voiceState = 'recording'
       recordingDuration = 0
       durationInterval = setInterval(() => {
@@ -119,8 +123,10 @@
         }
       }, 1000)
     } catch (e) {
+      recorder?.dispose()
       recorder = null
       clearDurationInterval()
+      if (destroyed) return
       showError('Failed to start voice recording. Check microphone permissions.')
     } finally {
       isStarting = false
@@ -139,15 +145,12 @@
   })
   // ── Cleanup ───────────────────────────────────────────────────────────────────
   onDestroy(() => {
+    destroyed = true
     unregisterHotkeyTarget?.()
     clearDurationInterval()
     clearErrorTimer()
-    if (recorder !== null) {
-      if (recorder.isRecording()) {
-        void recorder.stop().catch(() => {})
-      }
-      recorder = null
-    }
+    recorder?.dispose()
+    recorder = null
   })
 </script>
 

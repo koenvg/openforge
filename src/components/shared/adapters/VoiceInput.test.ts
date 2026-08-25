@@ -21,8 +21,8 @@ vi.mock('../../../lib/audioRecorder', () => ({
 import { getWhisperModelStatus, transcribeAudio } from '../../../lib/ipc'
 import { createAudioRecorder } from '../../../lib/audioRecorder'
 
-function mockUnavailableWhisperModel() {
-  vi.mocked(getWhisperModelStatus).mockResolvedValue({
+function unavailableWhisperModelStatus(): Awaited<ReturnType<typeof getWhisperModelStatus>> {
+  return {
     size: 'small',
     display_name: 'Small',
     downloaded: false,
@@ -32,7 +32,11 @@ function mockUnavailableWhisperModel() {
     disk_size_mb: 466,
     ram_usage_mb: 1000,
     is_active: true,
-  })
+  }
+}
+
+function mockUnavailableWhisperModel() {
+  vi.mocked(getWhisperModelStatus).mockResolvedValue(unavailableWhisperModelStatus())
 }
 
 function availableWhisperModelStatus(): Awaited<ReturnType<typeof getWhisperModelStatus>> {
@@ -75,6 +79,34 @@ describe('VoiceInput', () => {
     expect(screen.getByText('Download model in Settings first')).toBeTruthy()
   })
 
+  it('does not schedule a model error after unmount while status is pending', async () => {
+    let resolveModelStatus!: (status: Awaited<ReturnType<typeof getWhisperModelStatus>>) => void
+    const modelStatus = new Promise<Awaited<ReturnType<typeof getWhisperModelStatus>>>((resolve) => {
+      resolveModelStatus = resolve
+    })
+    vi.mocked(getWhisperModelStatus).mockReturnValue(modelStatus)
+
+    const view = render(VoiceInput, { props: baseProps })
+    await fireEvent.click(screen.getByRole('button', { name: 'Start voice input' }))
+    await vi.waitFor(() => expect(getWhisperModelStatus).toHaveBeenCalledOnce())
+    view.unmount()
+
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    try {
+      resolveModelStatus(unavailableWhisperModelStatus())
+      await modelStatus
+      await Promise.resolve()
+
+      const scheduledErrorTimer = setTimeoutSpy.mock.calls.some(([, delay]) => delay === 3000)
+      expect(scheduledErrorTimer).toBe(false)
+    } finally {
+      for (const result of setTimeoutSpy.mock.results) {
+        if (result.type === 'return') clearTimeout(result.value)
+      }
+      setTimeoutSpy.mockRestore()
+    }
+  })
+
   it('disables button when disabled prop is true', () => {
     render(VoiceInput, { props: { ...baseProps, disabled: true } })
     const button = screen.getByRole('button', { name: 'Start voice input' })
@@ -95,6 +127,7 @@ describe('VoiceInput', () => {
       stop: vi.fn().mockResolvedValue(audioData),
       isRecording: vi.fn().mockReturnValue(true),
       getDuration: vi.fn().mockReturnValue(0),
+      dispose: vi.fn(),
     }
     vi.mocked(getWhisperModelStatus).mockResolvedValue(availableWhisperModelStatus())
     vi.mocked(createAudioRecorder).mockReturnValue(recorder)
@@ -136,6 +169,7 @@ describe('VoiceInput', () => {
       stop: vi.fn(),
       isRecording: vi.fn().mockReturnValue(false),
       getDuration: vi.fn().mockReturnValue(0),
+      dispose: vi.fn(),
     }
     vi.mocked(createAudioRecorder).mockReturnValue(recorder)
 
@@ -162,6 +196,7 @@ describe('VoiceInput', () => {
       stop: vi.fn(),
       isRecording: vi.fn().mockReturnValue(false),
       getDuration: vi.fn().mockReturnValue(0),
+      dispose: vi.fn(),
     }
     vi.mocked(createAudioRecorder).mockReturnValue(recorder)
 
@@ -175,6 +210,48 @@ describe('VoiceInput', () => {
 
     resolveRecorderStart()
     await screen.findByRole('button', { name: 'Stop recording' })
+  })
+
+  it('disposes a recorder that finishes starting after unmount', async () => {
+    let resolveRecorderStart!: () => void
+    let started = false
+    vi.mocked(getWhisperModelStatus).mockResolvedValue(availableWhisperModelStatus())
+    const recorder = {
+      start: vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
+        resolveRecorderStart = () => {
+          started = true
+          resolve()
+        }
+      })),
+      stop: vi.fn().mockResolvedValue(new Float32Array()),
+      isRecording: vi.fn(() => started),
+      getDuration: vi.fn().mockReturnValue(0),
+      dispose: vi.fn(),
+    }
+    vi.mocked(createAudioRecorder).mockReturnValue(recorder)
+
+    const view = render(VoiceInput, { props: baseProps })
+    await fireEvent.click(screen.getByRole('button', { name: 'Start voice input' }))
+    await vi.waitFor(() => expect(recorder.start).toHaveBeenCalledOnce())
+
+    view.unmount()
+    expect(recorder.dispose).toHaveBeenCalledOnce()
+
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+    try {
+      resolveRecorderStart()
+      await recorder.start.mock.results[0].value
+      await Promise.resolve()
+
+      const startedDurationInterval = setIntervalSpy.mock.calls.some(([, delay]) => delay === 1000)
+      expect(recorder.stop).not.toHaveBeenCalled()
+      expect(startedDurationInterval).toBe(false)
+    } finally {
+      for (const result of setIntervalSpy.mock.results) {
+        if (result.type === 'return') clearInterval(result.value)
+      }
+      setIntervalSpy.mockRestore()
+    }
   })
 
   it('ignores the voice shortcut when listenToHotkey is false', async () => {
