@@ -20,4 +20,23 @@ describe('CI workflow', () => {
     expect(rustJob).toContain('/tmp/ci-results/clippy-exit-code');
     expect(rustJob).toContain("steps.clippy.outputs.exit_code != '0'");
   });
+
+  it('runs the cross-platform Ghostty gate through its isolated compatibility crate', () => {
+    const ghosttyJob = getJob(readWorkflow(), 'ghostty-compatibility');
+
+    expect(ghosttyJob).toContain(
+      'cargo test --manifest-path ghostty-compat/Cargo.toml --locked --offline terminal_model::',
+    );
+
+    const mainManifest = readFileSync(resolve(process.cwd(), 'src-tauri/Cargo.toml'), 'utf8');
+    const compatibilityManifest = readFileSync(
+      resolve(process.cwd(), 'src-tauri/ghostty-compat/Cargo.toml'),
+      'utf8',
+    );
+    const ghosttyDependency = (manifest: string) =>
+      manifest.match(/^libghostty-vt = .*$/m)?.[0];
+
+    expect(ghosttyDependency(mainManifest)).toBeTruthy();
+    expect(ghosttyDependency(compatibilityManifest)).toBe(ghosttyDependency(mainManifest));
+  });
 });

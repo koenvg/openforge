@@ -158,6 +158,10 @@ pub(super) async fn handle_app_pty_command(
                 })?;
             serde_json::Value::Null
         }
+        "get_terminal_view_snapshot" => {
+            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
+            json_value(pty_manager.terminal_view_snapshot(&payload.task_id).await)?
+        }
         "get_pty_buffer" => {
             let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
             let mut buffer_state = pty_manager.pty_buffer_state(&payload.task_id).await;

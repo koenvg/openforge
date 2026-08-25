@@ -1,8 +1,13 @@
 //! Shared PTY process creation and session publication primitives.
 
-use crate::app_events::AppEventSender;
+use crate::app_events::{publish_app_event, AppEventSender};
+use crate::terminal_model::{
+    ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelEvent, TerminalModelEventSink,
+    TerminalModelOptions,
+};
 use crate::user_environment::user_environment;
-use log::info;
+use base64::Engine;
+use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -61,6 +66,7 @@ struct SpawnedPty {
     reader: Box<dyn Read + Send>,
     session: PtySession,
     pid_file: PathBuf,
+    shadow_feeder: Option<ShadowTerminalFeeder>,
 }
 
 impl SpawnedPty {
@@ -75,12 +81,14 @@ impl SpawnedPty {
 
 struct PtyProcessRequest {
     command: CommandBuilder,
+    session_key: String,
     cols: u16,
     rows: u16,
     instance_id: u64,
     description: String,
     pid_file_name: String,
     kind: PtySessionKind,
+    app_event_tx: Option<AppEventSender>,
 }
 
 struct SessionRegistrationRequest<'a> {
@@ -94,6 +102,31 @@ struct SessionRegistrationRequest<'a> {
 struct PtyEventSink {
     app_handle: Option<crate::backend_runtime::AppHandle>,
     app_event_tx: Option<AppEventSender>,
+}
+
+fn terminal_model_event_sink(
+    session_key: &str,
+    app_event_tx: Option<AppEventSender>,
+) -> Option<TerminalModelEventSink> {
+    let sender = Some(app_event_tx?);
+    let output_event_name = format!("pty-model-output-{session_key}");
+    let disabled_event_name = format!("pty-model-disabled-{session_key}");
+    Some(Arc::new(move |event| match event {
+        TerminalModelEvent::Output(frame) => publish_app_event(
+            &sender,
+            &output_event_name,
+            &serde_json::json!({
+                "instance_id": frame.instance_id,
+                "sequence": frame.sequence,
+                "data": base64::engine::general_purpose::STANDARD.encode(frame.bytes),
+            }),
+        ),
+        TerminalModelEvent::Disabled { instance_id } => publish_app_event(
+            &sender,
+            &disabled_event_name,
+            &serde_json::json!({ "instance_id": instance_id }),
+        ),
+    }))
 }
 
 impl PtyManager {
@@ -191,6 +224,37 @@ impl PtyManager {
             ))
         })?;
 
+        let (shadow_model, shadow_feeder) = if self.terminal_model_enabled() {
+            let options = TerminalModelOptions::new(request.cols, request.rows);
+            let started =
+                match terminal_model_event_sink(&request.session_key, request.app_event_tx.clone())
+                {
+                    Some(event_sink) => ShadowTerminalSession::start_with_event_sink(
+                        request.session_key.clone(),
+                        request.instance_id,
+                        options,
+                        event_sink,
+                    ),
+                    None => ShadowTerminalSession::start(
+                        request.session_key.clone(),
+                        request.instance_id,
+                        options,
+                    ),
+                };
+            match started {
+                Ok((session, feeder)) => (Some(session), Some(feeder)),
+                Err(error) => {
+                    warn!(
+                        "[terminal-shadow] key={} instance={} phase=create disabled: {}",
+                        request.session_key, request.instance_id, error
+                    );
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        };
+
         Ok(SpawnedPty {
             reader,
             session: PtySession {
@@ -200,9 +264,11 @@ impl PtyManager {
                 instance_id: request.instance_id,
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
+                shadow_model,
                 managed_process,
             },
             pid_file,
+            shadow_feeder,
         })
     }
 

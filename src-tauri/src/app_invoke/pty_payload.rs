@@ -99,9 +99,10 @@ mod tests {
             "pty_spawn_shell" => PtySpawnShellPayload::decode(command, payload).map(|_| ()),
             "pty_write" => PtyWritePayload::decode(command, payload).map(|_| ()),
             "pty_resize" => PtyResizePayload::decode(command, payload).map(|_| ()),
-            "pty_kill" | "pty_kill_shells_for_task" | "get_pty_buffer" => {
-                PtyTaskPayload::decode(command, payload).map(|_| ())
-            }
+            "pty_kill"
+            | "pty_kill_shells_for_task"
+            | "get_pty_buffer"
+            | "get_terminal_view_snapshot" => PtyTaskPayload::decode(command, payload).map(|_| ()),
             other => panic!("unsupported PTY fixture command {other}"),
         }
     }

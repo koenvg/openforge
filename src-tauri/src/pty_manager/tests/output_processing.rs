@@ -103,7 +103,7 @@ fn spawn_repeating_reader(
             remaining_reads: read_count,
             byte,
         };
-        read_pty_output_loop(&mut reader, tx, session_key, None, None);
+        read_pty_output_loop(&mut reader, tx, session_key, None, None, None);
         finished.store(true, Ordering::Release);
     });
 
@@ -191,7 +191,7 @@ fn test_read_pty_output_loop_preserves_utf8_split_across_reads() {
     let mut reader = ChunkedReader::new(vec![b"hello \xC3", b"\xA9 world"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, None);
 
     assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
     assert_eq!(rx.blocking_recv(), Some(Some("é world".to_string())));
@@ -203,7 +203,7 @@ fn test_read_pty_output_loop_flushes_incomplete_utf8_before_exit() {
     let mut reader = ChunkedReader::new(vec![b"hello \xC3"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, None);
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, None);
 
     assert_eq!(rx.blocking_recv(), Some(Some("hello ".to_string())));
     assert_eq!(
@@ -220,7 +220,14 @@ fn test_read_pty_output_loop_rejects_malformed_utf8_only_for_companion() {
     let mut reader = ChunkedReader::new(vec![b"desktop", &[0xff], b"tail"]);
     let (tx, mut rx) = pty_output_channel();
 
-    read_pty_output_loop(&mut reader, tx, "task-reader", None, Some(Arc::clone(&hub)));
+    read_pty_output_loop(
+        &mut reader,
+        tx,
+        "task-reader",
+        None,
+        Some(Arc::clone(&hub)),
+        None,
+    );
 
     assert_eq!(rx.blocking_recv(), Some(Some("desktop".to_string())));
     assert_eq!(
@@ -252,6 +259,7 @@ fn test_read_pty_output_loop_updates_last_output_time() {
         tx,
         "task-reader",
         Some(Arc::clone(&last_output)),
+        None,
         None,
     );
 
@@ -358,5 +366,126 @@ async fn test_spawn_pty_populates_output_buffer() {
         result2,
         Some("opencode output data".to_string()),
         "buffer must be replayable on re-attach"
+    );
+}
+
+#[test]
+fn shadow_mode_observes_raw_bytes_without_changing_desktop_output() {
+    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+        "task-reader".to_string(),
+        42,
+        crate::terminal_model::TerminalModelOptions::new(20, 4),
+    )
+    .expect("shadow terminal should start");
+    let mut reader = ChunkedReader::new(vec![b"before \xF0\x9F", b"\x98\x80\r\n\x1b[6n"]);
+    let (tx, mut rx) = pty_output_channel();
+
+    read_pty_output_loop(&mut reader, tx, "task-reader", None, None, Some(feeder));
+
+    let mut desktop_output = String::new();
+    while let Some(message) = rx.blocking_recv() {
+        let Some(output) = message else {
+            break;
+        };
+        desktop_output.push_str(&output);
+    }
+    assert_eq!(
+        desktop_output.as_bytes(),
+        b"before \xF0\x9F\x98\x80\r\n\x1b[6n"
+    );
+
+    let snapshot = shadow.snapshot().expect("shadow snapshot should encode");
+    let portable = shadow.portable_vt().expect("shadow VT should format");
+    assert!(snapshot.starts_with(b"GHOSTSNP"));
+    assert!(portable
+        .windows(b"before".len())
+        .any(|part| part == b"before"));
+    assert_eq!(shadow.take_protocol_replies().len(), 1);
+}
+
+#[test]
+fn shadow_creation_failure_does_not_change_desktop_output() {
+    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+        "failed-shadow".to_string(),
+        7,
+        crate::terminal_model::TerminalModelOptions::new(0, 0),
+    )
+    .expect("shadow worker thread should start");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while shadow.diagnostics().is_empty() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert_eq!(shadow.diagnostics()[0].phase, "create");
+
+    let mut reader = ChunkedReader::new(vec![b"renderer-output"]);
+    let (tx, mut rx) = pty_output_channel();
+    read_pty_output_loop(&mut reader, tx, "failed-shadow", None, None, Some(feeder));
+
+    assert_eq!(
+        rx.blocking_recv(),
+        Some(Some("renderer-output".to_string()))
+    );
+    assert_eq!(rx.blocking_recv(), Some(None));
+    assert!(shadow.snapshot().is_err());
+}
+
+fn measure_sustained_output(
+    shadow_feeder: Option<crate::terminal_model::ShadowTerminalFeeder>,
+) -> (std::time::Duration, usize) {
+    const READ_COUNT: usize = 64;
+    let mut reader = RepeatingReader {
+        remaining_reads: READ_COUNT,
+        byte: b'x',
+    };
+    let (tx, mut rx) = pty_output_channel();
+    let consumer = std::thread::spawn(move || {
+        let mut bytes = 0usize;
+        while let Some(Some(output)) = rx.blocking_recv() {
+            bytes += output.len();
+        }
+        bytes
+    });
+    let started = std::time::Instant::now();
+    read_pty_output_loop(
+        &mut reader,
+        tx,
+        "throughput-guard",
+        None,
+        None,
+        shadow_feeder,
+    );
+    let elapsed = started.elapsed();
+    let bytes = consumer.join().expect("output consumer should finish");
+    (elapsed, bytes)
+}
+
+#[test]
+fn shadow_mode_sustained_output_stays_bounded_and_responsive() {
+    let (baseline_elapsed, baseline_bytes) = measure_sustained_output(None);
+    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+        "throughput-guard".to_string(),
+        99,
+        crate::terminal_model::TerminalModelOptions::new(80, 24),
+    )
+    .expect("shadow worker should start");
+    let (shadow_elapsed, shadow_bytes) = measure_sustained_output(Some(feeder));
+
+    assert_eq!(baseline_bytes, 64 * PTY_READ_BUFFER_SIZE);
+    assert_eq!(shadow_bytes, baseline_bytes);
+    assert_eq!(
+        crate::terminal_model::SHADOW_BUFFERED_BYTES_CAPACITY,
+        512 * 1024,
+    );
+    let allowed = baseline_elapsed
+        .saturating_mul(10)
+        .saturating_add(std::time::Duration::from_millis(250));
+    assert!(
+        shadow_elapsed <= allowed,
+        "shadow output path took {shadow_elapsed:?}; baseline was {baseline_elapsed:?}, gate was {allowed:?}",
+    );
+    let diagnostics = shadow.diagnostics();
+    assert!(
+        diagnostics.is_empty(),
+        "shadow diagnostics: {diagnostics:?}"
     );
 }

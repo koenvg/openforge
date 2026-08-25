@@ -327,6 +327,7 @@ async fn stale_agent_session_registration_reaps_the_unpublished_process() {
                 cols: 80,
                 rows: 24,
                 terminal_image_protocol: None,
+                app_event_tx: None,
             },
         )
         .expect("process creation stage should succeed");
@@ -334,6 +335,7 @@ async fn stale_agent_session_registration_reaps_the_unpublished_process() {
         reader,
         session,
         pid_file,
+        shadow_feeder: _,
     } = spawned;
     let (current_token, current_lock) = manager.begin_agent_spawn(task_id, adapter.label()).await;
 
@@ -741,6 +743,7 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
             task_id: "failed-shell-cleanup".to_string(),
         },
         pid_file_name: format!("{session_key}.pid"),
+        shadow_model: None,
         managed_process: mismatched_identity.clone(),
     };
 
@@ -1393,4 +1396,75 @@ async fn agent_pty_rejects_missing_workspace_cwd_instead_of_falling_back() {
             .contains_key("agent-missing-cwd"),
         "missing cwd must not register an agent session"
     );
+}
+
+#[tokio::test]
+async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
+    let mut manager = PtyManager::new();
+    manager.set_shadow_mode(crate::terminal_model::ShadowMode::Enabled);
+    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(temp_dir.path().join("pids"));
+    let task_id = "shadow-shell";
+    let session_key = shell_session_key(task_id, Some(0));
+    let mut command = CommandBuilder::new("/bin/sh");
+    command.arg("-lc");
+    command.arg("printf 'shadow-output'; exec sleep 30");
+
+    let instance_id = manager
+        .spawn_shell_pty_with_command(
+            PtySpawnContext {
+                task_id,
+                cwd: temp_dir.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: None,
+                app_event_tx: None,
+            },
+            Some(0),
+            None,
+            command,
+        )
+        .await
+        .expect("shell PTY should spawn with shadow mode enabled");
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if manager
+                .get_pty_buffer(&session_key)
+                .await
+                .is_some_and(|output| output.contains("shadow-output"))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("normal replay output should remain available");
+    manager
+        .resize_pty(&session_key, 100, 30)
+        .await
+        .expect("normal PTY resize should still succeed");
+
+    {
+        let sessions = manager.sessions.lock().await;
+        let session = sessions.get(&session_key).expect("live shell session");
+        assert_eq!(session.instance_id, instance_id);
+        let shadow = session
+            .shadow_model
+            .as_ref()
+            .expect("shadow model should follow the live instance");
+        let snapshot = shadow.snapshot().expect("canonical snapshot should encode");
+        let portable = shadow.portable_vt().expect("portable VT should format");
+        assert!(snapshot.starts_with(b"GHOSTSNP"));
+        assert!(portable
+            .windows(b"shadow-output".len())
+            .any(|part| part == b"shadow-output"));
+    }
+
+    manager
+        .kill_pty(&session_key)
+        .await
+        .expect("normal PTY cleanup should still succeed");
+    assert!(!manager.sessions.lock().await.contains_key(&session_key));
 }

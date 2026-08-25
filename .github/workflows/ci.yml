@@ -233,9 +233,50 @@ jobs:
       - name: Build companion
         run: ./scripts/mobile-companion ${{ matrix.command }}
 
+  ghostty-compatibility:
+    name: Ghostty Compatibility (${{ matrix.name }})
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-14
+          - name: Linux
+            runner: ubuntu-latest
+          - name: Windows
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig 0.16
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned Ghostty dependencies
+        shell: bash
+        run: |
+          node scripts/prepare-ghostty-vt.mjs | tee ghostty-prepare.log
+          grep '^GHOSTTY_' ghostty-prepare.log >> "$GITHUB_ENV"
+
+      - name: Build and run the compatibility gate offline
+        working-directory: src-tauri
+        shell: bash
+        run: 'cargo test --manifest-path ghostty-compat/Cargo.toml --locked --offline terminal_model::'
+
   rust:
     name: Rust Tests
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v6
@@ -248,6 +289,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Install Zig 0.16
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned Ghostty dependencies
+        run: |
+          node scripts/prepare-ghostty-vt.mjs | tee /tmp/ghostty-prepare.log
+          grep '^GHOSTTY_' /tmp/ghostty-prepare.log >> "$GITHUB_ENV"
+          echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -345,6 +397,17 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      - name: Install Zig 0.16
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Prepare pinned Ghostty dependencies
+        run: |
+          node scripts/prepare-ghostty-vt.mjs | tee /tmp/ghostty-prepare.log
+          grep '^GHOSTTY_' /tmp/ghostty-prepare.log >> "$GITHUB_ENV"
+          echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"
 
       - name: Install frontend dependencies
         run: pnpm install

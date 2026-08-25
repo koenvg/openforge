@@ -13,6 +13,7 @@ interface TerminalReconnectReplayOptions {
   hasEntries(): boolean
   resetEntry(entry: PoolEntry): void
   notifyLifecycle(terminalKey: string): void
+  recoverEntry?(entry: PoolEntry): Promise<void>
 }
 
 export function createTerminalReconnectReplay({
@@ -21,6 +22,7 @@ export function createTerminalReconnectReplay({
   hasEntries,
   resetEntry,
   notifyLifecycle,
+  recoverEntry,
 }: TerminalReconnectReplayOptions) {
   let appEventsReconnectUnlisten: TerminalRuntimeUnlistenFn | null = null
   let appEventsReconnectListenerPending: Promise<void> | null = null
@@ -29,6 +31,12 @@ export function createTerminalReconnectReplay({
     if (entry.needsClear) return
 
     try {
+      if (recoverEntry) {
+        await recoverEntry(entry)
+        notifyLifecycle(entry.taskId)
+        if (entry.attached) entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+        return
+      }
       const { buffer, isLive } = await host.getPtyBuffer(entry.taskId)
       entry.ptyActive = isLive
       if (!buffer) {

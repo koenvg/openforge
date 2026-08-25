@@ -10,6 +10,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "ghostty:prepare": "node scripts/prepare-ghostty-vt.mjs",
     "build:plugin-sdk-runtime": "node scripts/build-plugin-sdk-runtime.mjs",
     "build:plugins": "pnpm --filter @openforge-app/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
     "dev:plugin-artifacts": "node scripts/build-dev-plugin-artifacts.mjs",

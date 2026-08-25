@@ -101,6 +101,7 @@ export const desktopIpcFunctionDomains = {
   killPty: 'agent-session-pty',
   killShellsForTask: 'agent-session-pty',
   getPtyBuffer: 'agent-session-pty',
+  getTerminalViewSnapshot: 'agent-session-pty',
   getTaskDiff: 'files-review',
   getTaskGitStatus: 'files-review',
   getTaskFileContents: 'files-review',

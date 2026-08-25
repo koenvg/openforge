@@ -1,6 +1,7 @@
 //! Agent PTY provider setup, lifecycle arbitration, and stream-state ownership.
 
 use crate::app_events::AppEventSender;
+use crate::terminal_model::ShadowTerminalFeeder;
 use log::info;
 use portable_pty::CommandBuilder;
 use std::io::Read;
@@ -52,6 +53,7 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_event_tx: Option<AppEventSender>,
 }
 
 struct AgentEventStreamRequest<'a> {
@@ -59,6 +61,7 @@ struct AgentEventStreamRequest<'a> {
     token: AgentSpawnToken,
     instance_id: u64,
     reader: Box<dyn Read + Send>,
+    shadow_feeder: Option<ShadowTerminalFeeder>,
     stream_state: AgentStreamState,
     lifecycle_lock: LifecycleLockLease,
     pid_file: PathBuf,
@@ -359,12 +362,14 @@ impl PtyManager {
 
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
+            session_key: request.task_id.to_string(),
             cols: request.cols,
             rows: request.rows,
             instance_id,
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
+            app_event_tx: request.app_event_tx,
         })?;
         info!(
             "{} PTY for task {} started (PID: {})",
@@ -534,6 +539,7 @@ impl PtyManager {
             token,
             instance_id,
             reader,
+            shadow_feeder,
             stream_state,
             lifecycle_lock,
             pid_file,
@@ -558,6 +564,7 @@ impl PtyManager {
             task_id.to_string(),
             stream_state.last_output_time.as_ref().map(Arc::clone),
             Some(Arc::clone(&stream_state.attachment_hub)),
+            shadow_feeder,
         );
         spawn_batched_pty_event_emitter(
             rx,
@@ -626,6 +633,7 @@ impl PtyManager {
                 cols,
                 rows,
                 terminal_image_protocol,
+                app_event_tx: app_event_tx.clone(),
             },
         )?;
         let instance_id = spawned.instance_id();
@@ -634,6 +642,7 @@ impl PtyManager {
             reader,
             session,
             pid_file,
+            shadow_feeder,
         } = spawned;
 
         self.register_spawned_session(SessionRegistrationRequest {
@@ -677,6 +686,7 @@ impl PtyManager {
             token,
             instance_id,
             reader,
+            shadow_feeder,
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,

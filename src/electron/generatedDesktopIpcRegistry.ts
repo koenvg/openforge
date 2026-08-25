@@ -100,6 +100,7 @@ export const desktopCommandContracts = [
   {"functionName":"killPty","ipcCommand":"pty_kill","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"killShellsForTask","ipcCommand":"pty_kill_shells_for_task","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getPtyBuffer","ipcCommand":"get_pty_buffer","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
+  {"functionName":"getTerminalViewSnapshot","ipcCommand":"get_terminal_view_snapshot","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getTaskDiff","ipcCommand":"get_task_diff","payloadKeys":["taskId","includeCommitted","includeUncommitted"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getTaskGitStatus","ipcCommand":"get_task_git_status","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"files-review"},
   {"functionName":"getTaskFileContents","ipcCommand":"get_task_file_contents","payloadKeys":["taskId","path","oldPath","status","includeCommitted","includeUncommitted"],"owner":"rust-sidecar","domain":"files-review"},

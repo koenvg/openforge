@@ -347,6 +347,7 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
                     task_id: "task-1".to_string(),
                 },
                 pid_file_name: "task-1-shell-0.pid".to_string(),
+                shadow_model: None,
             },
         );
     }
@@ -468,6 +469,7 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
                 instance_id: 1,
                 kind: PtySessionKind::Agent,
                 pid_file_name: "agent-task-1-pty.pid".to_string(),
+                shadow_model: None,
             },
         );
     }
@@ -599,6 +601,7 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
                 instance_id: 2,
                 kind: PtySessionKind::Agent,
                 pid_file_name: "task-1-pty.pid".to_string(),
+                shadow_model: None,
             },
         );
     }

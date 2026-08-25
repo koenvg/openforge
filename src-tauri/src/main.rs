@@ -60,6 +60,7 @@ mod task_metadata_refresh;
 mod task_prompt;
 mod task_start;
 mod task_start_prompt;
+mod terminal_model;
 mod terminal_task_completion;
 #[cfg(test)]
 mod terminal_task_completion_tests;
@@ -201,8 +202,15 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| WhisperModelSize::from_str(&s))
         .unwrap_or(WhisperModelSize::Small);
 
+    let ghostty_terminal_view_enabled = database
+        .get_config(pty_manager::GHOSTTY_TERMINAL_VIEW_CONFIG)
+        .ok()
+        .flatten()
+        .is_some_and(|value| value == "true");
+
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
+    pty_manager.set_terminal_view_enabled(ghostty_terminal_view_enabled);
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
