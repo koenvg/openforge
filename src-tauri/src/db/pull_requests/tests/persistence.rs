@@ -1,3 +1,5 @@
+use super::fixtures::{PrCommentFixture, PullRequestFixture};
+
 use crate::db::test_helpers::*;
 use crate::db::PrMergeReadinessFacts;
 
@@ -6,19 +8,12 @@ fn test_pull_request_crud() {
     let (db, _temp_dir) = make_test_db("pr_crud");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "acme",
-        "repo",
-        "Fix auth",
-        "https://github.com/acme/repo/pull/42",
-        "open",
-        1000,
-        2000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(42)
+        .title("Fix auth")
+        .url("https://github.com/acme/repo/pull/42")
+        .updated_at(2000)
+        .insert(&db)
+        .expect("insert pr failed");
 
     let open_prs = db.get_open_prs().expect("get open prs failed");
     assert_eq!(open_prs.len(), 1);
@@ -26,19 +21,13 @@ fn test_pull_request_crud() {
     assert_eq!(open_prs[0].ticket_id, "T-100");
     assert_eq!(open_prs[0].state, "open");
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "acme",
-        "repo",
-        "Fix auth",
-        "https://github.com/acme/repo/pull/42",
-        "merged",
-        1000,
-        3000,
-        false,
-    )
-    .expect("update pr failed");
+    PullRequestFixture::new(42)
+        .title("Fix auth")
+        .url("https://github.com/acme/repo/pull/42")
+        .state("merged")
+        .updated_at(3000)
+        .insert(&db)
+        .expect("update pr failed");
 
     let open_prs = db.get_open_prs().expect("get open prs failed");
     assert_eq!(open_prs.len(), 0);
@@ -51,19 +40,12 @@ fn test_pull_request_terminal_state_updates_merged_and_closed() {
     let (db, _temp_dir) = make_test_db("pr_terminal_state_updates");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "acme",
-        "repo",
-        "Fix auth",
-        "https://github.com/acme/repo/pull/42",
-        "open",
-        1000,
-        2000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(42)
+        .title("Fix auth")
+        .url("https://github.com/acme/repo/pull/42")
+        .updated_at(2000)
+        .insert(&db)
+        .expect("insert pr failed");
 
     db.update_pr_merged_state(42, Some(1704067200))
         .expect("mark merged failed");
@@ -130,31 +112,17 @@ fn test_global_pr_upsert_migrates_legacy_repo_number_row_and_comments() {
     let (db, _temp_dir) = make_test_db("pr_global_upsert_migrates_legacy_row");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "acme",
-        "repo",
-        "Legacy title",
-        "https://github.com/acme/repo/pull/42",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert legacy pr failed");
-    db.insert_pr_comment(
-        9001,
-        42,
-        "reviewer",
-        "Still needs work",
-        "review_comment",
-        Some("src/main.rs"),
-        Some(12),
-        false,
-        1500,
-    )
-    .expect("insert legacy comment failed");
+    PullRequestFixture::new(42)
+        .title("Legacy title")
+        .url("https://github.com/acme/repo/pull/42")
+        .insert(&db)
+        .expect("insert legacy pr failed");
+    PrCommentFixture::new(9001, 42, "Still needs work")
+        .file_path("src/main.rs")
+        .line_number(12)
+        .created_at(1500)
+        .insert(&db)
+        .expect("insert legacy comment failed");
 
     db.insert_pull_request_with_number(
         1001,
@@ -196,49 +164,26 @@ fn test_pr_comment_lifecycle() {
     let (db, _temp_dir) = make_test_db("pr_comment_lifecycle");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        10,
-        "T-100",
-        "acme",
-        "repo",
-        "PR title",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(10)
+        .title("PR title")
+        .insert(&db)
+        .expect("insert pr failed");
 
     let missing_comment = db
         .get_pr_comments_by_ids(&[501])
         .expect("check missing comment failed");
     assert!(missing_comment.is_empty());
 
-    db.insert_pr_comment(
-        501,
-        10,
-        "reviewer",
-        "Fix this",
-        "review_comment",
-        Some("src/main.rs"),
-        Some(42),
-        false,
-        2000,
-    )
-    .expect("insert comment failed");
-    db.insert_pr_comment(
-        502,
-        10,
-        "reviewer",
-        "Nit: rename",
-        "review_comment",
-        None,
-        None,
-        false,
-        2001,
-    )
-    .expect("insert comment 2 failed");
+    PrCommentFixture::new(501, 10, "Fix this")
+        .file_path("src/main.rs")
+        .line_number(42)
+        .created_at(2000)
+        .insert(&db)
+        .expect("insert comment failed");
+    PrCommentFixture::new(502, 10, "Nit: rename")
+        .created_at(2001)
+        .insert(&db)
+        .expect("insert comment 2 failed");
 
     let inserted_comment = db
         .get_pr_comments_by_ids(&[501])
@@ -266,56 +211,25 @@ fn test_mark_comments_addressed_batch() {
     let (db, _temp_dir) = make_test_db("mark_batch_addressed");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        30,
-        "T-100",
-        "acme",
-        "repo",
-        "PR",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(30)
+        .insert(&db)
+        .expect("insert pr failed");
 
-    db.insert_pr_comment(
-        701,
-        30,
-        "a",
-        "c1",
-        "review_comment",
-        None,
-        None,
-        false,
-        4000,
-    )
-    .expect("insert failed");
-    db.insert_pr_comment(
-        702,
-        30,
-        "b",
-        "c2",
-        "review_comment",
-        None,
-        None,
-        false,
-        4001,
-    )
-    .expect("insert failed");
-    db.insert_pr_comment(
-        703,
-        30,
-        "c",
-        "c3",
-        "review_comment",
-        None,
-        None,
-        false,
-        4002,
-    )
-    .expect("insert failed");
+    PrCommentFixture::new(701, 30, "c1")
+        .author("a")
+        .created_at(4000)
+        .insert(&db)
+        .expect("insert failed");
+    PrCommentFixture::new(702, 30, "c2")
+        .author("b")
+        .created_at(4001)
+        .insert(&db)
+        .expect("insert failed");
+    PrCommentFixture::new(703, 30, "c3")
+        .author("c")
+        .created_at(4002)
+        .insert(&db)
+        .expect("insert failed");
 
     db.mark_comments_addressed(&[701, 703])
         .expect("batch mark failed");
@@ -333,19 +247,12 @@ fn test_ci_status_migration() {
     let (db, _temp_dir) = make_test_db("ci_migration");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://github.com/pr/42",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert PR through migrated schema failed");
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://github.com/pr/42")
+        .insert(&db)
+        .expect("insert PR through migrated schema failed");
 
     let prs = db
         .get_open_prs()
@@ -364,19 +271,14 @@ fn test_update_pr_ci_status() {
     insert_test_task(&db);
 
     let now = 1000i64;
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://github.com/pr/42",
-        "open",
-        now,
-        now,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://github.com/pr/42")
+        .created_at(now)
+        .updated_at(now)
+        .insert(&db)
+        .unwrap();
 
     db.update_pr_ci_status(42, "sha123", "success", r#"[{"id":1,"name":"build","status":"completed","conclusion":"success","html_url":"https://example.com"}]"#).unwrap();
 
@@ -395,18 +297,11 @@ fn test_update_pr_ci_status() {
 fn test_update_pr_is_queued() {
     let (db, _temp_dir) = make_test_db("update_pr_is_queued");
     insert_test_task(&db);
-    let _ = db.insert_pull_request(
-        1,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://url",
-        "open",
-        1000,
-        1000,
-        false,
-    );
+    let _ = PullRequestFixture::new(1)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://url")
+        .insert(&db);
     db.update_pr_is_queued(1, true).unwrap();
     let prs = db.get_open_prs().unwrap();
     assert_eq!(prs.len(), 1);
@@ -420,18 +315,11 @@ fn test_update_pr_is_queued() {
 fn test_update_pr_mergeability() {
     let (db, _temp_dir) = make_test_db("update_pr_mergeability");
     insert_test_task(&db);
-    let _ = db.insert_pull_request(
-        1,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://url",
-        "open",
-        1000,
-        1000,
-        false,
-    );
+    let _ = PullRequestFixture::new(1)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://url")
+        .insert(&db);
 
     db.update_pr_mergeability(1, Some(false), Some("dirty"))
         .unwrap();
@@ -447,19 +335,12 @@ fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
     let (db, _temp_dir) = make_test_db("pr_upsert_preserve_terminal_state");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Merged PR",
-        "https://github.com/pr/42",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Merged PR")
+        .url("https://github.com/pr/42")
+        .insert(&db)
+        .unwrap();
     db.update_pr_merge_readiness(
         42,
         &PrMergeReadinessFacts {
@@ -479,19 +360,13 @@ fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
     .unwrap();
     db.update_pr_merged_state(42, Some(1704067200)).unwrap();
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Stale open poll",
-        "https://github.com/pr/42",
-        "open",
-        1000,
-        2000,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Stale open poll")
+        .url("https://github.com/pr/42")
+        .updated_at(2000)
+        .insert(&db)
+        .unwrap();
 
     let prs = db.get_all_pull_requests().unwrap();
     let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
@@ -509,19 +384,12 @@ fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
         .unwrap_or_default()
         .contains("already_merged"));
 
-    db.insert_pull_request(
-        43,
-        "T-100",
-        "owner",
-        "repo",
-        "Closed PR",
-        "https://github.com/pr/43",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(43)
+        .repo_owner("owner")
+        .title("Closed PR")
+        .url("https://github.com/pr/43")
+        .insert(&db)
+        .unwrap();
     db.update_pr_merge_readiness(
         43,
         &PrMergeReadinessFacts {
@@ -540,19 +408,13 @@ fn test_pr_upsert_preserves_terminal_state_against_stale_open_data() {
     )
     .unwrap();
     db.update_pr_closed(43).unwrap();
-    db.insert_pull_request(
-        43,
-        "T-100",
-        "owner",
-        "repo",
-        "Stale reopened poll",
-        "https://github.com/pr/43",
-        "open",
-        1000,
-        2000,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(43)
+        .repo_owner("owner")
+        .title("Stale reopened poll")
+        .url("https://github.com/pr/43")
+        .updated_at(2000)
+        .insert(&db)
+        .unwrap();
 
     let prs = db.get_all_pull_requests().unwrap();
     let closed = prs
@@ -577,35 +439,25 @@ fn test_pr_upsert_preserves_ci_status() {
     insert_test_task(&db);
 
     let now = 1000i64;
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR",
-        "https://github.com/pr/42",
-        "open",
-        now,
-        now,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Test PR")
+        .url("https://github.com/pr/42")
+        .created_at(now)
+        .updated_at(now)
+        .insert(&db)
+        .unwrap();
 
     db.update_pr_ci_status(42, "sha123", "success", r#"[{"id":1,"name":"build","status":"completed","conclusion":"success","html_url":"https://example.com"}]"#).unwrap();
 
-    db.insert_pull_request(
-        42,
-        "T-100",
-        "owner",
-        "repo",
-        "Test PR Updated",
-        "https://github.com/pr/42",
-        "open",
-        now + 30,
-        now + 30,
-        false,
-    )
-    .unwrap();
+    PullRequestFixture::new(42)
+        .repo_owner("owner")
+        .title("Test PR Updated")
+        .url("https://github.com/pr/42")
+        .created_at(now + 30)
+        .updated_at(now + 30)
+        .insert(&db)
+        .unwrap();
 
     let prs = db.get_open_prs().unwrap();
     let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
@@ -630,19 +482,9 @@ fn test_pr_last_polled_lifecycle() {
     let (db, _temp_dir) = make_test_db("pr_last_polled");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        60,
-        "T-100",
-        "acme",
-        "repo",
-        "PR",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(60)
+        .insert(&db)
+        .expect("insert pr failed");
 
     let initial = db.get_pr_last_polled(60).expect("get initial failed");
     assert_eq!(initial, Some(0));
@@ -664,45 +506,23 @@ fn test_insert_pr_comment_with_addressed() {
     let (db, _temp_dir) = make_test_db("pr_comment_addressed");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        100,
-        "T-100",
-        "acme",
-        "repo",
-        "PR title",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(100)
+        .title("PR title")
+        .insert(&db)
+        .expect("insert pr failed");
 
-    db.insert_pr_comment(
-        701,
-        100,
-        "bot-user",
-        "Automated check passed",
-        "review_comment",
-        None,
-        None,
-        true,
-        2000,
-    )
-    .expect("insert addressed comment failed");
+    PrCommentFixture::new(701, 100, "Automated check passed")
+        .author("bot-user")
+        .addressed(true)
+        .created_at(2000)
+        .insert(&db)
+        .expect("insert addressed comment failed");
 
-    db.insert_pr_comment(
-        702,
-        100,
-        "human-reviewer",
-        "Please fix this",
-        "review_comment",
-        None,
-        None,
-        false,
-        2001,
-    )
-    .expect("insert unaddressed comment failed");
+    PrCommentFixture::new(702, 100, "Please fix this")
+        .author("human-reviewer")
+        .created_at(2001)
+        .insert(&db)
+        .expect("insert unaddressed comment failed");
 
     let comments = db.get_comments_for_pr(100).expect("get comments failed");
     assert_eq!(comments.len(), 2);
@@ -719,33 +539,19 @@ fn test_update_comment_outdated_preserves_addressed() {
     let (db, _temp_dir) = make_test_db("comment_outdated_preserves_addressed");
     insert_test_task(&db);
 
-    db.insert_pull_request(
-        110,
-        "T-100",
-        "acme",
-        "repo",
-        "PR title",
-        "https://example.com",
-        "open",
-        1000,
-        1000,
-        false,
-    )
-    .expect("insert pr failed");
+    PullRequestFixture::new(110)
+        .title("PR title")
+        .insert(&db)
+        .expect("insert pr failed");
 
     // A comment the user has already addressed locally.
-    db.insert_pr_comment(
-        801,
-        110,
-        "reviewer",
-        "Please fix",
-        "review_comment",
-        Some("src/lib.rs"),
-        Some(10),
-        true,
-        2000,
-    )
-    .expect("insert comment failed");
+    PrCommentFixture::new(801, 110, "Please fix")
+        .file_path("src/lib.rs")
+        .line_number(10)
+        .addressed(true)
+        .created_at(2000)
+        .insert(&db)
+        .expect("insert comment failed");
 
     // Newly inserted comments default to not-outdated.
     let comments = db.get_comments_for_pr(110).expect("get comments failed");
