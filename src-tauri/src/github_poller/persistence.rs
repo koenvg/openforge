@@ -1,4 +1,7 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
+use super::poll_events::{
+    emit_ci_status_changed, emit_new_pr_comment, emit_review_status_changed, emit_task_updated,
+};
 use super::pr_execution::{poll_single_pr, should_fetch_comments_for_pr, PollSinglePrResult};
 use super::review_sync::StaleAuthoredPrTerminalState;
 use crate::db::{acquire_db, finalize_readiness_facts_for_poll, Database, PrRow};
@@ -60,11 +63,11 @@ pub(super) struct PersistCommentsResult {
 }
 
 pub(super) fn persist_polled_comments(
-    events: &GitHubEventTarget,
     db: &Database,
     result: &PollSinglePrResult,
     existing_ids: &HashSet<i64>,
     now: i64,
+    mut on_new_comment: impl FnMut(i64),
 ) -> PersistCommentsResult {
     let mut persist_result = PersistCommentsResult::default();
     let mut inserted_this_batch: HashSet<i64> = HashSet::new();
@@ -96,16 +99,7 @@ pub(super) fn persist_polled_comments(
                 continue;
             }
 
-            if let Err(e) = events.emit(
-                "new-pr-comment",
-                serde_json::json!({
-                    "ticket_id": result.ticket_id,
-                    "comment_id": comment.id
-                }),
-            ) {
-                warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
-            }
-
+            on_new_comment(comment.id);
             persist_result.new_comment_count += 1;
             inserted_this_batch.insert(comment.id);
         }
@@ -142,19 +136,40 @@ pub(super) fn apply_terminal_pr_state(
     }
 }
 
-pub(super) fn emit_task_updated(
-    events: &GitHubEventTarget,
-    task_id: &str,
-    project_id: &str,
-) -> Result<(), String> {
-    events.emit(
-        "task-changed",
-        serde_json::json!({
-            "action": "updated",
-            "task_id": task_id,
-            "project_id": project_id,
-        }),
-    )
+#[derive(Debug)]
+struct PrMetadataSnapshot {
+    ci_statuses: HashMap<i64, Option<String>>,
+    review_statuses: HashMap<i64, Option<String>>,
+    mergeability: HashMap<i64, (Option<bool>, Option<String>)>,
+}
+
+#[derive(Debug, Default)]
+struct PollPersistenceCounts {
+    new_comments: usize,
+    ci_changes: usize,
+    review_changes: usize,
+    pr_changes: usize,
+    errors: usize,
+}
+
+impl PollPersistenceCounts {
+    fn absorb(&mut self, other: Self) {
+        self.new_comments += other.new_comments;
+        self.ci_changes += other.ci_changes;
+        self.review_changes += other.review_changes;
+        self.pr_changes += other.pr_changes;
+        self.errors += other.errors;
+    }
+
+    fn into_tuple(self) -> (usize, usize, usize, usize, usize) {
+        (
+            self.new_comments,
+            self.ci_changes,
+            self.review_changes,
+            self.pr_changes,
+            self.errors,
+        )
+    }
 }
 
 pub(super) async fn poll_prs_for_project(
@@ -167,10 +182,42 @@ pub(super) async fn poll_prs_for_project(
     changed_pr_numbers: &[i64],
 ) -> (usize, usize, usize, usize, usize) {
     if open_prs.is_empty() {
-        return (0, 0, 0, 0, 0);
+        return PollPersistenceCounts::default().into_tuple();
     }
 
-    let pr_metadata = {
+    let metadata = match load_pr_metadata(db, &open_prs) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            error!("[GitHub Poller] Failed to load PR metadata: {error}");
+            return (0, 0, 0, 0, 1);
+        }
+    };
+    let results = poll_project_prs(
+        github_client,
+        github_token,
+        configured_github_username,
+        open_prs,
+        changed_pr_numbers,
+        metadata,
+    )
+    .await;
+    let now = match current_unix_timestamp() {
+        Ok(now) => now,
+        Err(error) => {
+            error!("[GitHub Poller] Failed to read current timestamp: {error}");
+            return (0, 0, 0, 0, 1);
+        }
+    };
+
+    let db_lock = acquire_db(db);
+    persist_poll_results(events, &db_lock, results, now).into_tuple()
+}
+
+fn load_pr_metadata(
+    db: &Mutex<Database>,
+    open_prs: &[PrRow],
+) -> rusqlite::Result<PrMetadataSnapshot> {
+    let metadata = {
         let db_lock = acquire_db(db);
         open_prs
             .iter()
@@ -183,289 +230,425 @@ pub(super) async fn poll_prs_for_project(
                     mergeable_state: pr.mergeable_state.clone(),
                 })
             })
-            .collect::<rusqlite::Result<Vec<PrMetadata>>>()
-    };
-    let pr_metadata = match pr_metadata {
-        Ok(metadata) => metadata,
-        Err(e) => {
-            error!("[GitHub Poller] Failed to load PR metadata: {e}");
-            return (0, 0, 0, 0, 1);
-        }
+            .collect::<rusqlite::Result<Vec<_>>>()?
     };
 
-    let old_ci_map: HashMap<i64, Option<String>> = pr_metadata
-        .iter()
-        .map(|metadata| (metadata.pr_id, metadata.ci_status.clone()))
-        .collect();
+    Ok(PrMetadataSnapshot {
+        ci_statuses: metadata
+            .iter()
+            .map(|metadata| (metadata.pr_id, metadata.ci_status.clone()))
+            .collect(),
+        review_statuses: metadata
+            .iter()
+            .map(|metadata| (metadata.pr_id, metadata.review_status.clone()))
+            .collect(),
+        mergeability: metadata
+            .into_iter()
+            .map(|metadata| {
+                (
+                    metadata.pr_id,
+                    (metadata.mergeable, metadata.mergeable_state),
+                )
+            })
+            .collect(),
+    })
+}
 
-    let old_review_map: HashMap<i64, Option<String>> = pr_metadata
-        .iter()
-        .map(|metadata| (metadata.pr_id, metadata.review_status.clone()))
-        .collect();
-
-    let old_mergeability_map: HashMap<i64, (Option<bool>, Option<String>)> = pr_metadata
-        .into_iter()
-        .map(|metadata| {
-            (
-                metadata.pr_id,
-                (metadata.mergeable, metadata.mergeable_state),
-            )
-        })
-        .collect();
-
+async fn poll_project_prs(
+    github_client: &GitHubClient,
+    github_token: &str,
+    configured_github_username: Option<&str>,
+    open_prs: Vec<PrRow>,
+    changed_pr_numbers: &[i64],
+    metadata: PrMetadataSnapshot,
+) -> Vec<PollSinglePrResult> {
     let changed_pr_numbers: HashSet<i64> = changed_pr_numbers.iter().copied().collect();
+    let futures = open_prs.into_iter().map(|pr| {
+        let client = github_client.clone();
+        let token = github_token.to_string();
+        // Always full-refetch comments (no `since` delta). A comment going
+        // outdated does not bump its updated_at, so a delta fetch would never
+        // re-read it and its "outdated" state would go stale. ETag conditional
+        // requests keep unchanged fetches cheap (304 Not Modified).
+        let since: Option<String> = None;
+        let old_ci = metadata.ci_statuses.get(&pr.id).cloned().flatten();
+        let old_review = metadata.review_statuses.get(&pr.id).cloned().flatten();
+        let (old_mergeable, old_mergeable_state) = metadata
+            .mergeability
+            .get(&pr.id)
+            .cloned()
+            .unwrap_or((None, None));
+        let fetch_comments = should_fetch_comments_for_pr(pr.pr_number, &changed_pr_numbers);
+        let configured_github_username = configured_github_username.map(ToOwned::to_owned);
+        poll_single_pr(
+            client,
+            token,
+            configured_github_username,
+            pr,
+            since,
+            old_ci,
+            old_review,
+            old_mergeable,
+            old_mergeable_state,
+            fetch_comments,
+        )
+    });
 
-    let futures: Vec<_> = open_prs
-        .into_iter()
-        .map(|pr| {
-            let client = github_client.clone();
-            let token = github_token.to_string();
-            // Always full-refetch comments (no `since` delta). A comment going
-            // outdated does not bump its updated_at, so a delta fetch would never
-            // re-read it and its "outdated" state would go stale. ETag conditional
-            // requests keep unchanged fetches cheap (304 Not Modified).
-            let since: Option<String> = None;
-            let old_ci = old_ci_map.get(&pr.id).cloned().flatten();
-            let old_review = old_review_map.get(&pr.id).cloned().flatten();
-            let (old_mergeable, old_mergeable_state) = old_mergeability_map
-                .get(&pr.id)
-                .cloned()
-                .unwrap_or((None, None));
-            let fetch_comments = should_fetch_comments_for_pr(pr.pr_number, &changed_pr_numbers);
-            let configured_github_username = configured_github_username.map(ToOwned::to_owned);
-            poll_single_pr(
-                client,
-                token,
-                configured_github_username,
-                pr,
-                since,
-                old_ci,
-                old_review,
-                old_mergeable,
-                old_mergeable_state,
-                fetch_comments,
-            )
-        })
-        .collect();
+    join_all(futures).await
+}
 
-    let results = join_all(futures).await;
-
-    let now = std::time::SystemTime::now()
+fn current_unix_timestamp() -> Result<i64, String> {
+    let elapsed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        .map_err(|error| format!("system clock predates Unix epoch: {error}"))?;
+    i64::try_from(elapsed.as_secs())
+        .map_err(|_| "unix timestamp exceeds supported range".to_string())
+}
 
-    let mut new_comment_count = 0;
-    let mut ci_change_count = 0;
-    let mut review_change_count = 0;
-    let mut pr_change_count = 0;
-    let mut error_count = 0;
-
-    let db_lock = acquire_db(db);
-
+fn persist_poll_results(
+    events: &GitHubEventTarget,
+    db: &Database,
+    results: Vec<PollSinglePrResult>,
+    now: i64,
+) -> PollPersistenceCounts {
+    let mut counts = PollPersistenceCounts::default();
     for result in results {
-        if let Some(err) = &result.error {
+        counts.absorb(persist_poll_result(events, db, &result, now));
+    }
+    counts
+}
+
+fn persist_poll_result(
+    events: &GitHubEventTarget,
+    db: &Database,
+    result: &PollSinglePrResult,
+    now: i64,
+) -> PollPersistenceCounts {
+    let mut counts = PollPersistenceCounts::default();
+    if let Some(error) = &result.error {
+        error!(
+            "[GitHub Poller] Failed to poll PR #{}: {}",
+            result.pr_id, error
+        );
+        counts.errors += 1;
+        return counts;
+    }
+
+    let project_id = match project_id_for_task(db, &result.ticket_id) {
+        Ok(project_id) => project_id,
+        Err(error) => {
+            warn!(
+                "[GitHub Poller] Failed to resolve Project for Task {}: {}",
+                result.ticket_id, error
+            );
+            counts.errors += 1;
+            None
+        }
+    };
+    let comments = match persist_comments_and_publish_new(events, db, result, now) {
+        Ok(comments) => comments,
+        Err(error) => {
             error!(
-                "[GitHub Poller] Failed to poll PR #{}: {}",
-                result.pr_id, err
+                "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
+                result.pr_id, error
             );
-            error_count += 1;
-            continue;
+            counts.errors += 1;
+            return counts;
         }
+    };
 
-        let project_id = match db_lock.get_task(&result.ticket_id) {
-            Ok(Some(task)) => task.project_id,
-            Ok(None) => None,
-            Err(error) => {
+    counts.new_comments += comments.new_comment_count;
+    counts.errors += comments.error_count;
+    counts.absorb(persist_ci_and_publish_change(
+        events,
+        db,
+        result,
+        project_id.as_deref(),
+        now,
+    ));
+    counts.absorb(persist_review_and_publish_change(
+        events,
+        db,
+        result,
+        project_id.as_deref(),
+        now,
+    ));
+    counts.errors += persist_pr_snapshot(db, result);
+    counts.errors += reconcile_poll_readiness(db, result, comments.new_comment_count, now);
+    counts.absorb(persist_terminal_change(db, result));
+
+    emit_task_invalidation(events, result, project_id.as_deref());
+    counts.errors += record_last_polled(db, result.pr_id, now);
+    counts
+}
+
+fn persist_comments_and_publish_new(
+    events: &GitHubEventTarget,
+    db: &Database,
+    result: &PollSinglePrResult,
+    now: i64,
+) -> rusqlite::Result<PersistCommentsResult> {
+    let existing_ids = db.get_existing_comment_ids(result.pr_id)?;
+    Ok(persist_polled_comments(
+        db,
+        result,
+        &existing_ids,
+        now,
+        |comment_id| {
+            if let Err(error) = emit_new_pr_comment(events, &result.ticket_id, comment_id) {
                 warn!(
-                    "[GitHub Poller] Failed to resolve Project for Task {}: {}",
-                    result.ticket_id, error
+                    "[GitHub Poller] Failed to emit new-pr-comment event: {}",
+                    error
                 );
-                error_count += 1;
-                None
             }
-        };
-        let existing_ids = match db_lock.get_existing_comment_ids(result.pr_id) {
-            Ok(ids) => ids,
-            Err(e) => {
-                error!(
-                    "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
-                    result.pr_id, e
-                );
-                error_count += 1;
-                continue;
-            }
-        };
+        },
+    ))
+}
 
-        let persist_result = persist_polled_comments(events, &db_lock, &result, &existing_ids, now);
-        new_comment_count += persist_result.new_comment_count;
-        error_count += persist_result.error_count;
-
-        if let Some(ci_payload) = ci_persistence_payload(&result) {
-            if let Err(e) = db_lock.update_pr_ci_status(
-                ci_payload.pr_id,
-                &ci_payload.head_sha,
-                &ci_payload.status,
-                &ci_payload.check_runs_json,
+fn persist_ci_and_publish_change(
+    events: &GitHubEventTarget,
+    db: &Database,
+    result: &PollSinglePrResult,
+    project_id: Option<&str>,
+    now: i64,
+) -> PollPersistenceCounts {
+    let mut counts = PollPersistenceCounts::default();
+    match persist_ci_status(db, result) {
+        Ok(Some(status)) => {
+            if let Err(error) = emit_ci_status_changed(
+                events,
+                &result.ticket_id,
+                project_id,
+                result.pr_id,
+                &result.pr_title,
+                &status,
+                now,
             ) {
-                error!(
-                    "[GitHub Poller] Failed to update CI status for PR #{}: {}",
-                    result.pr_id, e
+                warn!(
+                    "[GitHub Poller] Failed to emit ci-status-changed event: {}",
+                    error
                 );
-                error_count += 1;
-            } else if ci_payload.status_changed {
-                if let Err(e) = events.emit(
-                    "ci-status-changed",
-                    serde_json::json!({
-                        "task_id": result.ticket_id,
-                        "project_id": project_id.as_deref(),
-                        "pr_id": result.pr_id,
-                        "pr_title": result.pr_title,
-                        "ci_status": ci_payload.status,
-                        "timestamp": now
-                    }),
-                ) {
-                    warn!(
-                        "[GitHub Poller] Failed to emit ci-status-changed event: {}",
-                        e
-                    );
-                }
-                ci_change_count += 1;
             }
+            counts.ci_changes += 1;
         }
-
-        if let Some(reviews) = &result.reviews {
-            let review_status = aggregate_review_status(
-                reviews,
-                result.has_requested_reviewers,
-                result.required_approving_count,
+        Ok(None) => {}
+        Err(error) => {
+            error!(
+                "[GitHub Poller] Failed to update CI status for PR #{}: {}",
+                result.pr_id, error
             );
-            if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
-                error!(
-                    "[GitHub Poller] Failed to update review status for PR #{}: {}",
-                    result.pr_id, e
-                );
-                error_count += 1;
-            } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
-                if let Err(e) = events.emit(
-                    "review-status-changed",
-                    serde_json::json!({
-                        "task_id": result.ticket_id,
-                        "project_id": project_id.as_deref(),
-                        "pr_id": result.pr_id,
-                        "pr_title": result.pr_title,
-                        "review_status": review_status,
-                        "timestamp": now
-                    }),
-                ) {
-                    warn!(
-                        "[GitHub Poller] Failed to emit review-status-changed event: {}",
-                        e
-                    );
-                }
-                review_change_count += 1;
-            }
+            counts.errors += 1;
         }
+    }
+    counts
+}
 
-        if let Some(github_node_id) = result.github_node_id.as_deref() {
-            if let Err(e) = db_lock.update_pr_github_node_id(result.pr_id, github_node_id) {
-                error!(
-                    "[GitHub Poller] Failed to update GitHub node id for PR #{}: {}",
-                    result.pr_id, e
+fn persist_review_and_publish_change(
+    events: &GitHubEventTarget,
+    db: &Database,
+    result: &PollSinglePrResult,
+    project_id: Option<&str>,
+    now: i64,
+) -> PollPersistenceCounts {
+    let mut counts = PollPersistenceCounts::default();
+    match persist_review_status(db, result) {
+        Ok(Some(status)) => {
+            if let Err(error) = emit_review_status_changed(
+                events,
+                &result.ticket_id,
+                project_id,
+                result.pr_id,
+                &result.pr_title,
+                &status,
+                now,
+            ) {
+                warn!(
+                    "[GitHub Poller] Failed to emit review-status-changed event: {}",
+                    error
                 );
-                error_count += 1;
             }
+            counts.review_changes += 1;
         }
-        let allowed_merge_methods = serde_json::to_string(&result.allowed_merge_methods)
-            .unwrap_or_else(|_| "[]".to_string());
-        if let Err(e) = db_lock.update_pr_merge_method_policy(
+        Ok(None) => {}
+        Err(error) => {
+            error!(
+                "[GitHub Poller] Failed to update review status for PR #{}: {}",
+                result.pr_id, error
+            );
+            counts.errors += 1;
+        }
+    }
+    counts
+}
+
+fn reconcile_poll_readiness(
+    db: &Database,
+    result: &PollSinglePrResult,
+    new_comment_count: usize,
+    now: i64,
+) -> usize {
+    match persist_readiness(db, result, new_comment_count, now) {
+        Ok(()) => 0,
+        Err(error) => {
+            error!(
+                "[GitHub Poller] Failed to update merge readiness for PR #{}: {}",
+                result.pr_id, error
+            );
+            1
+        }
+    }
+}
+
+fn persist_terminal_change(db: &Database, result: &PollSinglePrResult) -> PollPersistenceCounts {
+    let mut counts = PollPersistenceCounts::default();
+    match apply_terminal_pr_state(db, result) {
+        Ok(true) => counts.pr_changes += 1,
+        Ok(false) => {}
+        Err(error) => {
+            error!(
+                "[GitHub Poller] Failed to update terminal state for PR #{}: {}",
+                result.pr_id, error
+            );
+            counts.errors += 1;
+        }
+    }
+    counts
+}
+
+fn record_last_polled(db: &Database, pr_id: i64, now: i64) -> usize {
+    match db.set_pr_last_polled(pr_id, now) {
+        Ok(()) => 0,
+        Err(error) => {
+            error!(
+                "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
+                pr_id, error
+            );
+            1
+        }
+    }
+}
+
+fn project_id_for_task(db: &Database, task_id: &str) -> rusqlite::Result<Option<String>> {
+    Ok(db.get_task(task_id)?.and_then(|task| task.project_id))
+}
+
+fn persist_ci_status(
+    db: &Database,
+    result: &PollSinglePrResult,
+) -> rusqlite::Result<Option<String>> {
+    let Some(payload) = ci_persistence_payload(result) else {
+        return Ok(None);
+    };
+    db.update_pr_ci_status(
+        payload.pr_id,
+        &payload.head_sha,
+        &payload.status,
+        &payload.check_runs_json,
+    )?;
+    Ok(payload.status_changed.then_some(payload.status))
+}
+
+fn persist_review_status(
+    db: &Database,
+    result: &PollSinglePrResult,
+) -> rusqlite::Result<Option<String>> {
+    let Some(reviews) = &result.reviews else {
+        return Ok(None);
+    };
+    let status = aggregate_review_status(
+        reviews,
+        result.has_requested_reviewers,
+        result.required_approving_count,
+    );
+    db.update_pr_review_status(result.pr_id, &status)?;
+    let changed = result.old_review_status.as_deref() != Some(status.as_str());
+    Ok(changed.then_some(status))
+}
+
+fn persist_pr_snapshot(db: &Database, result: &PollSinglePrResult) -> usize {
+    let mut errors = 0;
+    if let Some(github_node_id) = result.github_node_id.as_deref() {
+        errors += log_pr_update_error(
+            result.pr_id,
+            "update GitHub node id",
+            db.update_pr_github_node_id(result.pr_id, github_node_id),
+        );
+    }
+
+    let allowed_merge_methods =
+        serde_json::to_string(&result.allowed_merge_methods).unwrap_or_else(|_| "[]".to_string());
+    errors += log_pr_update_error(
+        result.pr_id,
+        "update merge method policy",
+        db.update_pr_merge_method_policy(
             result.pr_id,
             result.merge_methods_policy_known,
             &allowed_merge_methods,
             result.default_merge_method.map(|method| method.as_str()),
-        ) {
-            error!(
-                "[GitHub Poller] Failed to update merge method policy for PR #{}: {}",
-                result.pr_id, e
-            );
-            error_count += 1;
-        }
-
-        if let Err(e) = db_lock.update_pr_is_queued(result.pr_id, result.is_queued) {
-            error!(
-                "[GitHub Poller] Failed to update is_queued for PR #{}: {}",
-                result.pr_id, e
-            );
-            error_count += 1;
-        }
-
-        if let Err(e) = db_lock.update_pr_mergeability(
+        ),
+    );
+    errors += log_pr_update_error(
+        result.pr_id,
+        "update is_queued",
+        db.update_pr_is_queued(result.pr_id, result.is_queued),
+    );
+    errors += log_pr_update_error(
+        result.pr_id,
+        "update mergeability",
+        db.update_pr_mergeability(
             result.pr_id,
             result.mergeable,
             result.mergeable_state.as_deref(),
-        ) {
-            error!(
-                "[GitHub Poller] Failed to update mergeability for PR #{}: {}",
-                result.pr_id, e
-            );
-            error_count += 1;
-        }
+        ),
+    );
+    errors
+}
 
-        let readiness_facts = finalize_readiness_facts_for_poll(
-            result.readiness_facts.clone(),
-            None,
-            &result.head_sha,
-            result.is_queued,
-            false,
-            persist_result.new_comment_count,
-            now,
-        );
-        if let Err(e) = db_lock.update_pr_merge_readiness(result.pr_id, &readiness_facts) {
+fn log_pr_update_error(pr_id: i64, operation: &str, result: rusqlite::Result<()>) -> usize {
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
             error!(
-                "[GitHub Poller] Failed to update merge readiness for PR #{}: {}",
-                result.pr_id, e
+                "[GitHub Poller] Failed to {} for PR #{}: {}",
+                operation, pr_id, error
             );
-            error_count += 1;
-        }
-
-        match apply_terminal_pr_state(&db_lock, &result) {
-            Ok(true) => pr_change_count += 1,
-            Ok(false) => {}
-            Err(e) => {
-                error!(
-                    "[GitHub Poller] Failed to update terminal state for PR #{}: {}",
-                    result.pr_id, e
-                );
-                error_count += 1;
-            }
-        }
-
-        if let Some(project_id) = project_id.as_deref() {
-            if let Err(error) = emit_task_updated(events, &result.ticket_id, project_id) {
-                warn!(
-                    "[GitHub Poller] Failed to emit Task Board invalidation for Task {}: {}",
-                    result.ticket_id, error
-                );
-            }
-        }
-        if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
-            error!(
-                "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
-                result.pr_id, e
-            );
-            error_count += 1;
+            1
         }
     }
+}
 
-    drop(db_lock);
-
-    (
+fn persist_readiness(
+    db: &Database,
+    result: &PollSinglePrResult,
+    new_comment_count: usize,
+    now: i64,
+) -> rusqlite::Result<()> {
+    let readiness_facts = finalize_readiness_facts_for_poll(
+        result.readiness_facts.clone(),
+        None,
+        &result.head_sha,
+        result.is_queued,
+        false,
         new_comment_count,
-        ci_change_count,
-        review_change_count,
-        pr_change_count,
-        error_count,
-    )
+        now,
+    );
+    db.update_pr_merge_readiness(result.pr_id, &readiness_facts)
+}
+
+fn emit_task_invalidation(
+    events: &GitHubEventTarget,
+    result: &PollSinglePrResult,
+    project_id: Option<&str>,
+) {
+    let Some(project_id) = project_id else {
+        return;
+    };
+    if let Err(error) = emit_task_updated(events, &result.ticket_id, project_id) {
+        warn!(
+            "[GitHub Poller] Failed to emit Task Board invalidation for Task {}: {}",
+            result.ticket_id, error
+        );
+    }
 }
 
 pub(super) fn ci_persistence_payload(result: &PollSinglePrResult) -> Option<CiPersistencePayload> {
