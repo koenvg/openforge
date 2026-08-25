@@ -40,6 +40,16 @@ fn parse_branch_merge_method_restriction(
     Ok(restriction)
 }
 
+fn branch_merge_method_restriction_from_body(
+    body: &str,
+) -> super::types::PolicyValue<Option<Vec<PullRequestMergeMethod>>> {
+    serde_json::from_str::<Value>(body)
+        .map_err(|error| error.to_string())
+        .and_then(|payload| parse_branch_merge_method_restriction(&payload))
+        .map(super::types::PolicyValue::known)
+        .unwrap_or_else(super::types::PolicyValue::unknown)
+}
+
 fn branch_merge_method_restriction_from_response(
     status: reqwest::StatusCode,
     body: &str,
@@ -47,14 +57,11 @@ fn branch_merge_method_restriction_from_response(
     const PRIVATE_REPOSITORY_RULES_UNAVAILABLE: &str =
         "Upgrade to GitHub Pro or make this repository public to enable this feature.";
 
-    let payload = serde_json::from_str::<Value>(body);
     let rules_are_unavailable_for_plan = status == reqwest::StatusCode::FORBIDDEN
-        && payload
-            .as_ref()
-            .ok()
-            .and_then(|value| value.get("message"))
-            .and_then(Value::as_str)
-            == Some(PRIVATE_REPOSITORY_RULES_UNAVAILABLE);
+        && serde_json::from_str::<Value>(body).is_ok_and(|value| {
+            value.get("message").and_then(Value::as_str)
+                == Some(PRIVATE_REPOSITORY_RULES_UNAVAILABLE)
+        });
 
     if rules_are_unavailable_for_plan {
         return super::types::PolicyValue::known(None);
@@ -66,11 +73,7 @@ fn branch_merge_method_restriction_from_response(
         ));
     }
 
-    payload
-        .map_err(|error| error.to_string())
-        .and_then(|payload| parse_branch_merge_method_restriction(&payload))
-        .map(super::types::PolicyValue::known)
-        .unwrap_or_else(super::types::PolicyValue::unknown)
+    branch_merge_method_restriction_from_body(body)
 }
 
 fn branch_rules_url(owner: &str, repo: &str, branch: &str) -> String {
@@ -99,11 +102,7 @@ impl super::GitHubClient {
         let url = branch_rules_url(owner, repo, branch);
         let response = match self.conditional_get(&url, token).await {
             Ok(super::ConditionalResponse::NotModified(Some(cached_body))) => {
-                return serde_json::from_str::<Value>(&cached_body)
-                    .map_err(|error| error.to_string())
-                    .and_then(|payload| parse_branch_merge_method_restriction(&payload))
-                    .map(super::types::PolicyValue::known)
-                    .unwrap_or_else(super::types::PolicyValue::unknown);
+                return branch_merge_method_restriction_from_body(&cached_body);
             }
             Ok(super::ConditionalResponse::NotModified(None)) => {
                 return super::types::PolicyValue::unknown(
@@ -181,6 +180,50 @@ mod tests {
         assert!(policy.known);
         assert_eq!(policy.value, None);
         assert_eq!(policy.unknown_reason, None);
+    }
+
+    #[test]
+    fn cached_and_fresh_branch_rules_bodies_produce_same_policy() {
+        let body = r#"[{"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash"]}}]"#;
+        let cached_policy = branch_merge_method_restriction_from_body(body);
+        let fresh_policy =
+            branch_merge_method_restriction_from_response(reqwest::StatusCode::OK, body);
+
+        assert_eq!(cached_policy, fresh_policy);
+        assert!(fresh_policy.known);
+        assert_eq!(
+            fresh_policy.value,
+            Some(vec![
+                PullRequestMergeMethod::Merge,
+                PullRequestMergeMethod::Squash,
+            ])
+        );
+        assert_eq!(fresh_policy.unknown_reason, None);
+    }
+
+    #[test]
+    fn malformed_successful_branch_rules_response_is_unknown() {
+        let policy =
+            branch_merge_method_restriction_from_response(reqwest::StatusCode::OK, "not json");
+
+        assert!(!policy.known);
+        assert_eq!(policy.value, None);
+        assert!(policy.unknown_reason.is_some());
+    }
+
+    #[test]
+    fn unexpected_branch_rules_response_is_unknown_without_parsing_body() {
+        let policy = branch_merge_method_restriction_from_response(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            "not json",
+        );
+
+        assert!(!policy.known);
+        assert_eq!(policy.value, None);
+        assert_eq!(
+            policy.unknown_reason.as_deref(),
+            Some("active branch rules unavailable (500 Internal Server Error)")
+        );
     }
 
     #[test]
