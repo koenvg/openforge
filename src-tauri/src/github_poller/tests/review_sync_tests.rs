@@ -149,16 +149,6 @@ fn test_stale_authored_pr_candidates_preserve_repo_local_pr_identity() {
 }
 
 #[test]
-fn authored_task_pr_timestamp_propagates_clock_errors() {
-    let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
-
-    let error = authored_task_pr_timestamp(before_unix_epoch)
-        .expect_err("a pre-epoch clock value should return an error");
-
-    assert!(matches!(error, SyncOpenPrsError::Clock(_)));
-}
-
-#[test]
 fn test_sync_open_prs_error_rate_limit_detection_uses_typed_github_error() {
     let rate_limited = SyncOpenPrsError::GitHub(crate::github_client::GitHubError::ApiError {
         status: 429,

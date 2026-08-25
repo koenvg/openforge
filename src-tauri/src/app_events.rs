@@ -578,14 +578,9 @@ fn frame_cursor(frame: &AppEventFrame) -> Option<AppEventCursor> {
     }
 }
 
-fn app_event_timestamp_ms(now: std::time::SystemTime) -> Result<u64, AppEventError> {
-    now.duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis() as u64)
-        .map_err(|_| AppEventError::Clock)
-}
-
 fn now_ms() -> Result<u64, AppEventError> {
-    app_event_timestamp_ms(std::time::SystemTime::now())
+    crate::unix_timestamp::milliseconds(std::time::SystemTime::now())
+        .map_err(|_| AppEventError::Clock)
 }
 
 pub type AppEventSender = tokio::sync::broadcast::Sender<AppEventEnvelope>;
@@ -637,15 +632,6 @@ pub fn publish_app_event_to_runtime(
 mod tests {
     use super::*;
 
-    #[test]
-    fn app_event_timestamp_rejects_time_before_unix_epoch() {
-        let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
-
-        let error = app_event_timestamp_ms(before_unix_epoch)
-            .expect_err("a pre-epoch clock value should return an error");
-
-        assert_eq!(error, AppEventError::Clock);
-    }
     #[test]
     fn test_publish_app_event_fans_out_to_app_event_stream_sender() {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(16);

@@ -1,7 +1,6 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::process::Command;
 
@@ -226,10 +225,8 @@ fn resolve_binary(env_name: &str, binary_name: &str) -> Result<PathBuf, String> 
 }
 
 fn unique_staging_dir(managed_base_dir: &Path, prefix: &str) -> Result<PathBuf, String> {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("failed to create staging directory nonce: {error}"))?
-        .as_nanos();
+    let nonce = crate::unix_timestamp::nanoseconds(std::time::SystemTime::now())
+        .map_err(|error| format!("failed to create staging directory nonce: {error}"))?;
     let path = managed_base_dir
         .join(".staging")
         .join(format!("{prefix}-{nonce}"));

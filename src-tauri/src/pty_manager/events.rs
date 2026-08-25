@@ -106,10 +106,7 @@ pub(super) fn pty_output_channel() -> (PtyOutputSender, PtyOutputReceiver) {
 type PtyEmitResult = Result<(), String>;
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+    crate::unix_timestamp::milliseconds(std::time::SystemTime::now()).unwrap_or_default()
 }
 
 fn decode_pty_output(bytes: &[u8], incomplete_utf8: &mut Vec<u8>) -> String {

@@ -298,11 +298,14 @@ async fn poll_project_prs(
 }
 
 fn current_unix_timestamp() -> Result<i64, String> {
-    let elapsed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|error| format!("system clock predates Unix epoch: {error}"))?;
-    i64::try_from(elapsed.as_secs())
-        .map_err(|_| "unix timestamp exceeds supported range".to_string())
+    crate::unix_timestamp::seconds(std::time::SystemTime::now()).map_err(|error| match error {
+        crate::unix_timestamp::UnixTimestampError::BeforeEpoch(error) => {
+            format!("system clock predates Unix epoch: {error}")
+        }
+        crate::unix_timestamp::UnixTimestampError::OutOfRange(_) => {
+            "unix timestamp exceeds supported range".to_string()
+        }
+    })
 }
 
 fn persist_poll_results(
