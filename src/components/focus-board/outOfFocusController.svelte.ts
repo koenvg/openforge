@@ -1,8 +1,12 @@
 import { fromStore, type Writable } from 'svelte/store'
-import { loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from '../../lib/boardFilters'
-import { outOfFocusTaskIdsByProject } from '../../lib/stores'
+import {
+  createOutOfFocusTaskMembershipState,
+  outOfFocusTaskMembership,
+  type OutOfFocusTaskMembershipState,
+} from '../../lib/outOfFocusTaskMembership'
 
 export interface OutOfFocusControllerOptions {
+  membership?: OutOfFocusTaskMembershipState
   taskIdsByProject?: Writable<Map<string, Set<string>>>
   loadTaskIds?: (projectId: string) => Promise<Set<string>>
   saveTaskIds?: (projectId: string, taskIds: Set<string>) => Promise<void>
@@ -13,39 +17,30 @@ export interface OutOfFocusController {
   readonly taskIds: ReadonlySet<string>
   isReadyFor(projectId: string | null): boolean
   selectProject(projectId: string | null): void
-  setAside(taskId: string): void
-  returnToBoard(taskId: string): void
+  setAside(taskId: string): Promise<void>
+  returnToBoard(taskId: string): Promise<void>
 }
 
 export function createOutOfFocusController(
   options: OutOfFocusControllerOptions = {},
 ): OutOfFocusController {
-  const taskIdsByProject = options.taskIdsByProject ?? outOfFocusTaskIdsByProject
-  const taskIdsByProjectState = fromStore(taskIdsByProject)
-  const loadTaskIds = options.loadTaskIds ?? loadOutOfFocusTaskIds
-  const saveTaskIds = options.saveTaskIds ?? saveOutOfFocusTaskIds
+  const hasCustomMembershipDependencies = options.taskIdsByProject !== undefined
+    || options.loadTaskIds !== undefined
+    || options.saveTaskIds !== undefined
+  const membership = options.membership ?? (
+    hasCustomMembershipDependencies
+      ? createOutOfFocusTaskMembershipState({
+          taskIdsByProject: options.taskIdsByProject,
+          loadTaskIds: options.loadTaskIds,
+          saveTaskIds: options.saveTaskIds,
+        })
+      : outOfFocusTaskMembership
+  )
+  const taskIdsByProjectState = fromStore(membership.taskIdsByProject)
 
   let activeProjectId = $state<string | null>(null)
   let loadedProjectId = $state<string | null>(null)
   let loadGeneration = 0
-
-  function replaceProjectTaskIds(projectId: string, taskIds: Set<string>): void {
-    taskIdsByProject.update((current) => {
-      const next = new Map(current)
-      if (taskIds.size > 0) {
-        next.set(projectId, taskIds)
-      } else {
-        next.delete(projectId)
-      }
-      return next
-    })
-  }
-
-  function applyLoadedTaskIds(projectId: string, generation: number, taskIds: Set<string>): void {
-    if (generation !== loadGeneration) return
-    replaceProjectTaskIds(projectId, taskIds)
-    loadedProjectId = projectId
-  }
 
   function selectProject(projectId: string | null): void {
     activeProjectId = projectId
@@ -53,34 +48,31 @@ export function createOutOfFocusController(
     const generation = ++loadGeneration
     if (!projectId) return
 
-    loadTaskIds(projectId)
-      .then((taskIds) => applyLoadedTaskIds(projectId, generation, taskIds))
-      .catch(() => applyLoadedTaskIds(projectId, generation, new Set()))
+    void membership.synchronizeProject(projectId, () => generation === loadGeneration)
+      .then((finishedCurrentSelection) => {
+        if (finishedCurrentSelection && generation === loadGeneration) {
+          loadedProjectId = projectId
+        }
+      })
   }
 
-  function updateTaskMembership(taskId: string, shouldBeOutOfFocus: boolean): void {
+  async function updateTaskMembership(taskId: string, shouldBeOutOfFocus: boolean): Promise<void> {
     if (!activeProjectId) return
 
-    const projectId = activeProjectId
-    const nextTaskIds = new Set(taskIdsByProjectState.current.get(projectId) ?? new Set<string>())
-    if (shouldBeOutOfFocus) {
-      nextTaskIds.add(taskId)
-    } else {
-      nextTaskIds.delete(taskId)
-    }
-    replaceProjectTaskIds(projectId, nextTaskIds)
-
-    void saveTaskIds(projectId, nextTaskIds)
-      .then(() => options.onProjectAttentionChanged?.())
-      .catch((error: unknown) => console.error('Failed to save Out of Focus tasks:', error))
+    await membership.updateTaskMembership({
+      projectId: activeProjectId,
+      taskId,
+      shouldBeOutOfFocus,
+      onProjectAttentionChanged: options.onProjectAttentionChanged,
+    })
   }
 
-  function setAside(taskId: string): void {
-    updateTaskMembership(taskId, true)
+  async function setAside(taskId: string): Promise<void> {
+    await updateTaskMembership(taskId, true)
   }
 
-  function returnToBoard(taskId: string): void {
-    updateTaskMembership(taskId, false)
+  async function returnToBoard(taskId: string): Promise<void> {
+    await updateTaskMembership(taskId, false)
   }
 
   return {

@@ -1,5 +1,6 @@
 import { get, writable } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
+import { error as appError } from '../../lib/stores'
 import { createOutOfFocusController } from './outOfFocusController.svelte'
 
 function deferred<T>() {
@@ -64,35 +65,61 @@ describe('createOutOfFocusController', () => {
     controller.selectProject('project-1')
     await vi.waitFor(() => expect(controller.isReadyFor('project-1')).toBe(true))
 
-    controller.setAside('task-2')
+    const mutation = controller.setAside('task-2')
 
-    expect(get(taskIdsByProject).get('project-1')).toEqual(new Set(['task-2']))
+    await vi.waitFor(() => {
+      expect(get(taskIdsByProject).get('project-1')).toEqual(new Set(['task-2']))
+    })
     expect(saveTaskIds).toHaveBeenCalledWith('project-1', new Set(['task-2']))
     expect(onProjectAttentionChanged).not.toHaveBeenCalled()
 
     saveResult.resolve()
-    await vi.waitFor(() => expect(onProjectAttentionChanged).toHaveBeenCalledOnce())
+    await mutation
+    expect(onProjectAttentionChanged).toHaveBeenCalledOnce()
+  })
+
+  it('reloads persisted membership before applying a FocusBoard mutation', async () => {
+    const taskIdsByProject = writable<Map<string, Set<string>>>(new Map())
+    const loadTaskIds = vi
+      .fn<() => Promise<Set<string>>>()
+      .mockResolvedValueOnce(new Set())
+      .mockResolvedValueOnce(new Set(['persisted-task']))
+    const saveTaskIds = vi.fn(async () => undefined)
+    const controller = createOutOfFocusController({ taskIdsByProject, loadTaskIds, saveTaskIds })
+
+    controller.selectProject('project-1')
+    await vi.waitFor(() => expect(controller.isReadyFor('project-1')).toBe(true))
+
+    taskIdsByProject.set(new Map([['project-1', new Set(['stale-task'])]]))
+    await controller.setAside('task-2')
+
+    expect(loadTaskIds).toHaveBeenCalledTimes(2)
+    expect(get(taskIdsByProject).get('project-1')).toEqual(new Set(['persisted-task', 'task-2']))
+    expect(saveTaskIds).toHaveBeenCalledWith('project-1', new Set(['persisted-task', 'task-2']))
   })
 
   it('returns a Task to the board and removes empty Project membership', async () => {
     const taskIdsByProject = writable(new Map([
       ['project-1', new Set(['task-1', 'task-2'])],
     ]))
-    const saveTaskIds = vi.fn(async () => undefined)
+    let persistedTaskIds = new Set(['task-1', 'task-2'])
+    const saveTaskIds = vi.fn(async (_projectId: string, taskIds: Set<string>) => {
+      persistedTaskIds = new Set(taskIds)
+    })
     const controller = createOutOfFocusController({
       taskIdsByProject,
-      loadTaskIds: vi.fn(async () => new Set(['task-1', 'task-2'])),
+      loadTaskIds: vi.fn(async () => new Set(persistedTaskIds)),
       saveTaskIds,
     })
 
     controller.selectProject('project-1')
     await vi.waitFor(() => expect(controller.isReadyFor('project-1')).toBe(true))
 
-    controller.returnToBoard('task-1')
+    await controller.returnToBoard('task-1')
     expect(get(taskIdsByProject).get('project-1')).toEqual(new Set(['task-2']))
     expect(saveTaskIds).toHaveBeenLastCalledWith('project-1', new Set(['task-2']))
 
-    controller.returnToBoard('task-2')
+    await controller.returnToBoard('task-2')
     expect(get(taskIdsByProject).has('project-1')).toBe(false)
     expect(saveTaskIds).toHaveBeenLastCalledWith('project-1', new Set<string>())
   })
@@ -114,6 +141,7 @@ describe('createOutOfFocusController', () => {
   })
 
   it('keeps the optimistic membership and reports a persistence failure without refreshing attention', async () => {
+    appError.set(null)
     const saveError = new Error('save failed')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const taskIdsByProject = writable<Map<string, Set<string>>>(new Map())
@@ -127,11 +155,10 @@ describe('createOutOfFocusController', () => {
 
     controller.selectProject('project-1')
     await vi.waitFor(() => expect(controller.isReadyFor('project-1')).toBe(true))
-    controller.setAside('task-1')
+    await controller.setAside('task-1')
 
-    await vi.waitFor(() => {
-      expect(consoleError).toHaveBeenCalledWith('Failed to save Out of Focus tasks:', saveError)
-    })
+    expect(consoleError).toHaveBeenCalledWith('Failed to update Out of Focus tasks:', saveError)
+    expect(get(appError)).toContain('save failed')
     expect(get(taskIdsByProject).get('project-1')).toEqual(new Set(['task-1']))
     expect(onProjectAttentionChanged).not.toHaveBeenCalled()
 
@@ -150,9 +177,9 @@ describe('createOutOfFocusController', () => {
 
     controller.selectProject('project-1')
     await vi.waitFor(() => expect(controller.isReadyFor('project-1')).toBe(true))
-    controller.setAside('task-1')
+    await controller.setAside('task-1')
 
-    await vi.waitFor(() => expect(consoleError).toHaveBeenCalledWith('Failed to save Out of Focus tasks:', refreshError))
+    expect(consoleError).toHaveBeenCalledWith('Failed to update Out of Focus tasks:', refreshError)
     consoleError.mockRestore()
   })
 })
