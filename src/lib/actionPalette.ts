@@ -1,3 +1,4 @@
+import { getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
 import { getAppShortcutHelpLabel, getPrimaryAppShortcutKey } from './appShortcutDefinitions'
 import {
   getProjectActionPresentation,
@@ -37,12 +38,6 @@ function taskPaletteAction(id: TaskPaletteActionId): PaletteAction {
   }
 }
 
-const MERGE_METHOD_LABELS: Record<PullRequestMergeMethod, (prNumber: number) => string> = {
-  merge: prNumber => `Create a merge commit for PR #${prNumber}`,
-  squash: prNumber => `Squash and merge PR #${prNumber}`,
-  rebase: prNumber => `Rebase and merge PR #${prNumber}`,
-}
-
 
 function parseAllowedMergeMethods(pr: PullRequestInfo): PullRequestMergeMethod[] {
   if (pr.merge_methods_policy_known !== true || pr.allowed_merge_methods === null) return []
@@ -75,7 +70,7 @@ function mergePaletteActions(pr: PullRequestInfo): PaletteAction[] {
   return ordered.map(mergeMethod => ({
     ...presentation,
     id: `merge-pr:${mergeMethod}`,
-    label: MERGE_METHOD_LABELS[mergeMethod](pr.pr_number),
+    label: getPullRequestMergeActionLabel(mergeMethod, pr.pr_number),
     keywords: [...presentation.keywords, mergeMethod],
     shortcut: null,
     category: 'task',

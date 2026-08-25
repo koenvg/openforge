@@ -24,8 +24,13 @@ export function useMergeOrchestration(client: GithubTaskClient, onActionComplete
 
     let actionSucceeded = false
     try {
-      if (action === 'merge') await client.mergePullRequest(pr)
-      else await client.enqueuePullRequest(pr)
+      if (action === 'merge') {
+        const mergeMethod = pr.default_merge_method
+        if (!mergeMethod) throw new Error('GitHub merge method is unavailable. Refresh GitHub status and try again.')
+        await client.mergePullRequest(pr, mergeMethod)
+      } else {
+        await client.enqueuePullRequest(pr)
+      }
       actionSucceeded = true
       await onActionCompleted(pr)
       setFeedback(pr.id, {

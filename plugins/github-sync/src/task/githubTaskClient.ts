@@ -1,5 +1,5 @@
 import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
-import type { PollResult, PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
+import type { PollResult, PrComment, PullRequestInfo, PullRequestMergeMethod } from '@openforge-app/plugin-sdk/domain'
 import type { ResolvedMarkdownMedia } from '@openforge-app/plugin-sdk/markdown'
 
 export interface GithubTaskClient {
@@ -8,7 +8,7 @@ export interface GithubTaskClient {
   linkPullRequest(taskId: string, prUrl: string): Promise<PullRequestInfo>
   getComments(prId: number): Promise<PrComment[]>
   markCommentAddressed(commentId: number): Promise<void>
-  mergePullRequest(pr: PullRequestInfo): Promise<void>
+  mergePullRequest(pr: PullRequestInfo, mergeMethod: PullRequestMergeMethod): Promise<void>
   enqueuePullRequest(pr: PullRequestInfo): Promise<void>
   resolveGithubAsset(request: { owner: string; repo: string; url: string }): Promise<ResolvedMarkdownMedia | null>
 }
@@ -27,10 +27,11 @@ export function createGithubTaskClient(api: FrontendOpenForgeAPI): GithubTaskCli
     linkPullRequest: (taskId, prUrl) => invoke('linkTaskPullRequest', { taskId, prUrl }),
     getComments: (prId) => invoke('getTaskPrComments', { prId }),
     markCommentAddressed: (commentId) => invoke('markTaskPrCommentAddressed', { commentId }),
-    mergePullRequest: (pr) => invoke('mergeTaskPullRequest', {
+    mergePullRequest: (pr, mergeMethod) => invoke('mergeTaskPullRequest', {
       taskId: pr.ticket_id,
       prId: pr.id,
       expectedHeadSha: pr.head_sha,
+      mergeMethod,
     }),
     enqueuePullRequest: (pr) => invoke('enqueueTaskPullRequest', {
       taskId: pr.ticket_id,

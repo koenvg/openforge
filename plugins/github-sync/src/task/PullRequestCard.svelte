@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
   import { canEnqueuePullRequest, canMergePullRequest, getMergeReadiness, isClosedOrMergedPullRequest, isClosedUnmergedPullRequest, isMergedPullRequest, parseCheckRuns, splitCheckRuns } from '@openforge-app/plugin-sdk/domain'
-  import { getPrStatusChips } from '@openforge-app/plugin-sdk/prStatusPresentation'
+  import { getPrStatusChips, getPullRequestMergeActionLabel } from '@openforge-app/plugin-sdk/prStatusPresentation'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import PrStatusChip from '@openforge-app/pr-review-ui/PrStatusChip.svelte'
@@ -34,6 +34,8 @@
   }: Props = $props()
 
   let chips = $derived(getPrStatusChips(pr, 'detail'))
+  let mergeActionLabel = $derived(pr.default_merge_method ? getPullRequestMergeActionLabel(pr.default_merge_method) : 'Merge')
+  let canMerge = $derived(canMergePullRequest(pr) && pr.default_merge_method !== null && pr.default_merge_method !== undefined)
   let detail = $derived(readinessText(pr))
   let unaddressedComments = $derived(comments.filter((comment) => comment.addressed === 0))
   let checkSummary = $derived(splitCheckRuns(parseCheckRuns(pr.ci_check_runs)))
@@ -91,7 +93,7 @@
     </div>
   {/if}
 
-  {#if detail || canMergePullRequest(pr) || canEnqueuePullRequest(pr) || feedback}
+  {#if detail || canMerge || canEnqueuePullRequest(pr) || feedback}
     <div class="border-t border-base-300/70 bg-base-200/35 p-2.5 flex flex-col gap-2" aria-label="Pull request merge status">
       {#if detail}<div class="text-[0.7rem] text-base-content/60">{detail}</div>{/if}
       <div class="flex items-center gap-2">
@@ -104,13 +106,13 @@
               Enqueue
             {/if}
           </Button>
-        {:else if canMergePullRequest(pr)}
-          <Button size="xs" aria-label={pendingPrId === pr.id || taskActionPending ? 'Merging…' : 'Merge'} disabled={pendingPrId !== null || taskActionPending} onclick={() => onRequestAction(pr, 'merge')}>
+        {:else if canMerge}
+          <Button size="xs" aria-label={pendingPrId === pr.id || taskActionPending ? 'Merging…' : mergeActionLabel} disabled={pendingPrId !== null || taskActionPending} onclick={() => onRequestAction(pr, 'merge')}>
             {#if pendingPrId === pr.id || taskActionPending}
               <span class="loading loading-spinner loading-xs" role="status" aria-label="Merging pull request"></span>
               Merging…
             {:else}
-              Merge
+              {mergeActionLabel}
             {/if}
           </Button>
         {/if}

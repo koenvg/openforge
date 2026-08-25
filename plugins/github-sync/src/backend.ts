@@ -5,6 +5,7 @@ import type {
   AiThread,
   AuthoredPullRequest,
   PollResult,
+  PullRequestMergeMethod,
   PrFileDiff,
   PrOverviewComment,
   PrWalkthrough,
@@ -18,6 +19,7 @@ type TaskPullRequestActionRequest = {
   taskId: string
   prId: number
   expectedHeadSha: string
+  mergeMethod?: PullRequestMergeMethod
 }
 import { randomUUID } from 'node:crypto'
 import {
