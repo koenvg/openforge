@@ -2,7 +2,6 @@ import { get } from 'svelte/store'
 import {
   activeSessions,
   error,
-  outOfFocusTaskIdsByProject,
   startingTasks,
   taskRuntimeInfo,
   tasks,
@@ -17,7 +16,10 @@ import {
   startImplementation,
 } from './ipc'
 import { runCompleteTask } from './completeTask'
-import { loadOutOfFocusTaskIds, saveOutOfFocusTaskIds } from './boardFilters'
+import {
+  outOfFocusTaskMembership,
+  type OutOfFocusTaskMembershipState,
+} from './outOfFocusTaskMembership'
 import { writePtyWithSubmit } from './ptySubmit'
 import { acquire, focusTerminal, getTerminalImageProtocol, hasTerminal, isPtyActive, release } from './terminalPool'
 import { resolveBranchStart } from './branchStart'
@@ -40,6 +42,7 @@ interface TaskActionRunnerOptions {
   getActiveProject(): Project | null
   loadTasks(): Promise<void>
   loadProjectAttention?: () => Promise<void>
+  outOfFocusMembership?: OutOfFocusTaskMembershipState
   logError?: (message: string, error: unknown) => void
 }
 
@@ -53,6 +56,7 @@ function setError(errorValue: unknown): void {
 
 export function createTaskActionRunner(options: TaskActionRunnerOptions) {
   const logError = options.logError ?? defaultLogError
+  const outOfFocusMembership = options.outOfFocusMembership ?? outOfFocusTaskMembership
 
   async function handleRunAction(data: RunActionData): Promise<void> {
     const activeProject = options.getActiveProject()
@@ -157,31 +161,16 @@ export function createTaskActionRunner(options: TaskActionRunnerOptions) {
       return
     }
 
-    try {
-      const storedTaskIds = await loadOutOfFocusTaskIds(activeProject.id)
-      const currentTaskIds = get(outOfFocusTaskIdsByProject).get(activeProject.id)
-      const nextTaskIds = new Set(currentTaskIds ?? storedTaskIds)
-
-      if (shouldBeOutOfFocus) {
-        nextTaskIds.add(taskId)
-      } else {
-        nextTaskIds.delete(taskId)
-      }
-
-      const nextByProject = new Map(get(outOfFocusTaskIdsByProject))
-      if (nextTaskIds.size > 0) {
-        nextByProject.set(activeProject.id, nextTaskIds)
-      } else {
-        nextByProject.delete(activeProject.id)
-      }
-      outOfFocusTaskIdsByProject.set(nextByProject)
-
-      await saveOutOfFocusTaskIds(activeProject.id, nextTaskIds)
-      await options.loadProjectAttention?.()
-    } catch (e) {
-      logError('Failed to update Out of Focus tasks:', e)
-      setError(e)
-    }
+    await outOfFocusMembership.updateTaskMembership({
+      projectId: activeProject.id,
+      taskId,
+      shouldBeOutOfFocus,
+      onProjectAttentionChanged: options.loadProjectAttention,
+      reportError: (message, errorValue) => {
+        logError(message, errorValue)
+        setError(errorValue)
+      },
+    })
   }
 
   async function mergeReadyPullRequest(

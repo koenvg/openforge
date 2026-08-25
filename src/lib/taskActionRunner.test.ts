@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { get } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import type { PullRequestInfo, Project, Task } from './types'
 
 vi.mock('./ipc', () => ({
@@ -27,6 +27,8 @@ vi.mock('./terminalPool', () => ({
   release: vi.fn(),
 }))
 
+import { createOutOfFocusController } from '../components/focus-board/outOfFocusController.svelte'
+import { createOutOfFocusTaskMembershipState } from './outOfFocusTaskMembership'
 import { createTaskActionRunner } from './taskActionRunner'
 import {
   activeSessions,
@@ -472,19 +474,31 @@ describe('createTaskActionRunner', () => {
     expect(loadTasks).not.toHaveBeenCalled()
   })
 
-  it('sets a task aside by persisting it in the Out of Focus backing set and refreshing project attention', async () => {
+  it('sets a task aside optimistically, persists it, and then refreshes project attention', async () => {
+    let resolveSave!: () => void
+    const savePending = new Promise<void>((resolve) => {
+      resolveSave = resolve
+    })
     const loadProjectAttention = vi.fn(async () => undefined)
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['T-existing']))
+    vi.mocked(setProjectConfig).mockImplementation(() => savePending)
     const runner = createTaskActionRunner({
       getActiveProject: () => activeProject,
       loadTasks: vi.fn(async () => undefined),
       loadProjectAttention,
     })
 
-    await runner.setTaskOutOfFocus(task.id, true)
+    outOfFocusTaskIdsByProject.set(new Map([[activeProject.id, new Set(['stale-task'])]]))
+    const mutation = runner.setTaskOutOfFocus(task.id, true)
+    await vi.waitFor(() => {
+      expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
+    })
 
-    expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing', task.id]))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing', task.id]))
+    expect(loadProjectAttention).not.toHaveBeenCalled()
+
+    resolveSave()
+    await mutation
     expect(loadProjectAttention).toHaveBeenCalledOnce()
   })
 
@@ -503,6 +517,60 @@ describe('createTaskActionRunner', () => {
     expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set(['T-existing']))
     expect(setProjectConfig).toHaveBeenCalledWith(activeProject.id, 'low_fire_task_ids', JSON.stringify(['T-existing']))
     expect(loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the optimistic Action Palette update and reports persistence failures consistently', async () => {
+    const saveError = new Error('save failed')
+    const loadProjectAttention = vi.fn(async () => undefined)
+    const logError = vi.fn()
+    vi.mocked(getProjectConfig).mockResolvedValue(null)
+    vi.mocked(setProjectConfig).mockRejectedValue(saveError)
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      loadProjectAttention,
+      logError,
+    })
+
+    await runner.setTaskOutOfFocus(task.id, true)
+
+    expect(get(outOfFocusTaskIdsByProject).get(activeProject.id)).toEqual(new Set([task.id]))
+    expect(loadProjectAttention).not.toHaveBeenCalled()
+    expect(logError).toHaveBeenCalledWith('Failed to update Out of Focus tasks:', saveError)
+    expect(get(error)).toContain('save failed')
+  })
+
+  it('does not let a pending FocusBoard load overwrite an Action Palette mutation', async () => {
+    let resolveBoardLoad!: (taskIds: Set<string>) => void
+    const boardLoad = new Promise<Set<string>>((resolve) => {
+      resolveBoardLoad = resolve
+    })
+    let persistedTaskIds = new Set(['persisted-task'])
+    const taskIdsByProject = writable<Map<string, Set<string>>>(new Map())
+    const loadTaskIds = vi
+      .fn<() => Promise<Set<string>>>()
+      .mockImplementationOnce(() => boardLoad)
+      .mockImplementation(async () => new Set(persistedTaskIds))
+    const membership = createOutOfFocusTaskMembershipState({
+      taskIdsByProject,
+      loadTaskIds,
+      saveTaskIds: vi.fn(async (_projectId, taskIds) => {
+        persistedTaskIds = new Set(taskIds)
+      }),
+    })
+    const controller = createOutOfFocusController({ membership })
+    const runner = createTaskActionRunner({
+      getActiveProject: () => activeProject,
+      loadTasks: vi.fn(async () => undefined),
+      outOfFocusMembership: membership,
+    })
+
+    controller.selectProject(activeProject.id)
+    await runner.setTaskOutOfFocus(task.id, true)
+    resolveBoardLoad(new Set(['stale-task']))
+
+    await vi.waitFor(() => expect(controller.isReadyFor(activeProject.id)).toBe(true))
+    expect(get(taskIdsByProject).get(activeProject.id)).toEqual(new Set(['persisted-task', task.id]))
   })
 
   it.each([
