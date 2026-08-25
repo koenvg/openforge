@@ -5,28 +5,17 @@ import {
   installPluginFromNpm as installPluginFromNpmIpc,
   registerBuiltinPlugin,
 } from '../ipc'
+import type { NormalizedPluginRow } from '../ipc'
 import { BUILTIN_PLUGIN_MANIFESTS, BUILTIN_PLUGIN_PACKAGE_METADATA } from './builtinPlugins'
 import { installedPlugins, loadInstalledPlugins, manifestFromPluginRow } from './pluginStore'
 import type { PluginManifest } from './types'
 import type { OpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 
-type InstalledPluginRow = {
-  id: string
-  name: string
-  version: string
-  apiVersion: number
-  description: string
-  permissions: string
-  contributes: string
-  frontendEntry: string
-  backendEntry: string | null
-  installPath: string
-  isBuiltin: boolean
-  sourceKind?: string
-  sourceSpec?: string
-  packageMetadata?: string
-  installedAt?: number
-}
+type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
+type InstalledPluginRow = WithOptional<
+  NormalizedPluginRow,
+  'sourceKind' | 'sourceSpec' | 'packageMetadata' | 'installedAt'
+>
 
 function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
