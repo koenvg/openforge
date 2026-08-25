@@ -110,6 +110,22 @@ export function tarExtractionArgs(archive, destination, { platform = process.pla
   ]
 }
 
+export function extractPackageArchive(
+  archive,
+  destination,
+  { platform = process.platform, runCommand = run } = {},
+) {
+  const args = tarExtractionArgs(archive, destination, { platform })
+  try {
+    runCommand('tar', args)
+  } catch (error) {
+    if (platform !== 'win32') throw error
+    // Git for Windows may see an archive symlink before its target. The first pass
+    // extracts the target, and the second resolves the symlink through MSYS.
+    runCommand('tar', args)
+  }
+}
+
 async function preparePackage(hash, url) {
   const destination = join(systemDir, hash)
   if (existsSync(destination)) return false
@@ -129,7 +145,7 @@ async function preparePackage(hash, url) {
     }
     mkdirSync(destination, { recursive: true })
     try {
-      run('tar', tarExtractionArgs(archive, destination))
+      extractPackageArchive(archive, destination)
     } catch (error) {
       rmSync(destination, { recursive: true, force: true })
       throw error

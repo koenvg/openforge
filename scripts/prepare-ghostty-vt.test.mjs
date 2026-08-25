@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { tarExtractionArgs } from './prepare-ghostty-vt.mjs'
+import { describe, expect, it, vi } from 'vitest'
+import { extractPackageArchive, tarExtractionArgs } from './prepare-ghostty-vt.mjs'
 
 describe('Ghostty dependency preparation', () => {
   it('forces Windows tar to treat drive-letter archives as local paths', () => {
@@ -25,5 +25,28 @@ describe('Ghostty dependency preparation', () => {
       '/tmp/package',
       '--strip-components=1',
     ])
+  })
+
+  it('retries Windows extraction after archive symlinks precede their targets', () => {
+    const runCommand = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('symlink target is not extracted yet') })
+      .mockImplementationOnce(() => '')
+
+    extractPackageArchive('C:\\archive.tar.gz', 'C:\\package', {
+      platform: 'win32',
+      runCommand,
+    })
+
+    expect(runCommand).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not mask Unix extraction failures', () => {
+    const runCommand = vi.fn(() => { throw new Error('corrupt archive') })
+
+    expect(() => extractPackageArchive('/tmp/archive.tar.gz', '/tmp/package', {
+      platform: 'linux',
+      runCommand,
+    })).toThrow('corrupt archive')
+    expect(runCommand).toHaveBeenCalledOnce()
   })
 })
