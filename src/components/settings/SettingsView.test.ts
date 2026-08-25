@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
-import { defaultProps } from './SettingsView.testUtils'
+import { defaultProps, openSettingsCategory } from './SettingsView.testUtils'
 import { resetSettingsViewNavigationTest } from './SettingsView.navigation.testFixture'
 import { getAllWhisperModelStatuses, getProjectConfig } from '../../lib/ipc'
 import { activeProjectId, projects } from '../../lib/stores'
@@ -10,9 +10,6 @@ import SettingsView from './SettingsView.svelte'
 describe('SettingsView rendering and navigation', () => {
   beforeEach(resetSettingsViewNavigationTest)
 
-  async function openCategory(name: RegExp) {
-    await fireEvent.click(screen.getByRole('button', { name }))
-  }
 
   it('renders General section', () => {
     render(SettingsView, { props: defaultProps })
@@ -48,10 +45,10 @@ describe('SettingsView rendering and navigation', () => {
 
     expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
 
-    await openCategory(/^Agents/)
+    await openSettingsCategory(/^Agents/)
     expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(1)
 
-    await openCategory(/GitHub & Credentials/)
+    await openSettingsCategory(/GitHub & Credentials/)
     expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
   })
 
@@ -82,7 +79,7 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryByText('Project configuration')).toBeNull()
     expect(screen.queryByTestId('task_id_prefix')).toBeNull()
 
-    await openCategory(/Agents & tasks/)
+    await openSettingsCategory(/Agents & tasks/)
 
     expect(screen.getByText('Project configuration')).toBeTruthy()
     expect(screen.getByTestId('task_id_prefix')).toBeTruthy()
@@ -132,7 +129,7 @@ describe('SettingsView rendering and navigation', () => {
 
   it('renders AI instructions textarea', async () => {
     render(SettingsView, { props: defaultProps })
-    await openCategory(/AI instructions/)
+    await openSettingsCategory(/AI instructions/)
     expect(
       screen.getByPlaceholderText(
         'Optional instructions prepended to the first prompt when starting a new task...'
@@ -143,7 +140,7 @@ describe('SettingsView rendering and navigation', () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    await openCategory(/GitHub & Credentials/)
+    await openSettingsCategory(/GitHub & Credentials/)
     expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
   })
 
@@ -206,7 +203,7 @@ describe('SettingsView rendering and navigation', () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    await openCategory(/GitHub & Credentials/)
+    await openSettingsCategory(/GitHub & Credentials/)
     const patInput = requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement)
     expect(patInput.type).toBe('password')
   })
@@ -230,7 +227,7 @@ describe('SettingsView rendering and navigation', () => {
 
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-    await openCategory(/Voice & Whisper/)
+    await openSettingsCategory(/Voice & Whisper/)
     await vi.waitFor(() => {
       expect(screen.queryAllByText(/tiny/i).length).toBeGreaterThan(0)
     })
@@ -240,7 +237,7 @@ describe('SettingsView rendering and navigation', () => {
 
   it('renders a Delete Project button in the danger zone', async () => {
     render(SettingsView, { props: defaultProps })
-    await openCategory(/Danger Zone/)
+    await openSettingsCategory(/Danger Zone/)
     expect(screen.getByRole('button', { name: /delete project/i })).toBeTruthy()
   })
 
