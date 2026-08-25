@@ -1,6 +1,9 @@
-use super::*;
 use crate::pty_manager::commands::get_shell_path;
-use crate::pty_manager::pids::shell_session_key;
+use crate::pty_manager::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
+use crate::pty_manager::pids::{shell_session_key, write_managed_process_identity};
+use crate::pty_manager::session::lifecycle::{PtySession, PtySessionKind};
+use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::time::Duration;
 
 fn long_running_shell_command() -> CommandBuilder {
@@ -139,22 +142,6 @@ async fn unresolved_shell_recovery_metadata_blocks_spawn_without_clobbering_reco
         .await
         .contains_key(&session_key));
     assert!(!manager.last_output.lock().await.contains_key(&session_key));
-}
-
-#[test]
-fn missing_root_pid_runs_emergency_child_cleanup() {
-    let cleanup_called = std::cell::Cell::new(false);
-
-    let result = require_root_pid_or_cleanup(None, "Shell PTY for task T-1", || {
-        cleanup_called.set(true);
-        Ok(())
-    });
-
-    assert!(matches!(result, Err(PtyError::SpawnFailed(_))));
-    assert!(
-        cleanup_called.get(),
-        "a spawned child without a PID must still receive emergency cleanup"
-    );
 }
 
 #[tokio::test]

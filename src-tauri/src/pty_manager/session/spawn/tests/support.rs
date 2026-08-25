@@ -1,15 +1,11 @@
-use super::super::super::PtySpawnContext;
+use super::super::super::{PtyError, PtyManager, PtySpawnContext};
 use super::super::provider_adapter::AgentPtyProviderAdapter;
-use super::agent::*;
-use super::*;
 use std::path::Path;
 
-#[cfg(test)]
 struct CompanionTestAgentAdapter {
     script: String,
 }
 
-#[cfg(test)]
 impl AgentPtyProviderAdapter for CompanionTestAgentAdapter {
     fn label(&self) -> &'static str {
         "CompanionTest"
@@ -44,7 +40,6 @@ impl AgentPtyProviderAdapter for CompanionTestAgentAdapter {
     }
 }
 
-#[cfg(test)]
 impl PtyManager {
     pub(crate) async fn spawn_companion_test_agent_pty(
         &self,
@@ -69,6 +64,3 @@ impl PtyManager {
         .await
     }
 }
-
-mod agent;
-mod shell;
