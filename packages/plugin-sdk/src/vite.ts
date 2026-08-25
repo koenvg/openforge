@@ -56,6 +56,7 @@ const OPENFORGE_PLUGIN_SDK_SOURCE_ENTRYPOINTS: readonly (readonly [string, strin
   ['@openforge-app/plugin-sdk/sanitize', 'packages/plugin-sdk/src/sanitize.ts'],
   ['@openforge-app/plugin-sdk/pluginIcons', 'packages/plugin-sdk/src/pluginIcons.ts'],
   ['@openforge-app/plugin-sdk/fileIcons', 'packages/plugin-sdk/src/fileIcons.ts'],
+  ['@openforge-app/plugin-sdk/collapsibleSectionState', 'packages/plugin-sdk/src/collapsibleSectionState.ts'],
   ...OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ importSpecifier, workspaceSourcePath }) =>
     [importSpecifier, workspaceSourcePath] as const),
   ['@openforge-app/plugin-sdk', 'packages/plugin-sdk/src/index.ts'],

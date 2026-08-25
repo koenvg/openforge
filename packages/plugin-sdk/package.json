@@ -64,6 +64,10 @@
       "types": "./dist/fileIcons.d.ts",
       "default": "./dist/fileIcons.js"
     },
+    "./collapsibleSectionState": {
+      "types": "./dist/collapsibleSectionState.d.ts",
+      "default": "./dist/collapsibleSectionState.js"
+    },
     "./ui/Button.svelte": "./dist/ui/Button.svelte",
     "./ui/Checkbox.svelte": "./dist/ui/Checkbox.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",
@@ -72,7 +76,8 @@
     "./ui/PluginPageHeader.svelte": "./dist/ui/PluginPageHeader.svelte",
     "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte",
     "./ui/PluginSidebarLink.svelte": "./dist/ui/PluginSidebarLink.svelte",
-    "./ui/FileTypeIcon.svelte": "./dist/ui/FileTypeIcon.svelte"
+    "./ui/FileTypeIcon.svelte": "./dist/ui/FileTypeIcon.svelte",
+    "./ui/CollapsibleSection.svelte": "./dist/ui/CollapsibleSection.svelte"
   },
   "files": [
     "dist",

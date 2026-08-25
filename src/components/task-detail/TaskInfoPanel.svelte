@@ -12,7 +12,8 @@
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
-  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import Info from '@lucide/svelte/icons/info'
 
   interface Props {
     task: Task
@@ -101,7 +102,8 @@
 
   <TaskInitialPrompt {task} {onEditPrompt} />
 
-  <CollapsibleInfoSection sectionKey="details" title="Details" cardId="details">
+  <CollapsibleSection sectionKey="details" title="Details" cardId="details">
+    {#snippet icon()}<Info size={14} />{/snippet}
     <div class="px-3 py-2 border-b border-base-300/70">
       <TaskLabelEditor
         projectId={task.project_id}
@@ -126,7 +128,7 @@
         <CopyButton text={resumeCommand} label="Copy resume command" />
       </div>
     {/if}
-  </CollapsibleInfoSection>
+  </CollapsibleSection>
 
   <TaskRelationshipDetailSection
     kind="dependencies"

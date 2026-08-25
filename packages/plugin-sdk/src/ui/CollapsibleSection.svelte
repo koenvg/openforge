@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { infoPanelSectionCollapse, isInfoPanelSectionCollapsed, toggleInfoPanelSection } from '../../../lib/infoPanelSectionState'
+  import { collapsedSections, isSectionCollapsed, toggleSection } from '../collapsibleSectionState'
 
   interface Props {
-    // Stable, global key used to persist the collapsed/expanded state.
+    // Stable, global key used to persist the collapsed/expanded state. Plugins must
+    // build this with `pluginSectionKey(pluginId, key)` so two plugins cannot collide.
     sectionKey: string
     title: string
     // aria-label for the section landmark (defaults to the title).
@@ -11,15 +12,19 @@
     // data-task-info-card value (defaults to the section key).
     cardId?: string
     ariaLive?: 'polite' | 'off'
+    // A 14px glyph identifying the section, drawn between the disclosure caret and the
+    // title. Keep it decorative: the host hides it from assistive tech so it cannot
+    // pollute the toggle's accessible name.
+    icon?: Snippet
     // Optional per-section controls (refresh, edit, counts). Rendered as a sibling of
     // the toggle button — never nested inside it — so nested <button>s stay valid.
     actions?: Snippet
     children: Snippet
   }
 
-  let { sectionKey, title, label, cardId, ariaLive, actions, children }: Props = $props()
+  let { sectionKey, title, label, cardId, ariaLive, icon, actions, children }: Props = $props()
 
-  let collapsed = $derived(isInfoPanelSectionCollapsed($infoPanelSectionCollapse, sectionKey))
+  let collapsed = $derived(isSectionCollapsed($collapsedSections, sectionKey))
   let contentId = $derived(`info-section-${sectionKey}`)
 </script>
 
@@ -37,12 +42,17 @@
         class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary rounded"
         aria-expanded={!collapsed}
         aria-controls={contentId}
-        onclick={() => toggleInfoPanelSection(sectionKey)}
+        onclick={() => toggleSection(sectionKey)}
       >
+        <!-- Fixed-width caret column so every section title starts at the same x,
+             including the single-row cards that render a blank column instead. -->
         <span
-          class="shrink-0 text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}"
+          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}"
           aria-hidden="true"
         >▾</span>
+        {#if icon}
+          <span class="flex shrink-0 items-center text-base-content/50" aria-hidden="true">{@render icon()}</span>
+        {/if}
         <span class="truncate">{title}</span>
       </button>
     </h3>

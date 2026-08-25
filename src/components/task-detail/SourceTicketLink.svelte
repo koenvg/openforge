@@ -72,12 +72,18 @@
   <section
     data-task-info-card="source-ticket"
     data-card-sizing="natural"
+    data-card-layout="row"
     class="flex flex-col gap-1.5 rounded-lg border border-base-300/70 bg-base-100 px-3 py-2 shrink-0"
     aria-label="Source ticket"
   >
     <div class="flex items-center gap-2">
+      <!-- Blank stand-in for the collapsible sections' caret column, so this row's icon
+           and title sit in the same columns as theirs. -->
+      <span class="w-3 shrink-0" aria-hidden="true"></span>
       <Ticket size={14} class="shrink-0 text-base-content/50" aria-hidden="true" />
-      <span class="text-xs text-base-content/55 shrink-0">Ticket</span>
+      <!-- Same heading treatment as the collapsible sections below it (Initial Prompt,
+           Details, Changes) so the whole panel reads as one column of sections. -->
+      <h3 class="m-0 shrink-0 text-sm font-semibold text-base-content">Ticket</h3>
 
       {#if isEditing}
         <input

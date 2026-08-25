@@ -2,7 +2,8 @@
   import { getTaskGitStatus } from '../../lib/ipc'
   import type { GitStatusSummary } from '../../lib/types'
   import { activeSessions } from '../../lib/stores'
-  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import FileDiff from '@lucide/svelte/icons/file-diff'
 
   interface Props {
     taskId: string
@@ -45,7 +46,8 @@
   })
 </script>
 
-<CollapsibleInfoSection sectionKey="git-status" title="Changes" cardId="git-status">
+<CollapsibleSection sectionKey="git-status" title="Changes" cardId="git-status">
+  {#snippet icon()}<FileDiff size={14} />{/snippet}
   {#snippet actions()}
     <button
       type="button"
@@ -109,4 +111,4 @@
       </div>
     </div>
   {/if}
-</CollapsibleInfoSection>
+</CollapsibleSection>

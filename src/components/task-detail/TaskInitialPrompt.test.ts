@@ -23,7 +23,7 @@ const baseTask: Task = {
 }
 
 describe('TaskInitialPrompt', () => {
-  it('previews the first three initial prompt lines', () => {
+  it('shows the whole initial prompt without a second expander', () => {
     render(TaskInitialPrompt, {
       props: {
         task: {
@@ -35,18 +35,17 @@ describe('TaskInitialPrompt', () => {
 
     const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
     expect(promptContent.textContent).toContain('Line one')
-    expect(promptContent.textContent).toContain('Line two')
-    expect(promptContent.textContent).toContain('Line three')
-    expect(promptContent.textContent).not.toContain('Line four')
-    expect(screen.getByRole('button', { name: /show full initial prompt/i })).toBeTruthy()
+    expect(promptContent.textContent).toContain('Line four')
+    // The section header chevron is the only expander; it persists, this one did not.
+    expect(screen.queryByRole('button', { name: /show (full|less) initial prompt/i })).toBeNull()
   })
 
-  it('renders the collapsed Initial Prompt preview as Markdown', () => {
+  it('renders the initial prompt as Markdown', () => {
     render(TaskInitialPrompt, {
       props: {
         task: {
           ...baseTask,
-          initial_prompt: '# Release plan\n\nShip the **renderer**\nHidden fourth line',
+          initial_prompt: '# Release plan\n\nShip the **renderer**\nFourth line',
         },
       },
     })
@@ -54,30 +53,10 @@ describe('TaskInitialPrompt', () => {
     const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
     expect(screen.getByRole('heading', { name: 'Release plan' })).toBeTruthy()
     expect(promptContent.querySelector('strong')?.textContent).toBe('renderer')
-    expect(promptContent.textContent).not.toContain('Hidden fourth line')
+    expect(promptContent.textContent).toContain('Fourth line')
   })
 
-  it('expands and collapses the initial prompt text when the toggle is clicked', async () => {
-    render(TaskInitialPrompt, {
-      props: {
-        task: {
-          ...baseTask,
-          initial_prompt: 'Line one\nLine two\nLine three\nLine four',
-        },
-      },
-    })
-    const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
-    expect(promptContent.textContent).not.toContain('Line four')
-
-    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
-    expect(promptContent.textContent).toContain('Line four')
-
-    await fireEvent.click(screen.getByRole('button', { name: /show less initial prompt/i }))
-    expect(promptContent.textContent).toContain('Line three')
-    expect(promptContent.textContent).not.toContain('Line four')
-  })
-
-  it('hides persisted image reference definitions from the initial prompt preview and full text', async () => {
+  it('hides persisted image reference definitions from the initial prompt', () => {
     render(TaskInitialPrompt, {
       props: {
         task: {
@@ -89,11 +68,6 @@ describe('TaskInitialPrompt', () => {
 
     const promptContent = screen.getByRole('region', { name: 'Initial Prompt content' })
     expect(promptContent.textContent).toContain('Inspect [image#1] carefully')
-    expect(promptContent.textContent).toContain('Third line')
-    expect(promptContent.textContent).not.toContain('Fourth line')
-    expect(promptContent.textContent).not.toContain('data:image/png;base64')
-
-    await fireEvent.click(screen.getByRole('button', { name: /show full initial prompt/i }))
     expect(promptContent.textContent).toContain('Fourth line')
     expect(promptContent.textContent).not.toContain('data:image/png;base64')
   })

@@ -23,6 +23,14 @@ describe('SourceTicketLink', () => {
     expect(container.textContent?.trim()).toBe('')
   })
 
+  // The task inspector keys its row padding off this attribute so the ticket row and the
+  // empty pull request row line up. Plugin sections opt in with the same value.
+  it('marks the card as a row for the task inspector', () => {
+    const { container } = render(SourceTicketLink, { props: { url: null, onSave: vi.fn() } })
+    const section = container.querySelector('[data-task-info-card="source-ticket"]')
+    expect(section?.getAttribute('data-card-layout')).toBe('row')
+  })
+
   it('renders a clickable control for a GitHub issue URL and opens it via openUrl', async () => {
     render(SourceTicketLink, { props: { url: 'https://github.com/koenvg/openforge/issues/1294' } })
 

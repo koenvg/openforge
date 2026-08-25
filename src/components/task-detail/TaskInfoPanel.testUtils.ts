@@ -9,7 +9,7 @@ import {
   updateTaskSourceTicketUrl,
   writeClipboardText,
 } from '../../lib/ipc'
-import { clearInfoPanelSectionCollapse } from '../../lib/infoPanelSectionState'
+import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import {
@@ -134,7 +134,7 @@ function resetTaskInfoPanelTestState(): void {
   vi.mocked(updateTaskSourceTicketUrl).mockResolvedValue(undefined)
   vi.mocked(writeClipboardText).mockResolvedValue(undefined)
   localStorage.clear()
-  clearInfoPanelSectionCollapse()
+  clearCollapsedSections()
   activeSessions.set(new Map())
   ticketPrs.set(new Map())
   mergingTaskIds.set(new Set())

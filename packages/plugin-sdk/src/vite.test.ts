@@ -26,6 +26,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       { find: '@openforge-app/plugin-sdk/sanitize', replacement: '/repo/packages/plugin-sdk/src/sanitize.ts' },
       { find: '@openforge-app/plugin-sdk/pluginIcons', replacement: '/repo/packages/plugin-sdk/src/pluginIcons.ts' },
       { find: '@openforge-app/plugin-sdk/fileIcons', replacement: '/repo/packages/plugin-sdk/src/fileIcons.ts' },
+      { find: '@openforge-app/plugin-sdk/collapsibleSectionState', replacement: '/repo/packages/plugin-sdk/src/collapsibleSectionState.ts' },
       { find: '@openforge-app/plugin-sdk/ui/Button.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/Button.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/Checkbox.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/Checkbox.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte' },
@@ -35,6 +36,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       { find: '@openforge-app/plugin-sdk/ui/PluginViewState.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/PluginSidebarLink.svelte' },
       { find: '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte' },
+      { find: '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte', replacement: '/repo/packages/plugin-sdk/src/ui/CollapsibleSection.svelte' },
       { find: '@openforge-app/plugin-sdk', replacement: '/repo/packages/plugin-sdk/src/index.ts' },
     ])
     expect(aliases.every((alias) => typeof alias.find === 'string')).toBe(true)
@@ -60,6 +62,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       '@openforge-app/plugin-sdk/sanitize': '/repo/packages/plugin-sdk/src/sanitize.ts',
       '@openforge-app/plugin-sdk/pluginIcons': '/repo/packages/plugin-sdk/src/pluginIcons.ts',
       '@openforge-app/plugin-sdk/fileIcons': '/repo/packages/plugin-sdk/src/fileIcons.ts',
+      '@openforge-app/plugin-sdk/collapsibleSectionState': '/repo/packages/plugin-sdk/src/collapsibleSectionState.ts',
       '@openforge-app/plugin-sdk/ui/Button.svelte': '/repo/packages/plugin-sdk/src/ui/Button.svelte',
       '@openforge-app/plugin-sdk/ui/Checkbox.svelte': '/repo/packages/plugin-sdk/src/ui/Checkbox.svelte',
       '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte': '/repo/packages/plugin-sdk/src/ui/MarkdownContent.svelte',
@@ -69,6 +72,7 @@ describe('OpenForge plugin Vite author tooling', () => {
       '@openforge-app/plugin-sdk/ui/PluginViewState.svelte': '/repo/packages/plugin-sdk/src/ui/PluginViewState.svelte',
       '@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte': '/repo/packages/plugin-sdk/src/ui/PluginSidebarLink.svelte',
       '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte': '/repo/packages/plugin-sdk/src/ui/FileTypeIcon.svelte',
+      '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte': '/repo/packages/plugin-sdk/src/ui/CollapsibleSection.svelte',
       '@openforge-app/plugin-sdk': '/repo/packages/plugin-sdk/src/index.ts',
     })
   })

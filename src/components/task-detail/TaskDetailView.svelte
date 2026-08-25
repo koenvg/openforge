@@ -200,6 +200,8 @@
               {workspacePath}
               onEditTask={onEdit}
               onOpenLinkedTask={onOpenTask}
+              onTaskUpdated={() => onTaskUpdated?.()}
+              allowRename={false}
             />
           </div>
         </ResizablePanel>
