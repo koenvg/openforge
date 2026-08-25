@@ -37,6 +37,8 @@ const rendererLabel = requiredElement('#renderer-kind')
 const renderer = getTerminalConformanceRenderer(new URLSearchParams(location.search).get('renderer') ?? 'xterm')
 rendererLabel.textContent = renderer.id
 
+const ptyInstanceId = 1
+
 let view: TerminalView | null = null
 let inputSubscription: TerminalViewDisposable | null = null
 let inputEvents: string[] = []
@@ -86,7 +88,7 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
   inputSubscription = nextView.onUserInput(data => {
     inputEvents.push(data)
     if (!echoInput) return
-    nextView.writeLive({ data, sequence: null })
+    nextView.writeLive({ data, ptyInstanceId })
     inputPresentation = nextView.drainPresentation()
   })
   nextView.mount(host)
@@ -99,8 +101,8 @@ async function play(id: string): Promise<PlayResult> {
   const activeView = requireView()
   const recording = recordingById(id)
   recording.chunks.forEach((chunk, index) => {
-    if (index === 0) activeView.bootstrap(chunk)
-    else activeView.writeLive({ data: chunk, sequence: index })
+    if (index === 0) activeView.bootstrap(chunk, ptyInstanceId)
+    else activeView.writeLive({ data: chunk, ptyInstanceId })
   })
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
@@ -109,7 +111,7 @@ async function play(id: string): Promise<PlayResult> {
 async function writeRepeated(data: string, repetitions: number): Promise<PlayResult> {
   const activeView = requireView()
   for (let index = 0; index < repetitions; index += 1) {
-    activeView.writeLive({ data, sequence: index })
+    activeView.writeLive({ data, ptyInstanceId })
   }
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
@@ -138,7 +140,7 @@ async function reconnect(id: string): Promise<PlayResult> {
   const activeView = requireView()
   activeView.reset()
   const recording = recordingById(id)
-  activeView.bootstrap(recording.chunks.join(''))
+  activeView.bootstrap(recording.chunks.join(''), ptyInstanceId)
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
 }
