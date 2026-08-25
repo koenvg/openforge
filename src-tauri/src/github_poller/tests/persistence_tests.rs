@@ -390,3 +390,29 @@ fn refresh_task_github_status_reconciles_terminal_pr_state() {
 
     drop(db);
 }
+
+#[tokio::test]
+async fn github_poller_task_changed_event_matches_renderer_contract() {
+    let bus = crate::app_events::AppEventBus::new(16, 8);
+    let mut subscription = bus.subscribe(None).expect("subscribe to app events");
+    let events = GitHubEventTarget::sidecar(Some(bus.sender()));
+
+    emit_task_updated(&events, "T-100", "P-4").expect("emit task update");
+
+    let crate::app_events::AppEventFrame::Event(event) = subscription
+        .recv()
+        .await
+        .expect("task-changed event should arrive")
+    else {
+        panic!("expected task-changed event");
+    };
+    assert_eq!(event.event_name, "task-changed");
+    assert_eq!(
+        event.payload,
+        serde_json::json!({
+            "action": "updated",
+            "task_id": "T-100",
+            "project_id": "P-4",
+        })
+    );
+}
