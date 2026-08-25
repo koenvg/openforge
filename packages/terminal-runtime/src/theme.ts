@@ -172,7 +172,3 @@ function resolveTerminalTheme(mode: ThemeMode): Record<TerminalThemeKey, string>
 export function getTerminalTheme(mode: ThemeMode): TerminalViewTheme {
   return buildTerminalTheme(resolveTerminalTheme(mode))
 }
-
-export function getDiffTheme(mode: ThemeMode): 'light' | 'dark' {
-  return mode
-}

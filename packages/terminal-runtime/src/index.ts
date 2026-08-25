@@ -43,7 +43,6 @@ export {
   preloadTerminalFonts,
 } from './terminalOptions'
 export {
-  getDiffTheme,
   getTerminalTheme,
   setupHostThemeSync,
   syncThemeModeWithDocument,

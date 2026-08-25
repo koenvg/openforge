@@ -1,5 +1,4 @@
 export {
-  getDiffTheme,
   getTerminalTheme,
   setupHostThemeSync,
   syncThemeModeWithDocument,

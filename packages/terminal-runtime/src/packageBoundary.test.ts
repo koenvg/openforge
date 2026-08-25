@@ -64,6 +64,16 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     }
   })
 
+  it('keeps diff theming out of the public terminal runtime contract', async () => {
+    const [runtimeExports, themeExports] = await Promise.all([
+      import('@openforge-app/terminal-runtime'),
+      import('@openforge-app/terminal-runtime/theme'),
+    ])
+
+    expect(runtimeExports).not.toHaveProperty('getDiffTheme')
+    expect(themeExports).not.toHaveProperty('getDiffTheme')
+  })
+
   it('keeps Svelte as a host-shared peer dependency', async () => {
     const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'packages/terminal-runtime/package.json'), 'utf8'))
 
