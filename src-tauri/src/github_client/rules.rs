@@ -39,6 +39,40 @@ fn parse_branch_merge_method_restriction(
 
     Ok(restriction)
 }
+
+fn branch_merge_method_restriction_from_response(
+    status: reqwest::StatusCode,
+    body: &str,
+) -> super::types::PolicyValue<Option<Vec<PullRequestMergeMethod>>> {
+    const PRIVATE_REPOSITORY_RULES_UNAVAILABLE: &str =
+        "Upgrade to GitHub Pro or make this repository public to enable this feature.";
+
+    let payload = serde_json::from_str::<Value>(body);
+    let rules_are_unavailable_for_plan = status == reqwest::StatusCode::FORBIDDEN
+        && payload
+            .as_ref()
+            .ok()
+            .and_then(|value| value.get("message"))
+            .and_then(Value::as_str)
+            == Some(PRIVATE_REPOSITORY_RULES_UNAVAILABLE);
+
+    if rules_are_unavailable_for_plan {
+        return super::types::PolicyValue::known(None);
+    }
+
+    if !status.is_success() {
+        return super::types::PolicyValue::unknown(format!(
+            "active branch rules unavailable ({status})"
+        ));
+    }
+
+    payload
+        .map_err(|error| error.to_string())
+        .and_then(|payload| parse_branch_merge_method_restriction(&payload))
+        .map(super::types::PolicyValue::known)
+        .unwrap_or_else(super::types::PolicyValue::unknown)
+}
+
 fn branch_rules_url(owner: &str, repo: &str, branch: &str) -> String {
     let mut url = reqwest::Url::parse("https://api.github.com/")
         .expect("static GitHub API base URL must be valid");
@@ -80,12 +114,7 @@ impl super::GitHubClient {
             Err(error) => return super::types::PolicyValue::unknown(error.to_string()),
         };
 
-        if !response.status().is_success() {
-            return super::types::PolicyValue::unknown(format!(
-                "active branch rules unavailable ({})",
-                response.status()
-            ));
-        }
+        let status = response.status();
         if response
             .headers()
             .get("link")
@@ -105,13 +134,11 @@ impl super::GitHubClient {
             Ok(body) => body,
             Err(error) => return super::types::PolicyValue::unknown(error.to_string()),
         };
-        self.cache_response_body(&url, etag, &body);
+        if status.is_success() {
+            self.cache_response_body(&url, etag, &body);
+        }
 
-        serde_json::from_str::<Value>(&body)
-            .map_err(|error| error.to_string())
-            .and_then(|payload| parse_branch_merge_method_restriction(&payload))
-            .map(super::types::PolicyValue::known)
-            .unwrap_or_else(super::types::PolicyValue::unknown)
+        branch_merge_method_restriction_from_response(status, &body)
     }
 }
 
@@ -142,6 +169,18 @@ mod tests {
             .expect("active branch rules should parse");
 
         assert_eq!(restriction, Some(vec![PullRequestMergeMethod::Squash]));
+    }
+
+    #[test]
+    fn unavailable_private_repository_rules_do_not_restrict_merge_methods() {
+        let policy = branch_merge_method_restriction_from_response(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"message":"Upgrade to GitHub Pro or make this repository public to enable this feature."}"#,
+        );
+
+        assert!(policy.known);
+        assert_eq!(policy.value, None);
+        assert_eq!(policy.unknown_reason, None);
     }
 
     #[test]
