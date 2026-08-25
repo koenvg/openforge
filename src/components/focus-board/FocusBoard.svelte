@@ -2,8 +2,8 @@
   import { onMount, untrack } from 'svelte'
   import { Plus, Search } from '@lucide/svelte'
   import { get } from 'svelte/store'
-  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, outOfFocusTaskIdsByProject, mergingTaskIds } from '../../lib/stores'
-  import { filterTasks, getFilterCounts, loadOutOfFocusTaskIds, saveOutOfFocusTaskIds, taskMatchesTextFilter } from '../../lib/boardFilters'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, lastViewedTaskId, mergingTaskIds } from '../../lib/stores'
+  import { filterTasks, getFilterCounts, taskMatchesTextFilter } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -18,6 +18,7 @@
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
   import BoardTextFilter from './BoardTextFilter.svelte'
+  import { createOutOfFocusController } from './outOfFocusController.svelte'
   import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, TaskLabel } from '../../lib/types'
 
   interface Props {
@@ -55,6 +56,9 @@
     onOpenCommandSearch,
     onRunAction,
   }: Props = $props()
+  const outOfFocusController = createOutOfFocusController({
+    onProjectAttentionChanged: () => onProjectAttentionChanged?.(),
+  })
   let dependencyResolutionTasks = $derived([...tasks, ...dependencyReferenceTasks])
   type TaskRow = {
     task: Task
@@ -86,12 +90,10 @@
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectLabels = $state<TaskLabel[]>([])
-  let loadedOutOfFocusProjectId: string | null = $state(null)
   let fallbackFilter: BoardFilter = $state('focus')
   let previousProjectId: string | null | undefined = undefined
   let labelLoadRequest = 0
   let labelLoadProjectId: string | null = null
-  let outOfFocusLoadRequest = 0
   let textFilterQuery = $state('')
 
   let activeFilter = $derived.by(() => {
@@ -104,10 +106,7 @@
     return $backlogLabelFilters.get(projectId) ?? new Set<number>()
   })
 
-  let outOfFocusTaskIds = $derived.by(() => {
-    if (!projectId) return new Set<string>()
-    return $outOfFocusTaskIdsByProject.get(projectId) ?? new Set<string>()
-  })
+  let outOfFocusTaskIds = $derived(outOfFocusController.taskIds)
   let projectAttentionRows = $derived(
     projectId ? attentionRows.filter((row) => row.project_id === projectId) : [],
   )
@@ -115,9 +114,7 @@
   let attentionByTaskId = $derived(new Map(projectAttentionRows.map((row) => [row.task_id, row])))
   let attentionOrder = $derived(new Map(projectAttentionRows.map((row, index) => [row.task_id, index])))
 
-  let boardMetadataReady = $derived(
-    (!projectId || loadedOutOfFocusProjectId === projectId) && attentionRowsLoaded,
-  )
+  let boardMetadataReady = $derived(outOfFocusController.isReadyFor(projectId) && attentionRowsLoaded)
 
   let tasksWithReadyAttentionMetadata = $derived.by(() =>
     boardMetadataReady ? tasks : tasks.filter((task) => task.status === 'backlog'),
@@ -294,38 +291,7 @@
 
 
   $effect(() => {
-    const currentProjectId = projectId
-    const requestId = ++outOfFocusLoadRequest
-
-    loadedOutOfFocusProjectId = null
-    if (!currentProjectId) {
-      loadedOutOfFocusProjectId = null
-      return
-    }
-
-    loadOutOfFocusTaskIds(currentProjectId)
-      .then((taskIds) => {
-        if (requestId !== outOfFocusLoadRequest) return
-        outOfFocusTaskIdsByProject.update((current) => {
-          const next = new Map(current)
-          if (taskIds.size > 0) {
-            next.set(currentProjectId, taskIds)
-          } else {
-            next.delete(currentProjectId)
-          }
-          return next
-        })
-        loadedOutOfFocusProjectId = currentProjectId
-      })
-      .catch(() => {
-        if (requestId !== outOfFocusLoadRequest) return
-        outOfFocusTaskIdsByProject.update((current) => {
-          const next = new Map(current)
-          next.delete(currentProjectId)
-          return next
-        })
-        loadedOutOfFocusProjectId = currentProjectId
-      })
+    outOfFocusController.selectProject(projectId)
   })
 
   function handleBoardKeydown(e: KeyboardEvent) {
@@ -370,33 +336,6 @@
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
   }
 
-  function setTaskOutOfFocus(taskId: string, shouldBeOutOfFocus: boolean) {
-    if (!projectId) return
-
-    const currentProjectId = projectId
-    let nextTaskIds = new Set<string>()
-    outOfFocusTaskIdsByProject.update((current) => {
-      const next = new Map(current)
-      nextTaskIds = new Set(next.get(currentProjectId) ?? new Set<string>())
-      if (shouldBeOutOfFocus) {
-        nextTaskIds.add(taskId)
-      } else {
-        nextTaskIds.delete(taskId)
-      }
-      if (nextTaskIds.size > 0) {
-        next.set(currentProjectId, nextTaskIds)
-      } else {
-        next.delete(currentProjectId)
-      }
-      return next
-    })
-
-    saveOutOfFocusTaskIds(currentProjectId, nextTaskIds)
-      .then(() => onProjectAttentionChanged?.())
-      .catch((err: unknown) => {
-        console.error('Failed to save Out of Focus tasks:', err)
-      })
-  }
 
 </script>
 
@@ -557,7 +496,7 @@
     onEdit={onEditTask}
     onDelete={() => contextMenu = { ...contextMenu, visible: false }}
     {outOfFocusTaskIds}
-    onMoveToOutOfFocus={(taskId) => setTaskOutOfFocus(taskId, true)}
-    onReturnToBoard={(taskId) => setTaskOutOfFocus(taskId, false)}
+    onMoveToOutOfFocus={outOfFocusController.setAside}
+    onReturnToBoard={outOfFocusController.returnToBoard}
   />
 </div>

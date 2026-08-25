@@ -26,7 +26,7 @@
     onStart?: (taskId: string, promptPrefix?: string | null) => void
     onEdit?: (taskId: string) => void
     onDelete?: (taskId: string) => void
-    outOfFocusTaskIds?: Set<string>
+    outOfFocusTaskIds?: ReadonlySet<string>
     onMoveToOutOfFocus?: (taskId: string) => void
     onReturnToBoard?: (taskId: string) => void
   }
