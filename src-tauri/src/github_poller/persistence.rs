@@ -395,12 +395,7 @@ fn persist_comments_and_publish_new(
         &existing_ids,
         now,
         |comment_id| {
-            if let Err(error) = emit_new_pr_comment(events, &result.ticket_id, comment_id) {
-                warn!(
-                    "[GitHub Poller] Failed to emit new-pr-comment event: {}",
-                    error
-                );
-            }
+            emit_new_pr_comment(events, &result.ticket_id, comment_id);
         },
     ))
 }
@@ -415,7 +410,7 @@ fn persist_ci_and_publish_change(
     let mut counts = PollPersistenceCounts::default();
     match persist_ci_status(db, result) {
         Ok(Some(status)) => {
-            if let Err(error) = emit_ci_status_changed(
+            emit_ci_status_changed(
                 events,
                 &result.ticket_id,
                 project_id,
@@ -423,12 +418,7 @@ fn persist_ci_and_publish_change(
                 &result.pr_title,
                 &status,
                 now,
-            ) {
-                warn!(
-                    "[GitHub Poller] Failed to emit ci-status-changed event: {}",
-                    error
-                );
-            }
+            );
             counts.ci_changes += 1;
         }
         Ok(None) => {}
@@ -453,7 +443,7 @@ fn persist_review_and_publish_change(
     let mut counts = PollPersistenceCounts::default();
     match persist_review_status(db, result) {
         Ok(Some(status)) => {
-            if let Err(error) = emit_review_status_changed(
+            emit_review_status_changed(
                 events,
                 &result.ticket_id,
                 project_id,
@@ -461,12 +451,7 @@ fn persist_review_and_publish_change(
                 &result.pr_title,
                 &status,
                 now,
-            ) {
-                warn!(
-                    "[GitHub Poller] Failed to emit review-status-changed event: {}",
-                    error
-                );
-            }
+            );
             counts.review_changes += 1;
         }
         Ok(None) => {}
@@ -643,12 +628,7 @@ fn emit_task_invalidation(
     let Some(project_id) = project_id else {
         return;
     };
-    if let Err(error) = emit_task_updated(events, &result.ticket_id, project_id) {
-        warn!(
-            "[GitHub Poller] Failed to emit Task Board invalidation for Task {}: {}",
-            result.ticket_id, error
-        );
-    }
+    emit_task_updated(events, &result.ticket_id, project_id);
 }
 
 pub(super) fn ci_persistence_payload(result: &PollSinglePrResult) -> Option<CiPersistencePayload> {

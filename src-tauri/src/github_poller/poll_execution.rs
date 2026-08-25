@@ -109,20 +109,16 @@ async fn start_github_poller_with_state(
             || result.pr_changes > 0;
 
         if has_changes {
-            if let Err(e) = events.emit("github-sync-complete", json_value_for_event(&result)) {
-                warn!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
-            }
+            events.emit("github-sync-complete", json_value_for_event(&result));
         }
 
         if result.rate_limited {
-            if let Err(e) = events.emit(
+            events.emit(
                 "github-rate-limited",
                 serde_json::json!({
                     "reset_at": result.rate_limit_reset_at
                 }),
-            ) {
-                warn!("[GitHub Poller] Failed to emit github-rate-limited: {}", e);
-            }
+            );
         }
 
         if ran_global_review {

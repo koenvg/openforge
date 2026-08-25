@@ -391,7 +391,7 @@ async fn github_poller_events_match_renderer_contracts() {
     let mut subscription = bus.subscribe(None).expect("subscribe to app events");
     let events = GitHubEventTarget::sidecar(Some(bus.sender()));
 
-    emit_new_pr_comment(&events, "T-100", 42).expect("emit new comment");
+    emit_new_pr_comment(&events, "T-100", 42);
     emit_ci_status_changed(
         &events,
         "T-100",
@@ -400,8 +400,7 @@ async fn github_poller_events_match_renderer_contracts() {
         "Update poller",
         "success",
         1_000,
-    )
-    .expect("emit CI status update");
+    );
     emit_review_status_changed(
         &events,
         "T-100",
@@ -410,9 +409,8 @@ async fn github_poller_events_match_renderer_contracts() {
         "Update poller",
         "approved",
         1_000,
-    )
-    .expect("emit review status update");
-    emit_task_updated(&events, "T-100", "P-4").expect("emit task update");
+    );
+    emit_task_updated(&events, "T-100", "P-4");
 
     let mut received = Vec::new();
     for _ in 0..4 {

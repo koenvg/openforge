@@ -10,9 +10,8 @@ impl GitHubEventTarget {
         Self { app_event_tx }
     }
 
-    pub(super) fn emit(&self, event_name: &str, payload: serde_json::Value) -> Result<(), String> {
+    pub(super) fn emit(&self, event_name: &str, payload: serde_json::Value) {
         publish_app_event(&self.app_event_tx, event_name, &payload);
-        Ok(())
     }
 }
 
