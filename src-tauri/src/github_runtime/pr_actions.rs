@@ -98,10 +98,7 @@ pub fn link_pull_request(
     pr_url: &str,
 ) -> Result<db::PrRow, String> {
     let link = parse_github_pr_url(pr_url)?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Failed to read current time: {e}"))?
-        .as_secs() as i64;
+    let now = pull_request_timestamp(std::time::SystemTime::now())?;
 
     let db_lock = crate::db::acquire_db(db);
     if db_lock
@@ -213,7 +210,7 @@ pub fn persist_successful_task_pull_request_action(
 ) -> Result<(), String> {
     match action {
         TaskPullRequestAction::Merge => db
-            .update_pr_merged(pr_id, current_unix_timestamp())
+            .update_pr_merged(pr_id, current_unix_timestamp()?)
             .map_err(|e| format!("Failed to persist merged pull request: {e}")),
         TaskPullRequestAction::Enqueue => db
             .update_pr_queued(pr_id)
@@ -221,11 +218,14 @@ pub fn persist_successful_task_pull_request_action(
     }
 }
 
-fn current_unix_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or(0)
+fn pull_request_timestamp(now: std::time::SystemTime) -> Result<i64, String> {
+    now.duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("Failed to read current time: {error}"))
+        .map(|elapsed| elapsed.as_secs() as i64)
+}
+
+fn current_unix_timestamp() -> Result<i64, String> {
+    pull_request_timestamp(std::time::SystemTime::now())
 }
 fn validate_pull_request_merge_method(
     pr: &db::PrRow,
@@ -347,6 +347,15 @@ pub async fn enqueue_task_pull_request(
 mod tests {
     use crate::db::test_helpers::make_test_db;
 
+    #[test]
+    fn pull_request_timestamp_rejects_time_before_unix_epoch() {
+        let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
+
+        let error = super::pull_request_timestamp(before_unix_epoch)
+            .expect_err("a pre-epoch clock value should return an error");
+
+        assert!(error.starts_with("Failed to read current time:"));
+    }
     #[test]
     fn parses_github_pull_request_url() {
         let parsed = super::parse_github_pr_url(

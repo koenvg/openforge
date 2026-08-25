@@ -46,11 +46,13 @@ enum ConditionalResponse {
     Fresh(Response),
 }
 
-fn current_unix_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64
+fn unix_timestamp(now: std::time::SystemTime) -> Result<i64, std::time::SystemTimeError> {
+    now.duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+}
+
+fn current_unix_timestamp() -> Result<i64, std::time::SystemTimeError> {
+    unix_timestamp(std::time::SystemTime::now())
 }
 
 #[derive(Clone, Debug)]
@@ -191,7 +193,12 @@ impl GitHubClient {
 
         if let Some(retry_after_secs) = retry_after {
             if status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS {
-                return Some(current_unix_timestamp().saturating_add(retry_after_secs));
+                match current_unix_timestamp() {
+                    Ok(now) => return Some(now.saturating_add(retry_after_secs)),
+                    Err(error) => warn!(
+                        "[GitHub Client] Failed to convert retry-after to a reset timestamp: {error}"
+                    ),
+                }
             }
         }
 
@@ -226,8 +233,16 @@ impl GitHubClient {
         headers: &HeaderMap,
         reset_at: i64,
     ) -> String {
-        let now = current_unix_timestamp();
-        let seconds_until_reset = (reset_at - now).max(0);
+        let reset_description = match current_unix_timestamp() {
+            Ok(now) => format!(
+                "resets in {} seconds (at unix timestamp {reset_at})",
+                (reset_at - now).max(0)
+            ),
+            Err(error) => {
+                warn!("[GitHub Client] Failed to read current time: {error}");
+                format!("resets at unix timestamp {reset_at}; current time unavailable")
+            }
+        };
 
         let mut details = vec![format!("status {}", status.as_u16())];
 
@@ -256,11 +271,10 @@ impl GitHubClient {
         }
 
         format!(
-            "[GitHub Client] Rate limit detected for {} ({}): resets in {} seconds (at unix timestamp {})",
+            "[GitHub Client] Rate limit detected for {} ({}): {}",
             method,
             details.join(", "),
-            seconds_until_reset,
-            reset_at
+            reset_description
         )
     }
 
@@ -416,6 +430,15 @@ mod tests {
     };
     use reqwest::Method;
 
+    #[test]
+    fn unix_timestamp_rejects_time_before_unix_epoch() {
+        let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
+
+        let error = unix_timestamp(before_unix_epoch)
+            .expect_err("a pre-epoch clock value should return an error");
+
+        assert_eq!(error.duration(), std::time::Duration::from_secs(1));
+    }
     #[test]
     fn test_client_creation() {
         let _client = GitHubClient::new();
@@ -658,9 +681,9 @@ mod tests {
         headers.insert("retry-after", HeaderValue::from_static("30"));
         headers.insert("x-ratelimit-reset", HeaderValue::from_static("999"));
 
-        let before = current_unix_timestamp();
+        let before = current_unix_timestamp().expect("test clock should follow Unix epoch");
         client.capture_rate_limit_reset_from_headers(StatusCode::TOO_MANY_REQUESTS, &headers);
-        let after = current_unix_timestamp();
+        let after = current_unix_timestamp().expect("test clock should follow Unix epoch");
 
         let reset = client
             .get_last_rate_limit_reset()

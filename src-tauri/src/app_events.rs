@@ -123,6 +123,7 @@ pub struct EmitReceipt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppEventError {
     BusClosed,
+    Clock,
 }
 
 #[derive(Debug, Clone)]
@@ -232,6 +233,7 @@ impl AppEventBus {
         E: Into<AppEvent>,
     {
         let event = event.into();
+        let emitted_at_ms = now_ms()?;
         let seq = self.inner.sequence.fetch_add(1, Ordering::SeqCst) + 1;
         let id = AppEventId {
             epoch: self.inner.epoch.clone(),
@@ -243,7 +245,7 @@ impl AppEventBus {
             payload: event.payload,
             meta: Some(AppEventMeta {
                 sequence: seq,
-                emitted_at_ms: now_ms(),
+                emitted_at_ms,
                 ordering_key: event.ordering_key,
                 delivery: event.delivery,
                 schema_version: APP_EVENT_SCHEMA_VERSION,
@@ -576,11 +578,14 @@ fn frame_cursor(frame: &AppEventFrame) -> Option<AppEventCursor> {
     }
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+fn app_event_timestamp_ms(now: std::time::SystemTime) -> Result<u64, AppEventError> {
+    now.duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .map_err(|_| AppEventError::Clock)
+}
+
+fn now_ms() -> Result<u64, AppEventError> {
+    app_event_timestamp_ms(std::time::SystemTime::now())
 }
 
 pub type AppEventSender = tokio::sync::broadcast::Sender<AppEventEnvelope>;
@@ -592,13 +597,17 @@ pub fn publish_app_event(
 ) {
     if let Some(sender) = sender {
         if let Some(bus) = bus_for_sender(sender) {
-            let _ = bus.try_emit(AppEvent::new(
-                event_name,
-                payload.clone(),
-                legacy_delivery_class(event_name),
-                legacy_ordering_key(event_name, payload),
-            ));
-            return;
+            if bus
+                .try_emit(AppEvent::new(
+                    event_name,
+                    payload.clone(),
+                    legacy_delivery_class(event_name),
+                    legacy_ordering_key(event_name, payload),
+                ))
+                .is_ok()
+            {
+                return;
+            }
         }
 
         let _ = sender.send(AppEventEnvelope {
@@ -628,6 +637,15 @@ pub fn publish_app_event_to_runtime(
 mod tests {
     use super::*;
 
+    #[test]
+    fn app_event_timestamp_rejects_time_before_unix_epoch() {
+        let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
+
+        let error = app_event_timestamp_ms(before_unix_epoch)
+            .expect_err("a pre-epoch clock value should return an error");
+
+        assert_eq!(error, AppEventError::Clock);
+    }
     #[test]
     fn test_publish_app_event_fans_out_to_app_event_stream_sender() {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(16);
