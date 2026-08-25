@@ -175,9 +175,27 @@ describe('App navigation controller', () => {
     await controller.switchToProject(projectOne.id)
 
     expect(get(focusBoardFilters).get(projectOne.id)).toBe('focus')
-    // Must not reset — that would wipe an open task detail, which also renders on the
-    // board view.
+    // Nothing is drilled in, so there is nothing to back out of. Resetting would only
+    // manufacture a junk history entry.
     expect(router.resetToBoard).not.toHaveBeenCalled()
+  })
+
+  it('re-clicking the active project with a task detail open closes it and jumps to Focus', async () => {
+    const router = createRouter()
+    const controller = createAppNavigationController({
+      router,
+      loadTasks: vi.fn(),
+      getSelectedTask: () => rememberedTask,
+      getSidebarPluginViewKeys: () => new Set(),
+      closeAttentionOverview: vi.fn(),
+    })
+    focusBoardFilters.set(new Map([[projectOne.id, 'backlog']]))
+    selectedTaskId.set(rememberedTask.id)
+
+    await controller.switchToProject(projectOne.id)
+
+    expect(router.resetToBoard).toHaveBeenCalledOnce()
+    expect(get(focusBoardFilters).get(projectOne.id)).toBe('focus')
   })
 
 })

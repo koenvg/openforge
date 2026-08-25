@@ -60,11 +60,16 @@ export function createAppNavigationController(options: AppNavigationControllerOp
     if (activeId === projectId && !isCrossProjectView(view, options.getSidebarPluginViewKeys())) {
       if (view !== 'board') {
         options.router.resetToBoard()
-      } else {
-        // Already on this project's board — a repeat click jumps to Focus instead of
-        // resetting (which would wipe an open task detail, since that also renders on
-        // the board view).
-        selectFocusBoardTab(projectId)
+        return
+      }
+
+      // The board is already showing, so the repeat click jumps to Focus. A task detail
+      // also renders on the board view, so when one is open the click has to back out of
+      // it too. Otherwise the Focus tab it selects stays hidden behind the detail and the
+      // row does nothing.
+      selectFocusBoardTab(projectId)
+      if (options.getSelectedTask() !== null) {
+        options.router.resetToBoard()
       }
       return
     }
