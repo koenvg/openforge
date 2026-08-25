@@ -172,6 +172,16 @@ mod tests {
     }
 
     #[test]
+    fn jira_api_token_is_a_keychain_secret() {
+        // The PR-review gap analysis reads Jira with an API token. It gets the
+        // same keychain protection as github_token; secure_store refuses to
+        // store any key that isn't listed as a secret account.
+        assert!(is_secret_account("jira_api_token"));
+        assert!(!is_secret_account("jira_email"));
+        assert!(!is_secret_account("jira_base_url"));
+    }
+
+    #[test]
     fn data_identity_manifest_preserves_legacy_migration_sources() {
         assert_eq!(legacy_home_dir_name(), ".ai-command-center");
         assert_eq!(current_home_dir_name(), ".openforge");

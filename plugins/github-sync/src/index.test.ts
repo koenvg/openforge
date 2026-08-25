@@ -42,6 +42,7 @@ function makeRuntimeHarness() {
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskUI: { registerSection: vi.fn(() => sectionDisposable) },
+    settings: { registerSection: vi.fn(() => ({ dispose: vi.fn() })) },
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })), invokeGlobal },
     backend: { invoke: backendInvoke, whenReady: backendWhenReady },
     events: { onGlobal },
@@ -275,7 +276,13 @@ describe('github-sync plugin', () => {
     expect(api.backend.registerMethod).toHaveBeenCalledWith('askAgentQuestions', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('replyToReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
     expect(api.backend.registerMethod).toHaveBeenCalledWith('createReviewComment', expect.objectContaining({ handler: expect.any(Function) }))
-    expect(subscriptions.add).toHaveBeenCalledTimes(37)
+    // Jira ticket gap analysis.
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getJiraSettings', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('saveJiraSettings', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('testJiraConnection', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('getPrTicket', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(api.backend.registerMethod).toHaveBeenCalledWith('setPrJiraKey', expect.objectContaining({ handler: expect.any(Function) }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(42)
   })
 
   it('passes the requested Task through to the local pull-request query', async () => {

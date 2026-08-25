@@ -177,4 +177,121 @@ describe('compileWalkthroughPrompt', () => {
     const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
     expect(out.toLowerCase()).toContain('no existing review comments')
   })
+
+  describe('Jira ticket context', () => {
+    const ticket = {
+      issue_key: 'AVIV-304',
+      url: 'https://collibra.atlassian.net/browse/AVIV-304',
+      summary: 'Compare the PR against its Jira ticket',
+      description: 'Reviewers need the ticket beside the diff.',
+      acceptance_criteria: '',
+      status: 'In Progress',
+      issue_type: 'Story',
+    }
+
+    it('injects the ticket so the agent reads it before the diff', () => {
+      const out = compileWalkthroughPrompt({ title: 't', body: null, files: [], ticket })
+
+      expect(out).toContain('AVIV-304')
+      expect(out).toContain('Compare the PR against its Jira ticket')
+      expect(out).toContain('Reviewers need the ticket beside the diff.')
+      expect(out).toContain('In Progress')
+      expect(out).toContain('Story')
+    })
+
+    it('asks for ticket_coverage only when a ticket is present', () => {
+      const withTicket = compileWalkthroughPrompt({ title: 't', body: null, files: [], ticket })
+      const without = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
+
+      expect(withTicket).toContain('ticket_coverage')
+      expect(without).not.toContain('ticket_coverage')
+    })
+
+    it('leaves no placeholder or stray heading behind when there is no ticket', () => {
+      const out = compileWalkthroughPrompt({ title: 't', body: null, files: [] })
+
+      expect(out).not.toContain('{{JIRA_TICKET}}')
+      expect(out).not.toContain('Source Ticket')
+    })
+
+    it('tells the agent to exclude refactors from out_of_scope', () => {
+      // The narrowing rule is the whole reason out_of_scope is usable; without
+      // it the model reports every rename it sees.
+      const out = compileWalkthroughPrompt({ title: 't', body: null, files: [], ticket })
+
+      expect(out).toContain('out_of_scope')
+      expect(out.toLowerCase()).toContain('refactor')
+    })
+
+    it('handles a ticket with no description', () => {
+      const out = compileWalkthroughPrompt({
+        title: 't',
+        body: null,
+        files: [],
+        ticket: { ...ticket, description: '', acceptance_criteria: '', status: null, issue_type: null },
+      })
+
+      expect(out).toContain('AVIV-304')
+      expect(out.toLowerCase()).toContain('no description')
+    })
+
+    it('presents the acceptance-criteria field as the authoritative list', () => {
+      const out = compileWalkthroughPrompt({
+        title: 't',
+        body: null,
+        files: [],
+        ticket: {
+          ...ticket,
+          acceptance_criteria: '- Login works.\n- Sessions expire after 30 minutes.',
+        },
+      })
+
+      expect(out).toContain('- Sessions expire after 30 minutes.')
+      // The field wins over anything the agent might infer from the description.
+      expect(out).toMatch(/authoritative/i)
+      expect(out).toContain('exactly these')
+    })
+
+    it('falls back to a description section when the field is empty', () => {
+      const out = compileWalkthroughPrompt({
+        title: 't',
+        body: null,
+        files: [],
+        ticket: {
+          ...ticket,
+          acceptance_criteria: '',
+          description: '## Acceptance Criteria\n\n- Login works.',
+        },
+      })
+
+      expect(out).toContain('"Acceptance Criteria" section')
+      expect(out).not.toMatch(/authoritative/i)
+    })
+
+    it('orders the criteria ahead of the description so they are read first', () => {
+      const out = compileWalkthroughPrompt({
+        title: 't',
+        body: null,
+        files: [],
+        ticket: { ...ticket, acceptance_criteria: '- Login works.' },
+      })
+
+      const criteriaAt = out.indexOf('### Acceptance Criteria')
+      const descriptionAt = out.indexOf('### Ticket Description')
+      expect(criteriaAt).toBeGreaterThan(-1)
+      expect(descriptionAt).toBeGreaterThan(-1)
+      expect(criteriaAt).toBeLessThan(descriptionAt)
+    })
+
+    it('is a no-op against a custom template that lacks the placeholder', () => {
+      // Users can override `pr_walkthrough_prompt`. An older template must keep
+      // working rather than erroring or silently gaining a ticket section.
+      const out = compileWalkthroughPrompt(
+        { title: 'My PR', body: null, files: [], ticket },
+        'Title: {{PR_TITLE}}\nFiles: {{CHANGED_FILES}}\n',
+      )
+
+      expect(out).toBe('Title: My PR\nFiles: (no files in this PR)\n')
+    })
+  })
 })

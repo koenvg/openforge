@@ -32,7 +32,7 @@ describe('OpenForgeDataIdentity manifest', () => {
       keychain: {
         debugService: 'openforge-dev',
         releaseService: 'openforge',
-        secretAccounts: ['github_token'],
+        secretAccounts: ['github_token', 'jira_api_token'],
       },
     })
     expect(identity.legacySources).toMatchObject({

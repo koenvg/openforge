@@ -2,6 +2,7 @@ You are walking a developer through a pull request titled: "{{PR_TITLE}}"
 
 Your job: split the PR into an ordered sequence of small, concept-sized steps — as if the author had landed several small commits instead of one big change. Each step should represent one logical concept; a step may span multiple files, and a single file may appear across multiple steps if it contains multiple unrelated changes.
 
+{{JIRA_TICKET}}
 {{PR_DESCRIPTION}}
 ## Changed Files
 
@@ -59,6 +60,7 @@ Additional rules for `review_comments`:
 - Prefer a few high-value remarks over exhaustive nitpicking. `review_comments` may be an empty array.
 - Do not duplicate any point already made in the Existing Review Comments above.
 
+{{TICKET_COVERAGE_OUTPUT}}
 Rules:
 - Order steps so a reader can follow them top-to-bottom.
 - Each `hunk_indexes` value must be a list of 0-based indexes that exist for that file (the indexes shown above as `hunk_index: N`). Use `null` to include the whole file.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSyntheticStepFiles, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint, totalWalkthroughSteps, isReviewSubmitStep } from './walkthroughViewState'
+import { buildSyntheticStepFiles, buildWalkthroughStepList, clampStepIndex, isWalkthroughStale, isPrLargeEnoughForWalkthroughHint } from './walkthroughViewState'
 import type { PrFileDiff, PrWalkthrough, PrWalkthroughStep, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 
 function file(filename: string, hunks: number, extra: Partial<PrFileDiff> = {}): PrFileDiff {
@@ -188,30 +188,28 @@ function walkthroughStep(id: string): PrWalkthroughStep {
   return { id, title: id, summary: id, files: [{ filename: 'a.ts', hunk_indexes: null }] }
 }
 
-describe('totalWalkthroughSteps', () => {
-  it('adds one trailing review/submit step to the parsed steps', () => {
-    expect(totalWalkthroughSteps([walkthroughStep('a'), walkthroughStep('b')])).toBe(3)
-  })
-
-  it('is 1 (just the review/submit step) when there are no parsed steps', () => {
-    expect(totalWalkthroughSteps([])).toBe(1)
-  })
-})
-
-describe('isReviewSubmitStep', () => {
+describe('buildWalkthroughStepList', () => {
   const steps = [walkthroughStep('a'), walkthroughStep('b')]
 
-  it('is true at the final index (equal to steps.length)', () => {
-    expect(isReviewSubmitStep(2, steps)).toBe(true)
+  it('leads with the ticket step and trails with review/submit', () => {
+    // The ticket step is unconditional: when Jira is unconfigured it is what
+    // explains why there is no coverage, which is otherwise invisible.
+    expect(buildWalkthroughStepList(steps)).toEqual([
+      { kind: 'ticket' },
+      { kind: 'concept', step: steps[0] },
+      { kind: 'concept', step: steps[1] },
+      { kind: 'submit' },
+    ])
   })
 
-  it('is false for every real step index', () => {
-    expect(isReviewSubmitStep(0, steps)).toBe(false)
-    expect(isReviewSubmitStep(1, steps)).toBe(false)
+  it('is just the ticket and review/submit steps when there are no parsed steps', () => {
+    expect(buildWalkthroughStepList([]).map(entry => entry.kind)).toEqual(['ticket', 'submit'])
   })
 
-  it('treats index 0 as the review/submit step when there are no parsed steps', () => {
-    expect(isReviewSubmitStep(0, [])).toBe(true)
+  it('keeps the ticket step from shifting which entry is the submit step', () => {
+    const entries = buildWalkthroughStepList(steps)
+    expect(entries.at(-1)).toEqual({ kind: 'submit' })
+    expect(entries[1]).toEqual({ kind: 'concept', step: steps[0] })
   })
 })
 

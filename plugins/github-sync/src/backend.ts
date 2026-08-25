@@ -41,7 +41,23 @@ import {
 import { AI_ANSWERS_JSON_SCHEMA, buildQuestionsPrompt, mapAnswersToThreads } from './lib/aiThreadPrompt'
 import { parseAndValidateWalkthroughSteps } from './lib/walkthroughParse'
 import { compileWalkthroughPrompt } from './lib/walkthroughPrompt'
-import { WALKTHROUGH_REVIEW_JSON_SCHEMA } from './lib/walkthroughSchema'
+import {
+  WALKTHROUGH_REVIEW_JSON_SCHEMA,
+  WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA,
+} from './lib/walkthroughSchema'
+import {
+  EMPTY_JIRA_CONFIG,
+  isJiraConfigured,
+  readJiraConfig,
+  readJiraKeyOverride,
+  readTicketSnapshot,
+  writeJiraConfig,
+  writeJiraKeyOverride,
+  writeTicketSnapshot,
+  type JiraConfig,
+} from './lib/jiraStore'
+import { resolveTicketSnapshot } from './lib/jiraTicket'
+import type { JiraWorkItem, TicketSnapshot } from './lib/ticketCoverage'
 
 const HOST_COMMAND_NAMESPACE = ['open', 'forge'].join('')
 
@@ -57,6 +73,15 @@ function hostCommandId(command: string): string {
 
 function invokeHostCommand<TOutput>(openforge: BackendOpenForgeAPI, command: string, payload?: HostCommandPayload): Promise<TOutput> {
   return openforge.commands.invokeGlobal<TOutput>(hostCommandId(command), payload ?? null)
+}
+
+/** Whether the Jira API token is present in the keychain. Never returns the token. */
+async function jiraTokenConfigured(openforge: BackendOpenForgeAPI): Promise<boolean> {
+  const status = await invokeHostCommand<{ configured: boolean }>(
+    openforge,
+    'getJiraApiTokenStatus',
+  ).catch(() => ({ configured: false }))
+  return status?.configured === true
 }
 
 export default defineBackendPlugin({
@@ -276,7 +301,25 @@ export default defineBackendPlugin({
         const existingComments = await invokeHostCommand<ReviewComment[]>(openforge, 'getReviewComments', {
           owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
         }).catch(() => [] as ReviewComment[])
-        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files, existingComments }, request.promptTemplate)
+
+        // Preliminary step: the PR is an outcome of a Jira ticket, so resolve and
+        // fetch that ticket before compiling the prompt. Returns null when Jira
+        // is unconfigured, in which case everything below is exactly as it was
+        // before the gap analysis existed — same prompt, same schema.
+        const ticketSnapshot = await resolveTicketSnapshot({
+          config: await readJiraConfig(openforge),
+          tokenConfigured: await jiraTokenConfigured(openforge),
+          override: await readJiraKeyOverride(openforge, request.reviewPrId),
+          pr: { head_ref: request.headRef, title: request.prTitle, body: request.prBody },
+          fetchWorkItem: payload =>
+            invokeHostCommand<JiraWorkItem>(openforge, 'fetchJiraWorkItem', payload),
+        })
+        if (ticketSnapshot) {
+          await writeTicketSnapshot(openforge, request.reviewPrId, request.headSha, ticketSnapshot)
+        }
+
+        const ticket = ticketSnapshot?.item ?? null
+        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files, existingComments, ticket }, request.promptTemplate)
 
         // Kick off generation in the background so the UI gets its session key
         // immediately and can render the optimistic "generating" state. The
@@ -295,12 +338,96 @@ export default defineBackendPlugin({
               repo: request.repoName,
               prNumber: request.prNumber,
               headSha: request.headSha,
-              outputSchema: WALKTHROUGH_REVIEW_JSON_SCHEMA,
+              // Only ask for coverage when the agent actually has a ticket to
+              // judge against; otherwise the schema would force it to invent one.
+              outputSchema: ticket
+                ? WALKTHROUGH_REVIEW_TICKET_JSON_SCHEMA
+                : WALKTHROUGH_REVIEW_JSON_SCHEMA,
             }).then((result) => result?.text ?? ''),
           files,
         )
         return { walkthrough_session_key: sessionKey }
       },
+    }))
+
+    // ---- Jira settings + ticket state -------------------------------------
+    // The token is never read back out of the keychain; the UI only learns
+    // whether one is stored.
+
+    context.subscriptions.add(openforge.backend.registerMethod<
+      null,
+      { config: JiraConfig; tokenConfigured: boolean }
+    >('getJiraSettings', {
+      handler: async () => ({
+        config: await readJiraConfig(openforge),
+        tokenConfigured: await jiraTokenConfigured(openforge),
+      }),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<
+      { config: JiraConfig; token?: string | null; clearToken?: boolean },
+      { config: JiraConfig; tokenConfigured: boolean }
+    >('saveJiraSettings', {
+      handler: async (request) => {
+        await writeJiraConfig(openforge, request.config ?? EMPTY_JIRA_CONFIG)
+
+        if (request.clearToken) {
+          await invokeHostCommand(openforge, 'clearJiraApiToken')
+        } else if (request.token && request.token.trim().length > 0) {
+          // Blank means "leave the stored token alone", so a user editing the
+          // site URL doesn't have to retype their token.
+          await invokeHostCommand(openforge, 'setJiraApiToken', { token: request.token.trim() })
+        }
+
+        return {
+          config: await readJiraConfig(openforge),
+          tokenConfigured: await jiraTokenConfigured(openforge),
+        }
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<
+      null,
+      { ok: boolean; displayName?: string; error?: string }
+    >('testJiraConnection', {
+      handler: async () => {
+        const config = await readJiraConfig(openforge)
+        if (config.baseUrl.trim().length === 0 || config.email.trim().length === 0) {
+          return { ok: false, error: 'Add the Jira site URL and email first.' }
+        }
+        return invokeHostCommand<{ ok: boolean; displayName?: string; error?: string }>(
+          openforge,
+          'testJiraConnection',
+          { baseUrl: config.baseUrl.trim(), email: config.email.trim() },
+        ).catch((error: unknown) => ({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }))
+      },
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<
+      { reviewPrId: number; headSha: string },
+      { snapshot: TicketSnapshot | null; jiraConfigured: boolean }
+    >('getPrTicket', {
+      handler: async (request) => ({
+        snapshot: await readTicketSnapshot(openforge, request.reviewPrId, request.headSha),
+        // Must match the condition generation uses, or the UI would offer a
+        // ticket step for a PR whose generation silently skipped the ticket.
+        jiraConfigured: isJiraConfigured(
+          await readJiraConfig(openforge),
+          await jiraTokenConfigured(openforge),
+        ),
+      }),
+    }))
+
+    context.subscriptions.add(openforge.backend.registerMethod<
+      { reviewPrId: number; issueKey: string | null },
+      void
+    >('setPrJiraKey', {
+      // Stored per PR, not per commit. The caller regenerates the walkthrough to
+      // pick the new ticket up.
+      handler: request => writeJiraKeyOverride(openforge, request.reviewPrId, request.issueKey),
     }))
 
     context.subscriptions.add(openforge.backend.registerMethod<{ walkthroughSessionKey: string }, void>('abortAgentWalkthrough', {

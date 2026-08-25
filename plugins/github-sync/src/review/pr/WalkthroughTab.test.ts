@@ -90,10 +90,20 @@ function makeWalkthrough(): PrWalkthrough {
 function makeGithubSync(): GithubSyncPrReviewClient {
   return {
     getPrWalkthrough: vi.fn(async () => makeWalkthrough()),
+    getPrTicket: vi.fn(async () => ({ snapshot: null, jiraConfigured: false })),
+    setPrJiraKey: vi.fn(async () => {}),
     startAgentWalkthrough: vi.fn(async () => ({ walkthrough_session_key: 'k' })),
     abortAgentWalkthrough: vi.fn(async () => {}),
     deletePrWalkthrough: vi.fn(async () => {}),
   } as unknown as GithubSyncPrReviewClient
+}
+
+/**
+ * The walkthrough opens on the ticket step, so the concept steps start at 2 and
+ * the review/submit step is last. Navigate by the number shown in the bubble.
+ */
+async function goToStep(stepNumber: number) {
+  await fireEvent.click(await screen.findByRole('button', { name: String(stepNumber) }))
 }
 
 function renderWalkthrough(overrides: Record<string, unknown> = {}) {
@@ -125,6 +135,7 @@ function renderWalkthrough(overrides: Record<string, unknown> = {}) {
 describe('WalkthroughTab comment sync', () => {
   it('forwards the shared pending-comment change handler to the per-step diff viewer', async () => {
     const { onPendingCommentsChange } = renderWalkthrough()
+    await goToStep(2)
     await screen.findByText('Step one')
 
     await fireEvent.click(screen.getByTestId('stub-add-pending'))
@@ -136,6 +147,7 @@ describe('WalkthroughTab comment sync', () => {
 
   it('feeds only the current step files to the per-step diff viewer', async () => {
     renderWalkthrough()
+    await goToStep(2)
     await screen.findByText('Step one')
 
     const stub = screen.getByTestId('diff-viewer-stub')
@@ -146,21 +158,29 @@ describe('WalkthroughTab comment sync', () => {
 })
 
 describe('WalkthroughTab review/submit step', () => {
+  it('opens on the ticket step so the reviewer sees the ticket before the diff', async () => {
+    renderWalkthrough()
+
+    expect(await screen.findByText('Ticket coverage')).toBeTruthy()
+    // Shown even with Jira unconfigured, because otherwise nothing explains the
+    // absent gap analysis.
+    expect(screen.getByText(/Jira is not connected/i)).toBeTruthy()
+  })
+
   it('adds a trailing Review & submit step beyond the parsed steps', async () => {
     renderWalkthrough()
+    await goToStep(2)
     await screen.findByText('Step one')
 
-    // 2 parsed steps + 1 review/submit step.
-    expect(screen.getByText('of 3')).toBeTruthy()
+    // 1 ticket step + 2 parsed steps + 1 review/submit step.
+    expect(screen.getByText('of 4')).toBeTruthy()
     // The submit panel is not shown on a normal step.
     expect(screen.queryByText('Submit Review')).toBeNull()
   })
 
   it('renders the full diff and the submit panel on the final step', async () => {
     renderWalkthrough()
-    await screen.findByText('Step one')
-
-    await fireEvent.click(screen.getByRole('button', { name: '3' }))
+    await goToStep(4)
 
     expect(await screen.findByText('Review & submit')).toBeTruthy()
     const stub = screen.getByTestId('diff-viewer-stub')
@@ -174,9 +194,7 @@ describe('WalkthroughTab review/submit step', () => {
   it('submits the pending review from the final step', async () => {
     const comment: ReviewSubmissionComment = { path: 'src/main.rs', line: 2, side: 'RIGHT', body: 'nit' }
     const { onSubmitReview } = renderWalkthrough({ pendingComments: [comment] })
-    await screen.findByText('Step one')
-
-    await fireEvent.click(screen.getByRole('button', { name: '3' }))
+    await goToStep(4)
     await screen.findByText('Review & submit')
     await fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
 
@@ -197,6 +215,8 @@ describe('WalkthroughTab step-details collapse', () => {
   it('hides the step summary so the diff gets the vertical space back, and remembers the choice', async () => {
     globalThis.localStorage?.clear()
     const { unmount } = renderWalkthrough()
+    // Step 1 is the ticket step, so walk to the first concept step.
+    await goToStep(2)
     await screen.findByText('Step one')
     expect(screen.getByText('First concept')).toBeTruthy()
 
@@ -208,6 +228,7 @@ describe('WalkthroughTab step-details collapse', () => {
 
     unmount()
     renderWalkthrough()
+    await goToStep(2)
     await screen.findByText('Step one')
     expect(screen.queryByText('First concept')).toBeNull()
   })
