@@ -64,6 +64,9 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: ['merge', 'squash', 'rebase'],
+    default_merge_method: 'merge',
     ...overrides,
   }
 }
@@ -103,6 +106,17 @@ describe('createPullRequestActions', () => {
     expect(mergePullRequest).toHaveBeenCalledWith(task.id, readyPr.id, readyPr.head_sha, 'squash')
     expect(get(ticketPrs).get(task.id)?.[0].state).toBe('merged')
     expect(get(ticketPrs).get(task.id)?.[0].merged_at).not.toBeNull()
+  })
+
+  it('rejects a merge method that is not allowed for the selected pull request', async () => {
+    const actions = createActions()
+    const readyPr = createPullRequest({ allowed_merge_methods: ['merge'] })
+    ticketPrs.set(new Map([[task.id, [readyPr]]]))
+
+    await actions.mergeReadyPullRequest(task, 'squash')
+
+    expect(mergePullRequest).not.toHaveBeenCalled()
+    expect(get(error)).toBe('The selected merge method is not available for this pull request.')
   })
 
   it('refreshes GitHub policy after a rejected merge without trying another method', async () => {
