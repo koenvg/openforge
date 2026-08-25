@@ -59,7 +59,7 @@ fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
         authority: authority::TerminalAuthorityContract::xterm_authoritative(),
         kind,
         pid_file_name,
-        shadow_model: None,
+        terminal_model: None,
     }
 }
 

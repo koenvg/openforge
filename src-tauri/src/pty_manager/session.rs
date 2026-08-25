@@ -334,7 +334,7 @@ impl TerminalSessions {
         operation: SessionOperation<'_>,
     ) -> Result<(), TerminalSessionFailure> {
         let session_key = target.session_key();
-        let (writer, master, shadow_model, instance_id) = {
+        let (writer, master, terminal_model, instance_id) = {
             let sessions = self.sessions.lock().await;
             let session =
                 sessions
@@ -379,7 +379,7 @@ impl TerminalSessions {
             (
                 std::sync::Arc::clone(&session.writer),
                 std::sync::Arc::clone(&session.master),
-                session.shadow_model.as_ref().map(std::sync::Arc::clone),
+                session.terminal_model.as_ref().map(std::sync::Arc::clone),
                 session.instance_id,
             )
         };
@@ -406,8 +406,8 @@ impl TerminalSessions {
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .resize(size)
                     .map_err(|error| TerminalSessionFailure::Resize(error.to_string()))?;
-                if let Some(shadow_model) = shadow_model {
-                    shadow_model.resize(columns, rows);
+                if let Some(terminal_model) = terminal_model {
+                    terminal_model.resize(columns, rows);
                 }
                 Ok(())
             }

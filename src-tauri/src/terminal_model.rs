@@ -1,9 +1,9 @@
-#[path = "terminal_model/shadow.rs"]
-mod shadow;
+#[path = "terminal_model/session.rs"]
+mod session;
 
 #[cfg(test)]
-pub(crate) use shadow::SHADOW_BUFFERED_BYTES_CAPACITY;
-pub(crate) use shadow::{ShadowMode, ShadowTerminalFeeder, ShadowTerminalSession};
+pub(crate) use session::TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY;
+pub(crate) use session::{ShadowMode, TerminalModelFeeder, TerminalModelSession};
 
 use libghostty_vt::{
     fmt::{Format, Formatter, FormatterOptions},
@@ -100,7 +100,7 @@ impl GhosttyTerminalModel {
                 tertiary: TertiaryDeviceAttributes::default(),
             })
         })?;
-        terminal.on_xtversion(|_terminal| Some("OpenForge shadow terminal"))?;
+        terminal.on_xtversion(|_terminal| Some("OpenForge terminal model"))?;
         Ok(Self {
             terminal,
             protocol_replies,
