@@ -371,12 +371,21 @@ mod tests {
         command.spawn().expect("recovery tree should spawn")
     }
 
-    fn wait_for_file(path: &Path) {
+    fn wait_for_parseable_pid(root: &mut Child, path: &Path) -> i32 {
         let deadline = Instant::now() + Duration::from_secs(2);
-        while !path.exists() && Instant::now() < deadline {
+        loop {
+            if let Ok(contents) = std::fs::read_to_string(path) {
+                if let Ok(pid) = contents.trim().parse() {
+                    return pid;
+                }
+            }
+            if Instant::now() >= deadline {
+                super::super::managed_process::force_kill_unverified_spawn(root.id());
+                let _ = root.wait();
+                panic!("descendant PID file did not contain a PID");
+            }
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(path.exists(), "descendant PID file should be written");
     }
 
     #[tokio::test]
@@ -384,12 +393,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
         let mut root = spawn_recovery_tree(&descendant_pid_file);
-        wait_for_file(&descendant_pid_file);
-        let descendant_pid: i32 = std::fs::read_to_string(&descendant_pid_file)
-            .expect("descendant PID should read")
-            .trim()
-            .parse()
-            .expect("descendant PID should parse");
+        let descendant_pid = wait_for_parseable_pid(&mut root, &descendant_pid_file);
         let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
         let pid_file = temp_dir.path().join("startup-shell-0.pid");
         write_managed_process_identity(&pid_file, &identity).expect("identity should persist");
@@ -421,7 +425,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
         let mut root = spawn_recovery_tree(&descendant_pid_file);
-        wait_for_file(&descendant_pid_file);
+        wait_for_parseable_pid(&mut root, &descendant_pid_file);
         let mut identity =
             ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
         identity.root_start_time = identity.root_start_time.saturating_sub(1);
