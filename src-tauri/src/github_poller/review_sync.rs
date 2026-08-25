@@ -444,9 +444,7 @@ pub(super) async fn poll_review_prs(
             .iter()
             .filter(|pr| pr.viewed_at.is_none())
             .count();
-        if let Err(e) = events.emit("review-pr-count-changed", serde_json::json!(count)) {
-            warn!("[GitHub Poller] Failed to emit review-pr-count-changed: {e}");
-        }
+        events.emit("review-pr-count-changed", serde_json::json!(count));
     }
 
     Ok(())
@@ -606,9 +604,7 @@ pub(super) async fn poll_authored_prs(
                 })?;
         }
 
-        if let Err(e) = events.emit("authored-prs-updated", serde_json::Value::Null) {
-            warn!("[GitHub Poller] Failed to emit authored-prs-updated: {e}");
-        }
+        events.emit("authored-prs-updated", serde_json::Value::Null);
     }
 
     Ok(())

@@ -1,17 +1,13 @@
 use super::common::GitHubEventTarget;
 
-pub(super) fn emit_new_pr_comment(
-    events: &GitHubEventTarget,
-    task_id: &str,
-    comment_id: i64,
-) -> Result<(), String> {
+pub(super) fn emit_new_pr_comment(events: &GitHubEventTarget, task_id: &str, comment_id: i64) {
     events.emit(
         "new-pr-comment",
         serde_json::json!({
             "ticket_id": task_id,
             "comment_id": comment_id,
         }),
-    )
+    );
 }
 
 pub(super) fn emit_ci_status_changed(
@@ -22,7 +18,7 @@ pub(super) fn emit_ci_status_changed(
     pr_title: &str,
     ci_status: &str,
     timestamp: i64,
-) -> Result<(), String> {
+) {
     events.emit(
         "ci-status-changed",
         serde_json::json!({
@@ -33,7 +29,7 @@ pub(super) fn emit_ci_status_changed(
             "ci_status": ci_status,
             "timestamp": timestamp,
         }),
-    )
+    );
 }
 
 pub(super) fn emit_review_status_changed(
@@ -44,7 +40,7 @@ pub(super) fn emit_review_status_changed(
     pr_title: &str,
     review_status: &str,
     timestamp: i64,
-) -> Result<(), String> {
+) {
     events.emit(
         "review-status-changed",
         serde_json::json!({
@@ -55,14 +51,10 @@ pub(super) fn emit_review_status_changed(
             "review_status": review_status,
             "timestamp": timestamp,
         }),
-    )
+    );
 }
 
-pub(super) fn emit_task_updated(
-    events: &GitHubEventTarget,
-    task_id: &str,
-    project_id: &str,
-) -> Result<(), String> {
+pub(super) fn emit_task_updated(events: &GitHubEventTarget, task_id: &str, project_id: &str) {
     events.emit(
         "task-changed",
         serde_json::json!({
@@ -70,5 +62,5 @@ pub(super) fn emit_task_updated(
             "task_id": task_id,
             "project_id": project_id,
         }),
-    )
+    );
 }
