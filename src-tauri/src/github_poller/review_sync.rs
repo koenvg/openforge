@@ -1,8 +1,10 @@
 use super::common::{parse_github_timestamp, GitHubEventTarget};
 use crate::db::{acquire_db, Database, PrRow};
-use crate::github_client::GitHubClient;
+use crate::github_client::{
+    CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrReview, PullRequest, SearchPrResult,
+};
 use log::{error, warn};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Mutex;
 
@@ -450,162 +452,183 @@ pub(super) async fn poll_review_prs(
     Ok(())
 }
 
+pub(super) struct EnrichedAuthoredPr {
+    pub(super) pr: SearchPrResult,
+    pub(super) created_at: i64,
+    pub(super) ci_status: Option<String>,
+    pub(super) ci_check_runs: Option<String>,
+    pub(super) review_status: Option<String>,
+    pub(super) mergeable: Option<bool>,
+    pub(super) mergeable_state: Option<String>,
+    pub(super) is_queued: bool,
+}
+
+pub(super) fn aggregate_authored_pr_enrichment(
+    pr: SearchPrResult,
+    check_runs: CheckRunsResponse,
+    combined_status: CombinedStatusResponse,
+    reviews: Vec<PrReview>,
+    pr_details: PullRequest,
+) -> EnrichedAuthoredPr {
+    let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
+        .map(|dt| dt.timestamp())
+        .unwrap_or(0);
+    let ci_status = Some(crate::github_client::aggregate_ci_status(
+        &check_runs,
+        &combined_status,
+    ));
+    let ci_check_runs =
+        Some(serde_json::to_string(&check_runs.check_runs).unwrap_or_else(|_| "[]".to_string()));
+    let review_status = Some(crate::github_client::aggregate_review_status(
+        &reviews, false, None,
+    ));
+    let is_queued = pr_details
+        .extra
+        .get("merge_queue_entry")
+        .map(|value| !value.is_null())
+        .unwrap_or(false);
+
+    EnrichedAuthoredPr {
+        pr,
+        created_at,
+        ci_status,
+        ci_check_runs,
+        review_status,
+        mergeable: pr_details.mergeable,
+        mergeable_state: pr_details.mergeable_state,
+        is_queued,
+    }
+}
+
+async fn enrich_authored_pr(
+    github_client: &GitHubClient,
+    github_token: &str,
+    pr: SearchPrResult,
+) -> Result<EnrichedAuthoredPr, PollPhaseError> {
+    let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
+        github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
+        github_client.get_combined_status(
+            &pr.repo_owner,
+            &pr.repo_name,
+            &pr.head_sha,
+            github_token
+        ),
+        github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
+        github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
+    );
+
+    Ok(aggregate_authored_pr_enrichment(
+        pr,
+        check_runs_result.map_err(PollPhaseError::GitHub)?,
+        combined_status_result.map_err(PollPhaseError::GitHub)?,
+        reviews_result.map_err(PollPhaseError::GitHub)?,
+        pr_details_result.map_err(PollPhaseError::GitHub)?,
+    ))
+}
+
+async fn fetch_enriched_authored_prs(
+    github_client: &GitHubClient,
+    github_token: &str,
+    username: &str,
+) -> Result<(Vec<EnrichedAuthoredPr>, Vec<i64>), PollPhaseError> {
+    let (prs, all_search_ids) = github_client
+        .search_authored_prs(username, github_token)
+        .await
+        .map_err(PollPhaseError::GitHub)?;
+    let mut enriched_prs = Vec::with_capacity(prs.len());
+
+    for pr in prs {
+        enriched_prs.push(enrich_authored_pr(github_client, github_token, pr).await?);
+    }
+
+    Ok((enriched_prs, all_search_ids))
+}
+
+fn configured_github_username(db: &Mutex<Database>) -> Result<Option<String>, PollPhaseError> {
+    acquire_db(db)
+        .get_config("github_username")
+        .map_err(|error| PollPhaseError::Db(error.to_string()))
+}
+
+pub(super) fn persist_authored_prs(
+    db: &Database,
+    events: &GitHubEventTarget,
+    enriched_prs: &[EnrichedAuthoredPr],
+    all_search_ids: &[i64],
+) -> Result<(), PollPhaseError> {
+    for enriched in enriched_prs {
+        let pr = &enriched.pr;
+        let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
+            .map(|dt| dt.timestamp())
+            .unwrap_or(0);
+        let task_id = db.get_task_id_for_pr(pr.id).map_err(|error| {
+            PollPhaseError::Db(format!("Failed to get Task ID for PR: {error}"))
+        })?;
+
+        db.upsert_authored_pr(
+            pr.id,
+            pr.number,
+            &pr.title,
+            pr.body.as_deref(),
+            &pr.state,
+            pr.draft,
+            &pr.html_url,
+            &pr.user_login,
+            pr.user_avatar_url.as_deref(),
+            &pr.repo_owner,
+            &pr.repo_name,
+            &pr.head_ref,
+            &pr.base_ref,
+            &pr.head_sha,
+            pr.additions,
+            pr.deletions,
+            pr.changed_files,
+            enriched.ci_status.as_deref(),
+            enriched.ci_check_runs.as_deref(),
+            enriched.review_status.as_deref(),
+            None,
+            enriched.is_queued,
+            task_id.as_deref(),
+            &pr.labels,
+            enriched.created_at,
+            updated_at,
+        )
+        .map_err(|error| PollPhaseError::Db(format!("Failed to upsert authored PR: {error}")))?;
+        db.update_authored_pr_mergeability(
+            pr.id,
+            enriched.mergeable,
+            enriched.mergeable_state.as_deref(),
+        )
+        .map_err(|error| {
+            PollPhaseError::Db(format!(
+                "Failed to update authored PR mergeability: {error}"
+            ))
+        })?;
+    }
+
+    if !all_search_ids.is_empty() || enriched_prs.is_empty() {
+        db.delete_stale_authored_prs(all_search_ids)
+            .map_err(|error| {
+                PollPhaseError::Db(format!("Failed to delete stale authored PRs: {error}"))
+            })?;
+    }
+
+    events.emit("authored-prs-updated", serde_json::Value::Null);
+    Ok(())
+}
+
 pub(super) async fn poll_authored_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     events: &GitHubEventTarget,
     github_token: &str,
 ) -> Result<(), PollPhaseError> {
-    let username = {
-        let db_lock = acquire_db(db);
-        db_lock
-            .get_config("github_username")
-            .map_err(|e| PollPhaseError::Db(e.to_string()))?
-    };
-
-    let Some(username) = username else {
+    let Some(username) = configured_github_username(db)? else {
         return Ok(());
     };
+    let (enriched_prs, all_search_ids) =
+        fetch_enriched_authored_prs(github_client, github_token, &username).await?;
 
-    let (prs, all_search_ids) = github_client
-        .search_authored_prs(&username, github_token)
-        .await
-        .map_err(PollPhaseError::GitHub)?;
-
-    type EnrichedPrData = (
-        i64,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<bool>,
-        Option<String>,
-        bool,
-    );
-    let mut enriched: HashMap<i64, EnrichedPrData> = HashMap::with_capacity(prs.len());
-
-    for pr in &prs {
-        let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
-            .map(|dt| dt.timestamp())
-            .unwrap_or(0);
-        let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
-            github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
-            github_client.get_combined_status(
-                &pr.repo_owner,
-                &pr.repo_name,
-                &pr.head_sha,
-                github_token
-            ),
-            github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
-            github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
-        );
-
-        let check_runs = check_runs_result.map_err(PollPhaseError::GitHub)?;
-        let combined_status = combined_status_result.map_err(PollPhaseError::GitHub)?;
-        let reviews = reviews_result.map_err(PollPhaseError::GitHub)?;
-        let pr_details = pr_details_result.map_err(PollPhaseError::GitHub)?;
-
-        let ci_status = Some(crate::github_client::aggregate_ci_status(
-            &check_runs,
-            &combined_status,
-        ));
-        let ci_check_runs = Some(
-            serde_json::to_string(&check_runs.check_runs).unwrap_or_else(|_| "[]".to_string()),
-        );
-        let review_status = Some(crate::github_client::aggregate_review_status(
-            &reviews, false, None,
-        ));
-
-        let is_queued = pr_details
-            .extra
-            .get("merge_queue_entry")
-            .map(|value| !value.is_null())
-            .unwrap_or(false);
-
-        enriched.insert(
-            pr.id,
-            (
-                created_at,
-                ci_status,
-                ci_check_runs,
-                review_status,
-                pr_details.mergeable,
-                pr_details.mergeable_state,
-                is_queued,
-            ),
-        );
-    }
-
-    {
-        let db_lock = acquire_db(db);
-        for pr in &prs {
-            let (
-                created_at,
-                ci_status,
-                ci_check_runs,
-                review_status,
-                mergeable,
-                mergeable_state,
-                is_queued,
-            ) = match enriched.get(&pr.id) {
-                Some(data) => data,
-                None => continue,
-            };
-
-            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-
-            let task_id = db_lock
-                .get_task_id_for_pr(pr.id)
-                .map_err(|e| PollPhaseError::Db(format!("Failed to get Task ID for PR: {e}")))?;
-
-            db_lock
-                .upsert_authored_pr(
-                    pr.id,
-                    pr.number,
-                    &pr.title,
-                    pr.body.as_deref(),
-                    &pr.state,
-                    pr.draft,
-                    &pr.html_url,
-                    &pr.user_login,
-                    pr.user_avatar_url.as_deref(),
-                    &pr.repo_owner,
-                    &pr.repo_name,
-                    &pr.head_ref,
-                    &pr.base_ref,
-                    &pr.head_sha,
-                    pr.additions,
-                    pr.deletions,
-                    pr.changed_files,
-                    ci_status.as_deref(),
-                    ci_check_runs.as_deref(),
-                    review_status.as_deref(),
-                    None,
-                    *is_queued,
-                    task_id.as_deref(),
-                    &pr.labels,
-                    *created_at,
-                    updated_at,
-                )
-                .map_err(|e| PollPhaseError::Db(format!("Failed to upsert authored PR: {e}")))?;
-            db_lock
-                .update_authored_pr_mergeability(pr.id, *mergeable, mergeable_state.as_deref())
-                .map_err(|e| {
-                    PollPhaseError::Db(format!("Failed to update authored PR mergeability: {e}"))
-                })?;
-        }
-
-        if !all_search_ids.is_empty() || prs.is_empty() {
-            db_lock
-                .delete_stale_authored_prs(&all_search_ids)
-                .map_err(|e| {
-                    PollPhaseError::Db(format!("Failed to delete stale authored PRs: {e}"))
-                })?;
-        }
-
-        events.emit("authored-prs-updated", serde_json::Value::Null);
-    }
-
-    Ok(())
+    let db_lock = acquire_db(db);
+    persist_authored_prs(&db_lock, events, &enriched_prs, &all_search_ids)
 }
