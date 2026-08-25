@@ -235,8 +235,22 @@ impl PtyManager {
             app_event_tx,
         } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
+        self.terminal_sessions
+            .ensure_no_managed_recovery(task_id)
+            .await?;
         let (token, lifecycle_lock) = self.begin_agent_spawn(task_id, adapter.label()).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
+        if let Err(error) = self
+            .terminal_sessions
+            .ensure_no_managed_recovery(task_id)
+            .await
+        {
+            let _ = self.finish_agent_spawn(task_id, token).await;
+            return Err(error);
+        }
+        if !self.is_current_spawn(task_id, token.generation).await {
+            return Err(token.stale_error(task_id, "cancelled before spawn"));
+        }
 
         self.replace_existing_agent_session(task_id, token.label)
             .await?;

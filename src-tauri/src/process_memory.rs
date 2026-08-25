@@ -1,4 +1,8 @@
-use crate::{db::AgentSessionRow, plugin_host::PluginHost, pty_manager::PtyManager};
+use crate::{
+    db::AgentSessionRow,
+    plugin_host::PluginHost,
+    pty_manager::{PtyManager, TerminalSessionLifecycleState},
+};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -44,6 +48,7 @@ pub struct PtyProcessTreeMemoryDiagnostics {
     pub pty_instance_id: u64,
     pub session_key: String,
     pub session_kind: String,
+    pub lifecycle_state: TerminalSessionLifecycleState,
     pub root_pid: Option<u32>,
     pub pid_file_name: String,
     pub root_process: Option<ProcessMemoryNode>,
@@ -187,6 +192,7 @@ fn pty_memory_diagnostics(
             pty_instance_id: pty.pty_instance_id,
             session_key: pty.session_key.clone(),
             session_kind: pty.session_kind.clone(),
+            lifecycle_state: pty.lifecycle_state,
             root_pid: pty.pid,
             pid_file_name: pty.pid_file_name.clone(),
             root_rss_bytes: root_process
@@ -470,6 +476,7 @@ mod tests {
             session_key: "KVG-1".to_string(),
             task_id: "KVG-1".to_string(),
             session_kind: "agent".to_string(),
+            lifecycle_state: TerminalSessionLifecycleState::Live,
             pid: Some(20),
             pty_instance_id: 7,
             pid_file_name: "KVG-1-pty.pid".to_string(),
@@ -506,6 +513,7 @@ mod tests {
             pty_instance_id: 1,
             session_key: "KVG-1".to_string(),
             session_kind: "agent".to_string(),
+            lifecycle_state: TerminalSessionLifecycleState::Live,
             root_pid: Some(20),
             pid_file_name: "KVG-1-pty.pid".to_string(),
             root_process: Some(pty_root),
@@ -528,6 +536,7 @@ mod tests {
             session_key: "KVG-1-shell-0".to_string(),
             task_id: "KVG-1".to_string(),
             session_kind: "shell".to_string(),
+            lifecycle_state: TerminalSessionLifecycleState::Live,
             pid: Some(20),
             pty_instance_id: 99,
             pid_file_name: "KVG-1-shell-0.pid".to_string(),

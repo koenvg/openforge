@@ -240,7 +240,7 @@ The companion's context-sensitive picker for currently available core Task actio
 _Avoid_: Mobile Command Palette, Task search, plugin command picker
 
 **Shell Session Key**:
-The OpenForge identifier for one concrete terminal shell tab/session.
+The stable OpenForge identifier for one terminal shell tab, which selects that tab's current concrete **Terminal Session**.
 _Avoid_: Task ID, terminal index, PID filename
 
 **Task Creation**:
@@ -436,6 +436,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
 - The **Terminal Runtime** uses **Shell Session Keys** to distinguish terminal shell tabs/sessions.
 - A **Shell Session Key** is not a **Task** id, even when it belongs to a **Task** terminal.
+- A **Shell Session Key** may select a succession of distinct **Terminal Sessions** over time; replacing the current session ends it and creates another under the same key.
 - A **Task** with unmet dependencies cannot start an **Implementation Run**.
 - A **Task** with an active **Agent Session** cannot start another **Implementation Run**.
 - **Session Reattachment** preserves the existing **Agent Session** identity.

@@ -30,7 +30,8 @@ impl PtyManager {
         } = request;
         let mut pending_session = Some(session);
         let replaced_session = {
-            let generations = self.agent_spawn_generations.lock().await;
+            let mut sessions = self.terminal_sessions.sessions.lock().await;
+            let generations = self.terminal_sessions.agent_spawn_generations.lock().await;
             let registration_is_stale = generations
                 .get(session_key)
                 .map(|current| *current != generation)
@@ -38,7 +39,7 @@ impl PtyManager {
             if registration_is_stale {
                 None
             } else {
-                self.sessions.lock().await.insert(
+                sessions.insert(
                     session_key.to_string(),
                     pending_session.take().expect("pending PTY session"),
                 )
@@ -53,8 +54,14 @@ impl PtyManager {
 
         if let Some(mut replaced_session) = replaced_session {
             info!("[PTY] Replacing existing {replacement_label} PTY for session {session_key}");
-            self.terminate_session_process(session_key, &mut replaced_session)
-                .await?;
+            if let Err(error) = self
+                .terminate_current_session_process(session_key, &mut replaced_session, false)
+                .await
+            {
+                self.retain_failed_current_cleanup(session_key, replaced_session)
+                    .await;
+                return Err(error);
+            }
             self.clear_session_tracking(session_key).await;
         }
         Ok(())
@@ -67,7 +74,13 @@ impl PtyManager {
         managed_process: &ManagedProcessIdentity,
     ) -> Result<(), PtyError> {
         if let Err(error) = write_managed_process_identity(pid_file, managed_process) {
-            if let Some(failed_session) = self.sessions.lock().await.remove(session_key) {
+            if let Some(failed_session) = self
+                .terminal_sessions
+                .sessions
+                .lock()
+                .await
+                .remove(session_key)
+            {
                 self.terminate_or_retain_unregistered_session(session_key, failed_session)
                     .await?;
             }

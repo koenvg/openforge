@@ -44,10 +44,11 @@ pub(super) struct PendingShellSpawn {
 impl PendingShellSpawn {
     fn register(manager: &PtyManager, session_key: &str, task_id: &str, generation: u64) -> Self {
         manager
+            .terminal_sessions
             .pending_shell_spawns
             .insert(session_key.to_string(), (task_id.to_string(), generation));
         Self {
-            pending: Arc::clone(&manager.pending_shell_spawns),
+            pending: Arc::clone(&manager.terminal_sessions.pending_shell_spawns),
             session_key: session_key.to_string(),
             generation,
         }
@@ -63,7 +64,7 @@ impl Drop for PendingShellSpawn {
 
 impl PtyManager {
     pub(super) async fn is_current_spawn(&self, session_key: &str, generation: u64) -> bool {
-        let generations = self.agent_spawn_generations.lock().await;
+        let generations = self.terminal_sessions.agent_spawn_generations.lock().await;
         generations
             .get(session_key)
             .map(|current| *current == generation)
@@ -71,7 +72,7 @@ impl PtyManager {
     }
 
     async fn is_current_agent_session(&self, task_id: &str, instance_id: u64) -> bool {
-        let sessions = self.sessions.lock().await;
+        let sessions = self.terminal_sessions.sessions.lock().await;
         sessions
             .get(task_id)
             .map(|session| session.instance_id == instance_id)
@@ -114,7 +115,8 @@ impl PtyManager {
             generation: NEXT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed),
             label,
         };
-        self.agent_spawn_generations
+        self.terminal_sessions
+            .agent_spawn_generations
             .lock()
             .await
             .insert(task_id.to_string(), token.generation);
@@ -127,7 +129,7 @@ impl PtyManager {
         task_id: &str,
         token: AgentSpawnToken,
     ) -> Result<(), PtyError> {
-        let mut generations = self.agent_spawn_generations.lock().await;
+        let mut generations = self.terminal_sessions.agent_spawn_generations.lock().await;
         if generations.get(task_id) == Some(&token.generation) {
             generations.remove(task_id);
             Ok(())
@@ -141,7 +143,8 @@ impl PtyManager {
         task_id: &str,
         label: &str,
     ) -> Result<(), PtyError> {
-        let Some(mut old_session) = self.sessions.lock().await.remove(task_id) else {
+        let Some(mut old_session) = self.terminal_sessions.sessions.lock().await.remove(task_id)
+        else {
             return Ok(());
         };
 
@@ -150,13 +153,11 @@ impl PtyManager {
             label, task_id
         );
         if let Err(error) = self
-            .terminate_session_process(task_id, &mut old_session)
+            .terminate_current_session_process(task_id, &mut old_session, false)
             .await
         {
-            self.sessions
-                .lock()
-                .await
-                .insert(task_id.to_string(), old_session);
+            self.retain_failed_current_cleanup(task_id, old_session)
+                .await;
             return Err(error);
         }
         self.clear_session_tracking(task_id).await;
@@ -173,7 +174,7 @@ impl PtyManager {
             generation: NEXT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed),
         };
         let pending_spawn = {
-            let mut generations = self.agent_spawn_generations.lock().await;
+            let mut generations = self.terminal_sessions.agent_spawn_generations.lock().await;
             let pending_spawn =
                 PendingShellSpawn::register(self, session_key, task_id, token.generation);
             generations.insert(token.session_key.clone(), token.generation);
@@ -184,7 +185,7 @@ impl PtyManager {
     }
 
     pub(super) async fn finish_shell_spawn(&self, token: &ShellSpawnToken) {
-        let mut generations = self.agent_spawn_generations.lock().await;
+        let mut generations = self.terminal_sessions.agent_spawn_generations.lock().await;
         if generations.get(&token.session_key) == Some(&token.generation) {
             generations.remove(&token.session_key);
         }
@@ -195,19 +196,23 @@ impl PtyManager {
         session_key: &str,
         task_id: &str,
     ) -> Result<(), PtyError> {
-        let Some(mut old_session) = self.sessions.lock().await.remove(session_key) else {
+        let Some(mut old_session) = self
+            .terminal_sessions
+            .sessions
+            .lock()
+            .await
+            .remove(session_key)
+        else {
             return Ok(());
         };
 
         info!("[PTY] Replacing existing shell PTY for task {task_id}");
         if let Err(error) = self
-            .terminate_session_process(session_key, &mut old_session)
+            .terminate_current_session_process(session_key, &mut old_session, false)
             .await
         {
-            self.sessions
-                .lock()
-                .await
-                .insert(session_key.to_string(), old_session);
+            self.retain_failed_current_cleanup(session_key, old_session)
+                .await;
             return Err(error);
         }
         self.clear_session_tracking(session_key).await;

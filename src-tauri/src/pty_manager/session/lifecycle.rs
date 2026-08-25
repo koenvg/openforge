@@ -1,7 +1,6 @@
-use super::super::authority::{QueryResponseOwner, TerminalAuthorityContract};
+use super::super::authority::TerminalAuthorityContract;
 use crate::terminal_model::ShadowTerminalSession;
-use log::{error, info};
-use portable_pty::PtySize;
+use log::{error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,7 +16,11 @@ use super::super::pids::{
     terminate_and_remove_managed_process, write_managed_process_identity,
     MANAGED_PROCESS_TERM_TIMEOUT,
 };
-use super::super::{PtyBufferState, PtyError, PtyManager, PtyProcessDiagnosticSession};
+use super::super::{
+    PtyBufferState, PtyError, PtyManager, PtyProcessDiagnosticSession,
+    TerminalSessionLifecycleState,
+};
+use super::{ManagedRecovery, SessionOperation, SessionTarget, TerminalSessions};
 
 pub(in super::super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(in super::super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
@@ -132,14 +135,109 @@ pub(in super::super) struct PtySession {
     #[allow(dead_code)]
     pub(in super::super) child: Box<dyn portable_pty::Child + Send + Sync>,
     #[allow(dead_code)]
-    pub(in super::super) master: Box<dyn portable_pty::MasterPty + Send>,
-    pub(in super::super) writer: OrderedPtyWriter,
+    pub(in super::super) master: Arc<StdMutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    pub(in super::super) writer: Arc<OrderedPtyWriter>,
     pub(in super::super) instance_id: u64,
     pub(in super::super) authority: TerminalAuthorityContract,
     pub(in super::super) kind: PtySessionKind,
     pub(in super::super) pid_file_name: String,
-    pub(in super::super) shadow_model: Option<ShadowTerminalSession>,
+    pub(in super::super) shadow_model: Option<Arc<ShadowTerminalSession>>,
     pub(in super::super) managed_process: ManagedProcessIdentity,
+}
+
+pub(in super::super) enum PassiveExitOutcome {
+    IgnoredStale,
+    Finalized { process_succeeded: bool },
+    CleanupFailed,
+}
+
+impl TerminalSessions {
+    pub(in super::super) async fn finalize_exit(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+        lifecycle_lock: &tokio::sync::Mutex<()>,
+        pid_file: &std::path::Path,
+        remove_output_buffer: bool,
+    ) -> PassiveExitOutcome {
+        if let Some(emit_exit) = self.finish_cleaning_exit(session_key, instance_id).await {
+            return if emit_exit {
+                PassiveExitOutcome::Finalized {
+                    process_succeeded: false,
+                }
+            } else {
+                PassiveExitOutcome::IgnoredStale
+            };
+        }
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+        let removed_session = {
+            let mut sessions = self.sessions.lock().await;
+            let matches_instance = sessions
+                .get(session_key)
+                .is_some_and(|session| session.instance_id == instance_id);
+            matches_instance
+                .then(|| sessions.remove(session_key))
+                .flatten()
+        };
+
+        let Some(mut session) = removed_session else {
+            return match self.finish_cleaning_exit(session_key, instance_id).await {
+                Some(true) => PassiveExitOutcome::Finalized {
+                    process_succeeded: false,
+                },
+                Some(false) | None => PassiveExitOutcome::IgnoredStale,
+            };
+        };
+        if let Err(error) = terminate_and_remove_managed_process(
+            &session.managed_process,
+            pid_file,
+            &format!("PTY EOF cleanup for {session_key}"),
+        )
+        .await
+        {
+            warn!("[PTY] Failed to finalize process tree for {session_key}: {error}");
+            self.retain_managed_recovery(
+                session_key,
+                ManagedRecovery {
+                    recovery_key: session_key.to_string(),
+                    session,
+                },
+            )
+            .await;
+            self.last_output.lock().await.remove(session_key);
+            if remove_output_buffer {
+                self.output_buffers.lock().await.remove(session_key);
+            }
+            let mut attachment_hubs = self.attachment_hubs.lock().await;
+            if attachment_hubs
+                .get(session_key)
+                .is_some_and(|hub| hub.instance_id() == instance_id)
+            {
+                attachment_hubs.remove(session_key);
+            }
+            return PassiveExitOutcome::CleanupFailed;
+        }
+        let process_succeeded = session
+            .child
+            .try_wait()
+            .ok()
+            .flatten()
+            .is_some_and(|status| status.success());
+
+        self.last_output.lock().await.remove(session_key);
+        if remove_output_buffer {
+            self.output_buffers.lock().await.remove(session_key);
+        }
+        let mut attachment_hubs = self.attachment_hubs.lock().await;
+        if attachment_hubs
+            .get(session_key)
+            .is_some_and(|hub| hub.instance_id() == instance_id)
+        {
+            attachment_hubs.remove(session_key);
+        }
+        drop(attachment_hubs);
+        PassiveExitOutcome::Finalized { process_succeeded }
+    }
 }
 
 impl PtyManager {
@@ -157,6 +255,39 @@ impl PtyManager {
         .await?;
         let _ = session.child.try_wait();
         Ok(())
+    }
+
+    pub(super) async fn terminate_current_session_process(
+        &self,
+        session_key: &str,
+        session: &mut PtySession,
+        emit_exit: bool,
+    ) -> Result<(), PtyError> {
+        self.terminal_sessions
+            .begin_cleaning(session_key, session, emit_exit)
+            .await;
+        let instance_id = session.instance_id;
+        let result = self.terminate_session_process(session_key, session).await;
+        self.terminal_sessions
+            .complete_cleaning(session_key, instance_id)
+            .await;
+        result
+    }
+
+    pub(super) async fn retain_failed_current_cleanup(
+        &self,
+        session_key: &str,
+        session: PtySession,
+    ) {
+        self.terminal_sessions
+            .retain_managed_recovery(
+                session_key,
+                ManagedRecovery {
+                    recovery_key: session_key.to_string(),
+                    session,
+                },
+            )
+            .await;
     }
 
     pub(super) async fn terminate_unregistered_session(
@@ -235,10 +366,15 @@ impl PtyManager {
         }
 
         session.pid_file_name = recovery_pid_file_name;
-        self.sessions
-            .lock()
-            .await
-            .insert(recovery_key.clone(), session);
+        self.terminal_sessions
+            .retain_managed_recovery(
+                base_key,
+                ManagedRecovery {
+                    recovery_key: recovery_key.clone(),
+                    session,
+                },
+            )
+            .await;
 
         if let Some(error) = metadata_error {
             return Err(PtyError::CleanupFailed(format!(
@@ -249,30 +385,63 @@ impl PtyManager {
         Ok(())
     }
 
+    async fn terminate_managed_recoveries(&self, session_key: &str) -> Result<(), PtyError> {
+        let recoveries = self
+            .terminal_sessions
+            .take_managed_recoveries(session_key)
+            .await;
+        let mut failures = Vec::new();
+        for mut recovery in recoveries {
+            if let Err(error) = self
+                .terminate_session_process(&recovery.recovery_key, &mut recovery.session)
+                .await
+            {
+                failures.push(error.to_string());
+                self.terminal_sessions
+                    .restore_managed_recovery(session_key, recovery)
+                    .await;
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(PtyError::CleanupFailed(failures.join("; ")))
+        }
+    }
+
     pub(in super::super) async fn lifecycle_lock_for(
         &self,
         session_key: &str,
     ) -> LifecycleLockLease {
-        self.lifecycle_locks.lock_for(session_key)
+        self.terminal_sessions.lifecycle_locks.lock_for(session_key)
     }
 
     pub(super) async fn clear_session_tracking(&self, session_key: &str) {
-        self.last_output.lock().await.remove(session_key);
-        self.output_buffers.lock().await.remove(session_key);
-        self.attachment_hubs.lock().await.remove(session_key);
+        self.terminal_sessions
+            .last_output
+            .lock()
+            .await
+            .remove(session_key);
+        self.terminal_sessions
+            .output_buffers
+            .lock()
+            .await
+            .remove(session_key);
+        self.terminal_sessions
+            .attachment_hubs
+            .lock()
+            .await
+            .remove(session_key);
     }
 
     pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), PtyError> {
-        let mut sessions = self.sessions.lock().await;
-
-        let session = sessions
-            .get_mut(task_id)
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
-
-        session
-            .writer
-            .write_user_input(task_id, session.instance_id, data)
-            .map_err(|error| PtyError::WriteFailed(error.to_string()))?;
+        self.terminal_sessions
+            .operate(
+                SessionTarget::Current(task_id),
+                SessionOperation::Write(data),
+            )
+            .await
+            .map_err(|failure| failure.into_pty_error())?;
 
         Ok(())
     }
@@ -283,26 +452,16 @@ impl PtyManager {
         instance_id: u64,
         data: &[u8],
     ) -> Result<(), PtyError> {
-        let sessions = self.sessions.lock().await;
-        let session = sessions
-            .get(session_key)
-            .ok_or_else(|| PtyError::ProcessNotFound(session_key.to_string()))?;
-        if session.authority.query_response_owner != QueryResponseOwner::Xterm {
-            return Err(PtyError::WriteFailed(
-                "xterm is not the terminal query-response authority".to_string(),
-            ));
-        }
-        if session.instance_id != instance_id {
-            return Err(PtyError::WriteFailed(format!(
-                "stale PTY instance {instance_id} for {session_key}; current instance is {}",
-                session.instance_id
-            )));
-        }
-
-        session
-            .writer
-            .write_xterm_query_response(session_key, instance_id, data)
-            .map_err(|error| PtyError::WriteFailed(error.to_string()))
+        self.terminal_sessions
+            .operate(
+                SessionTarget::Exact {
+                    session_key,
+                    instance_id,
+                },
+                SessionOperation::WriteQueryResponse(data),
+            )
+            .await
+            .map_err(|failure| failure.into_pty_error())
     }
 
     /// Resizes the PTY for the given task_id
@@ -312,42 +471,36 @@ impl PtyManager {
     /// * `cols` - New terminal width in columns
     /// * `rows` - New terminal height in rows
     pub async fn resize_pty(&self, task_id: &str, cols: u16, rows: u16) -> Result<(), PtyError> {
-        let sessions = self.sessions.lock().await;
-
-        let session = sessions
-            .get(task_id)
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
-
-        let size = PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        };
-
-        session
-            .master
-            .resize(size)
-            .map_err(|e| PtyError::IoError(io::Error::other(e.to_string())))?;
-
-        if let Some(shadow_model) = &session.shadow_model {
-            shadow_model.resize(cols, rows);
-        }
+        self.terminal_sessions
+            .operate(
+                SessionTarget::Current(task_id),
+                SessionOperation::Resize {
+                    columns: cols,
+                    rows,
+                },
+            )
+            .await
+            .map_err(|failure| failure.into_pty_error())?;
         Ok(())
     }
 
     /// Stops a completed Agent Session PTY while retaining its replay buffer.
     pub async fn reclaim_agent_pty(&self, task_id: &str) -> Result<(), PtyError> {
-        self.agent_spawn_generations.lock().await.remove(task_id);
+        self.terminal_sessions
+            .agent_spawn_generations
+            .lock()
+            .await
+            .remove(task_id);
         let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
 
-        let session = self.sessions.lock().await.remove(task_id);
+        let session = self.terminal_sessions.sessions.lock().await.remove(task_id);
         let Some(mut session) = session else {
             return Ok(());
         };
         if !matches!(session.kind, PtySessionKind::Agent) {
-            self.sessions
+            self.terminal_sessions
+                .sessions
                 .lock()
                 .await
                 .insert(task_id.to_string(), session);
@@ -358,15 +511,18 @@ impl PtyManager {
             "Reclaiming completed Agent Session PTY for task {}",
             task_id
         );
-        if let Err(error) = self.terminate_session_process(task_id, &mut session).await {
-            self.sessions
-                .lock()
-                .await
-                .entry(task_id.to_string())
-                .or_insert(session);
+        if let Err(error) = self
+            .terminate_current_session_process(task_id, &mut session, true)
+            .await
+        {
+            self.retain_failed_current_cleanup(task_id, session).await;
             return Err(error);
         }
-        self.last_output.lock().await.remove(task_id);
+        self.terminal_sessions
+            .last_output
+            .lock()
+            .await
+            .remove(task_id);
         info!("Completed Agent Session PTY for task {} reclaimed", task_id);
         Ok(())
     }
@@ -376,23 +532,27 @@ impl PtyManager {
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
     pub async fn kill_pty(&self, task_id: &str) -> Result<(), PtyError> {
-        self.agent_spawn_generations.lock().await.remove(task_id);
+        self.terminal_sessions
+            .agent_spawn_generations
+            .lock()
+            .await
+            .remove(task_id);
         let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
 
-        let session = self.sessions.lock().await.remove(task_id);
+        let session = self.terminal_sessions.sessions.lock().await.remove(task_id);
         if let Some(mut session) = session {
             info!("Killing PTY for task {}", task_id);
-            if let Err(error) = self.terminate_session_process(task_id, &mut session).await {
-                self.sessions
-                    .lock()
-                    .await
-                    .entry(task_id.to_string())
-                    .or_insert(session);
+            if let Err(error) = self
+                .terminate_current_session_process(task_id, &mut session, true)
+                .await
+            {
+                self.retain_failed_current_cleanup(task_id, session).await;
                 return Err(error);
             }
             info!("PTY for task {} killed", task_id);
         }
+        self.terminate_managed_recoveries(task_id).await?;
         self.clear_session_tracking(task_id).await;
 
         Ok(())
@@ -400,7 +560,7 @@ impl PtyManager {
 
     pub async fn kill_shells_for_task(&self, task_id: &str) -> Result<(), PtyError> {
         let mut keys_to_kill: HashSet<String> = {
-            let sessions = self.sessions.lock().await;
+            let sessions = self.terminal_sessions.sessions.lock().await;
             sessions
                 .iter()
                 .filter(|(_key, session)| session.kind.is_shell_for_task(task_id))
@@ -408,32 +568,23 @@ impl PtyManager {
                 .collect()
         };
         keys_to_kill.extend(
-            self.pending_shell_spawns
+            self.terminal_sessions
+                .pending_shell_spawns
                 .iter()
                 .filter(|entry| entry.value().0.as_str() == task_id)
                 .map(|entry| entry.key().clone()),
         );
+        keys_to_kill.extend(
+            self.terminal_sessions
+                .shell_recovery_keys_for_task(task_id)
+                .await,
+        );
 
         let mut failures = Vec::new();
         for key in keys_to_kill {
-            self.agent_spawn_generations.lock().await.remove(&key);
-            let lifecycle_lock = self.lifecycle_lock_for(&key).await;
-            let _lifecycle_guard = lifecycle_lock.lock().await;
-            let session = self.sessions.lock().await.remove(&key);
-            let Some(mut session) = session else {
-                continue;
-            };
-            info!("Killing shell PTY for key {}", key);
-            if let Err(error) = self.terminate_session_process(&key, &mut session).await {
-                self.sessions
-                    .lock()
-                    .await
-                    .entry(key.clone())
-                    .or_insert(session);
+            if let Err(error) = self.kill_pty(&key).await {
                 failures.push(error.to_string());
-                continue;
             }
-            self.clear_session_tracking(&key).await;
         }
 
         if failures.is_empty() {
@@ -445,14 +596,29 @@ impl PtyManager {
 
     /// Kills all running PTY processes
     pub async fn kill_all(&self) {
-        let mut session_keys: HashSet<String> =
-            self.sessions.lock().await.keys().cloned().collect();
+        let mut session_keys: HashSet<String> = self
+            .terminal_sessions
+            .sessions
+            .lock()
+            .await
+            .keys()
+            .cloned()
+            .collect();
         session_keys.extend(
-            self.pending_shell_spawns
+            self.terminal_sessions
+                .pending_shell_spawns
                 .iter()
                 .map(|entry| entry.key().clone()),
         );
-        session_keys.extend(self.agent_spawn_generations.lock().await.keys().cloned());
+        session_keys.extend(
+            self.terminal_sessions
+                .agent_spawn_generations
+                .lock()
+                .await
+                .keys()
+                .cloned(),
+        );
+        session_keys.extend(self.terminal_sessions.managed_recovery_keys().await);
 
         let cleanup_results =
             futures::future::join_all(session_keys.into_iter().map(|session_key| {
@@ -472,7 +638,7 @@ impl PtyManager {
     }
 
     pub async fn interrupt_claude(&self, task_id: &str) -> Result<(), PtyError> {
-        let sessions = self.sessions.lock().await;
+        let sessions = self.terminal_sessions.sessions.lock().await;
 
         let session = sessions
             .get(task_id)
@@ -492,7 +658,7 @@ impl PtyManager {
 
     pub async fn check_claude_frozen(&self, task_id: &str) -> Option<u64> {
         let pid = {
-            let sessions = self.sessions.lock().await;
+            let sessions = self.terminal_sessions.sessions.lock().await;
             let session = sessions.get(task_id)?;
             session.child.process_id()?
         };
@@ -502,7 +668,7 @@ impl PtyManager {
             return None;
         }
 
-        let times = self.last_output.lock().await;
+        let times = self.terminal_sessions.last_output.lock().await;
         let last_output_ms = times.get(task_id)?.load(Ordering::Relaxed);
 
         let now_ms = std::time::SystemTime::now()
@@ -515,27 +681,61 @@ impl PtyManager {
 
     /// Returns the keys of all active PTY sessions.
     pub async fn get_session_keys(&self) -> Vec<String> {
-        let sessions = self.sessions.lock().await;
+        let sessions = self.terminal_sessions.sessions.lock().await;
         sessions.keys().cloned().collect()
     }
 
-    /// Returns a read-only snapshot of live PTY roots for diagnostics.
+    /// Returns read-only snapshots of live, cleaning, and recovery-owned PTY roots.
     pub async fn process_diagnostic_sessions(&self) -> Vec<PtyProcessDiagnosticSession> {
-        let sessions = self.sessions.lock().await;
-        let mut diagnostics: Vec<PtyProcessDiagnosticSession> = sessions
-            .iter()
-            .map(|(session_key, session)| PtyProcessDiagnosticSession {
+        let mut diagnostics: Vec<PtyProcessDiagnosticSession> = {
+            let sessions = self.terminal_sessions.sessions.lock().await;
+            sessions
+                .iter()
+                .map(|(session_key, session)| PtyProcessDiagnosticSession {
+                    session_key: session_key.clone(),
+                    task_id: session
+                        .kind
+                        .task_id_for_session_key(session_key)
+                        .to_string(),
+                    session_kind: session.kind.diagnostic_kind().to_string(),
+                    lifecycle_state: TerminalSessionLifecycleState::Live,
+                    pid: session.child.process_id(),
+                    pty_instance_id: session.instance_id,
+                    pid_file_name: session.pid_file_name.clone(),
+                })
+                .collect()
+        };
+        let recoveries = self.terminal_sessions.managed_recoveries.lock().await;
+        for (base_key, entries) in recoveries.iter() {
+            diagnostics.extend(entries.iter().map(|recovery| {
+                PtyProcessDiagnosticSession {
+                    session_key: recovery.recovery_key.clone(),
+                    task_id: recovery
+                        .session
+                        .kind
+                        .task_id_for_session_key(base_key)
+                        .to_string(),
+                    session_kind: recovery.session.kind.diagnostic_kind().to_string(),
+                    lifecycle_state: TerminalSessionLifecycleState::ManagedRecovery,
+                    pid: recovery.session.child.process_id(),
+                    pty_instance_id: recovery.session.instance_id,
+                    pid_file_name: recovery.session.pid_file_name.clone(),
+                }
+            }));
+        }
+        drop(recoveries);
+        let cleaning_sessions = self.terminal_sessions.cleaning_sessions.lock().await;
+        diagnostics.extend(cleaning_sessions.iter().map(
+            |((session_key, _instance_id), cleaning)| PtyProcessDiagnosticSession {
                 session_key: session_key.clone(),
-                task_id: session
-                    .kind
-                    .task_id_for_session_key(session_key)
-                    .to_string(),
-                session_kind: session.kind.diagnostic_kind().to_string(),
-                pid: session.child.process_id(),
-                pty_instance_id: session.instance_id,
-                pid_file_name: session.pid_file_name.clone(),
-            })
-            .collect();
+                task_id: cleaning.task_id.clone(),
+                session_kind: cleaning.session_kind.clone(),
+                lifecycle_state: TerminalSessionLifecycleState::Cleaning,
+                pid: cleaning.pid,
+                pty_instance_id: cleaning.instance_id,
+                pid_file_name: cleaning.pid_file_name.clone(),
+            },
+        ));
         diagnostics.sort_by(|left, right| {
             left.task_id
                 .cmp(&right.task_id)
@@ -547,6 +747,7 @@ impl PtyManager {
 
     pub async fn pty_buffer_state(&self, task_id: &str) -> PtyBufferState {
         let instance_id = self
+            .terminal_sessions
             .sessions
             .lock()
             .await
@@ -560,7 +761,7 @@ impl PtyManager {
     }
 
     pub async fn get_pty_buffer(&self, task_id: &str) -> Option<String> {
-        let buffers = self.output_buffers.lock().await;
+        let buffers = self.terminal_sessions.output_buffers.lock().await;
         let buffer = buffers.get(task_id)?;
         let buf = buffer.lock().unwrap();
         let content = buf.snapshot();

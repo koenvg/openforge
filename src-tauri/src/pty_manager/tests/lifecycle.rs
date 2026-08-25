@@ -144,6 +144,129 @@ async fn test_interrupt_claude_not_found() {
     assert!(matches!(result, Err(PtyError::ProcessNotFound(_))));
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn write_pty_keeps_session_lookup_available_during_io() {
+    struct BlockingWriter {
+        started: Option<std::sync::mpsc::SyncSender<()>>,
+        release: std::sync::mpsc::Receiver<()>,
+    }
+
+    impl std::io::Write for BlockingWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if let Some(started) = self.started.take() {
+                started.send(()).expect("write start should be observed");
+            }
+            self.release
+                .recv()
+                .expect("blocked write should be released");
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let manager = PtyManager::new();
+    let task_id = "nonblocking-session-lookup";
+    let mut session = test_agent_pty_session(task_id);
+    let instance_id = session.instance_id;
+    let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    session.writer = Arc::new(
+        ordered_writer::OrderedPtyWriter::start(
+            task_id.to_string(),
+            instance_id,
+            Box::new(BlockingWriter {
+                started: Some(started_tx),
+                release: release_rx,
+            }),
+        )
+        .expect("blocking writer should start"),
+    );
+    manager
+        .sessions
+        .lock()
+        .await
+        .insert(task_id.to_string(), session);
+
+    let write_manager = manager.clone();
+    let write = tokio::spawn(async move { write_manager.write_pty(task_id, b"input").await });
+    tokio::task::spawn_blocking(move || {
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("PTY write should start");
+    })
+    .await
+    .expect("write-start waiter should finish");
+
+    let keys = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        manager.get_session_keys(),
+    )
+    .await;
+
+    release_tx.send(()).expect("blocked write should release");
+    write
+        .await
+        .expect("write task should join")
+        .expect("PTY write should succeed");
+    manager.kill_all().await;
+
+    assert_eq!(
+        keys.expect("session lookup must not wait for PTY I/O"),
+        vec![task_id.to_string()]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn resize_pty_keeps_session_lookup_available_during_io() {
+    let manager = PtyManager::new();
+    let task_id = "nonblocking-resize-lookup";
+    manager
+        .sessions
+        .lock()
+        .await
+        .insert(task_id.to_string(), test_agent_pty_session(task_id));
+
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    manager
+        .terminal_sessions
+        .set_resize_start_gate(ResizeStartGate {
+            reached_tx: started_tx,
+            release_rx,
+        });
+
+    let resize_manager = manager.clone();
+    let resize = tokio::spawn(async move { resize_manager.resize_pty(task_id, 120, 40).await });
+    tokio::task::spawn_blocking(move || {
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("PTY resize should start");
+    })
+    .await
+    .expect("resize-start waiter should finish");
+
+    let keys = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        manager.get_session_keys(),
+    )
+    .await;
+
+    release_tx.send(()).expect("blocked resize should release");
+    resize
+        .await
+        .expect("resize task should join")
+        .expect("PTY resize should succeed");
+    manager.kill_all().await;
+
+    assert_eq!(
+        keys.expect("session lookup must not wait for PTY resize"),
+        vec![task_id.to_string()]
+    );
+}
+
 #[tokio::test]
 async fn test_check_claude_frozen_not_found() {
     let manager = PtyManager::new();

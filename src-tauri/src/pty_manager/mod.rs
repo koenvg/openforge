@@ -13,20 +13,26 @@ mod session;
 use crate::terminal_model::ShadowMode;
 #[cfg(test)]
 use attachment::PtyAttachmentHub;
+#[cfg(test)]
 use attachment::PtyAttachmentHubs;
 pub(crate) use attachment::{AgentTerminalAttachmentError, AgentTerminalEvent};
 use authority::TerminalAuthorityContract;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[cfg(test)]
 #[derive(Debug)]
 struct AgentEventStreamStartGate {
+    reached_tx: std::sync::mpsc::Sender<()>,
+    release_rx: std::sync::mpsc::Receiver<()>,
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+struct ResizeStartGate {
     reached_tx: std::sync::mpsc::Sender<()>,
     release_rx: std::sync::mpsc::Receiver<()>,
 }
@@ -49,8 +55,10 @@ use pids::{
     is_shell_session_key_for_task, shell_pid_file_name, shell_session_key,
     write_managed_process_identity,
 };
+use session::TerminalSessions;
 #[cfg(test)]
 use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};
+#[cfg(test)]
 use session::{
     AgentSpawnGenerations, LastOutputTimes, LifecycleLockRegistry, PtyOutputBuffers, PtySessions,
 };
@@ -103,16 +111,24 @@ pub(crate) const GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG: &str = "ghostty_terminal_s
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
 pub struct PtyManager {
+    terminal_sessions: TerminalSessions,
+    #[cfg(test)]
     sessions: PtySessions,
     pid_dir_override: Option<PathBuf>,
+    #[cfg(test)]
     last_output: LastOutputTimes,
+    #[cfg(test)]
     output_buffers: PtyOutputBuffers,
+    #[cfg(test)]
     attachment_hubs: PtyAttachmentHubs,
+    #[cfg(test)]
     agent_spawn_generations: AgentSpawnGenerations,
+    #[cfg(test)]
     lifecycle_locks: LifecycleLockRegistry,
     terminal_authority: TerminalAuthorityContract,
     shadow_mode: ShadowMode,
     terminal_diagnostics_enabled: Arc<AtomicBool>,
+    #[cfg(test)]
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
@@ -127,12 +143,21 @@ pub struct PtyBufferState {
     pub instance_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalSessionLifecycleState {
+    Live,
+    Cleaning,
+    ManagedRecovery,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyProcessDiagnosticSession {
     pub session_key: String,
     pub task_id: String,
     pub session_kind: String,
+    pub lifecycle_state: TerminalSessionLifecycleState,
     pub pid: Option<u32>,
     pub pty_instance_id: u64,
     pub pid_file_name: String,
@@ -169,18 +194,29 @@ pub(crate) fn terminal_environment(
 
 impl PtyManager {
     pub fn new() -> Self {
+        let terminal_sessions = TerminalSessions::new();
+        #[cfg(test)]
+        let test_handles = terminal_sessions.test_handles();
         Self {
-            sessions: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(test)]
+            sessions: test_handles.sessions,
+            #[cfg(test)]
+            last_output: test_handles.last_output,
+            #[cfg(test)]
+            output_buffers: test_handles.output_buffers,
+            #[cfg(test)]
+            attachment_hubs: test_handles.attachment_hubs,
+            #[cfg(test)]
+            agent_spawn_generations: test_handles.agent_spawn_generations,
+            #[cfg(test)]
+            lifecycle_locks: test_handles.lifecycle_locks,
+            #[cfg(test)]
+            pending_shell_spawns: test_handles.pending_shell_spawns,
+            terminal_sessions,
             pid_dir_override: None,
-            last_output: Arc::new(Mutex::new(HashMap::new())),
-            output_buffers: Arc::new(Mutex::new(HashMap::new())),
-            attachment_hubs: Arc::new(Mutex::new(HashMap::new())),
-            agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
-            lifecycle_locks: LifecycleLockRegistry::default(),
             terminal_authority: TerminalAuthorityContract::xterm_authoritative(),
             shadow_mode: ShadowMode::from_environment(),
             terminal_diagnostics_enabled: Arc::new(AtomicBool::new(false)),
-            pending_shell_spawns: Arc::new(dashmap::DashMap::new()),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
