@@ -1098,4 +1098,61 @@ describe('FocusBoard', () => {
 
     expect(get(lastViewedTaskId)).toBeNull()
   })
+
+  it('loads label metadata once for each project as the board switches projects', async () => {
+    const ipc = await import('../../lib/ipc')
+    const view = renderBoard({ tasks: [], sessions: new Map() })
+
+    await waitFor(() => {
+      expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(1)
+      expect(ipc.getProjectTaskLabels).toHaveBeenLastCalledWith('proj-1')
+    })
+
+    await view.rerender({
+      projectId: 'proj-2',
+      projectName: 'Second Project',
+      tasks: [],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    await waitFor(() => {
+      expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(2)
+      expect(ipc.getProjectTaskLabels).toHaveBeenLastCalledWith('proj-2')
+    })
+
+    await view.rerender({
+      projectId: 'proj-2',
+      projectName: 'Second Project',
+      tasks: [makeTask('T-20', 'backlog', 'Second project task')],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    expect(ipc.getProjectTaskLabels).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps Command filter shortcuts active while the detail pane has focus', async () => {
+    renderBoard()
+    const openFullViewButton = await screen.findByRole('button', { name: 'Open full view' })
+
+    await fireEvent.focusIn(openFullViewButton)
+    await fireEvent.keyDown(window, { key: '4', metaKey: true })
+
+    expect(screen.getByRole('button', { name: /Backlog 1/i }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('opens the task context menu at the pointer coordinates', async () => {
+    renderBoard()
+    await fireEvent.click(await screen.findByRole('button', { name: /In Flight 1/i }))
+    const doingTask = (await screen.findAllByText('Doing task'))[0]
+
+    await fireEvent.contextMenu(doingTask, { clientX: 137, clientY: 241 })
+
+    expect(screen.getByRole('menu').getAttribute('style')).toContain('left: 137px; top: 241px;')
+  })
 })
