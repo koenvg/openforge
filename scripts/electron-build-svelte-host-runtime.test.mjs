@@ -13,7 +13,7 @@ import { activeProjectId } from '../src/lib/stores.ts'
 import { rendererImportMapHtml } from '../packages/plugin-sdk/src/svelteHostRuntimeContract.mjs'
 import { buildSvelteHostRuntimeAssets, copyHostRuntimeAssets, svelteHostRuntimeImportMapEntries } from './electron-build.mjs'
 import { writeMinimalHostRuntimeInputs } from './electron-build-host-runtime.test-fixtures.mjs'
-import { repoRoot, temporaryTestPath } from './electron-build.test-fixtures.mjs'
+import { removeTemporaryTestPaths, repoRoot, temporaryTestPath } from './electron-build.test-fixtures.mjs'
 
 const sidecarConfig = {
   command: 'openforge-sidecar',
@@ -156,6 +156,7 @@ function createProtocolBackedModuleLoader({ repoRoot, pluginId, pluginRoot, side
 }
 
 describe('Electron build Svelte host-runtime integration', () => {
+  afterEach(removeTemporaryTestPaths)
   afterEach(() => {
     _resetPluginLoaderForTests()
     installedPlugins.set(new Map())

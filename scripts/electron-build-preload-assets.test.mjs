@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { buildPreloadBundle, copyElectronMainRuntimeAssets } from './electron-build.mjs'
-import { repoRoot, temporaryTestPath } from './electron-build.test-fixtures.mjs'
+import { removeTemporaryTestPaths, repoRoot, temporaryTestPath } from './electron-build.test-fixtures.mjs'
 
 describe('Electron build preload assets', () => {
+  afterEach(removeTemporaryTestPaths)
   it('excludes Vitest-only Electron helpers from the production compilation graph', () => {
     const configPath = join(repoRoot, 'tsconfig.electron.json')
     const tscPath = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc')

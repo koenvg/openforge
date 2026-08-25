@@ -1,11 +1,12 @@
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { buildBackendPluginHostRuntime, copyHostRuntimeAssets } from './electron-build.mjs'
 import { writeMinimalHostRuntimeInputs } from './electron-build-host-runtime.test-fixtures.mjs'
-import { temporaryTestPath } from './electron-build.test-fixtures.mjs'
+import { removeTemporaryTestPaths, temporaryTestPath } from './electron-build.test-fixtures.mjs'
 
 describe('Electron build plugin-host bundling', () => {
+  afterEach(removeTemporaryTestPaths)
   it('builds the backend plugin-host runtime from workspace sources without generated package artifacts', async () => {
     const repoRoot = temporaryTestPath('electron-build-alt-backend')
     const outDir = join(repoRoot, 'dist-electron', 'plugin-host')
