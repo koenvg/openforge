@@ -1,3 +1,6 @@
+use crate::authored_pr_sync::{
+    enrich_and_persist_authored_prs, AuthoredPrEnrichmentPolicy, AuthoredPrStalePolicy,
+};
 use crate::{db, github_client::GitHubClient};
 use futures::future::join_all;
 use log::error;
@@ -322,116 +325,27 @@ pub async fn fetch_authored_prs(
         (event_signal_prs, Vec::new(), false)
     };
 
-    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
-    let mut enriched: HashMap<i64, EnrichedPrData> = HashMap::with_capacity(prs.len());
+    let stale_policy = if can_delete_stale && (!all_search_ids.is_empty() || prs.is_empty()) {
+        AuthoredPrStalePolicy::DeleteMissing(&all_search_ids)
+    } else {
+        AuthoredPrStalePolicy::Preserve
+    };
+    let outcome = enrich_and_persist_authored_prs(
+        github_client,
+        db,
+        &token,
+        prs,
+        AuthoredPrEnrichmentPolicy::BestEffort,
+        stale_policy,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
 
-    for pr in &prs {
-        let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
-            .map(|dt| dt.timestamp())
-            .unwrap_or(0);
-        let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
-            github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &token),
-            github_client.get_combined_status(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &token),
-            github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, &token),
-            github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, &token)
-        );
-
-        let (ci_status, ci_check_runs) = match (check_runs_result, combined_status_result) {
-            (Ok(check_runs), Ok(combined_status)) => {
-                let status =
-                    crate::github_client::aggregate_ci_status(&check_runs, &combined_status);
-                let check_runs_json = serde_json::to_string(&check_runs.check_runs)
-                    .unwrap_or_else(|_| "[]".to_string());
-                (Some(status), Some(check_runs_json))
-            }
-            _ => (None, None),
-        };
-
-        let review_status = reviews_result
-            .ok()
-            .map(|reviews| crate::github_client::aggregate_review_status(&reviews, false, None));
-
-        let is_queued = pr_details_result
-            .ok()
-            .and_then(|details| {
-                details
-                    .extra
-                    .get("merge_queue_entry")
-                    .map(|value| !value.is_null())
-            })
-            .unwrap_or(false);
-
-        enriched.insert(
-            pr.id,
-            (
-                created_at,
-                ci_status,
-                ci_check_runs,
-                review_status,
-                is_queued,
-            ),
-        );
-    }
-
-    {
+    if outcome.stale_reconciled {
         let db_lock = crate::db::acquire_db(db);
-        for pr in &prs {
-            let (created_at, ci_status, ci_check_runs, review_status, is_queued) = enriched
-                .get(&pr.id)
-                .ok_or_else(|| format!("Missing enriched data for PR {}", pr.id))?;
-
-            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
-                .map(|dt| dt.timestamp())
-                .unwrap_or(0);
-
-            let task_id = db_lock
-                .get_task_id_for_pr(pr.id)
-                .map_err(|e| format!("Failed to get task link for PR {}: {e}", pr.id))?;
-
-            db_lock
-                .upsert_authored_pr(
-                    pr.id,
-                    pr.number,
-                    &pr.title,
-                    pr.body.as_deref(),
-                    &pr.state,
-                    pr.draft,
-                    &pr.html_url,
-                    &pr.user_login,
-                    pr.user_avatar_url.as_deref(),
-                    &pr.repo_owner,
-                    &pr.repo_name,
-                    &pr.head_ref,
-                    &pr.base_ref,
-                    &pr.head_sha,
-                    pr.additions,
-                    pr.deletions,
-                    pr.changed_files,
-                    ci_status.as_deref(),
-                    ci_check_runs.as_deref(),
-                    review_status.as_deref(),
-                    None,
-                    *is_queued,
-                    task_id.as_deref(),
-                    &pr.labels,
-                    *created_at,
-                    updated_at,
-                )
-                .map_err(|e| format!("Failed to upsert authored PR: {e}"))?;
-            db_lock
-                .update_authored_pr_mergeability(pr.id, pr.mergeable, pr.mergeable_state.as_deref())
-                .map_err(|e| format!("Failed to update authored PR mergeability: {e}"))?;
-        }
-
-        if can_delete_stale && (!all_search_ids.is_empty() || prs.is_empty()) {
-            db_lock
-                .delete_stale_authored_prs(&all_search_ids)
-                .map_err(|e| format!("Failed to delete stale authored PRs: {e}"))?;
-
-            db_lock
-                .set_config("authored_prs_last_reconciled_at", &now.to_string())
-                .map_err(|e| format!("Failed to persist authored PR reconcile timestamp: {e}"))?;
-        }
+        db_lock
+            .set_config("authored_prs_last_reconciled_at", &now.to_string())
+            .map_err(|e| format!("Failed to persist authored PR reconcile timestamp: {e}"))?;
     }
 
     get_authored_prs(db)
