@@ -34,4 +34,43 @@ describe('createOutOfFocusTaskMembershipState', () => {
       process.off('unhandledRejection', onUnhandledRejection)
     }
   })
+
+  it('continues queued membership updates after an earlier same-project update rejects', async () => {
+    const firstUpdateError = new Error('first membership update failed')
+    let rejectFirstLoad: (reason: unknown) => void = () => {}
+    const firstLoad = new Promise<Set<string>>((_, reject) => {
+      rejectFirstLoad = reject
+    })
+    const loadTaskIds = vi
+      .fn<(projectId: string) => Promise<Set<string>>>()
+      .mockImplementationOnce(() => firstLoad)
+      .mockResolvedValueOnce(new Set())
+    const saveTaskIds = vi.fn(async () => {})
+    const membership = createOutOfFocusTaskMembershipState({
+      taskIdsByProject: writable(new Map()),
+      loadTaskIds,
+      saveTaskIds,
+    })
+
+    const firstUpdate = membership.updateTaskMembership({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      shouldBeOutOfFocus: true,
+      reportError: () => {
+        throw firstUpdateError
+      },
+    })
+    const secondUpdate = membership.updateTaskMembership({
+      projectId: 'project-1',
+      taskId: 'task-2',
+      shouldBeOutOfFocus: true,
+    })
+
+    rejectFirstLoad(firstUpdateError)
+
+    await expect(firstUpdate).rejects.toBe(firstUpdateError)
+    await expect(secondUpdate).resolves.toBeUndefined()
+    expect(loadTaskIds).toHaveBeenCalledTimes(2)
+    expect(saveTaskIds).toHaveBeenCalledWith('project-1', new Set(['task-2']))
+  })
 })

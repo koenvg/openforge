@@ -93,7 +93,9 @@ export function createOutOfFocusTaskMembershipState(
   ): Promise<void> {
 
     const previousMutation = mutationQueues.get(update.projectId) ?? Promise.resolve()
-    const mutation = previousMutation.then(() => performTaskMembershipUpdate(update))
+    const mutation = previousMutation
+      .catch(() => undefined)
+      .then(() => performTaskMembershipUpdate(update))
     mutationQueues.set(update.projectId, mutation)
     return mutation.finally(() => {
       if (mutationQueues.get(update.projectId) === mutation) {
