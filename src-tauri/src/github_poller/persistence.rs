@@ -142,6 +142,21 @@ pub(super) fn apply_terminal_pr_state(
     }
 }
 
+pub(super) fn emit_task_updated(
+    events: &GitHubEventTarget,
+    task_id: &str,
+    project_id: &str,
+) -> Result<(), String> {
+    events.emit(
+        "task-changed",
+        serde_json::json!({
+            "action": "updated",
+            "task_id": task_id,
+            "project_id": project_id,
+        }),
+    )
+}
+
 pub(super) async fn poll_prs_for_project(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -426,13 +441,7 @@ pub(super) async fn poll_prs_for_project(
         }
 
         if let Some(project_id) = project_id.as_deref() {
-            if let Err(error) = events.emit(
-                "task-changed",
-                serde_json::json!({
-                    "task_id": result.ticket_id,
-                    "project_id": project_id,
-                }),
-            ) {
+            if let Err(error) = emit_task_updated(events, &result.ticket_id, project_id) {
                 warn!(
                     "[GitHub Poller] Failed to emit Task Board invalidation for Task {}: {}",
                     result.ticket_id, error
