@@ -23,7 +23,7 @@
 
   interface Props {
     task: Task
-    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    onRunAction: (data: { taskId: string; actionPrompt: string }) => void
     onEdit?: (taskId: string) => void
     onOpenTask?: (taskId: string, projectId?: string | null) => void | Promise<void>
     onTaskUpdated?: () => void | Promise<void>
@@ -110,7 +110,7 @@
   }
 
   function handleSendToAgent(prompt: string): void {
-    onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
+    onRunAction({ taskId: task.id, actionPrompt: prompt })
   }
 
   function handleTaskDetailKeydown(event: KeyboardEvent): void {

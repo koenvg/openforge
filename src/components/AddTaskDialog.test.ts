@@ -144,7 +144,7 @@ describe('AddTaskDialog', () => {
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
       expect(onClose).toHaveBeenCalledTimes(1)
-      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '')
     })
 
     resolveRunAction()
@@ -956,7 +956,7 @@ describe('AddTaskDialog', () => {
     expect(getResolvedAiProvider).toHaveBeenCalledWith('test-project-id')
   })
 
-  it('uses direct task creation defaults and no agent when starting a task for opencode', async () => {
+  it('uses direct task creation defaults when starting a task for opencode', async () => {
     const onRunAction = vi.fn()
     vi.mocked(getResolvedAiProvider).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
@@ -972,7 +972,7 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default', { ...DEFAULT_WORKTREE_OPTIONS, aiProvider: 'opencode' })
-      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '')
     })
   })
 
@@ -988,7 +988,7 @@ describe('AddTaskDialog', () => {
     
     await waitFor(() => {
       expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', 'default', DEFAULT_WORKTREE_OPTIONS)
-      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '')
     })
   })
 })

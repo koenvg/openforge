@@ -28,7 +28,7 @@
     titleSeed?: string | null
     onClose?: () => void
     onTaskSaved?: (task?: Task, options?: { started: boolean }) => void | Promise<void>
-    onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
+    onRunAction?: (taskId: string, actionPrompt: string) => Promise<void>
   }
 
   // Provider choices come from the shared settings registry so the task-level
@@ -271,7 +271,7 @@
           // callback, and onRunAction hands control to the board.
           await onTaskSaved?.(savedTask, { started: true })
           onClose?.()
-          await onRunAction(savedTask.id, '', null)
+          await onRunAction(savedTask.id, '')
           return
         } else {
           await onTaskSaved?.(savedTask, { started: false })

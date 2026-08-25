@@ -20,7 +20,7 @@
     tabs: readonly ResolvedTab[]
     panelHidden?: boolean
     runAppState: TaskRunAppState
-    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    onRunAction: (data: { taskId: string; actionPrompt: string }) => void
     onBack: () => void
     onSelectView: (viewId: string) => void
     onRunApp: () => void | Promise<void>
@@ -181,7 +181,7 @@
       <button
         class="btn btn-primary btn-sm min-h-9 shrink-0"
         disabled={isStarting}
-        onclick={() => onRunAction({ taskId: task.id, actionPrompt: '', agent: null })}
+        onclick={() => onRunAction({ taskId: task.id, actionPrompt: '' })}
       >
         {#if isStarting}
           <span class="loading loading-spinner loading-xs"></span>
