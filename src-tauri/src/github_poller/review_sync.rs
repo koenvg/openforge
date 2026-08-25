@@ -61,6 +61,7 @@ impl fmt::Display for PollPhaseError {
 pub(super) enum SyncOpenPrsError {
     GitHub(crate::github_client::GitHubError),
     Db(String),
+    Clock(std::time::SystemTimeError),
 }
 
 impl SyncOpenPrsError {
@@ -81,6 +82,7 @@ impl SyncOpenPrsError {
                 message
             }
             Self::Db(_) => "database error".to_string(),
+            Self::Clock(_) => "clock error".to_string(),
         };
 
         format!("phase {phase}: {summary}")
@@ -92,6 +94,7 @@ impl fmt::Display for SyncOpenPrsError {
         match self {
             Self::Db(message) => f.write_str(message),
             Self::GitHub(error) => write!(f, "{}", error),
+            Self::Clock(error) => write!(f, "clock error: {}", error),
         }
     }
 }
@@ -196,6 +199,14 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     Ok(updated)
 }
 
+pub(super) fn authored_task_pr_timestamp(
+    now: std::time::SystemTime,
+) -> Result<i64, SyncOpenPrsError> {
+    now.duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .map_err(SyncOpenPrsError::Clock)
+}
+
 pub(super) async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -221,10 +232,7 @@ pub(super) async fn sync_authored_task_prs(
             .collect()
     };
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+    let now = authored_task_pr_timestamp(std::time::SystemTime::now())?;
 
     let mut synced = 0;
     let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();
