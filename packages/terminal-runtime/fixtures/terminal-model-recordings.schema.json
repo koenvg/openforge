@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openforge.dev/schemas/terminal-model-recordings.v1.json",
+  "title": "Recorded Terminal Model corpus",
+  "type": "object",
+  "required": ["version", "originTask", "recordings"],
+  "properties": {
+    "version": { "const": 1 },
+    "originTask": { "const": "KVG-3903" },
+    "recordings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "tags", "chunks"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "chunks": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "presentation": {
+            "type": "object",
+            "properties": {
+              "textIncludes": { "type": "array", "items": { "type": "string" } },
+              "styledText": {
+                "type": "object",
+                "properties": {
+                  "bold": { "type": "string" },
+                  "italic": { "type": "string" },
+                  "underline": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "foregroundText": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["text", "value"],
+                  "properties": {
+                    "text": { "type": "string" },
+                    "value": { "type": "integer", "minimum": 0 }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "minimumWideCells": { "type": "integer", "minimum": 0 },
+              "activeBuffer": { "enum": ["normal", "alternate"] },
+              "visual": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

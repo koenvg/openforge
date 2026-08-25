@@ -1,0 +1,115 @@
+{
+  "$schema": "./terminal-model-recordings.schema.json",
+  "version": 1,
+  "originTask": "KVG-3903",
+  "recordings": [
+    {
+      "id": "claude",
+      "tags": ["agent", "alternate-screen", "ansi", "cursor"],
+      "chunks": ["\u001b[?1049h\u001b[2J\u001b[1;1H\u001b[1;34mClaude\u001b[0m\u001b[?25l\u001b[?25h\u001b[?1049l"]
+    },
+    {
+      "id": "codex",
+      "tags": ["agent", "keyboard", "mouse"],
+      "chunks": ["\u001b[?2004h\u001b[>1u\u001b[?1000h\u001b[?1006hCodex\u001b[?1006l\u001b[?1000l\u001b[?2004l"]
+    },
+    {
+      "id": "opencode",
+      "tags": ["agent", "osc-8", "title"],
+      "chunks": ["\u001b]2;OpenCode\u0007\u001b]8;;https://example.test/task\u001b\\link\u001b]8;;\u001b\\"]
+    },
+    {
+      "id": "pi",
+      "tags": ["agent", "unicode", "graphemes", "width"],
+      "chunks": ["wide: 界 emoji: 👩🏽‍💻 combining: é\r\n"]
+    },
+    {
+      "id": "grok",
+      "tags": ["agent", "truecolor", "cursor"],
+      "chunks": ["\u001b[38;2;255;80;40mGrok\u001b[0m\u001b[4;10Hcursor\u001b[2K"]
+    },
+    {
+      "id": "shell",
+      "tags": ["plugin-shell", "working-directory", "device-status"],
+      "chunks": ["\u001b]7;file://localhost/tmp/project\u001b\\$ printf shell\r\n\u001b[6n"]
+    },
+    {
+      "id": "full-screen",
+      "tags": ["alternate-screen", "cursor"],
+      "chunks": ["\u001b[?1049h\u001b[Htop\u001b[2;1Hbottom\u001b[1A\u001b[2C!\u001b[?1049l"]
+    },
+    {
+      "id": "inline-images",
+      "tags": ["inline-image"],
+      "chunks": ["\u001b]1337;File=name=dGVzdA==;inline=1:AA==\u0007\u001b_Ga=T,f=100;AA==\u001b\\"]
+    },
+    {
+      "id": "presentation-ansi-styles",
+      "tags": ["presentation", "ansi", "palette", "bold", "italic", "underline"],
+      "chunks": ["\u001b[2J\u001b[HANSI ", "\u001b[31mred\u001b[0m \u001b[38;5;39mindexed\u001b[0m \u001b[38;2;12;200;90mtruecolor\u001b[0m\r\n", "\u001b[1mbold\u001b[0m \u001b[3mitalic\u001b[0m \u001b[4munderline\u001b[0m"] ,
+      "presentation": {
+        "textIncludes": ["ANSI red indexed truecolor", "bold italic underline"],
+        "styledText": {
+          "bold": "bold",
+          "italic": "italic",
+          "underline": "underline"
+        },
+        "foregroundText": [
+          { "text": "red", "value": 1 },
+          { "text": "indexed", "value": 39 },
+          { "text": "truecolor", "value": 837722 }
+        ],
+        "visual": true
+      }
+    },
+    {
+      "id": "presentation-glyphs",
+      "tags": ["presentation", "block-drawing", "powerline", "nerd-font", "pua", "ligature"],
+      "chunks": ["\u001b[2J\u001b[Hblocks: ┌─┬─┐ │█▓▒░│ └─┴─┘\r\npowerline:  nerd:    \r\nligatures: => != === -> <= >="] ,
+      "presentation": {
+        "textIncludes": ["┌─┬─┐", "", "   ", "=> != === -> <= >="],
+        "visual": true
+      }
+    },
+    {
+      "id": "presentation-unicode",
+      "tags": ["presentation", "unicode", "width", "graphemes", "ime"],
+      "chunks": ["\u001b[2J\u001b[HASCII | CJK 界語 | combining é å\r\nemoji 🙂 👩🏽‍💻 👨‍👩‍👧‍👦 | flags 🇺🇳 | keycap 1️⃣"] ,
+      "presentation": {
+        "textIncludes": ["CJK 界語", "combining é å", "👩🏽‍💻", "👨‍👩‍👧‍👦", "🇺🇳", "1️⃣"],
+        "minimumWideCells": 2,
+        "visual": true
+      }
+    },
+    {
+      "id": "presentation-cursor-link",
+      "tags": ["presentation", "cursor", "osc-8"],
+      "chunks": ["\u001b[2J\u001b[H\u001b]8;;https://openforge.dev/docs\u001b\\OpenForge docs\u001b]8;;\u001b\\\r\n\u001b[5 qbar cursor"] ,
+      "presentation": {
+        "textIncludes": ["OpenForge docs", "bar cursor"],
+        "activeBuffer": "normal",
+        "visual": true
+      }
+    },
+    {
+      "id": "presentation-cursor-underline",
+      "tags": ["presentation", "cursor"],
+      "chunks": ["\u001b[2J\u001b[H\u001b[3 qunderline cursor"],
+      "presentation": {
+        "textIncludes": ["underline cursor"],
+        "activeBuffer": "normal",
+        "visual": true
+      }
+    },
+    {
+      "id": "presentation-alternate-screen",
+      "tags": ["presentation", "alternate-screen", "resize", "reflow"],
+      "chunks": ["normal buffer sentinel", "\u001b[?1049h\u001b[2J\u001b[Halternate application\r\nrow two\r\nrow three"] ,
+      "presentation": {
+        "textIncludes": ["alternate application", "row two", "row three"],
+        "activeBuffer": "alternate",
+        "visual": true
+      }
+    }
+  ]
+}

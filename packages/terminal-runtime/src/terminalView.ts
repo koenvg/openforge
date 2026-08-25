@@ -13,6 +13,48 @@ export interface TerminalViewGeometry {
   rows: number
 }
 
+export interface TerminalViewPresentationEvidence {
+  writeGeneration: number
+  parsedGeneration: number
+  renderFrame: number
+  renderedRows: { start: number; end: number }
+  renderer: string
+  presentedAt: number
+  devicePixelRatio: number
+  geometry: TerminalViewGeometry
+}
+
+export interface TerminalViewPresentationCell {
+  column: number
+  text: string
+  width: number
+  foreground: { mode: number; value: number }
+  background: { mode: number; value: number }
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  dim: boolean
+  inverse: boolean
+  invisible: boolean
+  strikethrough: boolean
+  overline: boolean
+}
+
+export interface TerminalViewPresentationLine {
+  row: number
+  text: string
+  wrapped: boolean
+  cells: TerminalViewPresentationCell[]
+}
+
+export interface TerminalViewPresentationSnapshot {
+  geometry: TerminalViewGeometry
+  activeBuffer: 'normal' | 'alternate'
+  cursor: { x: number; y: number }
+  selectionText: string
+  lines: TerminalViewPresentationLine[]
+}
+
 export interface TerminalViewTheme {
   readonly background?: string
   readonly foreground?: string
@@ -64,6 +106,8 @@ export interface TerminalView {
   isMountedIn(container: HTMLElement): boolean
   bootstrap(data: TerminalViewData): void
   writeLive(output: TerminalViewLiveOutput): void
+  drainPresentation(): Promise<TerminalViewPresentationEvidence>
+  capturePresentation(): TerminalViewPresentationSnapshot
   focus(): void
   reset(): void
   refresh(): void

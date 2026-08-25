@@ -188,6 +188,8 @@ vi.mock("@xterm/xterm", () => {
 		write = vi.fn();
 		dispose = vi.fn();
 		onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+		onWriteParsed = vi.fn().mockReturnValue({ dispose: vi.fn() });
+		onRender = vi.fn().mockReturnValue({ dispose: vi.fn() });
 		attachCustomKeyEventHandler = vi.fn();
 		loadAddon = vi.fn((addon: unknown) => {
 			if (Object.getPrototypeOf(addon)?.constructor?.name !== "WebglAddon") {

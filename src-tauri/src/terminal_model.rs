@@ -199,49 +199,37 @@ mod tests {
 
     #[test]
     fn compatibility_fixtures_are_independent_of_read_chunking() {
-        let fixtures: &[(&str, &[u8])] = &[
-            (
-                "claude",
-                b"\x1b[?1049h\x1b[2J\x1b[1;1H\x1b[1;34mClaude\x1b[0m\x1b[?25l\x1b[?25h\x1b[?1049l",
-            ),
-            (
-                "codex",
-                b"\x1b[?2004h\x1b[>1u\x1b[?1000h\x1b[?1006hCodex\x1b[?1006l\x1b[?1000l\x1b[?2004l",
-            ),
-            (
-                "opencode",
-                b"\x1b]2;OpenCode\x07\x1b]8;;https://example.test/task\x1b\\link\x1b]8;;\x1b\\",
-            ),
-            (
-                "pi",
-                "wide: 界 emoji: 👩🏽‍💻 combining: e\u{301}\r\n".as_bytes(),
-            ),
-            (
-                "grok",
-                b"\x1b[38;2;255;80;40mGrok\x1b[0m\x1b[4;10Hcursor\x1b[2K",
-            ),
-            (
-                "shell",
-                b"\x1b]7;file://localhost/tmp/project\x1b\\$ printf shell\r\n\x1b[6n",
-            ),
-            (
-                "full-screen",
-                b"\x1b[?1049h\x1b[Htop\x1b[2;1Hbottom\x1b[1A\x1b[2C!\x1b[?1049l",
-            ),
-            (
-                "inline-images",
-                b"\x1b]1337;File=name=dGVzdA==;inline=1:AA==\x07\x1b_Ga=T,f=100;AA==\x1b\\",
-            ),
-        ];
+        let corpus: serde_json::Value = serde_json::from_str(include_str!(
+            "../../packages/terminal-runtime/fixtures/terminal-model-recordings.v1.json",
+        ))
+        .expect("recorded Terminal Model fixture corpus should be valid JSON");
+        let recordings = corpus["recordings"]
+            .as_array()
+            .expect("fixture corpus recordings should be an array");
 
-        for (name, fixture) in fixtures {
+        for recording in recordings {
+            let name = recording["id"]
+                .as_str()
+                .expect("fixture id should be a string");
+            let fixture = recording["chunks"]
+                .as_array()
+                .expect("fixture chunks should be an array")
+                .iter()
+                .flat_map(|chunk| {
+                    chunk
+                        .as_str()
+                        .expect("fixture chunk should be a string")
+                        .as_bytes()
+                })
+                .copied()
+                .collect::<Vec<_>>();
             let mut whole = GhosttyTerminalModel::new(TerminalModelOptions::new(80, 24))
                 .expect("whole fixture model should initialize");
-            whole.feed(fixture).expect("whole fixture should feed");
+            whole.feed(&fixture).expect("whole fixture should feed");
 
             let mut chunked = GhosttyTerminalModel::new(TerminalModelOptions::new(80, 24))
                 .expect("chunked fixture model should initialize");
-            for byte in *fixture {
+            for byte in &fixture {
                 chunked
                     .feed(std::slice::from_ref(byte))
                     .expect("single-byte fixture chunk should feed");
