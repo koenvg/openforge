@@ -1,10 +1,22 @@
-import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo } from './domain'
+import { getMergeReadiness, isClosedUnmergedPullRequest, isMergedPullRequest, type MergeReadinessAction, type MergeReadinessDetail, type MergeReadinessStatus, type MergeStatusInfo, type PullRequestMergeMethod } from './domain'
 
 export type PrChipSurface = 'compact' | 'detail'
 
 export type PrChipVariant = 'success' | 'error' | 'pending' | 'muted' | 'neutral' | 'done' | 'merged' | 'closed'
 export type PrChipType = 'draft' | 'ci' | 'review' | 'merge'
 export type PrChipIcon = 'check' | 'cross' | 'clock' | null
+
+const PULL_REQUEST_MERGE_ACTION_LABELS: Record<PullRequestMergeMethod, string> = {
+  merge: 'Create a merge commit',
+  squash: 'Squash and merge',
+  rebase: 'Rebase and merge',
+}
+
+export function getPullRequestMergeActionLabel(method: PullRequestMergeMethod, prNumber?: number): string {
+  const label = PULL_REQUEST_MERGE_ACTION_LABELS[method]
+  if (prNumber === undefined) return label
+  return method === 'merge' ? `${label} for PR #${prNumber}` : `${label} PR #${prNumber}`
+}
 
 export interface PrStatusChipSpec {
   type: PrChipType

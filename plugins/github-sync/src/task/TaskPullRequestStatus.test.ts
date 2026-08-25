@@ -48,6 +48,9 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
     merge_queue_required: null,
     merge_queue_state: null,
     readiness_updated_at: null,
+    merge_methods_policy_known: true,
+    allowed_merge_methods: ['merge'],
+    default_merge_method: 'merge',
     ...overrides,
   }
 }
@@ -298,22 +301,26 @@ describe('GitHub Sync Task pull request section', () => {
 
     renderSection(invoke)
 
-    expect((await screen.findAllByRole('button', { name: 'Merge' })).length).toBe(1)
+    expect((await screen.findAllByRole('button', { name: 'Create a merge commit' })).length).toBe(1)
     expect(screen.getAllByRole('button', { name: 'Enqueue' }).length).toBe(1)
   })
 
-  it('starts a merge immediately, shows progress, and suppresses duplicate requests', async () => {
+  it('starts a merge with the GitHub default method, shows progress, and suppresses duplicate requests', async () => {
     let resolveMerge!: () => void
     const mergeRequest = new Promise<void>((resolve) => { resolveMerge = resolve })
     const invoke = vi.fn(async (method: string) => {
-      if (method === 'listTaskPullRequests') return [createPullRequest()]
+      if (method === 'listTaskPullRequests') return [createPullRequest({
+        merge_methods_policy_known: true,
+        allowed_merge_methods: ['squash'],
+        default_merge_method: 'squash',
+      })]
       if (method === 'getTaskPrComments') return []
       if (method === 'mergeTaskPullRequest') return mergeRequest
       return emptyPollResult
     })
 
     renderSection(invoke)
-    await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Squash and merge' }))
 
     expect(screen.queryByText('Merge owner/repo pull request #42 “Test PR”?')).toBeNull()
     expect((screen.getByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
@@ -324,6 +331,7 @@ describe('GitHub Sync Task pull request section', () => {
       taskId: 'T-42',
       prId: 42,
       expectedHeadSha: 'abc123',
+      mergeMethod: 'squash',
     })
 
     resolveMerge()
@@ -358,7 +366,7 @@ describe('GitHub Sync Task pull request section', () => {
     })
 
     const { rerender } = renderSection(invoke)
-    await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Create a merge commit' }))
     await rerender({
       taskId: 'T-99',
       projectId: 'P-1',
