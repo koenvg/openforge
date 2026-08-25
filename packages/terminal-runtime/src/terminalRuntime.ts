@@ -179,6 +179,14 @@ export function createTerminalRuntime(
     return pool.get(terminalKey)?.ptyActive ?? false
   }
 
+  function restorePtyInstance(terminalKey: string, instanceId: number): void {
+    const entry = pool.get(terminalKey)
+    const shouldRecoverAttachment = entry?.attached === true
+      && (!entry.ptyActive || entry.currentPtyInstance !== instanceId)
+    sessionLifecycle.restorePtyInstance(terminalKey, instanceId)
+    if (entry && shouldRecoverAttachment) void attachments.recoverActiveTerminal(entry)
+  }
+
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {
     return entry.view.imageProtocol
   }
@@ -199,7 +207,7 @@ export function createTerminalRuntime(
     markPtySpawnPending: sessionLifecycle.markPtySpawnPending,
     clearPtySpawnPending: sessionLifecycle.clearPtySpawnPending,
     setCurrentPtyInstance: sessionLifecycle.setCurrentPtyInstance,
-    restorePtyInstance: sessionLifecycle.restorePtyInstance,
+    restorePtyInstance,
     markShellPtyStarted: sessionLifecycle.markPtyStarted,
     subscribeShellLifecycle: sessionLifecycle.subscribeShellLifecycle,
     isShellExited: sessionLifecycle.isShellExited,

@@ -238,6 +238,7 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
   return {
     geometry: { cols: 80, rows: 24 },
     imageProtocol: null,
+    resizeTarget: document.createElement('div'),
     mount: vi.fn(),
     unmount: vi.fn(),
     isMountedIn: vi.fn(() => false),

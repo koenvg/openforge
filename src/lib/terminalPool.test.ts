@@ -921,7 +921,6 @@ describe("terminalPool", () => {
 		const entry = await acquire("task-reactivate");
 		const wrapper = document.createElement("div");
 		await attach(entry, wrapper);
-		restorePtyInstance("task-reactivate", 42);
 
 		const { fit: fitSpy } = getFitAddonMocks(entry);
 		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
@@ -930,7 +929,8 @@ describe("terminalPool", () => {
 		focusSpy.mockClear();
 		vi.mocked(resizePty).mockClear();
 
-		await recoverActiveTerminal(entry);
+		restorePtyInstance("task-reactivate", 42);
+		await vi.waitFor(() => expect(fitSpy).toHaveBeenCalledTimes(1));
 
 		expect(fitSpy).toHaveBeenCalledTimes(1);
 		expect(resizePty).toHaveBeenCalledWith("task-reactivate", getTerminalMock(entry).cols, getTerminalMock(entry).rows);
@@ -942,7 +942,6 @@ describe("terminalPool", () => {
 		const entry = await acquire("task-cancelled-reactivate");
 		const wrapper = document.createElement("div");
 		await attach(entry, wrapper);
-		restorePtyInstance("task-cancelled-reactivate", 42);
 
 		const { fit: fitSpy } = getFitAddonMocks(entry);
 		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
