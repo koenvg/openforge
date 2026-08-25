@@ -413,20 +413,37 @@ mod tests {
         command.spawn().expect("forking root should spawn")
     }
 
+    fn kill_and_reap_spawned_root(root: &mut Child) {
+        force_kill_unverified_spawn(root.id());
+        let _ = root.wait();
+    }
+
+    fn spawn_ready_forking_root(
+        descendant_pid_file: &Path,
+    ) -> (Child, ManagedProcessIdentity, i32) {
+        let mut root = spawn_forking_root(descendant_pid_file);
+        let descendant_pid = match wait_for_pid(descendant_pid_file) {
+            Some(pid) => pid,
+            None => {
+                kill_and_reap_spawned_root(&mut root);
+                panic!("child PID file did not contain a PID");
+            }
+        };
+        let identity = match ManagedProcessIdentity::capture(root.id()) {
+            Ok(identity) => identity,
+            Err(error) => {
+                kill_and_reap_spawned_root(&mut root);
+                panic!("identity should capture: {error}");
+            }
+        };
+        (root, identity, descendant_pid)
+    }
+
     #[tokio::test]
     async fn term_timeout_kill_terminates_root_and_long_lived_descendant() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
-        let mut root = spawn_forking_root(&descendant_pid_file);
-        let descendant_pid = match wait_for_pid(&descendant_pid_file) {
-            Some(pid) => pid,
-            None => {
-                force_kill_unverified_spawn(root.id());
-                let _ = root.wait();
-                panic!("child PID file did not contain a PID");
-            }
-        };
-        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let (mut root, identity, descendant_pid) = spawn_ready_forking_root(&descendant_pid_file);
 
         let result = terminate_managed_process_tree(&identity, Duration::from_millis(100)).await;
         if result.is_err() {
@@ -502,12 +519,7 @@ mod tests {
     async fn cleanup_reaps_signaled_root_while_confirming_tree_exit() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
-        let mut root = spawn_forking_root(&descendant_pid_file);
-        assert!(
-            wait_for_file(&descendant_pid_file),
-            "child PID file was not created"
-        );
-        let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let (mut root, identity, _) = spawn_ready_forking_root(&descendant_pid_file);
         let mut root_reaped = false;
 
         let result = terminate_managed_process_tree_with_root_reaper(
@@ -603,13 +615,7 @@ while True:
     async fn start_identity_mismatch_refuses_to_signal_reused_pid() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
-        let mut root = spawn_forking_root(&descendant_pid_file);
-        assert!(
-            wait_for_file(&descendant_pid_file),
-            "child PID file was not created"
-        );
-        let mut identity =
-            ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
+        let (mut root, mut identity, _) = spawn_ready_forking_root(&descendant_pid_file);
         identity.root_start_time = identity.root_start_time.saturating_sub(1);
 
         let result = terminate_managed_process_tree(&identity, Duration::from_millis(10)).await;
