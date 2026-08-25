@@ -43,7 +43,7 @@ async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src
   await mkdir(join(repoRoot, 'packages', 'plugin-runtime', 'src'), { recursive: true })
   await mkdir(join(repoRoot, 'packages', 'terminal-runtime', 'src'), { recursive: true })
   await mkdir(join(repoRoot, backendCrateRoot, 'plugin-host'), { recursive: true })
-  await writeFile(join(repoRoot, 'packages', 'plugin-sdk', 'src', 'index.ts'), 'export const pluginSdk = true;')
+  await writeFile(join(repoRoot, 'packages', 'plugin-sdk', 'src', 'index.ts'), 'export const pluginSdk = true; export function resolveExternalTextFileChunkSize() { return 2048; }')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'index.ts'), 'export const terminalRuntime = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalRuntime.ts'), 'export const terminalRuntimeCore = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalOptions.ts'), 'export const terminalOptions = true;')
@@ -52,7 +52,7 @@ async function writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot = 'src
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'terminalShortcutController.ts'), 'export const terminalShortcutController = true;')
   await writeFile(join(repoRoot, 'packages', 'terminal-runtime', 'src', 'TerminalTabsShell.svelte'), '<script>export const terminalTabsShell = true;</script>')
   await writeFile(join(repoRoot, 'packages', 'plugin-runtime', 'src', 'commandValidation.ts'), 'export function validateSchemaValue() { return { valid: true, bundledRuntimeMarker: true }; }')
-  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'\nconsole.log(validateSchemaValue())\n")
+  await writeFile(join(repoRoot, backendCrateRoot, 'plugin-host', 'index.ts'), "import { resolveExternalTextFileChunkSize } from '@openforge-app/plugin-sdk'\nimport { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'\nconsole.log({ validation: validateSchemaValue(), chunkSize: resolveExternalTextFileChunkSize() })\n")
 
   const svelteFiles = Object.fromEntries(
     Object.values(svelteHostRuntimeBuildEntries()).map(relPath => [relPath, `export const stub = ${JSON.stringify(`svelte:${relPath}`)};`]),
@@ -385,16 +385,19 @@ describe('Electron build host-runtime assets', () => {
     }
   })
 
-  it('builds the backend plugin-host runtime from the configured Backend Crate root', async () => {
+  it('builds the backend plugin-host runtime from workspace sources without generated package artifacts', async () => {
     const repoRoot = join(tmpdir(), `openforge-electron-build-alt-backend-${process.pid}-${Date.now()}`)
     const outDir = join(repoRoot, 'dist-electron', 'plugin-host')
     await writeMinimalHostRuntimeInputs(repoRoot, { backendCrateRoot: 'crates/openforge-backend' })
+    await expect(stat(join(repoRoot, 'packages', 'plugin-sdk', 'dist', 'index.js'))).rejects.toMatchObject({ code: 'ENOENT' })
 
     await buildBackendPluginHostRuntime(repoRoot, outDir)
 
     const backendHost = await readFile(join(outDir, 'index.js'), 'utf8')
     expect(backendHost).toContain('bundledRuntimeMarker')
+    expect(backendHost).toContain('resolveExternalTextFileChunkSize')
     expect(backendHost).not.toContain('@openforge-app/plugin-runtime')
+    expect(backendHost).not.toContain('@openforge-app/plugin-sdk')
   })
 
   it('generates plugin SDK, bundles backend plugin-host runtime dependencies, and builds browser-ready Svelte host-runtime assets into dist-electron resources', async () => {
