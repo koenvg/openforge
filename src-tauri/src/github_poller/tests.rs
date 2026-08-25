@@ -11,7 +11,7 @@ use crate::db::test_helpers::{insert_test_task, make_test_db};
 use crate::db::{select_snapshot_readiness_inputs, PrMergeReadinessFacts, PrRow, ProjectRow};
 use crate::github_client::{
     CheckRun, CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubHead,
-    GitHubReadinessSnapshot, GitHubUser, PrComment, PrReview, PullRequest, SearchPrResult,
+    GitHubReadinessSnapshot, GitHubUser, PrComment, PrReview, PullRequest,
 };
 use std::collections::HashSet;
 use std::sync::Mutex;

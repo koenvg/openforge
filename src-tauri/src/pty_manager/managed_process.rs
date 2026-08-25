@@ -376,6 +376,21 @@ mod tests {
         path.exists()
     }
 
+    fn wait_for_pid(path: &Path) -> Option<i32> {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Ok(contents) = std::fs::read_to_string(path) {
+                if let Ok(pid) = contents.trim().parse() {
+                    return Some(pid);
+                }
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     fn spawn_forking_root(descendant_pid_file: &Path) -> Child {
         let script = format!(
             "trap '' TERM; (trap '' TERM; exec sleep 30) & echo $! > '{}'; wait",
@@ -403,15 +418,14 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let descendant_pid_file = temp_dir.path().join("descendant.pid");
         let mut root = spawn_forking_root(&descendant_pid_file);
-        assert!(
-            wait_for_file(&descendant_pid_file),
-            "child PID file was not created"
-        );
-        let descendant_pid: i32 = std::fs::read_to_string(&descendant_pid_file)
-            .expect("descendant PID should read")
-            .trim()
-            .parse()
-            .expect("descendant PID should parse");
+        let descendant_pid = match wait_for_pid(&descendant_pid_file) {
+            Some(pid) => pid,
+            None => {
+                force_kill_unverified_spawn(root.id());
+                let _ = root.wait();
+                panic!("child PID file did not contain a PID");
+            }
+        };
         let identity = ManagedProcessIdentity::capture(root.id()).expect("identity should capture");
 
         let result = terminate_managed_process_tree(&identity, Duration::from_millis(100)).await;
