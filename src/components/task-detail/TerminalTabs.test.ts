@@ -110,9 +110,6 @@ vi.mock('../../lib/terminalPool', () => ({
   detach: vi.fn(),
   release: releaseMock,
   focusTerminal: vi.fn(),
-  setCurrentPtyInstance: vi.fn((entry, instanceId) => {
-    entry.currentPtyInstance = instanceId
-  }),
   markShellPtyStarted: vi.fn((entry, instanceId) => {
     entry.currentPtyInstance = instanceId
     entry.ptyActive = true

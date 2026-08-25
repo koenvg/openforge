@@ -222,7 +222,6 @@ export function createTerminalRuntime(
     shouldSpawnPty: sessionLifecycle.shouldSpawnPty,
     markPtySpawnPending: sessionLifecycle.markPtySpawnPending,
     clearPtySpawnPending: sessionLifecycle.clearPtySpawnPending,
-    setCurrentPtyInstance: sessionLifecycle.setCurrentPtyInstance,
     restorePtyInstance,
     markShellPtyStarted,
     subscribeShellLifecycle: sessionLifecycle.subscribeShellLifecycle,

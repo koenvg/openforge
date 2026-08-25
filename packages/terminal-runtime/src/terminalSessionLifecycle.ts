@@ -121,7 +121,6 @@ export function createTerminalSessionLifecycle(
     markPtyStarted,
     notifyShellLifecycle: shellLifecycle.notify,
     restorePtyInstance,
-    setCurrentPtyInstance,
     shouldSpawnPty,
     subscribeShellLifecycle: shellLifecycle.subscribe,
     updateShellLifecycleState,
