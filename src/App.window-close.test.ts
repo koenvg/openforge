@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { installAppTestLifecycle } from './App.test-harness'
 import {
   closeRequestedHandler,
-  installAppTestLifecycle,
   mockWindowDestroy,
   mockWindowOnCloseRequested,
-} from './App.test-harness'
+} from './App.test-fixtures/desktop-lifecycle'
 
 describe('App window-close behavior', () => {
   installAppTestLifecycle()
