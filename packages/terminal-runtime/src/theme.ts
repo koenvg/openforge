@@ -1,4 +1,4 @@
-import type { ITheme } from '@xterm/xterm'
+import type { TerminalViewTheme } from './terminalView'
 import { writable } from 'svelte/store'
 
 export type ThemeMode = 'light' | 'dark'
@@ -139,7 +139,7 @@ const TERMINAL_THEME_FALLBACKS: Record<ThemeMode, Record<TerminalThemeKey, strin
   },
 }
 
-function buildTerminalTheme(values: Record<TerminalThemeKey, string>): ITheme {
+function buildTerminalTheme(values: Record<TerminalThemeKey, string>): TerminalViewTheme {
   return { ...values }
 }
 
@@ -169,7 +169,7 @@ function resolveTerminalTheme(mode: ThemeMode): Record<TerminalThemeKey, string>
   }
 }
 
-export function getTerminalTheme(mode: ThemeMode): ITheme {
+export function getTerminalTheme(mode: ThemeMode): TerminalViewTheme {
   return buildTerminalTheme(resolveTerminalTheme(mode))
 }
 

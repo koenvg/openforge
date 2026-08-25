@@ -1,9 +1,5 @@
-import type { FitAddon } from '@xterm/addon-fit'
-import type { ImageAddon } from '@xterm/addon-image'
-import type { WebglAddon } from '@xterm/addon-webgl'
-import type { IDisposable, Terminal } from '@xterm/xterm'
+import type { TerminalView, TerminalViewDisposable } from './terminalView'
 import type { Readable } from 'svelte/store'
-import type { TerminalImageProtocol } from './terminalImages'
 import type { ThemeMode } from './theme'
 
 export type TerminalRuntimeUnlistenFn = () => void
@@ -100,13 +96,11 @@ export interface TerminalRuntimeHost {
 
 export interface PoolEntry {
   taskId: string
-  loggerName: string | undefined
-  terminal: Terminal
-  fitAddon: FitAddon
-  hostDiv: HTMLDivElement
+  view: TerminalView
   ptyActive: boolean
   needsClear: boolean
   unlisteners: TerminalRuntimeUnlistenFn[]
+  viewSubscriptions: TerminalViewDisposable[]
   resizeObserver: ResizeObserver | null
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
@@ -120,11 +114,6 @@ export interface PoolEntry {
   pendingTerminalModelOutput: TerminalModelOutputEventPayload[]
   terminalModelRecovery: Promise<void> | null
   hasOutput: boolean
-  imageAddon: ImageAddon | null
-  imageProtocol: TerminalImageProtocol | null
-  webglAddon: WebglAddon | null
-  webglContextLossDisposable: IDisposable | null
-  webglUnavailable: boolean
 }
 
 export interface TerminalTab {

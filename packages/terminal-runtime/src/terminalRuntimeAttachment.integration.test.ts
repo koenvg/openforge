@@ -34,35 +34,33 @@ describe('terminal runtime attachment', () => {
       readonly rootMargin = ''
       readonly thresholds = [0]
     })
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(480)
 
     try {
       const entry = await runtime.acquire(terminalKey)
       const terminal = terminalMocks.instances[0]
-      Object.defineProperties(entry.hostDiv, {
-        clientWidth: { configurable: true, value: 640 },
-        clientHeight: { configurable: true, value: 480 },
-      })
 
       expect(terminal.open).not.toHaveBeenCalled()
-      expect(entry.webglAddon).toBeNull()
+      expect(terminal.loadAddon).toHaveBeenCalledTimes(4)
 
       const wrapper = document.createElement('div')
       await runtime.attach(entry, wrapper)
-      const firstWebglAddon = entry.webglAddon
+      const mountedHost = wrapper.firstElementChild
 
       expect(terminal.open).toHaveBeenCalledOnce()
-      expect(terminal.open).toHaveBeenCalledWith(entry.hostDiv)
-      expect(firstWebglAddon).not.toBeNull()
-      expect(entry.fitAddon.fit).toHaveBeenCalled()
+      expect(terminal.open).toHaveBeenCalledWith(mountedHost)
+      expect(terminal.loadAddon).toHaveBeenCalledTimes(5)
       expect(resizePty).toHaveBeenCalledWith(terminalKey, 80, 24)
 
       runtime.detach(entry)
       await runtime.attach(entry, wrapper)
 
       expect(terminal.open).toHaveBeenCalledOnce()
-      expect(entry.webglAddon).toBe(firstWebglAddon)
+      expect(terminal.loadAddon).toHaveBeenCalledTimes(5)
     } finally {
       runtime.release(terminalKey)
+      vi.restoreAllMocks()
       vi.unstubAllGlobals()
     }
   })

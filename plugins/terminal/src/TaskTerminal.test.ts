@@ -18,12 +18,11 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
     },
     mockEntry: {
       taskId: 'T-1-shell-0',
-      terminal: {
-        cols: 80,
-        rows: 24,
+      view: {
+        geometry: { cols: 80, rows: 24 },
         reset: vi.fn(),
+        isMountedIn: vi.fn(() => mockEntry.attached),
       },
-      hostDiv: document.createElement('div'),
       ptyActive: false,
       needsClear: false,
       attached: false,
@@ -35,7 +34,7 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
       attach: vi.fn(),
       detach: vi.fn(),
       recoverActiveTerminal: vi.fn(),
-      resetTerminal: vi.fn((entry) => entry.terminal.reset()),
+      resetTerminal: vi.fn((entry) => entry.view.reset()),
       shouldSpawnPty: vi.fn(),
       markPtySpawnPending: vi.fn(),
       clearPtySpawnPending: vi.fn(),

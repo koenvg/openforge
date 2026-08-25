@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { writable } from 'svelte/store'
-import type { TerminalRuntimeEvent, TerminalRuntimeHost } from './terminalRuntime'
+import type { TerminalRuntimeEvent, TerminalRuntimeHost, TerminalView } from './terminalRuntime'
 import type { TerminalViewSnapshot } from './terminalRuntimeTypes'
 
 const hoistedTerminalMocks = vi.hoisted(() => ({
@@ -71,7 +71,7 @@ vi.mock('@xterm/xterm', () => ({
         }
         loadedAddons.push(addon)
       }),
-      onData: vi.fn(),
+      onData: vi.fn(() => ({ dispose: vi.fn() })),
       attachCustomKeyEventHandler: vi.fn(),
       cols: 80,
       rows: 24,
@@ -232,6 +232,29 @@ export function createTrackedThemeMode() {
   }
 
   return { store, getSubscriberCount: () => subscriberCount }
+}
+
+export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): TerminalView {
+  return {
+    geometry: { cols: 80, rows: 24 },
+    imageProtocol: null,
+    mount: vi.fn(),
+    unmount: vi.fn(),
+    isMountedIn: vi.fn(() => false),
+    bootstrap: vi.fn(),
+    writeLive: vi.fn(),
+    focus: vi.fn(),
+    reset: vi.fn(),
+    refresh: vi.fn(),
+    fit: vi.fn(() => ({ cols: 80, rows: 24 })),
+    onUserInput: vi.fn(() => ({ dispose: vi.fn() })),
+    setKeyEventHandler: vi.fn(),
+    getSelectionText: vi.fn(() => ''),
+    setTheme: vi.fn(),
+    onRendererFailure: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+    ...overrides,
+  }
 }
 
 export function resetTerminalRuntimeIntegrationHarness(): void {

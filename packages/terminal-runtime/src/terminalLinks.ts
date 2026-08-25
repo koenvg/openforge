@@ -1,29 +1,32 @@
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ILinkHandler, Terminal } from '@xterm/xterm'
 import { terminalLogMessage } from './terminalLogging'
-import type { TerminalRuntimeHost } from './terminalRuntimeTypes'
 
-function openTerminalLink(host: TerminalRuntimeHost, terminalKey: string, event: MouseEvent, uri: string): void {
+export interface TerminalLinkOptions {
+  openLink(url: string): Promise<void>
+  loggerName?: string
+}
+
+function openTerminalLink(options: TerminalLinkOptions, event: MouseEvent, uri: string): void {
   event.preventDefault()
   event.stopPropagation()
-  host.openLink(terminalKey, uri).catch(error => {
-    console.error(terminalLogMessage(host.loggerName, 'Failed to open terminal link:'), error)
+  options.openLink(uri).catch(error => {
+    console.error(terminalLogMessage(options.loggerName, 'Failed to open terminal link:'), error)
   })
 }
 
-export function createTerminalLinkHandler(host: TerminalRuntimeHost, terminalKey: string): ILinkHandler {
+export function createTerminalLinkHandler(options: TerminalLinkOptions): ILinkHandler {
   return {
     allowNonHttpProtocols: false,
-    activate: (event, uri) => openTerminalLink(host, terminalKey, event, uri),
+    activate: (event, uri) => openTerminalLink(options, event, uri),
   }
 }
 
 export function loadTerminalWebLinksAddon(
-  host: TerminalRuntimeHost,
-  terminalKey: string,
+  options: TerminalLinkOptions,
   terminal: Terminal,
 ): void {
   terminal.loadAddon(new WebLinksAddon((event, uri) => {
-    openTerminalLink(host, terminalKey, event, uri)
+    openTerminalLink(options, event, uri)
   }))
 }

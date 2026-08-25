@@ -49,9 +49,12 @@ vi.mock('../../lib/desktopIpc', () => ({
 const { mockPoolEntry } = vi.hoisted(() => ({
   mockPoolEntry: {
     taskId: '',
-    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24, options: { theme: {} } },
-    fitAddon: { fit: vi.fn() },
-    hostDiv: document.createElement('div'),
+    view: {
+      geometry: { cols: 80, rows: 24 },
+      reset: vi.fn(),
+      setTheme: vi.fn(),
+      isMountedIn: vi.fn(() => mockPoolEntry.attached),
+    },
     ptyActive: false,
     needsClear: false,
     unlisteners: [] as Array<() => void>,
@@ -75,7 +78,7 @@ vi.mock('../../lib/terminalPool', () => ({
   detach: vi.fn(),
   recoverActiveTerminal: vi.fn(),
   release: vi.fn(),
-  resetTerminal: vi.fn((entry) => entry.terminal.reset()),
+  resetTerminal: vi.fn((entry) => entry.view.reset()),
   shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
   getTerminalImageProtocol: vi.fn(() => 'iterm2'),
   markPtySpawnPending: vi.fn((entry) => {
@@ -165,8 +168,8 @@ describe('TaskTerminal', () => {
     mockPoolEntry.attached = false
     mockPoolEntry.needsClear = false
     mockPoolEntry.currentPtyInstance = null
-    mockPoolEntry.terminal.cols = 80
-    mockPoolEntry.terminal.rows = 24
+    mockPoolEntry.view.geometry.cols = 80
+    mockPoolEntry.view.geometry.rows = 24
     listenCallback = null
   })
 
@@ -422,7 +425,6 @@ describe('TaskTerminal', () => {
     const nextEntry = {
       ...mockPoolEntry,
       taskId: 'project-P-2-shell-0',
-      hostDiv: document.createElement('div'),
       ptyActive: false,
       needsClear: false,
       attached: false,
@@ -441,9 +443,9 @@ describe('TaskTerminal', () => {
     await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
 
     await vi.waitFor(() => {
-      expect(detach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: mockPoolEntry.hostDiv }))
+      expect(detach).toHaveBeenCalledWith(mockPoolEntry)
       expect(acquire).toHaveBeenCalledWith('project-P-2-shell-0')
-      expect(attach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: nextEntry.hostDiv }), expect.any(HTMLDivElement))
+      expect(attach).toHaveBeenCalledWith(nextEntry, expect.any(HTMLDivElement))
     })
   })
 
@@ -552,8 +554,8 @@ describe('TaskTerminal', () => {
     let resolveAttach!: () => void
     const attachPromise = new Promise<void>((resolve) => {
       resolveAttach = () => {
-        mockPoolEntry.terminal.cols = 132
-        mockPoolEntry.terminal.rows = 40
+        mockPoolEntry.view.geometry.cols = 132
+        mockPoolEntry.view.geometry.rows = 40
         resolve()
       }
     })
@@ -641,19 +643,12 @@ describe('TaskTerminal', () => {
   it('does not override terminal theme on mount', async () => {
     const { attach } = await import('../../lib/terminalPool')
 
-    // Set a theme before mount to simulate pool's theme subscription
-    const originalTheme = { background: '#POOLBG', foreground: '#POOLFG' }
-    mockPoolEntry.terminal.options.theme = { ...originalTheme }
-
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalled()
     })
 
-    // Theme should remain unchanged — TaskTerminal must not override pool theme
-    const theme = mockPoolEntry.terminal.options.theme as Record<string, string>
-    expect(theme.background).toBe('#POOLBG')
-    expect(theme.foreground).toBe('#POOLFG')
+    expect(mockPoolEntry.view.setTheme).not.toHaveBeenCalled()
   })
 
   it('subscribes to pool lifecycle with terminalKey instead of listening to desktop pty-exit directly', async () => {
@@ -746,10 +741,10 @@ describe('TaskTerminal', () => {
       expect(screen.getByRole('button', { name: /Restart Shell/ })).toBeTruthy()
     })
 
-    mockPoolEntry.terminal.reset.mockClear()
+    mockPoolEntry.view.reset.mockClear()
     await fireEvent.click(screen.getByRole('button', { name: /Restart Shell/ }))
 
-    expect(mockPoolEntry.terminal.reset).toHaveBeenCalledTimes(1)
+    expect(mockPoolEntry.view.reset).toHaveBeenCalledTimes(1)
   })
 
   it('does not spawn the same shell twice while the initial spawn is still in flight', async () => {

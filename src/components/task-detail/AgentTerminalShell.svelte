@@ -4,7 +4,7 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, getShellLifecycleState, isValidTerminalDimensions, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, getShellLifecycleState, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
   import { hydrateAgentTerminalPtyInstance } from '../../lib/agentTerminalPanel'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
@@ -70,10 +70,7 @@
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!poolEntry) return
-        const proposed = poolEntry.fitAddon.proposeDimensions()
-        if (isValidTerminalDimensions(proposed)) {
-          poolEntry.fitAddon.fit()
-        }
+        poolEntry.view.fit()
       })
     })
   })

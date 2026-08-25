@@ -67,7 +67,7 @@ export function createTerminalAcquisition({
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
     if (isShellTerminalKey(entry.taskId)) return
 
-    entry.terminal.attachCustomKeyEventHandler((event) => {
+    entry.view.setKeyEventHandler((event) => {
       const isShiftEnter = event.key === 'Enter' && event.shiftKey
       const shouldConsume = isShiftEnter && (event.type === 'keydown' || event.type === 'keypress')
       if (!shouldConsume) return true
@@ -162,12 +162,12 @@ export function createTerminalAcquisition({
     if (disposeReleasedAcquisition(operation)) return entry
 
     attachAgentTerminalKeyHandler(entry)
-    entry.terminal.onData((data: string) => {
+    entry.viewSubscriptions.push(entry.view.onUserInput((data: string) => {
       if (!entry.ptyActive) return
       host.writePty(terminalKey, data).catch(error => {
         console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
       })
-    })
+    }))
 
     pool.set(terminalKey, entry)
     lifecycle.applyRestoredPtyInstance(entry)

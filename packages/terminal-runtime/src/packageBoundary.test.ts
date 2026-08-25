@@ -40,6 +40,30 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(runtimeSource).not.toContain('new IntersectionObserver(')
   })
 
+  it('keeps xterm types behind the TerminalView adapter', () => {
+    const rendererNeutralSources = [
+      'terminalRuntimeTypes.ts',
+      'terminalRuntime.ts',
+      'terminalAcquisition.ts',
+      'terminalAttachment.ts',
+      'terminalModelView.ts',
+      'terminalReconnectReplay.ts',
+      'terminalControls.ts',
+      'terminalSessionLifecycle.ts',
+      'terminalThemePropagation.ts',
+    ]
+
+    for (const fileName of rendererNeutralSources) {
+      const source = readFileSync(
+        join(process.cwd(), 'packages/terminal-runtime/src', fileName),
+        'utf8',
+      )
+      expect(source, `${fileName} should depend on TerminalView instead of xterm`).not.toMatch(
+        /from ['"]@xterm\//,
+      )
+    }
+  })
+
   it('keeps Svelte as a host-shared peer dependency', async () => {
     const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'packages/terminal-runtime/package.json'), 'utf8'))
 
