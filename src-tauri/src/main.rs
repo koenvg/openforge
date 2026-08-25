@@ -65,6 +65,7 @@ mod terminal_model;
 mod terminal_task_completion;
 #[cfg(test)]
 mod terminal_task_completion_tests;
+mod unix_timestamp;
 mod user_environment;
 mod whisper_manager;
 use log::{error, info, warn};
@@ -81,17 +82,6 @@ use whisper_manager::{WhisperManager, WhisperModelSize};
 
 fn database_filename() -> &'static str {
     data_identity::database_filename()
-}
-
-fn current_unix_timestamp_seconds_at(
-    now: std::time::SystemTime,
-) -> Result<i64, std::time::SystemTimeError> {
-    now.duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs() as i64)
-}
-
-fn current_unix_timestamp_seconds() -> Result<i64, std::time::SystemTimeError> {
-    current_unix_timestamp_seconds_at(std::time::SystemTime::now())
 }
 
 fn initialize_database(app_data_dir: &Path) -> db::Database {
@@ -194,7 +184,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
     let resource_dir = sidecar_resource_dir().map_err(std::io::Error::other)?;
     let database = initialize_database(&app_data_dir);
-    let stale_running_session_cutoff = current_unix_timestamp_seconds()?;
+    let stale_running_session_cutoff = unix_timestamp::seconds(std::time::SystemTime::now())?;
     run_database_startup_maintenance(&database);
     if let Err(e) = cli_installer::install_openforge_cli() {
         warn!("[startup] Failed to install OpenForge CLI: {}", e);
@@ -279,17 +269,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{current_unix_timestamp_seconds_at, sidecar_app_data_dir_from_override};
+    use super::sidecar_app_data_dir_from_override;
 
-    #[test]
-    fn startup_timestamp_rejects_time_before_unix_epoch() {
-        let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
-
-        let error = current_unix_timestamp_seconds_at(before_unix_epoch)
-            .expect_err("a pre-epoch clock value should return an error");
-
-        assert_eq!(error.duration(), std::time::Duration::from_secs(1));
-    }
     #[test]
     fn sidecar_app_data_dir_uses_override_and_creates_dir() {
         let temp_dir = tempfile::tempdir().expect("temp dir");

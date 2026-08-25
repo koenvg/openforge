@@ -13,15 +13,8 @@ pub(super) fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
         .unwrap_or(DEFAULT_GITHUB_POLL_INTERVAL_SECS)
 }
 
-pub(super) fn unix_timestamp(
-    now: std::time::SystemTime,
-) -> Result<i64, std::time::SystemTimeError> {
-    now.duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs() as i64)
-}
-
-pub(super) fn current_unix_timestamp() -> Result<i64, std::time::SystemTimeError> {
-    unix_timestamp(std::time::SystemTime::now())
+pub(super) fn current_unix_timestamp() -> Result<i64, crate::unix_timestamp::UnixTimestampError> {
+    crate::unix_timestamp::seconds(std::time::SystemTime::now())
 }
 
 pub(super) fn rate_limit_sleep_duration_secs(

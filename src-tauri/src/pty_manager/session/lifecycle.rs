@@ -505,10 +505,7 @@ impl PtyManager {
         let times = self.last_output.lock().await;
         let last_output_ms = times.get(task_id)?.load(Ordering::Relaxed);
 
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()?
-            .as_millis() as u64;
+        let now_ms = crate::unix_timestamp::milliseconds(std::time::SystemTime::now()).ok()?;
 
         frozen_seconds(last_output_ms, now_ms)
     }

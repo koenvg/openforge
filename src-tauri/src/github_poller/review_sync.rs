@@ -61,7 +61,7 @@ impl fmt::Display for PollPhaseError {
 pub(super) enum SyncOpenPrsError {
     GitHub(crate::github_client::GitHubError),
     Db(String),
-    Clock(std::time::SystemTimeError),
+    Clock(crate::unix_timestamp::UnixTimestampError),
 }
 
 impl SyncOpenPrsError {
@@ -199,14 +199,6 @@ pub(super) async fn reconcile_stale_authored_task_prs(
     Ok(updated)
 }
 
-pub(super) fn authored_task_pr_timestamp(
-    now: std::time::SystemTime,
-) -> Result<i64, SyncOpenPrsError> {
-    now.duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs() as i64)
-        .map_err(SyncOpenPrsError::Clock)
-}
-
 pub(super) async fn sync_authored_task_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -232,7 +224,8 @@ pub(super) async fn sync_authored_task_prs(
             .collect()
     };
 
-    let now = authored_task_pr_timestamp(std::time::SystemTime::now())?;
+    let now = crate::unix_timestamp::seconds(std::time::SystemTime::now())
+        .map_err(SyncOpenPrsError::Clock)?;
 
     let mut synced = 0;
     let should_reconcile_stale = !all_search_ids.is_empty() || github_prs.is_empty();

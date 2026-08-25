@@ -279,10 +279,8 @@ pub async fn fetch_authored_prs(
             .and_then(|value| value.parse::<i64>().ok())
     };
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Failed to read current time: {e}"))?
-        .as_secs() as i64;
+    let now = crate::unix_timestamp::seconds(std::time::SystemTime::now())
+        .map_err(|e| format!("failed to read current time: {e}"))?;
 
     let existing_id_by_ref: HashMap<String, i64> = existing_rows
         .iter()

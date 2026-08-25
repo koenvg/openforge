@@ -302,11 +302,10 @@ pub(crate) async fn read_dir(
             .map(|path| path.to_string_lossy().to_string())
             .unwrap_or_else(|_| name.clone());
         let is_dir = metadata.is_dir();
-        let modified_at = metadata.modified().ok().and_then(|time| {
-            time.duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .map(|duration| duration.as_millis() as u64)
-        });
+        let modified_at = metadata
+            .modified()
+            .ok()
+            .and_then(|time| crate::unix_timestamp::milliseconds(time).ok());
         let entry = ProjectFileEntry {
             name,
             path,

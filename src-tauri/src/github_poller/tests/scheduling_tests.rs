@@ -1,16 +1,6 @@
 use super::*;
 
 #[test]
-fn unix_timestamp_rejects_time_before_unix_epoch() {
-    let before_unix_epoch = std::time::UNIX_EPOCH - std::time::Duration::from_secs(1);
-
-    let error = unix_timestamp(before_unix_epoch)
-        .expect_err("a pre-epoch clock value should return an error");
-
-    assert_eq!(error.duration(), std::time::Duration::from_secs(1));
-}
-
-#[test]
 fn rate_limit_sleep_uses_poll_interval_when_current_time_is_unavailable() {
     assert_eq!(
         rate_limit_sleep_duration_with_optional_now(60, Some(i64::MAX), None),
