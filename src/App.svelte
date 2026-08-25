@@ -1,14 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { createDesktopWindow } from './lib/desktopWindow'
-  import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
-  import { getAppMode, getConfig, setPollContext, getProjectRepo } from './lib/ipc'
-  import { computePollContext, pollContextEquals, type PollContextPayload } from './lib/pollContext'
+  import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
-  import type { Project } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
@@ -28,28 +24,25 @@
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
   import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
-  import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
-  import { activatePlugin, deactivateAllPlugins, executePluginCommand, getPluginRenderProps, initializePluginRuntime, loadEnabledForApp, loadEnabledForProject } from './lib/plugin/pluginRegistry'
+  import { activatePlugin, deactivateAllPlugins, executePluginCommand, loadEnabledForProject } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
-  import { useShortcutRegistry } from './lib/shortcuts.svelte'
-  import { getViews, isCrossProjectView } from './lib/views'
-  import { registerAppShortcuts } from './lib/appShortcuts'
+  import { isCrossProjectView } from './lib/views'
   import { toggleVoiceInputShortcut } from './lib/voiceInputShortcut'
   import { useAppShortcutHelpController } from './lib/appShortcutHelpController.svelte'
-  import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
-  import { loadAppStartupData } from './lib/appStartup'
   import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
   import { createTaskActionRunner } from './lib/taskActionRunner'
   import { useAppTaskCreationController } from './lib/appTaskCreationController.svelte'
   import { createAppNavigationController } from './lib/appNavigationController'
   import { createReviewNavigationController } from './lib/reviewNavigationController'
-  import { createAppLifecycleController } from './lib/appLifecycleController'
+  import { createAppPluginController } from './lib/appPluginController'
+  import { resolveAppPluginPresentation } from './lib/appPluginPresentation'
+  import { createAppProjectController } from './lib/appProjectController'
+  import { createAppRendererContextController } from './lib/appRendererContextController'
+  import { createAppShellLifecycleController } from './lib/appShellLifecycleController'
   import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   import type { TaskRunAppRegistration } from './components/task-detail/taskRunAppController'
   import { useAppCloseController } from './lib/appCloseController.svelte'
-  
-  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
@@ -59,10 +52,9 @@
   let showCommandPalette = $state(false)
   let showFileQuickOpen = $state(false)
   let taskRunAppRegistration = $state<TaskRunAppRegistration | null>(null)
+  let windowFocused = $state(true)
   let router = useAppRouter()
-  let registeredPluginShortcuts = new Set<string>()
-  let previousPluginProjectId = $state<string | null>(null)
-  let appWindow: DesktopWindowTarget | null = null
+  let lifecycle!: ReturnType<typeof createAppShellLifecycleController>
 
   useCommandHeld()
 
@@ -70,13 +62,13 @@
     $tasks.find(t => t.id === $selectedTaskId) ||
       ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
   )
-  let previousActiveProjectId: string | null = $state(null)
+  let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
   let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
       .map((id) => $runtimeContributionSources.get(id))
       .filter((source) => source !== undefined)
   )
-  let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+
   function closeAttentionOverview(): void {
     showAttentionOverview = false
   }
@@ -92,7 +84,7 @@
   const closeController = useAppCloseController({
     refreshAttention: appData.loadProjectAttention,
     getAttention: () => get(projectAttention),
-    getAppWindow: () => appWindow,
+    getAppWindow: () => lifecycle.appWindow,
   })
   const taskActions = createTaskActionRunner({
     getActiveProject: () => activeProject,
@@ -131,185 +123,83 @@
       },
     },
   })
+  const pluginController = createAppPluginController({
+    navigate: navigation.navigate,
+    executePluginCommand,
+    activatePlugin,
+    deactivateAllPlugins,
+    loadEnabledForProject,
+  })
+  const projectController = createAppProjectController({
+    clearPendingTask: () => { pendingTask.set(null) },
+    clearSelectedTask: () => { selectedTaskId.set(null) },
+    getFocusBoardFilters: () => get(focusBoardFilters),
+    setFocusBoardFilters: (filters) => { focusBoardFilters.set(filters) },
+    loadTasks: appData.loadTasks,
+    loadPullRequests: appData.loadPullRequests,
+    refreshPrCounts: appData.refreshPrCounts,
+    loadProjects: appData.loadProjects,
+    setActiveProject: (projectId) => { activeProjectId.set(projectId) },
+    closeProjectSetup: () => { showProjectSetup = false },
+    openProjectSettings: () => { router.navigate('settings') },
+  })
+  const rendererContext = createAppRendererContextController({
+    globalPrViewKey: GITHUB_SYNC_GLOBAL_VIEW_KEY,
+    reportPollContext: (payload) => { void setPollContext(payload) },
+    resolveProjectRepo: (projectId) => { void getProjectRepo(projectId).catch(() => {}) },
+  })
   const handleRunAction = taskActions.handleRunAction
-  let resolvedPluginContributions = $derived(resolveContributions(enabledPluginContributionSources))
-  let resolvedViews = $derived(getViews(enabledPluginContributionSources))
-  let pluginNavItems = $derived(
-    [...resolvedPluginContributions.views]
-      .filter((view) => view.showInRail)
-      .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
-      .map((view) => ({
-        viewKey: makePluginViewKey(view.pluginId, view.contributionId),
-        icon: view.icon,
-        title: view.title,
-        shortcut: view.shortcut,
-      }))
-  )
-  let sidebarPluginNavItems = $derived(
-    [...resolvedPluginContributions.views]
-      .filter((view) => view.showInSidebar)
-      .sort((a, b) => a.railOrder - b.railOrder || a.title.localeCompare(b.title))
-      .map((view) => {
-        const item = {
-          viewKey: makePluginViewKey(view.pluginId, view.contributionId),
-          icon: view.icon,
-          title: view.title,
-          shortcut: view.shortcut,
-        }
-        if (!view.navigationComponent) return item
+  const handleProjectCreated = projectController.projectCreated
 
-        return {
-          ...item,
-          navigation: {
-            component: view.navigationComponent,
-            props: {
-              ...getPluginRenderProps(view.pluginId, { projectId: $activeProjectId }),
-              view: {
-                pluginId: view.pluginId,
-                id: view.contributionId,
-                qualifiedId: view.namespacedId,
-                title: view.title,
-                icon: view.icon,
-              },
-            },
-          },
-        }
-      })
-  )
-  let sidebarPluginViewKeySet = $derived(new Set(sidebarPluginNavItems.map((item) => item.viewKey)))
-  // Mirror the sidebar (cross-project) plugin view keys into the store so the router's
-  // restoreProjectView can reject them as project snapshots without importing plugin state.
+  let resolvedPluginContributions = $derived(resolveContributions(
+    enabledPluginContributionSources
+  ))
+  let pluginPresentation = $derived(resolveAppPluginPresentation(
+    enabledPluginContributionSources,
+    resolvedPluginContributions,
+    {
+      activeProject,
+      activeProjectId: $activeProjectId,
+      currentView: $currentView,
+      onCloseSettings: () => { router.navigate('board') },
+      onProjectDeleted: appData.loadProjects,
+      onProjectSettingsSaved: appData.refreshAttentionCounts,
+    }
+  ))
+  let pluginNavItems = $derived(pluginPresentation.pluginNavItems)
+  let sidebarPluginNavItems = $derived(pluginPresentation.sidebarPluginNavItems)
+  let sidebarPluginViewKeySet = $derived(pluginPresentation.sidebarPluginViewKeySet)
+  let renderedActiveView = $derived(pluginPresentation.renderedActiveView)
+  let pluginViewActive = $derived(pluginPresentation.pluginViewActive)
+
   $effect(() => {
     sidebarPluginViewKeys.set(sidebarPluginViewKeySet)
   })
-  let activeViewEntry = $derived($currentView === 'board' ? null : resolvedViews[$currentView] ?? null)
-  let renderedActiveView = $derived.by(() => {
-    if (activeViewEntry === null) {
-      return null
-    }
-
-    return {
-      component: activeViewEntry.component,
-      props: activeViewEntry.getProps({
-        projectId: $activeProjectId,
-        projectName: activeProject?.name ?? '',
-        projectPath: activeProject?.path ?? '',
-        onCloseSettings: () => { router.navigate('board') },
-        onProjectDeleted: appData.loadProjects,
-        onProjectSettingsSaved: appData.refreshAttentionCounts,
-      }),
-    }
-  })
-  let pluginViewActive = $derived(isPluginViewKey($currentView) && activeViewEntry === null)
 
   $effect(() => {
-    const pending = $pendingTask
-    if (pending && $tasks.some(t => t.id === pending.id)) {
-      pendingTask.set(null)
-    }
+    pluginController.syncContributions(resolvedPluginContributions)
   })
 
   $effect(() => {
-    const taskId = $selectedTaskId
-    if (taskId && !selectedTask) {
-      $selectedTaskId = null
-    }
+    projectController.reconcileTasks({
+      tasks: $tasks,
+      pendingTask: $pendingTask,
+      selectedTaskId: $selectedTaskId,
+    })
   })
 
   $effect(() => {
     const projectId = $activeProjectId
-    if (projectId && projectId !== previousActiveProjectId) {
-      const nextFilters = new Map($focusBoardFilters)
-      nextFilters.delete(projectId)
-      focusBoardFilters.set(nextFilters)
-    }
-    previousActiveProjectId = projectId
+    projectController.selectProject(projectId)
+    pluginController.selectProject(projectId)
   })
 
   $effect(() => {
-    const projectId = $activeProjectId
-    if (projectId !== previousPluginProjectId) {
-      void loadEnabledForProject(projectId).catch((error) => {
-        console.error(`[plugins] Failed to load enabled plugins for visible project ${projectId ?? 'none'}:`, error)
-      })
-    }
-
-    previousPluginProjectId = projectId
-  })
-
-  // Report the renderer's poll context to the sidecar so the GitHub poller can
-  // focus-gate (pause when unfocused) and scope its calls (active repo unless the
-  // global PR view is open). Deduped so redundant store updates don't spam IPC.
-  let windowFocused = $state(true)
-  let lastPollContext: PollContextPayload | null = null
-
-
-  $effect(() => {
-    const payload = computePollContext({
+    rendererContext.update({
       focused: windowFocused,
       activeProjectId: $activeProjectId,
       currentView: $currentView,
-      globalPrViewKey: GITHUB_SYNC_GLOBAL_VIEW_KEY,
     })
-    if (lastPollContext && pollContextEquals(lastPollContext, payload)) return
-    lastPollContext = payload
-    void setPollContext(payload)
-  })
-
-  // Resolve + cache the active project's GitHub repo (written to project config
-  // 'resolved_repo' by the sidecar) so the per-repo PR view can scope to it.
-  $effect(() => {
-    const projectId = $activeProjectId
-    if (projectId) {
-      void getProjectRepo(projectId).catch(() => {})
-    }
-  })
-
-  $effect(() => {
-    if (!shortcuts) return
-
-    const nextShortcutKeys = new Set<string>()
-
-    for (const view of resolvedPluginContributions.views) {
-      if (!view.shortcut) continue
-
-      nextShortcutKeys.add(view.shortcut)
-      shortcuts.register(view.shortcut, () => {
-        navigation.navigate(makePluginViewKey(view.pluginId, view.contributionId))
-      })
-    }
-
-    for (const command of resolvedPluginContributions.commands) {
-      if (!command.shortcut) continue
-
-      nextShortcutKeys.add(command.shortcut)
-      shortcuts.register(command.shortcut, () => {
-        void executePluginCommand(command.pluginId, command.contributionId)
-      })
-    }
-
-    for (const key of registeredPluginShortcuts) {
-      if (!nextShortcutKeys.has(key)) {
-        shortcuts.unregister(key)
-      }
-    }
-
-    registeredPluginShortcuts = nextShortcutKeys
-  })
-
-  $effect(() => {
-    for (const service of resolvedPluginContributions.backgroundServices) {
-      void activatePlugin(service.pluginId)
-    }
-  })
-
-  // Reload tasks when active project changes
-  $effect(() => {
-    if ($activeProjectId) {
-      appData.loadTasks()
-      appData.loadPullRequests()
-      appData.refreshPrCounts()
-    }
   })
 
   // Moving a Task to/from Out of Focus only mutates outOfFocusTaskIdsByProject (+ its config)
@@ -321,73 +211,35 @@
     appData.scheduleAttentionCountRefresh()
   })
 
-  async function handleProjectCreated(project: Project) {
-    showProjectSetup = false
-    $activeProjectId = project.id
-    await appData.loadProjects()
-    // Land the user on the new project's settings page to finish configuring it.
-    router.navigate('settings')
-  }
-  const lifecycle = createAppLifecycleController({
-    createWindow: () => {
-      const target = createDesktopWindow()
-      appWindow = target
-      return target
-    },
-    createShortcuts: () => {
-      const registry = useShortcutRegistry()
-      shortcuts = registry
-      return registry
-    },
-    registerShortcuts: (registry) => {
-      registerAppShortcuts(registry, {
-        showShortcuts: shortcutHelp.open,
-        openActionPalette: actionPalette.openActionPalette,
-        toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
-        toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
-        toggleSidebar: () => {
-          appSidebarCollapsed = !appSidebarCollapsed
-          localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
-        },
-        openNewTaskDialog: () => {
-          if (!taskCreation.dialog) taskCreation.openNewTask()
-        },
-        goBack: () => { void navigation.goBack() },
-        navigateForward: () => { void navigation.goForward() },
-        toggleVoiceRecording: () => { toggleVoiceInputShortcut() },
-        toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
-        toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-        canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !shortcutHelp.isOpen,
-        resetToBoard: () => { router.resetToBoard() },
-        navigateToGlobalSettings: () => { navigation.navigate('global_settings') },
-        cycleActiveProject: (direction, options) => { void navigation.cycleActiveProject(direction, options) },
-      })
-    },
-    registerDesktopEvents: (target) => registerAppDesktopEventListeners({
-      appWindow: target,
-      onCloseRequested: closeController.handleCloseRequested,
-      loadTasks: appData.loadTasks,
-      loadSessions: appData.loadSessions,
-      loadPullRequests: appData.loadPullRequests,
-      loadProjectAttention: appData.loadProjectAttention,
-      refreshPrCounts: appData.refreshPrCounts,
-      getActiveProjectId: () => get(activeProjectId),
-      loadEnabledPluginsForProject: loadEnabledForProject,
-    }),
-    loadRendererStartupData: () => loadAppStartupData({
-      initializePluginRuntime: async () => {
-        await initializePluginRuntime()
-        await loadEnabledForApp()
-      },
-      loadProjects: appData.loadProjects,
-      getAppMode,
-      getConfig,
-      setAppMode: (mode) => { appMode = mode },
-      setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
-      loadProjectAttention: appData.loadProjectAttention,
-      loadTasks: appData.loadTasks,
-    }),
+  lifecycle = createAppShellLifecycleController({
+    appData,
+    pluginOwner: pluginController,
+    onCloseRequested: closeController.handleCloseRequested,
+    setAppMode: (mode) => { appMode = mode },
+    setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
     onWindowFocusChange: (focused) => { windowFocused = focused },
+    shortcutHandlers: {
+      showShortcuts: shortcutHelp.open,
+      openActionPalette: actionPalette.openActionPalette,
+      toggleAttentionOverview: () => { showAttentionOverview = !showAttentionOverview },
+      toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
+      toggleSidebar: () => {
+        appSidebarCollapsed = !appSidebarCollapsed
+        localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
+      },
+      openNewTaskDialog: () => {
+        if (!taskCreation.dialog) taskCreation.openNewTask()
+      },
+      goBack: () => { void navigation.goBack() },
+      navigateForward: () => { void navigation.goForward() },
+      toggleVoiceRecording: () => { toggleVoiceInputShortcut() },
+      toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
+      toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
+      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showAttentionOverview && !actionPalette.showActionPalette && !shortcutHelp.isOpen,
+      resetToBoard: () => { router.resetToBoard() },
+      navigateToGlobalSettings: () => { navigation.navigate('global_settings') },
+      cycleActiveProject: (direction, options) => { void navigation.cycleActiveProject(direction, options) },
+    },
   })
 
   onMount(() => {
@@ -395,15 +247,6 @@
   })
 
   onDestroy(() => {
-    if (shortcuts) {
-      for (const key of registeredPluginShortcuts) {
-        shortcuts.unregister(key)
-      }
-    }
-
-    void deactivateAllPlugins().catch((error) => {
-      console.error('[plugins] Failed to deactivate all plugins during app teardown:', error)
-    })
     lifecycle.dispose()
   })
 </script>
