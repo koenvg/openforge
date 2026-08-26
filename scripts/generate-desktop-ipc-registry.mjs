@@ -82,7 +82,7 @@ function propertyValue(object, name) {
   return property?.type === 'ObjectProperty' ? property.value : null
 }
 
-export function publicCommandContracts(sourceFile, moduleName = null) {
+export function publicCommandContracts(sourceFile, moduleName) {
   const contracts = []
   for (const statement of sourceFile.program.body) {
     if (statement.type !== 'ExportNamedDeclaration') continue
