@@ -140,6 +140,14 @@ async function runInteractionAndRecovery(browser, report, browserPid) {
   const harness = await openHarness(browser, { surface: 'agent', theme: 'dark', dpr: 1 })
   const { page } = harness
   try {
+    await reset(page, { surface: 'agent', theme: 'dark' })
+    await page.evaluate(() => window.terminalConformance.writeRepeated('\u001b[6n', 1))
+    const queryResponses = await page.evaluate(() => window.terminalConformance.queryResponses())
+    const expectedQueryResponse = { data: '\u001b[1;1R', ptyInstanceId: 1 }
+    if (JSON.stringify(queryResponses) !== JSON.stringify([expectedQueryResponse])) {
+      throw new Error(`terminal query response was not PTY-scoped: ${JSON.stringify(queryResponses)}`)
+    }
+    recordCheck(report, 'pty-scoped-query-response', { response: queryResponses[0] })
     await reset(page, { surface: 'agent', theme: 'dark', echoInput: true })
     await page.evaluate(() => window.terminalConformance.focus())
     const firstInteractionStarted = performance.now()

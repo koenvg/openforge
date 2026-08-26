@@ -6,6 +6,7 @@ import type {
   TerminalView,
   TerminalViewDisposable,
   TerminalViewPresentationEvidence,
+  TerminalViewQueryResponse,
   TerminalViewPresentationSnapshot,
 } from '../../src/terminalView'
 import './style.css'
@@ -41,7 +42,9 @@ const ptyInstanceId = 1
 
 let view: TerminalView | null = null
 let inputSubscription: TerminalViewDisposable | null = null
+let queryResponseSubscription: TerminalViewDisposable | null = null
 let inputEvents: string[] = []
+let queryResponses: TerminalViewQueryResponse[] = []
 let openedLinks: string[] = []
 let echoInput = false
 let inputPresentation = Promise.resolve<TerminalViewPresentationEvidence | null>(null)
@@ -60,10 +63,13 @@ function recordingById(id: string) {
 async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvidence> {
   inputSubscription?.dispose()
   inputSubscription = null
+  queryResponseSubscription?.dispose()
+  queryResponseSubscription = null
   view?.dispose()
   view = null
   host.replaceChildren()
   inputEvents = []
+  queryResponses = []
   openedLinks = []
   echoInput = options.echoInput ?? false
   inputPresentation = Promise.resolve(null)
@@ -90,6 +96,9 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
     if (!echoInput) return
     nextView.writeLive({ data, ptyInstanceId })
     inputPresentation = nextView.drainPresentation()
+  })
+  queryResponseSubscription = nextView.onQueryResponse(response => {
+    queryResponses.push(response)
   })
   nextView.mount(host)
   nextView.fit()
@@ -174,6 +183,7 @@ const api = {
   capture: () => requireView().capturePresentation(),
   clearInput: () => { inputEvents = [] },
   inputEvents: () => [...inputEvents],
+  queryResponses: () => queryResponses.map(response => ({ ...response })),
   openedLinks: () => [...openedLinks],
   waitForInputCount,
 }
