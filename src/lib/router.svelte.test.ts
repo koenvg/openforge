@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
+import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
 import { activeProjectId, currentView, focusBoardFilters, lastViewedTaskId, projects, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
 import { captureProjectView, pushNavState, resetHistory, resetToBoard, restoreProjectView, selectFocusBoardTab, useAppRouter } from './router.svelte'
 import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
 import type { Project, ReviewPullRequest } from './types'
 
 const samplePr = { id: 'pr-1', number: 1 } as unknown as ReviewPullRequest
-const PR_REVIEW_VIEW = 'plugin:com.openforge.github-sync:pr_review'
 
 describe('useAppRouter', () => {
   beforeEach(() => {
@@ -22,10 +22,10 @@ describe('useAppRouter', () => {
     const router = useAppRouter()
     selectedTaskId.set('task-1')
 
-    router.navigate('plugin:com.openforge.github-sync:pr_review')
+    router.navigate(GITHUB_SYNC_VIEW_KEY)
 
     expect(get(selectedTaskId)).toBeNull()
-    expect(get(currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
+    expect(get(currentView)).toBe(GITHUB_SYNC_VIEW_KEY)
   })
 
   it('navigate emits a view-invoked host event carrying the target view', () => {
@@ -33,22 +33,22 @@ describe('useAppRouter', () => {
     const invoked: unknown[] = []
     const unsubscribe = subscribeToPluginHostEvent('test-plugin', 'view-invoked', (payload) => invoked.push(payload))
 
-    router.navigate(PR_REVIEW_VIEW)
+    router.navigate(GITHUB_SYNC_VIEW_KEY)
     unsubscribe()
 
-    expect(invoked).toContainEqual({ view: PR_REVIEW_VIEW })
+    expect(invoked).toContainEqual({ view: GITHUB_SYNC_VIEW_KEY })
   })
 
   it('navigate re-emits view-invoked even when navigating to the already-active view', () => {
     const router = useAppRouter()
-    currentView.set(PR_REVIEW_VIEW)
+    currentView.set(GITHUB_SYNC_VIEW_KEY)
     const invoked: unknown[] = []
     const unsubscribe = subscribeToPluginHostEvent('test-plugin', 'view-invoked', (payload) => invoked.push(payload))
 
-    router.navigate(PR_REVIEW_VIEW)
+    router.navigate(GITHUB_SYNC_VIEW_KEY)
     unsubscribe()
 
-    expect(invoked).toEqual([{ view: PR_REVIEW_VIEW }])
+    expect(invoked).toEqual([{ view: GITHUB_SYNC_VIEW_KEY }])
   })
 
   it('navigate(settings) clears selectedTaskId synchronously', () => {
@@ -124,7 +124,7 @@ describe('useAppRouter', () => {
 
   it('navigateToTask from a plugin view lands on the board', () => {
     const router = useAppRouter()
-    currentView.set('plugin:com.openforge.github-sync:pr_review')
+    currentView.set(GITHUB_SYNC_VIEW_KEY)
 
     router.navigateToTask('task-7')
 
@@ -188,7 +188,7 @@ describe('useAppRouter', () => {
   })
 
   it('resetToBoard resets from plugin PR review view', () => {
-    currentView.set('plugin:com.openforge.github-sync:pr_review')
+    currentView.set(GITHUB_SYNC_VIEW_KEY)
 
     resetToBoard()
 
@@ -366,14 +366,14 @@ describe('project view memory', () => {
   })
 
   it('captureProjectView snapshots the current tab, task, and PR under the project id', () => {
-    currentView.set('plugin:com.openforge.github-sync:pr_review')
+    currentView.set(GITHUB_SYNC_VIEW_KEY)
     selectedTaskId.set('task-9')
     selectedReviewPr.set(samplePr)
 
     captureProjectView('proj-X')
 
     expect(get(projectViewSnapshots).get('proj-X')).toEqual({
-      currentView: 'plugin:com.openforge.github-sync:pr_review',
+      currentView: GITHUB_SYNC_VIEW_KEY,
       selectedTaskId: 'task-9',
       selectedReviewPr: samplePr,
     })

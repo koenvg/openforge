@@ -1,13 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { get, writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import type { AgentSession, Project, Task } from '../../lib/types'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 const mockActiveSessions = writable<Map<string, AgentSession>>(new Map())
 const mockProjects = writable<Project[]>([])
 const mockActiveProjectId = writable<string | null>(null)
-const mockCurrentView = writable<'board' | 'settings' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.task-schedules:schedules'>('board')
+const mockCurrentView = writable<'board' | 'settings' | typeof GITHUB_SYNC_VIEW_KEY | 'plugin:com.openforge.task-schedules:schedules'>('board')
 const mockSelectedTaskId = writable<string | null>(null)
 const mockTasks = writable<Task[]>([])
 const mockInstalledPlugins = writable<Map<string, PluginEntry>>(new Map())

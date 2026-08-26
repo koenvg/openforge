@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import IconRail from './IconRail.svelte'
 import type { AppView } from '../../lib/types'
 import { commandHeld } from '../../lib/stores'
@@ -96,7 +97,7 @@ describe('IconRail', () => {
 
   describe('active-repo PR count badge', () => {
     const prRailItem = {
-      viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,
+      viewKey: GITHUB_SYNC_VIEW_KEY,
       icon: 'git-pull-request',
       title: 'Pull Requests',
       shortcut: '⌘G',
@@ -142,7 +143,7 @@ describe('IconRail', () => {
 
   describe('board attention count badge (green dot)', () => {
     const prRailItem = {
-      viewKey: 'plugin:com.openforge.github-sync:pr_review' as AppView,
+      viewKey: GITHUB_SYNC_VIEW_KEY,
       icon: 'git-pull-request',
       title: 'Pull Requests',
       shortcut: '⌘G',
