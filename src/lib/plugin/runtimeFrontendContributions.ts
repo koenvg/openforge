@@ -2,6 +2,7 @@ import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import type {
   FrontendOpenForgeAPI,
   PluginInjectionPointRegistration,
+  PluginReviewRowActionRegistration,
   PluginSettingsSectionRegistration,
   PluginTaskPaneTabRegistration,
   PluginTaskUISectionRegistration,
@@ -19,6 +20,7 @@ import {
 } from './runtimeContributionSupport'
 import type {
   RuntimeInjectionPointContribution,
+  RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskStartPrefixProviderContribution,
@@ -28,13 +30,14 @@ import type {
 
 type FrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
+  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'injectionPoints' | 'taskStart' | 'backend'
 >
 
 export class RuntimeFrontendContributionRegistry {
   private readonly views = new Map<string, RuntimeViewContribution>()
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, RuntimeTaskUISectionContribution>()
+  private readonly reviewRowActions = new Map<string, RuntimeReviewRowActionContribution>()
   private readonly settingsSections = new Map<string, RuntimeSettingsSectionContribution>()
   private readonly injectionPoints = new Map<string, RuntimeInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, RuntimeTaskStartPrefixProviderContribution>()
@@ -75,6 +78,9 @@ export class RuntimeFrontendContributionRegistry {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
         registerSection: (registration) => this.registerTaskUISection(registration),
       },
+      reviewUI: {
+        registerRowAction: (registration) => this.registerReviewRowAction(registration),
+      },
       taskPane: {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
       },
@@ -112,6 +118,7 @@ export class RuntimeFrontendContributionRegistry {
     views: RuntimeViewContribution[]
     taskPaneTabs: RuntimeTaskPaneTabContribution[]
     taskUISections: RuntimeTaskUISectionContribution[]
+    reviewRowActions: RuntimeReviewRowActionContribution[]
     settingsSections: RuntimeSettingsSectionContribution[]
     injectionPoints: RuntimeInjectionPointContribution[]
     taskStartPrefixProviders: RuntimeTaskStartPrefixProviderContribution[]
@@ -120,6 +127,7 @@ export class RuntimeFrontendContributionRegistry {
       views: Array.from(this.views.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
       taskUISections: Array.from(this.taskUISections.values()),
+      reviewRowActions: Array.from(this.reviewRowActions.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
       taskStartPrefixProviders: this.listTaskStartPrefixProviders(),
@@ -208,6 +216,28 @@ export class RuntimeFrontendContributionRegistry {
     return this.services.trackDisposable(createDisposable(() => {
       this.taskUISections.delete(qualifiedId)
       this.services.claims.release('taskUI', qualifiedId)
+    }))
+  }
+
+  // Review-row actions carry no title: they render inside a pull-request row that already
+  // names the pull request, so there is nothing for a title to label.
+  private registerReviewRowAction(registration: PluginReviewRowActionRegistration): Disposable {
+    const qualifiedId = this.services.qualifiedId('reviewUI', registration?.id)
+    assertComponent('reviewUI', registration?.component)
+    this.services.claims.claim('reviewUI', qualifiedId)
+
+    const contribution: RuntimeReviewRowActionContribution = {
+      ...registration,
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+    }
+    this.reviewRowActions.set(qualifiedId, contribution)
+
+    return this.services.trackDisposable(createDisposable(() => {
+      this.reviewRowActions.delete(qualifiedId)
+      this.services.claims.release('reviewUI', qualifiedId)
     }))
   }
 

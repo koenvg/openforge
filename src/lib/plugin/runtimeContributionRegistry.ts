@@ -39,6 +39,7 @@ export type {
   RuntimeEventListenerContribution,
   RuntimeHostBridge,
   RuntimeInjectionPointContribution,
+  RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskStartPrefixProviderContribution,

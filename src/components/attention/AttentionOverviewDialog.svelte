@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import PluginSlot from '../plugin/PluginSlot.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
   import { getAllTasks, getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { buildAttentionOverview, laneRowsByFilter, TASK_LANES, TASK_LANE_LABELS } from '../../lib/attentionOverview'
@@ -668,6 +669,23 @@
                           · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
                           {#if relTime(pr.updated_at)} · {relTime(pr.updated_at)}{/if}
                         </span>
+                      </div>
+                      <!-- Plugin-contributed row controls (GitHub Sync puts the walkthrough +
+                           AI review button here). Activation is swallowed so pressing the
+                           button does not also open the pull request behind it: the click for
+                           the mouse, Enter/Space for a keyboard tabbed onto the button. The
+                           navigation keys still bubble, so ↑/↓ and T keep working from here. -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div
+                        class="shrink-0"
+                        onclick={(e) => e.stopPropagation()}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                      >
+                        <PluginSlot
+                          slotType="reviewRowActions"
+                          projectId={prProjectId}
+                          extraProps={{ pr }}
+                        />
                       </div>
                       <span class="text-base-content/30 shrink-0">›</span>
                     </div>

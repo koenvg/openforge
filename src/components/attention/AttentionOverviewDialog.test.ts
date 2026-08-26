@@ -10,6 +10,9 @@ import {
   activeProjectId,
   taskAttentionRows,
 } from '../../lib/stores'
+import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
+import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import AttentionOverviewDialog from './AttentionOverviewDialog.svelte'
 
 // The dialog reads the backend-owned task projection over IPC; the stores it subscribes
@@ -507,5 +510,120 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
 
     await press(dialog, 't')
     expect(screen.getByText(/The backlog is empty/i)).toBeTruthy()
+  })
+})
+
+describe('AttentionOverviewDialog — plugin review row actions', () => {
+  const PLUGIN_ID = 'plugin.github-sync'
+
+  function registerRowActionPlugin(actions: { id: string; order: number }[]): void {
+    installedPlugins.set(new Map([[
+      PLUGIN_ID,
+      {
+        manifest: {
+          id: PLUGIN_ID,
+          name: 'GitHub Sync',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Review row action test plugin',
+          permissions: [],
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'active',
+        error: null,
+      },
+    ]]) as never)
+    enabledPluginIds.set(new Set([PLUGIN_ID]))
+    runtimeContributionSources.set(new Map([[PLUGIN_ID, { pluginId: PLUGIN_ID, reviewRowActions: actions }]]))
+    for (const action of actions) {
+      registerRenderableContributionComponent('reviewRowActions', `${PLUGIN_ID}:${action.id}`, PluginSlotTestView as never)
+    }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    projects.set([projectRecord('p1', 'Project One')])
+    reviewPrs.set([reviewPr(1, 'someone', 'app', 'Please review my fix')])
+    ticketPrs.set(new Map())
+    hiddenProjectIds.set(new Set())
+    globalExcludedPrRepos.set(new Set())
+    activeProjectId.set(null)
+    taskAttentionRows.set([])
+    installedPlugins.set(new Map())
+    enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map())
+    clearComponentRegistry()
+
+    ipc.getAllTasks.mockResolvedValue([])
+    ipc.getTaskLanes.mockResolvedValue(laneRows())
+    ipc.getProjectConfig.mockResolvedValue(null)
+    ipc.getConfig.mockResolvedValue(null)
+    ipc.setConfig.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    clearComponentRegistry()
+  })
+
+  async function renderWithReview(props: Partial<DialogProps> = {}) {
+    renderDialog(props)
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)
+    await vi.waitFor(() => expect(screen.getByText('Please review my fix')).toBeTruthy())
+  }
+
+  it("renders a contributed control on the review row, carrying that row's pull request", async () => {
+    registerRowActionPlugin([{ id: 'pr_walkthrough', order: 10 }])
+    reviewPrs.set([
+      reviewPr(1, 'someone', 'app', 'Please review my fix'),
+      reviewPr(2, 'someone', 'app', 'And this one too'),
+    ])
+
+    await renderWithReview()
+
+    await vi.waitFor(() => expect(screen.getAllByTestId('plugin-slot-view')).toHaveLength(2))
+    // Each row gets its own instance, holding the pull request that row is showing.
+    expect(screen.getAllByTestId('plugin-slot-view').map((el) => el.getAttribute('data-pr-number')))
+      .toEqual(['2', '1'])
+  })
+
+  it('keeps a click on the contributed control from opening the pull request behind it', async () => {
+    registerRowActionPlugin([{ id: 'pr_walkthrough', order: 10 }])
+    const onOpenPr = vi.fn()
+    await renderWithReview({ onOpenPr })
+    await vi.waitFor(() => expect(screen.getByTestId('plugin-slot-view')).toBeTruthy())
+
+    await fireEvent.click(screen.getByTestId('plugin-slot-view'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(onOpenPr).not.toHaveBeenCalled()
+  })
+
+  it('swallows Enter on the contributed control, but still lets the lane shortcut through', async () => {
+    registerRowActionPlugin([{ id: 'pr_walkthrough', order: 10 }])
+    const onOpenPr = vi.fn()
+    await renderWithReview({ onOpenPr })
+    await vi.waitFor(() => expect(screen.getByTestId('plugin-slot-view')).toBeTruthy())
+    const control = screen.getByTestId('plugin-slot-view')
+
+    // A keyboard that tabbed onto the control must not open the pull request behind it.
+    await fireEvent.keyDown(control, { key: 'Enter', bubbles: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onOpenPr).not.toHaveBeenCalled()
+
+    // Navigation still reaches the dialog from inside the control.
+    await fireEvent.keyDown(control, { key: 't', bubbles: true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.getByRole('button', { name: /^T In Flight 0$/ })).toBeTruthy()
+  })
+
+  it('renders nothing extra on the row when no plugin contributes', async () => {
+    await renderWithReview()
+
+    expect(screen.queryByTestId('plugin-slot-view')).toBeNull()
+    // No empty wrapper either: a stray element would show as a gap in the row.
+    expect(document.querySelector('[data-slot-type="reviewRowActions"]')).toBeNull()
   })
 })

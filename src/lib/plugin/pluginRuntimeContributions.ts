@@ -6,6 +6,7 @@ import type {
   RuntimeCommandContribution,
   RuntimeContributionSnapshot,
   RuntimeInjectionPointContribution,
+  RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
@@ -38,6 +39,10 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
     taskUISections: snapshot.taskUISections.map((section) => ({
       id: section.id,
       order: section.order,
+    })),
+    reviewRowActions: snapshot.reviewRowActions.map((action) => ({
+      id: action.id,
+      order: action.order,
     })),
     settingsSections: snapshot.settingsSections.map((section) => ({
       id: section.id,
@@ -96,9 +101,9 @@ export async function stopPluginBackgroundServices(pluginId: string): Promise<vo
   return stopBackgroundServiceEntries(stopEntries)
 }
 
-function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeSettingsSectionContribution | RuntimeInjectionPointContribution>(
+function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeTaskUISectionContribution | RuntimeReviewRowActionContribution | RuntimeSettingsSectionContribution | RuntimeInjectionPointContribution>(
   pluginId: string,
-  slotType: 'taskPaneTabs' | 'taskUISections' | 'settingsSections' | 'injectionPoints',
+  slotType: 'taskPaneTabs' | 'taskUISections' | 'reviewRowActions' | 'settingsSections' | 'injectionPoints',
   contributions: T[] | undefined
 ): void {
   for (const contribution of contributions ?? []) {
@@ -169,6 +174,7 @@ export async function applyRuntimeSnapshotContributions(pluginId: string, snapsh
 
     registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
     registerRenderableContributions(pluginId, 'taskUISections', snapshot.taskUISections)
+    registerRenderableContributions(pluginId, 'reviewRowActions', snapshot.reviewRowActions)
     registerRenderableContributions(pluginId, 'settingsSections', snapshot.settingsSections)
     registerRenderableContributions(pluginId, 'injectionPoints', snapshot.injectionPoints)
     registerCommandContributions(pluginId, snapshot.commands)

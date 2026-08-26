@@ -5,6 +5,7 @@
   import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
   import RepositoryFilterSection from './RepositoryFilterSection.svelte'
+  import PrWalkthroughButton from './PrWalkthroughButton.svelte'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
 
   interface Props {
@@ -194,30 +195,7 @@
                       >
                         {#snippet footer()}
                           <div class="pt-1">
-                            {#if wtState === 'ready'}
-                              <span class="inline-flex items-center gap-1 text-xs text-success" aria-label="Walkthrough ready">
-                                <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
-                                Walkthrough ready
-                              </span>
-                            {:else if wtState === 'generating'}
-                              <button type="button" class="btn btn-xs btn-ghost gap-1" disabled aria-label="Generating walkthrough">
-                                <span class="loading loading-spinner loading-xs"></span>
-                                Generating…
-                              </button>
-                            {:else}
-                              <button
-                                type="button"
-                                class="btn btn-xs btn-outline"
-                                aria-label="Generate walkthrough and AI review"
-                                onclick={(e) => { e.stopPropagation(); onGenerateWalkthrough(pr) }}
-                              >
-                                {wtState === 'stale'
-                                  ? 'Regenerate — new commits'
-                                  : wtState === 'error'
-                                    ? 'Retry — generation failed'
-                                    : 'Generate Walkthrough + AI Review'}
-                              </button>
-                            {/if}
+                            <PrWalkthroughButton state={wtState} onGenerate={() => onGenerateWalkthrough(pr)} />
                           </div>
                         {/snippet}
                       </ReviewPrCard>

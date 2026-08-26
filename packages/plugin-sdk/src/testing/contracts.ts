@@ -18,6 +18,7 @@ import type {
   PluginSettingsSectionRegistration,
   PluginStorage,
   PluginTaskPaneTabRegistration,
+  PluginReviewRowActionRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
   ShellSpawnRequest,
@@ -35,7 +36,7 @@ import type {
 import type { Task } from '../domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
-export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'settings' | 'backend' | 'background'
+export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
 export type TestingMaybePromise<T> = T | Promise<T>
 export type TestingCommandHandler = (payload?: unknown) => TestingMaybePromise<unknown>
 export type TestingEventHandler = (payload: unknown) => void
@@ -137,6 +138,7 @@ export type TestingEventListenerContribution = TestingContributionBase & {
 export type TestingViewContribution = TestingContributionBase & PluginViewRegistration
 export type TestingTaskPaneTabContribution = TestingContributionBase & PluginTaskPaneTabRegistration
 export type TestingTaskUISectionContribution = TestingContributionBase & PluginTaskUISectionRegistration
+export type TestingReviewRowActionContribution = TestingContributionBase & PluginReviewRowActionRegistration
 export type TestingSettingsSectionContribution = TestingContributionBase & PluginSettingsSectionRegistration
 export type TestingBackendMethodContribution = TestingContributionBase & {
   registration: BackendMethodRegistration
@@ -163,6 +165,7 @@ export interface TestingOpenForgeRegistrySnapshot {
   views: TestingViewContribution[]
   taskPaneTabs: TestingTaskPaneTabContribution[]
   taskUISections: TestingTaskUISectionContribution[]
+  reviewRowActions: TestingReviewRowActionContribution[]
   settingsSections: TestingSettingsSectionContribution[]
   commands: TestingCommandContribution[]
   eventListeners: TestingEventListenerContribution[]

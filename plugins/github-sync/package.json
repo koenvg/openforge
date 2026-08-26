@@ -38,6 +38,7 @@
     "requires": [
       "taskPane",
       "views",
+      "reviewUI",
       "settings",
       "backend",
       "commands",

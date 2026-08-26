@@ -167,6 +167,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       registerTab: () => ({ dispose: () => undefined }),
       registerSection: () => ({ dispose: () => undefined }),
     },
+    reviewUI: { registerRowAction: () => ({ dispose: () => undefined }) },
     taskPane: { registerTab: () => ({ dispose: () => undefined }) },
     settings: { registerSection: () => ({ dispose: () => undefined }) },
     injectionPoints: { register: () => ({ dispose: () => undefined }) },

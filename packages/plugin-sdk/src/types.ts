@@ -9,6 +9,7 @@ import type {
   FileEntry,
   Project,
   ProjectAttention,
+  ReviewPullRequest,
   Task,
   TaskWorkspaceInfo,
   WritableBoardStatus,
@@ -72,6 +73,7 @@ const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
   'taskLinks',
   'appEnablement',
   'customSidebarNavigation',
+  'reviewUI',
 ] as const
 
 export type OpenForgePluginCapability = (typeof OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS)[number]
@@ -394,8 +396,36 @@ export interface PluginSettingsSectionRegistration {
   component: PluginComponentLoader<PluginSettingsSectionProps> | PluginComponent<PluginSettingsSectionProps>
 }
 
+/**
+ * Props a review-row action receives. `pr` is the review-requested pull request whose row
+ * is being rendered, and `projectId` is the local project that owns its repo (null when the
+ * host surface has none for it). The same contribution renders once per row, so the host
+ * remounts it with a different `pr` rather than handing over the whole list.
+ */
+export interface PluginReviewRowActionProps extends Record<string, unknown> {
+  api: FrontendOpenForgeAPI
+  context: OpenForgeContextSnapshot
+  pr: ReviewPullRequest
+  projectId: string | null
+}
+
+export interface PluginReviewRowActionRegistration {
+  id: string
+  order?: number
+  component: PluginComponentLoader<PluginReviewRowActionProps> | PluginComponent<PluginReviewRowActionProps>
+}
+
 export interface FrontendViewRegistry {
   register(registration: PluginViewRegistration): Disposable
+}
+
+export interface FrontendReviewUIRegistry {
+  /**
+   * Contribute a control onto every review-requested pull-request row a host surface shows
+   * (today the attention overview). Rows are narrow and there is one per pull request, so
+   * keep the component to a chip or a single button and let it fetch its own state.
+   */
+  registerRowAction(registration: PluginReviewRowActionRegistration): Disposable
 }
 
 export type InjectionPointLocation = 'createTaskPrompt' | 'agentSession' | 'backlogPrompt'
@@ -771,6 +801,7 @@ export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   navigation: NavigationAPI
   views: FrontendViewRegistry
   taskUI: FrontendTaskUIRegistry
+  reviewUI: FrontendReviewUIRegistry
   /** @deprecated Use `taskUI.registerTab(...)`. */
   taskPane: FrontendTaskPaneRegistry
   settings: FrontendSettingsRegistry
