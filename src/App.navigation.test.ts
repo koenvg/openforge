@@ -18,6 +18,25 @@ function getLatestComponentProps<T extends Record<string, unknown>>(
   throw new Error(`Expected mocked component props with ${String(propName)}`)
 }
 
+const openTask: Task = {
+  id: 'task-open',
+  initial_prompt: 'Drilled-in task',
+  prompt: null,
+  title: null,
+  title_source: null,
+  title_generated_at: null,
+  status: 'doing',
+  agent: null,
+  permission_mode: null,
+  worktree_source: null,
+  worktree_branch: null,
+  source_ticket_url: null,
+  depends_on: [],
+  project_id: 'proj-1',
+  created_at: 1000,
+  updated_at: 1000,
+}
+
 describe('App navigation shortcuts', () => {
   installAppTestLifecycle()
   describe('keyboard shortcuts', () => {
@@ -363,9 +382,44 @@ describe('App navigation shortcuts', () => {
       props.onSelectProject('proj-1')
 
       expect(nav.restoreProjectView).not.toHaveBeenCalled()
-      // Re-clicking the project while already on its board tab must not reset — that
-      // would wipe an open task detail (which renders on the board view).
+      // Nothing is drilled in, so there is nothing to back out of. Resetting would only
+      // add a dead history entry.
       expect(nav.resetToBoard).not.toHaveBeenCalled()
+    })
+
+    it('backs out of an open task detail when the already-active project is re-clicked', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
+      const { tick } = await import('svelte')
+
+      render(App)
+      await vi.waitFor(() => {
+        expect(vi.mocked(AppSidebar)).toHaveBeenCalled()
+      })
+
+      stores.activeProjectId.set('proj-1')
+      stores.currentView.set('board')
+      stores.tasks.set([openTask])
+      stores.selectedTaskId.set(openTask.id)
+      await tick()
+
+      const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
+        vi.mocked(AppSidebar),
+        'onSelectProject',
+      )
+      vi.mocked(nav.restoreProjectView).mockClear()
+      vi.mocked(nav.resetToBoard).mockClear()
+      vi.mocked(nav.selectFocusBoardTab).mockClear()
+
+      props.onSelectProject('proj-1')
+
+      // A task detail also renders on the board view, so the project row would otherwise
+      // be a dead press while a task is open.
+      expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(nav.selectFocusBoardTab).toHaveBeenCalledWith('proj-1')
+      expect(nav.restoreProjectView).not.toHaveBeenCalled()
     })
 
     it('jumps to the board when clicking the already-active project from a non-board tab', async () => {

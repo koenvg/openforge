@@ -2,7 +2,9 @@
   import type { TaskDependencySummary, TaskDependentSummary } from '../../../lib/taskDependencies'
   import { getDependentReadinessLabel } from '../../../lib/taskDependencies'
   import { getDependencyStatusPresentation } from '../../../lib/dependencyStatusPresentation'
-  import CollapsibleInfoSection from '../ui/CollapsibleInfoSection.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import ListChecks from '@lucide/svelte/icons/list-checks'
+  import Network from '@lucide/svelte/icons/network'
 
   type RelationshipKind = 'dependencies' | 'dependents'
   type SectionDensity = 'full' | 'compact'
@@ -105,12 +107,15 @@
 
 {#if items.length > 0}
   {#if isFull}
-    <CollapsibleInfoSection sectionKey={kind} title={sectionLabel} cardId={kind} ariaLive="polite">
-      <div class="flex flex-col gap-2.5 px-3 py-2">
+    <CollapsibleSection sectionKey={kind} title={sectionLabel} cardId={kind} ariaLive="polite">
+      {#snippet icon()}
+        {#if isDependencies}<ListChecks size={14} />{:else}<Network size={14} />{/if}
+      {/snippet}
+      <div class="flex flex-col gap-2.5 py-2">
         {@render itemList()}
         <div class={footerClass}>{@render footerText()}</div>
       </div>
-    </CollapsibleInfoSection>
+    </CollapsibleSection>
   {:else}
     <section data-task-info-card={kind} data-card-sizing="natural" class={sectionElementClass} aria-label={sectionLabel} aria-live="polite">
       <span class={headingElementClass}>{sectionLabel}</span>

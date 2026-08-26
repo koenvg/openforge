@@ -249,6 +249,7 @@
         task={selectedTask}
         allTasks={tasks}
         {dependencyReferenceTasks}
+        {onTaskUpdated}
         onEditTask={onEditTask}
         onOpenLinkedTask={onOpenTask}
         onOpenFullView={() => {

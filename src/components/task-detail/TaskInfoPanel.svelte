@@ -12,7 +12,8 @@
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
   import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
   import PluginSlot from '../plugin/PluginSlot.svelte'
-  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import Info from '@lucide/svelte/icons/info'
 
   interface Props {
     task: Task
@@ -26,6 +27,12 @@
   }
 
   let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', density = 'default', onEditPrompt, onOpenRelatedTask }: Props = $props()
+
+  // The one point where a plugin section can land on either side of a built-in card.
+  // Sections that describe where the work came from (a linked ticket, an issue) declare
+  // an order below this and render above Changes; sections that describe what the work
+  // produced (pull requests) declare one at or above it and render below.
+  const CHANGES_SECTION_ORDER = 50
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
@@ -89,7 +96,13 @@
 
 </script>
 
+<!-- Sections run in the order the work happens: the prompt that started the task, the
+     ticket it came from, whatever the plugins link to it, the changes on disk, then the
+     pull requests those changes became. Details and relationships are reference material
+     and sit at the bottom. -->
 <div data-testid="task-info-panel" data-scroll-owner="false" data-density={density} class="flex min-h-max flex-col {panelClass}">
+  <TaskInitialPrompt {task} {onEditPrompt} />
+
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
   <PluginSlot
@@ -97,36 +110,20 @@
     taskId={task.id}
     projectId={task.project_id}
     taskActionPending={$mergingTaskIds.has(task.id)}
+    maxOrder={CHANGES_SECTION_ORDER}
   />
 
-  <TaskInitialPrompt {task} {onEditPrompt} />
+  {#if workspacePath !== null}
+    <TaskGitStatus taskId={task.id} />
+  {/if}
 
-  <CollapsibleInfoSection sectionKey="details" title="Details" cardId="details">
-    <div class="px-3 py-2 border-b border-base-300/70">
-      <TaskLabelEditor
-        projectId={task.project_id}
-        selectedLabels={labels}
-        onAdd={handleAddLabel}
-        onRemove={handleRemoveLabel}
-      />
-    </div>
-
-    {#if workspacePath}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 border-b border-base-300/70" aria-label="Workspace">
-        <div class="text-xs text-base-content/55">Workspace</div>
-        <span class="text-xs font-mono text-base-content/70 truncate" title={workspacePath}>{workspacePath}</span>
-        <CopyButton text={workspacePath} label="Copy workspace path" />
-      </div>
-    {/if}
-
-    {#if resumeCommand}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 border-b border-base-300/70" aria-label="Resume command">
-        <div class="text-xs text-base-content/55">Resume command</div>
-        <code class="text-xs font-mono text-base-content/70 truncate" title={resumeCommand}>{resumeCommand}</code>
-        <CopyButton text={resumeCommand} label="Copy resume command" />
-      </div>
-    {/if}
-  </CollapsibleInfoSection>
+  <PluginSlot
+    slotType="taskUISections"
+    taskId={task.id}
+    projectId={task.project_id}
+    taskActionPending={$mergingTaskIds.has(task.id)}
+    minOrder={CHANGES_SECTION_ORDER}
+  />
 
   <TaskRelationshipDetailSection
     kind="dependencies"
@@ -143,7 +140,31 @@
     {onOpenRelatedTask}
   />
 
-  {#if workspacePath !== null}
-    <TaskGitStatus taskId={task.id} />
-  {/if}
+  <CollapsibleSection sectionKey="details" title="Details" cardId="details">
+    {#snippet icon()}<Info size={14} />{/snippet}
+    <div class="py-2 border-b border-base-300/70">
+      <TaskLabelEditor
+        projectId={task.project_id}
+        selectedLabels={labels}
+        onAdd={handleAddLabel}
+        onRemove={handleRemoveLabel}
+      />
+    </div>
+
+    {#if workspacePath}
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Workspace">
+        <div class="text-xs text-base-content/55">Workspace</div>
+        <span class="text-xs font-mono text-base-content/70 truncate" title={workspacePath}>{workspacePath}</span>
+        <CopyButton text={workspacePath} label="Copy workspace path" />
+      </div>
+    {/if}
+
+    {#if resumeCommand}
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Resume command">
+        <div class="text-xs text-base-content/55">Resume command</div>
+        <code class="text-xs font-mono text-base-content/70 truncate" title={resumeCommand}>{resumeCommand}</code>
+        <CopyButton text={resumeCommand} label="Copy resume command" />
+      </div>
+    {/if}
+  </CollapsibleSection>
 </div>

@@ -24,9 +24,16 @@
      * settings section, which is not tied to any project's enabled plugins.
      */
     sourcePluginIds?: string[] | null
+    /**
+     * Render only the contributions whose declared order falls in `[minOrder, maxOrder)`.
+     * A host that interleaves its own sections with plugin ones renders the slot once per
+     * gap; see TaskInfoPanel, which puts the local changes between two windows.
+     */
+    minOrder?: number | null
+    maxOrder?: number | null
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null, minOrder = null, maxOrder = null }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -44,9 +51,18 @@
   )
 
   let allContributions = $derived(resolveContributions(resolvedContributionSources))
-  let slotContributions = $derived.by(() => slotId
+  let resolvedSlotContributions = $derived.by(() => slotId
     ? resolveContributionsForSlot(allContributions, slotType, slotId)
     : allContributions[slotType]
+  )
+  let slotContributions = $derived(
+    minOrder === null && maxOrder === null
+      ? resolvedSlotContributions
+      : resolvedSlotContributions.filter((contrib) => {
+        // Views rank by railOrder and have nothing to window on, so they pass through.
+        if (!('order' in contrib)) return true
+        return (minOrder === null || contrib.order >= minOrder) && (maxOrder === null || contrib.order < maxOrder)
+      })
   )
 
   function getContributionComponent(contrib: (typeof slotContributions)[number]): PluginComponentSource<Record<string, unknown>> | undefined {

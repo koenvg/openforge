@@ -32,6 +32,8 @@ vi.mock('../../lib/ipc', () => ({
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   removeTaskLabel: vi.fn().mockResolvedValue(undefined),
+  updateTaskTitle: vi.fn().mockResolvedValue(undefined),
+  updateTaskSourceTicketUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
@@ -89,10 +91,23 @@ describe('TaskInspectorPanel', () => {
     })
 
     const inspector = screen.getByRole('complementary', { name: 'Task inspector for T-748' })
-    expect(inspector.textContent).toContain('Task')
     expect(inspector.textContent).toContain('T-748')
     expect(inspector.textContent).toContain('Fix the dashboard bug.')
     expect(inspector.textContent).toContain('In Progress')
+  })
+
+  it('leads with the task itself instead of a redundant "Task" label', () => {
+    render(TaskInspectorPanel, {
+      props: {
+        task: baseTask,
+        allTasks: [],
+      },
+    })
+
+    // Nothing else can appear in this panel, so a "Task" heading only costs a row and
+    // reads as a collapsible section that never collapses. The title is the heading.
+    expect(screen.queryByRole('heading', { name: 'Task' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Fix the dashboard bug.' })).toBeTruthy()
   })
 
   it('shows an Edit prompt pencil for backlog tasks when onEditTask is provided', async () => {
@@ -156,4 +171,79 @@ describe('TaskInspectorPanel', () => {
     expect(onOpenLinkedTask).toHaveBeenCalledTimes(1)
   })
 
+  describe('renaming the task from the header', () => {
+    it('offers a rename control next to the task name', () => {
+      render(TaskInspectorPanel, { props: { task: baseTask, allTasks: [baseTask] } })
+
+      expect(screen.getByRole('button', { name: 'Rename task' })).toBeTruthy()
+    })
+
+    it('seeds the input with the title derived from the prompt when the task has none', async () => {
+      render(TaskInspectorPanel, { props: { task: baseTask, allTasks: [baseTask] } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+
+      const input = screen.getByRole('textbox', { name: 'Task title' }) as HTMLInputElement
+      expect(input.value).toBe('Fix the dashboard bug.')
+    })
+
+    it('saves the new title on Enter and reports the update', async () => {
+      const { updateTaskTitle } = await import('../../lib/ipc')
+      const onTaskUpdated = vi.fn()
+      render(TaskInspectorPanel, { props: { task: baseTask, allTasks: [baseTask], onTaskUpdated } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+      const input = screen.getByRole('textbox', { name: 'Task title' })
+      await fireEvent.input(input, { target: { value: 'Dashboard totals are wrong' } })
+      await fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(updateTaskTitle).toHaveBeenCalledWith('T-748', 'Dashboard totals are wrong')
+      expect(onTaskUpdated).toHaveBeenCalled()
+    })
+
+    it('discards the edit on Escape', async () => {
+      const { updateTaskTitle } = await import('../../lib/ipc')
+      render(TaskInspectorPanel, { props: { task: baseTask, allTasks: [baseTask] } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+      const input = screen.getByRole('textbox', { name: 'Task title' })
+      await fireEvent.input(input, { target: { value: 'Never saved' } })
+      await fireEvent.keyDown(input, { key: 'Escape' })
+
+      expect(updateTaskTitle).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox', { name: 'Task title' })).toBeNull()
+    })
+
+    it('allows renaming a task that is already running', async () => {
+      const { updateTaskTitle } = await import('../../lib/ipc')
+      // Unlike the prompt, a title is never injected into the agent session, so there
+      // is no reason to lock it once the task leaves the backlog.
+      render(TaskInspectorPanel, { props: { task: { ...baseTask, status: 'doing' }, allTasks: [baseTask] } })
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Rename task' }))
+      const input = screen.getByRole('textbox', { name: 'Task title' })
+      await fireEvent.input(input, { target: { value: 'Renamed mid-run' } })
+      await fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(updateTaskTitle).toHaveBeenCalledWith('T-748', 'Renamed mid-run')
+    })
+
+    it('has no rename control when no task is selected', () => {
+      render(TaskInspectorPanel, { props: { task: null, allTasks: [] } })
+
+      expect(screen.queryByRole('button', { name: 'Rename task' })).toBeNull()
+    })
+
+    it('defers to the surrounding screen when allowRename is false', () => {
+      // The task detail top bar already shows the title with its own pencil; two
+      // identical rename controls on one screen is the thing this prop prevents.
+      render(TaskInspectorPanel, { props: { task: baseTask, allTasks: [baseTask], allowRename: false } })
+
+      expect(screen.queryByRole('button', { name: 'Rename task' })).toBeNull()
+      // The title itself still shows; only the pencil goes away. It appears twice on
+      // screen because a task with no title derives one from its initial prompt.
+      const header = screen.getByTestId('task-inspector-panel').querySelector('header')
+      expect(header?.textContent).toContain('Fix the dashboard bug.')
+    })
+  })
 })

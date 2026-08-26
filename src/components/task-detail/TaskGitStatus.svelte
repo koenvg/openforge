@@ -2,7 +2,8 @@
   import { getTaskGitStatus } from '../../lib/ipc'
   import type { GitStatusSummary } from '../../lib/types'
   import { activeSessions } from '../../lib/stores'
-  import CollapsibleInfoSection from '../shared/ui/CollapsibleInfoSection.svelte'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+  import FileDiff from '@lucide/svelte/icons/file-diff'
 
   interface Props {
     taskId: string
@@ -45,7 +46,8 @@
   })
 </script>
 
-<CollapsibleInfoSection sectionKey="git-status" title="Changes" cardId="git-status">
+<CollapsibleSection sectionKey="git-status" title="Changes" cardId="git-status">
+  {#snippet icon()}<FileDiff size={14} />{/snippet}
   {#snippet actions()}
     <button
       type="button"
@@ -57,9 +59,9 @@
   {/snippet}
 
   {#if errored}
-    <div class="px-3 py-2 text-xs text-base-content/50">Unable to read changes</div>
+    <div class="py-2 text-xs text-base-content/50">Unable to read changes</div>
   {:else}
-    <div class="flex flex-col gap-1.5 px-3 py-2">
+    <div class="flex flex-col gap-1.5 py-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-xs text-base-content/55">Remote</span>
         {#if !summary?.has_remote}
@@ -109,4 +111,4 @@
       </div>
     </div>
   {/if}
-</CollapsibleInfoSection>
+</CollapsibleSection>

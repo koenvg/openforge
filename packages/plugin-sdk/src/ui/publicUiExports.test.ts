@@ -23,6 +23,7 @@ describe('plugin-sdk public UI exports', () => {
       'PluginViewState',
       'PluginSidebarLink',
       'FileTypeIcon',
+      'CollapsibleSection',
     ])
 
     for (const registration of OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS) {

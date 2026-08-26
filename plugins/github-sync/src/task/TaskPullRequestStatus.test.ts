@@ -1,8 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
 import { createMockFrontendOpenForgeApi } from '@openforge-app/plugin-sdk/testing'
 import type { PluginTaskUISectionProps } from '@openforge-app/plugin-sdk/frontend'
 import type { PollResult, PrComment, PullRequestInfo } from '@openforge-app/plugin-sdk/domain'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { get } from 'svelte/store'
+import {
+  clearCollapsedSections,
+  collapsedSections,
+  isSectionCollapsed,
+  pluginSectionKey,
+  setSectionCollapsed,
+} from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
 
 const emptyPollResult: PollResult = {
@@ -261,7 +269,7 @@ describe('GitHub Sync Task pull request section', () => {
     })
 
     const { api, rerender } = renderSection(invoke)
-    expect(await screen.findByText('No linked pull requests yet')).toBeTruthy()
+    expect(await screen.findByTestId('task-pull-requests-empty')).toBeTruthy()
 
     await rerender({
       api,
@@ -270,11 +278,10 @@ describe('GitHub Sync Task pull request section', () => {
       projectId: 'P-1',
     })
 
-    expect(screen.queryByText('No linked pull requests yet')).toBeNull()
     expect(screen.queryByText('Loading pull requests…')).toBeNull()
 
     resolveNextTask([])
-    expect(await screen.findByText('No linked pull requests yet')).toBeTruthy()
+    expect(await screen.findByTestId('task-pull-requests-empty')).toBeTruthy()
     expect(screen.queryByText('Loading pull requests…')).toBeNull()
   })
 
@@ -429,5 +436,234 @@ describe('GitHub Sync Task pull request section', () => {
       repo: pr.repo_name,
       url: uploadUrl,
     })
+  })
+
+  // The empty state mirrors the source ticket row in the same task panel: one titled row
+  // with an add affordance, no list controls and no placeholder box.
+  describe('empty state', () => {
+    const emptyInvoke = () => vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return []
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+
+    it('renders a single titled row with an add affordance', async () => {
+      renderSection(emptyInvoke())
+
+      const row = await screen.findByTestId('task-pull-requests-empty')
+      expect(within(row).getByRole('heading', { name: 'Pull Requests' })).toBeTruthy()
+      expect(within(row).getByRole('button', { name: 'Add PR' })).toBeTruthy()
+    })
+
+    it('drops the list controls that only make sense with linked pull requests', async () => {
+      renderSection(emptyInvoke())
+
+      await screen.findByTestId('task-pull-requests-empty')
+      expect(screen.queryByRole('button', { name: 'Refresh GitHub status' })).toBeNull()
+      expect(screen.queryByText('0 PRs')).toBeNull()
+    })
+
+    it('marks the card as a row so the task inspector aligns it with the ticket row', async () => {
+      const { container } = renderSection(emptyInvoke())
+
+      await screen.findByTestId('task-pull-requests-empty')
+      const section = container.querySelector('[data-task-info-card="pull-requests"]')
+      expect(section?.getAttribute('data-card-layout')).toBe('row')
+    })
+
+    it('opens the link form from the row and restores the row on cancel', async () => {
+      renderSection(emptyInvoke())
+
+      await screen.findByTestId('task-pull-requests-empty')
+      await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+      expect(screen.getByText('GitHub pull request URL')).toBeTruthy()
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByText('GitHub pull request URL')).toBeNull()
+      expect(screen.getByTestId('task-pull-requests-empty')).toBeTruthy()
+    })
+
+    it('keeps the header layout once a pull request is linked', async () => {
+      const invoke = vi.fn(async (method: string) => {
+        if (method === 'listTaskPullRequests') return [createPullRequest()]
+        if (method === 'getTaskPrComments') return []
+        return emptyPollResult
+      })
+
+      const { container } = renderSection(invoke)
+
+      // The row and the header share a heading, so wait for the list itself to land.
+      expect(await screen.findByText('Test PR')).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Pull Requests' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Refresh GitHub status' })).toBeTruthy()
+      expect(screen.queryByTestId('task-pull-requests-empty')).toBeNull()
+      expect(container.querySelector('[data-task-info-card="pull-requests"]')?.getAttribute('data-card-layout')).toBeNull()
+    })
+  })
+})
+
+describe('GitHub Sync Task pull request section collapsing', () => {
+  const SECTION_KEY = pluginSectionKey('com.openforge.github-sync', 'pull-requests')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    clearCollapsedSections()
+  })
+
+  function renderLoadedSection() {
+    const pr = createPullRequest()
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pr]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+    return { pr, ...renderSection(invoke) }
+  }
+
+  it('renders expanded by default with a header toggle', async () => {
+    const { pr } = renderLoadedSection()
+
+    await waitFor(() => expect(screen.getByText(pr.title)).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Pull Requests' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('hides the pull request list when the header is clicked', async () => {
+    const { pr } = renderLoadedSection()
+    await waitFor(() => expect(screen.getByText(pr.title)).toBeTruthy())
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' }))
+
+    expect(screen.queryByText(pr.title)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Pull Requests' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('persists collapsed state under a plugin-namespaced key', async () => {
+    renderLoadedSection()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pull Requests' })).toBeTruthy())
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' }))
+
+    expect(isSectionCollapsed(get(collapsedSections), SECTION_KEY)).toBe(true)
+    expect(SECTION_KEY).toBe('plugin:com.openforge.github-sync:pull-requests')
+    // A bare 'pull-requests' key would collide with any other plugin using the same name.
+    expect(isSectionCollapsed(get(collapsedSections), 'pull-requests')).toBe(false)
+  })
+
+  it('starts collapsed when the shared store already has the section collapsed', async () => {
+    setSectionCollapsed(SECTION_KEY, true)
+    const { pr } = renderLoadedSection()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pull Requests' })).toBeTruthy())
+    expect(screen.queryByText(pr.title)).toBeNull()
+  })
+
+  it('keeps the header actions reachable while collapsed', async () => {
+    const { pr } = renderLoadedSection()
+    await waitFor(() => expect(screen.getByText(pr.title)).toBeTruthy())
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' }))
+
+    expect(screen.getByRole('button', { name: 'Add PR' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh GitHub status' })).toBeTruthy()
+  })
+
+  it('expands the section when Add PR is pressed while collapsed', async () => {
+    const { pr } = renderLoadedSection()
+    // Wait for the list, not for Add PR: the empty row carries that button too, and it
+    // has no header toggle to collapse.
+    await waitFor(() => expect(screen.getByText(pr.title)).toBeTruthy())
+    await fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' }))
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Add PR' }))
+
+    // Opening the link form inside a collapsed section would hide the form it just opened.
+    expect(isSectionCollapsed(get(collapsedSections), SECTION_KEY)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Pull Requests' }).getAttribute('aria-expanded')).toBe('true')
+  })
+})
+
+describe('GitHub Sync individual pull request collapsing', () => {
+  function cardKey(repoName: string, number: number): string {
+    return pluginSectionKey('com.openforge.github-sync', `pull-request:owner/${repoName}#${number}`)
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    clearCollapsedSections()
+  })
+
+  function renderTwoPullRequests() {
+    const first = createPullRequest()
+    const second = createPullRequest({
+      id: 99,
+      pr_number: 99,
+      title: 'Second PR',
+      repo_name: 'other',
+      url: 'https://github.com/owner/other/pull/99',
+    })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [first, second]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+    return { first, second, ...renderSection(invoke) }
+  }
+
+  it('gives every pull request its own toggle, expanded by default', async () => {
+    renderTwoPullRequests()
+
+    expect((await screen.findByRole('button', { name: '#42 Test PR' })).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: '#99 Second PR' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('owner/repo')).toBeTruthy()
+  })
+
+  it('collapses one pull request without touching its sibling', async () => {
+    renderTwoPullRequests()
+
+    await fireEvent.click(await screen.findByRole('button', { name: '#42 Test PR' }))
+
+    // The identity row survives: collapsing hides the body, not the pull request.
+    expect(screen.getByRole('button', { name: '#42 Test PR' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('owner/repo')).toBeNull()
+    expect(screen.getByText('owner/other')).toBeTruthy()
+  })
+
+  it('hides the long body of a collapsed pull request', async () => {
+    const pr = createPullRequest()
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pr]
+      if (method === 'getTaskPrComments') return [baseComment]
+      return emptyPollResult
+    })
+    renderSection(invoke)
+
+    expect(await screen.findByText('Please update this code')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: '#42 Test PR' }))
+
+    expect(screen.queryByText('Please update this code')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create a merge commit' })).toBeNull()
+  })
+
+  it('persists per-pull-request collapse under a key namespaced by plugin and repo', async () => {
+    renderTwoPullRequests()
+
+    await fireEvent.click(await screen.findByRole('button', { name: '#42 Test PR' }))
+
+    expect(cardKey('repo', 42)).toBe('plugin:com.openforge.github-sync:pull-request:owner/repo#42')
+    expect(isSectionCollapsed(get(collapsedSections), cardKey('repo', 42))).toBe(true)
+    // Two repositories can hand out the same pull request number, so the repository
+    // has to be part of the key.
+    expect(isSectionCollapsed(get(collapsedSections), cardKey('other', 99))).toBe(false)
+  })
+
+  it('starts collapsed when the store already has that pull request collapsed', async () => {
+    setSectionCollapsed(cardKey('repo', 42), true)
+    renderTwoPullRequests()
+
+    await waitFor(() => expect(screen.getByText('Test PR')).toBeTruthy())
+    expect(screen.queryByText('owner/repo')).toBeNull()
+    expect(screen.getByText('owner/other')).toBeTruthy()
   })
 })

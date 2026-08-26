@@ -9,7 +9,7 @@ import {
   updateTaskSourceTicketUrl,
   writeClipboardText,
 } from '../../lib/ipc'
-import { clearInfoPanelSectionCollapse } from '../../lib/infoPanelSectionState'
+import { clearCollapsedSections } from '@openforge-app/plugin-sdk/collapsibleSectionState'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import {
@@ -134,7 +134,7 @@ function resetTaskInfoPanelTestState(): void {
   vi.mocked(updateTaskSourceTicketUrl).mockResolvedValue(undefined)
   vi.mocked(writeClipboardText).mockResolvedValue(undefined)
   localStorage.clear()
-  clearInfoPanelSectionCollapse()
+  clearCollapsedSections()
   activeSessions.set(new Map())
   ticketPrs.set(new Map())
   mergingTaskIds.set(new Set())
@@ -147,7 +147,10 @@ function resetTaskInfoPanelTestState(): void {
   clearComponentRegistry()
 }
 
-function registerTaskUiSectionPlugin(pluginId = 'plugin.task-context'): string {
+function registerTaskUiSectionPlugin(
+  pluginId = 'plugin.task-context',
+  sections: { id: string, order: number }[] = [{ id: 'context', order: 10 }],
+): string {
   installedPlugins.set(new Map([[
     pluginId,
     {
@@ -168,9 +171,11 @@ function registerTaskUiSectionPlugin(pluginId = 'plugin.task-context'): string {
   enabledPluginIds.set(new Set([pluginId]))
   runtimeContributionSources.set(new Map([[
     pluginId,
-    { pluginId, taskUISections: [{ id: 'context', order: 10 }] },
+    { pluginId, taskUISections: sections },
   ]]))
-  registerRenderableContributionComponent('taskUISections', `${pluginId}:context`, PluginSlotTestView)
+  for (const section of sections) {
+    registerRenderableContributionComponent('taskUISections', `${pluginId}:${section.id}`, PluginSlotTestView)
+  }
   return pluginId
 }
 
