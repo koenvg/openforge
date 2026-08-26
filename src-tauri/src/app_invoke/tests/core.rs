@@ -19,7 +19,7 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         &state,
         "set_config",
         json!({
-            "key": crate::pty_manager::GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG,
+            "key": crate::pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG,
             "value": "true",
         }),
     )
@@ -28,7 +28,7 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         .pty_manager
         .as_ref()
         .expect("PTY manager")
-        .terminal_diagnostics_enabled());
+        .ghostty_terminal_state_enabled());
 
     let project = invoke_ok(
         &state,

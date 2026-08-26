@@ -16,6 +16,7 @@ export function createTerminalSessionLifecycle(
 
   function markPtyStarted(entry: PoolEntry, instanceId: number): void {
     setCurrentPtyInstance(entry, instanceId)
+    entry.spawnPending = false
     entry.ptyActive = true
     entry.needsClear = false
     shellLifecycle.notify(entry.shellSessionKey)
@@ -64,9 +65,11 @@ export function createTerminalSessionLifecycle(
 
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
     entry.currentPtyInstance = instanceId
-    entry.authority = instanceId === null
-      ? null
-      : bindTerminalAuthority(authorityContract, entry.shellSessionKey, instanceId)
+    if (instanceId === null) {
+      entry.authority = null
+    } else if (entry.authority?.ptyInstanceId !== instanceId) {
+      entry.authority = bindTerminalAuthority(authorityContract, entry.shellSessionKey, instanceId)
+    }
   }
 
   function isShellExited(terminalKey: string): boolean {

@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
-#[cfg(test)]
 use std::time::Duration;
 
 const COMMAND_QUEUE_CAPACITY: usize = 64;
@@ -18,7 +17,6 @@ const REPLY_CAPACITY: usize = 64;
 const REPLY_BYTES_CAPACITY: usize = 64 * 1024;
 const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
-#[cfg(test)]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -59,12 +57,12 @@ pub(crate) struct TerminalModelOutputFrame {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TerminalModelEvent {
     Output(TerminalModelOutputFrame),
+    ProtocolReply { instance_id: u64, bytes: Vec<u8> },
     Disabled { instance_id: u64 },
 }
 
 pub(crate) type TerminalModelEventSink = Arc<dyn Fn(TerminalModelEvent) + Send + Sync>;
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PortableTerminalSnapshot {
     pub(crate) instance_id: u64,
@@ -148,7 +146,6 @@ enum TerminalModelCommand {
         cols: u16,
         rows: u16,
     },
-    #[cfg(test)]
     PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
     #[cfg(test)]
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
@@ -231,7 +228,6 @@ impl TerminalModelSession {
         Self::start_internal(session_key, instance_id, options, None)
     }
 
-    #[cfg(test)]
     pub(crate) fn start_with_event_sink(
         session_key: String,
         instance_id: u64,
@@ -304,7 +300,6 @@ impl TerminalModelSession {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn portable_snapshot(&self) -> Result<PortableTerminalSnapshot, String> {
         request_portable_snapshot(&self.tx, &self.state)
     }
@@ -358,7 +353,6 @@ impl TerminalModelSession {
     }
 }
 
-#[cfg(test)]
 fn request_portable_snapshot(
     tx: &mpsc::SyncSender<TerminalModelCommand>,
     state: &TerminalModelState,
@@ -447,7 +441,6 @@ fn run_worker(
                 result
             }
             TerminalModelCommand::Resize { cols, rows } => model.resize(cols, rows),
-            #[cfg(test)]
             TerminalModelCommand::PortableSnapshot(response) => {
                 let result = model
                     .format_portable_vt()
@@ -478,7 +471,14 @@ fn run_worker(
             state.disable(&session_key, instance_id, "command", model_error(error));
             return;
         }
-        state.capture_replies(model.take_protocol_replies());
+        let replies = model.take_protocol_replies();
+        if let Some(event_sink) = &state.event_sink {
+            for bytes in replies {
+                event_sink(TerminalModelEvent::ProtocolReply { instance_id, bytes });
+            }
+        } else {
+            state.capture_replies(replies);
+        }
         if bytes_since_checkpoint >= CHECKPOINT_INTERVAL_BYTES {
             checkpoint_due = true;
         }
@@ -518,6 +518,39 @@ mod tests {
             .any(|part| part == b"before"));
         assert_eq!(session.take_protocol_replies().len(), 1);
         assert!(session.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn authoritative_worker_publishes_ghostty_protocol_replies() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_events = Arc::clone(&captured);
+        let sink: TerminalModelEventSink = Arc::new(move |event| {
+            captured_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(event);
+        });
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
+            "reply-shell".to_string(),
+            91,
+            TerminalModelOptions::new(80, 24),
+            sink,
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"\x1b[6n");
+        session
+            .portable_snapshot()
+            .expect("snapshot request should cross the worker barrier");
+
+        let events = captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            TerminalModelEvent::ProtocolReply { instance_id: 91, bytes }
+                if bytes.starts_with(b"\x1b[") && bytes.ends_with(b"R")
+        )));
     }
 
     #[test]

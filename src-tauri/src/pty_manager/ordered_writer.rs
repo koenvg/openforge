@@ -9,6 +9,7 @@ const WRITE_QUEUE_CAPACITY: usize = 64;
 pub(super) enum PtyWriteSource {
     UserInput,
     XtermQueryResponse,
+    GhosttyQueryResponse,
 }
 
 impl std::fmt::Display for PtyWriteSource {
@@ -16,6 +17,7 @@ impl std::fmt::Display for PtyWriteSource {
         match self {
             Self::UserInput => formatter.write_str("user input"),
             Self::XtermQueryResponse => formatter.write_str("xterm query response"),
+            Self::GhosttyQueryResponse => formatter.write_str("Ghostty query response"),
         }
     }
 }
@@ -157,6 +159,20 @@ impl OrderedPtyWriter {
             session_key,
             instance_id,
             PtyWriteSource::XtermQueryResponse,
+            bytes,
+        )
+    }
+
+    pub(super) fn write_ghostty_query_response(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+        bytes: &[u8],
+    ) -> Result<(), OrderedPtyWriteError> {
+        self.shared.write(
+            session_key,
+            instance_id,
+            PtyWriteSource::GhosttyQueryResponse,
             bytes,
         )
     }

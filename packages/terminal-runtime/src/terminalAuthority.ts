@@ -1,14 +1,24 @@
-export interface XtermAuthoritativeTerminalContract {
+interface TerminalAuthorityContractShape {
+  readonly parsedStateOwner: 'xterm' | 'ghostty'
+  readonly queryResponseOwner: 'xterm' | 'ghostty'
+  readonly replayOwner: 'pty-byte-buffer' | 'ghostty-snapshot'
+  readonly snapshotOwner: 'ghostty' | null
+}
+
+export interface XtermAuthoritativeTerminalContract extends TerminalAuthorityContractShape {
   readonly mode: 'xterm-authoritative'
   readonly parsedStateOwner: 'xterm'
   readonly queryResponseOwner: 'xterm'
   readonly replayOwner: 'pty-byte-buffer'
   readonly snapshotOwner: null
-  readonly diagnosticModel: {
-    readonly mayObservePtyBytes: true
-    readonly maySendQueryResponses: false
-    readonly mayProvideReplay: false
-  }
+}
+
+export interface GhosttyAuthoritativeTerminalContract extends TerminalAuthorityContractShape {
+  readonly mode: 'ghostty-authoritative'
+  readonly parsedStateOwner: 'ghostty'
+  readonly queryResponseOwner: 'ghostty'
+  readonly replayOwner: 'ghostty-snapshot'
+  readonly snapshotOwner: 'ghostty'
 }
 
 export const XTERM_AUTHORITATIVE_TERMINAL_CONTRACT: XtermAuthoritativeTerminalContract = Object.freeze({
@@ -17,14 +27,19 @@ export const XTERM_AUTHORITATIVE_TERMINAL_CONTRACT: XtermAuthoritativeTerminalCo
   queryResponseOwner: 'xterm',
   replayOwner: 'pty-byte-buffer',
   snapshotOwner: null,
-  diagnosticModel: Object.freeze({
-    mayObservePtyBytes: true,
-    maySendQueryResponses: false,
-    mayProvideReplay: false,
-  }),
 })
 
-export type TerminalAuthorityContract = XtermAuthoritativeTerminalContract
+export const GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT: GhosttyAuthoritativeTerminalContract = Object.freeze({
+  mode: 'ghostty-authoritative',
+  parsedStateOwner: 'ghostty',
+  queryResponseOwner: 'ghostty',
+  replayOwner: 'ghostty-snapshot',
+  snapshotOwner: 'ghostty',
+})
+
+export type TerminalAuthorityContract =
+  | XtermAuthoritativeTerminalContract
+  | GhosttyAuthoritativeTerminalContract
 
 export interface TerminalAuthorityBinding {
   readonly shellSessionKey: string

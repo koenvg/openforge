@@ -69,6 +69,43 @@ describe('terminal runtime acquisition', () => {
   })
 
 
+  it('renders a Ghostty-owned backend snapshot and later model output through xterm', async () => {
+    const terminalKey = 'T-ghostty-shell-0'
+    const host = createHost()
+    host.getPtyBuffer = async () => ({
+      authority: 'ghostty-authoritative',
+      buffer: null,
+      snapshot: {
+        instanceId: 7,
+        watermark: 1,
+        data: btoa('ghostty snapshot'),
+      },
+      isLive: true,
+      instanceId: 7,
+    })
+    const runtime = createTerminalRuntime(host)
+
+    const entry = await runtime.acquire(terminalKey)
+    host.emit(`pty-model-output-${terminalKey}`, {
+      instance_id: 7,
+      sequence: 2,
+      data: btoa(' later output'),
+    })
+
+    expect(entry.terminalStateSource).toBe('ghostty-snapshot')
+    expect(entry.authority?.contract.mode).toBe('ghostty-authoritative')
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Uint8Array),
+      expect.any(Function),
+    )
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Uint8Array),
+      expect.any(Function),
+    )
+  })
+
   it('keeps xterm authoritative when the diagnostic model fails', async () => {
     const terminalKey = 'T-failed-shell-0'
     const host = createHost()

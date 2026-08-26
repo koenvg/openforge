@@ -5,16 +5,16 @@
 	interface Props {
 		isDarkMode: boolean
 		onThemeToggle: () => void
-		ghosttyTerminalDiagnosticsEnabled: boolean
-		onGhosttyTerminalDiagnosticsChange: (enabled: boolean) => void
+		ghosttyTerminalStateEnabled: boolean
+		onGhosttyTerminalStateChange: (enabled: boolean) => void
 		disabled?: boolean
 	}
 
 	const {
 		isDarkMode,
 		onThemeToggle,
-		ghosttyTerminalDiagnosticsEnabled,
-		onGhosttyTerminalDiagnosticsChange,
+		ghosttyTerminalStateEnabled,
+		onGhosttyTerminalStateChange,
 		disabled = false,
 	}: Props = $props()
 </script>
@@ -38,16 +38,16 @@
 
 		<label class="flex items-center justify-between gap-4 cursor-pointer">
 			<div class="flex flex-col gap-0.5">
-				<span class="text-sm text-base-content">Ghostty terminal diagnostics <span class="badge badge-warning badge-xs">Experimental</span></span>
-				<span class="text-[0.7rem] text-base-content/50">Observe PTY bytes with Ghostty for diagnostics. xterm remains the state and query-response authority.</span>
+				<span class="text-sm text-base-content">Ghostty terminal model <span class="badge badge-warning badge-xs">Experimental</span></span>
+				<span class="text-[0.7rem] text-base-content/50">Use Ghostty for backend terminal state and query responses while xterm continues rendering. Applies to new terminal sessions.</span>
 			</div>
 			<input
 				type="checkbox"
 				class="toggle toggle-primary toggle-sm"
-				checked={ghosttyTerminalDiagnosticsEnabled}
+				checked={ghosttyTerminalStateEnabled}
 				{disabled}
-				onchange={(event) => onGhosttyTerminalDiagnosticsChange(event.currentTarget.checked)}
-				data-testid="ghostty-terminal-diagnostics-toggle"
+				onchange={(event) => onGhosttyTerminalStateChange(event.currentTarget.checked)}
+				data-testid="ghostty-terminal-state-toggle"
 			/>
 		</label>
 	</div>

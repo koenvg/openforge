@@ -19,10 +19,28 @@ interface TrustedPluginPtyOutputPayload {
 interface TrustedPluginPtyExitPayload {
   instance_id: number
 }
+
+interface TrustedPluginTerminalModelOutputPayload {
+  data: string
+  instance_id: number
+  sequence: number
+}
+
+interface TrustedPluginTerminalModelDisabledPayload {
+  instance_id: number
+}
+
+interface TrustedPluginTerminalSnapshot {
+  data: string
+  instanceId: number
+  watermark: number
+}
 interface TrustedPluginPtyBufferState {
+  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   isLive: boolean
   instanceId: number | null
+  snapshot?: TrustedPluginTerminalSnapshot | null
 }
 
 interface IndexedShellRequest {
@@ -50,6 +68,11 @@ function parseIndexedShellSessionKey(shellSessionKey: string): IndexedShellReque
     throw new Error(`[terminal plugin] Expected indexed terminal key, received: ${shellSessionKey}`)
   }
   return { taskId: parsed.taskId, terminalIndex: parsed.terminalIndex }
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value)
+  return Uint8Array.from(binary, character => character.charCodeAt(0))
 }
 
 export function createTrustedPluginTerminalTransport(
@@ -90,27 +113,33 @@ export function createTrustedPluginTerminalTransport(
   ): Promise<TerminalTransportDisposable> {
     ensureActive()
     parseIndexedShellSessionKey(shellSessionKey)
-    const port = getPort()
-    const outputSubscription = port.events.onGlobal<TrustedPluginPtyOutputPayload>(
-      `openforge.pty-output-${shellSessionKey}`,
-      payload => handlers.onOutput({
-        data: payload.data,
-        ptyInstanceId: payload.instance_id,
-      }),
-    )
+    const events = getPort().events
+    const subscriptions: TrustedPluginDisposable[] = []
     try {
-      ensureActive()
-      const exitSubscription = port.events.onGlobal<TrustedPluginPtyExitPayload>(
+      subscriptions.push(events.onGlobal<TrustedPluginPtyOutputPayload>(
+        `openforge.pty-output-${shellSessionKey}`,
+        payload => handlers.onOutput({ data: payload.data, ptyInstanceId: payload.instance_id }),
+      ))
+      subscriptions.push(events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
+        `openforge.pty-model-output-${shellSessionKey}`,
+        payload => handlers.onModelOutput({
+          data: decodeBase64(payload.data),
+          ptyInstanceId: payload.instance_id,
+          sequence: payload.sequence,
+        }),
+      ))
+      subscriptions.push(events.onGlobal<TrustedPluginTerminalModelDisabledPayload>(
+        `openforge.pty-model-disabled-${shellSessionKey}`,
+        payload => handlers.onModelDisabled({ ptyInstanceId: payload.instance_id }),
+      ))
+      subscriptions.push(events.onGlobal<TrustedPluginPtyExitPayload>(
         `openforge.pty-exit-${shellSessionKey}`,
         payload => handlers.onExit({ ptyInstanceId: payload.instance_id }),
-      )
-      if (disposed) {
-        void exitSubscription.dispose()
-        throw new Error('Trusted Plugin TerminalTransport is disposed')
-      }
-      return track([outputSubscription, exitSubscription])
+      ))
+      ensureActive()
+      return track(subscriptions)
     } catch (error) {
-      void outputSubscription.dispose()
+      for (const subscription of subscriptions) void subscription.dispose()
       throw error
     }
   }
@@ -134,9 +163,17 @@ export function createTrustedPluginTerminalTransport(
     ensureActive()
     const replay = await getPort().shell.getBuffer(parseIndexedShellSessionKey(shellSessionKey))
     return {
+      authority: replay.authority,
       data: replay.buffer,
       isLive: replay.isLive,
       ptyInstanceId: replay.instanceId,
+      snapshot: replay.snapshot
+        ? {
+            data: decodeBase64(replay.snapshot.data),
+            ptyInstanceId: replay.snapshot.instanceId,
+            watermark: replay.snapshot.watermark,
+          }
+        : undefined,
     }
   }
 

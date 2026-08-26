@@ -64,17 +64,14 @@ fn terminal_environment_advertises_iterm_only_when_requested() {
 }
 
 #[test]
-fn terminal_diagnostics_cannot_change_xterm_authority() {
+fn ghostty_feature_flag_selects_ghostty_as_terminal_state_authority() {
     let manager = PtyManager::new();
 
-    manager.set_terminal_diagnostics_enabled(true);
+    manager.set_ghostty_terminal_state_enabled(true);
 
     let authority = manager.terminal_authority_contract();
-    assert_eq!(authority.parsed_state_owner, ParsedStateOwner::Xterm);
-    assert_eq!(authority.query_response_owner, QueryResponseOwner::Xterm);
-    assert_eq!(authority.replay_owner, ReplayOwner::PtyByteBuffer);
-    assert_eq!(authority.snapshot_owner, SnapshotOwner::None);
-    assert!(authority.diagnostic_model.may_observe_pty_bytes);
-    assert!(!authority.diagnostic_model.may_send_query_responses);
-    assert!(!authority.diagnostic_model.may_provide_replay);
+    assert_eq!(authority.parsed_state_owner, ParsedStateOwner::Ghostty);
+    assert_eq!(authority.query_response_owner, QueryResponseOwner::Ghostty);
+    assert_eq!(authority.replay_owner, ReplayOwner::GhosttySnapshot);
+    assert_eq!(authority.snapshot_owner, SnapshotOwner::Ghostty);
 }

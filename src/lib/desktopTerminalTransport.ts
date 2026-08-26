@@ -18,10 +18,28 @@ interface DesktopPtyOutputPayload {
 interface DesktopPtyExitPayload {
   instance_id: number
 }
+
+interface DesktopTerminalModelOutputPayload {
+  data: string
+  instance_id: number
+  sequence: number
+}
+
+interface DesktopTerminalModelDisabledPayload {
+  instance_id: number
+}
+
+interface DesktopTerminalSnapshot {
+  data: string
+  instanceId: number
+  watermark: number
+}
 export interface DesktopPtyBufferState {
+  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   isLive: boolean
   instanceId: number | null
+  snapshot?: DesktopTerminalSnapshot
 }
 
 export interface DesktopTerminalTransportPort {
@@ -33,6 +51,11 @@ export interface DesktopTerminalTransportPort {
   writePty(shellSessionKey: string, data: string): Promise<void>
   writeTerminalQueryResponse(response: TerminalQueryResponseWrite): Promise<void>
   resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void>
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value)
+  return Uint8Array.from(binary, character => character.charCodeAt(0))
 }
 
 export function createDesktopTerminalTransport(
@@ -64,38 +87,34 @@ export function createDesktopTerminalTransport(
     handlers: TerminalSessionTransportHandlers,
   ): Promise<TerminalTransportDisposable> {
     ensureActive()
-    const unlistenOutput = await port.listenEvent(
-      `pty-output-${shellSessionKey}`,
-      (event) => {
-        const payload = event.payload as DesktopPtyOutputPayload
-        handlers.onOutput({
-          data: payload.data,
-          ptyInstanceId: payload.instance_id,
-        })
-      },
-    )
+    const unlisteners: Array<() => void> = []
     try {
+      unlisteners.push(await port.listenEvent(`pty-output-${shellSessionKey}`, (event) => {
+        const payload = event.payload as DesktopPtyOutputPayload
+        handlers.onOutput({ data: payload.data, ptyInstanceId: payload.instance_id })
+      }))
+      unlisteners.push(await port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
+        const payload = event.payload as DesktopTerminalModelOutputPayload
+        handlers.onModelOutput({
+          data: decodeBase64(payload.data),
+          ptyInstanceId: payload.instance_id,
+          sequence: payload.sequence,
+        })
+      }))
+      unlisteners.push(await port.listenEvent(`pty-model-disabled-${shellSessionKey}`, (event) => {
+        const payload = event.payload as DesktopTerminalModelDisabledPayload
+        handlers.onModelDisabled({ ptyInstanceId: payload.instance_id })
+      }))
+      unlisteners.push(await port.listenEvent(`pty-exit-${shellSessionKey}`, (event) => {
+        const payload = event.payload as DesktopPtyExitPayload
+        handlers.onExit({ ptyInstanceId: payload.instance_id })
+      }))
       ensureActive()
-      const unlistenExit = await port.listenEvent(
-        `pty-exit-${shellSessionKey}`,
-        (event) => {
-          const payload = event.payload as DesktopPtyExitPayload
-          handlers.onExit({ ptyInstanceId: payload.instance_id })
-        },
-      )
-      if (disposed) {
-        unlistenExit()
-        throw new Error('Desktop TerminalTransport is disposed')
-      }
       return track(() => {
-        try {
-          unlistenOutput()
-        } finally {
-          unlistenExit()
-        }
+        for (const unlisten of unlisteners.reverse()) unlisten()
       })
     } catch (error) {
-      unlistenOutput()
+      for (const unlisten of unlisteners.reverse()) unlisten()
       throw error
     }
   }
@@ -122,9 +141,17 @@ export function createDesktopTerminalTransport(
       ensureActive()
       const replay = await port.getPtyBuffer(shellSessionKey)
       return {
+        authority: replay.authority,
         data: replay.buffer,
         isLive: replay.isLive,
         ptyInstanceId: replay.instanceId,
+        snapshot: replay.snapshot
+          ? {
+              data: decodeBase64(replay.snapshot.data),
+              ptyInstanceId: replay.snapshot.instanceId,
+              watermark: replay.snapshot.watermark,
+            }
+          : undefined,
       }
     },
     async writeUserInput(shellSessionKey, data) {

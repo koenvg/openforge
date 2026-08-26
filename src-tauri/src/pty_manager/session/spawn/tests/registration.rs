@@ -57,6 +57,7 @@ async fn stale_session_registration_reaps_the_unpublished_process() {
                 cols: 80,
                 rows: 24,
                 terminal_image_protocol: None,
+                app_event_tx: None,
             },
         )
         .expect("process creation stage should succeed");

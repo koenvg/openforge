@@ -136,11 +136,13 @@ vi.mock('@xterm/addon-image', () => ({
 }))
 
 interface TestReplayState {
+  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer?: string | null
   data?: string | null
   isLive: boolean
   instanceId?: number | null
   ptyInstanceId?: number | null
+  snapshot?: DiagnosticTerminalSnapshot | null
 }
 
 interface TestTransport extends TerminalTransport {
@@ -183,6 +185,11 @@ function createDeferredGate(): { promise: Promise<void>; release: () => void } {
   return { promise, release }
 }
 
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value)
+  return Uint8Array.from(binary, character => character.charCodeAt(0))
+}
+
 export function createHost(): TestHost {
   const sessionHandlers = new Map<string, Set<TerminalSessionTransportHandlers>>()
   const connectionRestoredHandlers = new Set<() => void>()
@@ -209,6 +216,8 @@ export function createHost(): TestHost {
   const transport: TestTransport = {
     subscribeSession: vi.fn(async (shellSessionKey: string, handlers: TerminalSessionTransportHandlers) => {
       await registerEvent(`pty-output-${shellSessionKey}`)
+      await registerEvent(`pty-model-output-${shellSessionKey}`)
+      await registerEvent(`pty-model-disabled-${shellSessionKey}`)
       await registerEvent(`pty-exit-${shellSessionKey}`)
       const current = sessionHandlers.get(shellSessionKey) ?? new Set()
       current.add(handlers)
@@ -223,9 +232,17 @@ export function createHost(): TestHost {
     readReplay: vi.fn(async (shellSessionKey: string) => {
       const replay = await host.getPtyBuffer(shellSessionKey)
       return {
+        authority: replay.authority,
         data: replay.data ?? replay.buffer ?? null,
         isLive: replay.isLive,
         ptyInstanceId: replay.ptyInstanceId ?? replay.instanceId ?? null,
+        snapshot: replay.snapshot
+          ? {
+              data: decodeBase64(replay.snapshot.data),
+              ptyInstanceId: replay.snapshot.instanceId,
+              watermark: replay.snapshot.watermark,
+            }
+          : undefined,
       }
     }),
     writeUserInput: vi.fn((shellSessionKey: string, data: string) => host.writePty(shellSessionKey, data)),
@@ -270,6 +287,26 @@ export function createHost(): TestHost {
         if (ptyInstanceId === undefined) return
         for (const handlers of sessionHandlers.get(eventName.slice(outputPrefix.length)) ?? []) {
           handlers.onOutput({ data: raw.data, ptyInstanceId })
+        }
+        return
+      }
+      const modelOutputPrefix = 'pty-model-output-'
+      if (eventName.startsWith(modelOutputPrefix)) {
+        const raw = payload as { data: string; instance_id?: number; ptyInstanceId?: number; sequence: number }
+        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
+        if (ptyInstanceId === undefined) return
+        for (const handlers of sessionHandlers.get(eventName.slice(modelOutputPrefix.length)) ?? []) {
+          handlers.onModelOutput({ data: decodeBase64(raw.data), ptyInstanceId, sequence: raw.sequence })
+        }
+        return
+      }
+      const modelDisabledPrefix = 'pty-model-disabled-'
+      if (eventName.startsWith(modelDisabledPrefix)) {
+        const raw = payload as { instance_id?: number; ptyInstanceId?: number }
+        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
+        if (ptyInstanceId === undefined) return
+        for (const handlers of sessionHandlers.get(eventName.slice(modelDisabledPrefix.length)) ?? []) {
+          handlers.onModelDisabled({ ptyInstanceId })
         }
         return
       }

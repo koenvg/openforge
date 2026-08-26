@@ -1,5 +1,6 @@
-use super::super::authority::TerminalAuthorityContract;
+use super::super::authority::{ParsedStateOwner, TerminalAuthorityContract};
 use crate::terminal_model::TerminalModelSession;
+use base64::Engine;
 use log::{error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -754,17 +755,76 @@ impl PtyManager {
     }
 
     pub async fn pty_buffer_state(&self, session_key: &str) -> PtyBufferState {
-        let instance_id = self
+        let live_session = self
             .terminal_sessions
             .sessions
             .lock()
             .await
             .get(session_key)
-            .map(|session| session.instance_id);
+            .map(|session| {
+                (
+                    session.instance_id,
+                    session.authority,
+                    session.terminal_model.as_ref().map(Arc::clone),
+                )
+            });
+
+        let Some((instance_id, authority, terminal_model)) = live_session else {
+            return PtyBufferState {
+                authority: None,
+                buffer: self.get_pty_buffer(session_key).await,
+                snapshot: None,
+                is_live: false,
+                instance_id: None,
+            };
+        };
+
+        if authority.parsed_state_owner == ParsedStateOwner::Ghostty {
+            let snapshot = if let Some(terminal_model) = terminal_model {
+                match tokio::task::spawn_blocking(move || terminal_model.portable_snapshot()).await
+                {
+                    Ok(Ok(snapshot)) if snapshot.instance_id == instance_id => {
+                        Some(super::super::TerminalViewSnapshot {
+                            instance_id: snapshot.instance_id,
+                            watermark: snapshot.watermark,
+                            data: base64::engine::general_purpose::STANDARD
+                                .encode(snapshot.portable_vt),
+                        })
+                    }
+                    Ok(Ok(_)) => None,
+                    Ok(Err(error)) => {
+                        warn!(
+                            "[terminal-model] key={} instance={} snapshot unavailable: {}",
+                            session_key, instance_id, error
+                        );
+                        None
+                    }
+                    Err(error) => {
+                        warn!(
+                            "[terminal-model] key={} instance={} snapshot worker failed: {}",
+                            session_key, instance_id, error
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+            return PtyBufferState {
+                authority: Some("ghostty-authoritative"),
+                buffer: None,
+                snapshot,
+                is_live: true,
+                instance_id: Some(instance_id),
+            };
+        }
+
         PtyBufferState {
+            authority: Some("xterm-authoritative"),
             buffer: self.get_pty_buffer(session_key).await,
-            is_live: instance_id.is_some(),
-            instance_id,
+            snapshot: None,
+            is_live: true,
+            instance_id: Some(instance_id),
         }
     }
 

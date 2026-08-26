@@ -1,105 +1,78 @@
 # Terminal state and protocol-response paths
 
-OpenForge has one production terminal mode: xterm owns parsed terminal state and terminal-generated query responses. The Rust sidecar owns PTY processes, raw byte replay, and instance validation. The optional Ghostty model is diagnostic only.
+OpenForge supports two explicit terminal authority modes. Both render through xterm and retain the same keyboard, IME, selection, link, image, accessibility, and presentation paths.
 
-The authority contract exists in two typed forms:
+- `xterm-authoritative`: xterm owns parsed state and terminal-generated replies; the Rust PTY byte buffer supplies replay.
+- `ghostty-authoritative`: the Rust sidecar's `libghostty-vt` model owns parsed state, restoration snapshots, and terminal-generated replies; xterm renders the model's portable VT snapshot and later output bytes.
 
-- TypeScript: `XTERM_AUTHORITATIVE_TERMINAL_CONTRACT` in `packages/terminal-runtime/src/terminalAuthority.ts`
-- Rust: `TerminalAuthorityContract::xterm_authoritative()` in `src-tauri/src/pty_manager/authority.rs`
+The experimental `ghostty_terminal_state_enabled` setting selects the authority for newly created Terminal Sessions. Existing sessions retain the contract captured at spawn.
 
-Both contracts name xterm as the parsed-state owner and query-response owner. They name the PTY byte buffer as replay owner and declare that no component owns a terminal snapshot path. The diagnostic model may observe PTY bytes. It may not send query responses or provide replay.
+The contracts are typed in both runtimes:
+
+- TypeScript: `XTERM_AUTHORITATIVE_TERMINAL_CONTRACT` and `GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT` in `packages/terminal-runtime/src/terminalAuthority.ts`
+- Rust: `TerminalAuthorityContract::{xterm_authoritative, ghostty_authoritative}` in `src-tauri/src/pty_manager/authority.rs`
 
 ## Transport seam
 
-Terminal Runtime receives terminal traffic only through `TerminalTransport`. The interface uses Shell Session Keys and camelCase domain events. It provides one session subscription for output and exit, one connection-restored subscription, replay reads, separate user-input and query-response writes, resize, and disposal.
+Terminal Runtime receives terminal traffic only through `TerminalTransport`. The interface uses Shell Session Keys and camelCase domain events. Its session subscription carries raw PTY output, sequenced Ghostty model output, model-disable signals, and exits. It also provides connection-restored subscriptions, restoration reads, separate user-input and query-response writes, resize, and disposal.
 
 The desktop adapter translates preload and Electron IPC event names, Rust-shaped payloads, and PTY commands. The Trusted Plugin adapter translates `openforge.*` global events, indexed Shell Session Keys, and frontend shell capabilities. Terminal Runtime does not know those event names, capability calls, credentials, or connection details.
 
-Each Terminal Runtime owns its adapter. The core Agent Terminal and built-in Terminal plugin still use separate Terminal Runtime instances and separate session maps. An adapter may multiplex many Shell Session Keys. A restored connection is only a signal; Terminal Runtime selects active sessions and requests their replay.
+Each Terminal Runtime owns its adapter. The core Agent Terminal and built-in Terminal plugin still use separate Terminal Runtime instances and separate session maps. An adapter may multiplex many Shell Session Keys. A restored connection is only a signal; Terminal Runtime selects active sessions and requests their restoration state.
 
 ## Session identity
 
-Every live authority binding contains:
+Every live authority binding contains one Shell Session Key, one PTY instance ID, and one authority contract. Reusing a Shell Session Key after replacement does not reuse the previous binding.
 
-- one Shell Session Key
-- one PTY instance ID
-- the selected authority contract
+Output, snapshots, replies, resize operations, and exits remain scoped to the PTY instance. Late data from a replaced instance cannot mutate or write to its successor.
 
-A Shell Session Key identifies the concrete agent terminal or indexed shell session. The PTY instance ID identifies its current process generation. Reusing a Shell Session Key after replacement does not reuse the old authority binding.
-
-`get_pty_buffer` returns `buffer`, `isLive`, and `instanceId`. Terminal Runtime binds replay and subsequent output to that instance. Live output with another instance ID is discarded.
-
-## Agent terminal path
+## xterm-authoritative path
 
 ```text
-agent PTY read
-  -> Rust raw-byte reader
-  -> optional diagnostic Ghostty feed
-  -> Rust UTF-8 event batching and raw replay buffer
+PTY read
+  -> Rust UTF-8 event batching and bounded raw replay buffer
   -> pty-output-<Shell Session Key> with PTY instance ID
-  -> desktop TerminalTransport adapter
+  -> desktop or Trusted Plugin TerminalTransport adapter
   -> normalized output event
-  -> desktop Terminal Runtime
+  -> Terminal Runtime instance check
   -> xterm parser and renderer
 ```
 
-On initial acquisition or app-event reconnect, Terminal Runtime requests the PTY byte replay. xterm parses that replay before later live bytes. If the PTY is replaced while the replay request is pending, Terminal Runtime discards the completed replay because its requested instance no longer matches.
+Initial acquisition and reconnect request `get_pty_buffer`. Terminal Runtime replays the retained bytes and then applies live output for the same PTY instance.
 
-An ended agent terminal may use persisted raw replay when no live PTY buffer remains. That replay has no live instance and cannot produce a response accepted by the PTY boundary.
+xterm-generated query responses are separated from user input and sent through `TerminalTransport.writeQueryResponse`. The desktop or Trusted Plugin adapter invokes `pty_write_terminal_query_response`; Rust checks the Shell Session Key, PTY instance, and authority contract before the ordered PTY writer accepts the response.
 
-## Terminal plugin shell path
-
-```text
-plugin shell PTY read
-  -> Rust raw-byte reader
-  -> optional diagnostic Ghostty feed
-  -> Rust UTF-8 event batching and raw replay buffer
-  -> openforge.pty-output-<Shell Session Key>
-  -> Trusted Plugin TerminalTransport adapter
-  -> normalized output event
-  -> Terminal plugin Terminal Runtime
-  -> xterm parser and renderer
-```
-
-The built-in Terminal plugin uses the same Terminal Runtime package and the same xterm authority contract as agent terminals. Its `ShellAPI.getBuffer` result includes the PTY instance ID. The plugin does not select authority from renderer type, API presence, or the Ghostty diagnostic setting.
-
-## Parser and partial escape sequences
-
-xterm is the only production parser. Terminal Runtime sends each replay or live output write to xterm with the matching PTY instance ID. The xterm adapter keeps that ID while xterm parses the write. This includes escape sequences split across multiple writes.
-
-A diagnostic model receives the original PTY bytes independently. Its parse success or failure does not change xterm state, replay selection, or response routing.
-
-## Generated terminal responses
-
-xterm's `onData` channel contains keyboard input and terminal-generated responses. The xterm adapter classifies known query-response forms and sends them through separate typed callbacks:
+## Ghostty-authoritative path
 
 ```text
-PTY query bytes
-  -> xterm parser
-  -> xterm-generated response with source PTY instance ID
-  -> Terminal Runtime authority check
-  -> TerminalTransport.writeQueryResponse
-  -> desktop or Trusted Plugin adapter
-  -> pty_write_terminal_query_response IPC or shell capability
-  -> Rust current-instance check
-  -> ordered PTY writer
+PTY read
+  -> libghostty-vt actor
+     -> canonical parsed terminal state
+     -> sequenced output frame
+     -> terminal-generated protocol reply
+  -> pty-model-output-<Shell Session Key>
+  -> desktop or Trusted Plugin TerminalTransport adapter
+  -> normalized model-output event
+  -> Terminal Runtime instance and sequence checks
+  -> xterm renderer
 ```
 
-Keyboard input continues through `writePty`. Query responses never use that unscoped path. Rust rejects a response if its Shell Session Key is absent or its PTY instance ID is not current. A late response from a replaced xterm generation cannot reach the successor PTY.
+The bytes rendered live by xterm are the same PTY bytes, but they are published only after Ghostty has accepted them. xterm therefore remains the renderer without becoming the backend state authority.
 
-The Ghostty diagnostic worker drains generated responses into a bounded diagnostic-only buffer. It has no PTY writer, desktop event sink, replay route, or public snapshot route.
+Ghostty's `on_pty_write` replies go directly through the Shell Session Key and PTY-instance-scoped ordered writer. Terminal Runtime drops xterm-generated replies in this mode, so a query has one response owner.
 
-## Replay and snapshot rules
+## Snapshot and reconnect
 
-- The Rust PTY byte buffer is the only replay authority.
-- xterm's in-memory parsed state remains authoritative while its Terminal Runtime entry lives.
-- OpenForge exposes no desktop terminal-view snapshot command in this mode.
-- Ghostty native and portable snapshots remain internal diagnostic and test artifacts. Terminal Runtime cannot request or apply them.
-- Reconnect replay captures the expected PTY instance before I/O and discards the result after replacement.
-- Raw output events, exits, and query responses all carry or verify the PTY instance.
+`get_pty_buffer` returns a discriminated authority mode. A Ghostty-authoritative live session returns a portable VT snapshot containing:
 
-## Attachments
+- the PTY instance ID
+- the Ghostty actor's output watermark
+- base64-encoded VT restoration bytes formatted by `libghostty-vt`
 
-A Terminal View Attachment mounts the one xterm view owned by its Terminal Runtime entry. Concurrent acquisition of the same Shell Session Key resolves to the same entry and one query-response subscription. Moving or detaching the view does not create another parser or response authority.
+Terminal Runtime registers transport listeners before requesting restoration. It bootstraps xterm from the snapshot, discards frames at or below the watermark, and applies contiguous later frames. A sequence gap requests a fresh Ghostty snapshot rather than replaying OpenForge's raw byte buffer as canonical state.
 
-Companion attachments consume the Rust PTY byte stream and use the current PTY instance. They do not parse queries for response generation and cannot become terminal replay authority.
+Completed Agent Sessions may still display persisted raw replay after their live Terminal Session has ended. That replay is historical presentation data and cannot generate a reply accepted by a PTY.
+
+## Failure behavior
+
+The modes never mix response or restoration owners. A Ghostty-authoritative session does not silently fall back to xterm authority when its model disables; the view stops accepting interaction for that PTY instance. A dedicated follow-up covers terminating or explicitly recovering the affected Terminal Session.

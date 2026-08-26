@@ -117,6 +117,8 @@ export function createTerminalAcquisition({
       entry,
       transport.subscribeSession(terminalKey, {
         onOutput: event => terminalStateView.handlePtyOutput(entry, event),
+        onModelOutput: event => terminalStateView.handleTerminalModelOutput(entry, event),
+        onModelDisabled: event => terminalStateView.handleTerminalModelDisabled(entry, event),
         onExit: event => {
           if (entry.currentPtyInstance !== null
             && event.ptyInstanceId !== entry.currentPtyInstance) return

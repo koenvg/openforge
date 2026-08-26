@@ -20,7 +20,7 @@ describe("terminalPool reconnect", () => {
 
 	it("pty-output listener writes to terminal", async () => {
 		const entry = await acquire("task-10");
-		markShellPtyStarted(entry, 42);
+		await markShellPtyStarted(entry, 42);
 		const { write: writeSpy } = getTerminalMocks(entry);
 
 		const outputCb = getListenCallback("pty-output-task-10");
@@ -33,7 +33,7 @@ describe("terminalPool reconnect", () => {
 	it("pty-output listener ignores stale instance ids", async () => {
 		const entry = await acquire("task-10-stale-output");
 		const { write: writeSpy } = getTerminalMocks(entry);
-		markShellPtyStarted(entry, 2);
+		await markShellPtyStarted(entry, 2);
 
 		const outputCb = getListenCallback("pty-output-task-10-stale-output");
 		outputCb({ payload: { data: "old output", instance_id: 1 } });
@@ -79,7 +79,7 @@ describe("terminalPool reconnect", () => {
 	it("pty-exit listener ignores stale instance ids", async () => {
 		const entry = await acquire("task-11-stale-exit");
 		entry.ptyActive = true;
-		markShellPtyStarted(entry, 2);
+		await markShellPtyStarted(entry, 2);
 
 		const exitCb = getListenCallback("pty-exit-task-11-stale-exit");
 		exitCb({ payload: { instance_id: 1 } });
@@ -92,7 +92,7 @@ describe("terminalPool reconnect", () => {
 		const entry = await acquire("task-11-lifecycle-subscribe");
 		const listener = vi.fn();
 		entry.ptyActive = true;
-		markShellPtyStarted(entry, 2);
+		await markShellPtyStarted(entry, 2);
 
 		const unsubscribe = subscribeShellLifecycle("task-11-lifecycle-subscribe", listener);
 		const exitCb = getListenCallback("pty-exit-task-11-lifecycle-subscribe");
@@ -114,7 +114,7 @@ describe("terminalPool reconnect", () => {
 
 	it("needsClear causes terminal.reset on next pty-output", async () => {
 		const entry = await acquire("task-12");
-		markShellPtyStarted(entry, 42);
+		await markShellPtyStarted(entry, 42);
 		entry.needsClear = true;
 		const { reset: resetSpy, write: writeSpy } = getTerminalMocks(entry);
 
@@ -166,7 +166,7 @@ describe("terminalPool reconnect", () => {
 		focusSpy.mockClear();
 		vi.mocked(resizePty).mockClear();
 
-		restorePtyInstance("task-reactivate", 42);
+		await restorePtyInstance("task-reactivate", 42);
 		await vi.waitFor(() => expect(fitSpy).toHaveBeenCalledTimes(1));
 
 		expect(fitSpy).toHaveBeenCalledTimes(1);

@@ -1,12 +1,16 @@
 import type { TerminalAuthorityBinding } from './terminalAuthority'
-import type { TerminalOutputEvent, TerminalTransportDisposable } from './terminalTransport'
+import type {
+  TerminalModelOutputEvent,
+  TerminalOutputEvent,
+  TerminalTransportDisposable,
+} from './terminalTransport'
 import type { TerminalView, TerminalViewDisposable } from './terminalView'
 import type { Readable } from 'svelte/store'
 import type { ThemeMode } from './theme'
 
 export type TerminalRuntimeUnlistenFn = () => void
 
-export type TerminalStateSource = 'bootstrapping' | 'pty-byte-replay'
+export type TerminalStateSource = 'bootstrapping' | 'pty-byte-replay' | 'ghostty-snapshot'
 
 export interface TerminalRuntimeEnvironment {
   openLink(shellSessionKey: string, url: string): Promise<void>
@@ -31,6 +35,8 @@ export interface PoolEntry {
   authority: TerminalAuthorityBinding | null
   terminalStateSource: TerminalStateSource
   pendingPtyOutput: TerminalOutputEvent[]
+  terminalModelSequence: number | null
+  pendingTerminalModelOutput: TerminalModelOutputEvent[]
   terminalReplayRecovery: Promise<void> | null
   hasOutput: boolean
 }

@@ -1,18 +1,36 @@
-import type { TerminalQueryResponseWrite } from './terminalAuthority'
+import type { TerminalAuthorityContract, TerminalQueryResponseWrite } from './terminalAuthority'
 
 export interface TerminalGeometry {
   cols: number
   rows: number
 }
 
+export interface TerminalSnapshot {
+  data: Uint8Array
+  ptyInstanceId: number
+  watermark: number
+}
+
 export interface TerminalReplay {
+  authority?: TerminalAuthorityContract['mode']
   data: string | null
   isLive: boolean
   ptyInstanceId: number | null
+  snapshot?: TerminalSnapshot
 }
 
 export interface TerminalOutputEvent {
   data: string
+  ptyInstanceId: number
+}
+
+export interface TerminalModelOutputEvent {
+  data: Uint8Array
+  ptyInstanceId: number
+  sequence: number
+}
+
+export interface TerminalModelDisabledEvent {
   ptyInstanceId: number
 }
 
@@ -25,6 +43,8 @@ export interface TerminalTransportDisposable {
 
 export interface TerminalSessionTransportHandlers {
   onOutput(event: TerminalOutputEvent): void
+  onModelOutput(event: TerminalModelOutputEvent): void
+  onModelDisabled(event: TerminalModelDisabledEvent): void
   onExit(event: TerminalExitEvent): void
 }
 

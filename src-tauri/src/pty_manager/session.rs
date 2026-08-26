@@ -347,7 +347,7 @@ impl TerminalSessions {
                 && session.authority.query_response_owner != QueryResponseOwner::Xterm
             {
                 return Err(TerminalSessionFailure::Write(
-                    "xterm is not the terminal query-response authority".to_string(),
+                    "Ghostty owns terminal query responses for this session".to_string(),
                 ));
             }
             let requested_instance_id = match &target {

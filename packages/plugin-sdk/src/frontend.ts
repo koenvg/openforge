@@ -59,6 +59,7 @@ import type {
   TaskStartPrefixProviderRegistration,
   PtyBufferState,
   TerminalImageProtocol,
+  TerminalViewSnapshot,
 } from './types'
 
 export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
@@ -140,4 +141,5 @@ export type {
   TaskStartPrefixProviderRegistration,
   PtyBufferState,
   TerminalImageProtocol,
+  TerminalViewSnapshot,
 }

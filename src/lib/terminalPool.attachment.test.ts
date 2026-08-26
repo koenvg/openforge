@@ -285,7 +285,7 @@ describe("terminalPool attachment", () => {
 
 	it("terminal survives detach/re-attach cycle", async () => {
 		const entry = await acquire("task-13");
-		markShellPtyStarted(entry, 42);
+		await markShellPtyStarted(entry, 42);
 		const wrapper1 = document.createElement("div");
 		const wrapper2 = document.createElement("div");
 		const { write: writeSpy } = getTerminalMocks(entry);

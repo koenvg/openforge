@@ -18,18 +18,23 @@ import { applyTerminalTheme } from './terminalThemePropagation'
 import { themeMode as defaultThemeMode } from './theme'
 
 export {
+  GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT,
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   type TerminalAuthorityBinding,
   type TerminalAuthorityContract,
   type TerminalQueryResponseWrite,
+  type GhosttyAuthoritativeTerminalContract,
   type XtermAuthoritativeTerminalContract,
 } from './terminalAuthority'
 export type { TerminalImageProtocol } from './terminalImages'
 export type {
   TerminalExitEvent,
   TerminalGeometry,
+  TerminalModelDisabledEvent,
+  TerminalModelOutputEvent,
   TerminalOutputEvent,
   TerminalReplay,
+  TerminalSnapshot,
   TerminalSessionTransportHandlers,
   TerminalTransport,
   TerminalTransportDisposable,
@@ -101,6 +106,8 @@ export function createTerminalRuntime({
       authority: null,
       terminalStateSource: 'bootstrapping',
       pendingPtyOutput: [],
+      terminalModelSequence: null,
+      pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,
       hasOutput: false,
     }
@@ -225,17 +232,27 @@ export function createTerminalRuntime({
     return pool.get(terminalKey)?.ptyActive ?? false
   }
 
-  function restorePtyInstance(terminalKey: string, instanceId: number): void {
+  async function restorePtyInstance(terminalKey: string, instanceId: number): Promise<void> {
     const entry = pool.get(terminalKey)
-    const shouldRecoverAttachment = entry?.attached === true
+    const shouldRecoverState = entry !== undefined
       && (!entry.ptyActive || entry.currentPtyInstance !== instanceId)
     sessionLifecycle.restorePtyInstance(terminalKey, instanceId)
-    if (entry && shouldRecoverAttachment) void attachments.recoverActiveTerminal(entry)
+    if (!entry || !shouldRecoverState) return
+    try {
+      await acquisition.recoverTerminalState(entry)
+      if (entry.attached) await attachments.recoverActiveTerminal(entry)
+    } catch (error) {
+      console.error(terminalLogMessage(environment.loggerName, 'Failed to resolve restored terminal authority:'), error)
+    }
   }
 
-  function markShellPtyStarted(entry: PoolEntry, instanceId: number): void {
+  async function markShellPtyStarted(entry: PoolEntry, instanceId: number): Promise<void> {
     sessionLifecycle.markPtyStarted(entry, instanceId)
-    acquisition.flushPendingOutput(entry)
+    try {
+      await acquisition.recoverTerminalState(entry)
+    } catch (error) {
+      console.error(terminalLogMessage(environment.loggerName, 'Failed to resolve spawned terminal authority:'), error)
+    }
   }
 
   function getTerminalImageProtocol(entry: PoolEntry): TerminalImageProtocol | null {

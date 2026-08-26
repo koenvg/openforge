@@ -119,6 +119,7 @@ export type {
   TaskStartPrefixContext,
   TaskStartPrefixProviderRegistration,
   TerminalImageProtocol,
+  TerminalViewSnapshot,
   ShellSessionRequest,
   ShellSpawnRequest,
   ShellTerminalQueryResponseRequest,
