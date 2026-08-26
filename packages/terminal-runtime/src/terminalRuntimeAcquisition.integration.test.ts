@@ -40,12 +40,16 @@ describe('terminal runtime acquisition', () => {
 
     expect(runtime.hasTerminal(terminalKey)).toBe(false)
     expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(0)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(0)
+    expect(host.getListenerCount(`pty-model-disabled-${terminalKey}`)).toBe(0)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(0)
 
     const entry = await runtime.acquire(terminalKey)
 
     expect(entry.currentPtyInstance).toBe(7)
     expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-model-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-model-disabled-${terminalKey}`)).toBe(1)
     expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
 
