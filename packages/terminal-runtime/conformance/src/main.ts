@@ -1,10 +1,10 @@
+import { createCapturedEventRecorder } from './capturedEventRecorder'
 import { getTerminalConformanceRenderer } from './rendererRegistry'
 import { getPresentationRecordings, terminalModelRecordingCorpus } from '../../src/terminalPresentationCorpus'
 import { preloadTerminalFonts } from '../../src/terminalOptions'
 import { getTerminalTheme, type ThemeMode } from '../../src/theme'
 import type {
   TerminalView,
-  TerminalViewDisposable,
   TerminalViewPresentationEvidence,
   TerminalViewQueryResponse,
   TerminalViewPresentationSnapshot,
@@ -41,10 +41,8 @@ rendererLabel.textContent = renderer.id
 const ptyInstanceId = 1
 
 let view: TerminalView | null = null
-let inputSubscription: TerminalViewDisposable | null = null
-let queryResponseSubscription: TerminalViewDisposable | null = null
-let inputEvents: string[] = []
-let queryResponses: TerminalViewQueryResponse[] = []
+const inputRecorder = createCapturedEventRecorder<string>(event => event)
+const queryResponseRecorder = createCapturedEventRecorder<TerminalViewQueryResponse>(response => ({ ...response }))
 let openedLinks: string[] = []
 let echoInput = false
 let inputPresentation = Promise.resolve<TerminalViewPresentationEvidence | null>(null)
@@ -61,15 +59,11 @@ function recordingById(id: string) {
 }
 
 async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvidence> {
-  inputSubscription?.dispose()
-  inputSubscription = null
-  queryResponseSubscription?.dispose()
-  queryResponseSubscription = null
+  inputRecorder.reset()
+  queryResponseRecorder.reset()
   view?.dispose()
   view = null
   host.replaceChildren()
-  inputEvents = []
-  queryResponses = []
   openedLinks = []
   echoInput = options.echoInput ?? false
   inputPresentation = Promise.resolve(null)
@@ -91,15 +85,12 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
     loggerName: 'terminal-conformance',
     openLink: async url => { openedLinks.push(url) },
   })
-  inputSubscription = nextView.onUserInput(data => {
-    inputEvents.push(data)
+  inputRecorder.subscribe(listener => nextView.onUserInput(listener), data => {
     if (!echoInput) return
     nextView.writeLive({ data, ptyInstanceId })
     inputPresentation = nextView.drainPresentation()
   })
-  queryResponseSubscription = nextView.onQueryResponse(response => {
-    queryResponses.push(response)
-  })
+  queryResponseRecorder.subscribe(listener => nextView.onQueryResponse(listener))
   nextView.mount(host)
   nextView.fit()
   view = nextView
@@ -156,7 +147,7 @@ async function reconnect(id: string): Promise<PlayResult> {
 
 async function waitForInputCount(count: number): Promise<PlayResult> {
   const deadline = performance.now() + 3_000
-  while (inputEvents.length < count) {
+  while (inputRecorder.snapshot().length < count) {
     if (performance.now() > deadline) throw new Error(`Timed out waiting for ${count} terminal input event(s)`)
     await new Promise(resolve => setTimeout(resolve, 10))
   }
@@ -181,9 +172,9 @@ const api = {
   focus: () => requireView().focus(),
   drain: () => requireView().drainPresentation(),
   capture: () => requireView().capturePresentation(),
-  clearInput: () => { inputEvents = [] },
-  inputEvents: () => [...inputEvents],
-  queryResponses: () => queryResponses.map(response => ({ ...response })),
+  clearInput: () => { inputRecorder.clear() },
+  inputEvents: () => inputRecorder.snapshot(),
+  queryResponses: () => queryResponseRecorder.snapshot(),
   openedLinks: () => [...openedLinks],
   waitForInputCount,
 }
