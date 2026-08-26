@@ -9,6 +9,7 @@ mod managed_process;
 mod ordered_writer;
 mod pids;
 mod session;
+mod terminal_model_bridge;
 
 use crate::terminal_model::ShadowMode;
 #[cfg(test)]
