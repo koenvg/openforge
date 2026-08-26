@@ -36,6 +36,18 @@ interface RawPtyModelOutputPayload extends RawPtyOutputPayload {
   sequence: number
 }
 
+const SESSION_EVENT_PREFIXES = {
+  output: 'pty-output-',
+  modelOutput: 'pty-model-output-',
+  modelDisabled: 'pty-model-disabled-',
+  exit: 'pty-exit-',
+} as const
+
+function parseSessionEventName(eventName: string): string | undefined {
+  const prefix = Object.values(SESSION_EVENT_PREFIXES).find(candidate => eventName.startsWith(candidate))
+  return prefix === undefined ? undefined : eventName.slice(prefix.length)
+}
+
 interface TestTransport extends TerminalTransport {
   subscribeSession: Mock<TerminalTransport['subscribeSession']>
   subscribeConnectionRestored: Mock<TerminalTransport['subscribeConnectionRestored']>
@@ -124,10 +136,9 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
 
   const transport: TestTransport = {
     subscribeSession: vi.fn(async (shellSessionKey: string, handlers: TerminalSessionTransportHandlers) => {
-      await registerEvent(`pty-output-${shellSessionKey}`)
-      await registerEvent(`pty-model-output-${shellSessionKey}`)
-      await registerEvent(`pty-model-disabled-${shellSessionKey}`)
-      await registerEvent(`pty-exit-${shellSessionKey}`)
+      for (const prefix of Object.values(SESSION_EVENT_PREFIXES)) {
+        await registerEvent(`${prefix}${shellSessionKey}`)
+      }
       const current = sessionHandlers.get(shellSessionKey) ?? new Set()
       current.add(handlers)
       sessionHandlers.set(shellSessionKey, current)
@@ -187,14 +198,14 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
       }
       if (dispatchSessionEvent(
         eventName,
-        'pty-output-',
+        SESSION_EVENT_PREFIXES.output,
         payload,
         (raw: RawPtyOutputPayload, ptyInstanceId) => ({ data: raw.data, ptyInstanceId }),
         (handlers, event) => handlers.onOutput(event),
       )) return
       if (dispatchSessionEvent(
         eventName,
-        'pty-model-output-',
+        SESSION_EVENT_PREFIXES.modelOutput,
         payload,
         (raw: RawPtyModelOutputPayload, ptyInstanceId) => ({
           data: decodeBase64(raw.data),
@@ -205,14 +216,14 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
       )) return
       if (dispatchSessionEvent(
         eventName,
-        'pty-model-disabled-',
+        SESSION_EVENT_PREFIXES.modelDisabled,
         payload,
         (_raw: RawPtyInstancePayload, ptyInstanceId) => ({ ptyInstanceId }),
         (handlers, event) => handlers.onModelDisabled(event),
       )) return
       dispatchSessionEvent(
         eventName,
-        'pty-exit-',
+        SESSION_EVENT_PREFIXES.exit,
         payload,
         (_raw: RawPtyInstancePayload, ptyInstanceId) => ({ ptyInstanceId }),
         (handlers, event) => handlers.onExit(event),
@@ -239,11 +250,9 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
     },
     getListenerCount(eventName: string) {
       if (eventName === 'openforge-app-events-reconnected') return connectionRestoredHandlers.size
-      if (eventName.startsWith('pty-output-')) {
-        return sessionHandlers.get(eventName.slice('pty-output-'.length))?.size ?? 0
-      }
-      if (eventName.startsWith('pty-exit-')) {
-        return sessionHandlers.get(eventName.slice('pty-exit-'.length))?.size ?? 0
+      const shellSessionKey = parseSessionEventName(eventName)
+      if (shellSessionKey !== undefined) {
+        return sessionHandlers.get(shellSessionKey)?.size ?? 0
       }
       return 0
     },
