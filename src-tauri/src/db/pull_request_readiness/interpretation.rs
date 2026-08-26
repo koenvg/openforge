@@ -11,6 +11,28 @@ pub(crate) enum PullRequestReadinessStatus {
     Blocked,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PullRequestReadinessAction {
+    Merge,
+    Enqueue,
+    WaitForQueue,
+    WaitForGithub,
+    ResolveBlockers,
+}
+
+impl PullRequestReadinessAction {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "merge" => Some(Self::Merge),
+            "enqueue" => Some(Self::Enqueue),
+            "wait_for_queue" => Some(Self::WaitForQueue),
+            "wait_for_github" => Some(Self::WaitForGithub),
+            "resolve_blockers" => Some(Self::ResolveBlockers),
+            _ => None,
+        }
+    }
+}
+
 impl PullRequestReadinessStatus {
     fn parse(value: &str) -> Option<Self> {
         match value {
@@ -23,14 +45,20 @@ impl PullRequestReadinessStatus {
         }
     }
 
-    pub(crate) fn matches_action(self, action: Option<&str>) -> bool {
+    fn matches_action(self, action: PullRequestReadinessAction) -> bool {
         matches!(
             (self, action),
-            (Self::ReadyToMerge, Some("merge"))
-                | (Self::ReadyToEnqueue, Some("enqueue"))
-                | (Self::QueuedPullRequest, Some("wait_for_queue"))
-                | (Self::ReadinessUnknown, Some("wait_for_github"))
-                | (Self::Blocked, Some("resolve_blockers"))
+            (Self::ReadyToMerge, PullRequestReadinessAction::Merge)
+                | (Self::ReadyToEnqueue, PullRequestReadinessAction::Enqueue)
+                | (
+                    Self::QueuedPullRequest,
+                    PullRequestReadinessAction::WaitForQueue
+                )
+                | (
+                    Self::ReadinessUnknown,
+                    PullRequestReadinessAction::WaitForGithub
+                )
+                | (Self::Blocked, PullRequestReadinessAction::ResolveBlockers)
         )
     }
 }
@@ -84,6 +112,16 @@ pub(crate) struct PullRequestReadinessView {
 }
 
 impl PullRequestReadinessView {
+    pub(crate) fn matches_current_persisted(
+        pr: &PrRow,
+        expected_status: PullRequestReadinessStatus,
+    ) -> Option<bool> {
+        let (status, action) =
+            persisted_readiness_status_and_action(&PullRequestReadinessInput::from(pr))?;
+        Some(status == expected_status && status.matches_action(action))
+    }
+
+    #[cfg(test)]
     pub(crate) fn current_persisted(pr: &PrRow) -> Option<Self> {
         persisted_readiness_view(&PullRequestReadinessInput::from(pr))
     }
@@ -137,17 +175,25 @@ fn parse_readiness_codes(raw: Option<&str>) -> HashSet<String> {
         .collect()
 }
 
-fn persisted_readiness_view(
+fn persisted_readiness_status_and_action(
     input: &PullRequestReadinessInput<'_>,
-) -> Option<PullRequestReadinessView> {
+) -> Option<(PullRequestReadinessStatus, PullRequestReadinessAction)> {
     let status = PullRequestReadinessStatus::parse(input.merge_readiness_status?)?;
-    if !status.matches_action(input.merge_readiness_action) {
-        return None;
-    }
+    let action = PullRequestReadinessAction::parse(input.merge_readiness_action?)?;
     if input.readiness_source_head_sha != Some(input.head_sha)
         || input.readiness_updated_at.is_none()
         || input.readiness_updated_at < Some(input.updated_at)
     {
+        return None;
+    }
+    Some((status, action))
+}
+
+fn persisted_readiness_view(
+    input: &PullRequestReadinessInput<'_>,
+) -> Option<PullRequestReadinessView> {
+    let (status, action) = persisted_readiness_status_and_action(input)?;
+    if !status.matches_action(action) {
         return None;
     }
 

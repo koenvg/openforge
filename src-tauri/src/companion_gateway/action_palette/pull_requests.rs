@@ -8,10 +8,11 @@ fn matches_current_readiness(
     pull_request: &crate::db::PrRow,
     status: PullRequestReadinessStatus,
 ) -> bool {
-    PullRequestReadinessView::current_persisted(pull_request).is_some_and(|readiness| {
-        readiness.status() == status
-            && status.matches_action(pull_request.merge_readiness_action.as_deref())
-    })
+    if let Some(matches) = PullRequestReadinessView::matches_current_persisted(pull_request, status)
+    {
+        return matches;
+    }
+    PullRequestReadinessView::from(pull_request).status() == status
 }
 
 fn merge_method_policy_from_pr(
