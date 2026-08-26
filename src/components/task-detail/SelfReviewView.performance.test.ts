@@ -9,11 +9,10 @@ import { describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
 import type { PrFileDiff } from "../../lib/types";
 import {
-	getActiveSelfReviewComments,
-	getCommitDiff,
-	getTaskBatchFileContents,
-	getTaskCommits,
-	getTaskDiff,
+  getCommitDiff,
+  getTaskBatchFileContents,
+  getTaskCommits,
+  getTaskDiff,
 } from "../../lib/ipc";
 
 setupSelfReviewViewTestSuite();
@@ -49,17 +48,6 @@ describe("SelfReviewView integration performance", () => {
 		});
 	});
 
-	it("getActiveSelfReviewComments called exactly once on mount", async () => {
-		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
-		const mockGetActiveComments = vi.mocked(getActiveSelfReviewComments);
-
-		renderSelfReviewView();
-
-		await waitFor(() => {
-			expect(mockGetActiveComments).toHaveBeenCalledTimes(1);
-			expect(mockGetActiveComments).toHaveBeenCalledWith("task-1");
-		});
-	});
 
 	it("DiffViewer toolbar visible after toggle (DiffViewer successfully re-mounted)", async () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);

@@ -123,13 +123,8 @@ vi.mock('../../lib/ipc', () => ({
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
   getTaskDiff: vi.fn().mockResolvedValue([]),
-  getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
-  getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
   getTaskFileContents: vi.fn().mockResolvedValue(['', '']),
   getTaskBatchFileContents: vi.fn().mockResolvedValue([]),
-  archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
-  addSelfReviewComment: vi.fn().mockResolvedValue(undefined),
-  deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({

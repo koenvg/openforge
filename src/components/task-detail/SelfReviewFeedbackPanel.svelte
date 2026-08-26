@@ -2,7 +2,6 @@
   import { CheckCircle2, MessageSquare } from '@lucide/svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import type { SelfReviewFeedbackPane } from './selfReviewFeedbackPane.svelte'
-  import GeneralCommentsSidebar from '../review/shared/GeneralCommentsSidebar.svelte'
   import PrCommentsList from '../shared/pr/PrCommentsList.svelte'
   import { buildPrCommentUrl } from '../../lib/prCommentLinks'
   import SendToAgentPanel from './SendToAgentPanel.svelte'
@@ -14,13 +13,11 @@
   }
 
   let { pane, agentStatus, onSendToAgent }: Props = $props()
-  let taskId = $derived(pane.general.taskId)
   let onRefresh = $derived(pane.pullRequest.onRefresh)
   let linkedPr = $derived(pane.pullRequest.linkedPr)
   let prComments = $derived(pane.pullRequest.comments)
   let visibleComments = $derived(pane.pullRequest.visibleComments)
   let commentSelection = $derived(pane.pullRequest.selection)
-  let generalCommentCount = $derived(pane.general.commentCount)
   let pendingInlineComments = $derived(pane.composer.pendingInlineComments)
   let markdownImageBaseUrl = $derived(pane.pullRequest.markdownImageBaseUrl)
   let resolveRemoteMedia = $derived(pane.pullRequest.resolveRemoteMedia)
@@ -29,8 +26,6 @@
   let onCommentClick = $derived(pane.pullRequest.onCommentClick)
   let onOpenLinkedPr = $derived(pane.pullRequest.onOpenLinkedPr)
   let onCollapse = $derived(pane.navigation.onCollapse)
-  let activeTab = $derived(pane.navigation.activeTab)
-  let onActiveTabChange = $derived(pane.navigation.onActiveTabChange)
   let showAddressed = $derived(pane.pullRequest.showAddressed)
   let onShowAddressedChange = $derived(pane.pullRequest.onShowAddressedChange)
   let totalCommentCount = $derived(pane.totalCommentCount)
@@ -51,23 +46,7 @@
         onclick={onCollapse}
       ><span aria-hidden="true">››</span></button>
     </div>
-    <div class="flex items-center border-b border-base-300 bg-base-200 shrink-0">
-      <button
-        class="min-h-10 flex-1 px-3 py-2 text-center text-[13px] font-semibold transition-colors {activeTab === 'pr' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'}"
-        onclick={() => onActiveTabChange('pr')}
-      >
-        PR Comments
-        {#if commentSelection.unaddressedCount > 0}<span class="badge badge-error badge-xs ml-1">{commentSelection.unaddressedCount}</span>{/if}
-      </button>
-      <button
-        class="min-h-10 flex-1 px-3 py-2 text-center text-[13px] font-semibold transition-colors {activeTab === 'notes' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/60 hover:text-base-content hover:bg-base-content/5'}"
-        onclick={() => onActiveTabChange('notes')}
-      >
-        General feedback
-        {#if generalCommentCount > 0}<span class="badge badge-ghost badge-xs ml-1">{generalCommentCount}</span>{/if}
-      </button>
-    </div>
-    <div class="flex-1 overflow-hidden flex flex-col" class:hidden={activeTab !== 'pr'}>
+    <div class="flex-1 overflow-hidden flex flex-col">
       {#if linkedPr}
         <div class="flex items-center gap-2 px-3 py-2 bg-base-200/50 border-b border-base-300 shrink-0">
           {#if commentSelection.selectedCount > 0}
@@ -130,12 +109,8 @@
       {/if}
     </div>
 
-    <div class="flex-1 overflow-hidden" class:hidden={activeTab !== 'notes'}>
-      <GeneralCommentsSidebar {taskId} />
-    </div>
     <SendToAgentPanel
       layout="sidebar"
-      {taskId}
       {agentStatus}
       {onSendToAgent}
       {onRefresh}

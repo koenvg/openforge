@@ -23,15 +23,10 @@ vi.mock('../../lib/ipc', () => ({
   getTaskBatchFileContents: vi.fn().mockResolvedValue([]),
   getCommitFileContents: vi.fn().mockResolvedValue(['', '']),
   getCommitBatchFileContents: vi.fn().mockResolvedValue([]),
-  getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
-  getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
   resolveGithubAsset: vi.fn().mockResolvedValue(null),
-  addSelfReviewComment: vi.fn().mockResolvedValue(undefined),
-  deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
-  archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/fileViewerPlugin', () => ({
@@ -217,6 +212,8 @@ describe('SelfReviewWorkspace presentation', () => {
       expect(screen.getByRole('region', { name: 'Changed files panel' })).toBeTruthy()
       expect(screen.getByRole('region', { name: 'Code diff panel' })).toBeTruthy()
       expect(screen.getByRole('region', { name: 'Feedback panel' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'General feedback' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'PR Comments' })).toBeNull()
       expect(screen.getByText('No changes for current selection')).toBeTruthy()
     })
   })

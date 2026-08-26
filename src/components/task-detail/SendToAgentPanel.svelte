@@ -1,17 +1,10 @@
 <script lang="ts">
-  import { AlertTriangle, CheckCircle2, RefreshCw, Send, Zap } from '@lucide/svelte'
-  import {
-    selfReviewStateByTask,
-    setSelfReviewArchivedComments,
-    setSelfReviewGeneralComments,
-  } from '../../lib/taskScopedSelfReviewState'
-  import { archiveSelfReviewComments, getActiveSelfReviewComments, getArchivedSelfReviewComments } from '../../lib/ipc'
+  import { CheckCircle2, RefreshCw, Send, Zap } from '@lucide/svelte'
   import { compileReviewPrompt, type ReviewPromptMode } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
 
   interface Props {
-    taskId: string
     layout?: 'bar' | 'sidebar'
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
@@ -22,39 +15,29 @@
     onSendComplete?: () => void
   }
 
-  let { taskId, layout = 'bar', agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
+  let { layout = 'bar', agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
 
-  let isSending = $state(false)
-  let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
   let showPromptDialog = $state(false)
   let promptDraft = $state('')
   let promptMode = $state<ReviewPromptMode>('address')
-  // Captured at dialog-open so toggling the mode can regenerate the prompt even
-  // after the source comment stores have been archived/cleared.
+  // Captured at dialog-open so toggling the mode can regenerate the prompt after
+  // pending inline comments are cleared.
   let capturedInline = $state<{ path: string; line: number; body: string }[]>([])
-  let capturedGeneral = $state<{ body: string }[]>([])
   let capturedPr = $state<
     { body: string; author: string; file_path: string | null; line_number: number | null }[]
   >([])
 
-  let selfReviewState = $derived($selfReviewStateByTask.get(taskId))
-  let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineCount = $derived(pendingInlineComments.length)
-  let generalCount = $derived(selfReviewGeneralComments.length)
   let prCommentCount = $derived(selectedPrComments.length)
-  let hasComments = $derived(inlineCount > 0 || generalCount > 0 || prCommentCount > 0)
+  let hasComments = $derived(inlineCount > 0 || prCommentCount > 0)
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
-  let canSend = $derived(hasComments && !isAgentBusy && !isSending)
+  let canSend = $derived(hasComments && !isAgentBusy)
 
-  // Opens the editable-prompt dialog. Archive timing is unchanged from before the
-  // dialog existed: comments are archived here (when the prompt is compiled), not on
-  // confirm — so cancelling the dialog still archives, as agreed for this change.
-  async function openPromptDialog() {
+  function openPromptDialog() {
     if (!canSend) return
 
     capturedInline = pendingInlineComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
-    capturedGeneral = selfReviewGeneralComments.map(c => ({ body: c.body }))
     capturedPr = selectedPrComments.map(c => ({
       body: c.body,
       author: c.author,
@@ -62,39 +45,15 @@
       line_number: c.line_number
     }))
     promptMode = 'address'
-    promptDraft = compileReviewPrompt(promptMode, capturedInline, capturedGeneral, capturedPr)
-
-    isSending = true
-    error = null
+    promptDraft = compileReviewPrompt(promptMode, capturedInline, capturedPr)
     successMessage = null
-
-    try {
-      // CRITICAL ORDER: archive → clear stores → reload
-      await archiveSelfReviewComments(taskId)
-
-      // Clear task-scoped inline comments from store
-      onPendingInlineCommentsChange?.([])
-
-      // Reload archived comments into store
-      const archived = await getArchivedSelfReviewComments(taskId)
-      setSelfReviewArchivedComments(taskId, archived.filter(c => c.comment_type === 'general'))
-
-      // Reload active comments (should be empty after archive)
-      const active = await getActiveSelfReviewComments(taskId)
-      setSelfReviewGeneralComments(taskId, active.filter(c => c.comment_type === 'general'))
-
-      showPromptDialog = true
-    } catch (e) {
-      console.error('Failed to prepare feedback:', e)
-      error = 'Failed to prepare feedback. Please try again.'
-    } finally {
-      isSending = false
-    }
+    showPromptDialog = true
   }
 
   // Dispatches the (possibly edited) prompt the user reviewed in the dialog.
   function confirmSend() {
     onSendToAgent(promptDraft)
+    onPendingInlineCommentsChange?.([])
     showPromptDialog = false
     successMessage = 'Feedback sent to agent!'
     setTimeout(() => {
@@ -111,7 +70,7 @@
   // any manual edits), so each mode shows its own template.
   function setPromptMode(mode: ReviewPromptMode) {
     promptMode = mode
-    promptDraft = compileReviewPrompt(mode, capturedInline, capturedGeneral, capturedPr)
+    promptDraft = compileReviewPrompt(mode, capturedInline, capturedPr)
   }
 </script>
 
@@ -132,12 +91,6 @@
             {inlineCount} inline {inlineCount === 1 ? 'comment' : 'comments'}
           </span>
         {/if}
-        {#if generalCount > 0}
-          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-warning/25 bg-warning/12 px-2.5 py-1 text-[13px] font-semibold text-warning">
-            <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
-            {generalCount} general {generalCount === 1 ? 'comment' : 'comments'}
-          </span>
-        {/if}
         {#if prCommentCount > 0}
           <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-error/25 bg-error/12 px-2.5 py-1 text-[13px] font-semibold text-error">
             <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
@@ -151,12 +104,6 @@
   </div>
 
   <div class="flex shrink-0 items-center gap-2.5 {layout === 'sidebar' ? 'w-full' : ''}">
-    {#if error}
-      <span class="inline-flex max-w-[280px] items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-error" role="alert">
-        <AlertTriangle size={16} strokeWidth={1.8} aria-hidden="true" />
-        {error}
-      </span>
-    {/if}
     {#if successMessage}
       <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-success" aria-live="polite">
         <CheckCircle2 size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -167,7 +114,6 @@
     <button
       class="btn btn-soft btn-sm h-10 min-h-10 shadow-sm transition-shadow hover:shadow-md {layout === 'sidebar' ? 'flex-1' : ''}"
       onclick={onRefresh}
-      disabled={isSending}
       title="Refresh diff"
     >
       <RefreshCw size={17} strokeWidth={1.8} aria-hidden="true" />
@@ -180,13 +126,8 @@
       disabled={!canSend}
       title={!hasComments ? 'Add comments before sending' : isAgentBusy ? 'Agent is currently running' : 'Review and send feedback to agent'}
     >
-      {#if isSending}
-        <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
-        Preparing…
-      {:else}
-        <Send size={17} strokeWidth={1.8} aria-hidden="true" />
-        Send to agent
-      {/if}
+      <Send size={17} strokeWidth={1.8} aria-hidden="true" />
+      Send to agent
     </button>
   </div>
 </div>

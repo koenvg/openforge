@@ -1,24 +1,16 @@
 import { derived, get, writable } from "svelte/store";
-import type {
-	PrFileDiff,
-	ReviewSubmissionComment,
-	SelfReviewComment,
-} from "./types";
+import type { PrFileDiff, ReviewSubmissionComment } from "./types";
 
 type ReviewSide = ReviewSubmissionComment["side"];
 
 export interface SelfReviewTaskState {
 	diffFiles: PrFileDiff[];
-	generalComments: SelfReviewComment[];
-	archivedComments: SelfReviewComment[];
 	pendingInlineComments: ReviewSubmissionComment[];
 	inlineCommentDrafts: Map<string, string>;
 }
 
 export const emptySelfReviewTaskState: SelfReviewTaskState = {
 	diffFiles: [],
-	generalComments: [],
-	archivedComments: [],
 	pendingInlineComments: [],
 	inlineCommentDrafts: new Map(),
 };
@@ -26,10 +18,10 @@ export const emptySelfReviewTaskState: SelfReviewTaskState = {
 /**
  * Task-detail self-review state keyed by task id.
  *
- * Self-review data belongs to a task detail view. Keeping diff files, general
- * notes, archived notes, and pending inline comments together behind this
- * scoped module prevents a task switch or late async load from writing data
- * into broad global view stores that another task is currently rendering.
+ * Self-review data belongs to a task detail view. Keeping diff files, pending
+ * inline comments, and comment drafts together prevents a task switch or late
+ * async load from writing data into broad global view stores that another task
+ * is currently rendering.
  */
 export const selfReviewStateByTask = writable<Map<string, SelfReviewTaskState>>(
 	new Map(),
@@ -64,8 +56,6 @@ export const selfReviewInlineCommentDrafts = derived(
 function cloneStateForUpdate(current: SelfReviewTaskState): SelfReviewTaskState {
 	return {
 		diffFiles: current.diffFiles,
-		generalComments: current.generalComments,
-		archivedComments: current.archivedComments,
 		pendingInlineComments: current.pendingInlineComments,
 		inlineCommentDrafts: current.inlineCommentDrafts,
 	};
@@ -98,31 +88,6 @@ export function setSelfReviewDiffFiles(
 	updateSelfReviewState(taskId, (state) => ({ ...state, diffFiles }));
 }
 
-export function getSelfReviewGeneralComments(
-	taskId: string,
-): SelfReviewComment[] {
-	return getSelfReviewTaskState(taskId).generalComments;
-}
-
-export function setSelfReviewGeneralComments(
-	taskId: string,
-	generalComments: SelfReviewComment[],
-): void {
-	updateSelfReviewState(taskId, (state) => ({ ...state, generalComments }));
-}
-
-export function getSelfReviewArchivedComments(
-	taskId: string,
-): SelfReviewComment[] {
-	return getSelfReviewTaskState(taskId).archivedComments;
-}
-
-export function setSelfReviewArchivedComments(
-	taskId: string,
-	archivedComments: SelfReviewComment[],
-): void {
-	updateSelfReviewState(taskId, (state) => ({ ...state, archivedComments }));
-}
 
 function inlineDraftKey(
 	path: string,

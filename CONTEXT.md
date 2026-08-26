@@ -77,7 +77,7 @@ A supported **Diff File Section** presentation that previews how the changed fil
 _Avoid_: Before-and-after preview, rendered source diff
 
 **Review Feedback Prompt**:
-The compiled bundle of inline, general, and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
+The compiled bundle of inline and PR review comments sent as an **Implementation Input** when the user sends collected feedback to the agent.
 _Avoid_: Send-to-agent message, fix-and-push instruction, commit prompt
 
 **Addressed Pull Request Comment**:

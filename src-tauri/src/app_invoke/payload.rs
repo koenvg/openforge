@@ -119,25 +119,6 @@ pub(crate) fn string_vec(
         .collect()
 }
 
-pub(crate) fn optional_i32(
-    payload: &serde_json::Value,
-    key: &str,
-) -> Result<Option<i32>, AppInvokeError> {
-    match payload.get(key) {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(value) => {
-            let Some(value) = value.as_i64() else {
-                return Err(AppInvokeError::bad_request(format!(
-                    "payload.{key} must be an integer or null"
-                )));
-            };
-            i32::try_from(value)
-                .map(Some)
-                .map_err(|_| AppInvokeError::bad_request(format!("payload.{key} must fit in i32")))
-        }
-    }
-}
-
 pub(crate) fn optional_usize(
     payload: &serde_json::Value,
     key: &str,

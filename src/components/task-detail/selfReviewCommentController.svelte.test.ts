@@ -39,8 +39,6 @@ describe('createSelfReviewCommentController', () => {
   it('hides comparison comments while preserving them when visible comments change', () => {
     let state = $state<SelfReviewTaskState>({
       diffFiles: [],
-      generalComments: [],
-      archivedComments: [],
       pendingInlineComments: [hiddenComment, visibleComment],
       inlineCommentDrafts: new Map(),
     })

@@ -16,7 +16,6 @@ mod projects;
 mod pull_request_readiness;
 mod pull_requests;
 mod review;
-mod self_review;
 mod settings_reset;
 mod sqlite;
 mod startup_resume_eligibility;

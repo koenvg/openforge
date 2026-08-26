@@ -28,7 +28,6 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
   const getState = () => options.getState() ?? emptySelfReviewTaskState
   const setPendingComments = options.setPendingComments ?? setPendingSelfReviewComments
 
-  let generalComments = $derived(getState().generalComments)
   let pendingInlineComments = $derived(getState().pendingInlineComments)
   let inlineReviewComments = $derived(prCommentsToReviewComments(options.getPrComments()))
   let visibleInlineReviewComments = $derived(
@@ -77,7 +76,6 @@ export function createSelfReviewCommentController(options: SelfReviewCommentCont
 
   return {
     get commentSelection() { return commentSelection },
-    get generalCommentCount() { return generalComments.length },
     get pendingInlineComments() { return pendingInlineComments },
     get visibleInlineReviewComments() { return visibleInlineReviewComments },
     get visiblePendingInlineComments() { return visiblePendingInlineComments },

@@ -147,10 +147,6 @@ fn delete_runtime_children(conn: &Connection, id: &str) -> Result<()> {
         rusqlite::params![id],
     )?;
     conn.execute(
-        "DELETE FROM self_review_comments WHERE task_id = ?1",
-        rusqlite::params![id],
-    )?;
-    conn.execute(
         "DELETE FROM worktrees WHERE task_id = ?1",
         rusqlite::params![id],
     )?;
@@ -429,8 +425,6 @@ mod tests {
             1000,
         )
         .expect("insert pull request comment");
-        db.insert_self_review_comment(task_id, "issue", Some("main.rs"), Some(5), "Wrong")
-            .expect("insert self-review comment");
         db.create_worktree_record(
             task_id,
             project_id,
@@ -455,10 +449,6 @@ mod tests {
             .expect("load pull request comments")
             .is_empty());
         assert!(db
-            .get_active_self_review_comments(task_id)
-            .expect("load self-review comments")
-            .is_empty());
-        assert!(db
             .get_worktree_for_task(task_id)
             .expect("load worktree")
             .is_none());
@@ -478,12 +468,6 @@ mod tests {
         assert_eq!(
             db.get_pr_comments_by_ids(&[501])
                 .expect("load pull request comments")
-                .len(),
-            1
-        );
-        assert_eq!(
-            db.get_active_self_review_comments(task_id)
-                .expect("load self-review comments")
                 .len(),
             1
         );

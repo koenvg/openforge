@@ -1647,6 +1647,7 @@ INSERT OR IGNORE INTO config (key, value)
         }
         Ok(())
     }),
+    M::up("DROP TABLE IF EXISTS self_review_comments;"),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2554,13 +2555,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_terminal_replays', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items', 'plugins', 'project_plugins', 'plugin_storage')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 19, "All 19 tables should be created");
+        assert_eq!(table_count, 18, "All 18 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -2801,13 +2802,7 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
 
-        // Verify all 4 indexes exist in sqlite_master
-        let index_names = vec![
-            "idx_self_review_comments_task_archived",
-            "idx_self_review_comments_task_round",
-            "idx_review_prs_updated_at",
-            "idx_review_prs_repo",
-        ];
+        let index_names = vec!["idx_review_prs_updated_at", "idx_review_prs_repo"];
 
         for index_name in index_names {
             let exists: bool = conn
@@ -3846,5 +3841,69 @@ mod tests {
 
         drop(conn);
         drop(db);
+    }
+
+    #[test]
+    fn fresh_database_omits_self_review_comments_table() {
+        let (_temp_dir, path) = temporary_database_path();
+        let db = Database::new(path).expect("create database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='self_review_comments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check self_review_comments table");
+
+        assert!(
+            !table_exists,
+            "fresh databases must not retain general self-review comment storage"
+        );
+    }
+
+    #[test]
+    fn upgrade_drops_existing_self_review_comments_table() {
+        let (_temp_dir, path) = temporary_database_path();
+
+        {
+            let conn = Connection::open(&path).expect("open legacy database");
+            conn.execute_batch(
+                "CREATE TABLE self_review_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    round INTEGER NOT NULL DEFAULT 1,
+                    comment_type TEXT NOT NULL,
+                    file_path TEXT,
+                    line_number INTEGER,
+                    body TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    archived_at INTEGER
+                );
+                INSERT INTO self_review_comments (task_id, comment_type, body, created_at)
+                VALUES ('KVG-1', 'general', 'legacy feedback', 1);",
+            )
+            .expect("create legacy self-review comments table");
+            conn.pragma_update(None, "user_version", migration_count() - 1)
+                .expect("set previous schema version");
+        }
+
+        let db = Database::new(path).expect("upgrade database");
+        let conn = db.connection();
+        let conn = conn.lock().expect("lock database");
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='self_review_comments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check self_review_comments table");
+
+        assert!(
+            !table_exists,
+            "upgrade must delete stored general self-review comments"
+        );
     }
 }

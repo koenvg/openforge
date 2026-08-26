@@ -1,19 +1,15 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PrFileDiff, ReviewSubmissionComment, SelfReviewComment } from "./types";
+import type { PrFileDiff, ReviewSubmissionComment } from "./types";
 import {
 	clearPendingSelfReviewComments,
 	getPendingSelfReviewComments,
-	getSelfReviewArchivedComments,
-	mergeVisiblePendingSelfReviewComments,
 	getSelfReviewDiffFiles,
-	getSelfReviewGeneralComments,
+	mergeVisiblePendingSelfReviewComments,
 	pendingSelfReviewCommentsByTask,
 	selfReviewStateByTask,
 	setPendingSelfReviewComments,
-	setSelfReviewArchivedComments,
 	setSelfReviewDiffFiles,
-	setSelfReviewGeneralComments,
 } from "./taskScopedSelfReviewState";
 
 const taskOneComment: ReviewSubmissionComment = {
@@ -49,52 +45,17 @@ const taskTwoDiff: PrFileDiff = {
 	filename: "src/task-two.ts",
 };
 
-const taskOneGeneralComment: SelfReviewComment = {
-	id: 1,
-	task_id: "task-1",
-	round: 1,
-	comment_type: "general",
-	file_path: null,
-	line_number: null,
-	body: "task one note",
-	created_at: 1700000000,
-	archived_at: null,
-};
-
-const taskTwoGeneralComment: SelfReviewComment = {
-	...taskOneGeneralComment,
-	id: 2,
-	task_id: "task-2",
-	body: "task two note",
-};
-
 describe("task-scoped self-review state", () => {
 	beforeEach(() => {
 		selfReviewStateByTask.set(new Map());
 	});
 
-	it("keeps loaded diff, general, and archived comments isolated by task id", () => {
+	it("keeps loaded diff files isolated by task id", () => {
 		setSelfReviewDiffFiles("task-1", [taskOneDiff]);
 		setSelfReviewDiffFiles("task-2", [taskTwoDiff]);
-		setSelfReviewGeneralComments("task-1", [taskOneGeneralComment]);
-		setSelfReviewGeneralComments("task-2", [taskTwoGeneralComment]);
-		setSelfReviewArchivedComments("task-1", [taskOneGeneralComment]);
-		setSelfReviewArchivedComments("task-2", [taskTwoGeneralComment]);
 
 		expect(getSelfReviewDiffFiles("task-1")).toEqual([taskOneDiff]);
 		expect(getSelfReviewDiffFiles("task-2")).toEqual([taskTwoDiff]);
-		expect(getSelfReviewGeneralComments("task-1")).toEqual([
-			taskOneGeneralComment,
-		]);
-		expect(getSelfReviewGeneralComments("task-2")).toEqual([
-			taskTwoGeneralComment,
-		]);
-		expect(getSelfReviewArchivedComments("task-1")).toEqual([
-			taskOneGeneralComment,
-		]);
-		expect(getSelfReviewArchivedComments("task-2")).toEqual([
-			taskTwoGeneralComment,
-		]);
 	});
 
 	it("updates maps immutably so scoped self-review changes are reactive", () => {
@@ -150,5 +111,4 @@ describe("task-scoped self-review state", () => {
 		expect(getPendingSelfReviewComments("task-1")).toEqual([]);
 		expect(getPendingSelfReviewComments("task-2")).toEqual([taskTwoComment]);
 	});
-
 });

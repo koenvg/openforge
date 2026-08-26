@@ -19,11 +19,6 @@ interface SelfReviewPullRequestFeedback {
   onShowAddressedChange: (showAddressed: boolean) => void
 }
 
-interface SelfReviewGeneralFeedback {
-  readonly taskId: string
-  readonly commentCount: number
-}
-
 interface SelfReviewFeedbackComposer {
   readonly pendingInlineComments: ReviewSubmissionComment[]
   onPendingInlineCommentsChange: (comments: ReviewSubmissionComment[]) => void
@@ -31,26 +26,21 @@ interface SelfReviewFeedbackComposer {
 }
 
 interface SelfReviewFeedbackNavigation {
-  readonly activeTab: 'pr' | 'notes'
-  onActiveTabChange: (tab: 'pr' | 'notes') => void
   onCollapse: () => void
 }
 
 export interface SelfReviewFeedbackPane {
   readonly totalCommentCount: number
   readonly pullRequest: SelfReviewPullRequestFeedback
-  readonly general: SelfReviewGeneralFeedback
   readonly composer: SelfReviewFeedbackComposer
   readonly navigation: SelfReviewFeedbackNavigation
 }
 
 interface SelfReviewFeedbackPaneSources {
-  getTaskId: () => string
   diff: Pick<SelfReviewDiffController, 'linkedPr' | 'prComments' | 'refresh'>
   comments: Pick<
     SelfReviewCommentController,
     | 'commentSelection'
-    | 'generalCommentCount'
     | 'pendingInlineComments'
     | 'markdownImageBaseUrl'
     | 'resolveRemoteMedia'
@@ -58,10 +48,8 @@ interface SelfReviewFeedbackPaneSources {
   >
   navigation: Pick<
     SelfReviewNavigationController,
-    | 'sidebarTab'
     | 'showAddressed'
     | 'setSidebarVisible'
-    | 'setSidebarTab'
     | 'setShowAddressed'
     | 'openLinkedPr'
     | 'scrollToComment'
@@ -74,7 +62,6 @@ export function createSelfReviewFeedbackPane(
   return {
     get totalCommentCount() {
       return sources.comments.commentSelection.unaddressedCount
-        + sources.comments.generalCommentCount
         + sources.comments.pendingInlineComments.length
     },
     pullRequest: {
@@ -94,18 +81,12 @@ export function createSelfReviewFeedbackPane(
       onOpenLinkedPr: sources.navigation.openLinkedPr,
       onShowAddressedChange: sources.navigation.setShowAddressed,
     },
-    general: {
-      get taskId() { return sources.getTaskId() },
-      get commentCount() { return sources.comments.generalCommentCount },
-    },
     composer: {
       get pendingInlineComments() { return sources.comments.pendingInlineComments },
       onPendingInlineCommentsChange: sources.comments.handlePendingInlineCommentsChange,
       onSendComplete: sources.comments.commentSelection.deselectAll,
     },
     navigation: {
-      get activeTab() { return sources.navigation.sidebarTab },
-      onActiveTabChange: sources.navigation.setSidebarTab,
       onCollapse: () => sources.navigation.setSidebarVisible(false),
     },
   }

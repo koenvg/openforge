@@ -6,7 +6,7 @@ import type {
   TerminalImageProtocol,
   TerminalQueryResponseWrite,
 } from '@openforge-app/terminal-runtime'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 import type { PullRequestMergeMethod } from './types'
 import type { ResolvedMarkdownMedia } from './markdown'
@@ -547,25 +547,6 @@ export async function getTaskBatchFileContents(taskId: string, files: FileConten
   return invoke<[string, string][]>("get_task_batch_file_contents", { taskId, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })), includeCommitted, includeUncommitted });
 }
 
-export async function addSelfReviewComment(taskId: string, commentType: string, filePath: string | null, lineNumber: number | null, body: string): Promise<number> {
-  return invoke<number>("add_self_review_comment", { taskId, commentType, filePath, lineNumber, body });
-}
-
-export async function getActiveSelfReviewComments(taskId: string): Promise<SelfReviewComment[]> {
-  return invoke<SelfReviewComment[]>("get_active_self_review_comments", { taskId });
-}
-
-export async function getArchivedSelfReviewComments(taskId: string): Promise<SelfReviewComment[]> {
-  return invoke<SelfReviewComment[]>("get_archived_self_review_comments", { taskId });
-}
-
-export async function deleteSelfReviewComment(commentId: number): Promise<void> {
-  return invoke<void>("delete_self_review_comment", { commentId });
-}
-
-export async function archiveSelfReviewComments(taskId: string): Promise<void> {
-  return invoke<void>("archive_self_review_comments", { taskId });
-}
 
 export async function getTaskCommits(taskId: string): Promise<CommitInfo[]> {
   return invoke<CommitInfo[]>("get_task_commits", { taskId });

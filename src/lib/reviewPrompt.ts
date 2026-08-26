@@ -1,5 +1,5 @@
 /**
- * Compiles inline code comments, general comment cards, and PR review comments into a single agent prompt string.
+ * Compiles inline code comments and PR review comments into a single agent prompt string.
  * Pure function with no side effects.
  *
  * The prompt does NOT include the task's initial prompt — the agent already has
@@ -15,15 +15,13 @@ export type ReviewPromptMode = 'address' | 'analyze'
 export function compileReviewPrompt(
   mode: ReviewPromptMode,
   inlineComments: { path: string; line: number; body: string }[],
-  generalComments: { body: string }[],
   prReviewComments: { body: string; author: string; file_path: string | null; line_number: number | null }[] = []
 ): string {
   const hasInlineComments = inlineComments.length > 0;
-  const hasGeneralComments = generalComments.length > 0;
   const hasPrReviewComments = prReviewComments.length > 0;
 
   // All empty: return empty string
-  if (!hasInlineComments && !hasGeneralComments && !hasPrReviewComments) {
+  if (!hasInlineComments && !hasPrReviewComments) {
     return "";
   }
 
@@ -56,14 +54,6 @@ export function compileReviewPrompt(
     sections.push("");
   }
 
-  // General Feedback section
-  if (hasGeneralComments) {
-    sections.push("## General Feedback");
-    generalComments.forEach((comment, index) => {
-      sections.push(`${index + 1}. ${comment.body}`);
-    });
-    sections.push("");
-  }
 
   // Closing instruction — differs per mode
   if (mode === 'analyze') {
