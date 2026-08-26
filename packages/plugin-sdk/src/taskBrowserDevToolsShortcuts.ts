@@ -19,11 +19,17 @@ export function classifyTaskBrowserDevToolsShortcut(
   if (!input.keyDown || input.repeat) return null
   if (input.key === 'f12') return 'toggle'
 
+  if (input.key === 'c') {
+    const elementsModified = platform === 'macos'
+      ? input.meta && input.shift && !input.control && !input.alt
+      : input.control && input.shift && !input.meta && !input.alt
+    return elementsModified ? 'elements' : null
+  }
+
   const modified = platform === 'macos'
     ? input.meta && input.alt && !input.control && !input.shift
     : input.control && input.shift && !input.meta && !input.alt
   if (!modified) return null
   if (input.key === 'i') return 'toggle'
-  if (input.key === 'c') return 'elements'
   return input.key === 'j' ? 'console' : null
 }

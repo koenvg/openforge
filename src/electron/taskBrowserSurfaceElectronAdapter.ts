@@ -51,7 +51,9 @@ const DEVTOOLS_OPEN_TIMEOUT_MS = 2_000
 
 function devToolsPanelInput(panel: TaskBrowserDevToolsPanel) {
   const modifiers: Array<'control' | 'shift' | 'alt' | 'meta'> = process.platform === 'darwin'
-    ? ['meta', 'alt']
+    ? panel === 'elements'
+      ? ['meta', 'shift']
+      : ['meta', 'alt']
     : ['control', 'shift']
   return {
     type: 'keyDown' as const,
