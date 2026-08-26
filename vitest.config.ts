@@ -2,6 +2,14 @@ import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
 import { createOpenForgePluginSdkSourceAliasRecord } from './packages/plugin-sdk/src/vite.ts'
+import {
+  SPECIALIZED_WORKSPACE_TEST_PROJECTS,
+  WORKSPACE_TEST_SUITE_EXCLUDES,
+  WORKSPACE_TEST_SUITE_GLOB,
+} from './scripts/vitest-workspace-policy.ts'
+
+
+const { pluginSdk, pluginRuntime } = SPECIALIZED_WORKSPACE_TEST_PROJECTS
 
 const pluginRuntimeAliases = {
   '@openforge-app/plugin-runtime/commandValidation': new URL('./packages/plugin-runtime/src/commandValidation.ts', import.meta.url).pathname,
@@ -40,17 +48,13 @@ export default defineConfig({
           pool: 'forks',
           globals: true,
           setupFiles: ['src/test-setup.ts'],
-          include: [
-            'src/**/*.test.ts',
-            'plugins/file-viewer/src/**/*.test.ts',
-            'plugins/github-sync/src/**/*.test.ts',
-            'plugins/task-browser/src/**/*.test.ts',
-            'plugins/task-schedules/src/**/*.test.ts',
-            'plugins/terminal/src/**/*.test.ts',
-            'packages/pr-review-ui/src/**/*.test.ts',
-            'packages/terminal-runtime/src/**/*.test.ts',
+          include: ['src/**/*.test.ts', WORKSPACE_TEST_SUITE_GLOB],
+          exclude: [
+            'src/lib/terminalPool.*.test.ts',
+            pluginSdk.suiteGlob,
+            pluginRuntime.suiteGlob,
+            ...WORKSPACE_TEST_SUITE_EXCLUDES,
           ],
-          exclude: ['src/lib/terminalPool.*.test.ts'],
           alias: {
             ...pluginRuntimeAliases,
             ...pluginSdkAliases,
@@ -77,11 +81,12 @@ export default defineConfig({
       {
         plugins: [svelte(), svelteTesting()],
         test: {
-          name: 'plugin-sdk',
+          name: pluginSdk.name,
           environment: 'jsdom',
           globals: true,
           setupFiles: ['src/test-setup.ts'],
-          include: ['packages/plugin-sdk/src/**/*.test.ts'],
+          include: [pluginSdk.suiteGlob],
+          exclude: WORKSPACE_TEST_SUITE_EXCLUDES,
           alias: {
             ...pluginSdkAliases,
             ...terminalRuntimeAliases,
@@ -90,10 +95,11 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'plugin-runtime',
+          name: pluginRuntime.name,
           environment: 'node',
           globals: true,
-          include: ['packages/plugin-runtime/src/**/*.test.ts'],
+          include: [pluginRuntime.suiteGlob],
+          exclude: WORKSPACE_TEST_SUITE_EXCLUDES,
           alias: {
             ...pluginRuntimeAliases,
             ...pluginSdkAliases,
