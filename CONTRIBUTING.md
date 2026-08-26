@@ -91,6 +91,10 @@ cargo build
 cargo clippy
 ```
 
+Root `pnpm test` includes JavaScript and TypeScript `*.test.*` and `*.spec.*` suites anywhere inside first-level `apps/*`, `packages/*`, and `plugins/*` workspaces. It ignores dependency and generated directories named `node_modules`, `dist`, `build`, `coverage`, `.svelte-kit`, and `target`.
+
+New workspace suites use the renderer's jsdom project by default, so do not add workspace names to an allowlist. A workspace that needs a different Vitest environment must get a named project in `vitest.config.ts`; exclude it from the renderer project only when that named project covers the same suite glob. `scripts/vitest-workspace-coverage.test.mjs` checks this policy against every existing workspace suite.
+
 For Rust test filtering, pass one filter before test-binary arguments, for example `cargo test database`. Run separate commands for separate filters.
 
 ## Building and installing from source
