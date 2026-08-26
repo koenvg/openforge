@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ShellLifecycleState } from '@openforge-app/terminal-runtime'
 import TaskTerminal from './TaskTerminal.svelte'
 
 const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(() => {
@@ -42,7 +43,7 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
       getShellLifecycleState: vi.fn(),
       subscribeShellLifecycle: vi.fn(),
       getTerminalImageProtocol: vi.fn(() => 'iterm2'),
-      emitLifecycle: null as null | ((state: typeof state) => void),
+      emitLifecycle: null as null | ((state: ShellLifecycleState) => void),
     },
   }
 })

@@ -3,9 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
+      "@openforge-app/plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
+      "@openforge-app/plugin-sdk/frontend": ["../../packages/plugin-sdk/src/frontend.ts"],
       "@openforge-app/terminal-runtime": ["../../packages/terminal-runtime/src/index.ts"],
       "@openforge-app/terminal-runtime/terminalRuntime": ["../../packages/terminal-runtime/src/terminalRuntime.ts"],
       "@openforge-app/terminal-runtime/terminalOptions": ["../../packages/terminal-runtime/src/terminalOptions.ts"],
