@@ -164,6 +164,23 @@ impl PtyManager {
         Ok(())
     }
 
+    #[cfg(test)]
+    async fn pause_after_shell_spawn_became_pending(&self) {
+        let gate = self
+            .shell_spawn_pending_gate
+            .lock()
+            .expect("shell spawn pending gate lock should not be poisoned")
+            .take();
+        if let Some(gate) = gate {
+            gate.reached_tx
+                .send(())
+                .expect("test should observe pending shell spawn");
+            gate.release_rx
+                .await
+                .expect("test should release pending shell spawn");
+        }
+    }
+
     pub(super) async fn begin_shell_spawn(
         &self,
         session_key: &str,
@@ -180,6 +197,8 @@ impl PtyManager {
             generations.insert(token.session_key.clone(), token.generation);
             pending_spawn
         };
+        #[cfg(test)]
+        self.pause_after_shell_spawn_became_pending().await;
         let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
         (token, pending_spawn, lifecycle_lock)
     }

@@ -273,8 +273,16 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
     manager.set_pid_dir(tmp_dir.path().join("pids"));
     let task_id = "pending-shell-cleanup";
     let session_key = shell_session_key(task_id, Some(0));
-    let lifecycle_lock = manager.lifecycle_lock_for(&session_key).await;
-    let lifecycle_guard = lifecycle_lock.lock().await;
+    let (spawn_pending_tx, spawn_pending_rx) = tokio::sync::oneshot::channel();
+    let (release_spawn_tx, release_spawn_rx) = tokio::sync::oneshot::channel();
+    *manager
+        .shell_spawn_pending_gate
+        .lock()
+        .expect("shell spawn pending gate lock should not be poisoned") =
+        Some(crate::pty_manager::ShellSpawnPendingGate {
+            reached_tx: spawn_pending_tx,
+            release_rx: release_spawn_rx,
+        });
 
     let spawn_manager = manager.clone();
     let spawn_cwd = tmp_dir.path().to_path_buf();
@@ -296,12 +304,9 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
             .await
     });
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while !manager.pending_shell_spawns.contains_key(&session_key)
-        && std::time::Instant::now() < deadline
-    {
-        tokio::task::yield_now().await;
-    }
+    spawn_pending_rx
+        .await
+        .expect("shell spawn should become pending");
     assert!(
         manager.pending_shell_spawns.contains_key(&session_key),
         "shell spawn should be discoverable before session publication"
@@ -311,8 +316,13 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
     let cleanup_task_id = task_id.to_string();
     let cleanup_task =
         tokio::spawn(async move { cleanup_manager.kill_shells_for_task(&cleanup_task_id).await });
-    tokio::task::yield_now().await;
-    drop(lifecycle_guard);
+    cleanup_task
+        .await
+        .expect("cleanup task should join")
+        .expect("task shell cleanup should succeed");
+    release_spawn_tx
+        .send(())
+        .expect("test should release pending shell spawn");
 
     let spawn_result = spawn_task.await.expect("spawn task should join");
     assert!(
@@ -324,10 +334,6 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
         ),
         "cleanup should cancel the pending shell spawn: {spawn_result:?}"
     );
-    cleanup_task
-        .await
-        .expect("cleanup task should join")
-        .expect("task shell cleanup should succeed");
 
     assert!(!manager.sessions.lock().await.contains_key(&session_key));
     assert!(!manager
@@ -341,7 +347,6 @@ async fn task_shell_cleanup_cancels_spawn_before_session_publication() {
         .await
         .contains_key(&session_key));
     assert!(!manager.last_output.lock().await.contains_key(&session_key));
-    drop(lifecycle_lock);
     tokio::time::timeout(Duration::from_secs(1), async {
         while manager.lifecycle_locks.contains_key(&session_key) {
             tokio::task::yield_now().await;
