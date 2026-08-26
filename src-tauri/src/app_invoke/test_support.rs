@@ -85,3 +85,49 @@ pub(crate) async fn invoke_ok(
         .await
         .unwrap_or_else(|err| panic!("{command} should succeed, got {err:?}"))
 }
+
+const UNREADABLE_SQLITE_TEXT_VALUE: &[u8] = &[0xff];
+
+pub(crate) fn insert_unreadable_global_config(state: &AppState, key: &str) {
+    let db = crate::db::acquire_db(&state.db);
+    let conn = db.lock_conn().expect("lock database");
+    conn.execute(
+        "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
+        rusqlite::params![key, UNREADABLE_SQLITE_TEXT_VALUE],
+    )
+    .expect("store unreadable global config");
+}
+
+pub(crate) fn insert_unreadable_project_config(state: &AppState, project_id: &str, key: &str) {
+    let db = crate::db::acquire_db(&state.db);
+    let conn = db.lock_conn().expect("lock database");
+    conn.execute(
+        "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+        rusqlite::params![project_id, key, UNREADABLE_SQLITE_TEXT_VALUE],
+    )
+    .expect("store unreadable project config");
+}
+
+pub(crate) fn assert_config_lookup_error_status(status: StatusCode) {
+    assert_eq!(
+        status,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "configuration lookup failure must propagate as an internal server error"
+    );
+}
+
+pub(crate) fn assert_propagated_config_lookup_error(
+    error: (StatusCode, String),
+    expected_context: &str,
+) {
+    let (status, message) = error;
+    assert_config_lookup_error_status(status);
+    assert!(
+        message.contains(expected_context),
+        "error should contain {expected_context:?}, got: {message}"
+    );
+    assert!(
+        message.contains("Invalid column type"),
+        "error should preserve the SQLite lookup failure, got: {message}"
+    );
+}

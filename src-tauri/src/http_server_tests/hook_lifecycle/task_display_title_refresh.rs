@@ -1,4 +1,7 @@
 use super::*;
+use crate::app_invoke::test_support::{
+    assert_config_lookup_error_status, insert_unreadable_global_config,
+};
 
 #[test]
 fn task_display_title_refresh_is_disabled_by_default() {
@@ -190,15 +193,7 @@ async fn lifecycle_handler_reports_unreadable_global_title_refresh_config() {
             pty_instance_id: 41,
         },
     );
-    {
-        let db = crate::db::acquire_db(&state.db);
-        let conn = db.lock_conn().expect("lock database");
-        conn.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
-            rusqlite::params!["task_display_title_metadata_updates_enabled", vec![0xff_u8]],
-        )
-        .expect("store unreadable global title config");
-    }
+    insert_unreadable_global_config(&state, "task_display_title_metadata_updates_enabled");
 
     let error = handle_agent_lifecycle_notification_with_refresh(
         state,
@@ -220,5 +215,5 @@ async fn lifecycle_handler_reports_unreadable_global_title_refresh_config() {
     .await
     .expect_err("unreadable title config must fail the lifecycle request");
 
-    assert_eq!(error, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_config_lookup_error_status(error);
 }
