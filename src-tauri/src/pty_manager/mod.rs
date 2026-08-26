@@ -50,11 +50,9 @@ use events::{
 };
 #[cfg(test)]
 use managed_process::ManagedProcessIdentity;
+pub(crate) use pids::shell_session_key;
 #[cfg(test)]
-use pids::{
-    is_shell_session_key_for_task, shell_pid_file_name, shell_session_key,
-    write_managed_process_identity,
-};
+use pids::{is_shell_session_key_for_task, shell_pid_file_name, write_managed_process_identity};
 use session::TerminalSessions;
 #[cfg(test)]
 use session::{frozen_seconds, PtySession, PtySessionKind, NEXT_INSTANCE_ID};

@@ -1,5 +1,6 @@
 use super::callbacks::{optional_param_string, required_param_string};
 use super::PluginHost;
+use crate::pty_manager::shell_session_key;
 use serde_json::Value;
 
 impl PluginHost {
@@ -15,7 +16,7 @@ impl PluginHost {
         let cwd = required_param_string(params, "cwd")?;
         let cols = required_param_u16(params, "cols")?;
         let rows = required_param_u16(params, "rows")?;
-        let terminal_index = Some(u32::from(required_param_u16(params, "terminalIndex")?));
+        let terminal_index = Some(required_param_u32(params, "terminalIndex")?);
         let terminal_image_protocol =
             match optional_param_string(params, "terminalImageProtocol")?.as_deref() {
                 None => None,
@@ -89,16 +90,27 @@ impl PluginHost {
 
 fn required_shell_session_key(params: &Value) -> Result<String, String> {
     let task_id = required_param_string(params, "taskId")?;
-    let terminal_index = required_param_u16(params, "terminalIndex")?;
-    Ok(format!("{task_id}-shell-{terminal_index}"))
+    let terminal_index = required_param_u32(params, "terminalIndex")?;
+    Ok(shell_session_key(&task_id, Some(terminal_index)))
 }
 
 fn required_param_u16(params: &Value, key: &str) -> Result<u16, String> {
+    required_unsigned_param(params, key)
+}
+
+fn required_param_u32(params: &Value, key: &str) -> Result<u32, String> {
+    required_unsigned_param(params, key)
+}
+
+fn required_unsigned_param<T>(params: &Value, key: &str) -> Result<T, String>
+where
+    T: TryFrom<u64>,
+{
     let value = params
         .get(key)
         .and_then(Value::as_u64)
         .ok_or_else(|| format!("plugin host callback missing integer param: {key}"))?;
-    u16::try_from(value)
+    T::try_from(value)
         .map_err(|_| format!("plugin host callback integer param out of range: {key}"))
 }
 
@@ -114,6 +126,29 @@ mod tests {
         assert_eq!(
             required_shell_session_key(&params).expect("valid shell request"),
             "project-P-1-shell-2"
+        );
+    }
+
+    #[test]
+    fn shell_session_key_supports_the_pty_u32_index_range() {
+        let params = json!({ "taskId": "project-P-1", "terminalIndex": u32::MAX });
+
+        assert_eq!(
+            required_shell_session_key(&params).expect("valid shell request"),
+            "project-P-1-shell-4294967295"
+        );
+    }
+
+    #[test]
+    fn shell_session_key_rejects_an_index_above_the_pty_u32_range() {
+        let params = json!({
+            "taskId": "project-P-1",
+            "terminalIndex": u64::from(u32::MAX) + 1,
+        });
+
+        assert_eq!(
+            required_shell_session_key(&params).expect_err("terminalIndex should be rejected"),
+            "plugin host callback integer param out of range: terminalIndex"
         );
     }
 

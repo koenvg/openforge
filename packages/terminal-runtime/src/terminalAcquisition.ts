@@ -1,3 +1,4 @@
+import { parsePtySessionKey } from './ptySessionKey'
 import type { TerminalAuthorityContract } from './terminalAuthority'
 import { terminalLogMessage } from './terminalLogging'
 import { createTerminalStateView } from './terminalStateView'
@@ -43,11 +44,6 @@ interface TerminalAcquisitionOptions {
   reconnectReplay: TerminalAcquisitionReconnectReplay
 }
 
-function isShellTerminalKey(terminalKey: string): boolean {
-  return /-shell-\d+$/.test(terminalKey)
-}
-
-
 export function createTerminalAcquisition({
   host,
   authority,
@@ -68,7 +64,7 @@ export function createTerminalAcquisition({
   })
 
   function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
-    if (isShellTerminalKey(entry.shellSessionKey)) return
+    if (parsePtySessionKey(entry.shellSessionKey).kind === 'indexed-shell') return
 
     entry.view.setKeyEventHandler((event) => {
       const isShiftEnter = event.key === 'Enter' && event.shiftKey
@@ -246,7 +242,8 @@ export function createTerminalAcquisition({
   function releaseAllForTask(taskId: string): number {
     const keysToRelease = new Set<string>()
     for (const key of [...pool.keys(), ...pendingAcquisitions.keys()]) {
-      if (key.startsWith(`${taskId}-shell-`)) keysToRelease.add(key)
+      const parsed = parsePtySessionKey(key)
+      if (parsed.kind === 'indexed-shell' && parsed.taskId === taskId) keysToRelease.add(key)
     }
     for (const key of keysToRelease) release(key)
     return keysToRelease.size

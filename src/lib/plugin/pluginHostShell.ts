@@ -1,4 +1,5 @@
 import type { ShellSpawnRequest } from '@openforge-app/plugin-sdk'
+import { createIndexedShellSessionKey } from '@openforge-app/terminal-runtime'
 import {
   getPtyBuffer,
   killPty,
@@ -24,7 +25,7 @@ function shellSessionKey(request: ShellSessionRequest): string {
   if (!Number.isInteger(request.terminalIndex) || request.terminalIndex < 0) {
     throw new Error('shell callback requires a non-negative integer terminalIndex')
   }
-  return `${request.taskId}-shell-${request.terminalIndex}`
+  return createIndexedShellSessionKey(request)
 }
 
 function shellSessionFromPayload(payload: PluginHostCommandPayload): ShellSessionRequest {

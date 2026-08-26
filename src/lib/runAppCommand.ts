@@ -1,4 +1,8 @@
-import type { ShellLifecycleState, TaskTerminalTabsSession } from '@openforge-app/terminal-runtime'
+import {
+  createIndexedShellSessionKey,
+  type ShellLifecycleState,
+  type TaskTerminalTabsSession,
+} from '@openforge-app/terminal-runtime'
 
 /** project_config key holding the per-project command used to run the app locally. */
 export const RUN_COMMAND_CONFIG_KEY = 'run_command'
@@ -21,7 +25,10 @@ export const DEFAULT_RUN_APP_POLL_INTERVAL_MS = 100
  */
 export function activeShellKey(taskId: string, session: TaskTerminalTabsSession): string {
   const activeTab = session.tabs.find((tab) => tab.index === session.activeTabIndex)
-  return activeTab?.key ?? `${taskId}-shell-${session.activeTabIndex}`
+  return activeTab?.key ?? createIndexedShellSessionKey({
+    taskId,
+    terminalIndex: session.activeTabIndex,
+  })
 }
 
 export interface RunAppCommandDeps {

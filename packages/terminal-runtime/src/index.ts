@@ -1,4 +1,10 @@
 export {
+  createIndexedShellSessionKey,
+  parsePtySessionKey,
+  type IndexedShellSessionKeyParts,
+  type PtySessionKey,
+} from './ptySessionKey'
+export {
   APP_EVENTS_RECONNECTED_EVENT,
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,

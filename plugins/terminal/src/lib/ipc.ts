@@ -1,5 +1,9 @@
 import type { Disposable, FrontendOpenForgeAPI, PtyBufferState, TerminalImageProtocol } from '@openforge-app/plugin-sdk/frontend'
-import type { TerminalQueryResponseWrite } from '@openforge-app/terminal-runtime'
+import {
+  parsePtySessionKey,
+  type IndexedShellSessionKeyParts,
+  type TerminalQueryResponseWrite,
+} from '@openforge-app/terminal-runtime'
 import type { TaskWorkspaceInfo } from './types'
 
 let terminalOpenForgeApi: FrontendOpenForgeAPI | null = null
@@ -24,13 +28,13 @@ function toUnlisten(disposable: Disposable): OpenForgeEventUnlistenFn {
   }
 }
 
-function parseIndexedTerminalKey(terminalKey: string): { taskId: string; terminalIndex: number } {
-  const match = /^(.*)-shell-(\d+)$/.exec(terminalKey)
-  if (!match || !match[1]) {
+function parseIndexedTerminalKey(terminalKey: string): IndexedShellSessionKeyParts {
+  const parsed = parsePtySessionKey(terminalKey)
+  if (parsed.kind !== 'indexed-shell') {
     throw new Error(`[terminal plugin] Expected indexed terminal key, received: ${terminalKey}`)
   }
 
-  return { taskId: match[1], terminalIndex: Number(match[2]) }
+  return { taskId: parsed.taskId, terminalIndex: parsed.terminalIndex }
 }
 
 export async function listenOpenForgeEvent<TPayload>(eventName: string, handler: (event: { payload: TPayload }) => void): Promise<OpenForgeEventUnlistenFn> {

@@ -1,3 +1,4 @@
+import { createIndexedShellSessionKey } from '@openforge-app/terminal-runtime'
 import { get } from 'svelte/store'
 import { listenPluginDesktopEvent } from '../desktopIpc'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
@@ -83,9 +84,12 @@ export async function waitForTerminalEventSubscriptions(
 ): Promise<void> {
   const taskId = typeof commandPayload?.taskId === 'string' ? commandPayload.taskId : ''
   const terminalIndex = Number(commandPayload?.terminalIndex)
-  if (!taskId || !Number.isInteger(terminalIndex) || terminalIndex < 0) return
-
-  const terminalKey = `${taskId}-shell-${terminalIndex}`
+  let terminalKey: string
+  try {
+    terminalKey = createIndexedShellSessionKey({ taskId, terminalIndex })
+  } catch {
+    return
+  }
   await Promise.all([
     waitForDesktopEventSubscription(`pty-output-${terminalKey}`),
     waitForDesktopEventSubscription(`pty-exit-${terminalKey}`),

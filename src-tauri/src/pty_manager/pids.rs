@@ -1,4 +1,5 @@
 use log::{info, warn};
+use std::fmt;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -210,7 +211,7 @@ impl PtyManager {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum PtySessionKeyKind<'a> {
+pub(super) enum PtySessionKey<'a> {
     Agent {
         task_id: &'a str,
     },
@@ -220,36 +221,50 @@ pub(super) enum PtySessionKeyKind<'a> {
     },
 }
 
-pub(super) fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
-    if let Some(idx) = terminal_index {
-        format!("{}-shell-{}", task_id, idx)
-    } else {
-        format!("{}-shell-0", task_id)
-    }
-}
-
-pub(super) fn classify_pty_session_key(session_key: &str) -> PtySessionKeyKind<'_> {
-    if let Some((task_id, shell_index)) = session_key.rsplit_once("-shell-") {
-        if !task_id.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit()) {
-            if let Ok(terminal_index) = shell_index.parse::<u32>() {
-                return PtySessionKeyKind::Shell {
-                    task_id,
-                    terminal_index,
-                };
-            }
+impl<'a> PtySessionKey<'a> {
+    fn indexed_shell(task_id: &'a str, terminal_index: u32) -> Self {
+        Self::Shell {
+            task_id,
+            terminal_index,
         }
     }
 
-    PtySessionKeyKind::Agent {
-        task_id: session_key,
+    fn parse(session_key: &'a str) -> Self {
+        if let Some((task_id, shell_index)) = session_key.rsplit_once("-shell-") {
+            if !task_id.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit()) {
+                if let Ok(terminal_index) = shell_index.parse::<u32>() {
+                    return Self::indexed_shell(task_id, terminal_index);
+                }
+            }
+        }
+
+        Self::Agent {
+            task_id: session_key,
+        }
     }
+}
+
+impl fmt::Display for PtySessionKey<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Agent { task_id } => formatter.write_str(task_id),
+            Self::Shell {
+                task_id,
+                terminal_index,
+            } => write!(formatter, "{task_id}-shell-{terminal_index}"),
+        }
+    }
+}
+
+pub(crate) fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
+    PtySessionKey::indexed_shell(task_id, terminal_index.unwrap_or_default()).to_string()
 }
 
 #[cfg(test)]
 pub(super) fn is_shell_session_key_for_task(session_key: &str, task_id: &str) -> bool {
     matches!(
-        classify_pty_session_key(session_key),
-        PtySessionKeyKind::Shell {
+        PtySessionKey::parse(session_key),
+        PtySessionKey::Shell {
             task_id: shell_task_id,
             ..
         } if shell_task_id == task_id
@@ -257,9 +272,9 @@ pub(super) fn is_shell_session_key_for_task(session_key: &str, task_id: &str) ->
 }
 
 pub(super) fn pid_file_name_for_session_key(session_key: &str) -> String {
-    match classify_pty_session_key(session_key) {
-        PtySessionKeyKind::Agent { task_id } => format!("{}-pty.pid", task_id),
-        PtySessionKeyKind::Shell { .. } => format!("{}.pid", session_key),
+    match PtySessionKey::parse(session_key) {
+        PtySessionKey::Agent { task_id } => format!("{}-pty.pid", task_id),
+        PtySessionKey::Shell { .. } => format!("{}.pid", session_key),
     }
 }
 
@@ -287,9 +302,9 @@ fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
         return (!task_id.is_empty()).then(|| shell_session_key(task_id, None));
     }
 
-    match classify_pty_session_key(stem) {
-        PtySessionKeyKind::Shell { .. } => Some(stem.to_string()),
-        PtySessionKeyKind::Agent { .. } => None,
+    match PtySessionKey::parse(stem) {
+        PtySessionKey::Shell { .. } => Some(stem.to_string()),
+        PtySessionKey::Agent { .. } => None,
     }
 }
 
@@ -304,8 +319,8 @@ mod tests {
     #[test]
     fn classifies_indexed_shell_session_keys() {
         assert_eq!(
-            classify_pty_session_key("task-1-shell-2"),
-            PtySessionKeyKind::Shell {
+            PtySessionKey::parse("task-1-shell-2"),
+            PtySessionKey::Shell {
                 task_id: "task-1",
                 terminal_index: 2,
             }
@@ -313,10 +328,18 @@ mod tests {
     }
 
     #[test]
+    fn constructs_and_parses_indexed_shell_session_keys_through_typed_contract() {
+        let session_key = PtySessionKey::indexed_shell("task-1", 2);
+
+        assert_eq!(session_key.to_string(), "task-1-shell-2");
+        assert_eq!(PtySessionKey::parse("task-1-shell-2"), session_key);
+    }
+
+    #[test]
     fn does_not_classify_agent_task_ids_with_shell_text_as_shells() {
         assert_eq!(
-            classify_pty_session_key("task-shell-feature"),
-            PtySessionKeyKind::Agent {
+            PtySessionKey::parse("task-shell-feature"),
+            PtySessionKey::Agent {
                 task_id: "task-shell-feature",
             }
         );
