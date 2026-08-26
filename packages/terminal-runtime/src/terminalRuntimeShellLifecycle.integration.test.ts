@@ -84,6 +84,33 @@ describe('terminal runtime resumed agent input', () => {
     expect(entry.terminalStateSource).toBe('ghostty-snapshot')
   })
 
+  it('prefers the live backend instance over stale resumed-agent metadata after restart', async () => {
+    const host = createHost()
+    host.getPtyBuffer = async () => ({
+      authority: 'ghostty-authoritative',
+      buffer: null,
+      snapshot: { instanceId: 43, watermark: 0, data: btoa('restarted') },
+      isLive: true,
+      instanceId: 43,
+    })
+    const writePty = vi.spyOn(host, 'writePty')
+    const runtime = createTerminalRuntime(host)
+
+    await runtime.restorePtyInstance('T-restarted-agent', 42)
+    const entry = await runtime.acquire('T-restarted-agent')
+    const onData = terminalMocks.instances[0].onData.mock.calls[0]?.[0] as
+      | ((data: string) => void)
+      | undefined
+    onData?.('continue')
+
+    expect(entry.currentPtyInstance).toBe(43)
+    expect(entry.authority).toMatchObject({
+      ptyInstanceId: 43,
+      contract: { mode: 'ghostty-authoritative' },
+    })
+    expect(writePty).toHaveBeenCalledWith('T-restarted-agent', 'continue')
+  })
+
   it('resolves Ghostty authority when an acquired agent terminal resumes', async () => {
     const terminalKey = 'T-resumed-ghostty-agent'
     const host = createHost()

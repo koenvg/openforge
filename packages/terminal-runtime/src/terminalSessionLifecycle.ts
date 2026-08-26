@@ -35,6 +35,7 @@ export function createTerminalSessionLifecycle(
     const restoredPtyInstance = pendingPtyInstances.get(entry.shellSessionKey)
     if (restoredPtyInstance === undefined) return
     pendingPtyInstances.delete(entry.shellSessionKey)
+    if (entry.ptyActive && entry.currentPtyInstance !== null) return
     markPtyStarted(entry, restoredPtyInstance)
   }
 
