@@ -559,3 +559,88 @@ describe('GitHub Sync Task pull request section collapsing', () => {
     expect(screen.getByRole('button', { name: 'Pull Requests' }).getAttribute('aria-expanded')).toBe('true')
   })
 })
+
+describe('GitHub Sync individual pull request collapsing', () => {
+  function cardKey(repoName: string, number: number): string {
+    return pluginSectionKey('com.openforge.github-sync', `pull-request:owner/${repoName}#${number}`)
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    clearCollapsedSections()
+  })
+
+  function renderTwoPullRequests() {
+    const first = createPullRequest()
+    const second = createPullRequest({
+      id: 99,
+      pr_number: 99,
+      title: 'Second PR',
+      repo_name: 'other',
+      url: 'https://github.com/owner/other/pull/99',
+    })
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [first, second]
+      if (method === 'getTaskPrComments') return []
+      return emptyPollResult
+    })
+    return { first, second, ...renderSection(invoke) }
+  }
+
+  it('gives every pull request its own toggle, expanded by default', async () => {
+    renderTwoPullRequests()
+
+    expect((await screen.findByRole('button', { name: '#42 Test PR' })).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: '#99 Second PR' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('owner/repo')).toBeTruthy()
+  })
+
+  it('collapses one pull request without touching its sibling', async () => {
+    renderTwoPullRequests()
+
+    await fireEvent.click(await screen.findByRole('button', { name: '#42 Test PR' }))
+
+    // The identity row survives: collapsing hides the body, not the pull request.
+    expect(screen.getByRole('button', { name: '#42 Test PR' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('owner/repo')).toBeNull()
+    expect(screen.getByText('owner/other')).toBeTruthy()
+  })
+
+  it('hides the long body of a collapsed pull request', async () => {
+    const pr = createPullRequest()
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') return [pr]
+      if (method === 'getTaskPrComments') return [baseComment]
+      return emptyPollResult
+    })
+    renderSection(invoke)
+
+    expect(await screen.findByText('Please update this code')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: '#42 Test PR' }))
+
+    expect(screen.queryByText('Please update this code')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create a merge commit' })).toBeNull()
+  })
+
+  it('persists per-pull-request collapse under a key namespaced by plugin and repo', async () => {
+    renderTwoPullRequests()
+
+    await fireEvent.click(await screen.findByRole('button', { name: '#42 Test PR' }))
+
+    expect(cardKey('repo', 42)).toBe('plugin:com.openforge.github-sync:pull-request:owner/repo#42')
+    expect(isSectionCollapsed(get(collapsedSections), cardKey('repo', 42))).toBe(true)
+    // Two repositories can hand out the same pull request number, so the repository
+    // has to be part of the key.
+    expect(isSectionCollapsed(get(collapsedSections), cardKey('other', 99))).toBe(false)
+  })
+
+  it('starts collapsed when the store already has that pull request collapsed', async () => {
+    setSectionCollapsed(cardKey('repo', 42), true)
+    renderTwoPullRequests()
+
+    await waitFor(() => expect(screen.getByText('Test PR')).toBeTruthy())
+    expect(screen.queryByText('owner/repo')).toBeNull()
+    expect(screen.getByText('owner/other')).toBeTruthy()
+  })
+})

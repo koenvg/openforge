@@ -22,8 +22,9 @@
   let { api, context, taskId, taskActionPending = false }: Props = $props()
 
   const initialApi = untrack(() => api)
+  const pluginId = untrack(() => context.pluginId)
   // Namespaced so this key cannot collide with another plugin's 'pull-requests' section.
-  const sectionKey = pluginSectionKey(untrack(() => context.pluginId), 'pull-requests')
+  const sectionKey = pluginSectionKey(pluginId, 'pull-requests')
   const client = createGithubTaskClient(initialApi)
   const cache = getTaskPullRequestCache(initialApi, client)
 
@@ -114,6 +115,13 @@
     return pr.pr_number ?? pr.id
   }
 
+  // Keyed by repository and number rather than by the local row id: the id is reassigned
+  // when a pull request is unlinked and relinked, and two repositories hand out the same
+  // pull request numbers.
+  function cardSectionKey(pr: PullRequestInfo): string {
+    return pluginSectionKey(pluginId, `pull-request:${pr.repo_owner}/${pr.repo_name}#${prNumber(pr)}`)
+  }
+
   // The header actions stay clickable while the section is collapsed, so opening the
   // link form has to expand the section or the form appears in hidden content.
   function toggleAdding() {
@@ -134,6 +142,7 @@
   {#each pullRequests as pr (pr.id)}
     <PullRequestCard
       {pr}
+      sectionKey={cardSectionKey(pr)}
       comments={commentsByPrId.get(pr.id) ?? []}
       feedback={orchestration.feedbackByPr.get(pr.id)}
       pendingPrId={orchestration.pendingPrId}
