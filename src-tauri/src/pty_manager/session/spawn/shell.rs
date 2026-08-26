@@ -116,5 +116,5 @@ impl PtyManager {
 }
 
 #[cfg(test)]
-#[path = "tests/shell.rs"]
+#[path = "tests/shell/mod.rs"]
 mod tests;
