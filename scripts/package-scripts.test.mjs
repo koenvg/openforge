@@ -17,12 +17,66 @@ async function pluginPackagePaths() {
     .sort()
 }
 
+async function publishablePackageManifests() {
+  const packageEntries = await readdir(join(repoRoot, 'packages'), { withFileTypes: true })
+  const packagePaths = packageEntries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}/package.json`)
+    .sort()
+
+  const packages = await Promise.all(
+    packagePaths.map(async (packagePath) => ({
+      packagePath,
+      packageJson: await readJson(packagePath),
+    })),
+  )
+
+  return packages.filter(
+    ({ packageJson }) => packageJson.private !== true && packageJson.publishConfig,
+  )
+}
+
 describe('package build scripts', () => {
   it('builds the plugin SDK package once before built-in plugin bundles', async () => {
     const packageJson = await readJson('package.json')
 
     expect(packageJson.scripts['build:plugins']).toBe(
       "pnpm --filter @openforge-app/plugin-sdk build && pnpm -r --filter './plugins/*' --if-present build:bundle",
+    )
+  })
+
+  it('builds and tests every publishable workspace package', async () => {
+    const rootPackage = await readJson('package.json')
+    const publishablePackages = await publishablePackageManifests()
+
+    expect(publishablePackages.length).toBeGreaterThan(0)
+
+    for (const scriptName of ['build', 'test']) {
+      const expectedCommands = publishablePackages.map(({ packagePath, packageJson }) => {
+        expect(packageJson.scripts?.[scriptName], packagePath).toBeTruthy()
+        return `pnpm --filter ${packageJson.name} ${scriptName}`
+      })
+
+      expect(rootPackage.scripts[`packages:${scriptName}`].split(' && ')).toEqual(expectedCommands)
+    }
+  })
+
+  it('runs publishable package coverage regression in the npm readiness job', async () => {
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+    const jobStart = ciWorkflow.indexOf('  npm-packages:')
+    const nextJob = ciWorkflow.slice(jobStart + 1).search(/^  [\w-]+:/m)
+    const npmPackagesJob = ciWorkflow.slice(
+      jobStart,
+      nextJob === -1 ? undefined : jobStart + nextJob + 1,
+    )
+
+    expect(jobStart).toBeGreaterThan(-1)
+    expect(npmPackagesJob).toContain('id: package_readiness_coverage')
+    expect(npmPackagesJob).toContain(
+      'pnpm test scripts/package-scripts.test.mjs 2>&1 | tee /tmp/npm-package-readiness-coverage.log',
+    )
+    expect(npmPackagesJob).toContain(
+      "steps.package_readiness_coverage.outputs.exit_code != '0'",
     )
   })
 
