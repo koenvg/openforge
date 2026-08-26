@@ -83,6 +83,18 @@ describe('terminal runtime resizing', () => {
 
       expect(fit).toHaveBeenCalledTimes(3)
       expect(resizePty).toHaveBeenLastCalledWith(terminalKey, 120, 24)
+
+      const resizeCallCount = resizePty.mock.calls.length
+      geometry = { cols: Number.POSITIVE_INFINITY, rows: 24 }
+      if (observedTarget === renderHost && resizeCallback) {
+        resizeCallback(
+          [{ contentRect: { width: 960, height: 480 } } as ResizeObserverEntry],
+          {} as ResizeObserver,
+        )
+      }
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(resizePty).toHaveBeenCalledTimes(resizeCallCount)
     } finally {
       runtime.release(terminalKey)
       vi.useRealTimers()

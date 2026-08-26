@@ -5,12 +5,22 @@ function isModalOpen(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
 }
 
+const MIN_PTY_DIMENSION = 1
+const MAX_PTY_DIMENSION = 0xFFFF
+
+function isValidPtyDimension(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MIN_PTY_DIMENSION
+    && value <= MAX_PTY_DIMENSION
+}
+
 export function isValidTerminalDimensions(
   dimensions: { cols: unknown; rows: unknown } | null | undefined,
 ): dimensions is { cols: number; rows: number } {
-  if (!dimensions) return false
-  if (typeof dimensions.cols !== 'number' || typeof dimensions.rows !== 'number') return false
-  return !Number.isNaN(dimensions.cols) && !Number.isNaN(dimensions.rows)
+  return Boolean(dimensions)
+    && isValidPtyDimension(dimensions?.cols)
+    && isValidPtyDimension(dimensions?.rows)
 }
 
 export function safeFit(entry: PoolEntry): boolean {
@@ -25,7 +35,9 @@ function refreshAndFocus(entry: PoolEntry): void {
 export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
-    const { cols, rows } = entry.view.geometry
+    const dimensions = entry.view.geometry
+    if (!isValidTerminalDimensions(dimensions)) return
+    const { cols, rows } = dimensions
     host.resizePty(entry.shellSessionKey, cols, rows)
       .catch(error => console.error(terminalLogMessage(host.loggerName, 'resize failed:'), error))
   }
