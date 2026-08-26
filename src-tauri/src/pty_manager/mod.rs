@@ -13,6 +13,8 @@ mod terminal_model_bridge;
 
 use crate::terminal_model::ShadowMode;
 #[cfg(test)]
+use crate::terminal_model::TerminalModelTestFault;
+#[cfg(test)]
 use attachment::PtyAttachmentHub;
 #[cfg(test)]
 use attachment::PtyAttachmentHubs;
@@ -127,6 +129,8 @@ pub struct PtyManager {
     shadow_mode: ShadowMode,
     ghostty_terminal_state_enabled: Arc<AtomicBool>,
     #[cfg(test)]
+    terminal_model_test_fault: Arc<std::sync::Mutex<TerminalModelTestFault>>,
+    #[cfg(test)]
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
@@ -225,6 +229,10 @@ impl PtyManager {
             shadow_mode: ShadowMode::from_environment(),
             ghostty_terminal_state_enabled: Arc::new(AtomicBool::new(false)),
             #[cfg(test)]
+            terminal_model_test_fault: Arc::new(std::sync::Mutex::new(
+                TerminalModelTestFault::None,
+            )),
+            #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
     }
@@ -265,6 +273,22 @@ impl PtyManager {
 
     pub(crate) fn set_shadow_mode(&mut self, mode: ShadowMode) {
         self.shadow_mode = mode;
+    }
+
+    pub(crate) fn set_terminal_model_test_fault(&self, fault: TerminalModelTestFault) {
+        *self
+            .terminal_model_test_fault
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = fault;
+    }
+
+    pub(super) fn take_terminal_model_test_fault(&self) -> TerminalModelTestFault {
+        std::mem::take(
+            &mut *self
+                .terminal_model_test_fault
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        )
     }
 }
 

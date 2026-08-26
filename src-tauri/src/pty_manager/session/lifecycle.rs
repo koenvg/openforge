@@ -533,6 +533,42 @@ impl PtyManager {
         Ok(())
     }
 
+    pub(super) async fn terminate_failed_terminal_model(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+    ) -> Result<(), PtyError> {
+        let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+        let session = {
+            let mut sessions = self.terminal_sessions.sessions.lock().await;
+            let is_affected_session = sessions
+                .get(session_key)
+                .is_some_and(|session| session.instance_id == instance_id);
+            is_affected_session
+                .then(|| sessions.remove(session_key))
+                .flatten()
+        };
+        let Some(mut session) = session else {
+            return Ok(());
+        };
+
+        warn!(
+            "[terminal-model] key={} instance={} terminating PTY after authoritative model failure",
+            session_key, instance_id
+        );
+        if let Err(error) = self
+            .terminate_current_session_process(session_key, &mut session, true)
+            .await
+        {
+            self.retain_failed_current_cleanup(session_key, session)
+                .await;
+            return Err(error);
+        }
+        self.clear_session_tracking(session_key).await;
+        Ok(())
+    }
+
     /// Kills the PTY process for the given session key.
     ///
     /// # Arguments

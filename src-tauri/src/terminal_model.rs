@@ -22,12 +22,24 @@ use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 const DEFAULT_SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
 const DEFAULT_CONTINUATION_BYTES: usize = 65 * 1024 * 1024;
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TerminalModelTestFault {
+    #[default]
+    None,
+    CreateFailure,
+    StallFirstCommand,
+    PanicOnFirstCommand,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TerminalModelOptions {
     pub(crate) cols: u16,
     pub(crate) rows: u16,
     pub(crate) max_scrollback_bytes: usize,
     pub(crate) max_continuation_bytes: usize,
+    #[cfg(test)]
+    pub(crate) test_fault: TerminalModelTestFault,
 }
 
 impl TerminalModelOptions {
@@ -37,7 +49,15 @@ impl TerminalModelOptions {
             rows,
             max_scrollback_bytes: DEFAULT_SCROLLBACK_BYTES,
             max_continuation_bytes: DEFAULT_CONTINUATION_BYTES,
+            #[cfg(test)]
+            test_fault: TerminalModelTestFault::None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_fault(mut self, test_fault: TerminalModelTestFault) -> Self {
+        self.test_fault = test_fault;
+        self
     }
 }
 
