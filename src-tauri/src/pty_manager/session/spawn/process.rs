@@ -1,13 +1,9 @@
 //! PTY command configuration and child-process creation.
 
-use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
+use crate::app_events::AppEventSender;
 use crate::backend_runtime::AppHandle;
-use crate::terminal_model::{
-    TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
-    TerminalModelSession,
-};
+use crate::terminal_model::{TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
 use crate::user_environment::user_environment;
-use base64::Engine;
 use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
@@ -19,6 +15,7 @@ use super::super::super::authority::ParsedStateOwner;
 use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use super::super::super::ordered_writer::OrderedPtyWriter;
 use super::super::super::pids::pid_file_name_for_session_key;
+use super::super::super::terminal_model_bridge::TerminalModelEventBridge;
 use super::super::super::{terminal_environment, PtyError, PtyManager, TerminalImageProtocol};
 use super::super::invalid_workspace_cwd;
 use super::super::lifecycle::{PtySession, PtySessionKind, NEXT_INSTANCE_ID};
@@ -108,45 +105,6 @@ where
     )))
 }
 
-fn terminal_model_event_sink(
-    session_key: &str,
-    app_handle: Option<AppHandle>,
-    app_event_tx: Option<AppEventSender>,
-    writer: Arc<OrderedPtyWriter>,
-) -> TerminalModelEventSink {
-    let session_key = session_key.to_string();
-    let output_event_name = format!("pty-model-output-{session_key}");
-    let disabled_event_name = format!("pty-model-disabled-{session_key}");
-    Arc::new(move |event| match event {
-        TerminalModelEvent::Output(frame) => publish_app_event_to_runtime(
-            app_handle.as_ref(),
-            &app_event_tx,
-            &output_event_name,
-            &serde_json::json!({
-                "instance_id": frame.instance_id,
-                "sequence": frame.sequence,
-                "data": base64::engine::general_purpose::STANDARD.encode(frame.bytes),
-            }),
-        ),
-        TerminalModelEvent::ProtocolReply { instance_id, bytes } => {
-            if let Err(error) =
-                writer.write_ghostty_query_response(&session_key, instance_id, &bytes)
-            {
-                warn!(
-                    "[terminal-model] key={} instance={} query response failed: {}",
-                    session_key, instance_id, error
-                );
-            }
-        }
-        TerminalModelEvent::Disabled { instance_id } => publish_app_event_to_runtime(
-            app_handle.as_ref(),
-            &app_event_tx,
-            &disabled_event_name,
-            &serde_json::json!({ "instance_id": instance_id }),
-        ),
-    })
-}
-
 impl PtyManager {
     fn configure_pty_command(
         command: &mut CommandBuilder,
@@ -219,12 +177,13 @@ impl PtyManager {
                     request.session_key.clone(),
                     request.instance_id,
                     options,
-                    terminal_model_event_sink(
-                        &request.session_key,
+                    TerminalModelEventBridge::new(
+                        request.session_key.clone(),
                         request.app_handle.clone(),
                         request.app_event_tx.clone(),
                         Arc::clone(&writer),
-                    ),
+                    )
+                    .into_event_sink(),
                 )
             } else {
                 TerminalModelSession::start(
