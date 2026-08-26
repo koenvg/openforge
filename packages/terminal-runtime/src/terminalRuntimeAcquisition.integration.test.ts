@@ -51,20 +51,27 @@ describe('terminal runtime acquisition', () => {
   it('uses PTY byte replay and never accepts a sidecar snapshot as xterm state', async () => {
     const terminalKey = 'T-xterm-shell-0'
     const host = createHost()
-    const getTerminalViewSnapshot = vi.spyOn(host, 'getTerminalViewSnapshot')
-    host.setTerminalViewSnapshot(terminalKey, {
-      instanceId: 6,
-      watermark: 99,
-      data: btoa('stale sidecar snapshot'),
+    host.getPtyBuffer = async () => ({
+      authority: 'xterm-authoritative',
+      buffer: 'xterm replay',
+      snapshot: {
+        instanceId: 6,
+        watermark: 99,
+        data: btoa('stale sidecar snapshot'),
+      },
+      isLive: true,
+      instanceId: 7,
     })
-    host.getPtyBuffer = async () => ({ buffer: 'xterm replay', isLive: true, instanceId: 7 })
     const runtime = createTerminalRuntime(host)
 
     const entry = await runtime.acquire(terminalKey)
 
     expect(entry.terminalStateSource).toBe('pty-byte-replay')
     expect(entry.authority?.ptyInstanceId).toBe(7)
-    expect(getTerminalViewSnapshot).not.toHaveBeenCalled()
+    expect(host).not.toHaveProperty('getTerminalViewSnapshot')
+    expect(host).not.toHaveProperty('setTerminalViewSnapshot')
+    expect(host).not.toHaveProperty('deferTerminalViewSnapshot')
+    expect(terminalMocks.instances[0].write).toHaveBeenCalledOnce()
     expect(terminalMocks.instances[0].write).toHaveBeenCalledWith('xterm replay', expect.any(Function))
   })
 

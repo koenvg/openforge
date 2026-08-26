@@ -167,9 +167,6 @@ export interface TestHost extends TerminalRuntimeOptions {
   enableImages: boolean | undefined
   emit<TPayload>(eventName: string, payload: TPayload): void
   setBuffer(shellSessionKey: string, buffer: string | null): void
-  getTerminalViewSnapshot(shellSessionKey: string): Promise<DiagnosticTerminalSnapshot | null>
-  setTerminalViewSnapshot(shellSessionKey: string, snapshot: DiagnosticTerminalSnapshot | null): void
-  deferTerminalViewSnapshot(shellSessionKey: string): () => void
   getListenerCount(eventName: string): number
   deferBufferRead(shellSessionKey: string): () => void
   deferListenerRegistration(eventName: string): () => void
@@ -194,8 +191,6 @@ export function createHost(): TestHost {
   const connectionRestoredHandlers = new Set<() => void>()
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
-  const terminalViewSnapshots = new Map<string, DiagnosticTerminalSnapshot | null>()
-  const terminalViewSnapshotGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationFailures = new Set<string>()
   const openLink = vi.fn(async () => undefined)
@@ -263,10 +258,6 @@ export function createHost(): TestHost {
       const buffer = buffers.get(shellSessionKey) ?? null
       return { buffer, isLive: buffer !== null, instanceId: null }
     },
-    async getTerminalViewSnapshot(shellSessionKey: string) {
-      await terminalViewSnapshotGates.get(shellSessionKey)?.promise
-      return terminalViewSnapshots.get(shellSessionKey) ?? null
-    },
     async writePty() {},
     async writeTerminalQueryResponse() {},
     async resizePty() {},
@@ -321,17 +312,6 @@ export function createHost(): TestHost {
     },
     setBuffer(shellSessionKey: string, buffer: string | null) {
       buffers.set(shellSessionKey, buffer)
-    },
-    setTerminalViewSnapshot(shellSessionKey: string, snapshot: DiagnosticTerminalSnapshot | null) {
-      terminalViewSnapshots.set(shellSessionKey, snapshot)
-    },
-    deferTerminalViewSnapshot(shellSessionKey: string) {
-      const gate = createDeferredGate()
-      terminalViewSnapshotGates.set(shellSessionKey, gate)
-      return () => {
-        if (terminalViewSnapshotGates.get(shellSessionKey) === gate) terminalViewSnapshotGates.delete(shellSessionKey)
-        gate.release()
-      }
     },
     deferBufferRead(shellSessionKey: string) {
       const gate = createDeferredGate()
