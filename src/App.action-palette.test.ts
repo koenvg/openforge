@@ -1,8 +1,14 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PullRequestInfo, PullRequestMergeMethod } from './lib/types'
+import type { ComponentProps } from 'svelte'
+import type { PullRequestInfo } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
+import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { createTask } from './App.test-fixtures/tasks'
+
+type ActionPaletteProps = ComponentProps<
+  typeof import('./components/shell/ActionPalette.svelte').default
+>
 
 describe('App action palette shortcuts', () => {
   installAppTestLifecycle()
@@ -91,20 +97,13 @@ describe('App action palette shortcuts', () => {
         expect(actionPaletteModule.default).toHaveBeenCalled()
       })
 
-      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
-      if (!lastCall) throw new Error('Expected ActionPalette to receive props')
+      const props = getLatestComponentProps<ActionPaletteProps>(
+        vi.mocked(actionPaletteModule.default),
+        'onExecute',
+        { latestCallOnly: true },
+      )
 
-      const propsCandidate = lastCall
-        .flatMap((arg) => {
-          if (typeof arg !== 'object' || arg === null) return []
-          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
-          return [arg]
-        })
-        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
-
-      if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
-
-      await propsCandidate.onExecute('merge-pr:squash', 'squash')
+      await props.onExecute('merge-pr:squash', 'squash')
 
       expect(ipc.mergePullRequest).toHaveBeenCalledWith(
         selectedTask.id,
@@ -203,20 +202,13 @@ describe('App action palette shortcuts', () => {
         expect(actionPaletteModule.default).toHaveBeenCalled()
       })
 
-      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
-      if (!lastCall) throw new Error('Expected ActionPalette to receive props')
+      const props = getLatestComponentProps<ActionPaletteProps>(
+        vi.mocked(actionPaletteModule.default),
+        'onExecute',
+        { latestCallOnly: true },
+      )
 
-      const propsCandidate = lastCall
-        .flatMap((arg) => {
-          if (typeof arg !== 'object' || arg === null) return []
-          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
-          return [arg]
-        })
-        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
-
-      if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
-
-      const execution = propsCandidate.onExecute('merge-pr:squash', 'squash')
+      const execution = props.onExecute('merge-pr:squash', 'squash')
 
       await vi.waitFor(() => {
         expect(get(stores.mergingTaskIds).has(selectedTask.id)).toBe(true)
@@ -322,20 +314,13 @@ describe('App action palette shortcuts', () => {
         expect(actionPaletteModule.default).toHaveBeenCalled()
       })
 
-      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
-      if (!lastCall) throw new Error('Expected ActionPalette to receive props')
+      const props = getLatestComponentProps<ActionPaletteProps>(
+        vi.mocked(actionPaletteModule.default),
+        'onExecute',
+        { latestCallOnly: true },
+      )
 
-      const propsCandidate = lastCall
-        .flatMap((arg) => {
-          if (typeof arg !== 'object' || arg === null) return []
-          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
-          return [arg]
-        })
-        .find((arg): arg is { onExecute: (actionId: string, mergeMethod?: PullRequestMergeMethod) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
-
-      if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
-
-      await propsCandidate.onExecute('merge-pr:squash', 'squash')
+      await props.onExecute('merge-pr:squash', 'squash')
 
       expect(ipc.mergePullRequest).not.toHaveBeenCalled()
       expect(ipc.forceGithubSync).not.toHaveBeenCalled()
