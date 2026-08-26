@@ -249,6 +249,74 @@ fn task_with_owned_start_prompt_contribution(
         .id
 }
 
+fn backlog_task_with_project(state: &crate::http_server::AppState) -> (String, String) {
+    let db = db::acquire_db(&state.db);
+    let project = db.create_project("P", "/tmp/p").expect("create Project");
+    let task = db
+        .create_task("p", "backlog", Some(&project.id), None, None)
+        .expect("create Task");
+    (project.id, task.id)
+}
+
+#[test]
+fn start_context_rejects_malformed_start_prompt_contributions_config() {
+    let (state, _temp_dir) =
+        crate::app_invoke::test_support::test_state("task_start_context_malformed_prompt_config");
+    let (project_id, task_id) = backlog_task_with_project(&state);
+    db::acquire_db(&state.db)
+        .set_project_config(
+            &project_id,
+            agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            "not-json",
+        )
+        .expect("store malformed contribution config");
+
+    let error = service_for_state(&state)
+        .load_context(&task_id)
+        .err()
+        .expect("malformed contribution config must reject Task Start");
+    let TaskStartError::InvalidConfiguration(message) = error else {
+        panic!("expected invalid configuration error, got {error:?}");
+    };
+    assert!(message.contains(agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY));
+    assert!(message.contains(&project_id));
+    assert!(message.contains("line 1 column"));
+
+    drop(state);
+}
+
+#[test]
+fn start_context_reports_unreadable_start_prompt_contributions_config() {
+    let (state, _temp_dir) =
+        crate::app_invoke::test_support::test_state("task_start_context_unreadable_prompt_config");
+    let (project_id, task_id) = backlog_task_with_project(&state);
+    db::acquire_db(&state.db)
+        .lock_conn()
+        .expect("lock database")
+        .execute(
+            "INSERT INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                &project_id,
+                agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+                vec![0xff_u8],
+            ],
+        )
+        .expect("store unreadable contribution config");
+
+    let error = service_for_state(&state)
+        .load_context(&task_id)
+        .err()
+        .expect("unreadable contribution config must reject Task Start");
+    let TaskStartError::Persistence(message) = error else {
+        panic!("expected persistence error, got {error:?}");
+    };
+    assert!(message.contains(agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY));
+    assert!(message.contains(&project_id));
+    assert!(message.contains("Invalid column type"));
+
+    drop(state);
+}
+
 #[test]
 fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_on_reenable() {
     let (state, _temp_dir) =

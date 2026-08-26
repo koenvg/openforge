@@ -425,9 +425,21 @@ impl TaskStartService {
                 &project_id,
                 agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
             )
-            .ok()
-            .flatten()
-            .and_then(|value| serde_json::from_str(&value).ok())
+            .map_err(|error| {
+                TaskStartError::Persistence(format!(
+                    "failed to load {} config for Project {project_id}: {error}",
+                    agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY
+                ))
+            })?
+            .map(|value| {
+                serde_json::from_str::<Vec<StartPromptContribution>>(&value).map_err(|error| {
+                    TaskStartError::InvalidConfiguration(format!(
+                        "invalid {} config for Project {project_id}: {error}",
+                        agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY
+                    ))
+                })
+            })
+            .transpose()?
             .unwrap_or_default();
         start_prompt_contributions.retain(|contribution| {
             contribution
