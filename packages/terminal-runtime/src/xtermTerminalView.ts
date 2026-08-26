@@ -1,5 +1,6 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
+import { isValidTerminalDimensions } from './terminalAttachment'
 import { isTerminalQueryResponse } from './terminalAuthority'
 import { loadXtermImageSupport } from './xtermImageSupport'
 import { createTerminalLinkHandler, loadTerminalWebLinksAddon } from './terminalLinks'
@@ -60,11 +61,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   function fit(): TerminalViewGeometry | null {
     if (hostDiv.clientWidth === 0 || hostDiv.clientHeight === 0) return null
     const dimensions = fitAddon.proposeDimensions()
-    if (!dimensions
-      || typeof dimensions.cols !== 'number'
-      || typeof dimensions.rows !== 'number'
-      || Number.isNaN(dimensions.cols)
-      || Number.isNaN(dimensions.rows)) return null
+    if (!isValidTerminalDimensions(dimensions)) return null
     fitAddon.fit()
     return dimensions
   }

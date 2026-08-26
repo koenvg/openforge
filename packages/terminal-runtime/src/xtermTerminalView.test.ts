@@ -157,6 +157,32 @@ describe('xterm TerminalView adapter', () => {
     expect(mocks.fit).toHaveBeenCalledOnce()
   })
 
+  it.each([
+    ['NaN', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['fractional', 1.5],
+    ['zero', 0],
+    ['negative', -1],
+    ['above the PTY u16 range', 65_536],
+  ])('does not pass %s dimensions to xterm fit', (_description, invalidDimension) => {
+    const container = document.createElement('div')
+    const view = createXtermTerminalView({
+      terminalKey: 'T-1-shell-0',
+      themeMode: 'dark',
+      openLink: vi.fn(async () => undefined),
+    })
+
+    view.mount(container)
+    Object.defineProperties(container.firstElementChild, {
+      clientWidth: { configurable: true, value: 640 },
+      clientHeight: { configurable: true, value: 480 },
+    })
+    mocks.proposeDimensions.mockReturnValueOnce({ cols: invalidDimension, rows: 24 })
+
+    expect(view.fit()).toBeNull()
+    expect(mocks.fit).not.toHaveBeenCalled()
+  })
+
   it('drains only after xterm parses queued writes and presents a renderer frame', async () => {
     const container = document.createElement('div')
     const view = createXtermTerminalView({
