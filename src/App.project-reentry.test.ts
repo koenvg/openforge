@@ -1,42 +1,17 @@
 import { render } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
-import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
+import { getLatestComponentProps } from './App.test-fixtures/component-props'
+import { activateGithubGlobalView } from './App.test-fixtures/plugin-runtime'
+import { createTask } from './App.test-fixtures/tasks'
 import App from './App.svelte'
 
-function getLatestComponentProps<T extends Record<string, unknown>>(
-  mockComponent: { mock: { calls: unknown[][] } },
-  propName: keyof T,
-): T {
-  for (const call of [...mockComponent.mock.calls].reverse()) {
-    const props = call.find(
-      (arg): arg is T => typeof arg === 'object' && arg !== null && (propName as PropertyKey) in arg,
-    )
-    if (props) return props
-  }
 
-  throw new Error(`Expected mocked component props with ${String(propName)}`)
-}
-
-const openTask: Task = {
+const openTask = createTask({
   id: 'task-open',
   initial_prompt: 'Drilled-in task',
-  prompt: null,
-  title: null,
-  title_source: null,
-  title_generated_at: null,
-  status: 'doing',
-  agent: null,
-  permission_mode: null,
-  worktree_source: null,
-  worktree_branch: null,
-  source_ticket_url: null,
-  depends_on: [],
-  project_id: 'proj-1',
-  created_at: 1000,
-  updated_at: 1000,
-}
+})
 
 describe('App project re-entry from cross-project views', () => {
   installAppTestLifecycle()
@@ -173,8 +148,7 @@ describe('App project re-entry from cross-project views', () => {
     const stores = await import('./lib/stores')
     const nav = await import('./lib/router.svelte')
     const pluginStore = await import('./lib/plugin/pluginStore')
-    const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-    const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
+    const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
     const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
     const { get } = await import('svelte/store')
     const { tick } = await import('svelte')
@@ -189,14 +163,7 @@ describe('App project re-entry from cross-project views', () => {
       expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
     })
 
-    pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
-    await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
-    // Register the github-sync global "All Pull Requests" view as a sidebar (cross-project) view.
-    pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
-      views: [{ id: GITHUB_SYNC_GLOBAL_VIEW_ID, title: 'All Pull Requests', icon: 'git-pull-request', placement: 'sidebar', order: 20 }],
-    })
-    await tick()
-
+    await activateGithubGlobalView()
     stores.currentView.set(GITHUB_SYNC_GLOBAL_VIEW_KEY)
     await tick()
 
@@ -214,8 +181,7 @@ describe('App project re-entry from cross-project views', () => {
   it('hides the per-project IconRail on a cross-project sidebar plugin view', async () => {
     const stores = await import('./lib/stores')
     const pluginStore = await import('./lib/plugin/pluginStore')
-    const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-    const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
+    const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_KEY } = await import('./lib/githubSyncPlugin')
     const IconRail = (await import('./components/shell/IconRail.svelte')).default
     const { get } = await import('svelte/store')
     const { tick } = await import('svelte')
@@ -227,12 +193,7 @@ describe('App project re-entry from cross-project views', () => {
       expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
     })
 
-    pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
-    await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
-    pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
-      views: [{ id: GITHUB_SYNC_GLOBAL_VIEW_ID, title: 'All Pull Requests', icon: 'git-pull-request', placement: 'sidebar', order: 20 }],
-    })
-    await tick()
+    await activateGithubGlobalView()
 
     // The per-project rail is mounted on the board; moving to a cross-project sidebar
     // view must unmount it, so returning to the board remounts it (a fresh render call).

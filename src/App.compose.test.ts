@@ -2,6 +2,7 @@ import { render, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
+import { createTask } from './App.test-fixtures/tasks'
 
 function latestDialogProps(mockComponent: { mock: { calls: unknown[][] } }): Record<string, unknown> {
   for (const call of [...mockComponent.mock.calls].reverse()) {
@@ -13,7 +14,7 @@ function latestDialogProps(mockComponent: { mock: { calls: unknown[][] } }): Rec
   throw new Error('Expected AddTaskDialog to be rendered with a promptSeed')
 }
 
-const task = { id: 'T-9' } as Task
+const task = createTask({ id: 'T-9' })
 
 describe('App compose dialog', () => {
   installAppTestLifecycle()

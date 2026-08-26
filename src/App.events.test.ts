@@ -4,6 +4,7 @@ import type { PullRequestInfo } from './lib/types'
 import { requireDefined } from './test-utils/dom'
 import { installAppTestLifecycle } from './App.test-harness'
 import { eventListeners } from './App.test-fixtures/ipc'
+import { createTask } from './App.test-fixtures/tasks'
 
 describe('App desktop events', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
@@ -140,24 +141,12 @@ describe('App desktop events', { timeout: 15_000 }, () => {
       const { getTaskDetail } = await import('./lib/ipc')
       const { get } = await import('svelte/store')
 
-      vi.mocked(getTaskDetail).mockResolvedValue({
+      vi.mocked(getTaskDetail).mockResolvedValue(createTask({
         id: 'T-99',
         initial_prompt: '',
         prompt: 'Prompt from task detail',
-        title: null,
-        title_source: null,
-        title_generated_at: null,
         status: 'backlog',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      })
+      }))
 
       render(App)
 

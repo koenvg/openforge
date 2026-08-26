@@ -3,6 +3,7 @@ import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { Project, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
+import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { callOrder, persistInstalledPluginRow } from './App.test-fixtures/ipc'
 import {
   mockActivatePlugin,
@@ -14,6 +15,7 @@ import {
   mockRouterResetToBoard,
 } from './App.test-fixtures/routing'
 import { mockCurrentViewStore } from './App.test-fixtures/stores'
+import { createTask } from './App.test-fixtures/tasks'
 
 async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockInstance<typeof console.error>) => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -24,14 +26,6 @@ async function withSuppressedExpectedConsoleError(run: (consoleErrorSpy: MockIns
   }
 }
 
-function getLatestComponentProps<T extends Record<string, unknown>>(mockComponent: { mock: { calls: unknown[][] } }, propName: keyof T): T {
-  for (const call of [...mockComponent.mock.calls].reverse()) {
-    const props = call.find((arg): arg is T => typeof arg === 'object' && arg !== null && propName in arg)
-    if (props) return props
-  }
-
-  throw new Error(`Expected mocked component props with ${String(propName)}`)
-}
 
 describe('App startup data loading', { timeout: 15_000 }, () => {
   installAppTestLifecycle()
@@ -213,24 +207,11 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     expect(screen.queryByRole('button', { name: 'Create new task' })).toBeNull()
   })
   describe('new task creation dialog navigation', () => {
-    const createdTask: Task = {
+    const createdTask = createTask({
       id: 'T-new',
       initial_prompt: 'Start this immediately',
-      prompt: null,
-      title: null,
-      title_source: null,
-      title_generated_at: null,
       status: 'backlog',
-      agent: null,
-      permission_mode: null,
-      worktree_source: null,
-      worktree_branch: null,
-      source_ticket_url: null,
-      depends_on: [],
-      project_id: 'proj-1',
-      created_at: 1000,
-      updated_at: 1000,
-    }
+    })
 
     async function openCreateTaskDialog(initialView: 'board' | 'plugin:com.openforge.file-viewer:files' = 'board') {
       const App = (await import('./App.svelte')).default
@@ -319,24 +300,10 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     it('clears selectedTaskId when the selected task disappears', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-123',
         initial_prompt: 'Selected task',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)
@@ -354,24 +321,10 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     it('keeps selectedTaskId when the selected task is still present', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-456',
         initial_prompt: 'Selected task',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)
@@ -387,24 +340,11 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     it('keeps selectedTaskId when the selected task is pending', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const pendingTask: Task = {
+      const pendingTask = createTask({
         id: 'task-pending',
         initial_prompt: 'Pending task',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
         status: 'backlog',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       stores.tasks.set([])
       stores.pendingTask.set(pendingTask)
