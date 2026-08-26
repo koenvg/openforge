@@ -92,12 +92,12 @@ jobs:
 
       - name: Check package contents
         working-directory: packages/plugin-sdk
-        run: npm pack --dry-run
+        run: pnpm pack --dry-run
 
       - name: Publish package
         if: inputs.dry_run == false && steps.published-sdk.outputs.published != 'true'
         working-directory: packages/plugin-sdk
-        run: npm publish --access public --provenance --tag "$NPM_TAG"
+        run: pnpm publish --no-git-checks --access public --provenance --tag "$NPM_TAG"
 
       - name: Report dry run
         if: inputs.dry_run == true
