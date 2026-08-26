@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, RefreshCw, X } from '@lucide/svelte'
+  import { ArrowLeft, ArrowRight, PanelRightOpen, RefreshCw, X } from '@lucide/svelte'
   import type {
     PluginTaskPaneProps,
+    BrowserDevToolsPanel,
     TaskBrowserSurfaceState,
   } from '@openforge-app/plugin-sdk/frontend'
   import { onDestroy } from 'svelte'
@@ -25,6 +26,7 @@
     loading: false,
     canGoBack: false,
     canGoForward: false,
+    devToolsOpen: false,
     error: null,
   }
 
@@ -152,6 +154,42 @@
     })
   }
 
+  async function setDevToolsOpen(
+    activeSession: BrowserTabSession,
+    panel?: BrowserDevToolsPanel,
+  ): Promise<TaskBrowserSurfaceState> {
+    if (!surfaceState.devToolsOpen && feedbackEditor.active) await feedbackEditor.toggle()
+    if (panel) return activeSession.openDevTools(panel)
+    return surfaceState.devToolsOpen
+      ? activeSession.closeDevTools()
+      : activeSession.openDevTools()
+  }
+
+  type DevToolsKeyboardShortcut = 'toggle' | BrowserDevToolsPanel
+
+  function devToolsKeyboardShortcut(event: KeyboardEvent): DevToolsKeyboardShortcut | null {
+    if (event.repeat) return null
+    const key = event.key.toLowerCase()
+    if (key === 'f12') return 'toggle'
+    const isMac = navigator.platform.toLowerCase().includes('mac')
+    const modified = isMac
+      ? event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey
+      : event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey
+    if (!modified) return null
+    if (key === 'i') return 'toggle'
+    if (key === 'c') return 'elements'
+    return key === 'j' ? 'console' : null
+  }
+
+  function handleDevToolsShortcut(event: KeyboardEvent) {
+    const shortcut = devToolsKeyboardShortcut(event)
+    if (shortcut === null) return
+    event.preventDefault()
+    void runSurfaceAction(activeSession => shortcut === 'toggle'
+      ? setDevToolsOpen(activeSession)
+      : setDevToolsOpen(activeSession, shortcut))
+  }
+
   function submitAddress(event: SubmitEvent) {
     event.preventDefault()
     editingAddress = false
@@ -184,6 +222,8 @@
     ])
   })
 </script>
+
+<svelte:window onkeydown={handleDevToolsShortcut} />
 
 <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
   <form
@@ -247,6 +287,18 @@
     <button class="btn btn-ghost btn-sm h-8 min-h-8 px-3" type="submit" disabled={opening || address.trim().length === 0}>
       Go
     </button>
+
+    <button
+      class="btn btn-ghost btn-square btn-xs h-8 min-h-8 w-8"
+      class:btn-active={surfaceState.devToolsOpen}
+      type="button"
+      aria-label={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
+      aria-pressed={surfaceState.devToolsOpen}
+      title={surfaceState.devToolsOpen ? 'Close Developer Tools' : 'Open Developer Tools'}
+      disabled={opening || session === null}
+      onclick={() => void runSurfaceAction(setDevToolsOpen)}
+    >
+      <PanelRightOpen size={15} aria-hidden="true" /></button>
 
     <VisualFeedbackEditor
       available={!opening && session !== null}

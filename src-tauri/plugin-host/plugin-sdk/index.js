@@ -1103,6 +1103,7 @@ var TestingTaskBrowserSurface = class {
 			loading: false,
 			canGoBack: false,
 			canGoForward: false,
+			devToolsOpen: false,
 			error: null
 		};
 	}
@@ -1212,6 +1213,27 @@ var TestingTaskBrowserSurface = class {
 			action: "stop"
 		});
 		this.publish({ loading: false });
+		return this.getState();
+	}
+	async openDevTools(panel) {
+		this.assertLive();
+		this.calls.browserSurfaceControls.push({
+			taskId: this.taskId,
+			id: this.id,
+			action: "openDevTools",
+			...panel ? { panel } : {}
+		});
+		this.publish({ devToolsOpen: true });
+		return this.getState();
+	}
+	async closeDevTools() {
+		this.assertLive();
+		this.calls.browserSurfaceControls.push({
+			taskId: this.taskId,
+			id: this.id,
+			action: "closeDevTools"
+		});
+		this.publish({ devToolsOpen: false });
 		return this.getState();
 	}
 	async selectVisibleRegion() {

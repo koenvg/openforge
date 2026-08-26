@@ -3,6 +3,7 @@ import {
 } from './taskBrowserSurfaceManager.js'
 import type {
   TaskBrowserBounds,
+  TaskBrowserDevToolsPanel,
   TaskBrowserSurfaceErrorCode,
   TaskBrowserSurfaceManager,
   TaskBrowserSurfaceVisualFeedback,
@@ -19,6 +20,8 @@ const COMMANDS = new Set([
   'task_browser_surface_go_forward',
   'task_browser_surface_reload',
   'task_browser_surface_stop',
+  'task_browser_surface_open_devtools',
+  'task_browser_surface_close_devtools',
   'task_browser_surface_select_visible_region',
   'task_browser_surface_cancel_visible_region_selection',
   'task_browser_surface_clear_visual_feedback',
@@ -57,6 +60,15 @@ function optionalStringField(payload: Record<string, unknown>, field: string): s
   const value = payload[field]
   if (value === undefined) return undefined
   if (typeof value !== 'string') throw new TaskBrowserSurfaceError('INVALID_URL', `Task Browser Surface ${field} must be a string`)
+  return value
+}
+
+function optionalDevToolsPanelField(payload: Record<string, unknown>): TaskBrowserDevToolsPanel | undefined {
+  const value = payload.panel
+  if (value === undefined) return undefined
+  if (value !== 'elements' && value !== 'console') {
+    throw new TaskBrowserSurfaceError('INVALID_ID', 'Task Browser DevTools panel must be elements or console')
+  }
   return value
 }
 
@@ -264,6 +276,10 @@ export class TaskBrowserSurfaceIpcRouter {
           return { ok: true, value: await this.manager.reload(surfaceId) }
         case 'task_browser_surface_stop':
           return { ok: true, value: await this.manager.stop(surfaceId) }
+        case 'task_browser_surface_open_devtools':
+          return { ok: true, value: await this.manager.openDevTools(surfaceId, optionalDevToolsPanelField(payload)) }
+        case 'task_browser_surface_close_devtools':
+          return { ok: true, value: await this.manager.closeDevTools(surfaceId) }
         default:
           throw new TaskBrowserSurfaceError('HOST_UNAVAILABLE', `Unknown Task Browser Surface command: ${command}`)
       }

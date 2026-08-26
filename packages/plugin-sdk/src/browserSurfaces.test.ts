@@ -23,6 +23,7 @@ describe('browser surfaces SDK contract', () => {
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     })
 
@@ -34,6 +35,8 @@ describe('browser surfaces SDK contract', () => {
     await first.goForward()
     await first.reload()
     await first.stop()
+    await expect(first.openDevTools('elements')).resolves.toMatchObject({ devToolsOpen: true })
+    await expect(first.closeDevTools()).resolves.toMatchObject({ devToolsOpen: false })
     await attachment.dispose()
 
     api.__testing.registry.setBrowserSurfaceState('T-1', 'main', { title: 'Driven by test' })
@@ -50,6 +53,14 @@ describe('browser surfaces SDK contract', () => {
     expect(api.__testing.calls.browserSurfaceAttachments).toHaveLength(1)
     expect(api.__testing.calls.browserSurfaceNavigations).toEqual([
       { taskId: 'T-1', id: 'main', url: 'https://example.com/second' },
+    ])
+    expect(api.__testing.calls.browserSurfaceControls).toEqual([
+      { taskId: 'T-1', id: 'main', action: 'goBack' },
+      { taskId: 'T-1', id: 'main', action: 'goForward' },
+      { taskId: 'T-1', id: 'main', action: 'reload' },
+      { taskId: 'T-1', id: 'main', action: 'stop' },
+      { taskId: 'T-1', id: 'main', action: 'openDevTools', panel: 'elements' },
+      { taskId: 'T-1', id: 'main', action: 'closeDevTools' },
     ])
     expect(api.__testing.calls.browserSurfaceDetaches).toEqual([{ taskId: 'T-1', id: 'main' }])
     expect(api.__testing.calls.browserSurfaceDestroys).toEqual([{ taskId: 'T-1', id: 'main' }])
@@ -72,6 +83,8 @@ describe('browser surfaces SDK contract', () => {
       'goForward',
       'reload',
       'stop',
+      'openDevTools',
+      'closeDevTools',
       'selectVisibleRegion',
       'captureVisibleViewport',
       'discardCapture',

@@ -1,6 +1,7 @@
 import { BrowserSurfaceError } from '@openforge-app/plugin-sdk/frontend'
 import type {
   BrowserSurfaceCapture,
+  BrowserDevToolsPanel,
   BrowserSurfaceFeedbackSelection,
   BrowserSurfaceVisualFeedback,
   BrowserSurfaceErrorCode,
@@ -160,6 +161,17 @@ class HostTaskBrowserSurfaceController implements TaskBrowserSurfaceController {
 
   stop(): Promise<TaskBrowserSurfaceState> {
     return this.control('task_browser_surface_stop', { surfaceId: this.reference.surfaceId })
+  }
+
+  openDevTools(panel?: BrowserDevToolsPanel): Promise<TaskBrowserSurfaceState> {
+    return this.control('task_browser_surface_open_devtools', {
+      surfaceId: this.reference.surfaceId,
+      ...(panel ? { panel } : {}),
+    })
+  }
+
+  closeDevTools(): Promise<TaskBrowserSurfaceState> {
+    return this.control('task_browser_surface_close_devtools', { surfaceId: this.reference.surfaceId })
   }
 
   selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null> {

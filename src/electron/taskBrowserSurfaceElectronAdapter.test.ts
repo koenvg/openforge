@@ -102,11 +102,21 @@ const electronFakes = vi.hoisted(() => {
     destroyed = false
     reloadCalls = 0
     stopCalls = 0
+    openDevToolsCalls: unknown[] = []
+    closeDevToolsCalls = 0
+    devToolsOpened = false
+    emitDevToolsEvents = true
+    inspectElementCalls: Array<{ x: number; y: number }> = []
+    devToolsInputEvents: unknown[] = []
+    readonly devToolsWebContents = {
+      sendInputEvent: (input: unknown) => { this.devToolsInputEvents.push(input) },
+    }
     capturePageCalls: unknown[] = []
     captureSize = { width: 640, height: 480 }
     capturePng = Buffer.from('visible-viewport-png')
     executeJavaScriptCalls: string[] = []
     executeJavaScriptResult: unknown = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }
+    executeJavaScriptResults: unknown[] = []
     backgroundThrottling: boolean[] = []
     windowOpenHandler: ((details: unknown) => unknown) | null = null
     loadError: Error | null = null
@@ -115,6 +125,18 @@ const electronFakes = vi.hoisted(() => {
       const handlers = this.handlers.get(event) ?? []
       handlers.push(handler)
       this.handlers.set(event, handlers)
+    }
+
+    once(event: string, handler: Listener): void {
+      const onceHandler: Listener = (...args) => {
+        this.handlers.set(event, (this.handlers.get(event) ?? []).filter(candidate => candidate !== onceHandler))
+        handler(...args)
+      }
+      this.on(event, onceHandler)
+    }
+
+    removeListener(event: string, handler: Listener): void {
+      this.handlers.set(event, (this.handlers.get(event) ?? []).filter(candidate => candidate !== handler))
     }
 
     emit(event: string, ...args: unknown[]): void {
@@ -142,11 +164,30 @@ const electronFakes = vi.hoisted(() => {
 
     async executeJavaScript(script: string): Promise<unknown> {
       this.executeJavaScriptCalls.push(script)
-      return this.executeJavaScriptResult
+      return this.executeJavaScriptResults.length > 0
+        ? this.executeJavaScriptResults.shift()
+        : this.executeJavaScriptResult
     }
 
     reload(): void { this.reloadCalls += 1 }
     stop(): void { this.stopCalls += 1 }
+    openDevTools(options?: unknown): void {
+      this.openDevToolsCalls.push(options)
+      if (this.emitDevToolsEvents) {
+        this.devToolsOpened = true
+        this.emit('devtools-opened')
+      }
+    }
+    closeDevTools(): void {
+      this.closeDevToolsCalls += 1
+      this.devToolsOpened = false
+      this.emit('devtools-closed')
+    }
+    isDevToolsOpened(): boolean { return this.devToolsOpened }
+    inspectElement(x: number, y: number): void {
+      this.inspectElementCalls.push({ x, y })
+      if (!this.devToolsOpened) this.openDevTools()
+    }
     setBackgroundThrottling(value: boolean): void { this.backgroundThrottling.push(value) }
     setWindowOpenHandler(handler: (details: unknown) => unknown): void { this.windowOpenHandler = handler }
     close(): void { this.destroyed = true }
@@ -205,10 +246,20 @@ const electronFakes = vi.hoisted(() => {
     isDestroyed(): boolean { return this.destroyed }
   }
 
+  type FakeMenuItem = { label?: string; click?: () => void }
+  class FakeMenu {
+    static buildFromTemplate(template: FakeMenuItem[]) {
+      return {
+        popup(options: unknown) { menuPopups.push({ template, options }) },
+      }
+    }
+  }
+
   const views: FakeWebContentsView[] = []
   const sessions = new Map<string, FakeSession>()
   const windows = new Map<number, FakeBrowserWindow>()
   const childWindows: FakeBrowserWindow[] = []
+  const menuPopups: Array<{ template: FakeMenuItem[]; options: unknown }> = []
 
   function sessionFor(partition: string): FakeSession {
     let browserSession = sessions.get(partition)
@@ -224,6 +275,8 @@ const electronFakes = vi.hoisted(() => {
     FakeBrowserWindow,
     FakeDownloadItem,
     FakeWebContentsView,
+    FakeMenu,
+    menuPopups,
     views,
     childWindows,
     sessionFor,
@@ -252,6 +305,7 @@ const electronFakes = vi.hoisted(() => {
     reset() {
       views.length = 0
       childWindows.length = 0
+      menuPopups.length = 0
       sessions.clear()
       windows.clear()
     },
@@ -264,6 +318,7 @@ vi.mock('electron', () => ({
     getPath: (name: string) => name === 'downloads' ? '/downloads' : '/',
   },
   BrowserWindow: electronFakes.FakeBrowserWindow,
+  Menu: electronFakes.FakeMenu,
   WebContentsView: electronFakes.FakeWebContentsView,
   session: {
     fromPartition: electronFakes.sessionFor,
@@ -282,6 +337,14 @@ function preventableEvent() {
     get prevented() { return prevented },
   }
 }
+
+const platformDevToolsModifiers = () => process.platform === 'darwin'
+  ? { meta: true, alt: true }
+  : { control: true, shift: true }
+
+const platformDevToolsInputModifiers = () => process.platform === 'darwin'
+  ? ['meta', 'alt']
+  : ['control', 'shift']
 
 describe('Electron Task Browser Surface navigation adapter', () => {
   beforeEach(() => electronFakes.reset())
@@ -314,6 +377,191 @@ describe('Electron Task Browser Surface navigation adapter', () => {
 
     surface.destroy()
     expect(view.webContents.destroyed).toBe(true)
+  })
+
+  it('opens packaged Task Browser DevTools and publishes their live surface state', async () => {
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-devtools',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const view = electronFakes.views[0]
+    const states: TaskBrowserNativeState[] = []
+    surface.onStateChanged(state => states.push(state))
+
+    expect((view.options as { webPreferences: { devTools: boolean } }).webPreferences.devTools).toBe(true)
+    expect(surface.getState().devToolsOpen).toBe(false)
+
+    await surface.openDevTools()
+    expect(view.webContents.openDevToolsCalls).toEqual([undefined])
+    expect(surface.getState().devToolsOpen).toBe(true)
+    expect(states.at(-1)?.devToolsOpen).toBe(true)
+
+    surface.detach()
+    expect(surface.getState().devToolsOpen).toBe(true)
+
+    await surface.closeDevTools()
+    expect(view.webContents.closeDevToolsCalls).toBe(1)
+    expect(surface.getState().devToolsOpen).toBe(false)
+    expect(states.at(-1)?.devToolsOpen).toBe(false)
+  })
+
+  it('rejects when Chromium does not open Task Browser DevTools', async () => {
+    vi.useFakeTimers()
+    try {
+      const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+        windowId: 10,
+        partition: 'persist:test-browser-devtools-failure',
+        webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+        popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+      })
+      const contents = electronFakes.views[0].webContents
+      contents.emitDevToolsEvents = false
+
+      const opening = surface.openDevTools()
+      const rejection = expect(opening).rejects.toMatchObject({
+        code: 'HOST_UNAVAILABLE',
+        message: 'Chromium Developer Tools did not open',
+      })
+      await vi.advanceTimersByTimeAsync(2_000)
+      await rejection
+      expect(surface.getState().devToolsOpen).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cancels active visual-feedback selection before opening Task Browser DevTools', async () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-devtools-selection',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 800, height: 600 })
+    const contents = electronFakes.views[0].webContents
+    let finishSelection!: (value: null) => void
+    const pendingSelection = new Promise<null>(resolve => { finishSelection = resolve })
+    contents.executeJavaScriptResults = [undefined, pendingSelection, undefined]
+    let selectionFinished = false
+    const selection = surface.selectVisibleRegion().then(result => {
+      selectionFinished = true
+      return result
+    })
+    while (contents.executeJavaScriptCalls.length < 2) await Promise.resolve()
+
+    await surface.openDevTools()
+    await Promise.resolve()
+
+    expect(selectionFinished).toBe(true)
+    await expect(selection).resolves.toBeNull()
+    expect(contents.executeJavaScriptCalls.at(-1)).toContain('__openforge_visual_feedback_selector__')
+    expect(contents.openDevToolsCalls).toEqual([undefined])
+    finishSelection(null)
+  })
+
+  it('toggles Task Browser DevTools with standard shortcuts in the page and focused popups', async () => {
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-devtools-shortcuts',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const contents = electronFakes.views[0].webContents
+
+    const openEvent = preventableEvent()
+    contents.emit('before-input-event', openEvent, { type: 'keyDown', key: 'F12' })
+    expect(openEvent.prevented).toBe(true)
+    await vi.waitFor(() => expect(contents.openDevToolsCalls).toEqual([undefined]))
+
+    const closeEvent = preventableEvent()
+    contents.emit('before-input-event', closeEvent, {
+      type: 'keyDown',
+      key: 'i',
+      ...platformDevToolsModifiers(),
+    })
+    expect(closeEvent.prevented).toBe(true)
+    expect(contents.closeDevToolsCalls).toBe(1)
+
+    const ignoredEvent = preventableEvent()
+    contents.emit('before-input-event', ignoredEvent, { type: 'keyDown', key: 'r', control: true })
+    expect(ignoredEvent.prevented).toBe(false)
+
+    const wrongPlatformEvent = preventableEvent()
+    contents.emit('before-input-event', wrongPlatformEvent, {
+      type: 'keyDown',
+      key: 'i',
+      ...(process.platform === 'darwin'
+        ? { control: true, shift: true }
+        : { meta: true, alt: true }),
+    })
+    expect(wrongPlatformEvent.prevented).toBe(false)
+
+    const popup = electronFakes.openPopup(contents, 'https://popup.example').child!
+    const popupEvent = preventableEvent()
+    popup.webContents.emit('before-input-event', popupEvent, {
+      type: 'keyDown',
+      key: 'i',
+      ...platformDevToolsModifiers(),
+    })
+    expect(popupEvent.prevented).toBe(true)
+    await vi.waitFor(() => expect(popup.webContents.openDevToolsCalls).toEqual([undefined]))
+
+    surface.destroy()
+  })
+
+  it('forwards Elements and Console shortcuts to Chromium DevTools', async () => {
+    new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-devtools-panels',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    const contents = electronFakes.views[0].webContents
+    const elementsInput = { type: 'keyDown', key: 'c', ...platformDevToolsModifiers() }
+    const elementsEvent = preventableEvent()
+
+    contents.emit('before-input-event', elementsEvent, elementsInput)
+    expect(elementsEvent.prevented).toBe(true)
+    await vi.waitFor(() => expect(contents.openDevToolsCalls).toEqual([undefined]))
+    expect(contents.devToolsInputEvents).toEqual([
+      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers() },
+    ])
+
+    const consoleInput = { type: 'keyDown', key: 'j', ...platformDevToolsModifiers() }
+    const consoleEvent = preventableEvent()
+    contents.emit('before-input-event', consoleEvent, consoleInput)
+    expect(consoleEvent.prevented).toBe(true)
+    expect(contents.openDevToolsCalls).toHaveLength(1)
+    await vi.waitFor(() => expect(contents.devToolsInputEvents).toEqual([
+      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers() },
+      { type: 'keyDown', keyCode: 'J', modifiers: platformDevToolsInputModifiers() },
+    ]))
+  })
+
+  it('offers Inspect element for the page and host-owned popups', async () => {
+    electronFakes.registerWindow(10)
+    const surface = new ElectronTaskBrowserSurfaceFactory().createSurface({
+      windowId: 10,
+      partition: 'persist:test-browser-devtools-inspect',
+      webPreferences: SECURE_TASK_BROWSER_WEB_PREFERENCES,
+      popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
+    })
+    surface.attach(10, { x: 0, y: 0, width: 800, height: 600 })
+    const contents = electronFakes.views[0].webContents
+
+    contents.emit('context-menu', {}, { x: 24, y: 36 })
+    expect(electronFakes.menuPopups).toHaveLength(1)
+    expect(electronFakes.menuPopups[0].template.map(item => item.label)).toEqual(['Inspect element'])
+    electronFakes.menuPopups[0].template[0].click?.()
+    await vi.waitFor(() => expect(contents.inspectElementCalls).toEqual([{ x: 24, y: 36 }]))
+
+    const popup = electronFakes.openPopup(contents, 'https://popup.example').child!
+    popup.webContents.emit('context-menu', {}, { x: 8, y: 12 })
+    electronFakes.menuPopups[1].template[0].click?.()
+    await vi.waitFor(() => expect(popup.webContents.inspectElementCalls).toEqual([{ x: 8, y: 12 }]))
   })
 
   it('collects a region on the live page while preserving native page scrolling', async () => {
@@ -542,7 +790,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
       webPreferences: {
         ...SECURE_TASK_BROWSER_WEB_PREFERENCES,
         partition: 'persist:test-browser',
-        devTools: false,
+        devTools: true,
       },
     })
 
@@ -601,7 +849,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
         webPreferences: {
           ...SECURE_TASK_BROWSER_WEB_PREFERENCES,
           partition: 'persist:test-browser-popup',
-          devTools: false,
+          devTools: true,
         },
       },
     })
@@ -709,18 +957,11 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     contents.emit('did-fail-load', {}, -7, 'Subframe failure', 'https://frame.example', false)
 
     expect(states).toEqual([
-      { url: 'https://example.com/start', title: '', loading: true, canGoBack: false, canGoForward: false, error: null },
-      { url: 'https://example.com/final', title: '', loading: true, canGoBack: true, canGoForward: false, error: null },
-      { url: 'https://example.com/final', title: 'Final title', loading: true, canGoBack: true, canGoForward: false, error: null },
-      { url: 'https://example.com/final', title: 'Final title', loading: false, canGoBack: true, canGoForward: false, error: null },
-      {
-        url: 'https://example.com/final',
-        title: 'Final title',
-        loading: false,
-        canGoBack: true,
-        canGoForward: false,
-        error: { code: '-105', message: 'Name not resolved', url: 'https://missing.example' },
-      },
+      { url: 'https://example.com/start', title: '', loading: true, canGoBack: false, canGoForward: false, devToolsOpen: false, error: null },
+      { url: 'https://example.com/final', title: '', loading: true, canGoBack: true, canGoForward: false, devToolsOpen: false, error: null },
+      { url: 'https://example.com/final', title: 'Final title', loading: true, canGoBack: true, canGoForward: false, devToolsOpen: false, error: null },
+      { url: 'https://example.com/final', title: 'Final title', loading: false, canGoBack: true, canGoForward: false, devToolsOpen: false, error: null },
+      { url: 'https://example.com/final', title: 'Final title', loading: false, canGoBack: true, canGoForward: false, devToolsOpen: false, error: { code: '-105', message: 'Name not resolved', url: 'https://missing.example' } },
     ])
 
     states.at(-1)!.error!.message = 'mutated by observer'

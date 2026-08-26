@@ -41,6 +41,7 @@ describe('Task Browser Surface Manager', () => {
         loading: true,
         canGoBack: true,
         canGoForward: false,
+        devToolsOpen: false,
         error: null,
       },
     })
@@ -218,6 +219,7 @@ describe('Task Browser Surface Manager', () => {
       loading: true,
       canGoBack: true,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     })
     await manager.navigate(created.surfaceId, 'http://example.com/second')
@@ -235,8 +237,19 @@ describe('Task Browser Surface Manager', () => {
     })
     await expect(manager.reload(created.surfaceId)).resolves.toMatchObject({ loading: true, error: null })
     await expect(manager.stop(created.surfaceId)).resolves.toMatchObject({ loading: false })
+    await expect(manager.openDevTools(created.surfaceId, 'console')).resolves.toMatchObject({ devToolsOpen: true })
+    await expect(manager.closeDevTools(created.surfaceId)).resolves.toMatchObject({ devToolsOpen: false })
 
-    expect(native.controlCalls).toEqual(['goBack', 'goBack', 'goForward', 'reload', 'stop'])
+    expect(native.controlCalls).toEqual([
+      'goBack',
+      'goBack',
+      'goForward',
+      'reload',
+      'stop',
+      'openDevTools',
+      'closeDevTools',
+    ])
+    expect(native.devToolsPanels).toEqual(['console'])
     expect(stateEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({
         windowId: 10,
@@ -288,6 +301,7 @@ describe('Task Browser Surface Manager', () => {
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: { code: '-105', message: 'stale failure', url: 'https://stale.example' },
     })
     factory.surfaces[1].emit({ title: 'Other window' })

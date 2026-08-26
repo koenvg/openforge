@@ -18,6 +18,7 @@ function browserState(url: string): TaskBrowserSurfaceState {
     loading: false,
     canGoBack: false,
     canGoForward: false,
+    devToolsOpen: false,
     error: null,
   }
 }
@@ -47,6 +48,8 @@ function createSurface(
     goForward: vi.fn(async () => state),
     reload: vi.fn(async () => state),
     stop: vi.fn(async () => state),
+    openDevTools: vi.fn(async () => ({ ...state, devToolsOpen: true })),
+    closeDevTools: vi.fn(async () => ({ ...state, devToolsOpen: false })),
     selectVisibleRegion: vi.fn()
       .mockResolvedValueOnce({
         region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
@@ -112,6 +115,84 @@ describe('TaskBrowserTab lifecycle', () => {
     await screen.findByDisplayValue('https://example.com/')
     expect(screen.getByTestId('browser-navigation-toolbar')).toBeTruthy()
     expect(screen.queryByTestId('browser-status-strip')).toBeNull()
+  })
+
+  it('toggles Task Browser DevTools from the navigation toolbar', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://example.com/')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+
+    await screen.findByDisplayValue('https://example.com/')
+    const openButton = await screen.findByRole('button', { name: 'Open Developer Tools' })
+    expect(openButton.getAttribute('aria-pressed')).toBe('false')
+    await fireEvent.click(openButton)
+    await waitFor(() => expect(surface.openDevTools).toHaveBeenCalledOnce())
+
+    const closeButton = screen.getByRole('button', { name: 'Close Developer Tools' })
+    expect(closeButton.getAttribute('aria-pressed')).toBe('true')
+    await fireEvent.click(closeButton)
+    await waitFor(() => expect(surface.closeDevTools).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Open Developer Tools' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('cancels active visual-feedback selection before opening Task Browser DevTools', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://example.com/')
+    const selection = deferred<null>()
+    vi.mocked(surface.selectVisibleRegion).mockReturnValue(selection.promise)
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+
+    await screen.findByDisplayValue('https://example.com/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Add visual feedback' }))
+    await waitFor(() => expect(surface.selectVisibleRegion).toHaveBeenCalledOnce())
+    await fireEvent.click(screen.getByRole('button', { name: 'Open Developer Tools' }))
+    await waitFor(() => expect(surface.openDevTools).toHaveBeenCalledOnce())
+
+    expect(vi.mocked(surface.cancelVisibleRegionSelection).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(surface.openDevTools).mock.invocationCallOrder[0])
+    selection.resolve(null)
+  })
+
+  it('keeps the page usable when Task Browser DevTools fail to open', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://example.com/')
+    vi.mocked(surface.openDevTools).mockRejectedValueOnce(new Error('Chromium DevTools are unavailable'))
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+
+    await screen.findByDisplayValue('https://example.com/')
+    await fireEvent.click(screen.getByRole('button', { name: 'Open Developer Tools' }))
+
+    expect(await screen.findByText('Chromium DevTools are unavailable')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Developer Tools' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('toggles Task Browser DevTools from standard shortcuts while the toolbar has focus', async () => {
+    const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
+    const surface = createSurface('https://example.com/')
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Linux x86_64')
+    vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
+
+    render(TaskBrowserTab, { props: props(api, 'T-A') })
+
+    const address = await screen.findByDisplayValue('https://example.com/')
+    address.focus()
+    await fireEvent.keyDown(address, { key: 'F12' })
+    await waitFor(() => expect(surface.openDevTools).toHaveBeenCalledOnce())
+    await fireEvent.keyDown(address, { key: 'i', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(surface.closeDevTools).toHaveBeenCalledOnce())
+    await fireEvent.keyDown(address, { key: 'c', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(surface.openDevTools).toHaveBeenNthCalledWith(2, 'elements'))
+    await fireEvent.keyDown(address, { key: 'j', ctrlKey: true, shiftKey: true })
+    await waitFor(() => expect(surface.openDevTools).toHaveBeenNthCalledWith(3, 'console'))
+
+    await fireEvent.keyDown(address, { key: 'i', metaKey: true, altKey: true })
+    expect(surface.closeDevTools).toHaveBeenCalledOnce()
   })
 
   it('ignores a navigation result from a Task that is no longer active', async () => {

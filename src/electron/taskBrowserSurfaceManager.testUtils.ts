@@ -5,6 +5,7 @@ import type {
   NativeTaskBrowserSurface,
   NativeTaskBrowserSurfaceFactory,
   TaskBrowserBounds,
+  TaskBrowserDevToolsPanel,
   TaskBrowserNativeState,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceVisualFeedback,
@@ -18,7 +19,8 @@ import type {
 
 export class FakeNativeSurface implements NativeTaskBrowserSurface {
   readonly loadCalls: string[] = []
-  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop' | 'clearVisualFeedback'> = []
+  readonly controlCalls: Array<'goBack' | 'goForward' | 'reload' | 'stop' | 'openDevTools' | 'closeDevTools' | 'clearVisualFeedback'> = []
+  readonly devToolsPanels: Array<TaskBrowserDevToolsPanel | undefined> = []
   readonly captureCalls: Array<Record<string, never>> = []
   readonly feedbackReplacements: TaskBrowserSurfaceVisualFeedback[][] = []
   readonly bounds: TaskBrowserBounds[] = []
@@ -31,6 +33,7 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
     loading: false,
     canGoBack: false,
     canGoForward: false,
+    devToolsOpen: false,
     error: null,
   }
   attachedWindowId: number | null = null
@@ -89,6 +92,17 @@ export class FakeNativeSurface implements NativeTaskBrowserSurface {
   stop(): void {
     this.controlCalls.push('stop')
     this.emitHistoryState({ loading: false })
+  }
+
+  async openDevTools(panel?: TaskBrowserDevToolsPanel): Promise<void> {
+    this.controlCalls.push('openDevTools')
+    this.devToolsPanels.push(panel)
+    this.emit({ devToolsOpen: true })
+  }
+
+  async closeDevTools(): Promise<void> {
+    this.controlCalls.push('closeDevTools')
+    this.emit({ devToolsOpen: false })
   }
 
   async selectVisibleRegion() {
