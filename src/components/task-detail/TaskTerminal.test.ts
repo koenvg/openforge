@@ -132,7 +132,7 @@ vi.mock('../../lib/terminalPool', () => ({
 }))
 
 import TaskTerminal from './TaskTerminal.svelte'
-import type { PoolEntry } from '../../lib/terminalPool'
+import type { PoolEntry, TerminalViewAttachment } from '../../lib/terminalPool'
 
 describe('TaskTerminal', () => {
   it('marks the terminal exited when the pool reports a matching shell exit', async () => {
@@ -556,11 +556,13 @@ describe('TaskTerminal', () => {
     const { attach } = await import('../../lib/terminalPool')
 
     let resolveAttach!: () => void
-    const attachPromise = new Promise<void>((resolve) => {
+    const attachPromise = new Promise<TerminalViewAttachment>((resolve) => {
       resolveAttach = () => {
         mockPoolEntry.view.geometry.cols = 132
         mockPoolEntry.view.geometry.rows = 40
-        resolve()
+        const detach = vi.fn()
+        attachmentDetaches.push(detach)
+        resolve({ generation: attachmentDetaches.length, detach })
       }
     })
 
@@ -583,8 +585,12 @@ describe('TaskTerminal', () => {
     const { attach } = await import('../../lib/terminalPool')
 
     let resolveAttach!: () => void
-    const attachPromise = new Promise<void>((resolve) => {
-      resolveAttach = resolve
+    const attachPromise = new Promise<TerminalViewAttachment>((resolve) => {
+      resolveAttach = () => {
+        const detach = vi.fn()
+        attachmentDetaches.push(detach)
+        resolve({ generation: attachmentDetaches.length, detach })
+      }
     })
 
     vi.mocked(attach).mockImplementationOnce(() => attachPromise)
