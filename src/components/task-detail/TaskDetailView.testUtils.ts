@@ -273,8 +273,18 @@ vi.mock('../../lib/terminalPool', () => {
         hasOutput: entry?.hasOutput ?? false,
       }
     }),
-    updateShellLifecycleState: vi.fn(),
-    isShellExited: vi.fn(() => false),
+    updateShellLifecycleState: vi.fn((shellSessionKey: string, state: import('@openforge-app/terminal-runtime').ShellLifecycleState) => {
+      const entry = terminalPoolEntries.get(shellSessionKey)
+      if (!entry) return
+      entry.ptyActive = state.ptyActive
+      entry.needsClear = state.shellExited
+      entry.currentPtyInstance = state.currentPtyInstance
+      entry.hasOutput = state.hasOutput
+    }),
+    isShellExited: vi.fn((shellSessionKey: string) => {
+      const entry = terminalPoolEntries.get(shellSessionKey)
+      return entry ? !entry.ptyActive && entry.needsClear : false
+    }),
     getTaskTerminalTabsSession: vi.fn((taskId: string) => {
       const existing = taskTabSessions.get(taskId)
       if (existing) return existing
