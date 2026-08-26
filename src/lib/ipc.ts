@@ -1,6 +1,6 @@
 import { invokeDesktopCommand as invoke } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
-import type { JsonValue, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
+import type { ConfigureStartPromptContributionRequest, JsonValue, StartPromptContribution, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type {
   PtyBufferState,
   TerminalImageProtocol,
@@ -126,6 +126,24 @@ export async function getResolvedAiProvider(projectId: string): Promise<string> 
 
 export async function setProjectConfig(projectId: string, key: string, value: string): Promise<void> {
   return invoke("set_project_config", { projectId, key, value });
+}
+
+export async function configureStartPromptContribution(
+  ownerPluginId: string | undefined,
+  request: ConfigureStartPromptContributionRequest,
+): Promise<StartPromptContribution[]> {
+  const order = request.order ?? 0;
+  if (!Number.isSafeInteger(order)) {
+    throw new Error('start prompt contribution order must be a safe integer');
+  }
+  return invoke<StartPromptContribution[]>("configure_start_prompt_contribution", {
+    ownerPluginId: ownerPluginId ?? null,
+    projectId: request.projectId,
+    id: request.id,
+    enabled: request.enabled !== false,
+    content: request.content,
+    order,
+  });
 }
 
 export async function clearProjectConfig(projectId: string, key: string): Promise<void> {

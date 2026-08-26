@@ -145,6 +145,7 @@ export const desktopIpcFunctionDomains = {
   getEnabledPlugins: 'plugins',
   setAppPluginEnabled: 'plugins',
   getEnabledAppPlugins: 'plugins',
+  configureStartPromptContribution: 'plugins',
   setGlobalPluginDefault: 'plugins',
   getGlobalPluginDefaults: 'plugins',
   getPluginStorage: 'plugins',

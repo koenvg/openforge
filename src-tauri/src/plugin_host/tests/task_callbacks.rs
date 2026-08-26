@@ -34,6 +34,46 @@ async fn plugin_host_create_task_uses_project_worktree_default() {
 }
 
 #[tokio::test]
+async fn plugin_host_prompt_contribution_order_requires_i64_and_preserves_safe_maximum() {
+    const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_prompt_contribution_order");
+    let project = database
+        .create_project("Plugin Prompts", "/tmp/plugin-prompts")
+        .expect("project fixture");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+    let request = |order| {
+        json!({
+            "pluginId": "com.example.workflow",
+            "projectId": project.id,
+            "id": "workflow",
+            "content": "Workflow",
+            "order": order
+        })
+    };
+
+    let error = host
+        .handle_host_callback(
+            "openforge.tasks.configureStartPromptContribution",
+            &request(json!(1.5)),
+        )
+        .await
+        .expect_err("fractional order must be rejected");
+    assert!(error.contains("integer"));
+
+    let contributions = host
+        .handle_host_callback(
+            "openforge.tasks.configureStartPromptContribution",
+            &request(json!(MAX_SAFE_INTEGER)),
+        )
+        .await
+        .expect("safe maximum order");
+    assert_eq!(contributions[0]["order"], MAX_SAFE_INTEGER);
+}
+
+#[tokio::test]
 async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_follow_up_callback");

@@ -19,6 +19,7 @@ export const desktopCommandContracts = [
   {"functionName":"getProjectConfig","ipcCommand":"get_project_config","payloadKeys":["projectId","key"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"getResolvedAiProvider","ipcCommand":"resolve_ai_provider","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"setProjectConfig","ipcCommand":"set_project_config","payloadKeys":["projectId","key","value"],"owner":"rust-sidecar","domain":"config"},
+  {"functionName":"configureStartPromptContribution","ipcCommand":"configure_start_prompt_contribution","payloadKeys":["ownerPluginId","projectId","id","enabled","content","order"],"owner":"rust-sidecar","domain":"plugins"},
   {"functionName":"clearProjectConfig","ipcCommand":"clear_project_config","payloadKeys":["projectId","key"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"getTaskConfig","ipcCommand":"get_task_config","payloadKeys":["taskId","key"],"owner":"rust-sidecar","domain":"config"},
   {"functionName":"setTaskConfig","ipcCommand":"set_task_config","payloadKeys":["taskId","key","value"],"owner":"rust-sidecar","domain":"config"},

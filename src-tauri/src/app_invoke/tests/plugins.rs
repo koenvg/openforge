@@ -88,6 +88,106 @@ fn write_local_plugin_package(source_path: &std::path::Path, plugin_id: &str) {
 }
 
 #[tokio::test]
+async fn concurrent_frontend_prompt_contributions_preserve_each_plugin() {
+    let (state, _temp_dir, _app_dir) =
+        test_state_with_backend_app("app_invoke_concurrent_prompt_contributions");
+    let project_id = {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_project("Plugin Prompts", "/tmp/plugin-prompts")
+            .expect("project fixture")
+            .id
+    };
+
+    let first = invoke(
+        &state,
+        "configure_start_prompt_contribution",
+        json!({
+            "ownerPluginId": "com.example.first",
+            "projectId": project_id,
+            "id": "workflow",
+            "content": "First workflow"
+        }),
+    );
+    let second = invoke(
+        &state,
+        "configure_start_prompt_contribution",
+        json!({
+            "ownerPluginId": "com.example.second",
+            "projectId": project_id,
+            "id": "workflow",
+            "content": "Second workflow"
+        }),
+    );
+    let (first_result, second_result) = tokio::join!(first, second);
+    first_result.expect("first contribution");
+    second_result.expect("second contribution");
+
+    let stored = {
+        let db = crate::db::acquire_db(&state.db);
+        db.get_project_config(
+            &project_id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+        )
+        .expect("read prompt contributions")
+        .expect("stored prompt contributions")
+    };
+    let contributions: Vec<crate::agent_lifecycle::StartPromptContribution> =
+        serde_json::from_str(&stored).expect("parse prompt contributions");
+    assert_eq!(contributions.len(), 2);
+    assert_eq!(
+        contributions
+            .iter()
+            .map(|contribution| contribution.owner_plugin_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("com.example.first"), Some("com.example.second")]
+    );
+    let task = {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_task(
+            "Run both workflows",
+            "backlog",
+            Some(&project_id),
+            None,
+            None,
+        )
+        .expect("task fixture")
+    };
+    let prompt =
+        crate::agent_lifecycle::build_task_prompt(&task, None, false, &contributions, None);
+    assert!(prompt.contains("First workflow"));
+    assert!(prompt.contains("Second workflow"));
+}
+
+#[tokio::test]
+async fn configure_start_prompt_contribution_rejects_fractional_order() {
+    let (state, _temp_dir, _app_dir) =
+        test_state_with_backend_app("app_invoke_fractional_prompt_contribution_order");
+    let project_id = {
+        let db = crate::db::acquire_db(&state.db);
+        db.create_project("Plugin Prompts", "/tmp/plugin-prompts")
+            .expect("project fixture")
+            .id
+    };
+
+    let error = invoke(
+        &state,
+        "configure_start_prompt_contribution",
+        json!({
+            "ownerPluginId": "com.example.workflow",
+            "projectId": project_id,
+            "id": "workflow",
+            "content": "Workflow",
+            "order": 1.5
+        }),
+    )
+    .await
+    .expect_err("fractional order must be rejected");
+
+    assert_eq!(error.0, StatusCode::BAD_REQUEST);
+    assert!(error.1.contains("integer"));
+}
+
+#[tokio::test]
 async fn register_builtin_plugin_rejects_external_plugin_rows() {
     let (state, _temp_dir, _app_dir) =
         test_state_with_backend_app("app_invoke_builtin_rejects_external_row");

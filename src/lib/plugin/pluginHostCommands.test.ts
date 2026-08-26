@@ -176,8 +176,12 @@ describe('plugin host commands', () => {
       key: 'start_prompt_contributions',
     })
 
-    invoke.mockResolvedValueOnce(null)
-    invoke.mockResolvedValueOnce(undefined)
+    invoke.mockResolvedValueOnce([{
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Review Task {{taskId}} before editing',
+      order: 5,
+    }])
 
     await expect(invokePluginHostCommand('configureStartPromptContribution', {
       projectId: 'P-1',
@@ -194,31 +198,25 @@ describe('plugin host commands', () => {
       content: 'Review Task {{taskId}} before editing',
       order: 5,
     }])
-    expect(invoke).toHaveBeenNthCalledWith(2, 'get_project_config', {
+    expect(invoke).toHaveBeenNthCalledWith(2, 'configure_start_prompt_contribution', {
+      ownerPluginId: null,
       projectId: 'P-1',
-      key: 'start_prompt_contributions',
-    })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'set_project_config', {
-      projectId: 'P-1',
-      key: 'start_prompt_contributions',
-      value: JSON.stringify([{
-        id: 'review-guidance',
-        enabled: true,
-        content: 'Review Task {{taskId}} before editing',
-        order: 5,
-      }]),
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Review Task {{taskId}} before editing',
+      order: 5,
     })
     expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
   })
   it('persists the requesting frontend plugin as the contribution owner', async () => {
     const { invoke } = installDesktopBridge(null)
-    invoke.mockResolvedValueOnce(JSON.stringify([{
+    invoke.mockResolvedValueOnce([{
+      ownerPluginId: 'com.example.workflow',
       id: 'review-guidance',
       enabled: true,
-      content: 'Legacy unowned guidance',
+      content: 'Review before editing',
       order: 5,
-    }]))
-    invoke.mockResolvedValueOnce(undefined)
+    }])
     const host = createPluginRuntimeHost('com.example.workflow')
 
     await expect(host.configureStartPromptContribution?.({
@@ -234,17 +232,90 @@ describe('plugin host commands', () => {
       content: 'Review before editing',
       order: 5,
     }])
-    expect(invoke).toHaveBeenLastCalledWith('set_project_config', {
+    expect(invoke).toHaveBeenLastCalledWith('configure_start_prompt_contribution', {
+      ownerPluginId: 'com.example.workflow',
       projectId: 'P-1',
-      key: 'start_prompt_contributions',
-      value: JSON.stringify([{
-        ownerPluginId: 'com.example.workflow',
-        id: 'review-guidance',
-        enabled: true,
-        content: 'Review before editing',
-        order: 5,
-      }]),
+      id: 'review-guidance',
+      enabled: true,
+      content: 'Review before editing',
+      order: 5,
     })
+  })
+
+  it('preserves prompt contributions configured concurrently by frontend plugins', async () => {
+    const { invoke } = installDesktopBridge()
+    let contributions: Array<{ ownerPluginId: string; id: string; enabled: boolean; content: string; order: number }> = []
+    invoke.mockImplementation(async (command, payload) => {
+      if (command === 'get_project_config') return JSON.stringify(contributions)
+      if (command !== 'configure_start_prompt_contribution') return null
+      const request = payload as typeof contributions[number] & { projectId: string }
+      contributions = [
+        ...contributions.filter(entry => entry.id !== request.id || entry.ownerPluginId !== request.ownerPluginId),
+        {
+          ownerPluginId: request.ownerPluginId,
+          id: request.id,
+          enabled: request.enabled,
+          content: request.content,
+          order: request.order,
+        },
+      ]
+      return contributions
+    })
+    const first = createPluginRuntimeHost('com.example.first')
+    const second = createPluginRuntimeHost('com.example.second')
+
+    await Promise.all([
+      first.configureStartPromptContribution?.({
+        projectId: 'P-1',
+        id: 'workflow',
+        content: 'First workflow',
+        enabled: true,
+      }),
+      second.configureStartPromptContribution?.({
+        projectId: 'P-1',
+        id: 'workflow',
+        content: 'Second workflow',
+        enabled: true,
+      }),
+    ])
+
+    await expect(first.listStartPromptContributions?.('P-1')).resolves.toEqual([
+      { ownerPluginId: 'com.example.first', id: 'workflow', enabled: true, content: 'First workflow', order: 0 },
+      { ownerPluginId: 'com.example.second', id: 'workflow', enabled: true, content: 'Second workflow', order: 0 },
+    ])
+    expect(invoke).toHaveBeenCalledWith('configure_start_prompt_contribution', expect.objectContaining({
+      ownerPluginId: 'com.example.first',
+      projectId: 'P-1',
+    }))
+    expect(invoke).toHaveBeenCalledWith('configure_start_prompt_contribution', expect.objectContaining({
+      ownerPluginId: 'com.example.second',
+      projectId: 'P-1',
+    }))
+  })
+
+  it('rejects non-integer contribution order without changing a safe integer', async () => {
+    const { invoke } = installDesktopBridge([])
+    const host = createPluginRuntimeHost('com.example.workflow')
+
+    await expect(host.configureStartPromptContribution?.({
+      projectId: 'P-1',
+      id: 'workflow',
+      content: 'Workflow',
+      enabled: true,
+      order: 1.5,
+    })).rejects.toThrow('safe integer')
+    expect(invoke).not.toHaveBeenCalled()
+
+    await host.configureStartPromptContribution?.({
+      projectId: 'P-1',
+      id: 'workflow',
+      content: 'Workflow',
+      enabled: true,
+      order: Number.MAX_SAFE_INTEGER,
+    })
+    expect(invoke).toHaveBeenCalledWith('configure_start_prompt_contribution', expect.objectContaining({
+      order: Number.MAX_SAFE_INTEGER,
+    }))
   })
 
   it('routes runtime host shell callbacks through Shell Session Keys', async () => {

@@ -199,6 +199,38 @@ pub(super) async fn handle_app_plugin_command(
                 .enabled_app_plugins()
                 .map_err(map_plugin_platform_error)?,
         )?,
+        "configure_start_prompt_contribution" => {
+            let owner_plugin_id = payload_optional_string(&request.payload, "ownerPluginId")?
+                .filter(|plugin_id| !plugin_id.trim().is_empty());
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let id = payload_string(&request.payload, "id")?;
+            let content = payload_string(&request.payload, "content")?;
+            let contribution = crate::task_start_prompt::StartPromptContribution {
+                owner_plugin_id,
+                id: id.trim().to_string(),
+                enabled: request
+                    .payload
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true),
+                content,
+                order: crate::task_start_prompt::parse_start_prompt_contribution_order(
+                    request.payload.get("order"),
+                )
+                .map_err(|error| (StatusCode::BAD_REQUEST, error))?,
+            };
+            crate::task_start_prompt::validate_start_prompt_contribution(&contribution)
+                .map_err(|error| (StatusCode::BAD_REQUEST, error))?;
+            let db = crate::db::acquire_db(&state.db);
+            json_value(
+                crate::task_start_prompt::upsert_start_prompt_contribution(
+                    &db,
+                    &project_id,
+                    contribution,
+                )
+                .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?,
+            )?
+        }
         "set_global_plugin_default" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let enabled = request
