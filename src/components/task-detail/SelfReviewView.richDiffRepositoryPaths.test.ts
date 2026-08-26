@@ -47,7 +47,7 @@ describe('SelfReviewView Rich Diff repository paths', () => {
         true,
         true,
       );
-      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+      expect(screen.getByAltText('Diagram').getAttribute('src'))
         .toBe('data:image/png;base64,base64-diagram');
     });
 
