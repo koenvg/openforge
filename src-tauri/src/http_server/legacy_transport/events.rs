@@ -187,11 +187,13 @@ where
 }
 
 fn task_display_title_metadata_updates_enabled(state: &AppState, task_id: &str) -> bool {
-    crate::db::acquire_db(&state.db).resolve_task_bool(
-        task_id,
-        TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
-        false,
-    )
+    crate::db::acquire_db(&state.db)
+        .resolve_task_bool(
+            task_id,
+            TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
+            false,
+        )
+        .unwrap_or(false)
 }
 
 pub(in crate::http_server) fn should_start_task_display_title_refresh(

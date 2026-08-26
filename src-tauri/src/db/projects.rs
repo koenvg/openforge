@@ -229,18 +229,25 @@ impl super::Database {
 
     /// Resolve the AI provider for a project.
     /// Checks project_config first, falls back to global config, then defaults to "claude-code".
-    pub fn resolve_ai_provider(&self, project_id: &str) -> String {
+    ///
+    /// # Errors
+    /// Returns an error when a project or global configuration lookup fails.
+    pub fn try_resolve_ai_provider(&self, project_id: &str) -> Result<String> {
         if !project_id.is_empty() {
-            if let Ok(Some(provider)) = self.get_project_config(project_id, "ai_provider") {
+            if let Some(provider) = self.get_project_config(project_id, "ai_provider")? {
                 if !provider.is_empty() {
-                    return provider;
+                    return Ok(provider);
                 }
             }
         }
-        self.get_config("ai_provider")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "claude-code".to_string())
+        Ok(self
+            .get_config("ai_provider")?
+            .unwrap_or_else(|| "claude-code".to_string()))
+    }
+
+    pub fn resolve_ai_provider(&self, project_id: &str) -> String {
+        self.try_resolve_ai_provider(project_id)
+            .unwrap_or_else(|_| "claude-code".to_string())
     }
 
     /// Get attention summaries for all projects.
