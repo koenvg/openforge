@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -129,16 +129,24 @@ try {
   const sourceSchema = JSON.parse(readFileSync(sourceSchemaPath, 'utf8'))
   assertVersion(sourceManifest.version, minimumVersionForCapabilities(sourceSchema))
 
-  run('npm', ['pack', '--pack-destination', tempRoot], {
+  run('pnpm', ['pack', '--pack-destination', tempRoot], {
     cwd: packageRoot,
     env: { ...process.env, npm_config_dry_run: 'false' },
   })
   const tarballs = readdirSync(tempRoot).filter(name => name.endsWith('.tgz'))
   if (tarballs.length !== 1) fail(`Expected one packed Plugin SDK tarball, found ${tarballs.length}.`)
 
+  run('npm', [
+    'install',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    join(tempRoot, tarballs[0]),
+  ], {
+    cwd: tempRoot,
+    env: { ...process.env, npm_config_dry_run: 'false' },
+  })
   const installedPackageRoot = join(tempRoot, 'node_modules', '@openforge-app', 'plugin-sdk')
-  mkdirSync(installedPackageRoot, { recursive: true })
-  run('tar', ['-xzf', join(tempRoot, tarballs[0]), '-C', installedPackageRoot, '--strip-components=1'])
 
   const packedManifest = JSON.parse(readFileSync(join(installedPackageRoot, 'package.json'), 'utf8'))
   if (packedManifest.name !== sourceManifest.name || packedManifest.version !== sourceManifest.version) {

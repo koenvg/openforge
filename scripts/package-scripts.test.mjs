@@ -154,9 +154,9 @@ describe('package build scripts', () => {
       'pnpm packages:contract:check',
       'npm view "@openforge-app/plugin-sdk@$PACKAGE_VERSION"',
       'pnpm packages:metadata:check',
-      'npm pack --dry-run',
+      'pnpm pack --dry-run',
       'npm install --global npm@^11.5.1',
-      'npm publish --access public --provenance',
+      'pnpm publish --no-git-checks --access public --provenance',
     ]
 
     expect(publishWorkflow).toContain('uses: ./.github/workflows/reusable-publish-plugin-sdk.yml')
@@ -175,7 +175,7 @@ describe('package build scripts', () => {
 
     const validationStepIndex = reusablePublishWorkflow.indexOf('name: Validate npm dist-tag')
     const publishStepIndex = reusablePublishWorkflow.indexOf(
-      'npm publish --access public --provenance --tag "$NPM_TAG"',
+      'pnpm publish --no-git-checks --access public --provenance --tag "$NPM_TAG"',
     )
     expect(validationStepIndex).toBeGreaterThan(-1)
     expect(publishStepIndex).toBeGreaterThan(validationStepIndex)
