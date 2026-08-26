@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { RuntimeContributionSource } from './plugin/contributionResolver'
 import { TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews, isCrossProjectView } from './views'
@@ -144,7 +145,7 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
     expect(pluginViews['plugin:com.openforge.task-schedules:schedules']).toBeDefined()
-    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
+    expect(pluginViews[GITHUB_SYNC_VIEW_KEY]).toBeDefined()
     expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
     expect(pluginViews['plugin:com.openforge.file-viewer:files']?.component).toBe(PluginSlot)
@@ -167,7 +168,7 @@ describe('views registry', () => {
       // Project settings shows the active project's own settings — a project location.
       expect(isCrossProjectView('settings', sidebarKeys)).toBe(false)
       // A rail (per-project) plugin view not registered as a sidebar view.
-      expect(isCrossProjectView('plugin:com.openforge.github-sync:pr_review', sidebarKeys)).toBe(false)
+      expect(isCrossProjectView(GITHUB_SYNC_VIEW_KEY, sidebarKeys)).toBe(false)
     })
   })
 

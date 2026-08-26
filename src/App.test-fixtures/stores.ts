@@ -1,5 +1,6 @@
 import { derived, writable } from 'svelte/store'
 import { vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from '../lib/githubSyncPlugin'
 import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from '../lib/prReviewBadgeCounts'
 import type {
   AgentSession,
@@ -21,7 +22,7 @@ export const mockCurrentViewStore = writable<
   | 'settings'
   | 'global_settings'
   | 'plugin:com.openforge.file-viewer:files'
-  | 'plugin:com.openforge.github-sync:pr_review'
+  | typeof GITHUB_SYNC_VIEW_KEY
   | 'plugin:com.openforge.task-schedules:schedules'
 >('board')
 export const mockSelectedReviewPrStore = writable(null)

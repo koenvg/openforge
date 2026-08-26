@@ -3,6 +3,7 @@ import { get } from 'svelte/store'
 import type { Writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import { setConfig } from '../../lib/ipc'
 import { activeProjectId, attentionCountByProject, hiddenProjectIds, projects, reviewRequestCountByProject } from '../../lib/stores'
 import type { AppView, Project } from '../../lib/types'
@@ -329,7 +330,7 @@ describe('AppSidebar', () => {
   it('project IS visually active on a per-project (rail) plugin view like PR review', () => {
     // The per-project PR review view is scoped to the active project, so its project
     // stays highlighted — e.g. after opening a review request from the attention dialog.
-    renderSidebar({ currentView: 'plugin:com.openforge.github-sync:pr_review' as AppView })
+    renderSidebar({ currentView: GITHUB_SYNC_VIEW_KEY })
 
     const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
     expect(activeProjectButton.getAttribute('aria-current')).toBe('true')

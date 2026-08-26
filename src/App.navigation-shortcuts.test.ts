@@ -1,5 +1,6 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
@@ -76,7 +77,7 @@ describe('App navigation shortcuts', () => {
 
       await fireEvent.keyDown(window, { key: 'g', code: 'KeyG', metaKey: true, bubbles: true })
 
-      expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
+      expect(get(stores.currentView)).toBe(GITHUB_SYNC_VIEW_KEY)
     })
 
   it('CMD+O navigates to the plugin-provided files view', async () => {
@@ -161,7 +162,7 @@ describe('App navigation shortcuts', () => {
       const stores = await import('./lib/stores')
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
 
-      stores.currentView.set('plugin:com.openforge.github-sync:pr_review')
+      stores.currentView.set(GITHUB_SYNC_VIEW_KEY)
       stores.selectedTaskId.set(null)
       render(App)
 

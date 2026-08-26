@@ -1,5 +1,6 @@
 import { render } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
+import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import App from './App.svelte'
@@ -149,7 +150,7 @@ describe('App project re-entry from cross-project views', () => {
 
     stores.activeProjectId.set('proj-1')
     // A per-project (non-cross-project) tab: the github-sync Pull Requests rail view.
-    stores.currentView.set('plugin:com.openforge.github-sync:pr_review')
+    stores.currentView.set(GITHUB_SYNC_VIEW_KEY)
     await tick()
 
     const props = getLatestComponentProps<{ onSelectProject: (id: string) => void }>(
