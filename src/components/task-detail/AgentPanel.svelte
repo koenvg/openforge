@@ -1,6 +1,6 @@
 <script lang="ts">
   import { activeSessions } from '../../lib/stores'
-  import { getLatestSession } from '../../lib/ipc'
+  import { getLatestSession } from '../../lib/ipc/agentSessions'
   import AgentTerminalShell from './AgentTerminalShell.svelte'
   import { onMount } from 'svelte'
 

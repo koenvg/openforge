@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse } from '@babel/parser'
 import { traverseBabelAst } from './babel-ast.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '..')
+const ipcModulesDirectory = resolve(repoRoot, 'src/lib/ipc')
 const registrySourcePaths = {
-  ipcFile: resolve(repoRoot, 'src/lib/ipc.ts'),
   domainsFile: resolve(repoRoot, 'src/lib/desktopIpcDomains.ts'),
   electronHandlersFile: resolve(repoRoot, 'src/electron/electronShellCommandHandler.ts'),
   internalRegistrationsFile: resolve(repoRoot, 'src/electron/internalSidecarCommandRegistrations.ts'),
@@ -82,7 +82,7 @@ function propertyValue(object, name) {
   return property?.type === 'ObjectProperty' ? property.value : null
 }
 
-export function publicCommandContracts(sourceFile) {
+export function publicCommandContracts(sourceFile, moduleName = null) {
   const contracts = []
   for (const statement of sourceFile.program.body) {
     if (statement.type !== 'ExportNamedDeclaration') continue
@@ -123,6 +123,7 @@ export function publicCommandContracts(sourceFile) {
 
     contracts.push({
       functionName: declaration.id.name,
+      moduleName,
       ipcCommand: commands[0],
       payloadKeys,
     })
@@ -181,8 +182,10 @@ function assertUnique(items, selectValue, label) {
   if (duplicate) throw new Error(`Duplicate ${label}: ${duplicate}`)
 }
 
-function buildRegistry({ ipcFile, domainsFile, electronHandlersFile, internalRegistrationsFile, protocolFile }) {
-  const publicContracts = publicCommandContracts(ipcFile)
+function buildRegistry({ ipcModules, domainsFile, electronHandlersFile, internalRegistrationsFile, protocolFile }) {
+  const publicContracts = ipcModules.flatMap(({ moduleName, sourceFile }) => (
+    publicCommandContracts(sourceFile, moduleName)
+  ))
   const domains = functionDomains(domainsFile)
   const electronCommands = electronMainCommands(electronHandlersFile)
   const publicCommands = new Set(publicContracts.map(contract => contract.ipcCommand))
@@ -234,13 +237,24 @@ function render({ publicRegistry, internalRegistry }) {
 }
 
 async function generate() {
-  const sourceFiles = Object.fromEntries(await Promise.all(
-    Object.entries(registrySourcePaths).map(async ([name, path]) => [
+  const [sourceFiles, ipcModuleEntries] = await Promise.all([
+    Promise.all(Object.entries(registrySourcePaths).map(async ([name, path]) => [
       name,
       parseTypeScript(await readFile(path, 'utf8')),
-    ]),
-  ))
-  return render(buildRegistry(sourceFiles))
+    ])),
+    readdir(ipcModulesDirectory, { withFileTypes: true }),
+  ])
+  const ipcModules = await Promise.all(
+    ipcModuleEntries
+      .filter(entry => entry.isFile() && extname(entry.name) === '.ts')
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(async entry => ({
+        moduleName: basename(entry.name, '.ts'),
+        sourceFile: parseTypeScript(await readFile(resolve(ipcModulesDirectory, entry.name), 'utf8')),
+      })),
+  )
+
+  return render(buildRegistry({ ...Object.fromEntries(sourceFiles), ipcModules }))
 }
 
 async function main() {

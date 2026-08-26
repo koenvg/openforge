@@ -6,7 +6,7 @@ vi.mock('./desktopIpc', () => ({
   isElectronDesktopBridgeAvailable: () => true,
 }))
 
-import { createProjectFromGit } from './ipc'
+import { createProjectFromGit } from './ipc/tasks'
 
 describe('createProjectFromGit', () => {
   beforeEach(() => invoke.mockReset())

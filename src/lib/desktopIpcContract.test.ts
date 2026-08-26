@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parse } from '@babel/parser'
 import { publicCommandContracts } from '../../scripts/generate-desktop-ipc-registry.mjs'
@@ -13,10 +13,15 @@ import {
 } from './desktopIpcContract'
 
 function parseIpcInvokeContracts() {
-  const sourcePath = resolve(process.cwd(), 'src/lib/ipc.ts')
-  const sourceText = readFileSync(sourcePath, 'utf8')
-  const sourceFile = parse(sourceText, { sourceType: 'module', plugins: ['typescript'] })
-  return publicCommandContracts(sourceFile)
+  const sourceDirectory = resolve(process.cwd(), 'src/lib/ipc')
+  return readdirSync(sourceDirectory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.ts'))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap(entry => {
+      const sourceText = readFileSync(resolve(sourceDirectory, entry.name), 'utf8')
+      const sourceFile = parse(sourceText, { sourceType: 'module', plugins: ['typescript'] })
+      return publicCommandContracts(sourceFile, entry.name.slice(0, -3))
+    })
 }
 
 describe('Desktop IPC contract', () => {
@@ -37,21 +42,21 @@ describe('Desktop IPC contract', () => {
     expect(generatedDomains).toEqual(desktopIpcFunctionDomains)
   })
 
-  it('locks ipc.ts IPC command names and top-level payload keys', () => {
+  it('locks domain IPC module ownership, command names, and top-level payload keys', () => {
     const parsedContracts = parseIpcInvokeContracts()
       .map(contract => [contract.functionName, contract] as const)
       .sort(([left], [right]) => left.localeCompare(right))
     const declaredContracts = desktopCommandContracts
-      .map(({ functionName, ipcCommand, payloadKeys }) => [
+      .map(({ functionName, moduleName, ipcCommand, payloadKeys }) => [
         functionName,
-        { functionName, ipcCommand, payloadKeys: [...payloadKeys] },
+        { functionName, moduleName, ipcCommand, payloadKeys: [...payloadKeys] },
       ] as const)
       .sort(([left], [right]) => left.localeCompare(right))
 
     expect(declaredContracts).toEqual(parsedContracts)
   })
 
-  it('locks internal desktop command ownership outside the public ipc.ts wrappers', () => {
+  it('locks internal desktop command ownership outside the public domain wrappers', () => {
     const publicCommands = new Set<string>(desktopCommandContracts.map(contract => contract.ipcCommand))
     const internalContracts = desktopCommandOwnershipContracts
       .filter(contract => !publicCommands.has(contract.ipcCommand))
