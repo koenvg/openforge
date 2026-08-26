@@ -5,17 +5,19 @@ import {
   APP_NAME,
   ELECTRON_APP_PACKAGE_NAME,
   ELECTRON_BUNDLE_IDENTIFIER,
-  assertPackageArchitectureCompatibility,
-  buildAndPackageElectronApp,
   createElectronAppPackageJson,
   electronBundlePath,
-  expectedDarwinArchForTarget,
-  hydrateElectronTemplate,
-  packageElectronApp,
-  readBuiltinPluginCatalog,
   updatePlistBooleanValue,
   updatePlistStringValue,
-} from './electron-package.mjs'
+} from './electron-package/app-metadata.mjs'
+import {
+  assertPackageArchitectureCompatibility,
+  expectedDarwinArchForTarget,
+} from './electron-package/architecture-validation.mjs'
+import { buildAndPackageElectronApp } from './electron-package/build-orchestration.mjs'
+import { packageElectronApp } from './electron-package/package-assembly.mjs'
+import { hydrateElectronTemplate } from './electron-package/runtime-hydration.mjs'
+import { readBuiltinPluginCatalog } from './electron-package/runtime-assets.mjs'
 import { BACKEND_LAYOUT_CONFIG_FILE, resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const currentLayoutConfig = {
