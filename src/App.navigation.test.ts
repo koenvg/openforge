@@ -3,6 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
+import App from './App.svelte'
+
+async function waitForProjectPluginsReady(): Promise<void> {
+  const { tick } = await import('svelte')
+
+  await vi.waitFor(() => {
+    expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+  })
+
+  const loadResult = mockLoadEnabledForProject.mock.results.at(-1)
+  if (!loadResult || loadResult.type !== 'return') {
+    throw new Error('Expected project plugin loading to be in progress')
+  }
+
+  await loadResult.value
+  await tick()
+}
 
 function getLatestComponentProps<T extends Record<string, unknown>>(
   mockComponent: { mock: { calls: unknown[][] } },
@@ -45,12 +62,12 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+H resets to board view and clears selectedTaskId', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
+      const { tick } = await import('svelte')
 
       render(App)
-
+      await tick()
       // Simulate being on a task detail view
       stores.selectedTaskId.set('task-123')
       stores.tasks.set([
@@ -76,103 +93,55 @@ describe('App navigation shortcuts', () => {
       stores.currentView.set('settings')
 
       vi.mocked(nav.resetToBoard).mockClear()
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', metaKey: true, bubbles: true }))
+      await fireEvent.keyDown(window, { key: 'h', metaKey: true, bubbles: true })
 
       expect(nav.resetToBoard).toHaveBeenCalled()
     })
 
     it('CMD+G navigates to plugin PR review view', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const pluginStore = await import('./lib/plugin/pluginStore')
-      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-      const { GITHUB_SYNC_PLUGIN_ID } = await import('./lib/githubSyncPlugin')
       const { get } = await import('svelte/store')
-      const { tick } = await import('svelte')
 
       stores.currentView.set('board')
       render(App)
-      await vi.waitFor(() => {
-        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
-      })
-      await vi.waitFor(() => {
-        expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
-      })
-      pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
-      await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
-      pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
-        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 20, shortcut: 'Cmd+G' }],
-      })
-      await tick()
 
-      await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', metaKey: true, bubbles: true }))
-        expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
-      })
+      await waitForProjectPluginsReady()
+
+      await fireEvent.keyDown(window, { key: 'g', code: 'KeyG', metaKey: true, bubbles: true })
+
+      expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
     })
 
   it('CMD+O navigates to the plugin-provided files view', async () => {
-    const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
     const { get } = await import('svelte/store')
-    const { tick } = await import('svelte')
-    const pluginStore = await import('./lib/plugin/pluginStore')
-    const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-    const { FILE_VIEWER_PLUGIN_ID } = await import('./lib/fileViewerPlugin')
 
     stores.currentView.set('board')
     render(App)
-    await vi.waitFor(() => {
-      expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
-    })
-    await vi.waitFor(() => {
-      expect(get(pluginStore.installedPlugins).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
-    })
-    pluginStore.enabledPluginIds.set(new Set([FILE_VIEWER_PLUGIN_ID]))
-    await pluginRegistry.activatePlugin(FILE_VIEWER_PLUGIN_ID)
-    pluginStore.setRuntimeContributionSource(FILE_VIEWER_PLUGIN_ID, {
-      views: [{ id: 'files', title: 'Files', icon: 'folder-open', placement: 'rail', order: 10, shortcut: 'Cmd+O' }],
-    })
-    await tick()
 
-    await vi.waitFor(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', code: 'KeyO', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
-    })
+    await waitForProjectPluginsReady()
+
+    await fireEvent.keyDown(window, { key: 'o', code: 'KeyO', metaKey: true, bubbles: true })
+
+    expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
   })
 
     it('CMD+S navigates to the Task Schedules plugin view', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const pluginStore = await import('./lib/plugin/pluginStore')
-      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
-      const { TASK_SCHEDULES_PLUGIN_ID, TASK_SCHEDULES_VIEW_KEY } = await import('./lib/taskSchedulesPlugin')
+      const { TASK_SCHEDULES_VIEW_KEY } = await import('./lib/taskSchedulesPlugin')
       const { get } = await import('svelte/store')
-      const { tick } = await import('svelte')
 
       stores.currentView.set('board')
       render(App)
-      await vi.waitFor(() => {
-        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
-      })
-      await vi.waitFor(() => {
-        expect(get(pluginStore.installedPlugins).has(TASK_SCHEDULES_PLUGIN_ID)).toBe(true)
-      })
-      pluginStore.enabledPluginIds.set(new Set([TASK_SCHEDULES_PLUGIN_ID]))
-      await pluginRegistry.activatePlugin(TASK_SCHEDULES_PLUGIN_ID)
-      pluginStore.setRuntimeContributionSource(TASK_SCHEDULES_PLUGIN_ID, {
-        views: [{ id: 'schedules', title: 'Task Schedules', icon: 'clock', placement: 'rail', order: 50, shortcut: 'Cmd+S' }],
-      })
-      await tick()
 
-      await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', metaKey: true, bubbles: true }))
-        expect(get(stores.currentView)).toBe(TASK_SCHEDULES_VIEW_KEY)
-      })
+      await waitForProjectPluginsReady()
+
+      await fireEvent.keyDown(window, { key: 's', code: 'KeyS', metaKey: true, bubbles: true })
+
+      expect(get(stores.currentView)).toBe(TASK_SCHEDULES_VIEW_KEY)
     })
 
     it('CMD+comma navigates to global settings view', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const { get } = await import('svelte/store')
 
@@ -183,7 +152,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('dashboard icon resets to board when a task view is open', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const iconRailModule = await import('./components/shell/IconRail.svelte')
@@ -230,7 +198,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+K opens the action palette', async () => {
-      const App = (await import('./App.svelte')).default
       const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       render(App)
@@ -243,7 +210,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+SHIFT+P opens the project switcher', async () => {
-      const App = (await import('./App.svelte')).default
       const projectSwitcherModule = await import('./components/project/ProjectSwitcherModal.svelte')
 
       render(App)
@@ -256,7 +222,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+P opens the file quick-open overlay from the board', async () => {
-      const App = (await import('./App.svelte')).default
       const projectSwitcherModule = await import('./components/project/ProjectSwitcherModal.svelte')
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
 
@@ -271,7 +236,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+P opens the file quick-open overlay from plugin views', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
 
@@ -287,7 +251,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('CMD+P does not open the file quick-open overlay from task views', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
       const selectedTask: Task = {
@@ -328,7 +291,6 @@ describe('App navigation shortcuts', () => {
     // re-clicking that project used to trip switchToProject's "already active" guard and
     // strand the user on the global view. Clicking it must now re-enter the project.
     it('re-enters the active project when its sidebar row is clicked from global settings', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
@@ -357,7 +319,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('does not re-navigate when clicking the already-active project on its board', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
@@ -388,7 +349,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('backs out of an open task detail when the already-active project is re-clicked', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
@@ -423,7 +383,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('jumps to the board when clicking the already-active project from a non-board tab', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const AppSidebar = (await import('./components/shell/AppSidebar.svelte')).default
@@ -457,7 +416,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('re-enters the active project when clicked from a cross-project sidebar plugin view', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const pluginStore = await import('./lib/plugin/pluginStore')
@@ -500,7 +458,6 @@ describe('App navigation shortcuts', () => {
     })
 
     it('hides the per-project IconRail on a cross-project sidebar plugin view', async () => {
-      const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const pluginStore = await import('./lib/plugin/pluginStore')
       const pluginRegistry = await import('./lib/plugin/pluginRegistry')
