@@ -25,17 +25,25 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   })
 }
 
+async function renderImageAsPng(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+): Promise<DecodedInlineImage> {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('browser canvas is unavailable')
+  context.drawImage(source, 0, 0)
+  return { width, height, pngBytes: await canvasToPng(canvas) }
+}
+
 async function decodeWithImageBitmap(blob: Blob, mimeType: SupportedInlineImageMime): Promise<DecodedInlineImage> {
   const bitmap = await createImageBitmap(blob)
   try {
     if (mimeType !== 'image/webp') return { width: bitmap.width, height: bitmap.height }
-    const canvas = document.createElement('canvas')
-    canvas.width = bitmap.width
-    canvas.height = bitmap.height
-    const context = canvas.getContext('2d')
-    if (!context) throw new Error('browser canvas is unavailable')
-    context.drawImage(bitmap, 0, 0)
-    return { width: bitmap.width, height: bitmap.height, pngBytes: await canvasToPng(canvas) }
+    return renderImageAsPng(bitmap, bitmap.width, bitmap.height)
   } finally {
     bitmap.close()
   }
@@ -66,11 +74,5 @@ export async function decodeInlineImageInBrowser(
 
   const image = await loadHtmlImage(blob)
   if (mimeType !== 'image/webp') return { width: image.naturalWidth, height: image.naturalHeight }
-  const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('browser canvas is unavailable')
-  context.drawImage(image, 0, 0)
-  return { width: image.naturalWidth, height: image.naturalHeight, pngBytes: await canvasToPng(canvas) }
+  return renderImageAsPng(image, image.naturalWidth, image.naturalHeight)
 }
