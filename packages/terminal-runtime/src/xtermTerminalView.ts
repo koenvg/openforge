@@ -3,8 +3,9 @@ import { Terminal } from '@xterm/xterm'
 import { isValidTerminalDimensions } from './terminalAttachment'
 import { isTerminalQueryResponse } from './terminalAuthority'
 import { loadXtermImageSupport } from './xtermImageSupport'
+import { terminalLogMessage } from './terminalLogging'
 import { createTerminalLinkHandler, loadTerminalWebLinksAddon } from './terminalLinks'
-import { getTerminalOptions } from './terminalOptions'
+import { getTerminalOptions, type TerminalFontLoadOutcome } from './terminalOptions'
 import { createXtermPresentationController } from './xtermPresentation'
 import type {
   TerminalView,
@@ -83,6 +84,44 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       if (hostDiv.parentNode) fitAndRefresh()
     },
   })
+  let completedFontLoad: TerminalFontLoadOutcome | null = null
+  function handleFontLoadCompletion(outcome: TerminalFontLoadOutcome): void {
+    completedFontLoad = outcome
+    if (outcome.status === 'failed') {
+      if (opened && !disposed) {
+        console.warn(
+          terminalLogMessage(
+            options.loggerName,
+            'Bundled terminal fonts failed to load after xterm opened; continuing with fallback fonts:',
+          ),
+          outcome.error,
+        )
+      }
+      return
+    }
+    if (!opened || disposed) return
+    webglRenderer.clearTextureAtlas()
+    if (hostDiv.parentNode) fitAndRefresh()
+  }
+  if (options.fontReadiness.status === 'timed-out') {
+    void options.fontReadiness.completion.then(handleFontLoadCompletion)
+  }
+
+  function reportFontReadinessBeforeOpen(): void {
+    const readiness = completedFontLoad ?? options.fontReadiness
+    if (readiness.status === 'failed') {
+      console.warn(
+        terminalLogMessage(options.loggerName, 'Bundled terminal fonts failed to load; opening xterm with fallback fonts:'),
+        readiness.error,
+      )
+    } else if (readiness.status === 'timed-out') {
+      console.warn(terminalLogMessage(
+        options.loggerName,
+        'Bundled terminal fonts are still loading; opening xterm with fallback fonts until they become ready.',
+      ))
+    }
+  }
+
   const presentation = createXtermPresentationController({
     terminal,
     rendererName: () => webglRenderer.rendererName,
@@ -114,6 +153,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       if (disposed) return
       container.appendChild(hostDiv)
       if (opened) return
+      reportFontReadinessBeforeOpen()
       terminal.open(hostDiv)
       opened = true
       webglRenderer.load()

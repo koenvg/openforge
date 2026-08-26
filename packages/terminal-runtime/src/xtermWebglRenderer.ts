@@ -13,6 +13,7 @@ export interface XtermWebglRendererOptions {
 export interface XtermWebglRendererLifecycle {
   readonly rendererName: 'xterm-default' | 'xterm-webgl'
   load(): void
+  clearTextureAtlas(): void
   dispose(): void
 }
 
@@ -75,6 +76,9 @@ export function createXtermWebglRendererLifecycle(
         console.warn(terminalLogMessage(loggerName, 'WebGL renderer unavailable; falling back to the default renderer:'), error)
         onFailure({ renderer: 'webgl', reason: 'unavailable', error })
       }
+    },
+    clearTextureAtlas() {
+      addon?.clearTextureAtlas()
     },
     dispose() {
       if (disposed) return

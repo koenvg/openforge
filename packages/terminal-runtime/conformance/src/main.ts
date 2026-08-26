@@ -75,7 +75,7 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
   document.documentElement.dataset.theme = options.theme
   surfaceLabel.textContent = options.surface === 'agent' ? 'Agent terminal' : 'Terminal plugin shell'
 
-  await preloadTerminalFonts()
+  const fontReadiness = await preloadTerminalFonts()
   const theme = getTerminalTheme(options.theme)
   host.style.setProperty('--terminal-background', theme.background ?? 'transparent')
   const nextView = renderer.createView({
@@ -84,6 +84,7 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
     enableImages: false,
     loggerName: 'terminal-conformance',
     openLink: async url => { openedLinks.push(url) },
+    fontReadiness,
   })
   inputRecorder.subscribe(listener => nextView.onUserInput(listener), data => {
     if (!echoInput) return

@@ -7,7 +7,7 @@ import { createTerminalAcquisition } from './terminalAcquisition'
 import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
 import type { TerminalImageProtocol } from './terminalImages'
 import { terminalLogMessage } from './terminalLogging'
-import { preloadTerminalFonts } from './terminalOptions'
+import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
 import { createXtermTerminalView } from './xtermTerminalView'
 import type {
@@ -80,7 +80,7 @@ export function createTerminalRuntime(
   const attachments = createTerminalAttachmentController(host)
   const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key), authority)
 
-  function createEntry(terminalKey: string): PoolEntry {
+  function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
     return {
       shellSessionKey: terminalKey,
       view: createView({
@@ -89,6 +89,7 @@ export function createTerminalRuntime(
         openLink: url => host.openLink(terminalKey, url),
         enableImages: host.enableImages,
         loggerName: host.loggerName,
+        fontReadiness,
       }),
       ptyActive: false,
       needsClear: false,

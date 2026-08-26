@@ -1,6 +1,7 @@
 import { parsePtySessionKey } from './ptySessionKey'
 import type { TerminalAuthorityContract } from './terminalAuthority'
 import { terminalLogMessage } from './terminalLogging'
+import type { TerminalFontReadiness } from './terminalOptions'
 import { createTerminalStateView } from './terminalStateView'
 import {
   ptyExitEventName,
@@ -36,8 +37,8 @@ interface TerminalAcquisitionOptions {
   host: TerminalRuntimeHost
   authority: TerminalAuthorityContract
   pool: Map<string, PoolEntry>
-  createEntry(terminalKey: string): PoolEntry
-  preloadEntry(): Promise<void>
+  createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry
+  preloadEntry(): Promise<TerminalFontReadiness>
   disposeEntry(entry: PoolEntry): void
   resetEntry(entry: PoolEntry): void
   lifecycle: TerminalAcquisitionLifecycle
@@ -109,10 +110,9 @@ export function createTerminalAcquisition({
     terminalKey: string,
     operation: TerminalAcquisitionOperation,
   ): Promise<PoolEntry> {
-    const entry = createEntry(terminalKey)
+    const fontReadiness = await preloadEntry()
+    const entry = createEntry(terminalKey, fontReadiness)
     operation.entry = entry
-
-    await preloadEntry()
     if (disposeReleasedAcquisition(operation)) return entry
 
     const outputListenerRetained = await retainAcquisitionListener(

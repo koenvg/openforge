@@ -38,6 +38,7 @@ describe('terminal acquisition', () => {
     const gate = createDeferredGate()
     const pool = new Map<string, PoolEntry>()
     const entry = createEntry('T-1')
+    const fontReadiness = { status: 'ready' } as const
     const host = {
       getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: true, instanceId: 1 }),
       listenEvent: vi.fn().mockResolvedValue(vi.fn()),
@@ -48,7 +49,10 @@ describe('terminal acquisition', () => {
       authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
       pool,
       createEntry: createEntryForKey,
-      preloadEntry: () => gate.promise,
+      preloadEntry: async () => {
+        await gate.promise
+        return fontReadiness
+      },
       disposeEntry: vi.fn(),
       resetEntry: vi.fn(),
       lifecycle: {
@@ -65,11 +69,13 @@ describe('terminal acquisition', () => {
 
     const first = acquisition.acquire('T-1')
     const second = acquisition.acquire('T-1')
+    expect(createEntryForKey).not.toHaveBeenCalled()
     gate.release()
 
     await expect(first).resolves.toBe(entry)
     await expect(second).resolves.toBe(entry)
     expect(createEntryForKey).toHaveBeenCalledOnce()
+    expect(createEntryForKey).toHaveBeenCalledWith('T-1', fontReadiness)
     expect(pool.get('T-1')).toBe(entry)
     expect(host.listenEvent).toHaveBeenCalledTimes(2)
   })

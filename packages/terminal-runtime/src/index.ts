@@ -50,6 +50,8 @@ export {
   TERMINAL_WEB_FONT_FACES,
   getTerminalOptions,
   preloadTerminalFonts,
+  type TerminalFontLoadOutcome,
+  type TerminalFontReadiness,
 } from './terminalOptions'
 export {
   getTerminalTheme,
