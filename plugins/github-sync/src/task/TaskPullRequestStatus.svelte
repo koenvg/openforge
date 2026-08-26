@@ -189,9 +189,17 @@
   <CollapsibleSection {sectionKey} title="Pull Requests" cardId="pull-requests">
     {#snippet icon()}<GitPullRequest size={14} />{/snippet}
     {#snippet actions()}
-      <button type="button" class="btn btn-ghost btn-xs" disabled={refreshing} onclick={() => void refreshGithubStatus()}>{refreshing ? 'Refreshing…' : 'Refresh GitHub status'}</button>
       <span class="badge badge-ghost badge-sm font-mono">{pullRequests.length} {pullRequests.length === 1 ? 'PR' : 'PRs'}</span>
       <button type="button" class="btn btn-ghost btn-xs" onclick={toggleAdding}>Add PR</button>
+      <!-- Icon only, in the same spot and shape as the Changes card's refresh: the label
+           this used to carry pushed the section title into an ellipsis. -->
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-base-content"
+        aria-label="Refresh GitHub status"
+        disabled={refreshing}
+        onclick={() => void refreshGithubStatus()}
+      >↻</button>
     {/snippet}
 
     <div class="flex flex-col gap-2.5 py-2" aria-busy={loading}>
