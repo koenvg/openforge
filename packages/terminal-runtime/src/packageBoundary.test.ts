@@ -82,6 +82,17 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     }
   })
 
+  it('keeps the shared TerminalView test factory free of global mock installation', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'packages/terminal-runtime/src/terminalView.testUtils.ts'),
+      'utf8',
+    )
+
+    expect(source).not.toContain('vi.mock(')
+    expect(source).not.toMatch(/from ['"]@xterm\//)
+    expect(source).not.toContain('terminalRuntime.integrationTestHarness')
+  })
+
   it('keeps diff theming out of the public terminal runtime contract', async () => {
     const [runtimeExports, themeExports] = await Promise.all([
       import('@openforge-app/terminal-runtime'),
@@ -101,6 +112,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(packageJson.exports['./shortcuts']).toBe('./src/terminalShortcuts.ts')
     expect(packageJson.exports['./shortcutController']).toBe('./src/terminalShortcutController.ts')
     expect(packageJson.exports['./taskTerminalController']).toBe('./src/taskTerminalController.ts')
+    expect(packageJson.exports['./testUtils']).toBe('./src/terminalView.testUtils.ts')
     expect(packageJson.exports['./TerminalTabsShell']).toBe('./src/TerminalTabsShell.svelte')
     expect(packageJson.exports['./xterm.css']).toBe('./src/xterm.css')
   })

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  createFakeTerminalView,
   createHost,
   resetTerminalRuntimeIntegrationHarness,
 } from './terminalRuntime.integrationTestHarness'
+import { createFakeTerminalView } from './terminalView.testUtils'
 import {
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,

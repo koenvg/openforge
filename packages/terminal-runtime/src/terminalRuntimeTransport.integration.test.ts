@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createFakeTerminalView,
-  resetTerminalRuntimeIntegrationHarness,
-} from './terminalRuntime.integrationTestHarness'
+import { resetTerminalRuntimeIntegrationHarness } from './terminalRuntime.integrationTestHarness'
+import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal runtime transport seam', () => {

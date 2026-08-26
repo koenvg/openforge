@@ -42,7 +42,8 @@
       "@openforge-app/terminal-runtime/shortcuts": ["./packages/terminal-runtime/src/terminalShortcuts.ts"],
       "@openforge-app/terminal-runtime/shortcutController": ["./packages/terminal-runtime/src/terminalShortcutController.ts"],
       "@openforge-app/terminal-runtime/TerminalTabsShell": ["./packages/terminal-runtime/src/TerminalTabsShell.svelte"],
-      "@openforge-app/terminal-runtime/xterm.css": ["./packages/terminal-runtime/src/xterm.css"]
+      "@openforge-app/terminal-runtime/xterm.css": ["./packages/terminal-runtime/src/xterm.css"],
+      "@openforge-app/terminal-runtime/testUtils": ["./packages/terminal-runtime/src/terminalView.testUtils.ts"]
     },
 
     /* Linting */
