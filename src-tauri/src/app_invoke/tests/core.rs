@@ -862,19 +862,13 @@ async fn resolve_ai_provider_reports_unreadable_project_config() {
     let (state, _temp_dir) = test_state("app_invoke_unreadable_project_provider");
     let project_id = {
         let db = crate::db::acquire_db(&state.db);
-        let project = db
-            .create_project("Unreadable provider", "/tmp/unreadable-provider")
-            .expect("create project");
-        let conn = db.lock_conn().expect("lock database");
-        conn.execute(
-            "INSERT INTO project_config (project_id, key, value) VALUES (?1, 'ai_provider', ?2)",
-            rusqlite::params![&project.id, vec![0xff_u8]],
-        )
-        .expect("store unreadable project provider");
-        project.id
+        db.create_project("Unreadable provider", "/tmp/unreadable-provider")
+            .expect("create project")
+            .id
     };
+    insert_unreadable_project_config(&state, &project_id, "ai_provider");
 
-    let (status, message) = invoke(
+    let error = invoke(
         &state,
         "resolve_ai_provider",
         json!({ "projectId": project_id }),
@@ -882,25 +876,15 @@ async fn resolve_ai_provider_reports_unreadable_project_config() {
     .await
     .expect_err("unreadable project provider must fail");
 
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert!(message.contains("failed to resolve AI provider"));
-    assert!(message.contains("Invalid column type"));
+    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
 }
 
 #[tokio::test]
 async fn agent_generate_reports_unreadable_global_provider_config() {
     let (state, _temp_dir) = test_state("agent_generate_unreadable_global_provider");
-    {
-        let db = crate::db::acquire_db(&state.db);
-        let conn = db.lock_conn().expect("lock database");
-        conn.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES ('ai_provider', ?1)",
-            rusqlite::params![vec![0xff_u8]],
-        )
-        .expect("store unreadable global provider");
-    }
+    insert_unreadable_global_config(&state, "ai_provider");
 
-    let (status, message) = invoke(
+    let error = invoke(
         &state,
         "agent_generate",
         json!({ "sessionKey": "generation-1", "prompt": "Summarize" }),
@@ -908,9 +892,7 @@ async fn agent_generate_reports_unreadable_global_provider_config() {
     .await
     .expect_err("unreadable global provider must fail");
 
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert!(message.contains("failed to resolve AI provider"));
-    assert!(message.contains("Invalid column type"));
+    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
 }
 
 #[tokio::test]
@@ -918,22 +900,16 @@ async fn repo_agent_generate_reports_unreadable_project_provider_config() {
     let (state, _temp_dir) = test_state("repo_agent_generate_unreadable_project_provider");
     let project_id = {
         let db = crate::db::acquire_db(&state.db);
-        let project = db
-            .create_project(
-                "Unreadable provider",
-                "/tmp/repo-generation-unreadable-provider",
-            )
-            .expect("create project");
-        let conn = db.lock_conn().expect("lock database");
-        conn.execute(
-            "INSERT INTO project_config (project_id, key, value) VALUES (?1, 'ai_provider', ?2)",
-            rusqlite::params![&project.id, vec![0xff_u8]],
+        db.create_project(
+            "Unreadable provider",
+            "/tmp/repo-generation-unreadable-provider",
         )
-        .expect("store unreadable project provider");
-        project.id
+        .expect("create project")
+        .id
     };
+    insert_unreadable_project_config(&state, &project_id, "ai_provider");
 
-    let (status, message) = invoke(
+    let error = invoke(
         &state,
         "agent_generate_in_repo",
         json!({
@@ -947,7 +923,5 @@ async fn repo_agent_generate_reports_unreadable_project_provider_config() {
     .await
     .expect_err("unreadable project provider must fail");
 
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert!(message.contains("failed to resolve AI provider"));
-    assert!(message.contains("Invalid column type"));
+    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
 }

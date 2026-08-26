@@ -105,19 +105,13 @@ async fn runtime_command_reports_unreadable_global_provider_config() {
     let (state, _temp_dir) = test_state("runtime_unreadable_global_provider");
     let project_id = {
         let db = crate::db::acquire_db(&state.db);
-        let project = db
-            .create_project("Unreadable provider", "/tmp/runtime-unreadable-provider")
-            .expect("create project");
-        let conn = db.lock_conn().expect("lock database");
-        conn.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES ('ai_provider', ?1)",
-            rusqlite::params![vec![0xff_u8]],
-        )
-        .expect("store unreadable global provider");
-        project.id
+        db.create_project("Unreadable provider", "/tmp/runtime-unreadable-provider")
+            .expect("create project")
+            .id
     };
+    insert_unreadable_global_config(&state, "ai_provider");
 
-    let (status, message) = invoke(
+    let error = invoke(
         &state,
         "list_opencode_commands",
         json!({ "projectId": project_id }),
@@ -125,7 +119,5 @@ async fn runtime_command_reports_unreadable_global_provider_config() {
     .await
     .expect_err("unreadable global provider must fail");
 
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert!(message.contains("failed to resolve AI provider"));
-    assert!(message.contains("Invalid column type"));
+    assert_propagated_config_lookup_error(error, "failed to resolve AI provider");
 }
