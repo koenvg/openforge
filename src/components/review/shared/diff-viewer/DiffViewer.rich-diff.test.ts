@@ -85,11 +85,42 @@ describe('DiffViewer Rich Diff View', () => {
 
     await waitFor(() => {
       expect(resolveRepositoryImage).toHaveBeenCalledWith('docs/assets/diagram.png')
-      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src')).toBe('data:image/png;base64,diagram')
+      expect(screen.getByAltText('Diagram').getAttribute('src')).toBe('data:image/png;base64,diagram')
     })
 
     await fireEvent.click(screen.getByRole('link', { name: 'Setup' }))
     expect(onOpenRepositoryPath).toHaveBeenCalledWith('docs/SETUP.md', '')
+  })
+
+  it('reports images opened from a Rich Diff View', async () => {
+    const markdownFile: PrFileDiff = { ...modifiedFileWithPatch, filename: 'docs/README.md' }
+    const onOpenImage = vi.fn()
+
+    render(DiffViewer, {
+      props: {
+        files: [markdownFile],
+        batchFetchFileContents: vi.fn().mockResolvedValue(new Map([[markdownFile.filename, {
+          oldContent: '',
+          newContent: '![Diagram](assets/diagram.png)',
+        }]])),
+        resolveRepositoryImage: vi.fn().mockResolvedValue('data:image/png;base64,diagram'),
+        onOpenImage,
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
+    const imageButton = await screen.findByRole('button', { name: 'Open Diagram image' })
+    await fireEvent.click(imageButton)
+
+    expect(onOpenImage).toHaveBeenCalledWith({
+      activeIndex: 0,
+      images: [{
+        alt: 'Diagram',
+        filename: 'docs/README.md',
+        label: 'Rich preview',
+        src: 'data:image/png;base64,diagram',
+      }],
+    })
   })
 
   it('resolves nested GitHub Rich Diff images and links at the pull request head', async () => {
@@ -112,7 +143,7 @@ describe('DiffViewer Rich Diff View', () => {
     await fireEvent.click(screen.getByRole('button', { name: `Show rich diff for ${markdownFile.filename}` }))
 
     await waitFor(() => {
-      expect(screen.getByRole('img', { name: 'Diagram' }).getAttribute('src'))
+      expect(screen.getByAltText('Diagram').getAttribute('src'))
         .toBe('https://raw.githubusercontent.com/acme/repo/abc123/docs/assets/diagram.png')
     })
 

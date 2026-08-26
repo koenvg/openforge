@@ -236,6 +236,50 @@ describe('DiffViewer file content fetching', () => {
     expect(screen.queryByText('Processing diff…')).toBeNull()
   })
 
+  it('reports the selected image and its before/after gallery when a preview is opened', async () => {
+    const imageFile: PrFileDiff = {
+      ...modifiedFileWithPatch,
+      filename: 'assets/logo.png',
+      status: 'binary',
+      patch: null,
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+    }
+    const onOpenImage = vi.fn()
+
+    render(DiffViewer, {
+      props: {
+        files: [imageFile],
+        batchFetchFileContents: vi.fn().mockResolvedValue(new Map([
+          ['assets/logo.png', { oldContent: 'before-image', newContent: 'after-image' }],
+        ])),
+        onOpenImage,
+      },
+    })
+
+    const afterPreview = await screen.findByRole('button', { name: 'Open assets/logo.png after preview' })
+    await fireEvent.click(afterPreview)
+
+    expect(onOpenImage).toHaveBeenCalledWith({
+      activeIndex: 1,
+      images: [
+        {
+          alt: 'assets/logo.png old preview',
+          filename: 'assets/logo.png',
+          label: 'Before',
+          src: 'data:image/png;base64,before-image',
+        },
+        {
+          alt: 'assets/logo.png new preview',
+          filename: 'assets/logo.png',
+          label: 'After',
+          src: 'data:image/png;base64,after-image',
+        },
+      ],
+    })
+  })
+
   it('preserves image previews for a pure image rename', async () => {
     const imageFile: PrFileDiff = {
       ...modifiedFileWithPatch,

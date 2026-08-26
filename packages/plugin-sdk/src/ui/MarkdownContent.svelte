@@ -8,6 +8,12 @@
     type ResolvedMarkdownMedia,
   } from '../markdown'
 
+  interface MarkdownImageOpenRequest {
+    src: string
+    alt: string
+    openLink?: () => void
+  }
+
   interface Props {
     content: string
     imageBaseUrl?: string | null
@@ -16,6 +22,7 @@
     resolveRemoteMedia?: (url: string) => Promise<ResolvedMarkdownMedia | null>
     onOpenRepositoryPath?: (repositoryPath: string, suffix: string) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
+    onOpenImage?: (request: MarkdownImageOpenRequest) => void
   }
 
   let {
@@ -26,6 +33,7 @@
     resolveRemoteMedia,
     onOpenRepositoryPath,
     onOpenUrl,
+    onOpenImage,
   }: Props = $props()
 
   let root = $state<HTMLDivElement | null>(null)
@@ -37,6 +45,35 @@
     deferRemoteMedia: Boolean(resolveRemoteMedia),
   }))
 
+  function imageTrigger(image: HTMLImageElement): HTMLElement {
+    return image.closest('a') ?? image
+  }
+
+  function updateInteractiveImage(image: HTMLImageElement) {
+    const trigger = imageTrigger(image)
+    if (!onOpenImage || !image.getAttribute('src')) {
+      if (trigger.dataset.markdownImageTrigger === 'true') {
+        trigger.removeAttribute('role')
+        trigger.removeAttribute('tabindex')
+        trigger.removeAttribute('aria-label')
+        delete trigger.dataset.markdownImageTrigger
+      }
+      image.classList.remove('cursor-zoom-in')
+      return
+    }
+
+    const imageName = image.alt.trim()
+    trigger.setAttribute('role', 'button')
+    if (trigger === image) trigger.setAttribute('tabindex', '0')
+    trigger.setAttribute('aria-label', imageName ? `Open ${imageName} image` : 'Open image preview')
+    trigger.dataset.markdownImageTrigger = 'true'
+    image.classList.add('cursor-zoom-in')
+  }
+
+  function updateInteractiveImages() {
+    if (!root) return
+    root.querySelectorAll('img').forEach(updateInteractiveImage)
+  }
   async function resolveRepositoryImages(runId: number) {
     if (!root || !markdownFilePath || !resolveRepositoryImage) return
 
@@ -50,6 +87,7 @@
         if (runId !== imageResolutionId || !resolvedSrc) return
         image.setAttribute('src', resolvedSrc)
         image.removeAttribute('data-markdown-repository-path')
+        updateInteractiveImage(image)
       } catch {
         // Leave the image inert when an asset is missing or cannot be previewed.
       }
@@ -61,6 +99,7 @@
 
     if (element instanceof HTMLImageElement) {
       element.setAttribute('src', resolved?.url ?? url)
+      updateInteractiveImage(element)
       return
     }
 
@@ -102,6 +141,7 @@
     const runId = ++imageResolutionId
     void html
     if (!root) return
+    updateInteractiveImages()
 
     void resolveRepositoryImages(runId)
     void resolveRemoteMediaElements(runId)
@@ -111,17 +151,10 @@
     imageResolutionId++
   })
 
-  function handleClick(event: MouseEvent) {
-    if (!(event.target instanceof Element)) return
-
-    const anchor = event.target.closest('a')
-    const href = anchor?.getAttribute('href')
-    if (!anchor || !href) return
-
+  function openMarkdownLink(href: string, absoluteHref: string) {
     if (markdownFilePath) {
       const repositoryPath = resolveMarkdownRepositoryPath(href, markdownFilePath)
       if (repositoryPath) {
-        event.preventDefault()
         void onOpenRepositoryPath?.(repositoryPath, getMarkdownRepositoryLinkSuffix(href))
         return
       }
@@ -129,14 +162,62 @@
 
     if (href.startsWith('#')) return
 
-    event.preventDefault()
-    if (onOpenUrl && anchor.href) {
-      void onOpenUrl(href.startsWith('//') ? `https:${href}` : anchor.href)
+    if (onOpenUrl && absoluteHref) {
+      void onOpenUrl(href.startsWith('//') ? `https:${href}` : absoluteHref)
     }
+  }
+
+  function openImage(image: HTMLImageElement) {
+    const src = image.getAttribute('src')
+    if (!onOpenImage || !src) return
+
+    const anchor = image.closest('a')
+    const href = anchor?.getAttribute('href')
+    onOpenImage({
+      src,
+      alt: image.alt,
+      openLink: href ? () => openMarkdownLink(href, anchor?.href ?? '') : undefined,
+    })
+  }
+
+  function findEventImage(target: Element): HTMLImageElement | null {
+    const image = target.closest('img')
+    if (image instanceof HTMLImageElement) return image
+
+    return target.closest('a')?.querySelector('img') ?? null
+  }
+
+  function handleClick(event: MouseEvent) {
+    if (!(event.target instanceof Element)) return
+
+    const image = findEventImage(event.target)
+    if (image && onOpenImage && image.getAttribute('src')) {
+      event.preventDefault()
+      imageTrigger(image).focus()
+      openImage(image)
+      return
+    }
+
+    const anchor = event.target.closest('a')
+    const href = anchor?.getAttribute('href')
+    if (!anchor || !href) return
+
+    if (!href.startsWith('#')) event.preventDefault()
+    openMarkdownLink(href, anchor.href)
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    if (!(event.target instanceof Element)) return
+
+    const image = findEventImage(event.target)
+    if (!image) return
+
+    event.preventDefault()
+    openImage(image)
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div bind:this={root} role="presentation" class="markdown-body" onclick={handleClick}>
+<div bind:this={root} role="presentation" class="markdown-body" onclick={handleClick} onkeydown={handleKeydown}>
   {@html html}
 </div>

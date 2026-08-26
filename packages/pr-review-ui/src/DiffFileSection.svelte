@@ -45,6 +45,7 @@
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
+    onOpenImage,
     onToggleCollapse,
     onSetRichDiffActive,
     onReviewedChange,
@@ -110,6 +111,7 @@
       {resolveRepositoryImage}
       {onOpenRepositoryPath}
       {onOpenUrl}
+      {onOpenImage}
       {onOpenInlineCommentWidget}
       {getInlineCommentText}
       {onSetInlineCommentText}

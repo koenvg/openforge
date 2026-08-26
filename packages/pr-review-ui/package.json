@@ -30,6 +30,7 @@
     "./prSort": "./src/prSort.ts",
     "./prStatusPresentation": "./src/prStatusPresentation.ts",
     "./reviewFileIdentity": "./src/reviewFileIdentity.ts",
+    "./reviewImages": "./src/reviewImages.ts",
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {

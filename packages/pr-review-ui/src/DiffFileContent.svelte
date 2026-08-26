@@ -6,6 +6,7 @@
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
+  import type { OpenReviewImage, ReviewImage } from './reviewImages'
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
   import FileContentsError from './FileContentsError.svelte'
@@ -28,6 +29,7 @@
     resolveRepositoryImage?: (repositoryPath: string) => Promise<string | null>
     onOpenRepositoryPath: (repositoryPath: string, suffix: string) => void | Promise<void>
     onOpenUrl?: (url: string) => void | Promise<void>
+    onOpenImage?: OpenReviewImage
     onOpenInlineCommentWidget: (lineNumber: number, side: SplitSide) => void
     getInlineCommentText: (lineNumber: number, side: SplitSide) => string
     onSetInlineCommentText: (lineNumber: number, side: SplitSide, text: string) => void
@@ -65,6 +67,7 @@
     resolveRepositoryImage,
     onOpenRepositoryPath,
     onOpenUrl,
+    onOpenImage,
     onOpenInlineCommentWidget,
     getInlineCommentText,
     onSetInlineCommentText,
@@ -88,7 +91,49 @@
   function sideToReviewSide(side: SplitSide): ReviewSubmissionComment['side'] {
     return side === SplitSide.old ? 'LEFT' : 'RIGHT'
   }
+
+  function buildImageGallery(oldImageSrc: string | null, newImageSrc: string | null): ReviewImage[] {
+    const images: ReviewImage[] = []
+
+    if (oldImageSrc) {
+      images.push({
+        src: oldImageSrc,
+        alt: `${file.previous_filename || file.filename} old preview`,
+        filename: file.filename,
+        label: 'Before',
+      })
+    }
+
+    if (newImageSrc) {
+      images.push({
+        src: newImageSrc,
+        alt: `${file.filename} new preview`,
+        filename: file.filename,
+        label: 'After',
+      })
+    }
+
+    return images
+  }
 </script>
+
+{#snippet imagePreview(src: string, alt: string, openLabel: string, images: ReviewImage[], activeIndex: number)}
+  {#if onOpenImage}
+    <button
+      type="button"
+      class="cursor-zoom-in rounded border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      aria-label={openLabel}
+      onclick={(event) => {
+        event.currentTarget.focus()
+        onOpenImage?.({ images, activeIndex })
+      }}
+    >
+      <img {src} {alt} class="max-h-96 max-w-full object-contain" />
+    </button>
+  {:else}
+    <img {src} {alt} class="max-h-96 max-w-full object-contain" />
+  {/if}
+{/snippet}
 
 {#if !file.patch && !isImageFileDiff(file) && file.status === 'renamed' && file.changes === 0}
   <div class="flex items-center justify-center py-8 text-base-content/50">
@@ -104,6 +149,10 @@
         {resolveRepositoryImage}
         {onOpenRepositoryPath}
         {onOpenUrl}
+        onOpenImage={onOpenImage ? (image) => onOpenImage({
+          activeIndex: 0,
+          images: [{ ...image, filename: file.filename, label: 'Rich preview' }],
+        }) : undefined}
       />
     {:else if fileContentError}
       <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
@@ -129,13 +178,20 @@
   {:else}
     {@const oldImageSrc = fileContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, fileContents.oldContent) : null}
     {@const newImageSrc = fileContents ? getImagePreviewDataUrl(file.filename, fileContents.newContent) : null}
+    {@const imageGallery = buildImageGallery(oldImageSrc, newImageSrc)}
     <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
     {#if file.status !== 'added'}
       <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
         <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
         <div class="flex flex-1 items-center justify-center overflow-auto">
           {#if oldImageSrc}
-            <img src={oldImageSrc} alt={`${file.previous_filename || file.filename} old preview`} class="max-h-96 max-w-full object-contain" />
+            {@render imagePreview(
+              oldImageSrc,
+              `${file.previous_filename || file.filename} old preview`,
+              `Open ${file.filename} before preview`,
+              imageGallery,
+              imageGallery.findIndex(image => image.label === 'Before'),
+            )}
           {:else if fileContents === undefined && canFetchFileContents}
             <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading old image preview"></span>
           {:else}
@@ -149,7 +205,13 @@
         <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
         <div class="flex flex-1 items-center justify-center overflow-auto">
           {#if newImageSrc}
-            <img src={newImageSrc} alt={`${file.filename} new preview`} class="max-h-96 max-w-full object-contain" />
+            {@render imagePreview(
+              newImageSrc,
+              `${file.filename} new preview`,
+              `Open ${file.filename} after preview`,
+              imageGallery,
+              imageGallery.findIndex(image => image.label === 'After'),
+            )}
           {:else if fileContents === undefined && canFetchFileContents}
             <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading new image preview"></span>
           {:else}
