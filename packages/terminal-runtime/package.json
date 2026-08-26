@@ -12,6 +12,7 @@
     "./theme": "./src/theme.ts",
     "./shortcuts": "./src/terminalShortcuts.ts",
     "./shortcutController": "./src/terminalShortcutController.ts",
+    "./taskTerminalController": "./src/taskTerminalController.ts",
     "./TerminalTabsShell": "./src/TerminalTabsShell.svelte",
     "./TaskTerminalSurface": "./src/TaskTerminalSurface.svelte",
     "./TerminalTabsSurface": "./src/TerminalTabsSurface.svelte",
