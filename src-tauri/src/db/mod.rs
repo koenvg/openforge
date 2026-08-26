@@ -12,6 +12,7 @@ mod browser_session_purges;
 mod config;
 pub(crate) mod migrations;
 mod plugins;
+mod project_attention;
 mod project_config;
 mod projects;
 mod pull_request_readiness;
@@ -37,7 +38,8 @@ pub use authored_prs::AuthoredPrRow;
 pub use board_status::BoardStatus;
 pub use browser_session_purges::BrowserSessionPurgeIntentRow;
 pub use plugins::PluginRow;
-pub use projects::{ProjectAttentionRow, ProjectRow};
+pub use project_attention::ProjectAttentionRow;
+pub use projects::ProjectRow;
 pub use pull_request_readiness::PrMergeReadinessFacts;
 pub(crate) use pull_request_readiness::{
     build_merge_readiness_facts, ci_status_for_readiness, enforce_actor_scoped_readiness,
