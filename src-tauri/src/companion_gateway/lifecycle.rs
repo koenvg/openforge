@@ -232,6 +232,7 @@ impl CompanionGatewayManager {
             Some(pty_manager.clone()),
             Some(events.sender()),
             task_claims,
+            crate::task_start::default_worktree_root(),
         ));
         Self::new_with_sources(
             Arc::new(KeychainCompanionIdentityStore),

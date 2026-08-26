@@ -58,7 +58,6 @@ async fn handles_agent_lifecycle_followups() {
 
 use once_cell::sync::Lazy;
 use std::{
-    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     process::{Command as StdCommand, Output},
@@ -113,28 +112,6 @@ fn configure_provider_test_path(state: &mut crate::http_server::AppState, provid
     pty_manager.set_test_environment_variable("PATH", provider_path.to_string_lossy());
     #[cfg(windows)]
     pty_manager.set_test_environment_variable("PATHEXT", windows_provider_test_pathext());
-}
-
-struct EnvVarGuard {
-    key: &'static str,
-    original: Option<OsString>,
-}
-
-impl EnvVarGuard {
-    fn set_path(key: &'static str, value: &Path) -> Self {
-        let original = std::env::var_os(key);
-        std::env::set_var(key, value);
-        Self { key, original }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        match self.original.as_ref() {
-            Some(value) => std::env::set_var(self.key, value),
-            None => std::env::remove_var(self.key),
-        }
-    }
 }
 
 #[cfg(windows)]
@@ -848,16 +825,15 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let temp = tempfile::tempdir().expect("tempdir should be created");
-    let home_dir = temp.path().join("home");
-    fs::create_dir(&home_dir).expect("home dir should be created");
+    let worktree_root = temp.path().join("worktrees");
     let repo_dir = temp.path().join("repo");
     init_committed_repo(&repo_dir);
     assert_git_success(&repo_dir, &["checkout", "-b", "feature/open-pr"]);
     fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
-    let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
     let (mut state, _temp_dir) = test_state("app_invoke_start_existing_branch_worktree");
+    state.task_start_worktree_root = Some(worktree_root.clone());
     configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
@@ -894,6 +870,10 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     let workspace_path = response["workspace_path"]
         .as_str()
         .expect("workspace path should be string");
+    assert!(
+        Path::new(workspace_path).starts_with(&worktree_root),
+        "existing-branch workspace must use the injected worktree root"
+    );
     let branch_output = git(
         Path::new(workspace_path),
         &["rev-parse", "--abbrev-ref", "HEAD"],
@@ -941,17 +921,16 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let temp = tempfile::tempdir().expect("tempdir should be created");
-    let home_dir = temp.path().join("home");
-    fs::create_dir(&home_dir).expect("home dir should be created");
+    let worktree_root = temp.path().join("worktrees");
     let repo_dir = temp.path().join("repo");
     init_committed_repo(&repo_dir);
     assert_git_success(&repo_dir, &["checkout", "-b", "feature/open-pr"]);
     fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
-    let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
     let (mut state, _temp_dir) =
         test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
+    state.task_start_worktree_root = Some(worktree_root.clone());
     configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
@@ -977,11 +956,7 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
         .expect("create task")
         .id
     };
-    let stale_worktree_path = home_dir
-        .join(".openforge")
-        .join("worktrees")
-        .join("repo")
-        .join(&task_id);
+    let stale_worktree_path = worktree_root.join("repo").join(&task_id);
     let stale_worktree_path_str = stale_worktree_path.to_string_lossy().to_string();
     let stale_branch = crate::git_worktree::task_branch_name(&task_id);
     assert_git_success(
@@ -1029,6 +1004,135 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
         .expect("get workspace")
         .expect("workspace should exist");
     assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_existing_branch_starts_keep_worktree_roots_isolated() {
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Barrier,
+    };
+
+    let process_home = std::env::var_os("HOME");
+    let temp_a = tempfile::tempdir().expect("first tempdir should be created");
+    let temp_b = tempfile::tempdir().expect("second tempdir should be created");
+    let repo_a = temp_a.path().join("repo");
+    let repo_b = temp_b.path().join("repo");
+    let worktree_root_a = temp_a.path().join("worktrees");
+    let worktree_root_b = temp_b.path().join("worktrees");
+    let sandbox_a = ProviderTestSandbox::new();
+    let sandbox_b = ProviderTestSandbox::new();
+    let (mut state_a, _db_temp_a) = test_state("parallel_existing_branch_start_a");
+    let (mut state_b, _db_temp_b) = test_state("parallel_existing_branch_start_b");
+    state_a.task_start_worktree_root = Some(worktree_root_a.clone());
+    state_b.task_start_worktree_root = Some(worktree_root_b.clone());
+    configure_provider_test_path(&mut state_a, &sandbox_a.bin_dir);
+    configure_provider_test_path(&mut state_b, &sandbox_b.bin_dir);
+
+    let prepare_task = |state: &crate::http_server::AppState, repo_dir: &Path, prompt: &str| {
+        init_committed_repo(repo_dir);
+        assert_git_success(repo_dir, &["checkout", "-b", "feature/open-pr"]);
+        fs::write(repo_dir.join("README.md"), "feature branch\n")
+            .expect("fixture file should write");
+        assert_git_success(repo_dir, &["commit", "-am", "feature change"]);
+        assert_git_success(repo_dir, &["checkout", "main"]);
+
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "Parallel Existing Branch Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            prompt,
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("existingBranch"),
+                branch: Some("feature/open-pr"),
+            },
+        )
+        .expect("create task")
+        .id
+    };
+    let task_a = prepare_task(&state_a, &repo_a, "Parallel existing branch A");
+    let task_b = prepare_task(&state_b, &repo_b, "Parallel existing branch B");
+
+    let stop_home_observer = Arc::new(AtomicBool::new(false));
+    let home_changed = Arc::new(AtomicBool::new(false));
+    let home_observations = Arc::new(AtomicUsize::new(0));
+    let observer_ready = Arc::new(Barrier::new(2));
+    let home_observer = {
+        let expected_home = process_home.clone();
+        let stop = Arc::clone(&stop_home_observer);
+        let changed = Arc::clone(&home_changed);
+        let observations = Arc::clone(&home_observations);
+        let ready = Arc::clone(&observer_ready);
+        std::thread::spawn(move || {
+            ready.wait();
+            while !stop.load(Ordering::Acquire) {
+                observations.fetch_add(1, Ordering::Relaxed);
+                if std::env::var_os("HOME") != expected_home {
+                    changed.store(true, Ordering::Release);
+                }
+                std::thread::yield_now();
+            }
+        })
+    };
+    observer_ready.wait();
+
+    let (response_a, response_b) = tokio::join!(
+        invoke(
+            &state_a,
+            "start_implementation",
+            json!({ "taskId": task_a, "repoPath": repo_a.to_string_lossy() }),
+        ),
+        invoke(
+            &state_b,
+            "start_implementation",
+            json!({ "taskId": task_b, "repoPath": repo_b.to_string_lossy() }),
+        ),
+    );
+
+    stop_home_observer.store(true, Ordering::Release);
+    home_observer.join().expect("HOME observer should stop");
+    assert!(
+        home_observations.load(Ordering::Relaxed) > 0,
+        "HOME observer should sample while both starts are in flight"
+    );
+    assert!(
+        !home_changed.load(Ordering::Acquire),
+        "task starts must never expose a temporary process HOME"
+    );
+
+    let response_a = response_a.expect("first concurrent task start should succeed");
+    let response_b = response_b.expect("second concurrent task start should succeed");
+    let workspace_a = Path::new(
+        response_a["workspace_path"]
+            .as_str()
+            .expect("first workspace path should be a string"),
+    );
+    let workspace_b = Path::new(
+        response_b["workspace_path"]
+            .as_str()
+            .expect("second workspace path should be a string"),
+    );
+    assert!(workspace_a.starts_with(&worktree_root_a));
+    assert!(workspace_b.starts_with(&worktree_root_b));
+    assert!(!workspace_a.starts_with(&worktree_root_b));
+    assert!(!workspace_b.starts_with(&worktree_root_a));
+    assert_eq!(std::env::var_os("HOME"), process_home);
+
+    let manager_a = state_a.pty_manager.as_ref().expect("first PTY manager");
+    let manager_b = state_b.pty_manager.as_ref().expect("second PTY manager");
+    let (kill_a, kill_b) = tokio::join!(manager_a.kill_pty(&task_a), manager_b.kill_pty(&task_b));
+    kill_a.expect("first provider should stop");
+    kill_b.expect("second provider should stop");
 }
 
 #[tokio::test]

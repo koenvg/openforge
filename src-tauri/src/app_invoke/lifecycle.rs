@@ -23,6 +23,7 @@ fn task_start_service(state: &AppState) -> crate::task_start::TaskStartService {
         state.pty_manager.clone(),
         state.app_event_tx.clone(),
         state.task_claims.clone(),
+        state.task_start_worktree_root.clone(),
     )
 }
 
