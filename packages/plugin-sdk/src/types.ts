@@ -1,4 +1,4 @@
-import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
+import packageMetadataSchemaData from './openforgePackageMetadataSchema.json' with { type: 'json' }
 
 import type { Component } from 'svelte'
 import type { BrowserSurfacesAPI } from './browserSurfaces'
