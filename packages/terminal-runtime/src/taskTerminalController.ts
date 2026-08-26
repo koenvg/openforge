@@ -77,12 +77,14 @@ export function createTaskTerminalController({
     activatingEntry = null
   }
 
-  async function ensureShellStarted(entry: PoolEntry, binding: TaskTerminalBinding): Promise<void> {
-    if (!isCurrentBinding(binding) || !adapter.runtime.shouldSpawnPty(entry)) return
-
+  async function spawnShellPty(
+    entry: PoolEntry,
+    binding: TaskTerminalBinding,
+    shouldStart: () => boolean = () => true,
+  ): Promise<void> {
     adapter.runtime.markPtySpawnPending(entry)
     try {
-      if (!isCurrentBinding(binding)) return
+      if (!shouldStart()) return
       const instanceId = await adapter.spawnShellPty(
         binding.taskId,
         binding.workspacePath,
@@ -98,6 +100,12 @@ export function createTaskTerminalController({
     } finally {
       adapter.runtime.clearPtySpawnPending(entry)
     }
+  }
+
+  async function ensureShellStarted(entry: PoolEntry, binding: TaskTerminalBinding): Promise<void> {
+    if (!isCurrentBinding(binding) || !adapter.runtime.shouldSpawnPty(entry)) return
+
+    await spawnShellPty(entry, binding, () => isCurrentBinding(binding))
   }
 
   async function activateTerminal(entry: PoolEntry, binding: TaskTerminalBinding): Promise<void> {
@@ -180,23 +188,9 @@ export function createTaskTerminalController({
         console.error('[TaskTerminal] Failed to kill PTY on restart:', error)
       })
       adapter.runtime.resetTerminal(entry)
-      adapter.runtime.markPtySpawnPending(entry)
-      const instanceId = await adapter.spawnShellPty(
-        binding.taskId,
-        binding.workspacePath,
-        entry.view.geometry.cols,
-        entry.view.geometry.rows,
-        binding.terminalIndex,
-        adapter.runtime.getTerminalImageProtocol(entry),
-      )
-      adapter.runtime.markShellPtyStarted(entry, instanceId)
-      if (isCurrentBinding(binding)) {
-        updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))
-      }
+      await spawnShellPty(entry, binding)
     } catch (error) {
       console.error('[TaskTerminal] Failed to restart shell:', error)
-    } finally {
-      adapter.runtime.clearPtySpawnPending(entry)
     }
   }
 
