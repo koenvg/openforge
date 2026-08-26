@@ -13,8 +13,8 @@ describe('xterm terminal authority adapter', () => {
     const responses: Array<{ data: string; ptyInstanceId: number | null }> = []
     view.onQueryResponse(response => responses.push(response))
 
-    view.bootstrap('\u001b[', 71)
-    view.writeLive({ data: '6n', ptyInstanceId: 71 })
+    view.bootstrap('\u001b[', 71, 0)
+    view.writeLive({ data: '6n', ptyInstanceId: 71, sequence: 1 })
 
     await vi.waitFor(() => {
       expect(responses).toEqual([{ data: '\u001b[1;1R', ptyInstanceId: 71 }])

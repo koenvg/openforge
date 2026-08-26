@@ -2,6 +2,11 @@ import { terminalLogMessage } from './terminalLogging'
 import type { TerminalTransport } from './terminalTransport'
 import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
+export interface TerminalViewAttachment {
+  readonly generation: number
+  detach(): void
+}
+
 function isModalOpen(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
 }
@@ -45,10 +50,18 @@ export function createTerminalAttachmentController(
       .catch(error => console.error(terminalLogMessage(environment.loggerName, 'resize failed:'), error))
   }
 
-  function waitForInitialFit(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
+  function waitForInitialFit(
+    entry: PoolEntry,
+    attachmentGeneration: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
     return new Promise((resolve) => {
       requestAnimationFrame(() => {
-        if (signal?.aborted || !entry.attached) {
+        if (
+          signal?.aborted
+          || !entry.attached
+          || entry.attachmentGeneration !== attachmentGeneration
+        ) {
           resolve()
           return
         }
@@ -58,17 +71,31 @@ export function createTerminalAttachmentController(
           resolve()
           return
         }
-        void waitForInitialFit(entry, signal).then(resolve)
+        void waitForInitialFit(entry, attachmentGeneration, signal).then(resolve)
       })
     })
   }
 
-  async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
-    if (entry.attached && entry.view.isMountedIn(wrapperEl)) return
+  function createAttachment(entry: PoolEntry, generation: number): TerminalViewAttachment {
+    return {
+      generation,
+      detach: () => detach(entry, generation),
+    }
+  }
 
+  async function attach(
+    entry: PoolEntry,
+    wrapperEl: HTMLDivElement,
+  ): Promise<TerminalViewAttachment> {
+    if (entry.attached && entry.view.isMountedIn(wrapperEl)) {
+      return createAttachment(entry, entry.attachmentGeneration)
+    }
+    if (entry.attached) detach(entry)
+
+    entry.attachmentGeneration += 1
+    const generation = entry.attachmentGeneration
     entry.view.mount(wrapperEl)
     entry.attached = true
-
     if (!entry.resizeObserver) {
       entry.resizeObserver = new ResizeObserver((entries) => {
         const { width, height } = entries[0].contentRect
@@ -98,16 +125,20 @@ export function createTerminalAttachmentController(
     entry.visibilityObserver.disconnect()
     entry.visibilityObserver.observe(wrapperEl)
 
-    await waitForInitialFit(entry)
+    await waitForInitialFit(entry, generation)
+    return createAttachment(entry, generation)
   }
 
   async function recoverActiveTerminal(entry: PoolEntry, signal?: AbortSignal): Promise<void> {
     if (!entry.attached) return
-    await waitForInitialFit(entry, signal)
+    await waitForInitialFit(entry, entry.attachmentGeneration, signal)
   }
 
-  function detach(entry: PoolEntry): void {
-    if (!entry.attached) return
+  function detach(
+    entry: PoolEntry,
+    attachmentGeneration = entry.attachmentGeneration,
+  ): void {
+    if (!entry.attached || attachmentGeneration !== entry.attachmentGeneration) return
 
     if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
     entry.resizeTimeout = null

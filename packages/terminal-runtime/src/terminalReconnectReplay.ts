@@ -43,7 +43,8 @@ export function createTerminalReconnectReplay({
 
       resetEntry(entry)
       entry.needsClear = false
-      entry.view.bootstrap(replay.data, replay.ptyInstanceId)
+      entry.outputSequence = 0
+      entry.view.bootstrap(replay.data, replay.ptyInstanceId, entry.outputSequence)
       entry.hasOutput = true
       notifyLifecycle(entry.shellSessionKey)
       if (entry.attached) entry.view.refresh()

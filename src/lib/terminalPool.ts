@@ -1,76 +1,47 @@
-import {
-  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
-  createTerminalRuntime,
-  parsePtySessionKey,
-  type PoolEntry,
-  type ShellLifecycleState,
-  type TaskTerminalTabsSession,
-  type TerminalTab,
-} from '@openforge-app/terminal-runtime'
-import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
-import type { TerminalDesktopEventName } from './desktopIpcContract'
-import { createDesktopTerminalTransport } from './desktopTerminalTransport'
-import { getPtyBuffer, resizePty, writePty, writeTerminalQueryResponse } from './ipc'
-import { taskLinkRouter } from './plugin/taskLinks'
-import { themeMode } from './theme'
-
-const transport = createDesktopTerminalTransport({
-  listenEvent: (eventName, handler) => listenDesktopEvent(
-    eventName as TerminalDesktopEventName,
-    handler,
-  ),
-  getPtyBuffer,
-  writeTerminalQueryResponse,
-  writePty,
-  resizePty,
-})
-
-const terminalRuntime = createTerminalRuntime({
-  transport,
-  environment: {
-    openLink: (terminalKey, url) => taskLinkRouter.open({
-      taskId: parsePtySessionKey(terminalKey).taskId,
-      url,
-    }),
-    themeMode,
-    loggerName: 'terminalPool',
-  },
-  authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
-})
-
-export type {
-  DesktopUnlistenFn,
+import type {
   PoolEntry,
   ShellLifecycleState,
   TaskTerminalTabsSession,
+  TerminalRuntimeUnlistenFn,
   TerminalTab,
+  TerminalViewAttachment,
+} from '@openforge-app/terminal-runtime'
+import { agentTerminalSessions, getTerminalRuntimeForTests } from './terminalSessionService'
+
+export type {
+  PoolEntry,
+  ShellLifecycleState,
+  TaskTerminalTabsSession,
+  TerminalRuntimeUnlistenFn as DesktopUnlistenFn,
+  TerminalTab,
+  TerminalViewAttachment,
 }
 
 export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
-export const isValidTerminalDimensions = terminalRuntime.isValidTerminalDimensions
-export const getTerminalImageProtocol = terminalRuntime.getTerminalImageProtocol
-export const acquire = terminalRuntime.acquire
-export const attach = terminalRuntime.attach
-export const detach = terminalRuntime.detach
-export const release = terminalRuntime.release
-export const resetTerminal = terminalRuntime.resetTerminal
-export const shouldSpawnPty = terminalRuntime.shouldSpawnPty
-export const markPtySpawnPending = terminalRuntime.markPtySpawnPending
-export const clearPtySpawnPending = terminalRuntime.clearPtySpawnPending
-export const restorePtyInstance = terminalRuntime.restorePtyInstance
-export const markShellPtyStarted = terminalRuntime.markShellPtyStarted
-export const subscribeShellLifecycle = terminalRuntime.subscribeShellLifecycle
-export const isShellExited = terminalRuntime.isShellExited
-export const getShellLifecycleState = terminalRuntime.getShellLifecycleState
-export const updateShellLifecycleState = terminalRuntime.updateShellLifecycleState
-export const getTaskTerminalTabsSession = terminalRuntime.getTaskTerminalTabsSession
-export const updateTaskTerminalTabsSession = terminalRuntime.updateTaskTerminalTabsSession
-export const clearTaskTerminalTabsSession = terminalRuntime.clearTaskTerminalTabsSession
-export const releaseAll = terminalRuntime.releaseAll
-export const releaseAllForTask = terminalRuntime.releaseAllForTask
-export const focusTerminal = terminalRuntime.focusTerminal
-export const hasTerminal = terminalRuntime.hasTerminal
-export const isPtyActive = terminalRuntime.isPtyActive
-export const recoverActiveTerminal = terminalRuntime.recoverActiveTerminal
-export const replayPtyBuffersForActiveTerminals = terminalRuntime.replayPtyBuffersForActiveTerminals
-export const _getPool = terminalRuntime._getPool
+export const isValidTerminalDimensions = agentTerminalSessions.isValidTerminalDimensions
+export const getTerminalImageProtocol = agentTerminalSessions.getTerminalImageProtocol
+export const acquire = agentTerminalSessions.acquire
+export const attach = agentTerminalSessions.attach
+export const detach = agentTerminalSessions.detach
+export const release = agentTerminalSessions.release
+export const resetTerminal = agentTerminalSessions.resetTerminal
+export const shouldSpawnPty = agentTerminalSessions.shouldSpawnPty
+export const markPtySpawnPending = agentTerminalSessions.markPtySpawnPending
+export const clearPtySpawnPending = agentTerminalSessions.clearPtySpawnPending
+export const restorePtyInstance = agentTerminalSessions.restorePtyInstance
+export const markShellPtyStarted = agentTerminalSessions.markShellPtyStarted
+export const subscribeShellLifecycle = agentTerminalSessions.subscribeShellLifecycle
+export const isShellExited = agentTerminalSessions.isShellExited
+export const getShellLifecycleState = agentTerminalSessions.getShellLifecycleState
+export const updateShellLifecycleState = agentTerminalSessions.updateShellLifecycleState
+export const getTaskTerminalTabsSession = agentTerminalSessions.getTaskTerminalTabsSession
+export const updateTaskTerminalTabsSession = agentTerminalSessions.updateTaskTerminalTabsSession
+export const clearTaskTerminalTabsSession = agentTerminalSessions.clearTaskTerminalTabsSession
+export const releaseAll = agentTerminalSessions.releaseAll
+export const releaseAllForTask = agentTerminalSessions.releaseAllForTask
+export const focusTerminal = agentTerminalSessions.focusTerminal
+export const hasTerminal = agentTerminalSessions.hasTerminal
+export const isPtyActive = agentTerminalSessions.isPtyActive
+export const recoverActiveTerminal = agentTerminalSessions.recoverActiveTerminal
+export const replayPtyBuffersForActiveTerminals = agentTerminalSessions.replayPtyBuffersForActiveTerminals
+export const _getPool = getTerminalRuntimeForTests()._getPool

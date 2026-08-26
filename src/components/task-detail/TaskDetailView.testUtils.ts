@@ -134,9 +134,10 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
-const { taskTabSessions, terminalPoolEntries } = vi.hoisted(() => ({
+const { taskTabSessions, terminalPoolEntries, terminalAttachmentDetach } = vi.hoisted(() => ({
   taskTabSessions: new Map<string, { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }>(),
   terminalPoolEntries: new Map<string, PoolEntry>(),
+  terminalAttachmentDetach: vi.fn(),
 }))
 
 vi.mock('../../lib/terminalPool', () => {
@@ -190,6 +191,7 @@ vi.mock('../../lib/terminalPool', () => {
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,
       authority: null,
@@ -199,6 +201,7 @@ vi.mock('../../lib/terminalPool', () => {
       pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,
       hasOutput: false,
+      outputSequence: 0,
     }
   }
 
@@ -211,8 +214,20 @@ vi.mock('../../lib/terminalPool', () => {
       return entry
     }),
     attach: vi.fn(async (entry: PoolEntry, host: HTMLElement) => {
+      if (entry.attached) entry.view.unmount()
+      entry.attachmentGeneration += 1
+      const generation = entry.attachmentGeneration
       entry.view.mount(host)
       entry.attached = true
+      return {
+        generation,
+        detach: () => {
+          if (!entry.attached || entry.attachmentGeneration !== generation) return
+          terminalAttachmentDetach()
+          entry.view.unmount()
+          entry.attached = false
+        },
+      }
     }),
     detach: vi.fn((entry: PoolEntry) => {
       entry.view.unmount()
@@ -263,6 +278,14 @@ vi.mock('../../lib/terminalPool', () => {
     clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
       taskTabSessions.delete(taskId)
     }),
+  }
+})
+
+vi.mock('../../lib/liveTerminalPool', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/liveTerminalPool')>()
+  return {
+    ...actual,
+    releaseAllForTask: vi.fn().mockReturnValue(0),
   }
 })
 
@@ -362,6 +385,7 @@ function resetTaskDetailViewTestState() {
   tasks.set([])
   taskTabSessions.clear()
   terminalPoolEntries.clear()
+  terminalAttachmentDetach.mockClear()
   clearTerminalTaskPaneControllers()
   installedPlugins.set(new Map([[
     'com.openforge.terminal',
@@ -398,6 +422,7 @@ export {
   mockResetToBoard,
   mockRunAppCommandInTaskTerminal,
   taskTabSessions,
+  terminalAttachmentDetach,
   getTaskDetailViewTestDependencies,
   resetTaskDetailViewTestState,
 }

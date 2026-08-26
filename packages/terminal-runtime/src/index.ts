@@ -46,7 +46,14 @@ export {
   type TerminalViewPresentationSnapshot,
   type TerminalViewRendererFailure,
   type TerminalViewTheme,
+  type TerminalViewAttachment,
+  type TerminalSessionConfiguration,
 } from './terminalRuntime'
+export {
+  createTerminalSessionService,
+  type TerminalSessionClient,
+  type TerminalSessionService,
+} from './terminalSessionService'
 export {
   TERMINAL_CELL_HEIGHT,
   TERMINAL_FONT_FAMILY,

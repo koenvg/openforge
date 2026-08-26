@@ -136,8 +136,8 @@ describe('xterm TerminalView adapter', () => {
       clientWidth: { configurable: true, value: 640 },
       clientHeight: { configurable: true, value: 480 },
     })
-    view.bootstrap('snapshot', 7)
-    view.writeLive({ data: Uint8Array.from([65]), ptyInstanceId: 7 })
+    view.bootstrap('snapshot', 7, 0)
+    view.writeLive({ data: Uint8Array.from([65]), ptyInstanceId: 7, sequence: 1 })
     view.onUserInput(onInput)
     const onXtermData = mocks.terminal.onData.mock.calls[0]?.[0] as (data: string) => void
     onXtermData('typed input')
@@ -198,7 +198,7 @@ describe('xterm TerminalView adapter', () => {
     })
 
     view.mount(container)
-    view.bootstrap('queued output', null)
+    view.bootstrap('queued output', null, 0)
     const drained = view.drainPresentation()
     let settled = false
     void drained.then(() => { settled = true })
@@ -241,7 +241,7 @@ describe('xterm TerminalView adapter', () => {
     })
 
     view.mount(container)
-    view.bootstrap('queued output', null)
+    view.bootstrap('queued output', null, 0)
     const drained = view.drainPresentation()
     view.unmount()
 

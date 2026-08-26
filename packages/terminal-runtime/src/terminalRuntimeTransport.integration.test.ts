@@ -46,8 +46,8 @@ describe('terminal runtime transport seam', () => {
 
     expect(transport.subscribeSession).toHaveBeenCalledOnce()
     expect(transport.subscribeSession).toHaveBeenCalledWith('T-1-shell-0', expect.any(Object))
-    expect(view.bootstrap).toHaveBeenCalledWith('replay first', 7)
-    expect(view.writeLive).toHaveBeenCalledWith({ data: ' then live', ptyInstanceId: 7 })
+    expect(view.bootstrap).toHaveBeenCalledWith('replay first', 7, 0)
+    expect(view.writeLive).toHaveBeenCalledWith({ data: ' then live', ptyInstanceId: 7, sequence: 1 })
     expect(vi.mocked(view.bootstrap).mock.invocationCallOrder[0])
       .toBeLessThan(vi.mocked(view.writeLive).mock.invocationCallOrder[0])
     expect(entry.currentPtyInstance).toBe(7)

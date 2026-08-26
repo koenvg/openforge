@@ -1,6 +1,6 @@
 # @openforge-app/terminal-runtime
 
-Host-shared terminal lifecycle runtime for OpenForge Trusted Plugins that render Terminal Surfaces.
+Host-owned terminal lifecycle runtime for OpenForge agent and trusted-plugin Terminal Surfaces.
 
 This package is MIT-licensed so plugin authors can build and redistribute Terminal Surface integrations against the public OpenForge host runtime contract. It must only compose public plugin capabilities. It must not import OpenForge renderer stores, Electron or preload internals, Rust Sidecar helpers, or other private app modules.
 
@@ -24,6 +24,8 @@ One Terminal Runtime owns one transport. The transport may multiplex many Shell 
 Terminal Runtime continues to own Terminal Session lifecycle, replay ordering, current PTY instance checks, Terminal View Attachments, and Terminal Geometry Leases. A transport restores connectivity but does not decide replay policy. `TerminalView` does not receive transport, IPC, capability, or connection details.
 
 The interface is exported from the package root and `@openforge-app/terminal-runtime/terminalTransport`.
+
+The desktop host creates one `TerminalSessionService` and gives each Terminal Surface an owner-scoped client. Clients share sessions by Shell Session Key, while bulk release affects only sessions owned by that client.
 
 ## Renderer conformance
 

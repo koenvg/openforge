@@ -26,6 +26,7 @@ export {
   type GhosttyAuthoritativeTerminalContract,
   type XtermAuthoritativeTerminalContract,
 } from './terminalAuthority'
+export type { TerminalViewAttachment } from './terminalAttachment'
 export type { TerminalImageProtocol } from './terminalImages'
 export type {
   TerminalExitEvent,
@@ -45,6 +46,7 @@ export type {
   ShellLifecycleState,
   TaskTerminalTabsSession,
   TerminalRuntimeEnvironment,
+  TerminalSessionConfiguration,
   TerminalRuntimeUnlistenFn,
   TerminalTab,
 } from './terminalRuntimeTypes'
@@ -83,13 +85,17 @@ export function createTerminalRuntime({
   const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key), authority)
 
   function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
+    const configuration = environment.sampleSessionConfiguration?.(terminalKey) ?? {
+      renderer: 'xterm' as const,
+      enableImages: environment.enableImages,
+    }
     return {
       shellSessionKey: terminalKey,
       view: createTerminalView({
         terminalKey,
         themeMode: get(activeThemeMode),
         openLink: url => environment.openLink(terminalKey, url),
-        enableImages: environment.enableImages,
+        enableImages: configuration.enableImages,
         loggerName: environment.loggerName,
         fontReadiness,
       }),
@@ -101,6 +107,7 @@ export function createTerminalRuntime({
       visibilityObserver: null,
       resizeTimeout: null,
       attached: false,
+      attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,
       authority: null,
@@ -110,6 +117,7 @@ export function createTerminalRuntime({
       pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,
       hasOutput: false,
+      outputSequence: 0,
     }
   }
 

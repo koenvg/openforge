@@ -15,7 +15,7 @@ describe('renderer-neutral terminal view runtime', () => {
     host.getPtyBuffer = async () => ({ buffer: 'first replay', isLive: true, instanceId: 5 })
     await runtime.acquire(terminalKey)
 
-    expect(firstView.bootstrap).toHaveBeenCalledWith('first replay', 5)
+    expect(firstView.bootstrap).toHaveBeenCalledWith('first replay', 5, 0)
     host.emit(`pty-output-${terminalKey}`, {
       shell_session_key: terminalKey,
       instance_id: 5,
@@ -24,6 +24,7 @@ describe('renderer-neutral terminal view runtime', () => {
     expect(firstView.writeLive).toHaveBeenCalledWith({
       data: ' first live bytes',
       ptyInstanceId: 5,
+      sequence: 1,
     })
 
     runtime.release(terminalKey)
@@ -45,6 +46,7 @@ describe('renderer-neutral terminal view runtime', () => {
     expect(successorView.writeLive).toHaveBeenCalledWith({
       data: 'successor live bytes',
       ptyInstanceId: 6,
+      sequence: 1,
     })
 
     runtime.dispose()

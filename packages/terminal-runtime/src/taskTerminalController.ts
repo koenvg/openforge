@@ -1,4 +1,8 @@
-import type { PoolEntry, ShellLifecycleState } from './terminalRuntime'
+import type {
+  PoolEntry,
+  ShellLifecycleState,
+  TerminalViewAttachment,
+} from './terminalRuntime'
 import type { TerminalSurfaceAdapter } from './terminalSurfaceAdapter'
 
 export interface TaskTerminalBinding {
@@ -48,6 +52,7 @@ export function createTaskTerminalController({
   let currentBinding: TaskTerminalBinding | null = null
   let boundContextSignature: string | null = null
   let poolEntry: PoolEntry | null = null
+  let viewAttachment: TerminalViewAttachment | null = null
   let unsubscribeShellLifecycle: (() => void) | null = null
   let lifecycle = initialLifecycle
   let bindRun = 0
@@ -69,10 +74,9 @@ export function createTaskTerminalController({
   function clearBindingResources(): void {
     unsubscribeShellLifecycle?.()
     unsubscribeShellLifecycle = null
-    if (poolEntry) {
-      adapter.runtime.detach(poolEntry)
-      poolEntry = null
-    }
+    viewAttachment?.detach()
+    viewAttachment = null
+    poolEntry = null
     previousIsActive = null
     activatingEntry = null
   }
@@ -113,8 +117,12 @@ export function createTaskTerminalController({
     activatingEntry = entry
     try {
       const wasAttached = entry.attached
-      await adapter.runtime.attach(entry, terminalHost)
-      if (poolEntry !== entry || !isCurrentBinding(binding)) return
+      const attachment = await adapter.runtime.attach(entry, terminalHost)
+      if (poolEntry !== entry || !isCurrentBinding(binding)) {
+        attachment.detach()
+        return
+      }
+      viewAttachment = attachment
       if (wasAttached) {
         await adapter.runtime.recoverActiveTerminal(entry)
         if (poolEntry !== entry || !isCurrentBinding(binding)) return

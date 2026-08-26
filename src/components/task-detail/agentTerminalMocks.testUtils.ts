@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
     resizeTimeout: null,
     attached: false,
   },
+  attachment: {
+    generation: 1,
+    detach: vi.fn(),
+  },
   shellLifecycleState: {
     ptyActive: false,
     shellExited: false,
@@ -54,7 +58,7 @@ vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue(mocks.poolEntry),
-  attach: vi.fn(),
+  attach: vi.fn().mockResolvedValue(mocks.attachment),
   detach: vi.fn(),
   recoverActiveTerminal: vi.fn(),
   focusTerminal: vi.fn(),
@@ -77,6 +81,7 @@ vi.mock('../../lib/terminalPool', () => ({
 }))
 
 export const mockPoolEntry = mocks.poolEntry
+export const mockAttachment = mocks.attachment
 export const mockShellLifecycleState = mocks.shellLifecycleState
 
 export function resetAgentTerminalMocks() {
@@ -84,6 +89,7 @@ export function resetAgentTerminalMocks() {
   mocks.poolEntry.ptyActive = false
   mocks.poolEntry.needsClear = false
   mocks.poolEntry.attached = false
+  mocks.attachment.detach.mockClear()
   mocks.poolEntry.view.setTheme.mockClear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false

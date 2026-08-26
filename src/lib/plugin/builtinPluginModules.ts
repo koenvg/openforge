@@ -9,6 +9,10 @@ import githubSyncPlugin from '../../../plugins/github-sync/src/index'
 import taskBrowserPlugin from '../../../plugins/task-browser/src/index'
 import taskSchedulesPlugin from '../../../plugins/task-schedules/src/index'
 import terminalPlugin from '../../../plugins/terminal/src/index'
+import { configureTerminalSessionClient } from '../../../plugins/terminal/src/lib/terminalPool'
+import { regularTerminalSessions } from '../terminalSessionService'
+
+configureTerminalSessionClient(regularTerminalSessions)
 
 const BUILTIN_PLUGIN_MODULES: Record<string, LoadedPluginModule> = {
   [FILE_VIEWER_PLUGIN_ID]: fileViewerPlugin,

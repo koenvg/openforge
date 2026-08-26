@@ -454,7 +454,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A reconnect requests fresh restoration state from the **Terminal State Authority** and rejects restoration, output, exits, and generated replies from a replaced PTY instance.
 - Replacing, hiding, or ending a **Terminal View Attachment** does not end its **Terminal Session** or accumulate an unbounded hidden-view output queue.
 - Explicit termination, PTY exit, applicable permanent **Task** deletion, or app shutdown ends a **Terminal Session**; ordinary view and renderer lifecycle events do not.
-- The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.
+- One host-owned **Terminal Runtime** is shared by agent and regular plugin **Terminal Surfaces**; a Surface can end only the **Terminal Sessions** it owns.
 - The **Terminal Runtime** uses **Shell Session Keys** to distinguish terminal shell tabs/sessions.
 - A **Shell Session Key** is not a **Task** id, even when it belongs to a **Task** terminal.
 - A **Shell Session Key** may select a succession of distinct **Terminal Sessions** over time; replacing the current session ends it and creates another under the same key.

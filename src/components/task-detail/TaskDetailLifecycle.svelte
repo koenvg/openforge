@@ -2,8 +2,7 @@
   import { createTaskTerminalPaneLifecycle } from '@openforge-app/terminal-runtime'
   import { onDestroy } from 'svelte'
   import { getProjectConfig, getTaskWorkspace, writePty } from '../../lib/ipc'
-  import { getShellLifecycleState, getTaskTerminalTabsSession } from '../../lib/liveTerminalPool'
-  import { releaseAllForTask } from '../../lib/terminalPool'
+  import { getShellLifecycleState, getTaskTerminalTabsSession, releaseAllForTask } from '../../lib/liveTerminalPool'
   import {
     createTaskRunAppController,
     type TaskRunAppRegistration,
