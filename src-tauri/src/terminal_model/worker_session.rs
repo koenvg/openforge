@@ -2,8 +2,9 @@ use super::super::{GhosttyTerminalModel, TerminalModel, TerminalModelError, Term
 #[cfg(test)]
 use super::event_state::TerminalModelDiagnostic;
 use super::event_state::{PortableTerminalSnapshot, TerminalModelEventSink, TerminalModelState};
-use log::info;
-use std::sync::{mpsc, Arc};
+use log::{info, warn};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -36,6 +37,7 @@ pub(crate) const TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY: usize =
 const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: Duration = Duration::from_millis(50);
 pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const WORKER_JOIN_TIMEOUT: Duration = Duration::from_millis(100);
 
 enum TerminalModelCommand {
     Feed(Vec<u8>),
@@ -134,6 +136,8 @@ pub(crate) struct TerminalModelSession {
     tx: mpsc::SyncSender<TerminalModelCommand>,
     queue_policy: TerminalModelQueuePolicy,
     state: Arc<TerminalModelState>,
+    shutdown_requested: Arc<AtomicBool>,
+    worker_done: Mutex<mpsc::Receiver<()>>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -168,16 +172,26 @@ impl TerminalModelSession {
             TerminalModelQueuePolicy::DisableAfterTimeout
         };
         let state = Arc::new(TerminalModelState::new(event_sink));
+        let shutdown_requested = Arc::new(AtomicBool::new(false));
+        let (worker_done_tx, worker_done) = mpsc::channel();
         let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
         let worker_key = Arc::clone(&session_key);
         let worker_state = Arc::clone(&state);
+        let worker_shutdown_requested = Arc::clone(&shutdown_requested);
         let worker = std::thread::Builder::new()
             .name(format!("terminal-model-{instance_id}"))
             .spawn(move || {
                 let panic_key = Arc::clone(&worker_key);
                 let panic_state = Arc::clone(&worker_state);
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_worker(worker_key, instance_id, options, rx, worker_state);
+                    run_worker(
+                        worker_key,
+                        instance_id,
+                        options,
+                        rx,
+                        worker_state,
+                        worker_shutdown_requested,
+                    );
                 }));
                 if let Err(payload) = result {
                     let message = payload
@@ -187,6 +201,7 @@ impl TerminalModelSession {
                         .unwrap_or_else(|| "unknown model worker panic".to_string());
                     panic_state.disable(&panic_key, instance_id, "panic", message);
                 }
+                let _ = worker_done_tx.send(());
             })?;
         let feeder = TerminalModelFeeder {
             session_key: Arc::clone(&session_key),
@@ -202,6 +217,8 @@ impl TerminalModelSession {
                 tx,
                 queue_policy,
                 state,
+                shutdown_requested,
+                worker_done: Mutex::new(worker_done),
                 worker: Some(worker),
             },
             feeder,
@@ -291,11 +308,27 @@ fn request_portable_snapshot(
 
 impl Drop for TerminalModelSession {
     fn drop(&mut self) {
-        if !self.state.is_disabled() {
-            let _ = self.tx.send(TerminalModelCommand::Shutdown);
-        }
+        self.shutdown_requested.store(true, Ordering::Release);
+        let _ = self.tx.try_send(TerminalModelCommand::Shutdown);
+
         if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+            let worker_done = self
+                .worker_done
+                .get_mut()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            match worker_done.recv_timeout(WORKER_JOIN_TIMEOUT) {
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    let _ = worker.join();
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    warn!(
+                        "[terminal-model] key={} instance={} worker did not stop within {} ms; detaching",
+                        self.session_key,
+                        self.instance_id,
+                        WORKER_JOIN_TIMEOUT.as_millis()
+                    );
+                }
+            }
         }
         info!(
             "[terminal-model] key={} instance={} disposed",
@@ -314,6 +347,7 @@ fn run_worker(
     options: TerminalModelOptions,
     rx: mpsc::Receiver<TerminalModelCommand>,
     state: Arc<TerminalModelState>,
+    shutdown_requested: Arc<AtomicBool>,
 ) {
     let mut model = match GhosttyTerminalModel::new(options) {
         Ok(model) => model,
@@ -327,6 +361,9 @@ fn run_worker(
     let mut checkpoint_due = true;
     let mut output_sequence = 0u64;
     loop {
+        if shutdown_requested.load(Ordering::Acquire) {
+            return;
+        }
         let command = match rx.recv_timeout(CHECKPOINT_IDLE_INTERVAL) {
             Ok(command) => command,
             Err(mpsc::RecvTimeoutError::Timeout) => {

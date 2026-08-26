@@ -23,6 +23,14 @@ use worker_session::{COMMAND_QUEUE_CAPACITY, QUEUE_CATCH_UP_TIMEOUT, REQUEST_TIM
 mod tests {
     use super::*;
 
+    struct DropSignal(mpsc::SyncSender<()>);
+
+    impl Drop for DropSignal {
+        fn drop(&mut self) {
+            let _ = self.0.send(());
+        }
+    }
+
     #[test]
     fn worker_preserves_raw_chunk_order_and_captures_replies() {
         let (session, feeder) = TerminalModelSession::start(
@@ -142,6 +150,81 @@ mod tests {
         session
             .portable_snapshot()
             .expect("authoritative model should remain available after the burst");
+    }
+
+    #[test]
+    fn dropping_a_session_is_bounded_when_the_worker_and_command_queue_are_blocked() {
+        let first_output = Arc::new(AtomicBool::new(true));
+        let sink_first_output = Arc::clone(&first_output);
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let release_rx = Mutex::new(release_rx);
+        let (worker_disconnected_tx, worker_disconnected_rx) = mpsc::sync_channel(1);
+        let (worker_dropped_tx, worker_dropped_rx) = mpsc::sync_channel(1);
+        let worker_drop_signal = DropSignal(worker_dropped_tx);
+        let sink: TerminalModelEventSink = Arc::new(move |event| {
+            let _worker_drop_signal = &worker_drop_signal;
+            match event {
+                TerminalModelEvent::Output(_)
+                    if sink_first_output.swap(false, Ordering::AcqRel) =>
+                {
+                    let _ = entered_tx.send(());
+                    let _ = release_rx
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .recv();
+                }
+                TerminalModelEvent::Disabled { .. } => {
+                    let _ = worker_disconnected_tx.send(());
+                }
+                _ => {}
+            }
+        });
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
+            "blocked-drop-shell".to_string(),
+            93,
+            TerminalModelOptions::new(80, 24),
+            sink,
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"first");
+        entered_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("event sink should block the model worker");
+        for _ in 0..COMMAND_QUEUE_CAPACITY {
+            feeder.feed(b"queued");
+        }
+
+        let (drop_complete_tx, drop_complete_rx) = mpsc::sync_channel(1);
+        let drop_thread = std::thread::spawn(move || {
+            drop(session);
+            let _ = drop_complete_tx.send(());
+        });
+        let drop_completed_within_deadline = drop_complete_rx
+            .recv_timeout(Duration::from_millis(250))
+            .is_ok();
+
+        release_tx
+            .send(())
+            .expect("test should release the model worker");
+        drop_thread
+            .join()
+            .expect("session drop thread should not panic");
+
+        assert!(
+            drop_completed_within_deadline,
+            "session drop must not wait indefinitely for a full queue or blocked event sink"
+        );
+
+        let feeder_probe = std::thread::spawn(move || feeder.feed(b"after-drop"));
+        feeder_probe.join().expect("feeder probe should not panic");
+        worker_disconnected_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("worker should disconnect retained feeders after shutdown");
+        worker_dropped_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("released worker should finish orderly cleanup");
     }
 
     #[test]
