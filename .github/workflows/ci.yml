@@ -292,17 +292,8 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Zig 0.16
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
-      - name: Prepare pinned Ghostty dependencies
-        shell: bash
-        run: |
-          node scripts/prepare-ghostty-vt.mjs | tee ghostty-prepare.log
-          grep '^GHOSTTY_' ghostty-prepare.log >> "$GITHUB_ENV"
-
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
       - name: Build and run the compatibility gate offline
         working-directory: src-tauri
         shell: bash
@@ -324,17 +315,8 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install Zig 0.16
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
-      - name: Prepare pinned Ghostty dependencies
-        run: |
-          node scripts/prepare-ghostty-vt.mjs | tee /tmp/ghostty-prepare.log
-          grep '^GHOSTTY_' /tmp/ghostty-prepare.log >> "$GITHUB_ENV"
-          echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"
-
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -432,17 +414,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install Zig 0.16
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
-      - name: Prepare pinned Ghostty dependencies
-        run: |
-          node scripts/prepare-ghostty-vt.mjs | tee /tmp/ghostty-prepare.log
-          grep '^GHOSTTY_' /tmp/ghostty-prepare.log >> "$GITHUB_ENV"
-          echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"
-
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
       - name: Install frontend dependencies
         run: pnpm install
 

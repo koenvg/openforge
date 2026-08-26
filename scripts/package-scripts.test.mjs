@@ -80,6 +80,39 @@ describe('package build scripts', () => {
     }
   })
 
+  it('prepares pinned Ghostty dependencies through one reusable action for every compiling job', async () => {
+    const ghosttyActionPath = '.github/actions/prepare-ghostty/action.yml'
+    const ghosttyAction = await readFile(join(repoRoot, ghosttyActionPath), 'utf8')
+    const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
+    const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
+    const reusableActionUse = 'uses: ./.github/actions/prepare-ghostty'
+
+    expect(ghosttyAction).toContain('using: composite')
+    expect(ghosttyAction).toContain('uses: mlugg/setup-zig@v2')
+    expect(ghosttyAction).toContain('version: 0.16.0')
+    expect(ghosttyAction).toContain('node scripts/prepare-ghostty-vt.mjs')
+    expect(ghosttyAction).toContain(`grep '^GHOSTTY_'`)
+    expect(ghosttyAction).toContain(`echo 'CARGO_NET_OFFLINE=true' >> "$GITHUB_ENV"`)
+
+    for (const [workflow, jobName] of [
+      [ciWorkflow, 'ghostty-compatibility'],
+      [ciWorkflow, 'rust'],
+      [ciWorkflow, 'packaged-electron-smoke'],
+      [releaseWorkflow, 'release'],
+    ]) {
+      const jobStart = workflow.indexOf(`  ${jobName}:`)
+      const nextJob = workflow.slice(jobStart + 1).search(/^  [\w-]+:/m)
+      const job = workflow.slice(jobStart, nextJob === -1 ? undefined : jobStart + nextJob + 1)
+
+      expect(jobStart, jobName).toBeGreaterThan(-1)
+      expect(job, jobName).toContain(reusableActionUse)
+    }
+
+    expect(ciWorkflow).not.toContain('uses: mlugg/setup-zig@v2')
+    expect(releaseWorkflow).not.toContain('uses: mlugg/setup-zig@v2')
+    expect(ciWorkflow).not.toContain('node scripts/prepare-ghostty-vt.mjs')
+    expect(releaseWorkflow).not.toContain('node scripts/prepare-ghostty-vt.mjs')
+  })
   it('runs the packaged Electron smoke guardrail in general CI on macOS instead of release-only CI', async () => {
     const ciWorkflow = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
     const releaseWorkflow = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8')
