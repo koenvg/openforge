@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/koenvangeert/openforge/main/scripts
 To install a specific version:
 
 ```bash
-OPENFORGE_VERSION=0.0.5 curl -fsSL https://raw.githubusercontent.com/koenvangeert/openforge/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/koenvangeert/openforge/main/scripts/install.sh | OPENFORGE_VERSION=0.0.5 sh
 ```
 
 > **Note:** The app is unsigned. The install script removes the macOS quarantine flag automatically. If you downloaded the DMG manually, run:
