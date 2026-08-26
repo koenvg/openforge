@@ -78,7 +78,7 @@ describe('terminal runtime acquisition', () => {
     host.emit(`pty-output-${terminalKey}`, {
       data: ' after failure',
       instance_id: 21,
-      task_id: terminalKey,
+      shell_session_key: terminalKey,
     })
 
     expect(entry.terminalStateSource).toBe('pty-byte-replay')

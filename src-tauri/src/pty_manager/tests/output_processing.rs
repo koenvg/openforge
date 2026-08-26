@@ -289,7 +289,7 @@ fn test_pty_output_batcher_flushes_at_threshold_to_event_and_ring_buffer() {
 
     assert_eq!(emitted.len(), 1);
     assert_eq!(emitted[0].0, "pty-output-task-batch");
-    assert_eq!(emitted[0].1["task_id"], "task-batch");
+    assert_eq!(emitted[0].1["shell_session_key"], "task-batch");
     assert_eq!(emitted[0].1["data"], "hello");
     assert_eq!(emitted[0].1["instance_id"], 42);
     assert_eq!(ring.lock().unwrap().snapshot(), "hello");

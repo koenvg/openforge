@@ -9,7 +9,12 @@ async fn handles_commands_that_do_not_require_spawn() {
     let (state, _temp_dir) = test_state("app_invoke_pty_commands");
 
     assert_eq!(
-        invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-404" })).await,
+        invoke_ok(
+            &state,
+            "get_pty_buffer",
+            json!({ "shellSessionKey": "T-404" }),
+        )
+        .await,
         json!({ "buffer": null, "isLive": false, "instanceId": null })
     );
     assert!(invoke_ok(
@@ -33,7 +38,12 @@ async fn spawns_without_backend_app_emitter() {
     .await;
     assert!(instance_id.as_u64().expect("instance id") > 0);
 
-    let live_buffer = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": "T-1-shell-1" })).await;
+    let live_buffer = invoke_ok(
+        &state,
+        "get_pty_buffer",
+        json!({ "shellSessionKey": "T-1-shell-1" }),
+    )
+    .await;
     assert_eq!(live_buffer["isLive"], true);
     assert_eq!(live_buffer["instanceId"], instance_id);
     assert!(live_buffer["buffer"].is_null());
@@ -328,7 +338,12 @@ async fn terminal_buffer_falls_back_to_persisted_completed_session_replay() {
             .expect("persist replay"));
     }
 
-    let buffer = invoke_ok(&state, "get_pty_buffer", json!({ "taskId": task_id })).await;
+    let buffer = invoke_ok(
+        &state,
+        "get_pty_buffer",
+        json!({ "shellSessionKey": task_id }),
+    )
+    .await;
 
     assert_eq!(
         buffer,

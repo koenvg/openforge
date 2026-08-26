@@ -41,7 +41,7 @@ describe('Desktop event contract', () => {
     expect(ptyOutputEventName('T-1')).toBe('pty-output-T-1')
     expect(ptyExitEventName('T-1-shell-2')).toBe('pty-exit-T-1-shell-2')
     expectTypeOf<PtyOutputEventPayload>().toEqualTypeOf<{
-      task_id: string
+      shell_session_key: string
       data: string
       instance_id: number
     }>()
@@ -54,7 +54,7 @@ describe('Desktop event contract', () => {
     const producerSource = source('src-tauri/src/pty_manager/events.rs')
     expect(producerSource).toContain('format!("pty-output-{}", self.session_key)')
     expect(producerSource).toContain('format!("pty-exit-{}", session_key)')
-    expect(producerSource).toContain('"task_id": &self.session_key')
+    expect(producerSource).toContain('"shell_session_key": &self.session_key')
     expect(producerSource).toContain('"instance_id": self.instance_id')
   })
 

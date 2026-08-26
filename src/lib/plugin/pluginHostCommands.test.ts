@@ -247,24 +247,24 @@ describe('plugin host commands', () => {
     })
   })
 
-  it('routes runtime host shell callbacks through concrete PTY session keys', async () => {
+  it('routes runtime host shell callbacks through Shell Session Keys', async () => {
     const { invoke } = installDesktopBridge({ buffer: 'buffered', isLive: true, instanceId: 42 })
     const host = createPluginRuntimeHost('test-plugin')
 
     await host.writeShell({ taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
-    expect(invoke).toHaveBeenLastCalledWith('pty_write', { taskId: 'T-1-shell-2', data: 'echo hi\n' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_write', { shellSessionKey: 'T-1-shell-2', data: 'echo hi\n' })
 
     await host.resizeShell({ taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
-    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { taskId: 'T-1-shell-2', cols: 120, rows: 40 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { shellSessionKey: 'T-1-shell-2', cols: 120, rows: 40 })
 
     await host.killShell({ taskId: 'T-1', terminalIndex: 2 })
-    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { shellSessionKey: 'T-1-shell-2' })
 
     await expect(host.getShellBuffer({ taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true, instanceId: 42 })
-    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
+    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { shellSessionKey: 'T-1-shell-2' })
   })
 
-  it('routes indexed shell host commands through concrete PTY session keys', async () => {
+  it('routes indexed shell host commands through Shell Session Keys', async () => {
     const { invoke } = installDesktopBridge('buffered')
 
     await expect(invokePluginHostCommand('spawnShellPty', {
@@ -285,17 +285,17 @@ describe('plugin host commands', () => {
     })
 
     await invokePluginHostCommand('writePty', { taskId: 'T-1', terminalIndex: 2, data: 'echo hi\n' })
-    expect(invoke).toHaveBeenLastCalledWith('pty_write', { taskId: 'T-1-shell-2', data: 'echo hi\n' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_write', { shellSessionKey: 'T-1-shell-2', data: 'echo hi\n' })
 
     await invokePluginHostCommand('resizePty', { taskId: 'T-1', terminalIndex: 2, cols: 120, rows: 40 })
-    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { taskId: 'T-1-shell-2', cols: 120, rows: 40 })
+    expect(invoke).toHaveBeenLastCalledWith('pty_resize', { shellSessionKey: 'T-1-shell-2', cols: 120, rows: 40 })
 
     await invokePluginHostCommand('killPty', { taskId: 'T-1', terminalIndex: 2 })
-    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { taskId: 'T-1-shell-2' })
+    expect(invoke).toHaveBeenLastCalledWith('pty_kill', { shellSessionKey: 'T-1-shell-2' })
 
     invoke.mockResolvedValue({ buffer: 'buffered', isLive: true, instanceId: 42 })
     await expect(invokePluginHostCommand('getPtyBuffer', { taskId: 'T-1', terminalIndex: 2 })).resolves.toEqual({ buffer: 'buffered', isLive: true, instanceId: 42 })
-    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { taskId: 'T-1-shell-2' })
+    expect(invoke).toHaveBeenLastCalledWith('get_pty_buffer', { shellSessionKey: 'T-1-shell-2' })
   })
 
   it('rejects missing indexed shell host command payloads instead of coercing them to shell zero', async () => {

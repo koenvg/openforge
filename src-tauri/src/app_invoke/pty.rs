@@ -1,6 +1,6 @@
 use super::pty_payload::{
-    PtyResizePayload, PtySpawnShellPayload, PtyTaskPayload, PtyTerminalQueryResponsePayload,
-    PtyWritePayload,
+    PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload, PtyTaskPayload,
+    PtyTerminalQueryResponsePayload, PtyWritePayload,
 };
 use super::*;
 use serde::Serialize;
@@ -115,7 +115,7 @@ pub(super) async fn handle_app_pty_command(
         "pty_write" => {
             let payload = PtyWritePayload::decode(&request.command, &request.payload)?;
             pty_manager
-                .write_pty(&payload.task_id, payload.data.as_bytes())
+                .write_pty(&payload.shell_session_key, payload.data.as_bytes())
                 .await
                 .map_err(|e| {
                     (
@@ -141,7 +141,7 @@ pub(super) async fn handle_app_pty_command(
         "pty_resize" => {
             let payload = PtyResizePayload::decode(&request.command, &request.payload)?;
             pty_manager
-                .resize_pty(&payload.task_id, payload.cols, payload.rows)
+                .resize_pty(&payload.shell_session_key, payload.cols, payload.rows)
                 .await
                 .map_err(|e| {
                     (
@@ -152,13 +152,16 @@ pub(super) async fn handle_app_pty_command(
             serde_json::Value::Null
         }
         "pty_kill" => {
-            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
-            pty_manager.kill_pty(&payload.task_id).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to kill PTY: {e}"),
-                )
-            })?;
+            let payload = PtyShellSessionPayload::decode(&request.command, &request.payload)?;
+            pty_manager
+                .kill_pty(&payload.shell_session_key)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to kill PTY: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "pty_kill_shells_for_task" => {
@@ -175,11 +178,13 @@ pub(super) async fn handle_app_pty_command(
             serde_json::Value::Null
         }
         "get_pty_buffer" => {
-            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
-            let mut buffer_state = pty_manager.pty_buffer_state(&payload.task_id).await;
+            let payload = PtyShellSessionPayload::decode(&request.command, &request.payload)?;
+            let mut buffer_state = pty_manager
+                .pty_buffer_state(&payload.shell_session_key)
+                .await;
             if !buffer_state.is_live && buffer_state.buffer.is_none() {
                 buffer_state.buffer = crate::db::acquire_db(&state.db)
-                    .get_latest_agent_terminal_replay(&payload.task_id)
+                    .get_latest_agent_terminal_replay(&payload.shell_session_key)
                     .map_err(|error| {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,

@@ -131,12 +131,12 @@ vi.mock('@xterm/addon-image', () => ({
 
 export interface TestHost extends TerminalRuntimeHost {
   emit<TPayload>(eventName: string, payload: TPayload): void
-  setBuffer(taskId: string, buffer: string | null): void
-  getTerminalViewSnapshot(taskId: string): Promise<DiagnosticTerminalSnapshot | null>
-  setTerminalViewSnapshot(taskId: string, snapshot: DiagnosticTerminalSnapshot | null): void
-  deferTerminalViewSnapshot(taskId: string): () => void
+  setBuffer(shellSessionKey: string, buffer: string | null): void
+  getTerminalViewSnapshot(shellSessionKey: string): Promise<DiagnosticTerminalSnapshot | null>
+  setTerminalViewSnapshot(shellSessionKey: string, snapshot: DiagnosticTerminalSnapshot | null): void
+  deferTerminalViewSnapshot(shellSessionKey: string): () => void
   getListenerCount(eventName: string): number
-  deferBufferRead(taskId: string): () => void
+  deferBufferRead(shellSessionKey: string): () => void
   deferListenerRegistration(eventName: string): () => void
   failNextListenerRegistration(eventName: string): void
 }
@@ -171,14 +171,14 @@ export function createHost(): TestHost {
       listeners.set(eventName, current)
       return () => current.delete(handler as (event: TerminalRuntimeEvent<unknown>) => void)
     },
-    async getPtyBuffer(taskId: string) {
-      await bufferReadGates.get(taskId)?.promise
-      const buffer = buffers.get(taskId) ?? null
+    async getPtyBuffer(shellSessionKey: string) {
+      await bufferReadGates.get(shellSessionKey)?.promise
+      const buffer = buffers.get(shellSessionKey) ?? null
       return { buffer, isLive: buffer !== null, instanceId: null }
     },
-    async getTerminalViewSnapshot(taskId: string) {
-      await terminalViewSnapshotGates.get(taskId)?.promise
-      return terminalViewSnapshots.get(taskId) ?? null
+    async getTerminalViewSnapshot(shellSessionKey: string) {
+      await terminalViewSnapshotGates.get(shellSessionKey)?.promise
+      return terminalViewSnapshots.get(shellSessionKey) ?? null
     },
     async writePty() {},
     async writeTerminalQueryResponse() {},
@@ -189,25 +189,25 @@ export function createHost(): TestHost {
         listener({ payload })
       }
     },
-    setBuffer(taskId: string, buffer: string | null) {
-      buffers.set(taskId, buffer)
+    setBuffer(shellSessionKey: string, buffer: string | null) {
+      buffers.set(shellSessionKey, buffer)
     },
-    setTerminalViewSnapshot(taskId: string, snapshot: DiagnosticTerminalSnapshot | null) {
-      terminalViewSnapshots.set(taskId, snapshot)
+    setTerminalViewSnapshot(shellSessionKey: string, snapshot: DiagnosticTerminalSnapshot | null) {
+      terminalViewSnapshots.set(shellSessionKey, snapshot)
     },
-    deferTerminalViewSnapshot(taskId: string) {
+    deferTerminalViewSnapshot(shellSessionKey: string) {
       const gate = createDeferredGate()
-      terminalViewSnapshotGates.set(taskId, gate)
+      terminalViewSnapshotGates.set(shellSessionKey, gate)
       return () => {
-        if (terminalViewSnapshotGates.get(taskId) === gate) terminalViewSnapshotGates.delete(taskId)
+        if (terminalViewSnapshotGates.get(shellSessionKey) === gate) terminalViewSnapshotGates.delete(shellSessionKey)
         gate.release()
       }
     },
-    deferBufferRead(taskId: string) {
+    deferBufferRead(shellSessionKey: string) {
       const gate = createDeferredGate()
-      bufferReadGates.set(taskId, gate)
+      bufferReadGates.set(shellSessionKey, gate)
       return () => {
-        if (bufferReadGates.get(taskId) === gate) bufferReadGates.delete(taskId)
+        if (bufferReadGates.get(shellSessionKey) === gate) bufferReadGates.delete(shellSessionKey)
         gate.release()
       }
     },

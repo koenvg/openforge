@@ -10,7 +10,7 @@ export interface TerminalRuntimeEvent<TPayload> {
 }
 
 export interface PtyOutputEventPayload {
-  task_id: string
+  shell_session_key: string
   data: string
   instance_id: number
 }
@@ -58,10 +58,10 @@ export interface TerminalRuntimeHost {
     eventName: TEventName,
     handler: (event: TerminalRuntimeEvent<TerminalRuntimeEventPayload<TEventName>>) => void,
   ): Promise<TerminalRuntimeUnlistenFn>
-  getPtyBuffer(taskId: string): Promise<PtyBufferState>
-  writePty(taskId: string, data: string): Promise<void>
+  getPtyBuffer(shellSessionKey: string): Promise<PtyBufferState>
+  writePty(shellSessionKey: string, data: string): Promise<void>
   writeTerminalQueryResponse(response: TerminalQueryResponseWrite): Promise<void>
-  resizePty(taskId: string, cols: number, rows: number): Promise<void>
+  resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void>
   openLink(terminalKey: string, url: string): Promise<void>
   themeMode?: Readable<ThemeMode>
   loggerName?: string
