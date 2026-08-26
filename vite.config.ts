@@ -89,6 +89,10 @@ function createOpenForgeRootAliases() {
       find: /^@openforge-app\/terminal-runtime\/xterm\.css$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
     },
+    {
+      find: /^@openforge-app\/terminal-runtime\/testUtils$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/terminalView.testUtils.ts'),
+    },
     ...createDaisyUiTailwindPluginAliases(),
   ]
 }

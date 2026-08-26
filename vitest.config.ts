@@ -19,6 +19,7 @@ const terminalRuntimeAliases = {
   '@openforge-app/terminal-runtime/TerminalTabsSurface': new URL('./packages/terminal-runtime/src/TerminalTabsSurface.svelte', import.meta.url).pathname,
   '@openforge-app/terminal-runtime/TerminalTaskPaneSurface': new URL('./packages/terminal-runtime/src/TerminalTaskPaneSurface.svelte', import.meta.url).pathname,
   '@openforge-app/terminal-runtime/xterm.css': new URL('./packages/terminal-runtime/src/xterm.css', import.meta.url).pathname,
+  '@openforge-app/terminal-runtime/testUtils': new URL('./packages/terminal-runtime/src/terminalView.testUtils.ts', import.meta.url).pathname,
   '@openforge-app/terminal-runtime': new URL('./packages/terminal-runtime/src/index.ts', import.meta.url).pathname,
 }
 

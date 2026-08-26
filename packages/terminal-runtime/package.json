@@ -15,6 +15,7 @@
     "./shortcutController": "./src/terminalShortcutController.ts",
     "./taskTerminalController": "./src/taskTerminalController.ts",
     "./TerminalTabsShell": "./src/TerminalTabsShell.svelte",
+    "./testUtils": "./src/terminalView.testUtils.ts",
     "./TaskTerminalSurface": "./src/TaskTerminalSurface.svelte",
     "./TerminalTabsSurface": "./src/TerminalTabsSurface.svelte",
     "./TerminalTaskPaneSurface": "./src/TerminalTaskPaneSurface.svelte",

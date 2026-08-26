@@ -77,7 +77,8 @@ vi.mock('../../lib/useCommentSelection.svelte', () => ({
 }))
 
 import { writable } from 'svelte/store'
-import type { PoolEntry, TerminalView } from '@openforge-app/terminal-runtime'
+import type { PoolEntry } from '@openforge-app/terminal-runtime'
+import { createFakeTerminalView } from '@openforge-app/terminal-runtime/testUtils'
 import { vi } from 'vitest'
 
 vi.mock('../../lib/stores', () => ({
@@ -139,18 +140,13 @@ const { taskTabSessions, terminalPoolEntries } = vi.hoisted(() => ({
 }))
 
 vi.mock('../../lib/terminalPool', () => {
-  function createDisposable() {
-    return { dispose: vi.fn() }
-  }
-
-  function createTerminalView(): TerminalView {
+  function createTerminalView() {
     const geometry = { cols: 80, rows: 24 }
     let mountedHost: HTMLElement | null = null
 
-    return {
+    return createFakeTerminalView({
       geometry,
       imageProtocol: 'iterm2',
-      resizeTarget: document.createElement('div'),
       mount: vi.fn((host: HTMLElement) => {
         mountedHost = host
       }),
@@ -158,8 +154,6 @@ vi.mock('../../lib/terminalPool', () => {
         mountedHost = null
       }),
       isMountedIn: vi.fn((host: HTMLElement) => mountedHost === host),
-      bootstrap: vi.fn(),
-      writeLive: vi.fn(),
       drainPresentation: vi.fn(async () => ({
         writeGeneration: 0,
         parsedGeneration: 0,
@@ -177,20 +171,11 @@ vi.mock('../../lib/terminalPool', () => {
         selectionText: '',
         lines: [],
       })),
-      focus: vi.fn(),
-      reset: vi.fn(),
-      refresh: vi.fn(),
       fit: vi.fn(() => geometry),
-      onUserInput: vi.fn(() => createDisposable()),
-      onQueryResponse: vi.fn(() => createDisposable()),
-      setKeyEventHandler: vi.fn(),
-      getSelectionText: vi.fn(() => ''),
-      setTheme: vi.fn(),
-      onRendererFailure: vi.fn(() => createDisposable()),
       dispose: vi.fn(() => {
         mountedHost = null
       }),
-    }
+    })
   }
 
   function createPoolEntry(shellSessionKey: string): PoolEntry {

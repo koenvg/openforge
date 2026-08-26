@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  createFakeTerminalView,
-  createHost,
-} from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntime.integrationTestHarness'
+import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('renderer-neutral terminal view runtime', () => {
