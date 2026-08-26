@@ -171,7 +171,7 @@ pub(super) fn git(repo: &Path, args: &[&str]) {
     );
 }
 
-pub(super) fn init_remote_backed_main(repo: &Path) {
+fn init_repository(repo: &Path) {
     std::fs::create_dir_all(repo).expect("repository should create");
     git(repo, &["init", "-b", "main"]);
     git(repo, &["config", "user.email", "test@example.com"]);
@@ -179,17 +179,15 @@ pub(super) fn init_remote_backed_main(repo: &Path) {
     std::fs::write(repo.join("README.md"), "base\n").expect("base file should write");
     git(repo, &["add", "README.md"]);
     git(repo, &["commit", "-m", "base"]);
+}
+
+pub(super) fn init_remote_backed_main(repo: &Path) {
+    init_repository(repo);
     git(repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
 }
 
 pub(super) fn init_diverged_existing_branch(repo: &Path) {
-    std::fs::create_dir_all(repo).expect("repository should create");
-    git(repo, &["init", "-b", "main"]);
-    git(repo, &["config", "user.email", "test@example.com"]);
-    git(repo, &["config", "user.name", "Test User"]);
-    std::fs::write(repo.join("README.md"), "base\n").expect("base file should write");
-    git(repo, &["add", "README.md"]);
-    git(repo, &["commit", "-m", "base"]);
+    init_repository(repo);
     git(repo, &["checkout", "-b", "feature/diverged"]);
     std::fs::write(repo.join("local.txt"), "local\n").expect("local file should write");
     git(repo, &["add", "local.txt"]);
