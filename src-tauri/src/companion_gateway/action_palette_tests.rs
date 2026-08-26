@@ -408,6 +408,108 @@ async fn advertised_delegated_task_actions_route_to_their_owning_services() {
 }
 
 #[tokio::test]
+async fn task_actions_snapshot_matches_desktop_readiness_policy() {
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("companion_action_readiness_fallback");
+    let database = Arc::new(Mutex::new(database));
+    let task_id = {
+        let database = crate::db::acquire_db(&database);
+        let project = database
+            .create_project("OpenForge", "/tmp/openforge")
+            .expect("create Project");
+        let task = database
+            .create_task("Doing", "doing", Some(&project.id), None, None)
+            .expect("create doing Task");
+        database
+            .insert_pull_request(
+                1,
+                &task.id,
+                "owner",
+                "repo",
+                "Ready PR",
+                "https://example.com/pr",
+                "open",
+                1,
+                1,
+                false,
+            )
+            .expect("insert pull request");
+        database
+            .update_pr_head_sha(1, "head-sha")
+            .expect("set pull request head SHA");
+        database
+            .update_pr_mergeability(1, Some(true), Some("clean"))
+            .expect("set pull request mergeability");
+        database
+            .update_pr_merge_method_policy(1, true, r#"["squash","rebase"]"#, Some("squash"))
+            .expect("set merge method policy");
+        task.id
+    };
+    let app = router(Arc::new(DatabaseCompanionActionPaletteService::new(
+        Arc::clone(&database),
+    )));
+    let response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("/companion/v1/tasks/{task_id}/actions"),
+        ))
+        .await
+        .expect("router response");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = response_json(response).await;
+    let merge_action = body["actions"]
+        .as_array()
+        .expect("advertised Task actions")
+        .iter()
+        .find(|presentation| presentation["id"] == "merge_pull_request")
+        .expect("merge action should match desktop readiness fallback");
+    assert_eq!(
+        merge_action["mergeMethods"],
+        serde_json::json!(["squash", "rebase"])
+    );
+    assert_eq!(merge_action["defaultMergeMethod"], "squash");
+
+    {
+        let database = crate::db::acquire_db(&database);
+        database
+            .update_pr_merge_readiness(
+                1,
+                &crate::db::PrMergeReadinessFacts {
+                    status: Some("ready_to_merge".to_string()),
+                    action: Some("enqueue".to_string()),
+                    blockers_json: Some("[]".to_string()),
+                    warnings_json: Some("[]".to_string()),
+                    source_head_sha: Some("head-sha".to_string()),
+                    merge_group_sha: None,
+                    required_checks_policy_known: Some(true),
+                    required_reviews_policy_known: Some(true),
+                    merge_queue_required: Some(false),
+                    merge_queue_state: None,
+                    updated_at: 1,
+                },
+            )
+            .expect("set current mismatched readiness");
+    }
+    let response = app
+        .oneshot(request(
+            "GET",
+            &format!("/companion/v1/tasks/{task_id}/actions"),
+        ))
+        .await
+        .expect("router response");
+
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = response_json(response).await;
+    assert!(!body["actions"]
+        .as_array()
+        .expect("advertised Task actions")
+        .iter()
+        .any(|presentation| presentation["id"] == "merge_pull_request"));
+}
+
+#[tokio::test]
 async fn task_actions_snapshot_is_typed_ordered_and_task_scoped() {
     let response = router(Arc::new(RecordingActionPalette::default()))
         .oneshot(request("GET", "/companion/v1/tasks/KVG-3233/actions"))
