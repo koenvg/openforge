@@ -27,10 +27,11 @@
     onEdit?: (taskId: string) => void
     onOpenTask?: (taskId: string, projectId?: string | null) => void | Promise<void>
     onTaskUpdated?: () => void | Promise<void>
+    onProjectAttentionChanged?: () => void | Promise<void>
     onRunAppRegistrationChange?: (registration: TaskRunAppRegistration | null) => void
   }
 
-  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated, onRunAppRegistrationChange }: Props = $props()
+  let { task, onRunAction, onEdit, onOpenTask, onTaskUpdated, onProjectAttentionChanged, onRunAppRegistrationChange }: Props = $props()
 
   const router = useAppRouter()
   const taskShortcuts = useShortcutRegistry()
@@ -170,6 +171,7 @@
     onSelectView={(viewId) => taskPaneController.select(viewId)}
     onRunApp={handleRunApp}
     {onTaskUpdated}
+    {onProjectAttentionChanged}
   />
 
   <div data-testid="upper-area" class="relative flex flex-1 min-h-0 overflow-hidden">

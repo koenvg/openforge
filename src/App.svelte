@@ -282,6 +282,7 @@
             onEdit={taskCreation.openEditTask}
             onOpenTask={navigation.openTaskInProject}
             onTaskUpdated={async () => { await appData.loadTasks() }}
+            onProjectAttentionChanged={appData.loadProjectAttention}
             onRunAppRegistrationChange={handleRunAppRegistrationChange}
           />
         {:else}

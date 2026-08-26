@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { ArrowLeft, PanelRightClose, PanelRightOpen, Pencil, Play } from '@lucide/svelte'
+  import { ArrowLeft, ChevronDown, PanelRightClose, PanelRightOpen, Pencil, Play } from '@lucide/svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import { onMount } from 'svelte'
-  import { commandHeld, completingTasks, startingTasks } from '../../lib/stores'
+  import { activeProjectId, commandHeld, completingTasks, startingTasks } from '../../lib/stores'
   import { confirmTerminalTaskAction, runCompleteTask } from '../../lib/completeTask'
+  import { getTaskActionPresentation } from '../../lib/actionPalettePresentation'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { hasVsCodeProtocolHandler, openInEditor } from '../../lib/ipc'
+  import { createOutOfFocusController } from '../focus-board/outOfFocusController.svelte'
   import { createTaskTitleRename } from '../../lib/useTaskTitleRename.svelte'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
   import type { Task } from '../../lib/types'
   import type { TaskRunAppState } from './taskRunAppController'
+  import AnchoredMenu from '../shared/ui/AnchoredMenu.svelte'
+  import ContextMenuItem from '../shared/ui/ContextMenuItem.svelte'
   import TaskPaneNavigation from './TaskPaneNavigation.svelte'
   import AgentStatusPill from './AgentStatusPill.svelte'
 
@@ -25,6 +29,7 @@
     onSelectView: (viewId: string) => void
     onRunApp: () => void | Promise<void>
     onTaskUpdated?: () => void | Promise<void>
+    onProjectAttentionChanged?: () => void | Promise<void>
   }
 
   let {
@@ -39,16 +44,25 @@
     onSelectView,
     onRunApp,
     onTaskUpdated,
+    onProjectAttentionChanged,
   }: Props = $props()
 
   const PANEL_HIDDEN_STORAGE_PREFIX = 'task-info-panel-hidden:'
   const titleRename = createTaskTitleRename(() => task, () => onTaskUpdated?.())
+  const setAsidePresentation = getTaskActionPresentation('set-aside-task')
+  const returnPresentation = getTaskActionPresentation('return-to-board')
+  const outOfFocusController = createOutOfFocusController({
+    onProjectAttentionChanged: () => onProjectAttentionChanged?.(),
+  })
   let lastTaskId = ''
   let persistedTaskId = ''
   let vsCodeProtocolAvailable = $state(false)
+  let moreActionsOpen = $state(false)
+  let moreActionsTrigger = $state<HTMLButtonElement | null>(null)
   let displayTitle = $derived(getTaskTitle(task))
   let isStarting = $derived($startingTasks.has(task.id))
   let isCompleting = $derived($completingTasks.has(task.id))
+  let isOutOfFocus = $derived(outOfFocusController.taskIds.has(task.id))
 
   function focusAndSelect(node: HTMLInputElement): void {
     node.focus()
@@ -80,13 +94,32 @@
     if (await runCompleteTask(task.id)) onBack()
   }
 
+  function toggleMoreActions(): void {
+    moreActionsOpen = !moreActionsOpen
+  }
+
+  async function handleSetAside(): Promise<void> {
+    moreActionsOpen = false
+    await outOfFocusController.setAside(task.id)
+  }
+
+  async function handleReturnToBoard(): Promise<void> {
+    moreActionsOpen = false
+    await outOfFocusController.returnToBoard(task.id)
+  }
+
   function openInVsCode(): void {
     if (workspacePath !== null) void openInEditor(workspacePath)
   }
 
   $effect(() => {
+    outOfFocusController.selectProject($activeProjectId)
+  })
+
+  $effect(() => {
     if (task.id === lastTaskId) return
     lastTaskId = task.id
+    moreActionsOpen = false
     panelHidden = readPanelHidden(task.id)
     persistedTaskId = task.id
   })
@@ -191,20 +224,40 @@
         {/if}
       </button>
     {:else if task.status === 'doing'}
-      <Button
-        size="sm"
-        variant="outline"
-        class="min-h-9 shrink-0 border-primary px-4 text-primary"
-        disabled={isCompleting}
-        onclick={handleComplete}
-      >
-        {#if isCompleting}
-          <span class="loading loading-spinner loading-xs"></span>
-          Completing…
-        {:else}
-          Complete
-        {/if}
-      </Button>
+      <div class="relative flex shrink-0 items-stretch">
+        <Button
+          size="sm"
+          variant="outline"
+          class="min-h-9 rounded-r-none border-r-0 border-primary px-4 text-primary"
+          disabled={isCompleting}
+          onclick={handleComplete}
+        >
+          {#if isCompleting}
+            <span class="loading loading-spinner loading-xs"></span>
+            Completing…
+          {:else}
+            Complete
+          {/if}
+        </Button>
+        <button
+          bind:this={moreActionsTrigger}
+          type="button"
+          class="btn btn-outline btn-sm min-h-9 rounded-l-none border-primary px-1.5 text-primary"
+          aria-label="More task actions"
+          aria-haspopup="menu"
+          aria-expanded={moreActionsOpen}
+          onclick={toggleMoreActions}
+        >
+          <ChevronDown size={14} class="transition-transform duration-200 {moreActionsOpen ? 'rotate-180' : ''}" aria-hidden="true" />
+        </button>
+        <AnchoredMenu detached visible={moreActionsOpen} trigger={moreActionsTrigger} onClose={() => { moreActionsOpen = false }}>
+          {#if isOutOfFocus}
+            <ContextMenuItem label={returnPresentation.label} onclick={handleReturnToBoard} />
+          {:else}
+            <ContextMenuItem label={setAsidePresentation.label} onclick={handleSetAside} />
+          {/if}
+        </AnchoredMenu>
+      </div>
     {/if}
 
     {#if activeView === 'agent' && workspacePath !== null}
