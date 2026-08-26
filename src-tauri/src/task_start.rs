@@ -418,8 +418,11 @@ impl TaskStartService {
             })?;
         let additional_instructions = db
             .get_project_config(&project_id, "additional_instructions")
-            .ok()
-            .flatten();
+            .map_err(|error| {
+                TaskStartError::Persistence(format!(
+                    "Failed to load additional_instructions config for Project {project_id}: {error}"
+                ))
+            })?;
         let mut start_prompt_contributions: Vec<StartPromptContribution> = db
             .get_project_config(
                 &project_id,

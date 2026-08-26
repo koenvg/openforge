@@ -317,6 +317,35 @@ fn start_context_reports_unreadable_start_prompt_contributions_config() {
     drop(state);
 }
 
+#[tokio::test]
+async fn safe_start_reports_unreadable_additional_instructions_config() {
+    let (state, _temp_dir) =
+        crate::app_invoke::test_support::test_state("task_start_unreadable_instructions");
+    let (project_id, task_id) = backlog_task_with_project(&state);
+    db::acquire_db(&state.db)
+        .lock_conn()
+        .expect("lock database")
+        .execute(
+            "INSERT INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            rusqlite::params![&project_id, "additional_instructions", vec![0xff_u8]],
+        )
+        .expect("store unreadable additional instructions");
+
+    let error = service_for_state(&state)
+        .with_provider_launcher(Arc::new(SuccessfulProviderLauncher))
+        .start(TaskStartRequest::safe(&task_id))
+        .await
+        .expect_err("unreadable additional instructions must reject Task Start");
+    let TaskStartError::Persistence(message) = error else {
+        panic!("expected persistence error, got {error:?}");
+    };
+    assert!(message.contains("additional_instructions"));
+    assert!(message.contains(&project_id));
+    assert!(message.contains("Invalid column type"));
+
+    drop(state);
+}
+
 #[test]
 fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_on_reenable() {
     let (state, _temp_dir) =
