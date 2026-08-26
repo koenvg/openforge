@@ -209,6 +209,53 @@ describe('buildAttentionOverview — the non-focus lanes', () => {
   })
 })
 
+describe('buildAttentionOverview — running agents', () => {
+  it('counts every running agent across all lanes and projects, not just the focus lane', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1'), project('p2')],
+      allTasks: [task('flying', 'p1'), task('parked', 'p1'), task('idle', 'p1'), task('other', 'p2')],
+      taskRowsByLane: lanes({
+        // The focus lane never holds a running agent (a running agent needs nothing from
+        // you), so an idle row here must not be counted.
+        focus: [attentionRow('idle', 'p1', { state: 'idle' })],
+        'in-flight': [attentionRow('flying', 'p1', { state: 'active' })],
+        // A parked task whose agent is running still counts: it is running.
+        'out-of-focus': [attentionRow('parked', 'p1', { state: 'active' })],
+        backlog: [attentionRow('other', 'p2', { state: 'backlog' })],
+      }),
+    }))
+
+    expect(result.totalRunningAgents).toBe(2)
+  })
+
+  it('ignores rows whose desktop Task record is gone, and hidden projects', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1'), project('hidden')],
+      allTasks: [task('flying', 'p1'), task('hidden-flying', 'hidden')],
+      taskRowsByLane: lanes({
+        'in-flight': [
+          attentionRow('flying', 'p1', { state: 'active' }),
+          attentionRow('stale', 'p1', { state: 'active' }),
+          attentionRow('hidden-flying', 'hidden', { state: 'active' }),
+        ],
+      }),
+      hiddenProjectIds: new Set(['hidden']),
+    }))
+
+    expect(result.totalRunningAgents).toBe(1)
+  })
+
+  it('is zero when nothing is running', () => {
+    const result = buildAttentionOverview(baseInput({
+      projects: [project('p1')],
+      allTasks: [task('idle', 'p1')],
+      taskRowsByLane: lanes({ focus: [attentionRow('idle', 'p1')] }),
+    }))
+
+    expect(result.totalRunningAgents).toBe(0)
+  })
+})
+
 describe('buildAttentionOverview — standalone review PRs', () => {
   it('includes only unopened, non-DO-NOT-REVIEW, non-excluded PRs for the matching project', () => {
     const result = buildAttentionOverview(baseInput({

@@ -336,7 +336,9 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
       ],
       out_of_focus: [
         attentionRow('t2', 'p1', 'Parked one'),
-        attentionRow('t3', 'p2', 'Parked two'),
+        // Parked, but its agent is still running: the lane is a manual choice, so this one
+        // counts toward the running total while never appearing in the focus lane.
+        attentionRow('t3', 'p2', 'Parked two', { state: 'active' }),
       ],
       backlog: [attentionRow('t5', 'p2', 'Queued task', { state: 'backlog' })],
     }))
@@ -445,6 +447,42 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     await vi.waitFor(() => expect(screen.getByText('Focus task')).toBeTruthy())
 
     expect(screen.queryByText('Please review my fix')).toBeNull()
+  })
+
+  it('keeps the running-agent count on screen in every lane and with reviews hidden', async () => {
+    const dialog = await renderLoaded()
+
+    // One running agent is in flight (t4) and one is parked (t6), so the header counts both
+    // even though neither is ever visible in the focus lane the dialog opens on.
+    expect(screen.getByText('2 agents running')).toBeTruthy()
+
+    for (const lane of ['In Flight', 'Out of Focus', 'Backlog', 'Focus']) {
+      await press(dialog, 't')
+      expect(screen.getByRole('button', { name: new RegExp(`^T ${lane} `) })).toBeTruthy()
+      expect(screen.getByText('2 agents running')).toBeTruthy()
+    }
+
+    await press(dialog, 'r')
+    expect(screen.getByText('2 agents running')).toBeTruthy()
+  })
+
+  it('says no agents are running rather than showing a bare zero', async () => {
+    ipc.getTaskLanes.mockResolvedValue(laneRows({
+      focus: [attentionRow('t1', 'p1', 'Focus task')],
+    }))
+    await renderLoaded()
+
+    expect(screen.getByText('No agents running')).toBeTruthy()
+  })
+
+  it('counts one running agent in the singular', async () => {
+    ipc.getTaskLanes.mockResolvedValue(laneRows({
+      focus: [attentionRow('t1', 'p1', 'Focus task')],
+      in_flight: [attentionRow('t4', 'p1', 'Flying task', { state: 'active' })],
+    }))
+    await renderLoaded()
+
+    expect(screen.getByText('1 agent running')).toBeTruthy()
   })
 
   it('shows exactly two chips: the current lane and the review toggle', async () => {

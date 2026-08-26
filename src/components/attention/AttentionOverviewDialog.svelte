@@ -88,6 +88,12 @@
   let laneLabel = $derived(TASK_LANE_LABELS[taskLane])
   let taskCount = $derived(overview?.totalTasksByLane[taskLane] ?? 0)
   let reviewCount = $derived(overview?.totalReviewPrs ?? 0)
+  let runningAgents = $derived(overview?.totalRunningAgents ?? 0)
+  let runningAgentsLabel = $derived(
+    runningAgents === 0
+      ? 'No agents running'
+      : `${runningAgents} agent${runningAgents === 1 ? '' : 's'} running`,
+  )
 
   // R is hiding reviews that do exist. Drives the empty state, so an empty list never claims
   // "all caught up" when the filter is what emptied it.
@@ -488,9 +494,20 @@
       </div>
       <div class="flex flex-col min-w-0">
         <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
-        {#if taskLane !== 'focus'}
-          <span class="text-[11px] text-base-content/50 leading-tight">Showing the {laneLabel} lane</span>
-        {/if}
+        <!-- Always on screen, whatever T and R are set to. The focus lane deliberately holds
+             no running agent, so without this the dialog can look idle while five agents
+             work. -->
+        <span class="text-[11px] leading-tight flex items-center gap-1.5 min-w-0">
+          <span class="flex items-center gap-1 {runningAgents > 0 ? 'text-success' : 'text-base-content/50'}">
+            {#if runningAgents > 0}
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
+            {/if}
+            {runningAgentsLabel}
+          </span>
+          {#if taskLane !== 'focus'}
+            <span class="text-base-content/40 truncate">· Showing the {laneLabel} lane</span>
+          {/if}
+        </span>
       </div>
       <div class="flex-1"></div>
       <!-- Two chips, mirroring the two keyboard shortcuts, so the letters are discoverable

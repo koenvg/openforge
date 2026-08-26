@@ -57,6 +57,12 @@ export interface AttentionOverview {
   otherReviewPrs: ReviewPullRequest[]
   totalTasksByLane: Record<BoardFilter, number>
   totalReviewPrs: number
+  /**
+   * Agents running right now, across every lane and project. Independent of which lane the
+   * dialog is showing: the focus lane deliberately excludes running agents, so a count taken
+   * from one lane would report zero while agents were working.
+   */
+  totalRunningAgents: number
 }
 
 export interface BuildAttentionOverviewInput {
@@ -160,6 +166,7 @@ export function buildAttentionOverview(input: BuildAttentionOverviewInput): Atte
     backlog: 0,
   }
   let totalReviewPrs = otherReviewPrs.length
+  let totalRunningAgents = 0
 
   for (const project of input.projects) {
     if (hiddenProjectIds.has(project.id)) continue
@@ -170,6 +177,7 @@ export function buildAttentionOverview(input: BuildAttentionOverviewInput): Atte
       tasksByLane[lane] = laneTasks
       totalTasksByLane[lane] += laneTasks.length
       taskCount += laneTasks.length
+      totalRunningAgents += laneTasks.filter((item) => item.state === 'active').length
     }
     const reviewPrs = reviewsByProject.get(project.id) ?? []
     if (taskCount === 0 && reviewPrs.length === 0) continue
@@ -178,5 +186,5 @@ export function buildAttentionOverview(input: BuildAttentionOverviewInput): Atte
     totalReviewPrs += reviewPrs.length
   }
 
-  return { groups, otherReviewPrs, totalTasksByLane, totalReviewPrs }
+  return { groups, otherReviewPrs, totalTasksByLane, totalReviewPrs, totalRunningAgents }
 }
