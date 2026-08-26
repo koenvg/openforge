@@ -2,9 +2,11 @@ mod event_state;
 mod worker_session;
 
 pub(crate) use event_state::{TerminalModelEvent, TerminalModelEventSink};
-#[cfg(test)]
-pub(crate) use worker_session::TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY;
 pub(crate) use worker_session::{ShadowMode, TerminalModelFeeder, TerminalModelSession};
+#[cfg(test)]
+pub(crate) use worker_session::{
+    TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY, TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES,
+};
 
 #[cfg(test)]
 use super::TerminalModelOptions;

@@ -4,6 +4,7 @@ use crate::app_events::{
 };
 use crate::backend_runtime::AppHandle;
 use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
+use base64::Engine;
 use portable_pty::CommandBuilder;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -80,6 +81,49 @@ pub(super) fn model_event_fixture() -> (RuntimeEventPublisher, AppEventSubscript
     app.set_app_event_adapter(Arc::new(InMemoryAppEventAdapter::new(bus.clone())));
     let events = bus.subscribe(None).expect("event subscription should open");
     (RuntimeEventPublisher::new(Some(app), None), events)
+}
+
+pub(super) async fn wait_for_model_output(
+    mut events: AppEventSubscription,
+    session_key: String,
+    instance_id: u64,
+    expected: &'static [u8],
+) {
+    assert!(
+        !expected.is_empty(),
+        "expected model output must not be empty"
+    );
+    let output_event = format!("pty-model-output-{session_key}");
+    let mut observed = Vec::with_capacity(expected.len().saturating_mul(2));
+    loop {
+        let AppEventFrame::Event(event) = events
+            .recv()
+            .await
+            .expect("model event stream should stay open")
+        else {
+            continue;
+        };
+        if event.event_name != output_event || event.payload["instance_id"] != instance_id {
+            continue;
+        }
+        let encoded = event.payload["data"]
+            .as_str()
+            .expect("model output should contain base64 data");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("model output should contain valid base64 data");
+        observed.extend_from_slice(&bytes);
+        if observed
+            .windows(expected.len())
+            .any(|window| window == expected)
+        {
+            return;
+        }
+        let retained = expected.len().saturating_sub(1);
+        if observed.len() > retained {
+            observed.drain(..observed.len() - retained);
+        }
+    }
 }
 
 pub(super) async fn wait_for_output(

@@ -1,9 +1,12 @@
 use super::support::{
-    model_event_fixture, wait_for_file_removal, wait_for_model_shutdown, wait_for_output,
-    ShellTestHarness,
+    model_event_fixture, wait_for_file_removal, wait_for_model_output, wait_for_model_shutdown,
+    wait_for_output, ShellTestHarness,
 };
 use crate::pty_manager::pids::shell_session_key;
-use crate::terminal_model::{TerminalModelTestFault, TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY};
+use crate::terminal_model::{
+    TerminalModelQueueSaturationGate, TerminalModelTestFault,
+    TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES,
+};
 use portable_pty::CommandBuilder;
 use std::sync::Arc;
 use std::time::Duration;
@@ -144,35 +147,41 @@ async fn ghostty_model_creation_failure_terminates_session_and_preserves_shell_k
 async fn ghostty_model_queue_saturation_backpressures_and_recovers_the_session() {
     let harness = ShellTestHarness::new();
     harness.manager.set_ghostty_terminal_state_enabled(true);
+    let queue_gate = TerminalModelQueueSaturationGate::new();
     harness
         .manager
-        .set_terminal_model_test_fault(TerminalModelTestFault::StallFirstCommand);
+        .set_terminal_model_test_fault(TerminalModelTestFault::BlockFirstCommand(
+            queue_gate.clone(),
+        ));
     let task_id = "ghostty-queue-saturation";
     let session_key = shell_session_key(task_id, Some(0));
     let mut command = CommandBuilder::new("/bin/sh");
     command.arg("-c");
     command.arg(format!(
         "head -c {} /dev/zero | tr '\\0' x; printf model-queue-recovered; exec sleep 30",
-        TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY + 8192
+        TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES
     ));
 
+    let (event_publisher, events) = model_event_fixture();
     let instance_id = harness
-        .spawn_with_publisher(
-            task_id,
-            Some(0),
-            crate::app_events::RuntimeEventPublisher::new(None, None),
-            command,
-        )
+        .spawn_with_publisher(task_id, Some(0), event_publisher, command)
         .await
         .expect("Ghostty PTY should spawn");
 
-    wait_for_output(
-        &harness.manager,
-        &session_key,
-        "model-queue-recovered",
-        Duration::from_secs(20),
-    )
-    .await;
+    let recovery = tokio::spawn(wait_for_model_output(
+        events,
+        session_key.clone(),
+        instance_id,
+        b"model-queue-recovered",
+    ));
+    let blocked_gate = queue_gate.clone();
+    tokio::task::spawn_blocking(move || blocked_gate.wait_until_queue_saturated())
+        .await
+        .expect("queue saturation wait should join");
+    queue_gate.release_first_command();
+    recovery
+        .await
+        .expect("model output wait should join after queue recovery");
 
     let terminal_model = harness
         .manager
