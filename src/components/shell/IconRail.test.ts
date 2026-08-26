@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
+import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
 import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import IconRail from './IconRail.svelte'
 import type { AppView } from '../../lib/types'
@@ -52,7 +53,7 @@ describe('IconRail', () => {
         onNavigate,
         pluginNavItems: [
           {
-            viewKey: 'plugin:com.openforge.file-viewer:files',
+            viewKey: FILE_VIEWER_VIEW_KEY,
             icon: 'folder-open',
             title: 'Files',
             shortcut: '⌘O',
@@ -65,7 +66,7 @@ describe('IconRail', () => {
     expect(buttons).toHaveLength(3)
 
     fireEvent.click(buttons[1])
-    expect(onNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
+    expect(onNavigate).toHaveBeenCalledWith(FILE_VIEWER_VIEW_KEY)
 
     fireEvent.click(buttons[2])
     expect(onNavigate).toHaveBeenCalledWith('settings')
@@ -238,7 +239,7 @@ describe('IconRail', () => {
           onNavigate: vi.fn(),
           pluginNavItems: [
             {
-              viewKey: 'plugin:com.openforge.file-viewer:files',
+              viewKey: FILE_VIEWER_VIEW_KEY,
               icon: 'folder-open',
               title: 'Files',
               shortcut: '⌘O',

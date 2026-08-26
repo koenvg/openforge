@@ -1,11 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
+import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
 
 const mockActiveProjectId = writable<string | null>('test-project-id')
 const mockFsSearchFiles = vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>()
 const mockNavigate = vi.fn()
-const mockRevealFileInFileViewer = vi.fn<(path: string) => Promise<boolean>>()
+const { mockRevealFileInFileViewer } = vi.hoisted(() => ({
+  mockRevealFileInFileViewer: vi.fn<(path: string) => Promise<boolean>>(),
+}))
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: mockActiveProjectId,
@@ -19,10 +22,13 @@ vi.mock('../../lib/router.svelte', () => ({
   useAppRouter: () => ({ navigate: mockNavigate }),
 }))
 
-vi.mock('../../lib/fileViewerPlugin', () => ({
-  FILE_VIEWER_VIEW_KEY: 'plugin:com.openforge.file-viewer:files',
-  revealFileInFileViewer: mockRevealFileInFileViewer,
-}))
+vi.mock('../../lib/fileViewerPlugin', async () => {
+  const { makePluginViewKey } = await import('../../lib/plugin/types')
+  return {
+    FILE_VIEWER_VIEW_KEY: makePluginViewKey('com.openforge.file-viewer', 'files'),
+    revealFileInFileViewer: mockRevealFileInFileViewer,
+  }
+})
 
 Element.prototype.scrollIntoView = vi.fn()
 
@@ -147,7 +153,7 @@ describe('FileQuickOpen', () => {
 
     await waitFor(() => {
       expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
-      expect(mockNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
+      expect(mockNavigate).toHaveBeenCalledWith(FILE_VIEWER_VIEW_KEY)
       expect(onClose).toHaveBeenCalledOnce()
     })
   })

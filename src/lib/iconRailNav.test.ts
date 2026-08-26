@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { FILE_VIEWER_VIEW_KEY } from './fileViewerPlugin'
 import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
+import { TASK_SCHEDULES_VIEW_KEY } from './taskSchedulesPlugin'
 import { getIconRailNavItems } from './iconRailNav'
-import type { AppView } from './types'
 
 describe('getIconRailNavItems', () => {
   it('keeps Project Settings last after plugin rail items', () => {
@@ -13,7 +14,7 @@ describe('getIconRailNavItems', () => {
         shortcut: '⌘G',
       },
       {
-        viewKey: 'plugin:com.openforge.task-schedules:schedules' as AppView,
+        viewKey: TASK_SCHEDULES_VIEW_KEY,
         icon: 'clock',
         title: 'Task Schedules',
         shortcut: '⌘S',
@@ -26,7 +27,7 @@ describe('getIconRailNavItems', () => {
   it('normalizes shortcut hints for plugin-provided rail items', () => {
     const items = getIconRailNavItems([
       {
-        viewKey: 'plugin:com.openforge.file-viewer:files' as AppView,
+        viewKey: FILE_VIEWER_VIEW_KEY,
         icon: 'folder-open',
         title: 'Files',
         shortcut: '⌘⇧o',
