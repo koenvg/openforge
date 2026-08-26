@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
-import {
-  createFakeTerminalView,
-  createHost,
-} from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntime.integrationTestHarness'
+import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalSessionService } from './terminalSessionService'
 
 const clients = [

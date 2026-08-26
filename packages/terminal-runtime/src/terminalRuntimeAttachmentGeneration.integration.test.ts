@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeTerminalView, createHost } from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntime.integrationTestHarness'
+import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal attachment generations', () => {
