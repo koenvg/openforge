@@ -1,4 +1,4 @@
-use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
+use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::TerminalModelFeeder;
 use log::{info, warn};
 use std::io::Read;
@@ -290,8 +290,7 @@ pub(super) enum PtyExitAction {
 pub(super) struct PtyEventEmitterConfig {
     pub(super) session_key: String,
     pub(super) instance_id: u64,
-    pub(super) app_handle: Option<crate::backend_runtime::AppHandle>,
-    pub(super) app_event_tx: Option<AppEventSender>,
+    pub(super) event_publisher: RuntimeEventPublisher,
     pub(super) ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
     pub(super) attachment_hub: Option<Arc<PtyAttachmentHub>>,
     pub(super) terminal_sessions: TerminalSessions,
@@ -306,8 +305,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
         let PtyEventEmitterConfig {
             session_key,
             instance_id,
-            app_handle,
-            app_event_tx,
+            event_publisher,
             ring_buffer,
             attachment_hub,
             terminal_sessions,
@@ -324,7 +322,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
-            publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, event_name, payload);
+            event_publisher.publish(event_name, payload);
             Ok(())
         };
 
@@ -382,12 +380,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
         info!("[PTY] key={} emitter received exit signal", session_key);
         let exit_event_name = format!("pty-exit-{}", session_key);
         let exit_payload = serde_json::json!({"instance_id": instance_id});
-        publish_app_event_to_runtime(
-            app_handle.as_ref(),
-            &app_event_tx,
-            &exit_event_name,
-            &exit_payload,
-        );
+        event_publisher.publish(&exit_event_name, &exit_payload);
         if emit_agent_exit {
             let success = matches!(
                 exit_outcome,
@@ -400,12 +393,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
                 "success": success,
                 "instance_id": instance_id
             });
-            publish_app_event_to_runtime(
-                app_handle.as_ref(),
-                &app_event_tx,
-                "agent-pty-exited",
-                &payload,
-            );
+            event_publisher.publish("agent-pty-exited", &payload);
         }
     });
 }

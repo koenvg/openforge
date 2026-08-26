@@ -36,8 +36,7 @@ impl OpenCodeProvider {
                 model,
                 start_context.cols,
                 start_context.rows,
-                start_context.app_handle.clone(),
-                start_context.app_event_tx.clone(),
+                start_context.event_publisher.clone(),
             )
             .await?;
 
@@ -76,8 +75,7 @@ impl OpenCodeProvider {
                 model,
                 start_context.cols,
                 start_context.rows,
-                start_context.app_handle.clone(),
-                start_context.app_event_tx.clone(),
+                start_context.event_publisher.clone(),
             )
             .await?;
 

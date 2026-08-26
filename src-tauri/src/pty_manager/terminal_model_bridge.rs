@@ -1,7 +1,6 @@
 //! Bridges Ghostty terminal-model events to OpenForge runtime transports.
 
-use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
-use crate::backend_runtime::AppHandle;
+use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::{TerminalModelEvent, TerminalModelEventSink};
 use base64::Engine;
 use log::warn;
@@ -11,22 +10,19 @@ use super::ordered_writer::OrderedPtyWriter;
 
 pub(super) struct TerminalModelEventBridge {
     session_key: String,
-    app_handle: Option<AppHandle>,
-    app_event_tx: Option<AppEventSender>,
+    event_publisher: RuntimeEventPublisher,
     writer: Arc<OrderedPtyWriter>,
 }
 
 impl TerminalModelEventBridge {
     pub(super) fn new(
         session_key: String,
-        app_handle: Option<AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
         writer: Arc<OrderedPtyWriter>,
     ) -> Self {
         Self {
             session_key,
-            app_handle,
-            app_event_tx,
+            event_publisher,
             writer,
         }
     }
@@ -35,9 +31,7 @@ impl TerminalModelEventBridge {
         let output_event_name = format!("pty-model-output-{}", self.session_key);
         let disabled_event_name = format!("pty-model-disabled-{}", self.session_key);
         Arc::new(move |event| match event {
-            TerminalModelEvent::Output(frame) => publish_app_event_to_runtime(
-                self.app_handle.as_ref(),
-                &self.app_event_tx,
+            TerminalModelEvent::Output(frame) => self.event_publisher.publish(
                 &output_event_name,
                 &serde_json::json!({
                     "instance_id": frame.instance_id,
@@ -56,9 +50,7 @@ impl TerminalModelEventBridge {
                     );
                 }
             }
-            TerminalModelEvent::Disabled { instance_id } => publish_app_event_to_runtime(
-                self.app_handle.as_ref(),
-                &self.app_event_tx,
+            TerminalModelEvent::Disabled { instance_id } => self.event_publisher.publish(
                 &disabled_event_name,
                 &serde_json::json!({ "instance_id": instance_id }),
             ),
@@ -94,7 +86,7 @@ mod tests {
     fn bridge(
         session_key: &str,
         instance_id: u64,
-        app_event_tx: Option<AppEventSender>,
+        app_event_tx: Option<crate::app_events::AppEventSender>,
     ) -> (TerminalModelEventBridge, Arc<Mutex<Vec<u8>>>) {
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer = Arc::new(
@@ -108,7 +100,11 @@ mod tests {
             .expect("ordered writer should start"),
         );
         (
-            TerminalModelEventBridge::new(session_key.to_string(), None, app_event_tx, writer),
+            TerminalModelEventBridge::new(
+                session_key.to_string(),
+                RuntimeEventPublisher::new(None, app_event_tx),
+                writer,
+            ),
             bytes,
         )
     }

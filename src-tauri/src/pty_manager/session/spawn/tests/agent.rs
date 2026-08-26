@@ -93,8 +93,7 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -159,8 +158,7 @@ async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: Some(app),
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(Some(app), None),
             },
             None,
         )
@@ -212,8 +210,7 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -300,8 +297,7 @@ async fn unresolved_recovery_metadata_blocks_spawn_without_clobbering_record() {
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -347,8 +343,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
                 cwd: &old_cwd,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         ))
@@ -373,8 +368,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -443,8 +437,7 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
                 cwd: temp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -475,8 +468,7 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
                     cwd: &spawn_cwd,
                     cols: 80,
                     rows: 24,
-                    app_handle: None,
-                    app_event_tx: None,
+                    event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
                 },
                 None,
             ))
@@ -597,8 +589,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
                 cwd: &stale_cwd,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         ))
@@ -665,8 +656,7 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
                 cwd: tmp_dir.path(),
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )
@@ -772,8 +762,7 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
                 cwd: &spawn_cwd,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         ))
@@ -874,8 +863,10 @@ async fn agent_pty_starts_process_with_actual_workspace_cwd_containing_spaces() 
                 cwd: &workspace_path,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: Some(app_event_tx),
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                    None,
+                    Some(app_event_tx),
+                ),
             },
             None,
         )
@@ -955,8 +946,7 @@ async fn agent_pty_rejects_missing_workspace_cwd_instead_of_falling_back() {
                 cwd: &missing_workspace,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )

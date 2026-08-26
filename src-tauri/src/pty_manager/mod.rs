@@ -177,8 +177,7 @@ pub(crate) struct PtySpawnContext<'a> {
     pub cwd: &'a std::path::Path,
     pub cols: u16,
     pub rows: u16,
-    pub app_handle: Option<crate::backend_runtime::AppHandle>,
-    pub app_event_tx: Option<crate::app_events::AppEventSender>,
+    pub event_publisher: crate::app_events::RuntimeEventPublisher,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]

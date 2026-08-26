@@ -1,6 +1,6 @@
 //! Registration and startup of PTY output streams.
 
-use crate::app_events::AppEventSender;
+use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::TerminalModelFeeder;
 use std::io::Read;
 use std::path::PathBuf;
@@ -15,11 +15,6 @@ use super::super::super::events::{
 use super::super::super::{PtyError, PtyManager};
 use super::super::lifecycle::LifecycleLockLease;
 use super::arbitration::AgentSpawnToken;
-
-pub(super) struct PtyEventSink {
-    pub(super) app_handle: Option<crate::backend_runtime::AppHandle>,
-    pub(super) app_event_tx: Option<AppEventSender>,
-}
 
 pub(super) struct AgentStreamState {
     pub(super) last_output_time: Option<Arc<AtomicU64>>,
@@ -36,7 +31,7 @@ pub(super) struct AgentEventStreamRequest<'a> {
     pub(super) stream_state: AgentStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
-    pub(super) event_sink: PtyEventSink,
+    pub(super) event_publisher: RuntimeEventPublisher,
 }
 
 pub(super) struct ShellStreamState {
@@ -52,7 +47,7 @@ pub(super) struct ShellEventStreamRequest {
     pub(super) stream_state: ShellStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
-    pub(super) event_sink: PtyEventSink,
+    pub(super) event_publisher: RuntimeEventPublisher,
 }
 
 impl PtyManager {
@@ -233,7 +228,7 @@ impl PtyManager {
             stream_state,
             lifecycle_lock,
             pid_file,
-            event_sink,
+            event_publisher,
         } = request;
         if let Err(error) = self
             .require_current_agent_spawn_and_session(
@@ -261,8 +256,7 @@ impl PtyManager {
             PtyEventEmitterConfig {
                 session_key: task_id.to_string(),
                 instance_id,
-                app_handle: event_sink.app_handle,
-                app_event_tx: event_sink.app_event_tx,
+                event_publisher,
                 ring_buffer: stream_state.ring_buffer,
                 attachment_hub: Some(stream_state.attachment_hub),
                 terminal_sessions: self.terminal_sessions.clone(),
@@ -306,7 +300,7 @@ impl PtyManager {
             stream_state,
             lifecycle_lock,
             pid_file,
-            event_sink,
+            event_publisher,
         } = request;
         let rx = spawn_pty_output_reader(
             reader,
@@ -320,8 +314,7 @@ impl PtyManager {
             PtyEventEmitterConfig {
                 session_key,
                 instance_id,
-                app_handle: event_sink.app_handle,
-                app_event_tx: event_sink.app_event_tx,
+                event_publisher,
                 ring_buffer: stream_state.ring_buffer,
                 attachment_hub: None,
                 terminal_sessions: self.terminal_sessions.clone(),

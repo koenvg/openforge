@@ -7,7 +7,7 @@ use super::super::super::pids::shell_session_key;
 use super::super::super::{PtyError, PtyManager, PtySpawnContext, TerminalImageProtocol};
 use super::process::{resolve_pty_cwd, ShellProcessRequest, SpawnedPty};
 use super::registration::SessionRegistrationRequest;
-use super::streams::{PtyEventSink, ShellEventStreamRequest};
+use super::streams::ShellEventStreamRequest;
 
 impl PtyManager {
     pub(crate) async fn spawn_shell_pty(
@@ -37,8 +37,7 @@ impl PtyManager {
             cwd,
             cols,
             rows,
-            app_handle,
-            app_event_tx,
+            event_publisher,
         } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         let session_key = shell_session_key(task_id, terminal_index);
@@ -72,8 +71,7 @@ impl PtyManager {
             cols,
             rows,
             terminal_image_protocol,
-            app_handle: app_handle.clone(),
-            app_event_tx: app_event_tx.clone(),
+            event_publisher: event_publisher.clone(),
             command,
         })?;
         let instance_id = spawned.instance_id();
@@ -110,10 +108,7 @@ impl PtyManager {
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,
-            event_sink: PtyEventSink {
-                app_handle,
-                app_event_tx,
-            },
+            event_publisher,
         });
         self.finish_shell_spawn(&token).await;
         Ok(instance_id)

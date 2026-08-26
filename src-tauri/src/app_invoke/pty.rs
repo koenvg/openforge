@@ -75,8 +75,10 @@ pub(super) async fn handle_app_pty_command(
                         cwd: std::path::Path::new(&payload.cwd),
                         cols: payload.cols,
                         rows: payload.rows,
-                        app_handle: app,
-                        app_event_tx: state.app_event_tx.clone(),
+                        event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                            app,
+                            state.app_event_tx.clone(),
+                        ),
                     },
                     payload.terminal_index,
                     payload.terminal_image_protocol,

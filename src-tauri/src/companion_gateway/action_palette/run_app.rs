@@ -67,8 +67,10 @@ pub(super) async fn execute(
                 cwd: Path::new(&workspace_path),
                 cols: 120,
                 rows: 30,
-                app_handle: service.app.clone(),
-                app_event_tx: service.app_event_tx.clone(),
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                    service.app.clone(),
+                    service.app_event_tx.clone(),
+                ),
             },
             Some(0),
             None,
