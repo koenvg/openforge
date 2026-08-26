@@ -40,6 +40,8 @@ pub(crate) struct PortableTerminalSnapshot {
 
 pub(super) struct TerminalModelState {
     disabled: AtomicBool,
+    #[cfg(test)]
+    queue_saturated: AtomicBool,
     diagnostics: Mutex<VecDeque<TerminalModelDiagnostic>>,
     replies: Mutex<VecDeque<Vec<u8>>>,
     reply_bytes: Mutex<usize>,
@@ -50,6 +52,8 @@ impl TerminalModelState {
     pub(super) fn new(event_sink: Option<TerminalModelEventSink>) -> Self {
         Self {
             disabled: AtomicBool::new(false),
+            #[cfg(test)]
+            queue_saturated: AtomicBool::new(false),
             diagnostics: Mutex::new(VecDeque::new()),
             replies: Mutex::new(VecDeque::new()),
             reply_bytes: Mutex::new(0),
@@ -59,6 +63,16 @@ impl TerminalModelState {
 
     pub(super) fn is_disabled(&self) -> bool {
         self.disabled.load(Ordering::Acquire)
+    }
+
+    #[cfg(test)]
+    pub(super) fn mark_queue_saturated(&self) {
+        self.queue_saturated.store(true, Ordering::Release);
+    }
+
+    #[cfg(test)]
+    pub(super) fn queue_saturated(&self) -> bool {
+        self.queue_saturated.load(Ordering::Acquire)
     }
 
     pub(super) fn disable(

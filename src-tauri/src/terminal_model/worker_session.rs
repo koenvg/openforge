@@ -90,6 +90,8 @@ impl TerminalModelFeeder {
                 Err(mpsc::TrySendError::Full(returned))
                     if self.queue_policy == TerminalModelQueuePolicy::Backpressure =>
                 {
+                    #[cfg(test)]
+                    self.state.mark_queue_saturated();
                     if self.tx.send(returned).is_err() {
                         self.state.disable(
                             &self.session_key,
@@ -289,6 +291,11 @@ impl TerminalModelSession {
     pub(crate) fn diagnostics(&self) -> Vec<TerminalModelDiagnostic> {
         self.state.diagnostics()
     }
+
+    #[cfg(test)]
+    pub(crate) fn queue_saturated_for_test(&self) -> bool {
+        self.state.queue_saturated()
+    }
 }
 
 fn request_portable_snapshot(
@@ -349,6 +356,17 @@ fn run_worker(
     state: Arc<TerminalModelState>,
     shutdown_requested: Arc<AtomicBool>,
 ) {
+    #[cfg(test)]
+    if options.test_fault == super::super::TerminalModelTestFault::CreateFailure {
+        state.disable(
+            &session_key,
+            instance_id,
+            "create",
+            "injected terminal model creation failure".to_string(),
+        );
+        return;
+    }
+
     let mut model = match GhosttyTerminalModel::new(options) {
         Ok(model) => model,
         Err(error) => {
@@ -360,6 +378,8 @@ fn run_worker(
     let mut bytes_since_checkpoint = 0usize;
     let mut checkpoint_due = true;
     let mut output_sequence = 0u64;
+    #[cfg(test)]
+    let mut first_command = true;
     loop {
         if shutdown_requested.load(Ordering::Acquire) {
             return;
@@ -379,6 +399,20 @@ fn run_worker(
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => return,
         };
+        #[cfg(test)]
+        if first_command {
+            first_command = false;
+            match options.test_fault {
+                super::super::TerminalModelTestFault::StallFirstCommand => {
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+                super::super::TerminalModelTestFault::PanicOnFirstCommand => {
+                    panic!("injected terminal model worker panic");
+                }
+                super::super::TerminalModelTestFault::None
+                | super::super::TerminalModelTestFault::CreateFailure => {}
+            }
+        }
         if state.is_disabled() {
             return;
         }

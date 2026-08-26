@@ -1,7 +1,9 @@
 //! PTY command configuration and child-process creation.
 
 use crate::app_events::RuntimeEventPublisher;
-use crate::terminal_model::{TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
+use crate::terminal_model::{
+    TerminalModelEvent, TerminalModelFeeder, TerminalModelOptions, TerminalModelSession,
+};
 use crate::user_environment::user_environment;
 use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -168,18 +170,46 @@ impl PtyManager {
         let authority = self.terminal_authority_contract();
         let (terminal_model, terminal_model_feeder) = if self.terminal_model_enabled() {
             let options = TerminalModelOptions::new(request.cols, request.rows);
+            #[cfg(test)]
+            let options = options.with_test_fault(self.take_terminal_model_test_fault());
             let started = if authority.parsed_state_owner == ParsedStateOwner::Ghostty {
-                TerminalModelSession::start_with_event_sink(
+                let failure_manager = self.clone();
+                let failure_key = request.session_key.clone();
+                let runtime = tokio::runtime::Handle::current();
+                let disabled_sink = Arc::new(move |failed_instance_id| {
+                    let manager = failure_manager.clone();
+                    let session_key = failure_key.clone();
+                    runtime.spawn(async move {
+                        if let Err(error) = manager
+                            .terminate_failed_terminal_model(&session_key, failed_instance_id)
+                            .await
+                        {
+                            warn!(
+                                "[terminal-model] key={} instance={} PTY termination failed: {}",
+                                session_key, failed_instance_id, error
+                            );
+                        }
+                    });
+                });
+                let event_sink = TerminalModelEventBridge::new(
+                    request.session_key.clone(),
+                    request.event_publisher.clone(),
+                    Arc::clone(&writer),
+                    Some(disabled_sink),
+                )
+                .into_event_sink();
+                let started = TerminalModelSession::start_with_event_sink(
                     request.session_key.clone(),
                     request.instance_id,
                     options,
-                    TerminalModelEventBridge::new(
-                        request.session_key.clone(),
-                        request.event_publisher.clone(),
-                        Arc::clone(&writer),
-                    )
-                    .into_event_sink(),
-                )
+                    Arc::clone(&event_sink),
+                );
+                if started.is_err() {
+                    event_sink(TerminalModelEvent::Disabled {
+                        instance_id: request.instance_id,
+                    });
+                }
+                started
             } else {
                 TerminalModelSession::start(
                     request.session_key.clone(),

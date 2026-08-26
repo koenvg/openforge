@@ -8,10 +8,13 @@ use std::sync::Arc;
 
 use super::ordered_writer::OrderedPtyWriter;
 
+type TerminalModelDisabledSink = Arc<dyn Fn(u64) + Send + Sync>;
+
 pub(super) struct TerminalModelEventBridge {
     session_key: String,
     event_publisher: RuntimeEventPublisher,
     writer: Arc<OrderedPtyWriter>,
+    disabled_sink: Option<TerminalModelDisabledSink>,
 }
 
 impl TerminalModelEventBridge {
@@ -19,11 +22,13 @@ impl TerminalModelEventBridge {
         session_key: String,
         event_publisher: RuntimeEventPublisher,
         writer: Arc<OrderedPtyWriter>,
+        disabled_sink: Option<TerminalModelDisabledSink>,
     ) -> Self {
         Self {
             session_key,
             event_publisher,
             writer,
+            disabled_sink,
         }
     }
 
@@ -50,10 +55,15 @@ impl TerminalModelEventBridge {
                     );
                 }
             }
-            TerminalModelEvent::Disabled { instance_id } => self.event_publisher.publish(
-                &disabled_event_name,
-                &serde_json::json!({ "instance_id": instance_id }),
-            ),
+            TerminalModelEvent::Disabled { instance_id } => {
+                self.event_publisher.publish(
+                    &disabled_event_name,
+                    &serde_json::json!({ "instance_id": instance_id }),
+                );
+                if let Some(disabled_sink) = &self.disabled_sink {
+                    disabled_sink(instance_id);
+                }
+            }
         })
     }
 }
@@ -104,6 +114,7 @@ mod tests {
                 session_key.to_string(),
                 RuntimeEventPublisher::new(None, app_event_tx),
                 writer,
+                None,
             ),
             bytes,
         )
