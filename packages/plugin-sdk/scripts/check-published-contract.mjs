@@ -43,6 +43,10 @@ const hostCapabilityReleases = [
     version: '0.2.4',
     capabilities: ['appEnablement', 'customSidebarNavigation'],
   },
+  {
+    version: '0.2.5',
+    capabilities: ['reviewUI'],
+  },
 ]
 
 function fail(message) {

@@ -138,7 +138,8 @@
           "browserSurfaces",
           "taskLinks",
           "appEnablement",
-          "customSidebarNavigation"
+          "customSidebarNavigation",
+          "reviewUI"
         ]
       }
     }

@@ -7,6 +7,7 @@ import type {
   PluginInjectionPointRegistration,
   PluginSettingsSectionRegistration,
   PluginTaskPaneTabRegistration,
+  PluginReviewRowActionRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
   TaskLinkHandler,
@@ -23,19 +24,21 @@ import type {
   TestingTaskStartPrefixProviderContribution,
   TestingSettingsSectionContribution,
   TestingTaskPaneTabContribution,
+  TestingReviewRowActionContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,
 } from './contracts'
 
 type TestingFrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
+  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
 >
 
 export class TestingFrontendContributionFake {
   private readonly views = new Map<string, TestingViewContribution>()
   private readonly taskPaneTabs = new Map<string, TestingTaskPaneTabContribution>()
   private readonly taskUISections = new Map<string, TestingTaskUISectionContribution>()
+  private readonly reviewRowActions = new Map<string, TestingReviewRowActionContribution>()
   private readonly settingsSections = new Map<string, TestingSettingsSectionContribution>()
   private readonly injectionPoints = new Map<string, TestingInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, TestingTaskStartPrefixProviderContribution>()
@@ -91,6 +94,9 @@ export class TestingFrontendContributionFake {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
         registerSection: (registration) => this.registerTaskUISection(registration),
       },
+      reviewUI: {
+        registerRowAction: (registration) => this.registerReviewRowAction(registration),
+      },
       taskPane: {
         registerTab: (registration) => this.registerTaskPaneTab(registration),
       },
@@ -126,6 +132,7 @@ export class TestingFrontendContributionFake {
     views: TestingViewContribution[]
     taskPaneTabs: TestingTaskPaneTabContribution[]
     taskUISections: TestingTaskUISectionContribution[]
+    reviewRowActions: TestingReviewRowActionContribution[]
     settingsSections: TestingSettingsSectionContribution[]
     injectionPoints: TestingInjectionPointContribution[]
     taskStartPrefixProviders: TestingTaskStartPrefixProviderContribution[]
@@ -134,6 +141,7 @@ export class TestingFrontendContributionFake {
       views: Array.from(this.views.values()),
       taskPaneTabs: Array.from(this.taskPaneTabs.values()),
       taskUISections: Array.from(this.taskUISections.values()),
+      reviewRowActions: Array.from(this.reviewRowActions.values()),
       settingsSections: Array.from(this.settingsSections.values()),
       injectionPoints: Array.from(this.injectionPoints.values()),
       taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort(
@@ -212,6 +220,26 @@ export class TestingFrontendContributionFake {
     return createDisposable(() => {
       this.taskUISections.delete(qualifiedId)
       this.services.claims.release('taskUI', qualifiedId)
+    })
+  }
+
+  private registerReviewRowAction(registration: PluginReviewRowActionRegistration): Disposable {
+    const qualifiedId = this.services.localQualifiedId('reviewUI', registration.id)
+    assertFunction('reviewUI', 'component', registration.component)
+    this.services.claims.claim('reviewUI', qualifiedId)
+
+    const contribution: TestingReviewRowActionContribution = {
+      ...registration,
+      id: registration.id.trim(),
+      qualifiedId,
+      pluginId: this.services.pluginId,
+      projectId: this.services.projectId,
+    }
+    this.reviewRowActions.set(qualifiedId, contribution)
+
+    return createDisposable(() => {
+      this.reviewRowActions.delete(qualifiedId)
+      this.services.claims.release('reviewUI', qualifiedId)
     })
   }
 

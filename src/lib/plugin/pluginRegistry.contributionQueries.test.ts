@@ -125,6 +125,7 @@ describe('pluginRegistry contribution queries', () => {
         },
       ],
       injectionPoints: [],
+      reviewRowActions: [],
       taskStartPrefixProviders: [],
     } satisfies RuntimeContributionSnapshot
 

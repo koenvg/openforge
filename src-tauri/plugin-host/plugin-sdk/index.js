@@ -147,7 +147,8 @@ var openforgePackageMetadataSchema_default = {
 				"browserSurfaces",
 				"taskLinks",
 				"appEnablement",
-				"customSidebarNavigation"
+				"customSidebarNavigation",
+				"reviewUI"
 			] }
 		}
 	}
@@ -199,7 +200,8 @@ var OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
 	"browserSurfaces",
 	"taskLinks",
 	"appEnablement",
-	"customSidebarNavigation"
+	"customSidebarNavigation",
+	"reviewUI"
 ];
 function assertOpenForgePluginCapabilitiesMatchSchema() {
 	const schemaCapabilities = openforgePackageMetadataSchema_default.properties.requires.items.enum;
@@ -1380,6 +1382,7 @@ var TestingFrontendContributionFake = class {
 	views = /* @__PURE__ */ new Map();
 	taskPaneTabs = /* @__PURE__ */ new Map();
 	taskUISections = /* @__PURE__ */ new Map();
+	reviewRowActions = /* @__PURE__ */ new Map();
 	settingsSections = /* @__PURE__ */ new Map();
 	injectionPoints = /* @__PURE__ */ new Map();
 	taskStartPrefixProviders = /* @__PURE__ */ new Map();
@@ -1423,6 +1426,7 @@ var TestingFrontendContributionFake = class {
 				registerTab: (registration) => this.registerTaskPaneTab(registration),
 				registerSection: (registration) => this.registerTaskUISection(registration)
 			},
+			reviewUI: { registerRowAction: (registration) => this.registerReviewRowAction(registration) },
 			taskPane: { registerTab: (registration) => this.registerTaskPaneTab(registration) },
 			settings: { registerSection: (registration) => this.registerSettingsSection(registration) },
 			backend: {
@@ -1448,6 +1452,7 @@ var TestingFrontendContributionFake = class {
 			views: Array.from(this.views.values()),
 			taskPaneTabs: Array.from(this.taskPaneTabs.values()),
 			taskUISections: Array.from(this.taskUISections.values()),
+			reviewRowActions: Array.from(this.reviewRowActions.values()),
 			settingsSections: Array.from(this.settingsSections.values()),
 			injectionPoints: Array.from(this.injectionPoints.values()),
 			taskStartPrefixProviders: Array.from(this.taskStartPrefixProviders.values()).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
@@ -1511,6 +1516,23 @@ var TestingFrontendContributionFake = class {
 		return createDisposable(() => {
 			this.taskUISections.delete(qualifiedId);
 			this.services.claims.release("taskUI", qualifiedId);
+		});
+	}
+	registerReviewRowAction(registration) {
+		const qualifiedId = this.services.localQualifiedId("reviewUI", registration.id);
+		assertFunction("reviewUI", "component", registration.component);
+		this.services.claims.claim("reviewUI", qualifiedId);
+		const contribution = {
+			...registration,
+			id: registration.id.trim(),
+			qualifiedId,
+			pluginId: this.services.pluginId,
+			projectId: this.services.projectId
+		};
+		this.reviewRowActions.set(qualifiedId, contribution);
+		return createDisposable(() => {
+			this.reviewRowActions.delete(qualifiedId);
+			this.services.claims.release("reviewUI", qualifiedId);
 		});
 	}
 	registerSettingsSection(registration) {

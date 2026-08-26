@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
+  import PluginSlot from '../plugin/PluginSlot.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
   import { getAllTasks, getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
   import { buildAttentionOverview, laneRowsByFilter, TASK_LANES, TASK_LANE_LABELS } from '../../lib/attentionOverview'
@@ -87,6 +88,12 @@
   let laneLabel = $derived(TASK_LANE_LABELS[taskLane])
   let taskCount = $derived(overview?.totalTasksByLane[taskLane] ?? 0)
   let reviewCount = $derived(overview?.totalReviewPrs ?? 0)
+  let runningAgents = $derived(overview?.totalRunningAgents ?? 0)
+  let runningAgentsLabel = $derived(
+    runningAgents === 0
+      ? 'No agents running'
+      : `${runningAgents} agent${runningAgents === 1 ? '' : 's'} running`,
+  )
 
   // R is hiding reviews that do exist. Drives the empty state, so an empty list never claims
   // "all caught up" when the filter is what emptied it.
@@ -487,9 +494,20 @@
       </div>
       <div class="flex flex-col min-w-0">
         <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
-        {#if taskLane !== 'focus'}
-          <span class="text-[11px] text-base-content/50 leading-tight">Showing the {laneLabel} lane</span>
-        {/if}
+        <!-- Always on screen, whatever T and R are set to. The focus lane deliberately holds
+             no running agent, so without this the dialog can look idle while five agents
+             work. -->
+        <span class="text-[11px] leading-tight flex items-center gap-1.5 min-w-0">
+          <span class="flex items-center gap-1 {runningAgents > 0 ? 'text-success' : 'text-base-content/50'}">
+            {#if runningAgents > 0}
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true"></span>
+            {/if}
+            {runningAgentsLabel}
+          </span>
+          {#if taskLane !== 'focus'}
+            <span class="text-base-content/40 truncate">· Showing the {laneLabel} lane</span>
+          {/if}
+        </span>
       </div>
       <div class="flex-1"></div>
       <!-- Two chips, mirroring the two keyboard shortcuts, so the letters are discoverable
@@ -668,6 +686,23 @@
                           · {pr.changed_files} file{pr.changed_files === 1 ? '' : 's'}
                           {#if relTime(pr.updated_at)} · {relTime(pr.updated_at)}{/if}
                         </span>
+                      </div>
+                      <!-- Plugin-contributed row controls (GitHub Sync puts the walkthrough +
+                           AI review button here). Activation is swallowed so pressing the
+                           button does not also open the pull request behind it: the click for
+                           the mouse, Enter/Space for a keyboard tabbed onto the button. The
+                           navigation keys still bubble, so ↑/↓ and T keep working from here. -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div
+                        class="shrink-0"
+                        onclick={(e) => e.stopPropagation()}
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                      >
+                        <PluginSlot
+                          slotType="reviewRowActions"
+                          projectId={prProjectId}
+                          extraProps={{ pr }}
+                        />
                       </div>
                       <span class="text-base-content/30 shrink-0">›</span>
                     </div>

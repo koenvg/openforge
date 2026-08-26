@@ -4,6 +4,7 @@ import type { CommandShortcutMetadata, PluginIcon } from '@openforge-app/plugin-
 import type {
   RuntimeBackgroundServiceContribution,
   RuntimeCommandContribution,
+  RuntimeReviewRowActionContribution,
   RuntimeSettingsSectionContribution,
   RuntimeTaskPaneTabContribution,
   RuntimeTaskUISectionContribution,
@@ -13,6 +14,7 @@ import type {
 type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut' | 'navigationComponent'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
 type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
 type RuntimeTaskUISectionSource = Pick<RuntimeTaskUISectionContribution, 'id' | 'order'>
+type RuntimeReviewRowActionSource = Pick<RuntimeReviewRowActionContribution, 'id' | 'order'>
 type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut' | 'discoverable'>
 type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order' | 'scope'>
 type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
@@ -40,6 +42,14 @@ export interface ResolvedTab {
 }
 
 export interface ResolvedTaskUISection {
+  pluginId: string
+  contributionId: string
+  namespacedId: string
+  order: number
+}
+
+/** A plugin control rendered on each review-requested pull-request row. */
+export interface ResolvedReviewRowAction {
   pluginId: string
   contributionId: string
   namespacedId: string
@@ -76,6 +86,7 @@ export interface RuntimeContributionSource {
   views?: RuntimeViewSource[]
   taskPaneTabs?: RuntimeTaskPaneTabSource[]
   taskUISections?: RuntimeTaskUISectionSource[]
+  reviewRowActions?: RuntimeReviewRowActionSource[]
   commands?: RuntimeCommandSource[]
   settingsSections?: RuntimeSettingsSectionSource[]
   backgroundServices?: RuntimeBackgroundServiceSource[]
@@ -85,6 +96,7 @@ export interface ResolvedContributions {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
   taskUISections: ResolvedTaskUISection[]
+  reviewRowActions: ResolvedReviewRowAction[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -96,6 +108,7 @@ type ResolvedSlotItems = {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
   taskUISections: ResolvedTaskUISection[]
+  reviewRowActions: ResolvedReviewRowAction[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -216,6 +229,25 @@ function resolveTaskUISection(pluginId: string, item: unknown): ResolvedTaskUISe
   }
 }
 
+// Same shape as a task UI section: an id and a rank, with no title to validate.
+function resolveReviewRowAction(pluginId: string, item: unknown): ResolvedReviewRowAction | null {
+  if (!isRecord(item)) {
+    return null
+  }
+
+  const { id, order } = item
+  if (!isNonEmptyString(id)) {
+    return null
+  }
+
+  return {
+    pluginId,
+    contributionId: id,
+    namespacedId: toNamespacedId(pluginId, id),
+    order: isNumber(order) ? order : 0,
+  }
+}
+
 function normalizeCommandShortcut(shortcut: unknown): string | null {
   if (isNonEmptyString(shortcut)) {
     return normalizeShortcut(shortcut)
@@ -305,6 +337,7 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
     views: [],
     taskPaneTabs: [],
     taskUISections: [],
+    reviewRowActions: [],
     commands: [],
     settingsSections: [],
     backgroundServices: [],
@@ -318,12 +351,14 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
     resolved.views.push(...collectResolved(plugin.pluginId, plugin.views, resolveView))
     resolved.taskPaneTabs.push(...collectResolved(plugin.pluginId, plugin.taskPaneTabs, resolveTab))
     resolved.taskUISections.push(...collectResolved(plugin.pluginId, plugin.taskUISections, resolveTaskUISection))
+    resolved.reviewRowActions.push(...collectResolved(plugin.pluginId, plugin.reviewRowActions, resolveReviewRowAction))
     resolved.commands.push(...collectResolved(plugin.pluginId, plugin.commands, resolveCommand))
     resolved.settingsSections.push(...collectResolved(plugin.pluginId, plugin.settingsSections, resolveSettingsSection))
     resolved.backgroundServices.push(...collectResolved(plugin.pluginId, plugin.backgroundServices, resolveBackgroundService))
   }
 
   resolved.taskUISections.sort((left, right) => left.order - right.order || left.namespacedId.localeCompare(right.namespacedId))
+  resolved.reviewRowActions.sort((left, right) => left.order - right.order || left.namespacedId.localeCompare(right.namespacedId))
   resolved.settingsSections.sort((left, right) => left.order - right.order)
   return resolved
 }

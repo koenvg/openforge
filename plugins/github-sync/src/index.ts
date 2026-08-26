@@ -1,12 +1,14 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import type { ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
 import PrReviewView from './review/pr/PrReviewView.svelte'
+import PrReviewRowAction from './review/pr/PrReviewRowAction.svelte'
 import { createGithubSyncPrReviewClient } from './review/pr/githubSyncClient'
 import { pendingReviewPrOpen } from './lib/stores'
 import TaskPullRequestStatus from './task/TaskPullRequestStatus.svelte'
 import JiraSettingsSection from './settings/JiraSettingsSection.svelte'
 
 export const PrReviewViewComponent = PrReviewView
+export const PrReviewRowActionComponent = PrReviewRowAction
 export const TaskPullRequestStatusComponent = TaskPullRequestStatus
 export const JiraSettingsSectionComponent = JiraSettingsSection
 
@@ -18,6 +20,14 @@ export default defineFrontendPlugin({
       id: 'task_pull_request_status',
       order: 60,
       component: TaskPullRequestStatus,
+    }))
+    // The walkthrough control the plugin's own PR list shows, on every review row a host
+    // surface renders (today the attention overview). It fetches its own state per pull
+    // request, so the host hands it nothing but the row's `pr`.
+    context.subscriptions.add(openforge.reviewUI.registerRowAction({
+      id: 'pr_walkthrough',
+      order: 10,
+      component: PrReviewRowAction,
     }))
     context.subscriptions.add(openforge.views.register({
       id: 'pr_review',

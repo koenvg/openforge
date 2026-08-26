@@ -12,7 +12,7 @@
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import { walkthroughReadyFirst } from '../../lib/reviewListSort'
-  import { DEFAULT_WALKTHROUGH_PROMPT } from '../../lib/walkthroughPrompt'
+  import { resolveWalkthroughPromptTemplate } from '../../lib/walkthroughPromptTemplate'
   import {
     getPrReviewFilesKey,
     loadPrReviewedFileShas,
@@ -844,27 +844,13 @@
     await Promise.all(prs.map(refreshWalkthroughStatus))
   }
 
-  // Resolve the configurable walkthrough + AI-review prompt template: per-project
-  // override, else global default, else the built-in template. Mirrors how other
-  // hierarchical settings (e.g. ai_provider) inherit global → project.
-  async function resolveWalkthroughPromptTemplate(): Promise<string> {
-    const projectId = $activeProjectId
-    const projectPrompt = projectId
-      ? await api.projectConfig.get<string>('pr_walkthrough_prompt', projectId)
-      : null
-    if (projectPrompt && projectPrompt.length > 0) return projectPrompt
-    const globalPrompt = await api.config.get<string>('pr_walkthrough_prompt')
-    if (globalPrompt && globalPrompt.length > 0) return globalPrompt
-    return DEFAULT_WALKTHROUGH_PROMPT
-  }
-
   // Kick off a background walkthrough + AI-review generation for a PR from the
   // list card. Deliberately does NOT mark the PR read — read state only changes
   // when the reviewer opens the PR (openPrDetail). The prompt is compiled
   // server-side (Plan 2); the template (resolved from settings here) is passed in.
   async function generateWalkthrough(pr: ReviewPullRequest) {
     try {
-      const promptTemplate = await resolveWalkthroughPromptTemplate()
+      const promptTemplate = await resolveWalkthroughPromptTemplate(api, $activeProjectId)
       await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,

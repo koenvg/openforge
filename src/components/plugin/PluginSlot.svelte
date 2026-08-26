@@ -31,9 +31,17 @@
      */
     minOrder?: number | null
     maxOrder?: number | null
+    /**
+     * Extra props handed to every contribution in this slot, for slots whose subject is not
+     * a task or a project. The review-row slot passes the pull request its row is showing.
+     * Host-owned props (taskId, projectId, ...) always win, so a plugin cannot shadow them.
+     */
+    extraProps?: Record<string, unknown>
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null, minOrder = null, maxOrder = null }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', taskActionPending = false, sourcePluginIds = null, minOrder = null, maxOrder = null, extraProps = undefined }: Props = $props()
+
+  const UNWRAPPED_SLOT_TYPES = new Set<PluginSlotType>(['taskUISections', 'reviewRowActions'])
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -70,7 +78,7 @@
       return getRegisteredComponent(makePluginViewKey(contrib.pluginId, contrib.contributionId))
     }
 
-    if (slotType === 'taskPaneTabs' || slotType === 'taskUISections' || slotType === 'settingsSections') {
+    if (slotType === 'taskPaneTabs' || slotType === 'taskUISections' || slotType === 'reviewRowActions' || slotType === 'settingsSections') {
       return getRegisteredRenderableComponent(slotType, contrib.namespacedId)
     }
 
@@ -188,14 +196,17 @@
         />
       {/snippet}
       {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
-      <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} {taskActionPending} />
+      <Component {...renderProps} {...extraProps ?? {}} {taskId} {projectId} {projectName} {projectPath} {taskActionPending} />
     </svelte:boundary>
-  {:else if slotType !== 'taskUISections'}
+  {:else if !UNWRAPPED_SLOT_TYPES.has(slotType)}
     <div data-contribution-id={contrib.contributionId}></div>
   {/if}
 {/snippet}
 
-{#if slotType === 'taskUISections'}
+<!-- These slots render bare, with no wrapper element and no placeholder: their hosts are a
+     section stack and a table-tight row, where an empty div of our own would show up as a
+     stray gap whenever no plugin contributes. -->
+{#if UNWRAPPED_SLOT_TYPES.has(slotType)}
   {#each slotContributions as contrib (contrib.namespacedId)}
     {@render renderContribution(contrib)}
   {/each}

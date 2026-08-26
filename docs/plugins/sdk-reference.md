@@ -63,10 +63,17 @@ Frontend-specific API areas are:
 - `views`: register plugin views.
 - `taskUI`: register task-pane tabs and plugin-owned task information sections.
 - `taskPane`: deprecated API-v1 alias for `taskUI.registerTab(...)`.
+- `reviewUI`: register controls rendered on each review-requested pull-request row.
 - `settings`: register plugin settings sections.
 - `backend`: wait for and invoke this plugin's backend methods.
 
-Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
+Frontend UI contribution registrations use Svelte component loaders or components for `PluginViewProps`, `PluginTaskPaneProps`, `PluginTaskUISectionProps`, `PluginReviewRowActionProps`, and `PluginSettingsSectionProps`. Register sections with `openforge.taskUI.registerSection({ id, order?, component })`; sections receive `api`, `context`, `taskId`, and `projectId`, and do not require presentation metadata such as a title, icon, heading, or host card. Sections are ordered by numeric `order`, then namespaced contribution id.
+
+### Review row actions
+
+`openforge.reviewUI.registerRowAction({ id, order?, component })` puts a control on every review-requested pull-request row a host surface shows. Today that is the cross-project attention overview. The component receives `api`, `context`, `pr` (the row's `ReviewPullRequest`) and `projectId`, and is ordered by numeric `order`, then namespaced contribution id.
+
+One instance renders per row, so keep the component to a chip or a single button and let it fetch its own per-pull-request state. Hosts key rows by pull-request id and hand over a fresh `pr` object on every data refresh without remounting, so identify the subject by `(pr.id, pr.head_sha)` rather than by object identity. A click inside the control does not open the pull request; the host stops that propagation.
 
 Package metadata and view registrations use `PluginIcon` for `icon`: either a supported kebab-case Lucide name or `{ type: 'svg', svg: string }`. Custom SVGs are limited to static, self-contained geometry with one positive `viewBox` root and a 10,000-character maximum. The host sanitizes them, owns rail/sidebar sizing and decorative accessibility, and uses the view title as the navigation label. Plugins own geometry and paint; use `currentColor` for host theme and active-state colors. Invalid custom SVG registrations are rejected. Unsupported names render the generic Plug fallback. See [Plugin icons](../plugin-authoring.md#plugin-icons) for the exact allowed subset and an example.
 
@@ -293,6 +300,7 @@ export type OpenForgePluginCapability =
   | 'taskLinks'
   | 'appEnablement'
   | 'customSidebarNavigation'
+  | 'reviewUI'
 ```
 
 Manifest contribution arrays are not supported. `validateOpenForgePackageMetadata` rejects a `contributes` field with the message that contribution arrays are not supported; register contributions at runtime in `activate()` instead.

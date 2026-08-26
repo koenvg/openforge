@@ -158,6 +158,25 @@ describe('resolveContributions', () => {
     expect(result.taskUISections.every((section) => !('title' in section) && !('icon' in section))).toBe(true)
   })
 
+  it('resolves review row actions the same way, and drops entries without an id', () => {
+    const result = resolveContributions([
+      makeSource({
+        pluginId: 'plugin.zeta',
+        reviewRowActions: [{ id: 'later', order: 30 }, { order: 5 } as never],
+      }),
+      makeSource({
+        pluginId: 'plugin.alpha',
+        reviewRowActions: [{ id: 'walkthrough', order: 10 }, { id: 'default-order' } as never],
+      }),
+    ])
+
+    expect(result.reviewRowActions).toEqual([
+      { pluginId: 'plugin.alpha', contributionId: 'default-order', namespacedId: 'plugin.alpha:default-order', order: 0 },
+      { pluginId: 'plugin.alpha', contributionId: 'walkthrough', namespacedId: 'plugin.alpha:walkthrough', order: 10 },
+      { pluginId: 'plugin.zeta', contributionId: 'later', namespacedId: 'plugin.zeta:later', order: 30 },
+    ])
+  })
+
   it('sorts settings sections by order while preserving registration order for ties', () => {
     const result = resolveContributions([
       makeSource({
@@ -217,6 +236,7 @@ describe('resolveContributions', () => {
       views: [],
       taskPaneTabs: [],
       taskUISections: [],
+      reviewRowActions: [],
       commands: [],
       settingsSections: [],
       backgroundServices: [],

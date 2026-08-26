@@ -8,6 +8,7 @@ function contributions(overrides: Partial<ResolvedContributions> = {}): Resolved
     views: [],
     taskPaneTabs: [],
     taskUISections: [],
+    reviewRowActions: [],
     commands: [],
     settingsSections: [],
     backgroundServices: [],
