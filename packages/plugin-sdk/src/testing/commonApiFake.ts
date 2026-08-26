@@ -1,4 +1,4 @@
-import { resolveExternalTextFileChunkSize } from '../types'
+import { resolveExternalTextFileChunkSize } from '../types.js'
 import type {
   BackendOpenForgeAPI,
   CommandRegistration,
@@ -15,7 +15,7 @@ import {
   isJsonValue,
   normalizeAgentCommandMetadata,
   type TestingRegistryServices,
-} from './support'
+} from './support.js'
 import type {
   TestingCommandContribution,
   TestingCommandHandler,

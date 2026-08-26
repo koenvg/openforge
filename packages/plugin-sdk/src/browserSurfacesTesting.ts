@@ -1,7 +1,7 @@
 import {
   BrowserSurfaceError,
   isAllowedBrowserSurfaceUrl,
-} from './browserSurfaces'
+} from './browserSurfaces.js'
 import type {
   BrowserSurfacesAPI,
   BrowserDevToolsPanel,

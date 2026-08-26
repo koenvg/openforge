@@ -4,7 +4,7 @@ import type {
   BackgroundServiceRegistration,
   Disposable,
 } from '../types'
-import { assertFunction, createDisposable, type TestingRegistryServices } from './support'
+import { assertFunction, createDisposable, type TestingRegistryServices } from './support.js'
 import type {
   TestingBackendMethodContribution,
   TestingBackgroundServiceContribution,

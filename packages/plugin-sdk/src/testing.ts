@@ -5,12 +5,12 @@ export {
   createMockPluginContext,
   createOpenForgeRegistryFake,
   TestingOpenForgeRegistryFake,
-} from './testing/registryFake'
+} from './testing/registryFake.js'
 export {
   createMemoryPluginStorage,
   createTestingCalls,
   TestingSubscriptionSink,
-} from './testing/support'
+} from './testing/support.js'
 
 export type {
   MockBackendOpenForgeAPI,
@@ -32,4 +32,4 @@ export type {
   TestingTaskPaneTabContribution,
   TestingTaskUISectionContribution,
   TestingViewContribution,
-} from './testing/contracts'
+} from './testing/contracts.js'

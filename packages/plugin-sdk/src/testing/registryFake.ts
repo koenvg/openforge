@@ -7,8 +7,8 @@ import type {
   OpenForgePackageMetadata,
   PluginStorage,
 } from '../types'
-import { TestingBackendServicesFake } from './backendServicesFake'
-import { TestingCommonApiFake } from './commonApiFake'
+import { TestingBackendServicesFake } from './backendServicesFake.js'
+import { TestingCommonApiFake } from './commonApiFake.js'
 import type {
   MockBackendOpenForgeAPI,
   MockFrontendOpenForgeAPI,
@@ -16,11 +16,11 @@ import type {
   TestingOpenForgeApiOptions,
   TestingOpenForgeRegistrySnapshot,
 } from './contracts'
-import { TestingFrontendContributionFake } from './frontendContributionFake'
+import { TestingFrontendContributionFake } from './frontendContributionFake.js'
 import {
   TestingRegistryServices,
   TestingSubscriptionSink,
-} from './support'
+} from './support.js'
 
 export class TestingOpenForgeRegistryFake {
   readonly pluginId: string

@@ -1,6 +1,6 @@
-import { createTestingBrowserSurfaces } from '../browserSurfacesTesting'
+import { createTestingBrowserSurfaces } from '../browserSurfacesTesting.js'
 import type { TestingBrowserSurfaces } from '../browserSurfacesTesting'
-import { isAllowedBrowserSurfaceUrl, type TaskBrowserSurfaceState } from '../browserSurfaces'
+import { isAllowedBrowserSurfaceUrl, type TaskBrowserSurfaceState } from '../browserSurfaces.js'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -17,7 +17,7 @@ import {
   assertTitle,
   createDisposable,
   type TestingRegistryServices,
-} from './support'
+} from './support.js'
 import type {
   TestingInjectionPointContribution,
   TestingTaskStartPrefixProviderContribution,

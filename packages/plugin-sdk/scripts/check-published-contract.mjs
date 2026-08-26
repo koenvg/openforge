@@ -151,6 +151,13 @@ try {
     if (!existsSync(targetPath)) fail(`Packed export target is missing: ${target}`)
   }
 
+  writeFileSync(join(tempRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')
+if (typeof testing.createMockOpenForgeApi !== 'function') {
+  throw new Error('Installed Plugin SDK testing entry point did not expose createMockOpenForgeApi.')
+}
+`)
+  run(process.execPath, ['./esm-resolution.mjs'], { cwd: tempRoot })
+
   writeFileSync(join(tempRoot, 'authoring-contract.ts'), readFileSync(fixturePath, 'utf8'))
   writeFileSync(join(tempRoot, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
