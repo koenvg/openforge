@@ -1,17 +1,18 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
+  createListenerRegistrationFailureSupport,
   imageAddonMocks,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
   webLinkMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 describe('terminal runtime acquisition', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('passes the owning Terminal Surface key when a web link is activated', async () => {
     const host = createHost()
@@ -157,8 +158,9 @@ describe('terminal runtime acquisition', () => {
       const outputEvent = `pty-output-${terminalKey}`
       const exitEvent = `pty-exit-${terminalKey}`
       const failedEvent = `${failedEventPrefix}-${terminalKey}`
-      const host = createHost()
-      host.failNextListenerRegistration(failedEvent)
+      const listenerRegistrationFailures = createListenerRegistrationFailureSupport()
+      const host = createHost({ listenerRegistrationFailures })
+      listenerRegistrationFailures.failNext(failedEvent)
       const runtime = createTerminalRuntime(host)
 
       await expect(runtime.acquire(terminalKey)).rejects.toThrow(`listener registration failed: ${failedEvent}`)

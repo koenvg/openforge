@@ -1,10 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetTerminalRuntimeIntegrationHarness } from './terminalRuntime.integrationTestHarness'
+import { describe, expect, it, vi } from 'vitest'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal runtime transport seam', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
 
   it('acquires a Terminal Session through one named transport subscription', async () => {
     const view = createFakeTerminalView()

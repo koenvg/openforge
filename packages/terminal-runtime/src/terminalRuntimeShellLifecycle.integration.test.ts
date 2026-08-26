@@ -1,8 +1,8 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
@@ -43,7 +43,7 @@ describe('terminal runtime PTY activation API', () => {
 })
 
 describe('terminal runtime resumed agent input', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('forwards keyboard input after an empty resumed PTY is restored as active', async () => {
     const host = createHost()
@@ -149,7 +149,7 @@ describe('terminal runtime resumed agent input', () => {
 })
 
 describe('terminal runtime shell output lifecycle', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('renders a persisted Terminal Replay without accepting keyboard input', async () => {
     const host = createHost()

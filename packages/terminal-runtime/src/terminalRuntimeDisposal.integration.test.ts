@@ -1,16 +1,16 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
   createTrackedThemeMode,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 
 describe('terminal runtime disposal', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('releases terminal resources and unsubscribes from theme updates', async () => {
     const trackedThemeMode = createTrackedThemeMode()

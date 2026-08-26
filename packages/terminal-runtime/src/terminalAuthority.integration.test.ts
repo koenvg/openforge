@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createHost,
-  resetTerminalRuntimeIntegrationHarness,
-} from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntimeHost.testSupport'
+import { resetTerminalRuntimeMocks } from './terminalRuntimeFeatures.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import {
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
@@ -10,7 +8,7 @@ import {
 } from './terminalRuntime'
 
 describe('terminal authority', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('binds the explicit xterm authority contract to one Shell Session Key and PTY instance', async () => {
     const shellSessionKey = 'T-1-shell-0'

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
-import { createHost } from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntimeHost.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalSessionService } from './terminalSessionService'
 

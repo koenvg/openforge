@@ -1,16 +1,17 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
+  createListenerRegistrationFailureSupport,
   imageAddonMocks,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 describe('terminal runtime reconnect replay', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('reacquires cleanly after release invalidates initialization during reconnect setup', async () => {
     const terminalKey = 'T-1-shell-0'
@@ -39,8 +40,9 @@ describe('terminal runtime reconnect replay', () => {
     const terminalKey = 'T-1-shell-0'
     const outputEvent = `pty-output-${terminalKey}`
     const exitEvent = `pty-exit-${terminalKey}`
-    const host = createHost()
-    host.failNextListenerRegistration(APP_EVENTS_RECONNECTED_EVENT)
+    const listenerRegistrationFailures = createListenerRegistrationFailureSupport()
+    const host = createHost({ listenerRegistrationFailures })
+    listenerRegistrationFailures.failNext(APP_EVENTS_RECONNECTED_EVENT)
     const runtime = createTerminalRuntime(host)
 
     await expect(runtime.acquire(terminalKey)).rejects.toThrow(
