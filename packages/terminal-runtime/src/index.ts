@@ -66,8 +66,6 @@ export {
 } from './terminalOptions'
 export {
   getTerminalTheme,
-  setupHostThemeSync,
-  syncThemeModeWithDocument,
   themeMode,
   type ThemeMode,
 } from './theme'

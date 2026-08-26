@@ -10,34 +10,6 @@ const THEME_NAMES: Record<ThemeMode, string> = {
   dark: 'openforge-dark',
 }
 
-function themeModeFromDocumentTheme(themeName: string | null): ThemeMode {
-  return themeName === THEME_NAMES.dark ? 'dark' : 'light'
-}
-
-export function syncThemeModeWithDocument(): void {
-  if (typeof document === 'undefined') return
-
-  themeMode.set(themeModeFromDocumentTheme(document.documentElement.getAttribute('data-theme')))
-}
-
-export function setupHostThemeSync(): () => void {
-  syncThemeModeWithDocument()
-
-  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
-    return () => undefined
-  }
-
-  const observer = new MutationObserver(() => {
-    syncThemeModeWithDocument()
-  })
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  })
-
-  return () => observer.disconnect()
-}
-
 type TerminalThemeKey =
   | 'background'
   | 'foreground'
