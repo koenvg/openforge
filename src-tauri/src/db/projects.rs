@@ -1,5 +1,6 @@
-use rusqlite::Result;
+use rusqlite::{types::Type, Result};
 use serde::Serialize;
+use thiserror::Error;
 
 /// Project row from database
 #[derive(Debug, Clone, Serialize)]
@@ -27,6 +28,20 @@ pub struct ProjectAttentionRow {
     pub completed_agents: i64,
 }
 
+#[derive(Debug, Error)]
+#[error("invalid next_project_id config value '{0}': expected a 64-bit integer")]
+struct InvalidProjectIdCounter(String);
+
+fn parse_next_project_id(value: String) -> Result<i64> {
+    value.parse::<i64>().map_err(|_| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            Type::Text,
+            Box::new(InvalidProjectIdCounter(value)),
+        )
+    })
+}
+
 impl super::Database {
     /// Create a new project with auto-incremented ID
     pub fn create_project(&self, name: &str, path: &str) -> Result<ProjectRow> {
@@ -35,10 +50,7 @@ impl super::Database {
         let next_id: i64 = conn.query_row(
             "SELECT value FROM config WHERE key = 'next_project_id'",
             [],
-            |row| {
-                let val: String = row.get(0)?;
-                Ok(val.parse::<i64>().unwrap_or(1))
-            },
+            |row| parse_next_project_id(row.get(0)?),
         )?;
 
         let project_id = format!("P-{}", next_id);
@@ -410,6 +422,38 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::*;
+
+    #[test]
+    fn create_project_rejects_corrupted_next_project_id_before_duplicate_id_collision() {
+        let (db, _temp_dir) = make_test_db("corrupted_project_counter");
+        let existing = db
+            .create_project("Existing project", "/tmp/existing")
+            .expect("create existing project");
+        db.set_config("next_project_id", "not-a-number")
+            .expect("set corrupted project counter");
+
+        let error = db
+            .create_project("Must not collide", "/tmp/must-not-collide")
+            .expect_err("corrupted project counter must fail project creation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid next_project_id config value"),
+            "unexpected error: {error}"
+        );
+        let projects = db
+            .get_all_projects()
+            .expect("get projects after failed creation");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].id, existing.id);
+        assert_eq!(
+            db.get_config("next_project_id")
+                .expect("get corrupted project counter")
+                .as_deref(),
+            Some("not-a-number")
+        );
+    }
 
     #[test]
     fn test_delete_project_with_tasks_succeeds() {
