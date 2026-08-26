@@ -104,7 +104,7 @@
 
   <CollapsibleSection sectionKey="details" title="Details" cardId="details">
     {#snippet icon()}<Info size={14} />{/snippet}
-    <div class="px-3 py-2 border-b border-base-300/70">
+    <div class="py-2 border-b border-base-300/70">
       <TaskLabelEditor
         projectId={task.project_id}
         selectedLabels={labels}
@@ -114,7 +114,7 @@
     </div>
 
     {#if workspacePath}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 border-b border-base-300/70" aria-label="Workspace">
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Workspace">
         <div class="text-xs text-base-content/55">Workspace</div>
         <span class="text-xs font-mono text-base-content/70 truncate" title={workspacePath}>{workspacePath}</span>
         <CopyButton text={workspacePath} label="Copy workspace path" />
@@ -122,7 +122,7 @@
     {/if}
 
     {#if resumeCommand}
-      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 border-b border-base-300/70" aria-label="Resume command">
+      <div class="grid grid-cols-[6.25rem_minmax(0,1fr)_auto] items-center gap-2 py-2 border-b border-base-300/70" aria-label="Resume command">
         <div class="text-xs text-base-content/55">Resume command</div>
         <code class="text-xs font-mono text-base-content/70 truncate" title={resumeCommand}>{resumeCommand}</code>
         <CopyButton text={resumeCommand} label="Copy resume command" />

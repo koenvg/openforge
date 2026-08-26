@@ -31,7 +31,7 @@
       >✎</button>
     {/if}
   {/snippet}
-  <div class="px-3 py-2 flex flex-col gap-2">
+  <div class="py-2 flex flex-col gap-2">
     <div
       id={promptContentId}
       role="region"

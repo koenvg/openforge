@@ -111,7 +111,7 @@
       {#snippet icon()}
         {#if isDependencies}<ListChecks size={14} />{:else}<Network size={14} />{/if}
       {/snippet}
-      <div class="flex flex-col gap-2.5 px-3 py-2">
+      <div class="flex flex-col gap-2.5 py-2">
         {@render itemList()}
         <div class={footerClass}>{@render footerText()}</div>
       </div>

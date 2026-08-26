@@ -91,10 +91,23 @@ describe('TaskInspectorPanel', () => {
     })
 
     const inspector = screen.getByRole('complementary', { name: 'Task inspector for T-748' })
-    expect(inspector.textContent).toContain('Task')
     expect(inspector.textContent).toContain('T-748')
     expect(inspector.textContent).toContain('Fix the dashboard bug.')
     expect(inspector.textContent).toContain('In Progress')
+  })
+
+  it('leads with the task itself instead of a redundant "Task" label', () => {
+    render(TaskInspectorPanel, {
+      props: {
+        task: baseTask,
+        allTasks: [],
+      },
+    })
+
+    // Nothing else can appear in this panel, so a "Task" heading only costs a row and
+    // reads as a collapsible section that never collapses. The title is the heading.
+    expect(screen.queryByRole('heading', { name: 'Task' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Fix the dashboard bug.' })).toBeTruthy()
   })
 
   it('shows an Edit prompt pencil for backlog tasks when onEditTask is provided', async () => {

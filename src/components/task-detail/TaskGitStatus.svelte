@@ -59,9 +59,9 @@
   {/snippet}
 
   {#if errored}
-    <div class="px-3 py-2 text-xs text-base-content/50">Unable to read changes</div>
+    <div class="py-2 text-xs text-base-content/50">Unable to read changes</div>
   {:else}
-    <div class="flex flex-col gap-1.5 px-3 py-2">
+    <div class="flex flex-col gap-1.5 py-2">
       <div class="flex items-center justify-between gap-2">
         <span class="text-xs text-base-content/55">Remote</span>
         {#if !summary?.has_remote}

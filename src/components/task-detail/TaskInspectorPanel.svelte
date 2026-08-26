@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Task } from '../../lib/types'
-  import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { getTaskTitle } from '../../lib/taskTitle'
@@ -51,12 +50,13 @@
   </aside>
 {:else}
   <aside data-testid="task-inspector-panel" class="task-inspector flex h-full flex-col overflow-y-auto border-l border-base-300 bg-base-100" aria-label="Task inspector for {task.id}">
-    <header class="shrink-0 border-b border-base-300 px-4 py-4">
+    <!-- No "Task" label and no chevron: the panel can only ever hold a task, and a caret
+         that never collapses anything is a lie. The id and the title carry the header. -->
+    <header class="task-inspector-header shrink-0 border-b border-base-300 py-4">
       <div class="flex min-h-10 items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <ChevronDown size={14} class="text-base-content/45" aria-hidden="true" />
-          <h2 class="m-0 text-sm font-semibold text-base-content">Task</h2>
-        </div>
+        <!-- Same treatment the task card gives the id, so the same task reads the same
+             on the board and in this panel. -->
+        <div class="font-mono text-sm font-semibold text-primary">{task.id}</div>
         {#if onOpenFullView}
           <button class="btn btn-outline btn-sm min-h-10 shrink-0" type="button" onclick={onOpenFullView}>
             Open full view
@@ -64,12 +64,11 @@
           </button>
         {/if}
       </div>
-      <div class="mt-3 flex items-start justify-between gap-3">
+      <div class="mt-2 flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
-          <div class="font-mono text-xs font-semibold text-base-content/65">{task.id}</div>
           {#if titleRename.editing && allowRename}
             <input
-              class="input input-bordered mt-1 h-8 min-h-8 w-full text-[13px] font-medium"
+              class="input input-bordered h-8 min-h-8 w-full text-sm font-semibold"
               aria-label="Task title"
               value={titleRename.draft}
               oninput={(e) => titleRename.draft = e.currentTarget.value}
@@ -78,8 +77,8 @@
               use:focusAndSelect
             />
           {:else}
-            <div class="mt-1 flex items-start gap-1">
-              <p class="m-0 line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-snug text-base-content" title={taskTitle}>{taskTitle}</p>
+            <div class="flex items-start gap-1">
+              <h2 class="m-0 line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-base-content" title={taskTitle}>{taskTitle}</h2>
               {#if allowRename}
                 <button
                   class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content"
@@ -109,7 +108,22 @@
 {/if}
 
 <style>
+  /* One column contract for the whole panel. `--panel-inset` is where the section carets
+     start; `--panel-icon-column` is CollapsibleSection's caret plus the gap after it
+     (0.75 + 0.5), which is where the section icons and every section body start. The task
+     header has no caret, so it pays that offset directly to land on the same column. */
+  .task-inspector {
+    --panel-inset: 1rem;
+    --panel-icon-column: 1.25rem;
+  }
+
+  .task-inspector-header {
+    padding-left: calc(var(--panel-inset) + var(--panel-icon-column));
+    padding-right: var(--panel-inset);
+  }
+
   .task-inspector :global([data-task-info-card]) {
+    --section-inset: var(--panel-inset);
     border-width: 0 0 1px;
     border-color: var(--color-base-300);
     border-radius: 0;
@@ -122,11 +136,12 @@
   .task-inspector :global([data-card-layout="row"]) {
     min-height: 3.5rem;
     justify-content: center;
-    padding: 0.875rem 1.5rem;
+    padding: 0.875rem var(--section-inset);
   }
 
   .task-inspector :global([data-task-info-card] h3 button) {
     min-height: 3.5rem;
-    padding: 0.875rem 1.5rem;
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
   }
 </style>

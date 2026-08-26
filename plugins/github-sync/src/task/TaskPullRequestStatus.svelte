@@ -194,7 +194,7 @@
       <button type="button" class="btn btn-ghost btn-xs" onclick={toggleAdding}>Add PR</button>
     {/snippet}
 
-    <div class="flex flex-col gap-2.5 px-3 py-2" aria-busy={loading}>
+    <div class="flex flex-col gap-2.5 py-2" aria-busy={loading}>
       {@render body()}
     </div>
   </CollapsibleSection>

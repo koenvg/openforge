@@ -28,10 +28,15 @@
   let contentId = $derived(`info-section-${sectionKey}`)
 </script>
 
+<!-- `--section-inset` is the distance from the card edge to the caret. Hosts override it
+     per surface (the task inspector pushes it out to 1.5rem); the header and the body
+     both read it so they can never drift apart. `--section-caret-column` is the caret
+     plus the gap after it, so body content lines up with the icon and title rather than
+     starting under the caret. Keep it equal to the caret's `w-3` plus the header `gap-2`. -->
 <section
   data-task-info-card={cardId ?? sectionKey}
   data-card-sizing="natural"
-  class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0"
+  class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0 [--section-inset:0.75rem] [--section-caret-column:1.25rem]"
   aria-label={label ?? title}
   aria-live={ariaLive}
 >
@@ -39,7 +44,7 @@
     <h3 class="m-0 min-w-0 flex-1">
       <button
         type="button"
-        class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary rounded"
+        class="flex w-full items-center gap-2 px-[var(--section-inset)] py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary rounded"
         aria-expanded={!collapsed}
         aria-controls={contentId}
         onclick={() => toggleSection(sectionKey)}
@@ -64,7 +69,10 @@
   </div>
 
   {#if !collapsed}
-    <div id={contentId}>
+    <div
+      id={contentId}
+      class="pl-[calc(var(--section-inset)_+_var(--section-caret-column))] pr-[var(--section-inset)]"
+    >
       {@render children()}
     </div>
   {/if}
