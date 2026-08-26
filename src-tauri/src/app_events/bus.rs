@@ -46,11 +46,6 @@ impl AppEventBus {
         TaskEvents { bus: self.clone() }
     }
 
-    #[allow(dead_code)]
-    pub fn github(&self) -> GithubEvents {
-        GithubEvents { bus: self.clone() }
-    }
-
     pub fn try_emit<E>(&self, event: E) -> Result<EmitReceipt, AppEventError>
     where
         E: Into<AppEvent>,
@@ -321,33 +316,6 @@ impl TaskEvents {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone)]
-pub struct GithubEvents {
-    bus: AppEventBus,
-}
-
-#[allow(dead_code)]
-impl GithubEvents {
-    pub fn sync_complete(&self, result: &serde_json::Value) -> Result<EmitReceipt, AppEventError> {
-        self.bus.try_emit(AppEvent::new(
-            "github-sync-complete",
-            result.clone(),
-            DeliveryClass::StateInvalidation,
-            Some("github".to_string()),
-        ))
-    }
-
-    pub fn rate_limited(&self, reset_at: Option<i64>) -> Result<EmitReceipt, AppEventError> {
-        self.bus.try_emit(AppEvent::new(
-            "github-rate-limited",
-            serde_json::json!({ "reset_at": reset_at }),
-            DeliveryClass::UserNotification,
-            Some("github".to_string()),
-        ))
-    }
-}
-
 fn envelope_cursor(envelope: &AppEventEnvelope) -> Option<AppEventCursor> {
     envelope.id.as_ref().map(|id| AppEventCursor {
         epoch: id.epoch.clone(),
@@ -403,11 +371,11 @@ mod tests {
     async fn test_app_event_bus_replays_events_after_cursor() {
         let bus = AppEventBus::new(16, 8);
         let first = bus
-            .github()
-            .sync_complete(&serde_json::json!({ "new_comments": 1 }))
+            .tasks()
+            .updated("T-1", None)
             .expect("first event should publish");
-        bus.github()
-            .rate_limited(Some(123))
+        bus.tasks()
+            .updated("T-2", None)
             .expect("second event should publish");
 
         let mut subscription = bus
@@ -421,7 +389,8 @@ mod tests {
         else {
             panic!("expected event frame");
         };
-        assert_eq!(received.event_name, "github-rate-limited");
+        assert_eq!(received.event_name, "task-changed");
+        assert_eq!(received.payload["task_id"], "T-2");
         assert_eq!(received.id.as_ref().expect("id should be present").seq, 2);
     }
 

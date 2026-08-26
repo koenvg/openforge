@@ -7,7 +7,7 @@ mod runtime_adapter;
     unused_imports,
     reason = "crate-facing event API remains available through app_events after the module split"
 )]
-pub use bus::{AppEventBus, AppEventSender, AppEventSubscription, GithubEvents, TaskEvents};
+pub use bus::{AppEventBus, AppEventSender, AppEventSubscription, TaskEvents};
 #[allow(
     unused_imports,
     reason = "crate-facing event API remains available through app_events after the module split"
