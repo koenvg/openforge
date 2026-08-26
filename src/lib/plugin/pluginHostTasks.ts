@@ -20,7 +20,7 @@ import {
   getTasksForProject,
   getTaskWorkspace,
   sendAgentFollowUp,
-  setProjectConfig,
+  configureStartPromptContribution as configureStartPromptContributionIpc,
   startImplementation,
   updateTaskStatus,
 } from '../ipc'
@@ -151,24 +151,13 @@ async function configureStartPromptContributionForProject(
     throw new Error(`start prompt contribution content exceeds ${MAX_START_PROMPT_CONTRIBUTION_LENGTH} characters`)
   }
 
-  const existing = await listStartPromptContributionsForProject(projectId)
-  const contribution: StartPromptContribution = {
-    ...(ownerPluginId ? { ownerPluginId } : {}),
+  return configureStartPromptContributionIpc(ownerPluginId, {
+    projectId,
     id: request.id.trim(),
     enabled: request.enabled !== false,
     content: request.content,
-    order: typeof request.order === 'number' && Number.isFinite(request.order) ? request.order : 0,
-  }
-  const next = [
-    ...existing.filter((entry) => entry.id !== contribution.id
-      || (entry.ownerPluginId !== undefined && entry.ownerPluginId !== contribution.ownerPluginId)),
-    contribution,
-  ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)
-    || a.id.localeCompare(b.id)
-    || (a.ownerPluginId ?? '').localeCompare(b.ownerPluginId ?? ''))
-
-  await setProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY, JSON.stringify(next))
-  return next
+    order: request.order,
+  })
 }
 
 async function startTaskImplementationFromPluginRequest(request: StartTaskImplementationRequest): Promise<ImplementationRun> {

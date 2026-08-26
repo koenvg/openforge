@@ -1,7 +1,9 @@
 use crate::db;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
 pub const START_PROMPT_CONTRIBUTIONS_CONFIG_KEY: &str = "start_prompt_contributions";
+pub(crate) const MAX_START_PROMPT_CONTRIBUTION_LENGTH: usize = 16_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +21,78 @@ pub struct StartPromptContribution {
 
 fn default_start_prompt_contribution_enabled() -> bool {
     true
+}
+
+pub(crate) fn validate_start_prompt_contribution(
+    contribution: &StartPromptContribution,
+) -> Result<(), String> {
+    if contribution.id.trim().is_empty() {
+        return Err("start prompt contribution requires id".to_string());
+    }
+    if contribution.content.chars().count() > MAX_START_PROMPT_CONTRIBUTION_LENGTH {
+        return Err(format!(
+            "start prompt contribution content exceeds {MAX_START_PROMPT_CONTRIBUTION_LENGTH} characters"
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn parse_start_prompt_contribution_order(
+    value: Option<&serde_json::Value>,
+) -> Result<i64, String> {
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(0),
+        Some(value) => value.as_i64().ok_or_else(|| {
+            "start prompt contribution order must be an integer within i64 range".to_string()
+        }),
+    }
+}
+
+pub(crate) fn upsert_start_prompt_contribution(
+    database: &db::Database,
+    project_id: &str,
+    contribution: StartPromptContribution,
+) -> Result<Vec<StartPromptContribution>, String> {
+    validate_start_prompt_contribution(&contribution)?;
+    let connection = database
+        .lock_conn()
+        .map_err(|error| format!("failed to lock start prompt contributions: {error}"))?;
+    let stored = connection
+        .query_row(
+            "SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2",
+            [project_id, START_PROMPT_CONTRIBUTIONS_CONFIG_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| format!("failed to get start prompt contributions: {error}"))?;
+    let mut contributions = stored
+        .and_then(|value| serde_json::from_str::<Vec<StartPromptContribution>>(&value).ok())
+        .unwrap_or_default();
+    contributions.retain(|existing| {
+        existing.id != contribution.id
+            || (existing.owner_plugin_id.is_some()
+                && existing.owner_plugin_id != contribution.owner_plugin_id)
+    });
+    contributions.push(contribution);
+    contributions.sort_by(|left, right| {
+        left.order
+            .cmp(&right.order)
+            .then_with(|| left.id.cmp(&right.id))
+            .then_with(|| left.owner_plugin_id.cmp(&right.owner_plugin_id))
+    });
+    let serialized = serde_json::to_string(&contributions)
+        .map_err(|error| format!("failed to serialize start prompt contributions: {error}"))?;
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            [
+                project_id,
+                START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+                &serialized,
+            ],
+        )
+        .map_err(|error| format!("failed to set start prompt contributions: {error}"))?;
+    Ok(contributions)
 }
 
 fn render_start_prompt_contribution(content: &str, task: &db::TaskRow) -> String {

@@ -3,8 +3,6 @@ use super::PluginHost;
 use crate::app_events::publish_app_event;
 use serde_json::{json, Value};
 
-const MAX_START_PROMPT_CONTRIBUTION_LENGTH: usize = 16_000;
-
 impl PluginHost {
     fn publish_task_changed_for_host(
         &self,
@@ -182,20 +180,13 @@ impl PluginHost {
         let owner_plugin_id = required_param_string(params, "pluginId")?;
         let project_id = required_param_string(params, "projectId")?;
         let id = required_param_string(params, "id")?;
-        if id.trim().is_empty() {
-            return Err("plugin host callback missing non-empty string param: id".to_string());
-        }
         let content = required_param_text(params, "content")?;
-        if content.chars().count() > MAX_START_PROMPT_CONTRIBUTION_LENGTH {
-            return Err(format!(
-                "start prompt contribution content exceeds {MAX_START_PROMPT_CONTRIBUTION_LENGTH} characters"
-            ));
-        }
         let enabled = params
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true);
-        let order = params.get("order").and_then(Value::as_i64).unwrap_or(0);
+        let order =
+            crate::task_start_prompt::parse_start_prompt_contribution_order(params.get("order"))?;
         let contribution = crate::agent_lifecycle::StartPromptContribution {
             owner_plugin_id: Some(owner_plugin_id),
             id: id.trim().to_string(),
@@ -207,41 +198,11 @@ impl PluginHost {
         let contributions = {
             let db_state = self.database_state_for_host()?;
             let db = crate::db::acquire_db(db_state.as_ref());
-            let mut contributions = db
-                .get_project_config(
-                    &project_id,
-                    crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
-                )
-                .map_err(|error| format!("failed to get start prompt contributions: {error}"))?
-                .and_then(|value| {
-                    serde_json::from_str::<Vec<crate::agent_lifecycle::StartPromptContribution>>(
-                        &value,
-                    )
-                    .ok()
-                })
-                .unwrap_or_default();
-            contributions.retain(|existing| {
-                existing.id != contribution.id
-                    || (existing.owner_plugin_id.is_some()
-                        && existing.owner_plugin_id != contribution.owner_plugin_id)
-            });
-            contributions.push(contribution);
-            contributions.sort_by(|a, b| {
-                a.order
-                    .cmp(&b.order)
-                    .then_with(|| a.id.cmp(&b.id))
-                    .then_with(|| a.owner_plugin_id.cmp(&b.owner_plugin_id))
-            });
-            let serialized = serde_json::to_string(&contributions).map_err(|error| {
-                format!("failed to serialize start prompt contributions: {error}")
-            })?;
-            db.set_project_config(
+            crate::task_start_prompt::upsert_start_prompt_contribution(
+                &db,
                 &project_id,
-                crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
-                &serialized,
-            )
-            .map_err(|error| format!("failed to set start prompt contributions: {error}"))?;
-            contributions
+                contribution,
+            )?
         };
         serde_json::to_value(contributions)
             .map_err(|error| format!("failed to serialize start prompt contributions: {error}"))
