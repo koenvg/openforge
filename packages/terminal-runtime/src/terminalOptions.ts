@@ -25,7 +25,7 @@ export const TERMINAL_WEB_FONT_FACES: TerminalFontFace[] = [
   { family: 'JetBrains Mono', weight: 700, style: 'normal' },
   { family: 'JetBrains Mono', weight: 400, style: 'italic' },
   { family: 'JetBrains Mono', weight: 700, style: 'italic' },
-  { family: 'NerdFontsSymbols Nerd Font', weight: 400, style: 'normal' },
+  { family: 'Symbols Nerd Font Mono', weight: 400, style: 'normal' },
 ]
 
 /**
@@ -33,7 +33,7 @@ export const TERMINAL_WEB_FONT_FACES: TerminalFontFace[] = [
  * Prioritizes JetBrains Mono with bundled Nerd Font symbol support, then
  * falls back to system-installed symbol and monospace fonts.
  */
-export const TERMINAL_FONT_FAMILY = "'JetBrains Mono', 'NerdFontsSymbols Nerd Font', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace"
+export const TERMINAL_FONT_FAMILY = "'JetBrains Mono', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'SF Mono', 'Fira Code', 'Consolas', monospace"
 
 /**
  * Preloads the bundled terminal fonts so xterm measures glyph widths against

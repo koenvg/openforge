@@ -174,6 +174,7 @@ describe('xterm TerminalView adapter', () => {
       terminalKey: 'T-1-shell-0',
       themeMode: 'dark',
       openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
     })
 
     view.mount(container)

@@ -19,7 +19,7 @@ describe('terminal font preloading', () => {
     expect(load).toHaveBeenCalledTimes(TERMINAL_WEB_FONT_FACES.length)
     expect(load).toHaveBeenCalledWith(`400 ${TERMINAL_FONT_SIZE}px "JetBrains Mono"`)
     expect(load).toHaveBeenCalledWith(`italic 700 ${TERMINAL_FONT_SIZE}px "JetBrains Mono"`)
-    expect(load).toHaveBeenCalledWith(`400 ${TERMINAL_FONT_SIZE}px "NerdFontsSymbols Nerd Font"`)
+    expect(load).toHaveBeenCalledWith(`400 ${TERMINAL_FONT_SIZE}px "Symbols Nerd Font Mono"`)
   })
 
   it('reports a rejected bundled terminal font load', async () => {

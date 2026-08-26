@@ -4,7 +4,7 @@ import { getTerminalTheme } from '@openforge-app/terminal-runtime/theme'
 
 describe('terminalOptions', () => {
   it('exports TERMINAL_FONT_FAMILY constant', () => {
-    expect(TERMINAL_FONT_FAMILY).toBe("'JetBrains Mono', 'NerdFontsSymbols Nerd Font', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
+    expect(TERMINAL_FONT_FAMILY).toBe("'JetBrains Mono', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'SF Mono', 'Fira Code', 'Consolas', monospace")
   })
 
   it('exports the web font faces that must be preloaded before terminals open', () => {
@@ -13,7 +13,7 @@ describe('terminalOptions', () => {
       { family: 'JetBrains Mono', weight: 700, style: 'normal' },
       { family: 'JetBrains Mono', weight: 400, style: 'italic' },
       { family: 'JetBrains Mono', weight: 700, style: 'italic' },
-      { family: 'NerdFontsSymbols Nerd Font', weight: 400, style: 'normal' },
+      { family: 'Symbols Nerd Font Mono', weight: 400, style: 'normal' },
     ])
   })
 

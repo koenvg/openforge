@@ -54,7 +54,7 @@ describe("terminalPool lifecycle", () => {
 		expect(fontLoadMock).toHaveBeenCalledWith('italic 400 13px "JetBrains Mono"');
 		expect(fontLoadMock).toHaveBeenCalledWith('italic 700 13px "JetBrains Mono"');
 		expect(fontLoadMock).toHaveBeenCalledWith(
-			'400 13px "NerdFontsSymbols Nerd Font"',
+			'400 13px "Symbols Nerd Font Mono"',
 		);
 	});
 

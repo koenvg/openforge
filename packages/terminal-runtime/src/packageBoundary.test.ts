@@ -84,4 +84,14 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(packageJson.exports['./TerminalTabsShell']).toBe('./src/TerminalTabsShell.svelte')
     expect(packageJson.exports['./xterm.css']).toBe('./src/xterm.css')
   })
+
+  it('ships the current Nerd Font symbols through the public xterm stylesheet', () => {
+    const packageRoot = join(process.cwd(), 'packages/terminal-runtime')
+    const xtermCss = readFileSync(join(packageRoot, 'src/xterm.css'), 'utf8')
+    const symbolsFontPath = join(packageRoot, 'src/fonts/SymbolsNerdFontMono-Regular.woff2')
+
+    expect(xtermCss).toContain("font-family: 'Symbols Nerd Font Mono'")
+    expect(xtermCss).toContain("url('./fonts/SymbolsNerdFontMono-Regular.woff2')")
+    expect(statSync(symbolsFontPath).isFile()).toBe(true)
+  })
 })

@@ -65,9 +65,9 @@
     {
       "id": "presentation-glyphs",
       "tags": ["presentation", "block-drawing", "powerline", "nerd-font", "pua", "ligature"],
-      "chunks": ["\u001b[2J\u001b[Hblocks: ┌─┬─┐ │█▓▒░│ └─┴─┘\r\npowerline:  nerd:    \r\nligatures: => != === -> <= >="] ,
+      "chunks": ["\u001b[2J\u001b[Hblocks: ┌─┬─┐ │█▓▒░│ └─┴─┘\r\npowerline:  nerd:    \r\nmodern: 󰂺     \r\nligatures: => != === -> <= >="] ,
       "presentation": {
-        "textIncludes": ["┌─┬─┐", "", "   ", "=> != === -> <= >="],
+        "textIncludes": ["┌─┬─┐", "", "   ", "󰂺     ", "=> != === -> <= >="],
         "visual": true
       }
     },
