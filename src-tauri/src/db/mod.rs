@@ -12,6 +12,7 @@ mod browser_session_purges;
 mod config;
 pub(crate) mod migrations;
 mod plugins;
+mod project_config;
 mod projects;
 mod pull_request_readiness;
 mod pull_requests;
