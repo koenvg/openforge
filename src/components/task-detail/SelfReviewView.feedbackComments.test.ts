@@ -13,19 +13,13 @@ import {
 	resolveGithubAsset,
 } from "../../lib/ipc";
 import { ticketPrs } from "../../lib/stores";
-import {
-	setSelfReviewArchivedComments,
-	setSelfReviewDiffFiles,
-	setSelfReviewGeneralComments,
-} from "../../lib/taskScopedSelfReviewState";
+import { setSelfReviewDiffFiles } from "../../lib/taskScopedSelfReviewState";
 
 setupSelfReviewViewTestSuite();
 
 describe("SelfReviewView — hide addressed comments", () => {
 	beforeEach(() => {
 		setSelfReviewDiffFiles("task-1", [baseDiff]);
-		setSelfReviewGeneralComments("task-1", []);
-		setSelfReviewArchivedComments("task-1", []);
 	});
 
 	const makeComment = (id: number, addressed: number, body = `Comment ${id}`): PrComment => ({

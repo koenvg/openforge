@@ -24,7 +24,6 @@ export interface SelfReviewNavigationControllerOptions {
 export function createSelfReviewNavigationController(options: SelfReviewNavigationControllerOptions) {
   let fileTreeVisible = $state(true)
   let sidebarVisible = $state(true)
-  let sidebarTab = $state<'pr' | 'notes'>('pr')
   let showAddressed = $state(false)
   let attachedDiffViewer: SelfReviewDiffViewerHandle | undefined
   let synchronizedTaskId: string | null = null
@@ -82,7 +81,6 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
   return {
     get fileTreeVisible() { return fileTreeVisible },
     get sidebarVisible() { return sidebarVisible },
-    get sidebarTab() { return sidebarTab },
     get showAddressed() { return showAddressed },
     get initialScrollTop() { return getTaskReviewPaneState(options.getTaskId()).diffScrollTop },
     synchronizeTask,
@@ -95,7 +93,6 @@ export function createSelfReviewNavigationController(options: SelfReviewNavigati
     toggleFileTree: () => { fileTreeVisible = !fileTreeVisible },
     setSidebarVisible: (visible: boolean) => { sidebarVisible = visible },
     toggleSidebar: () => { sidebarVisible = !sidebarVisible },
-    setSidebarTab: (tab: 'pr' | 'notes') => { sidebarTab = tab },
     setShowAddressed: (value: boolean) => { showAddressed = value },
     openRepositoryPath,
     openLinkedPr,

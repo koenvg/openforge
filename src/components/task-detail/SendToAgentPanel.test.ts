@@ -1,14 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReviewSubmissionComment } from '../../lib/types'
-import { selfReviewStateByTask } from '../../lib/taskScopedSelfReviewState'
 import SendToAgentPanel from './SendToAgentPanel.svelte'
 
-vi.mock('../../lib/ipc', () => ({
-  archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
-  getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
-  getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
-}))
 
 describe('SendToAgentPanel', () => {
   const inlineComments: ReviewSubmissionComment[] = [
@@ -16,14 +10,12 @@ describe('SendToAgentPanel', () => {
   ]
 
   beforeEach(() => {
-    selfReviewStateByTask.set(new Map())
     vi.clearAllMocks()
   })
 
   it('uses task-scoped pending inline comments for the send affordance', () => {
     render(SendToAgentPanel, {
       props: {
-        taskId: 'task-1',
         agentStatus: null,
         onSendToAgent: vi.fn(),
         onRefresh: vi.fn(),
@@ -35,12 +27,11 @@ describe('SendToAgentPanel', () => {
     expect(screen.getByText('Send to agent').closest('button')?.disabled).toBe(false)
   })
 
-  it('archives inline comments when opening the prompt dialog, then sends on confirm', async () => {
+  it('keeps inline comments while previewing, then clears them on confirm', async () => {
     const onPendingInlineCommentsChange = vi.fn()
     const onSendToAgent = vi.fn()
     render(SendToAgentPanel, {
       props: {
-        taskId: 'task-1',
         agentStatus: null,
         onSendToAgent,
         onRefresh: vi.fn(),
@@ -49,23 +40,17 @@ describe('SendToAgentPanel', () => {
       },
     })
 
-    // Clicking the panel button archives (current timing) and opens the dialog,
-    // but does NOT dispatch to the agent yet.
     await fireEvent.click(screen.getByText('Send to agent'))
-    await waitFor(() => {
-      expect(onPendingInlineCommentsChange).toHaveBeenCalledWith([])
-    })
-    expect(onSendToAgent).not.toHaveBeenCalled()
-
-    // The dialog shows the compiled prompt (Address mode by default) with the
-    // comment content — and NOT the task's initial prompt.
     const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement
+
+    expect(onPendingInlineCommentsChange).not.toHaveBeenCalled()
+    expect(onSendToAgent).not.toHaveBeenCalled()
     expect(textarea.value).toContain('Please address the following review comments:')
     expect(textarea.value).toContain('task scoped feedback')
     expect(textarea.value).not.toContain('for task')
 
-    // Confirming dispatches the prompt.
     await fireEvent.click(screen.getByTestId('confirm-send-prompt'))
+    expect(onPendingInlineCommentsChange).toHaveBeenCalledWith([])
     expect(onSendToAgent).toHaveBeenCalledWith(textarea.value)
   })
 
@@ -73,7 +58,6 @@ describe('SendToAgentPanel', () => {
     const onSendToAgent = vi.fn()
     render(SendToAgentPanel, {
       props: {
-        taskId: 'task-1',
         agentStatus: null,
         onSendToAgent,
         onRefresh: vi.fn(),
@@ -102,7 +86,6 @@ describe('SendToAgentPanel', () => {
     const onSendToAgent = vi.fn()
     render(SendToAgentPanel, {
       props: {
-        taskId: 'task-1',
         agentStatus: null,
         onSendToAgent,
         onRefresh: vi.fn(),
@@ -120,13 +103,14 @@ describe('SendToAgentPanel', () => {
 
   it('does not send when the dialog is cancelled', async () => {
     const onSendToAgent = vi.fn()
+    const onPendingInlineCommentsChange = vi.fn()
     render(SendToAgentPanel, {
       props: {
-        taskId: 'task-1',
         agentStatus: null,
         onSendToAgent,
         onRefresh: vi.fn(),
         pendingInlineComments: inlineComments,
+        onPendingInlineCommentsChange,
       },
     })
 
@@ -134,6 +118,7 @@ describe('SendToAgentPanel', () => {
     await screen.findByRole('textbox')
     await fireEvent.click(screen.getByText('Cancel'))
 
+    expect(onPendingInlineCommentsChange).not.toHaveBeenCalled()
     expect(onSendToAgent).not.toHaveBeenCalled()
   })
 })

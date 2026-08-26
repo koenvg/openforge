@@ -6,8 +6,6 @@ vi.mock('../../lib/ipc', () => ({
   getTaskDiff: vi.fn().mockResolvedValue([]),
   getTaskCommits: vi.fn().mockResolvedValue([]),
   getCommitDiff: vi.fn().mockResolvedValue([]),
-  getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
-  getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
 }))
 

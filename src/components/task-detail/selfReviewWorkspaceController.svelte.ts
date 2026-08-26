@@ -71,7 +71,6 @@ export function createSelfReviewWorkspaceController(
   })
 
   const feedbackPane = createSelfReviewFeedbackPane({
-    getTaskId: options.getTaskId,
     diff: diffController,
     comments: commentController,
     navigation: navigationController,

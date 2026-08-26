@@ -70,10 +70,6 @@ fn payload_optional_string_vec(
     payload::optional_string_vec(payload, key).map_err(Into::into)
 }
 
-fn payload_optional_i32(payload: &serde_json::Value, key: &str) -> AppResult<Option<i32>> {
-    payload::optional_i32(payload, key).map_err(Into::into)
-}
-
 fn payload_optional_usize(payload: &serde_json::Value, key: &str) -> AppResult<Option<usize>> {
     payload::optional_usize(payload, key).map_err(Into::into)
 }

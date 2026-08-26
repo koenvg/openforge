@@ -166,10 +166,6 @@ impl super::Database {
             rusqlite::params![id],
         )?;
         tx.execute(
-            "DELETE FROM self_review_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
-            rusqlite::params![id],
-        )?;
-        tx.execute(
             "DELETE FROM tasks WHERE project_id = ?1",
             rusqlite::params![id],
         )?;
@@ -406,11 +402,6 @@ mod tests {
         {
             let conn = conn.lock().unwrap();
             conn.execute(
-                "INSERT INTO self_review_comments (task_id, round, comment_type, file_path, line_number, body, created_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                rusqlite::params![&task.id, 1_i64, "issue", Some("src/main.rs"), Some(1_i64), "Needs follow-up", 1_i64, Option::<i64>::None],
-            )
-            .expect("insert self review comment failed");
-            conn.execute(
                 "INSERT INTO shepherd_messages (project_id, role, content, event_context, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
                 rusqlite::params![&project.id, "assistant", "message", Some("test"), 1_i64],
             )
@@ -440,13 +431,6 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("count shepherd messages failed");
-        let remaining_self_review_comments: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM self_review_comments WHERE task_id = ?1",
-                rusqlite::params![&task.id],
-                |row| row.get(0),
-            )
-            .expect("count self review comments failed");
         let remaining_action_items: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM action_items WHERE project_id = ?1",
@@ -464,10 +448,6 @@ mod tests {
         assert_eq!(
             remaining_shepherd_messages, 0,
             "shepherd messages should be removed"
-        );
-        assert_eq!(
-            remaining_self_review_comments, 0,
-            "self review comments should be removed"
         );
         assert_eq!(remaining_action_items, 0, "action items should be removed");
         assert_eq!(

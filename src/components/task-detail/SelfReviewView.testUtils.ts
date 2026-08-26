@@ -55,15 +55,10 @@ const ipcMocks = vi.hoisted(() => ({
 	getTaskBatchFileContents: vi.fn().mockResolvedValue([["", ""]]),
 	getCommitFileContents: vi.fn().mockResolvedValue(["", ""]),
 	getCommitBatchFileContents: vi.fn().mockResolvedValue([["", ""]]),
-	getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
-	getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
 	getPrComments: vi.fn().mockResolvedValue([]),
 	markCommentAddressed: vi.fn().mockResolvedValue(undefined),
 	openUrl: vi.fn(),
 	resolveGithubAsset: vi.fn().mockResolvedValue(null),
-	addSelfReviewComment: vi.fn().mockResolvedValue(undefined),
-	deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
-	archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../lib/ipc", () => ipcMocks);

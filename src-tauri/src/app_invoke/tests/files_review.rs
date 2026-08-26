@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn handles_fs_self_review_and_agent_review_db_commands() {
+async fn handles_fs_and_agent_review_db_commands() {
     let (state, _temp_dir) = test_state("app_invoke_files_self_agent_review");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     std::fs::write(temp_dir.path().join("README.md"), "hello electron").expect("write file");
@@ -16,14 +16,11 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
         .add_path(std::path::Path::new("src/main.rs"))
         .expect("add main");
     index.write().expect("write index");
-    let (project_id, task_id) = {
+    let project_id = {
         let db = state.db.lock().expect("db lock");
         let project = db
             .create_project("Open Forge", temp_dir.path().to_str().expect("utf8 path"))
             .expect("create project");
-        let task = db
-            .create_task("Review task", "doing", Some(&project.id), None, None)
-            .expect("create task");
         db.upsert_review_pr(
             88,
             8,
@@ -61,7 +58,7 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
             )
             .expect("insert agent comment");
         assert!(agent_comment_id > 0);
-        (project.id, task.id)
+        project.id
     };
 
     let dir_entries = invoke_ok(
@@ -104,46 +101,6 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
     .expect("search")
     .iter()
     .any(|value| value == "src/main.rs"));
-
-    let self_comment_id = invoke_ok(
-            &state,
-            "add_self_review_comment",
-            json!({ "taskId": task_id, "commentType": "general", "filePath": null, "lineNumber": null, "body": "Self review note" }),
-        )
-        .await
-        .as_i64()
-        .expect("self comment id");
-    assert!(self_comment_id > 0);
-    assert_eq!(
-        invoke_ok(
-            &state,
-            "get_active_self_review_comments",
-            json!({ "taskId": task_id })
-        )
-        .await[0]["body"],
-        "Self review note"
-    );
-    invoke_ok(
-        &state,
-        "archive_self_review_comments",
-        json!({ "taskId": task_id }),
-    )
-    .await;
-    assert_eq!(
-        invoke_ok(
-            &state,
-            "get_archived_self_review_comments",
-            json!({ "taskId": task_id })
-        )
-        .await[0]["id"],
-        self_comment_id
-    );
-    invoke_ok(
-        &state,
-        "delete_self_review_comment",
-        json!({ "commentId": self_comment_id }),
-    )
-    .await;
 
     let agent_comment_id = invoke_ok(
         &state,

@@ -123,16 +123,16 @@ describe('Electron backend bridge Rust sidecar forwarding', () => {
     })
   })
 
-  it('forwards files/self-review/agent-review commands to the authenticated sidecar app IPC route', async () => {
+  it('forwards files-review commands to the authenticated sidecar app IPC route', async () => {
     const fetch = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ value: [{ id: 1, body: 'Fix this' }] }),
+      json: async () => ({ value: [{ filename: 'src/main.ts' }] }),
     }))
 
     await expect(handleElectronInvoke(
-      { command: 'get_active_self_review_comments', payload: { taskId: 'T-1' } },
+      { command: 'get_task_diff', payload: { taskId: 'T-1', includeCommitted: true, includeUncommitted: true } },
       { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn() },
-    )).resolves.toEqual([{ id: 1, body: 'Fix this' }])
+    )).resolves.toEqual([{ filename: 'src/main.ts' }])
 
     expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:17642/app/invoke', {
       method: 'POST',
@@ -140,7 +140,7 @@ describe('Electron backend bridge Rust sidecar forwarding', () => {
         Authorization: 'Bearer launch-token',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ command: 'get_active_self_review_comments', payload: { taskId: 'T-1' } }),
+      body: JSON.stringify({ command: 'get_task_diff', payload: { taskId: 'T-1', includeCommitted: true, includeUncommitted: true } }),
     })
   })
 

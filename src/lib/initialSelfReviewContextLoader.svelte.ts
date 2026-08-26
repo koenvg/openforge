@@ -1,15 +1,6 @@
 import { get } from "svelte/store";
-import {
-	getActiveSelfReviewComments,
-	getArchivedSelfReviewComments,
-	getPrComments,
-} from "./ipc";
+import { getPrComments } from "./ipc";
 import { ticketPrs } from "./stores";
-import {
-	mergePendingSelfReviewComments,
-	setSelfReviewArchivedComments,
-	setSelfReviewGeneralComments,
-} from "./taskScopedSelfReviewState";
 import type { PrComment, PullRequestInfo } from "./types";
 
 export interface InitialSelfReviewContextLoader {
@@ -31,38 +22,6 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 
 	function isStale(requestGeneration: number): boolean {
 		return requestGeneration !== generation;
-	}
-
-	async function loadSelfReviewComments(
-		taskId: string,
-		requestGeneration: number,
-	): Promise<boolean> {
-		const activeComments = await getActiveSelfReviewComments(taskId);
-		if (isStale(requestGeneration)) return false;
-		setSelfReviewGeneralComments(
-			taskId,
-			activeComments.filter((comment) => comment.comment_type === "general"),
-		);
-
-		const archivedComments = await getArchivedSelfReviewComments(taskId);
-		if (isStale(requestGeneration)) return false;
-		setSelfReviewArchivedComments(
-			taskId,
-			archivedComments.filter((comment) => comment.comment_type === "general"),
-		);
-
-		mergePendingSelfReviewComments(
-			taskId,
-			activeComments
-				.filter((comment) => comment.comment_type === "inline")
-				.map((comment) => ({
-					path: comment.file_path!,
-					line: comment.line_number!,
-					body: comment.body,
-					side: "RIGHT",
-				})),
-		);
-		return true;
 	}
 
 	async function loadLinkedPrComments(
@@ -92,20 +51,13 @@ export function createInitialSelfReviewContextLoader(): InitialSelfReviewContext
 		const requestGeneration = ++generation;
 		linkedPr = null;
 		prComments = [];
-		const selfReviewCommentsLoaded = await loadSelfReviewComments(
-			taskId,
-			requestGeneration,
-		);
-		if (!selfReviewCommentsLoaded) return;
 		await loadLinkedPrComments(taskId, requestGeneration);
 	}
 
-	function cleanup(taskId: string): void {
+	function cleanup(_taskId: string): void {
 		invalidate();
 		prComments = [];
 		linkedPr = null;
-		setSelfReviewGeneralComments(taskId, []);
-		setSelfReviewArchivedComments(taskId, []);
 	}
 
 	return {
