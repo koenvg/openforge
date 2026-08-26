@@ -155,7 +155,7 @@ impl PluginHost {
         params: &Value,
     ) -> Result<Value, String> {
         let project_id = required_param_string(params, "projectId")?;
-        let contributions = {
+        let stored = {
             let db_state = self.database_state_for_host()?;
             let db = crate::db::acquire_db(db_state.as_ref());
             db.get_project_config(
@@ -163,11 +163,17 @@ impl PluginHost {
                 crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
             )
             .map_err(|error| format!("failed to get start prompt contributions: {error}"))?
-            .and_then(|value| {
-                serde_json::from_str::<Vec<crate::agent_lifecycle::StartPromptContribution>>(&value)
-                    .ok()
-            })
-            .unwrap_or_default()
+        };
+        let contributions = match stored {
+            Some(value) => serde_json::from_str::<
+                Vec<crate::agent_lifecycle::StartPromptContribution>,
+            >(&value)
+            .map_err(|error| {
+                format!(
+                    "failed to parse stored start prompt contributions for project {project_id}: {error}"
+                )
+            })?,
+            None => Vec::new(),
         };
         serde_json::to_value(contributions)
             .map_err(|error| format!("failed to serialize start prompt contributions: {error}"))
