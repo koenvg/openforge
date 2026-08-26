@@ -1,6 +1,6 @@
 //! Agent-specific spawn entry points and orchestration.
 
-use crate::app_events::AppEventSender;
+use crate::app_events::RuntimeEventPublisher;
 use std::path::Path;
 
 use super::super::super::commands::PiSessionTarget;
@@ -11,7 +11,7 @@ use super::super::provider_adapter::{
 };
 use super::process::{resolve_pty_cwd, AgentProcessRequest, SpawnedPty};
 use super::registration::SessionRegistrationRequest;
-use super::streams::{AgentEventStreamRequest, PtyEventSink};
+use super::streams::AgentEventStreamRequest;
 
 impl PtyManager {
     #[allow(clippy::too_many_arguments)]
@@ -26,8 +26,7 @@ impl PtyManager {
         model: Option<&crate::opencode_client::PromptModel>,
         cols: u16,
         rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
         let model_name = model.map(|model| format!("{}/{}", model.provider_id, model.model_id));
         self.spawn_agent_pty(
@@ -43,8 +42,7 @@ impl PtyManager {
                 cwd,
                 cols,
                 rows,
-                app_handle,
-                app_event_tx,
+                event_publisher,
             },
             None,
         )
@@ -61,8 +59,7 @@ impl PtyManager {
         continue_session: bool,
         cols: u16,
         rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             CodexPtyAdapter::new(prompt, resume_session_id, continue_session),
@@ -71,8 +68,7 @@ impl PtyManager {
                 cwd,
                 cols,
                 rows,
-                app_handle,
-                app_event_tx,
+                event_publisher,
             },
             None,
         )
@@ -94,7 +90,7 @@ impl PtyManager {
     /// * `permission_mode` - If Some, passes `--permission-mode <mode>` to Claude CLI
     /// * `cols` - Terminal width in columns
     /// * `rows` - Terminal height in rows
-    /// * `app_handle` - Tauri app handle for emitting PTY output events
+    /// * `event_publisher` - Runtime publisher for PTY output events
     ///
     /// # Returns
     /// The unique instance ID for this PTY session
@@ -110,8 +106,7 @@ impl PtyManager {
         permission_mode: Option<&str>,
         cols: u16,
         rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             ClaudeCodePtyAdapter::new(
@@ -126,8 +121,7 @@ impl PtyManager {
                 cwd,
                 cols,
                 rows,
-                app_handle,
-                app_event_tx,
+                event_publisher,
             },
             None,
         )
@@ -143,8 +137,7 @@ impl PtyManager {
         session_target: PiSessionTarget,
         cols: u16,
         rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
@@ -154,8 +147,7 @@ impl PtyManager {
                 cwd,
                 cols,
                 rows,
-                app_handle,
-                app_event_tx,
+                event_publisher,
             },
             terminal_image_protocol,
         )
@@ -178,7 +170,7 @@ impl PtyManager {
     /// * `model` - If Some, passes `--model <model>` to the Grok CLI
     /// * `cols` - Terminal width in columns
     /// * `rows` - Terminal height in rows
-    /// * `app_handle` - Tauri app handle for emitting PTY output events
+    /// * `event_publisher` - Runtime publisher for PTY output events
     ///
     /// # Returns
     /// The unique instance ID for this PTY session
@@ -194,8 +186,7 @@ impl PtyManager {
         model: Option<&str>,
         cols: u16,
         rows: u16,
-        app_handle: Option<crate::backend_runtime::AppHandle>,
-        app_event_tx: Option<AppEventSender>,
+        event_publisher: RuntimeEventPublisher,
     ) -> Result<u64, PtyError> {
         self.spawn_agent_pty(
             GrokPtyAdapter::new(
@@ -210,8 +201,7 @@ impl PtyManager {
                 cwd,
                 cols,
                 rows,
-                app_handle,
-                app_event_tx,
+                event_publisher,
             },
             // Grok has no inline-image renderer, so it gets the same `None` as
             // Claude/Codex/OpenCode; only Pi threads a terminal image protocol.
@@ -231,8 +221,7 @@ impl PtyManager {
             cwd,
             cols,
             rows,
-            app_handle,
-            app_event_tx,
+            event_publisher,
         } = context;
         let resolved_cwd = resolve_pty_cwd(cwd)?;
         self.terminal_sessions
@@ -264,8 +253,7 @@ impl PtyManager {
                 cols,
                 rows,
                 terminal_image_protocol,
-                app_handle: app_handle.clone(),
-                app_event_tx: app_event_tx.clone(),
+                event_publisher: event_publisher.clone(),
             },
         )?;
         let instance_id = spawned.instance_id();
@@ -322,10 +310,7 @@ impl PtyManager {
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,
-            event_sink: PtyEventSink {
-                app_handle,
-                app_event_tx,
-            },
+            event_publisher,
         })
         .await?;
         self.finish_agent_spawn(task_id, token).await?;

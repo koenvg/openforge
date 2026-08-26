@@ -56,8 +56,7 @@ impl PtyManager {
                 cwd,
                 cols: 80,
                 rows: 24,
-                app_handle: None,
-                app_event_tx: None,
+                event_publisher: crate::app_events::RuntimeEventPublisher::new(None, None),
             },
             None,
         )

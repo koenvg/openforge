@@ -16,5 +16,7 @@ pub use event_model::{
     AppEvent, AppEventCursor, AppEventEnvelope, AppEventError, AppEventFrame, AppEventGap,
     AppEventId, AppEventMeta, DeliveryClass, EmitReceipt,
 };
-pub use legacy_publishing::{publish_app_event, publish_app_event_to_runtime};
+pub use legacy_publishing::{
+    publish_app_event, publish_app_event_to_runtime, RuntimeEventPublisher,
+};
 pub use runtime_adapter::{InMemoryAppEventAdapter, RustAppEventAdapter};

@@ -4,8 +4,7 @@ pub mod grok;
 pub mod opencode;
 pub mod pi;
 
-use crate::app_events::AppEventSender;
-use crate::backend_runtime::AppHandle;
+use crate::app_events::RuntimeEventPublisher;
 use std::path::Path;
 
 use crate::db::AgentSessionRow;
@@ -63,18 +62,16 @@ pub struct ProviderSessionResult {
 
 #[derive(Clone)]
 pub struct ProviderStartContext {
-    pub app_handle: Option<AppHandle>,
-    pub app_event_tx: Option<AppEventSender>,
+    pub event_publisher: RuntimeEventPublisher,
     pub cols: u16,
     pub rows: u16,
     pub terminal_image_protocol: Option<crate::pty_manager::TerminalImageProtocol>,
 }
 
 impl ProviderStartContext {
-    pub fn new(app_handle: Option<AppHandle>, app_event_tx: Option<AppEventSender>) -> Self {
+    pub fn new(event_publisher: RuntimeEventPublisher) -> Self {
         Self {
-            app_handle,
-            app_event_tx,
+            event_publisher,
             cols: 80,
             rows: 24,
             terminal_image_protocol: None,

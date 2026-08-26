@@ -32,8 +32,10 @@ impl PluginHost {
                         cwd: std::path::Path::new(&cwd),
                         cols,
                         rows,
-                        app_handle: Some(self.app_handle.clone()),
-                        app_event_tx: self.app_event_tx.clone(),
+                        event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                            Some(self.app_handle.clone()),
+                            self.app_event_tx.clone(),
+                        ),
                     },
                     terminal_index,
                     terminal_image_protocol,

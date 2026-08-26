@@ -1,5 +1,30 @@
 use super::bus::{bus_for_sender, AppEventSender};
 use super::event_model::{AppEvent, AppEventEnvelope, DeliveryClass};
+use crate::backend_runtime::AppHandle;
+
+#[derive(Clone, Default)]
+pub struct RuntimeEventPublisher {
+    app: Option<AppHandle>,
+    fallback_sender: Option<AppEventSender>,
+}
+
+impl RuntimeEventPublisher {
+    pub fn new(app: Option<AppHandle>, fallback_sender: Option<AppEventSender>) -> Self {
+        Self {
+            app,
+            fallback_sender,
+        }
+    }
+
+    pub fn publish(&self, event_name: &str, payload: &serde_json::Value) {
+        publish_app_event_to_runtime(
+            self.app.as_ref(),
+            &self.fallback_sender,
+            event_name,
+            payload,
+        );
+    }
+}
 
 pub(super) fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
     if event_name.starts_with("pty-output-") || event_name.starts_with("pty-model-output-") {

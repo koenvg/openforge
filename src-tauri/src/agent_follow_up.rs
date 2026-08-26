@@ -1,5 +1,5 @@
 use crate::{
-    app_events::AppEventSender,
+    app_events::{AppEventSender, RuntimeEventPublisher},
     backend_runtime::AppHandle,
     completed_session_reaper::CompletedSessionReaper,
     db::{self, AgentSessionRow, Database},
@@ -122,8 +122,10 @@ impl AgentFollowUpRuntime for PtyAgentFollowUpRuntime {
         Box::pin(async move {
             let provider =
                 Provider::from_name(&request.session.provider, self.pty_manager.clone())?;
-            let start_context =
-                ProviderStartContext::new(self.app.clone(), self.app_event_tx.clone());
+            let start_context = ProviderStartContext::new(RuntimeEventPublisher::new(
+                self.app.clone(),
+                self.app_event_tx.clone(),
+            ));
             provider
                 .resume(
                     &request.task_id,

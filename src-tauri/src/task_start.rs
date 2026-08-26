@@ -1,6 +1,6 @@
 use crate::{
     agent_lifecycle::{self, StartPromptContribution},
-    app_events::{publish_app_event_to_runtime, AppEventSender},
+    app_events::{publish_app_event_to_runtime, AppEventSender, RuntimeEventPublisher},
     backend_runtime::AppHandle,
     db::{self, Database, TaskRow, WorktreeRow},
     git_worktree::{self, DivergenceResolution, ExistingBranchRelation, GitWorktreeError},
@@ -297,9 +297,11 @@ impl TaskStartService {
             .repo_path
             .to_str()
             .ok_or_else(|| TaskStartError::Workspace("Invalid repository path".to_string()))?;
-        let provider_start_context =
-            ProviderStartContext::new(self.app.clone(), self.app_event_tx.clone())
-                .with_terminal_image_protocol(request.terminal_image_protocol);
+        let provider_start_context = ProviderStartContext::new(RuntimeEventPublisher::new(
+            self.app.clone(),
+            self.app_event_tx.clone(),
+        ))
+        .with_terminal_image_protocol(request.terminal_image_protocol);
         let provider_options = ProviderRunOptions::for_task(&context.task);
         let provider_result = match provider_launcher
             .launch(ProviderLaunchRequest {

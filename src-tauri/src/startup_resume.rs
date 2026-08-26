@@ -255,7 +255,9 @@ pub(crate) async fn resume_task_sessions(
             }
         };
 
-        let start_context = providers::ProviderStartContext::new(Some(app.clone()), None);
+        let start_context = providers::ProviderStartContext::new(
+            crate::app_events::RuntimeEventPublisher::new(Some(app.clone()), None),
+        );
 
         match provider
             .resume(

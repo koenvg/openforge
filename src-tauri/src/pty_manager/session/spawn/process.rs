@@ -1,7 +1,6 @@
 //! PTY command configuration and child-process creation.
 
-use crate::app_events::AppEventSender;
-use crate::backend_runtime::AppHandle;
+use crate::app_events::RuntimeEventPublisher;
 use crate::terminal_model::{TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
 use crate::user_environment::user_environment;
 use log::{info, warn};
@@ -58,8 +57,7 @@ struct PtyProcessRequest {
     description: String,
     pid_file_name: String,
     kind: PtySessionKind,
-    app_handle: Option<AppHandle>,
-    app_event_tx: Option<AppEventSender>,
+    event_publisher: RuntimeEventPublisher,
 }
 
 pub(super) struct AgentProcessRequest<'a> {
@@ -68,8 +66,7 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
-    pub(super) app_handle: Option<AppHandle>,
-    pub(super) app_event_tx: Option<AppEventSender>,
+    pub(super) event_publisher: RuntimeEventPublisher,
 }
 
 pub(super) struct ShellProcessRequest<'a> {
@@ -79,8 +76,7 @@ pub(super) struct ShellProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
-    pub(super) app_handle: Option<AppHandle>,
-    pub(super) app_event_tx: Option<AppEventSender>,
+    pub(super) event_publisher: RuntimeEventPublisher,
     pub(super) command: CommandBuilder,
 }
 
@@ -179,8 +175,7 @@ impl PtyManager {
                     options,
                     TerminalModelEventBridge::new(
                         request.session_key.clone(),
-                        request.app_handle.clone(),
-                        request.app_event_tx.clone(),
+                        request.event_publisher.clone(),
                         Arc::clone(&writer),
                     )
                     .into_event_sink(),
@@ -256,8 +251,7 @@ impl PtyManager {
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
-            app_handle: request.app_handle,
-            app_event_tx: request.app_event_tx,
+            event_publisher: request.event_publisher,
         })?;
         info!(
             "{} PTY for task {} started (PID: {})",
@@ -279,8 +273,7 @@ impl PtyManager {
             cols,
             rows,
             terminal_image_protocol,
-            app_handle,
-            app_event_tx,
+            event_publisher,
             mut command,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
@@ -296,8 +289,7 @@ impl PtyManager {
             kind: PtySessionKind::Shell {
                 task_id: task_id.to_string(),
             },
-            app_handle,
-            app_event_tx,
+            event_publisher,
         })?;
         info!(
             "Shell PTY for task {} started (PID: {})",

@@ -25,8 +25,10 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
         PtyEventEmitterConfig {
             session_key: "task-dedupe-shell-0".to_string(),
             instance_id: 7,
-            app_handle: Some(app),
-            app_event_tx: Some(bus.sender()),
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                Some(app),
+                Some(bus.sender()),
+            ),
             ring_buffer: ring,
             attachment_hub: None,
             terminal_sessions: manager.terminal_sessions.clone(),
@@ -185,8 +187,10 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
         PtyEventEmitterConfig {
             session_key: "task-dedupe-exit-shell-0".to_string(),
             instance_id: 8,
-            app_handle: Some(app),
-            app_event_tx: Some(bus.sender()),
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                Some(app),
+                Some(bus.sender()),
+            ),
             ring_buffer: ring,
             attachment_hub: None,
             terminal_sessions: manager.terminal_sessions.clone(),
@@ -237,8 +241,10 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
         PtyEventEmitterConfig {
             session_key: "agent-dedupe-exit".to_string(),
             instance_id: 9,
-            app_handle: Some(app),
-            app_event_tx: Some(bus.sender()),
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                Some(app),
+                Some(bus.sender()),
+            ),
             ring_buffer: ring,
             attachment_hub: None,
             terminal_sessions: manager.terminal_sessions.clone(),
@@ -292,8 +298,10 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
         PtyEventEmitterConfig {
             session_key: "agent-fallback-exit".to_string(),
             instance_id: 10,
-            app_handle: Some(app),
-            app_event_tx: Some(app_event_tx),
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                Some(app),
+                Some(app_event_tx),
+            ),
             ring_buffer: ring,
             attachment_hub: None,
             terminal_sessions: manager.terminal_sessions.clone(),
@@ -401,8 +409,10 @@ async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
         PtyEventEmitterConfig {
             session_key: key.to_string(),
             instance_id: 1,
-            app_handle: None,
-            app_event_tx: Some(app_event_tx),
+            event_publisher: crate::app_events::RuntimeEventPublisher::new(
+                None,
+                Some(app_event_tx),
+            ),
             ring_buffer: ring,
             attachment_hub: None,
             terminal_sessions: manager.terminal_sessions.clone(),
