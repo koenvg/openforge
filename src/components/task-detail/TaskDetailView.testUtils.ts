@@ -77,7 +77,7 @@ vi.mock('../../lib/useCommentSelection.svelte', () => ({
 }))
 
 import { writable } from 'svelte/store'
-import type { PoolEntry } from '@openforge-app/terminal-runtime'
+import { parsePtySessionKey, type PoolEntry } from '@openforge-app/terminal-runtime'
 import { createFakeTerminalView } from '@openforge-app/terminal-runtime/testUtils'
 import { vi } from 'vitest'
 
@@ -235,9 +235,20 @@ vi.mock('../../lib/terminalPool', () => {
     }),
     recoverActiveTerminal: vi.fn(async () => undefined),
     restorePtyInstance: vi.fn(),
-    release: vi.fn(),
+    release: vi.fn((shellSessionKey: string) => {
+      terminalPoolEntries.delete(shellSessionKey)
+    }),
     resetTerminal: vi.fn((entry: PoolEntry) => entry.view.reset()),
-    releaseAllForTask: vi.fn().mockReturnValue(0),
+    releaseAllForTask: vi.fn((taskId: string) => {
+      let released = 0
+      for (const shellSessionKey of terminalPoolEntries.keys()) {
+        const session = parsePtySessionKey(shellSessionKey)
+        if (session.kind !== 'indexed-shell' || session.taskId !== taskId) continue
+        terminalPoolEntries.delete(shellSessionKey)
+        released += 1
+      }
+      return released
+    }),
     focusTerminal: vi.fn((entry: PoolEntry) => entry.view.focus()),
     shouldSpawnPty: vi.fn((entry: PoolEntry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
     getTerminalImageProtocol: vi.fn((entry: PoolEntry) => entry.view.imageProtocol),
@@ -253,12 +264,15 @@ vi.mock('../../lib/terminalPool', () => {
       entry.needsClear = false
     }),
     subscribeShellLifecycle: vi.fn(() => () => {}),
-    getShellLifecycleState: vi.fn(() => ({
-      ptyActive: false,
-      shellExited: false,
-      currentPtyInstance: null,
-      hasOutput: false,
-    })),
+    getShellLifecycleState: vi.fn((shellSessionKey: string) => {
+      const entry = terminalPoolEntries.get(shellSessionKey)
+      return {
+        ptyActive: entry?.ptyActive ?? false,
+        shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
+        currentPtyInstance: entry?.currentPtyInstance ?? null,
+        hasOutput: entry?.hasOutput ?? false,
+      }
+    }),
     updateShellLifecycleState: vi.fn(),
     isShellExited: vi.fn(() => false),
     getTaskTerminalTabsSession: vi.fn((taskId: string) => {
