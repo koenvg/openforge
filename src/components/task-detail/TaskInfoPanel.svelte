@@ -28,6 +28,12 @@
 
   let { task, workspacePath, allTasksOverride, dependencyReferenceTasksOverride, surface = 'default', density = 'default', onEditPrompt, onOpenRelatedTask }: Props = $props()
 
+  // The one point where a plugin section can land on either side of a built-in card.
+  // Sections that describe where the work came from (a linked ticket, an issue) declare
+  // an order below this and render above Changes; sections that describe what the work
+  // produced (pull requests) declare one at or above it and render below.
+  const CHANGES_SECTION_ORDER = 50
+
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
   let previousTaskLabelSignature = ''
@@ -90,7 +96,13 @@
 
 </script>
 
+<!-- Sections run in the order the work happens: the prompt that started the task, the
+     ticket it came from, whatever the plugins link to it, the changes on disk, then the
+     pull requests those changes became. Details and relationships are reference material
+     and sit at the bottom. -->
 <div data-testid="task-info-panel" data-scroll-owner="false" data-density={density} class="flex min-h-max flex-col {panelClass}">
+  <TaskInitialPrompt {task} {onEditPrompt} />
+
   <SourceTicketLink url={task.source_ticket_url} onSave={handleSaveSourceTicket} />
 
   <PluginSlot
@@ -98,9 +110,35 @@
     taskId={task.id}
     projectId={task.project_id}
     taskActionPending={$mergingTaskIds.has(task.id)}
+    maxOrder={CHANGES_SECTION_ORDER}
   />
 
-  <TaskInitialPrompt {task} {onEditPrompt} />
+  {#if workspacePath !== null}
+    <TaskGitStatus taskId={task.id} />
+  {/if}
+
+  <PluginSlot
+    slotType="taskUISections"
+    taskId={task.id}
+    projectId={task.project_id}
+    taskActionPending={$mergingTaskIds.has(task.id)}
+    minOrder={CHANGES_SECTION_ORDER}
+  />
+
+  <TaskRelationshipDetailSection
+    kind="dependencies"
+    items={dependencies}
+    {waitingDependencyCount}
+    density="full"
+    {onOpenRelatedTask}
+  />
+
+  <TaskRelationshipDetailSection
+    kind="dependents"
+    items={dependents}
+    density="full"
+    {onOpenRelatedTask}
+  />
 
   <CollapsibleSection sectionKey="details" title="Details" cardId="details">
     {#snippet icon()}<Info size={14} />{/snippet}
@@ -129,23 +167,4 @@
       </div>
     {/if}
   </CollapsibleSection>
-
-  <TaskRelationshipDetailSection
-    kind="dependencies"
-    items={dependencies}
-    {waitingDependencyCount}
-    density="full"
-    {onOpenRelatedTask}
-  />
-
-  <TaskRelationshipDetailSection
-    kind="dependents"
-    items={dependents}
-    density="full"
-    {onOpenRelatedTask}
-  />
-
-  {#if workspacePath !== null}
-    <TaskGitStatus taskId={task.id} />
-  {/if}
 </div>

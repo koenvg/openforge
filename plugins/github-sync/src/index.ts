@@ -12,9 +12,11 @@ export const JiraSettingsSectionComponent = JiraSettingsSection
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
+    // Above the host's Changes card (order 50) on purpose: a pull request is what the
+    // local changes turned into, so it reads after them rather than before.
     context.subscriptions.add(openforge.taskUI.registerSection({
       id: 'task_pull_request_status',
-      order: 10,
+      order: 60,
       component: TaskPullRequestStatus,
     }))
     context.subscriptions.add(openforge.views.register({

@@ -131,7 +131,8 @@ describe('github-sync plugin', () => {
 
     expect(api.taskUI.registerSection).toHaveBeenCalledWith({
       id: 'task_pull_request_status',
-      order: 10,
+      // Past the host's Changes card, so the section reads after the local changes.
+      order: 60,
       component: TaskPullRequestStatusComponent,
     })
     expect(TaskPullRequestStatusComponent).toBe(mockTaskPullRequestStatus)
