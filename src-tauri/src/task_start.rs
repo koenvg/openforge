@@ -464,12 +464,20 @@ impl TaskStartService {
         let start_prompt_contributions = active_start_prompt_contributions;
 
         Ok(StartContext {
-            code_cleanup_enabled: db.resolve_task_bool(
-                &task.id,
-                "code_cleanup_tasks_enabled",
-                false,
-            ),
-            provider_name: db.resolve_ai_provider_for_task(&task.id),
+            code_cleanup_enabled: db
+                .resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false)
+                .map_err(|error| {
+                    TaskStartError::Persistence(format!(
+                        "Failed to resolve code_cleanup_tasks_enabled config for Task {}: {error}",
+                        task.id
+                    ))
+                })?,
+            provider_name: db.resolve_ai_provider_for_task(&task.id).map_err(|error| {
+                TaskStartError::Persistence(format!(
+                    "Failed to resolve ai_provider config for Task {}: {error}",
+                    task.id
+                ))
+            })?,
             task,
             project_id,
             repo_path: PathBuf::from(project.path),

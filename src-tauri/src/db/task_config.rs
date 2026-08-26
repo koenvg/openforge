@@ -51,36 +51,38 @@ impl super::Database {
     }
 
     /// Resolve a boolean setting for a task: task_config ?? project_config ?? config ?? default.
-    pub fn resolve_task_bool(&self, task_id: &str, key: &str, default: bool) -> bool {
-        if let Ok(Some(v)) = self.get_task_config(task_id, key) {
-            return v == "true";
+    ///
+    /// # Errors
+    /// Returns an error when a Task, Project, or global configuration lookup fails.
+    pub fn resolve_task_bool(&self, task_id: &str, key: &str, default: bool) -> Result<bool> {
+        if let Some(v) = self.get_task_config(task_id, key)? {
+            return Ok(v == "true");
         }
-        if let Ok(Some(project_id)) = self.get_task_project_id(task_id) {
+        if let Some(project_id) = self.get_task_project_id(task_id)? {
             if !project_id.is_empty() {
-                if let Ok(Some(v)) = self.get_project_config(&project_id, key) {
-                    return v == "true";
+                if let Some(v) = self.get_project_config(&project_id, key)? {
+                    return Ok(v == "true");
                 }
             }
         }
-        if let Ok(Some(v)) = self.get_config(key) {
-            return v == "true";
+        if let Some(v) = self.get_config(key)? {
+            return Ok(v == "true");
         }
-        default
+        Ok(default)
     }
 
     /// Resolve the AI provider for a task: task_config ?? project ?? global ?? claude-code.
-    pub fn resolve_ai_provider_for_task(&self, task_id: &str) -> String {
-        if let Ok(Some(v)) = self.get_task_config(task_id, "ai_provider") {
+    ///
+    /// # Errors
+    /// Returns an error when a Task, Project, or global configuration lookup fails.
+    pub fn resolve_ai_provider_for_task(&self, task_id: &str) -> Result<String> {
+        if let Some(v) = self.get_task_config(task_id, "ai_provider")? {
             if !v.is_empty() {
-                return v;
+                return Ok(v);
             }
         }
-        let project_id = self
-            .get_task_project_id(task_id)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        self.resolve_ai_provider(&project_id)
+        let project_id = self.get_task_project_id(task_id)?.unwrap_or_default();
+        self.try_resolve_ai_provider(&project_id)
     }
 }
 
@@ -154,16 +156,16 @@ mod tests {
         let key = "code_cleanup_tasks_enabled";
 
         // Nothing set -> default.
-        assert!(!db.resolve_task_bool(&task.id, key, false));
+        assert!(!db.resolve_task_bool(&task.id, key, false).unwrap());
         // Global on.
         db.set_config(key, "true").unwrap();
-        assert!(db.resolve_task_bool(&task.id, key, false));
+        assert!(db.resolve_task_bool(&task.id, key, false).unwrap());
         // Project off beats global.
         db.set_project_config(&project.id, key, "false").unwrap();
-        assert!(!db.resolve_task_bool(&task.id, key, false));
+        assert!(!db.resolve_task_bool(&task.id, key, false).unwrap());
         // Task on beats project.
         db.set_task_config(&task.id, key, "true").unwrap();
-        assert!(db.resolve_task_bool(&task.id, key, false));
+        assert!(db.resolve_task_bool(&task.id, key, false).unwrap());
 
         drop(db);
     }
@@ -190,13 +192,19 @@ mod tests {
             .unwrap();
 
         // Falls back to project resolution (which defaults to claude-code).
-        assert_eq!(db.resolve_ai_provider_for_task(&task.id), "claude-code");
+        assert_eq!(
+            db.resolve_ai_provider_for_task(&task.id).unwrap(),
+            "claude-code"
+        );
         db.set_project_config(&project.id, "ai_provider", "opencode")
             .unwrap();
-        assert_eq!(db.resolve_ai_provider_for_task(&task.id), "opencode");
+        assert_eq!(
+            db.resolve_ai_provider_for_task(&task.id).unwrap(),
+            "opencode"
+        );
         db.set_task_config(&task.id, "ai_provider", "codex")
             .unwrap();
-        assert_eq!(db.resolve_ai_provider_for_task(&task.id), "codex");
+        assert_eq!(db.resolve_ai_provider_for_task(&task.id).unwrap(), "codex");
 
         drop(db);
     }

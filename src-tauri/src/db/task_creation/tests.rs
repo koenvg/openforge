@@ -409,8 +409,13 @@ fn test_create_task_snapshots_task_config_when_provided() {
         Some("opencode".to_string())
     );
     // Resolver reads the snapshot.
-    assert!(db.resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false));
-    assert_eq!(db.resolve_ai_provider_for_task(&task.id), "opencode");
+    assert!(db
+        .resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false)
+        .unwrap());
+    assert_eq!(
+        db.resolve_ai_provider_for_task(&task.id).unwrap(),
+        "opencode"
+    );
 
     drop(db);
 }
