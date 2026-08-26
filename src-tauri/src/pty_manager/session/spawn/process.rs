@@ -105,12 +105,17 @@ where
 
 impl PtyManager {
     fn configure_pty_command(
+        &self,
         command: &mut CommandBuilder,
         cwd: &Path,
         terminal_image_protocol: Option<TerminalImageProtocol>,
     ) {
         command.cwd(cwd);
         for (key, value) in user_environment() {
+            command.env(key, value);
+        }
+        #[cfg(test)]
+        for (key, value) in &self.test_environment {
             command.env(key, value);
         }
         command.env("PWD", cwd.to_string_lossy().to_string());
@@ -267,7 +272,7 @@ impl PtyManager {
         for arg in adapter.command_args() {
             command.arg(arg);
         }
-        Self::configure_pty_command(&mut command, request.cwd, request.terminal_image_protocol);
+        self.configure_pty_command(&mut command, request.cwd, request.terminal_image_protocol);
         for (key, value) in adapter.extra_env(request.task_id, instance_id) {
             command.env(key, value);
         }
@@ -307,7 +312,7 @@ impl PtyManager {
             mut command,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
-        Self::configure_pty_command(&mut command, cwd, terminal_image_protocol);
+        self.configure_pty_command(&mut command, cwd, terminal_image_protocol);
         let spawned = self.create_pty_process(PtyProcessRequest {
             command,
             session_key: session_key.to_string(),

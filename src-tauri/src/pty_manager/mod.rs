@@ -35,6 +35,13 @@ struct AgentEventStreamStartGate {
 
 #[cfg(test)]
 #[derive(Debug)]
+struct ShellSpawnPendingGate {
+    reached_tx: tokio::sync::oneshot::Sender<()>,
+    release_rx: tokio::sync::oneshot::Receiver<()>,
+}
+
+#[cfg(test)]
+#[derive(Debug)]
 struct ResizeStartGate {
     reached_tx: std::sync::mpsc::Sender<()>,
     release_rx: std::sync::mpsc::Receiver<()>,
@@ -134,6 +141,10 @@ pub struct PtyManager {
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
     agent_event_stream_start_gate: Arc<std::sync::Mutex<Option<AgentEventStreamStartGate>>>,
+    #[cfg(test)]
+    shell_spawn_pending_gate: Arc<std::sync::Mutex<Option<ShellSpawnPendingGate>>>,
+    #[cfg(test)]
+    test_environment: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -234,6 +245,10 @@ impl PtyManager {
             )),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            shell_spawn_pending_gate: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(test)]
+            test_environment: std::collections::HashMap::new(),
         }
     }
 
@@ -269,6 +284,14 @@ impl Default for PtyManager {
 impl PtyManager {
     pub fn set_pid_dir(&mut self, dir: PathBuf) {
         self.pid_dir_override = Some(dir);
+    }
+
+    pub(crate) fn set_test_environment_variable(
+        &mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) {
+        self.test_environment.insert(key.into(), value.into());
     }
 
     pub(crate) fn set_shadow_mode(&mut self, mode: ShadowMode) {

@@ -66,7 +66,7 @@ use std::{
 };
 use tokio::sync::Mutex as TokioMutex;
 
-static PROVIDER_PATH_ENV_LOCK: Lazy<TokioMutex<()>> = Lazy::new(|| TokioMutex::new(()));
+static PROVIDER_TEST_LOCK: Lazy<TokioMutex<()>> = Lazy::new(|| TokioMutex::new(()));
 static PROVIDER_TEST_SANDBOX: Lazy<ProviderTestSandbox> = Lazy::new(ProviderTestSandbox::new);
 
 struct ProviderTestSandbox {
@@ -96,49 +96,23 @@ impl ProviderTestSandbox {
     }
 }
 
-struct PathEnvGuard {
-    original_path: Option<OsString>,
+fn configure_provider_test_path(state: &mut crate::http_server::AppState, provider_bin_dir: &Path) {
+    let provider_path = std::env::join_paths(
+        std::iter::once(provider_bin_dir.to_path_buf()).chain(
+            std::env::var_os("PATH")
+                .as_ref()
+                .into_iter()
+                .flat_map(std::env::split_paths),
+        ),
+    )
+    .expect("provider test PATH should be joinable");
+    let pty_manager = state
+        .pty_manager
+        .as_mut()
+        .expect("PTY manager should exist");
+    pty_manager.set_test_environment_variable("PATH", provider_path.to_string_lossy());
     #[cfg(windows)]
-    original_pathext: Option<OsString>,
-}
-
-impl PathEnvGuard {
-    fn prepend(path: &Path) -> Self {
-        let original_path = std::env::var_os("PATH");
-        let mut paths = vec![path.to_path_buf()];
-        if let Some(original_path) = original_path.as_ref() {
-            paths.extend(std::env::split_paths(original_path));
-        }
-        let joined = std::env::join_paths(paths).expect("test PATH should be joinable");
-        std::env::set_var("PATH", joined);
-
-        #[cfg(windows)]
-        let original_pathext = {
-            let original_pathext = std::env::var_os("PATHEXT");
-            ensure_windows_pathext_resolves_cmd(original_pathext.as_ref());
-            original_pathext
-        };
-
-        Self {
-            original_path,
-            #[cfg(windows)]
-            original_pathext,
-        }
-    }
-}
-
-impl Drop for PathEnvGuard {
-    fn drop(&mut self) {
-        match self.original_path.as_ref() {
-            Some(path) => std::env::set_var("PATH", path),
-            None => std::env::remove_var("PATH"),
-        }
-        #[cfg(windows)]
-        match self.original_pathext.as_ref() {
-            Some(path) => std::env::set_var("PATHEXT", path),
-            None => std::env::remove_var("PATHEXT"),
-        }
-    }
+    pty_manager.set_test_environment_variable("PATHEXT", windows_provider_test_pathext());
 }
 
 struct EnvVarGuard {
@@ -164,8 +138,9 @@ impl Drop for EnvVarGuard {
 }
 
 #[cfg(windows)]
-fn ensure_windows_pathext_resolves_cmd(original_pathext: Option<&OsString>) {
-    let mut extensions: Vec<String> = original_pathext
+fn windows_provider_test_pathext() -> String {
+    let mut extensions: Vec<String> = std::env::var_os("PATHEXT")
+        .as_ref()
         .and_then(|value| value.to_str())
         .unwrap_or(".COM;.EXE;.BAT;.CMD")
         .split(';')
@@ -178,7 +153,7 @@ fn ensure_windows_pathext_resolves_cmd(original_pathext: Option<&OsString>) {
     {
         extensions.push(".CMD".to_string());
     }
-    std::env::set_var("PATHEXT", extensions.join(";"));
+    extensions.join(";")
 }
 
 const PROVIDER_RECORD_COMPLETE: &str = "openforge-provider-record=complete";
@@ -337,12 +312,12 @@ fn init_committed_repo(repo_path: &Path) {
 
 #[tokio::test]
 async fn start_implementation_starts_configured_pi_provider_through_app_invoke_boundary() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_pi_provider_boundary");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_pi_provider_boundary");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -428,13 +403,13 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
 
 #[tokio::test]
 async fn start_implementation_uses_authoritative_project_path_and_publishes_canonical_event() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_project_temp, project_repo_dir) = provider_repo_dir();
     let (_spoofed_temp, spoofed_repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_authoritative_project_path");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_authoritative_project_path");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -503,12 +478,12 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
 
 #[tokio::test]
 async fn start_implementation_rejects_stale_non_backlog_task_state() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_rejects_stale_state");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_rejects_stale_state");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -554,12 +529,12 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
 
 #[tokio::test]
 async fn start_implementation_injects_plugin_configured_review_workflow() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_plugin_review_workflow");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_plugin_review_workflow");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -633,13 +608,13 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
 
 #[tokio::test]
 async fn start_implementation_materializes_pasted_image_references_for_provider_prompt() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir, app_dir) =
+    let (mut state, _temp_dir, app_dir) =
         test_state_with_backend_app("app_invoke_start_materializes_image_references");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -700,12 +675,12 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
 
 #[tokio::test]
 async fn start_implementation_passes_task_agent_to_configured_opencode_provider() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_opencode_agent_boundary");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_opencode_agent_boundary");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -785,12 +760,12 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
 
 #[tokio::test]
 async fn start_implementation_starts_configured_codex_provider_through_app_invoke_boundary() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let (_temp, repo_dir) = provider_repo_dir();
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_codex_provider_boundary");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_codex_provider_boundary");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -816,6 +791,12 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
         .id
     };
 
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+
     let response = invoke_ok(
         &state,
         "start_implementation",
@@ -831,8 +812,7 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     assert_eq!(response["port"], 0);
 
     let log =
-        wait_for_provider_log_record(&sandbox.log_path, "codex", "Start through Codex provider")
-            .await;
+        read_provider_log_after_ready(&mut provider_events, &task_id, &sandbox.log_path).await;
     assert!(log.contains("provider=codex"), "got provider log: {log}");
     assert!(
         log.contains("Start through Codex provider"),
@@ -864,7 +844,7 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
 
 #[tokio::test]
 async fn start_implementation_uses_persisted_existing_worktree_branch() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let temp = tempfile::tempdir().expect("tempdir should be created");
@@ -877,8 +857,8 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
     let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_existing_branch_worktree");
+    let (mut state, _temp_dir) = test_state("app_invoke_start_existing_branch_worktree");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -957,7 +937,7 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
 
 #[tokio::test]
 async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
-    let _env_lock = PROVIDER_PATH_ENV_LOCK.lock().await;
+    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
     let sandbox = &*PROVIDER_TEST_SANDBOX;
     sandbox.clear_log();
     let temp = tempfile::tempdir().expect("tempdir should be created");
@@ -970,8 +950,9 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
     let _home_guard = EnvVarGuard::set_path("HOME", &home_dir);
-    let _path_guard = PathEnvGuard::prepend(&sandbox.bin_dir);
-    let (state, _temp_dir) = test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
+    let (mut state, _temp_dir) =
+        test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
+    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
