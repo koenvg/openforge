@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
-import { validateOpenForgeCliRuntimeAssetManifest } from './electron-package.mjs'
+import { validateOpenForgeCliRuntimeAssetManifest } from './electron-package/runtime-assets.mjs'
 
 const fixtures = JSON.parse(
   await readFile(new URL('../fixtures/openforge-cli-runtime-asset-manifests.json', import.meta.url), 'utf8'),
