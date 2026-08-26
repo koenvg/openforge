@@ -1,5 +1,6 @@
 import { terminalLogMessage } from './terminalLogging'
-import type { PoolEntry, TerminalRuntimeHost } from './terminalRuntimeTypes'
+import type { TerminalTransport } from './terminalTransport'
+import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
 function isModalOpen(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
@@ -32,14 +33,16 @@ function refreshAndFocus(entry: PoolEntry): void {
   if (!isModalOpen()) entry.view.focus()
 }
 
-export function createTerminalAttachmentController(host: TerminalRuntimeHost) {
+export function createTerminalAttachmentController(
+  transport: TerminalTransport,
+  environment: TerminalRuntimeEnvironment,
+) {
   function syncPtySize(entry: PoolEntry): void {
     if (!entry.ptyActive) return
     const dimensions = entry.view.geometry
     if (!isValidTerminalDimensions(dimensions)) return
-    const { cols, rows } = dimensions
-    host.resizePty(entry.shellSessionKey, cols, rows)
-      .catch(error => console.error(terminalLogMessage(host.loggerName, 'resize failed:'), error))
+    transport.resize(entry.shellSessionKey, dimensions)
+      .catch(error => console.error(terminalLogMessage(environment.loggerName, 'resize failed:'), error))
   }
 
   function waitForInitialFit(entry: PoolEntry, signal?: AbortSignal): Promise<void> {

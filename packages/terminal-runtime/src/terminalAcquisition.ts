@@ -3,13 +3,8 @@ import type { TerminalAuthorityContract } from './terminalAuthority'
 import { terminalLogMessage } from './terminalLogging'
 import type { TerminalFontReadiness } from './terminalOptions'
 import { createTerminalStateView } from './terminalStateView'
-import {
-  ptyExitEventName,
-  ptyOutputEventName,
-  type PoolEntry,
-  type TerminalRuntimeHost,
-  type TerminalRuntimeUnlistenFn,
-} from './terminalRuntimeTypes'
+import type { TerminalTransport, TerminalTransportDisposable } from './terminalTransport'
+import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
 interface TerminalAcquisitionOperation {
   released: boolean
@@ -34,7 +29,8 @@ interface TerminalAcquisitionReconnectReplay {
 }
 
 interface TerminalAcquisitionOptions {
-  host: TerminalRuntimeHost
+  transport: TerminalTransport
+  environment: TerminalRuntimeEnvironment
   authority: TerminalAuthorityContract
   pool: Map<string, PoolEntry>
   createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry
@@ -46,7 +42,8 @@ interface TerminalAcquisitionOptions {
 }
 
 export function createTerminalAcquisition({
-  host,
+  transport,
+  environment,
   authority,
   pool,
   createEntry,
@@ -58,7 +55,7 @@ export function createTerminalAcquisition({
 }: TerminalAcquisitionOptions) {
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
   const terminalStateView = createTerminalStateView({
-    host,
+    transport,
     authority,
     resetEntry,
     markOutput: lifecycle.markPtyOutput,
@@ -75,8 +72,8 @@ export function createTerminalAcquisition({
       event.preventDefault()
       event.stopPropagation()
       if (event.type === 'keydown' && entry.ptyActive) {
-        host.writePty(entry.shellSessionKey, '\n').catch(error => {
-          console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
+        transport.writeUserInput(entry.shellSessionKey, '\n').catch(error => {
+          console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
         })
       }
       return false
@@ -92,17 +89,17 @@ export function createTerminalAcquisition({
     return true
   }
 
-  async function retainAcquisitionListener(
+  async function retainSessionSubscription(
     operation: TerminalAcquisitionOperation,
     entry: PoolEntry,
-    listenerRegistration: Promise<TerminalRuntimeUnlistenFn>,
+    registration: Promise<TerminalTransportDisposable>,
   ): Promise<boolean> {
-    const unlisten = await listenerRegistration
+    const subscription = await registration
     if (operation.released) {
-      unlisten()
+      subscription.dispose()
       return false
     }
-    entry.unlisteners.push(unlisten)
+    entry.transportSubscription = subscription
     return true
   }
 
@@ -115,38 +112,28 @@ export function createTerminalAcquisition({
     operation.entry = entry
     if (disposeReleasedAcquisition(operation)) return entry
 
-    const outputListenerRetained = await retainAcquisitionListener(
+    const subscriptionRetained = await retainSessionSubscription(
       operation,
       entry,
-      host.listenEvent(ptyOutputEventName(terminalKey), (event) => {
-        terminalStateView.handlePtyOutput(entry, event.payload)
+      transport.subscribeSession(terminalKey, {
+        onOutput: event => terminalStateView.handlePtyOutput(entry, event),
+        onExit: event => {
+          if (entry.currentPtyInstance !== null
+            && event.ptyInstanceId !== entry.currentPtyInstance) return
+          lifecycle.markPtyExited(entry)
+        },
       }),
     )
-    if (!outputListenerRetained || disposeReleasedAcquisition(operation)) return entry
+    if (!subscriptionRetained || disposeReleasedAcquisition(operation)) return entry
 
-    const exitListenerRetained = await retainAcquisitionListener(
-      operation,
-      entry,
-      host.listenEvent(ptyExitEventName(terminalKey), (event) => {
-        const instanceId = event.payload.instance_id
-        if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) return
-        lifecycle.markPtyExited(entry)
-      }),
-    )
-    if (!exitListenerRetained || disposeReleasedAcquisition(operation)) return entry
-
-    try {
-      await terminalStateView.recover(entry, false)
-    } catch (error) {
-      console.error(terminalLogMessage(host.loggerName, 'Failed to get PTY buffer:'), error)
-    }
+    await terminalStateView.recover(entry, false)
     if (disposeReleasedAcquisition(operation)) return entry
 
     attachAgentTerminalKeyHandler(entry)
     entry.viewSubscriptions.push(entry.view.onUserInput((data: string) => {
       if (!entry.ptyActive) return
-      host.writePty(terminalKey, data).catch(error => {
-        console.error(terminalLogMessage(host.loggerName, 'write failed:'), error)
+      transport.writeUserInput(terminalKey, data).catch(error => {
+        console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
       })
     }))
     entry.viewSubscriptions.push(entry.view.onQueryResponse((response) => {
@@ -155,12 +142,12 @@ export function createTerminalAcquisition({
         || !binding
         || binding.contract.queryResponseOwner !== 'xterm'
         || response.ptyInstanceId !== binding.ptyInstanceId) return
-      host.writeTerminalQueryResponse({
+      transport.writeQueryResponse({
         shellSessionKey: binding.shellSessionKey,
         ptyInstanceId: binding.ptyInstanceId,
         data: response.data,
       }).catch(error => {
-        console.error(terminalLogMessage(host.loggerName, 'query response write failed:'), error)
+        console.error(terminalLogMessage(environment.loggerName, 'query response write failed:'), error)
       })
     }))
 
@@ -183,7 +170,7 @@ export function createTerminalAcquisition({
       disposeEntry(entry)
     } catch (cleanupError) {
       console.warn(
-        terminalLogMessage(host.loggerName, 'Failed to fully dispose terminal after initialization failure:'),
+        terminalLogMessage(environment.loggerName, 'Failed to fully dispose terminal after initialization failure:'),
         cleanupError,
       )
     } finally {
@@ -222,21 +209,43 @@ export function createTerminalAcquisition({
 
     const pooledEntry = pool.get(terminalKey)
     const pendingEntry = pendingAcquisition?.operation.entry ?? null
-    if (pooledEntry) {
-      disposeEntry(pooledEntry)
-      pool.delete(terminalKey)
-    } else if (pendingEntry) {
-      disposeEntry(pendingEntry)
-    }
-
+    pool.delete(terminalKey)
     if (pendingAcquisition) pendingAcquisition.operation.entry = null
-    lifecycle.clearTerminal(terminalKey)
-    reconnectReplay.releaseListenerIfIdle()
+
+    let releaseError: unknown = null
+    try {
+      if (pooledEntry) disposeEntry(pooledEntry)
+      else if (pendingEntry) disposeEntry(pendingEntry)
+    } catch (error) {
+      releaseError = error
+    }
+    try {
+      lifecycle.clearTerminal(terminalKey)
+    } catch (error) {
+      releaseError ??= error
+    }
+    try {
+      reconnectReplay.releaseListenerIfIdle()
+    } catch (error) {
+      releaseError ??= error
+    }
+    if (releaseError) throw releaseError
+  }
+
+  function releaseTerminalKeys(terminalKeys: Iterable<string>): void {
+    let releaseError: unknown = null
+    for (const terminalKey of terminalKeys) {
+      try {
+        release(terminalKey)
+      } catch (error) {
+        releaseError ??= error
+      }
+    }
+    if (releaseError) throw releaseError
   }
 
   function releaseAll(): void {
-    const terminalKeys = new Set([...pool.keys(), ...pendingAcquisitions.keys()])
-    for (const terminalKey of terminalKeys) release(terminalKey)
+    releaseTerminalKeys(new Set([...pool.keys(), ...pendingAcquisitions.keys()]))
   }
 
   function releaseAllForTask(taskId: string): number {
@@ -245,7 +254,7 @@ export function createTerminalAcquisition({
       const parsed = parsePtySessionKey(key)
       if (parsed.kind === 'indexed-shell' && parsed.taskId === taskId) keysToRelease.add(key)
     }
-    for (const key of keysToRelease) release(key)
+    releaseTerminalKeys(keysToRelease)
     return keysToRelease.size
   }
 

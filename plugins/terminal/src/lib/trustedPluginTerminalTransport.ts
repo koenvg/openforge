@@ -1,0 +1,187 @@
+import {
+  parsePtySessionKey,
+  type TerminalQueryResponseWrite,
+  type TerminalSessionTransportHandlers,
+  type TerminalTransport,
+  type TerminalTransportDisposable,
+} from '@openforge-app/terminal-runtime'
+
+interface TrustedPluginDisposable {
+  dispose(): void | Promise<void>
+}
+
+interface TrustedPluginPtyOutputPayload {
+  data: string
+  instance_id: number
+  task_id?: string
+}
+
+interface TrustedPluginPtyExitPayload {
+  instance_id: number
+}
+interface TrustedPluginPtyBufferState {
+  buffer: string | null
+  isLive: boolean
+  instanceId: number | null
+}
+
+interface IndexedShellRequest {
+  taskId: string
+  terminalIndex: number
+}
+
+export interface TrustedPluginTerminalPort {
+  events: {
+    onGlobal<TPayload>(eventName: string, handler: (payload: TPayload) => void): TrustedPluginDisposable
+  }
+  shell: {
+    getBuffer(request: IndexedShellRequest): Promise<TrustedPluginPtyBufferState>
+    write(request: IndexedShellRequest & { data: string }): Promise<void>
+    writeTerminalQueryResponse(
+      request: IndexedShellRequest & { ptyInstanceId: number; data: string },
+    ): Promise<void>
+    resize(request: IndexedShellRequest & { cols: number; rows: number }): Promise<void>
+  }
+}
+
+function parseIndexedShellSessionKey(shellSessionKey: string): IndexedShellRequest {
+  const parsed = parsePtySessionKey(shellSessionKey)
+  if (parsed.kind !== 'indexed-shell') {
+    throw new Error(`[terminal plugin] Expected indexed terminal key, received: ${shellSessionKey}`)
+  }
+  return { taskId: parsed.taskId, terminalIndex: parsed.terminalIndex }
+}
+
+export function createTrustedPluginTerminalTransport(
+  getPort: () => TrustedPluginTerminalPort,
+): TerminalTransport {
+  const activeSubscriptions = new Set<TerminalTransportDisposable>()
+  let disposed = false
+
+  function ensureActive(): void {
+    if (disposed) throw new Error('Trusted Plugin TerminalTransport is disposed')
+  }
+
+  function track(disposables: TrustedPluginDisposable[]): TerminalTransportDisposable {
+    let active = true
+    const subscription = {
+      dispose() {
+        if (!active) return
+        active = false
+        activeSubscriptions.delete(subscription)
+        let disposalError: unknown = null
+        for (const disposable of disposables) {
+          try {
+            void disposable.dispose()
+          } catch (error) {
+            disposalError ??= error
+          }
+        }
+        if (disposalError) throw disposalError
+      },
+    }
+    activeSubscriptions.add(subscription)
+    return subscription
+  }
+
+  async function subscribeSession(
+    shellSessionKey: string,
+    handlers: TerminalSessionTransportHandlers,
+  ): Promise<TerminalTransportDisposable> {
+    ensureActive()
+    parseIndexedShellSessionKey(shellSessionKey)
+    const port = getPort()
+    const outputSubscription = port.events.onGlobal<TrustedPluginPtyOutputPayload>(
+      `openforge.pty-output-${shellSessionKey}`,
+      payload => handlers.onOutput({
+        data: payload.data,
+        ptyInstanceId: payload.instance_id,
+      }),
+    )
+    try {
+      ensureActive()
+      const exitSubscription = port.events.onGlobal<TrustedPluginPtyExitPayload>(
+        `openforge.pty-exit-${shellSessionKey}`,
+        payload => handlers.onExit({ ptyInstanceId: payload.instance_id }),
+      )
+      if (disposed) {
+        void exitSubscription.dispose()
+        throw new Error('Trusted Plugin TerminalTransport is disposed')
+      }
+      return track([outputSubscription, exitSubscription])
+    } catch (error) {
+      void outputSubscription.dispose()
+      throw error
+    }
+  }
+
+  async function subscribeConnectionRestored(
+    handler: Parameters<TerminalTransport['subscribeConnectionRestored']>[0],
+  ): Promise<TerminalTransportDisposable> {
+    ensureActive()
+    const subscription = getPort().events.onGlobal<unknown>(
+      'openforge.openforge-app-events-reconnected',
+      () => handler(),
+    )
+    if (disposed) {
+      void subscription.dispose()
+      throw new Error('Trusted Plugin TerminalTransport is disposed')
+    }
+    return track([subscription])
+  }
+
+  async function readReplay(shellSessionKey: string) {
+    ensureActive()
+    const replay = await getPort().shell.getBuffer(parseIndexedShellSessionKey(shellSessionKey))
+    return {
+      data: replay.buffer,
+      isLive: replay.isLive,
+      ptyInstanceId: replay.instanceId,
+    }
+  }
+
+  async function writeUserInput(shellSessionKey: string, data: string): Promise<void> {
+    ensureActive()
+    await getPort().shell.write({ ...parseIndexedShellSessionKey(shellSessionKey), data })
+  }
+
+  async function writeQueryResponse(response: TerminalQueryResponseWrite): Promise<void> {
+    ensureActive()
+    await getPort().shell.writeTerminalQueryResponse({
+      ...parseIndexedShellSessionKey(response.shellSessionKey),
+      ptyInstanceId: response.ptyInstanceId,
+      data: response.data,
+    })
+  }
+
+  async function resize(shellSessionKey: string, geometry: { cols: number; rows: number }): Promise<void> {
+    ensureActive()
+    await getPort().shell.resize({
+      ...parseIndexedShellSessionKey(shellSessionKey),
+      cols: geometry.cols,
+      rows: geometry.rows,
+    })
+  }
+
+  return {
+    subscribeSession,
+    subscribeConnectionRestored,
+    readReplay,
+    writeUserInput,
+    writeQueryResponse,
+    resize,
+    dispose() {
+      if (disposed) return
+      disposed = true
+      let disposalError: unknown = null
+      for (const subscription of [...activeSubscriptions]) {
+        try {
+          subscription.dispose()
+        } catch (error) {
+          disposalError ??= error
+        }
+      }
+      if (disposalError) throw disposalError
+    },
+  }
+}

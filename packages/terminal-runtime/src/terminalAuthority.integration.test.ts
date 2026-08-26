@@ -20,7 +20,8 @@ describe('terminal authority', () => {
       isLive: true,
       instanceId: 41,
     })
-    const runtime = createTerminalRuntime(host, {
+    const runtime = createTerminalRuntime({
+      ...host,
       authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
     })
 
@@ -46,7 +47,8 @@ describe('terminal authority', () => {
     host.getPtyBuffer = async () => ({ buffer: '', isLive: true, instanceId: 52 })
     const writeTerminalQueryResponse = vi.fn(async () => undefined)
     host.writeTerminalQueryResponse = writeTerminalQueryResponse
-    const runtime = createTerminalRuntime(host, {
+    const runtime = createTerminalRuntime({
+      ...host,
       authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
       createTerminalView: () => view,
     })

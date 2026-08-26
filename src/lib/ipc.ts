@@ -2,10 +2,10 @@ import { invokeDesktopCommand as invoke } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { ConfigureStartPromptContributionRequest, JsonValue, StartPromptContribution, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import type {
-  PtyBufferState,
   TerminalImageProtocol,
   TerminalQueryResponseWrite,
 } from '@openforge-app/terminal-runtime'
+import type { DesktopPtyBufferState } from './desktopTerminalTransport'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 import type { PullRequestMergeMethod } from './types'
@@ -538,8 +538,8 @@ export async function killShellsForTask(taskId: string): Promise<void> {
   return invoke("pty_kill_shells_for_task", { taskId });
 }
 
-export async function getPtyBuffer(shellSessionKey: string): Promise<PtyBufferState> {
-  return invoke<PtyBufferState>("get_pty_buffer", { shellSessionKey });
+export async function getPtyBuffer(shellSessionKey: string): Promise<DesktopPtyBufferState> {
+  return invoke<DesktopPtyBufferState>("get_pty_buffer", { shellSessionKey });
 }
 
 

@@ -9,6 +9,14 @@ The authority contract exists in two typed forms:
 
 Both contracts name xterm as the parsed-state owner and query-response owner. They name the PTY byte buffer as replay owner and declare that no component owns a terminal snapshot path. The diagnostic model may observe PTY bytes. It may not send query responses or provide replay.
 
+## Transport seam
+
+Terminal Runtime receives terminal traffic only through `TerminalTransport`. The interface uses Shell Session Keys and camelCase domain events. It provides one session subscription for output and exit, one connection-restored subscription, replay reads, separate user-input and query-response writes, resize, and disposal.
+
+The desktop adapter translates preload and Electron IPC event names, Rust-shaped payloads, and PTY commands. The Trusted Plugin adapter translates `openforge.*` global events, indexed Shell Session Keys, and frontend shell capabilities. Terminal Runtime does not know those event names, capability calls, credentials, or connection details.
+
+Each Terminal Runtime owns its adapter. The core Agent Terminal and built-in Terminal plugin still use separate Terminal Runtime instances and separate session maps. An adapter may multiplex many Shell Session Keys. A restored connection is only a signal; Terminal Runtime selects active sessions and requests their replay.
+
 ## Session identity
 
 Every live authority binding contains:
@@ -29,6 +37,8 @@ agent PTY read
   -> optional diagnostic Ghostty feed
   -> Rust UTF-8 event batching and raw replay buffer
   -> pty-output-<Shell Session Key> with PTY instance ID
+  -> desktop TerminalTransport adapter
+  -> normalized output event
   -> desktop Terminal Runtime
   -> xterm parser and renderer
 ```
@@ -45,6 +55,8 @@ plugin shell PTY read
   -> optional diagnostic Ghostty feed
   -> Rust UTF-8 event batching and raw replay buffer
   -> openforge.pty-output-<Shell Session Key>
+  -> Trusted Plugin TerminalTransport adapter
+  -> normalized output event
   -> Terminal plugin Terminal Runtime
   -> xterm parser and renderer
 ```
@@ -66,8 +78,9 @@ PTY query bytes
   -> xterm parser
   -> xterm-generated response with source PTY instance ID
   -> Terminal Runtime authority check
-  -> writeTerminalQueryResponse
-  -> pty_write_terminal_query_response IPC
+  -> TerminalTransport.writeQueryResponse
+  -> desktop or Trusted Plugin adapter
+  -> pty_write_terminal_query_response IPC or shell capability
   -> Rust current-instance check
   -> ordered PTY writer
 ```

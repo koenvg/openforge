@@ -14,7 +14,7 @@ export function setTerminalOpenForgeApi(api: FrontendOpenForgeAPI | null): void 
   terminalOpenForgeApi = api
 }
 
-function getTerminalOpenForgeApi(): FrontendOpenForgeAPI {
+export function getTerminalOpenForgeApi(): FrontendOpenForgeAPI {
   if (!terminalOpenForgeApi) {
     throw new Error('[terminal plugin] OpenForge frontend API is not initialized')
   }

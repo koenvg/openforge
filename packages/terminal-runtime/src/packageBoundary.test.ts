@@ -40,10 +40,28 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(runtimeSource).not.toContain('new IntersectionObserver(')
   })
 
+  it('keeps lower-level event names and Rust payload fields out of Terminal Runtime', () => {
+    const runtimeFiles = [
+      'terminalRuntime.ts',
+      'terminalAcquisition.ts',
+      'terminalStateView.ts',
+      'terminalReconnectReplay.ts',
+    ]
+
+    for (const fileName of runtimeFiles) {
+      const source = readFileSync(join(process.cwd(), 'packages/terminal-runtime/src', fileName), 'utf8')
+      expect(source, fileName).not.toContain('pty-output-')
+      expect(source, fileName).not.toContain('pty-exit-')
+      expect(source, fileName).not.toContain('openforge-app-events-reconnected')
+      expect(source, fileName).not.toContain('instance_id')
+    }
+  })
+
   it('keeps xterm types behind the TerminalView adapter', () => {
     const rendererNeutralSources = [
       'terminalRuntimeTypes.ts',
       'terminalRuntime.ts',
+      'terminalTransport.ts',
       'terminalAcquisition.ts',
       'terminalAttachment.ts',
       'terminalStateView.ts',
@@ -79,6 +97,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
 
     expect(packageJson.peerDependencies.svelte).toBe('^5.0.0')
     expect(packageJson.dependencies?.svelte).toBeUndefined()
+    expect(packageJson.exports['./terminalTransport']).toBe('./src/terminalTransport.ts')
     expect(packageJson.exports['./shortcuts']).toBe('./src/terminalShortcuts.ts')
     expect(packageJson.exports['./shortcutController']).toBe('./src/terminalShortcutController.ts')
     expect(packageJson.exports['./taskTerminalController']).toBe('./src/taskTerminalController.ts')

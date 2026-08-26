@@ -5,15 +5,10 @@ import {
   type AppDesktopEventName,
   type AppDesktopEventPayloads,
   type SessionResumedPayload,
+  type TerminalDesktopEventPayload,
 } from './desktopIpcContract'
 import { createAppDesktopEventListenerRegistrations } from './appDesktopEventListeners'
 import type { AppDesktopEventDeps } from './appDesktopEventListeners/types'
-import {
-  ptyExitEventName,
-  ptyOutputEventName,
-  type PtyExitEventPayload,
-  type PtyOutputEventPayload,
-} from '@openforge-app/terminal-runtime'
 
 function source(path: string): string {
   return readFileSync(resolve(process.cwd(), path), 'utf8')
@@ -37,19 +32,23 @@ describe('Desktop event contract', () => {
     }>()
   })
 
-  it('builds PTY channels used by the real renderer listeners and Rust producer', () => {
-    expect(ptyOutputEventName('T-1')).toBe('pty-output-T-1')
-    expect(ptyExitEventName('T-1-shell-2')).toBe('pty-exit-T-1-shell-2')
-    expectTypeOf<PtyOutputEventPayload>().toEqualTypeOf<{
+  it('keeps PTY channel names and Rust payload fields inside the desktop adapter', () => {
+    expectTypeOf<TerminalDesktopEventPayload<`pty-output-${string}`>>().toEqualTypeOf<{
       shell_session_key: string
       data: string
       instance_id: number
     }>()
-    expectTypeOf<PtyExitEventPayload>().toEqualTypeOf<{ instance_id: number }>()
+    expectTypeOf<TerminalDesktopEventPayload<`pty-exit-${string}`>>()
+      .toEqualTypeOf<{ instance_id: number }>()
 
-    const acquisitionSource = source('packages/terminal-runtime/src/terminalAcquisition.ts')
-    expect(acquisitionSource).toContain('ptyOutputEventName(terminalKey)')
-    expect(acquisitionSource).toContain('ptyExitEventName(terminalKey)')
+    const adapterSource = source('src/lib/desktopTerminalTransport.ts')
+    expect(adapterSource).toContain('`pty-output-${shellSessionKey}`')
+    expect(adapterSource).toContain('`pty-exit-${shellSessionKey}`')
+    expect(adapterSource).toContain('ptyInstanceId: payload.instance_id')
+
+    const runtimeSource = source('packages/terminal-runtime/src/terminalAcquisition.ts')
+    expect(runtimeSource).not.toContain('pty-output-')
+    expect(runtimeSource).not.toContain('instance_id')
 
     const producerSource = source('src-tauri/src/pty_manager/events.rs')
     expect(producerSource).toContain('format!("pty-output-{}", self.session_key)')

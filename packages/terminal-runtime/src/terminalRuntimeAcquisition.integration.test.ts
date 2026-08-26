@@ -6,7 +6,9 @@ import {
   webLinkMocks,
 } from './terminalRuntime.integrationTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { APP_EVENTS_RECONNECTED_EVENT, createTerminalRuntime } from './terminalRuntime'
+import { createTerminalRuntime } from './terminalRuntime'
+
+const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 describe('terminal runtime acquisition', () => {
   beforeEach(resetTerminalRuntimeIntegrationHarness)
@@ -24,26 +26,26 @@ describe('terminal runtime acquisition', () => {
     expect(host.openLink).toHaveBeenCalledWith('T-1-shell-2', 'https://openforge.dev/docs')
   })
 
-  it('uses the configured logger name for runtime diagnostics', async () => {
+  it('rolls back a failed replay read and permits a clean retry', async () => {
     const terminalKey = 'T-1-shell-0'
     const host = createHost()
     const error = new Error('buffer unavailable')
-    host.loggerName = 'terminalPluginPool'
-    vi.spyOn(host, 'getPtyBuffer').mockRejectedValue(error)
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(host, 'getPtyBuffer')
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ buffer: 'retry replay', isLive: true, instanceId: 7 })
+    const runtime = createTerminalRuntime(host)
 
-    try {
-      const runtime = createTerminalRuntime(host)
-      await runtime.acquire(terminalKey)
+    await expect(runtime.acquire(terminalKey)).rejects.toThrow(error)
 
-      expect(consoleError).toHaveBeenCalledWith(
-        '[terminalPluginPool] Failed to get PTY buffer:',
-        error,
-      )
-      runtime.release(terminalKey)
-    } finally {
-      consoleError.mockRestore()
-    }
+    expect(runtime.hasTerminal(terminalKey)).toBe(false)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(0)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(0)
+
+    const entry = await runtime.acquire(terminalKey)
+
+    expect(entry.currentPtyInstance).toBe(7)
+    expect(host.getListenerCount(`pty-output-${terminalKey}`)).toBe(1)
+    expect(host.getListenerCount(`pty-exit-${terminalKey}`)).toBe(1)
   })
 
   it('uses PTY byte replay and never accepts a sidecar snapshot as xterm state', async () => {
@@ -181,14 +183,15 @@ describe('terminal runtime acquisition', () => {
   it('does not publish a released entry after final PTY listener registration', async () => {
     const terminalKey = 'T-1-shell-0'
     const host = createHost()
-    const listenEvent = vi.spyOn(host, 'listenEvent')
+    const subscribeSession = host.transport.subscribeSession
     const resumeExitListenerRegistration = host.deferListenerRegistration(`pty-exit-${terminalKey}`)
     const runtime = createTerminalRuntime(host)
 
     const releasedAcquisition = runtime.acquire(terminalKey)
     await vi.waitFor(() => {
-      expect(listenEvent).toHaveBeenCalledWith(`pty-exit-${terminalKey}`, expect.any(Function))
+      expect(subscribeSession).toHaveBeenCalledWith(terminalKey, expect.any(Object))
     })
+    await Promise.resolve()
 
     resumeExitListenerRegistration()
     // Let listener registration and retention settle, but release before initializeTerminal resumes.

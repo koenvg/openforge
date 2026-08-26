@@ -1,8 +1,29 @@
 # @openforge-app/terminal-runtime
 
-Host-shared terminal lifecycle runtime for OpenForge trusted plugins that render terminal surfaces.
+Host-shared terminal lifecycle runtime for OpenForge Trusted Plugins that render Terminal Surfaces.
 
-This package is MIT-licensed so plugin authors can build and redistribute terminal surface integrations against the public OpenForge host runtime contract. It must only compose public plugin capabilities; it must not import OpenForge renderer stores, Electron/preload internals, Rust sidecar helpers, or other private app modules.
+This package is MIT-licensed so plugin authors can build and redistribute Terminal Surface integrations against the public OpenForge host runtime contract. It must only compose public plugin capabilities. It must not import OpenForge renderer stores, Electron or preload internals, Rust Sidecar helpers, or other private app modules.
+
+## Terminal transport
+
+`createTerminalRuntime` accepts one options object containing a `TerminalTransport` and a `TerminalRuntimeEnvironment`:
+
+```ts
+const runtime = createTerminalRuntime({
+  transport,
+  environment: {
+    openLink: (shellSessionKey, url) => openTerminalLink(shellSessionKey, url),
+    themeMode,
+    loggerName: 'myTerminalSurface',
+  },
+})
+```
+
+One Terminal Runtime owns one transport. The transport may multiplex many Shell Session Keys. It normalizes live output, PTY exit, connection restoration, and Terminal Replay into camelCase domain types. It also keeps user input separate from PTY-instance-scoped terminal query responses.
+
+Terminal Runtime continues to own Terminal Session lifecycle, replay ordering, current PTY instance checks, Terminal View Attachments, and Terminal Geometry Leases. A transport restores connectivity but does not decide replay policy. `TerminalView` does not receive transport, IPC, capability, or connection details.
+
+The interface is exported from the package root and `@openforge-app/terminal-runtime/terminalTransport`.
 
 ## Renderer conformance
 
