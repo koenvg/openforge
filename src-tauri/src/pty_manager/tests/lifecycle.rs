@@ -138,10 +138,43 @@ fn test_freeze_detection_with_ring_buffer() {
 }
 
 #[tokio::test]
-async fn test_interrupt_claude_not_found() {
+async fn test_interrupt_claude_reports_missing_process() {
     let manager = PtyManager::new();
     let result = manager.interrupt_claude("nonexistent-task").await;
-    assert!(matches!(result, Err(PtyError::ProcessNotFound(_))));
+    assert!(
+        matches!(result, Err(PtyError::ProcessNotFound(ref task_id)) if task_id == "nonexistent-task"),
+        "missing process should report its task ID, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_interrupt_claude_propagates_signal_delivery_failure() {
+    let manager = PtyManager::new();
+    let task_id = "exited-agent-session";
+    let mut session = test_agent_pty_session(task_id);
+    session
+        .child
+        .kill()
+        .expect("test child should accept termination");
+    session
+        .child
+        .wait()
+        .expect("test child should exit before interrupt");
+    manager
+        .sessions
+        .lock()
+        .await
+        .insert(task_id.to_string(), session);
+
+    let error = manager
+        .interrupt_claude(task_id)
+        .await
+        .expect_err("interrupting an exited process should fail");
+
+    assert!(
+        matches!(error, PtyError::IoError(ref source) if source.raw_os_error() == Some(libc::ESRCH)),
+        "expected the OS missing-process error, got {error}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
