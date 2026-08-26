@@ -16,7 +16,6 @@ const { mockTerminalTaskPane, mockTerminalProjectView, cleanupSideEffects } = vi
     killPty: vi.fn(),
     releaseAll: vi.fn(),
     releaseAllForTask: vi.fn(),
-    setupHostThemeSync: vi.fn(() => vi.fn()),
     clearTaskTerminalTabsSession: vi.fn(),
   },
 }))
@@ -41,10 +40,6 @@ vi.mock('./lib/terminalPool', () => ({
   releaseAllForTask: cleanupSideEffects.releaseAllForTask,
 }))
 
-vi.mock('./lib/theme', () => ({
-  setupHostThemeSync: cleanupSideEffects.setupHostThemeSync,
-}))
-
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
   const api = {
@@ -67,7 +62,6 @@ describe('terminal plugin', () => {
     cleanupSideEffects.killPty.mockClear()
     cleanupSideEffects.releaseAll.mockClear()
     cleanupSideEffects.releaseAllForTask.mockClear()
-    cleanupSideEffects.setupHostThemeSync.mockClear()
     cleanupSideEffects.clearTaskTerminalTabsSession.mockClear()
   })
 
@@ -107,7 +101,6 @@ describe('terminal plugin', () => {
       order: 10,
       component: mockTerminalTaskPane,
     }))
-    expect(cleanupSideEffects.setupHostThemeSync).toHaveBeenCalledTimes(1)
     expect(subscriptions.add).toHaveBeenCalledTimes(3)
   })
 
