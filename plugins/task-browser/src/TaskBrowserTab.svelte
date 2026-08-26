@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ArrowLeft, ArrowRight, PanelRightOpen, RefreshCw, X } from '@lucide/svelte'
+  import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'
   import type {
     PluginTaskPaneProps,
     BrowserDevToolsPanel,
@@ -165,20 +166,19 @@
       : activeSession.openDevTools()
   }
 
-  type DevToolsKeyboardShortcut = 'toggle' | BrowserDevToolsPanel
-
-  function devToolsKeyboardShortcut(event: KeyboardEvent): DevToolsKeyboardShortcut | null {
-    if (event.repeat) return null
-    const key = event.key.toLowerCase()
-    if (key === 'f12') return 'toggle'
-    const isMac = navigator.platform.toLowerCase().includes('mac')
-    const modified = isMac
-      ? event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey
-      : event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey
-    if (!modified) return null
-    if (key === 'i') return 'toggle'
-    if (key === 'c') return 'elements'
-    return key === 'j' ? 'console' : null
+  function devToolsKeyboardShortcut(event: KeyboardEvent) {
+    return classifyTaskBrowserDevToolsShortcut(
+      navigator.platform.toLowerCase().includes('mac') ? 'macos' : 'other',
+      {
+        key: event.key.toLowerCase(),
+        keyDown: event.type === 'keydown',
+        repeat: event.repeat,
+        control: event.ctrlKey,
+        shift: event.shiftKey,
+        alt: event.altKey,
+        meta: event.metaKey,
+      },
+    )
   }
 
   function handleDevToolsShortcut(event: KeyboardEvent) {

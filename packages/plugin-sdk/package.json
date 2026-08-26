@@ -68,6 +68,10 @@
       "types": "./dist/collapsibleSectionState.d.ts",
       "default": "./dist/collapsibleSectionState.js"
     },
+    "./taskBrowserDevToolsShortcuts": {
+      "types": "./dist/taskBrowserDevToolsShortcuts.d.ts",
+      "default": "./dist/taskBrowserDevToolsShortcuts.js"
+    },
     "./ui/Button.svelte": "./dist/ui/Button.svelte",
     "./ui/Checkbox.svelte": "./dist/ui/Checkbox.svelte",
     "./ui/MarkdownContent.svelte": "./dist/ui/MarkdownContent.svelte",

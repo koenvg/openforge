@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'
 import { BrowserWindow, Menu, WebContentsView, app, session as electronSession } from 'electron'
 import type { DownloadItem, Event as ElectronEvent, Session, WebContents } from 'electron'
 import { TaskBrowserSurfaceError, integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
@@ -46,34 +47,7 @@ function isAbortedNavigationError(error: unknown): boolean {
   return code === -3 || code === 'ERR_ABORTED'
 }
 
-interface TaskBrowserKeyboardInput {
-  type: string
-  key: string
-  control?: boolean
-  shift?: boolean
-  alt?: boolean
-  meta?: boolean
-}
-
-type TaskBrowserDevToolsShortcut = 'toggle' | TaskBrowserDevToolsPanel
-
 const DEVTOOLS_OPEN_TIMEOUT_MS = 2_000
-
-function taskBrowserDevToolsShortcut(
-  input: TaskBrowserKeyboardInput,
-  platform: NodeJS.Platform = process.platform,
-): TaskBrowserDevToolsShortcut | null {
-  if (input.type !== 'keyDown') return null
-  const key = input.key.toLowerCase()
-  if (key === 'f12') return 'toggle'
-  const modified = platform === 'darwin'
-    ? input.meta === true && input.alt === true && input.control !== true && input.shift !== true
-    : input.control === true && input.shift === true && input.meta !== true && input.alt !== true
-  if (!modified) return null
-  if (key === 'i') return 'toggle'
-  if (key === 'c') return 'elements'
-  return key === 'j' ? 'console' : null
-}
 
 function devToolsPanelInput(panel: TaskBrowserDevToolsPanel) {
   const modifiers: Array<'control' | 'shift' | 'alt' | 'meta'> = process.platform === 'darwin'
@@ -596,7 +570,18 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
 
   private configureSecurityPolicy(contents: WebContents, ownerWindow: BrowserWindow | null = null): void {
     contents.on('before-input-event', (event, input) => {
-      const shortcut = taskBrowserDevToolsShortcut(input)
+      const shortcut = classifyTaskBrowserDevToolsShortcut(
+        process.platform === 'darwin' ? 'macos' : 'other',
+        {
+          key: input.key.toLowerCase(),
+          keyDown: input.type === 'keyDown',
+          repeat: input.isAutoRepeat === true,
+          control: input.control === true,
+          shift: input.shift === true,
+          alt: input.alt === true,
+          meta: input.meta === true,
+        },
+      )
       if (shortcut === null) return
       event.preventDefault()
       if (shortcut !== 'toggle') {
