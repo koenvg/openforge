@@ -63,7 +63,12 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             let project_id = payload_string(&request.payload, "projectId")?;
             let value = {
                 let db = crate::db::acquire_db(&state.db);
-                db.resolve_ai_provider(&project_id)
+                db.try_resolve_ai_provider(&project_id).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to resolve AI provider: {e}"),
+                    )
+                })?
             };
             json_value(value)
         }

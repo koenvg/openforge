@@ -281,11 +281,6 @@ impl super::Database {
             .unwrap_or_else(|| "claude-code".to_string()))
     }
 
-    pub fn resolve_ai_provider(&self, project_id: &str) -> String {
-        self.try_resolve_ai_provider(project_id)
-            .unwrap_or_else(|_| "claude-code".to_string())
-    }
-
     /// Get attention summaries for all projects.
     ///
     /// Aggregates cross-domain signals (agent status, PR status) per project
@@ -808,7 +803,9 @@ mod tests {
             .expect("set config failed");
 
         // Global default is claude-code, but project override should win
-        let provider = db.resolve_ai_provider(&project.id);
+        let provider = db
+            .try_resolve_ai_provider(&project.id)
+            .expect("resolve provider");
         assert_eq!(provider, "opencode");
 
         drop(db);
@@ -823,7 +820,9 @@ mod tests {
             .expect("create failed");
 
         // No project-level ai_provider set, should fall back to global
-        let provider = db.resolve_ai_provider(&project.id);
+        let provider = db
+            .try_resolve_ai_provider(&project.id)
+            .expect("resolve provider");
         assert_eq!(provider, "claude-code");
 
         drop(db);
@@ -834,7 +833,7 @@ mod tests {
         let (db, _temp_dir) = make_test_db("resolve_provider_empty");
 
         // Empty project ID should fall back to global
-        let provider = db.resolve_ai_provider("");
+        let provider = db.try_resolve_ai_provider("").expect("resolve provider");
         assert_eq!(provider, "claude-code");
 
         drop(db);

@@ -24,7 +24,9 @@ pub(crate) fn load_project_runtime_context(
     db: &db::Database,
     project_id: &str,
 ) -> Result<ProjectRuntimeContext, String> {
-    let provider = db.resolve_ai_provider(project_id);
+    let provider = db
+        .try_resolve_ai_provider(project_id)
+        .map_err(|e| format!("failed to resolve AI provider: {e}"))?;
     let project_path = db
         .get_project(project_id)
         .map_err(|e| format!("Failed to get project: {e}"))?

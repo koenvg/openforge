@@ -145,7 +145,15 @@ where
         } else {
             state.completed_session_reaper.active(&change.task_id).await;
         }
-        if should_start_task_display_title_refresh(&state, &notification) {
+        let should_start_title_refresh =
+            should_start_task_display_title_refresh(&state, &notification).map_err(|error| {
+                error!(
+                    "[http_server] failed to resolve task display title metadata update config for task {}: {}",
+                    notification.task_id, error
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        if should_start_title_refresh {
             let refresh_state = state.clone();
             let db = Arc::clone(&refresh_state.db);
             let task_id = notification.task_id.clone();
@@ -186,33 +194,35 @@ where
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
-fn task_display_title_metadata_updates_enabled(state: &AppState, task_id: &str) -> bool {
-    crate::db::acquire_db(&state.db)
-        .resolve_task_bool(
-            task_id,
-            TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
-            false,
-        )
-        .unwrap_or(false)
+fn task_display_title_metadata_updates_enabled(
+    state: &AppState,
+    task_id: &str,
+) -> rusqlite::Result<bool> {
+    crate::db::acquire_db(&state.db).resolve_task_bool(
+        task_id,
+        TASK_DISPLAY_TITLE_METADATA_UPDATES_ENABLED_CONFIG_KEY,
+        false,
+    )
 }
 
 pub(in crate::http_server) fn should_start_task_display_title_refresh(
     state: &AppState,
     notification: &crate::agent_lifecycle::AgentLifecycleNotification,
-) -> bool {
-    if !task_display_title_metadata_updates_enabled(state, &notification.task_id) {
-        return false;
+) -> rusqlite::Result<bool> {
+    let enabled = task_display_title_metadata_updates_enabled(state, &notification.task_id)?;
+    if !enabled {
+        return Ok(false);
     }
 
     if notification.kind != crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy {
-        return false;
+        return Ok(false);
     }
 
-    match notification.provider.as_str() {
+    Ok(match notification.provider.as_str() {
         "codex" => notification.raw_event_type.as_deref() == Some("UserPromptSubmit"),
         "claude-code" => notification.raw_event_type.as_deref() == Some("user-prompt-submit"),
         "opencode" => notification.raw_event_type.as_deref() == Some("message.updated"),
         "pi" => notification.raw_event_type.as_deref() == Some("user_prompt"),
         _ => false,
-    }
+    })
 }
