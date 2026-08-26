@@ -11,7 +11,12 @@
     getTerminalRegionTitle,
     shouldShowShellReadyAffordance,
   } from './terminalControls'
-  import type { PoolEntry, ShellLifecycleState } from './terminalRuntime'
+  import {
+    createTaskTerminalController,
+    type TaskTerminalBinding,
+    type TaskTerminalController,
+  } from './taskTerminalController'
+  import type { ShellLifecycleState } from './terminalRuntime'
   import type { TerminalSurfaceAdapter } from './terminalSurfaceAdapter'
 
   interface Props {
@@ -35,16 +40,16 @@
   }: Props = $props()
 
   let terminalEl: HTMLDivElement
-  let unsubscribeShellLifecycle: (() => void) | null = null
-  let poolEntry = $state.raw<PoolEntry | null>(null)
-  let mounted = $state(false)
-  let lifecycle = $state<ShellLifecycleState>({ ptyActive: false, shellExited: false, currentPtyInstance: null, hasOutput: false })
+  let terminalController: TaskTerminalController | null = null
+  let boundAdapter: TerminalSurfaceAdapter | null = null
+  let componentMounted = false
+  let lifecycle = $state<ShellLifecycleState>({
+    ptyActive: false,
+    shellExited: false,
+    currentPtyInstance: null,
+    hasOutput: false,
+  })
   let showReadyAffordance = $derived(showShellReadyAffordance && shouldShowShellReadyAffordance(isActive, lifecycle))
-  let previousIsActive: boolean | null = null
-  let activatingEntry: PoolEntry | null = null
-  let boundTerminalKey = $state<string | null>(null)
-  let boundContextSignature = $state<string | null>(null)
-  let bindRun = 0
 
   const shellLabel = $derived(getShellLabel(terminalIndex))
   const focusDescriptionId = $derived(getTerminalFocusDescriptionId(terminalKey))
@@ -53,180 +58,49 @@
   const restartShellLabel = $derived(getRestartShellAriaLabel(shellLabel))
   const restartShellTitle = $derived(getRestartShellTitle(shellLabel))
 
-  interface TerminalBindingContext {
-    taskId: string
-    workspacePath: string
-    terminalKey: string
-    terminalIndex: number
+  function currentBinding(): TaskTerminalBinding {
+    return { taskId, workspacePath, terminalKey, terminalIndex, isActive }
   }
 
-  function currentBindingContext(): TerminalBindingContext {
-    return { taskId, workspacePath, terminalKey, terminalIndex }
-  }
-
-  function bindingContextSignature(context: TerminalBindingContext): string {
-    return `${context.taskId}\u0000${context.workspacePath}\u0000${context.terminalKey}\u0000${context.terminalIndex}`
-  }
-
-  function isCurrentBindingContext(context: TerminalBindingContext): boolean {
-    return mounted
-      && boundTerminalKey === context.terminalKey
-      && terminalKey === context.terminalKey
-      && taskId === context.taskId
-      && workspacePath === context.workspacePath
-      && terminalIndex === context.terminalIndex
-  }
-
-  function syncLifecycleState(key: string = boundTerminalKey ?? terminalKey) {
-    lifecycle = adapter.runtime.getShellLifecycleState(key)
-  }
-
-  async function activateTerminal(entry: PoolEntry, context: TerminalBindingContext = currentBindingContext()) {
-    if (activatingEntry === entry) return
-    activatingEntry = entry
-    try {
-      const wasAttached = entry.attached
-      await adapter.runtime.attach(entry, terminalEl)
-      if (poolEntry !== entry || !isCurrentBindingContext(context)) return
-      if (wasAttached) {
-        await adapter.runtime.recoverActiveTerminal(entry)
-        if (poolEntry !== entry || !isCurrentBindingContext(context)) return
-      }
-      await ensureShellStarted(entry, context)
-    } finally {
-      if (activatingEntry === entry) activatingEntry = null
-    }
-  }
-
-  async function ensureShellStarted(entry: PoolEntry, context: TerminalBindingContext) {
-    if (!isCurrentBindingContext(context) || !adapter.runtime.shouldSpawnPty(entry)) return
-
-    adapter.runtime.markPtySpawnPending(entry)
-    try {
-      if (!isCurrentBindingContext(context)) return
-      const instanceId = await adapter.spawnShellPty(
-        context.taskId,
-        context.workspacePath,
-        entry.view.geometry.cols,
-        entry.view.geometry.rows,
-        context.terminalIndex,
-        adapter.runtime.getTerminalImageProtocol(entry),
-      )
-      adapter.runtime.markShellPtyStarted(entry, instanceId)
-      if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
-    } finally {
-      adapter.runtime.clearPtySpawnPending(entry)
-    }
-  }
-
-  function clearComponentTerminalResources() {
-    unsubscribeShellLifecycle?.()
-    unsubscribeShellLifecycle = null
-    if (poolEntry) {
-      adapter.runtime.detach(poolEntry)
-      poolEntry = null
-    }
-    previousIsActive = null
-    activatingEntry = null
-  }
-
-  async function bindToTerminalKey(nextTerminalKey: string) {
-    const currentRun = bindRun + 1
-    bindRun = currentRun
-    clearComponentTerminalResources()
-    const context = currentBindingContext()
-    boundTerminalKey = nextTerminalKey
-    boundContextSignature = bindingContextSignature(context)
-
-    const entry = await adapter.runtime.acquire(nextTerminalKey)
-    if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
-
-    poolEntry = entry
-    syncLifecycleState(nextTerminalKey)
-
-    unsubscribeShellLifecycle = adapter.runtime.subscribeShellLifecycle(nextTerminalKey, (state: ShellLifecycleState) => {
-      if (!poolEntry || boundTerminalKey !== nextTerminalKey) return
-      lifecycle = state
+  function createController(nextAdapter: TerminalSurfaceAdapter): TaskTerminalController {
+    boundAdapter = nextAdapter
+    return createTaskTerminalController({
+      adapter: nextAdapter,
+      terminalHost: terminalEl,
+      onLifecycleChange: (state) => { lifecycle = state },
     })
-
-    if (isActive) {
-      await activateTerminal(entry, context)
-      if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
-    }
-
-    previousIsActive = isActive
-
-    if (!mounted || bindRun !== currentRun || boundTerminalKey !== nextTerminalKey) {
-      unsubscribeShellLifecycle?.()
-      unsubscribeShellLifecycle = null
-    }
   }
 
   onMount(() => {
-    mounted = true
+    componentMounted = true
+    terminalController = createController(adapter)
+    terminalController.mount(currentBinding())
   })
 
   $effect(() => {
-    if (!mounted) return
+    const binding = currentBinding()
+    const nextAdapter = adapter
+    if (!componentMounted) return
 
-    const context = currentBindingContext()
-    if (boundContextSignature !== bindingContextSignature(context)) {
-      void bindToTerminalKey(terminalKey)
+    if (boundAdapter !== nextAdapter) {
+      terminalController?.destroy()
+      terminalController = createController(nextAdapter)
+      terminalController.mount(binding)
       return
     }
 
-    const entry = poolEntry
-    if (!entry) return
-
-    syncLifecycleState(boundTerminalKey)
-
-    const needsActiveHostRestore = isActive && !entry.view.isMountedIn(terminalEl)
-    if (previousIsActive === null) {
-      if (needsActiveHostRestore) void activateTerminal(entry, context)
-      previousIsActive = isActive
-      return
-    }
-
-    if ((!previousIsActive && isActive) || needsActiveHostRestore) {
-      void activateTerminal(entry, context)
-    }
-
-    previousIsActive = isActive
+    terminalController?.sync(binding)
   })
 
   onDestroy(() => {
-    mounted = false
-    bindRun += 1
-    clearComponentTerminalResources()
-    boundTerminalKey = null
-    boundContextSignature = null
+    componentMounted = false
+    terminalController?.destroy()
+    terminalController = null
+    boundAdapter = null
   })
 
-  async function handleRestart() {
-    const entry = poolEntry
-    const context = currentBindingContext()
-    if (!entry || lifecycle.ptyActive) return
-    try {
-      await adapter.killPty(context.terminalKey).catch(e => {
-        console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
-      })
-      adapter.runtime.resetTerminal(entry)
-      adapter.runtime.markPtySpawnPending(entry)
-      const instanceId = await adapter.spawnShellPty(
-        context.taskId,
-        context.workspacePath,
-        entry.view.geometry.cols,
-        entry.view.geometry.rows,
-        context.terminalIndex,
-        adapter.runtime.getTerminalImageProtocol(entry),
-      )
-      adapter.runtime.markShellPtyStarted(entry, instanceId)
-      if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
-    } catch (e) {
-      console.error('[TaskTerminal] Failed to restart shell:', e)
-    } finally {
-      adapter.runtime.clearPtySpawnPending(entry)
-    }
+  function handleRestart(): void {
+    void terminalController?.restart()
   }
 </script>
 

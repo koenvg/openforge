@@ -97,6 +97,13 @@ export {
   type TerminalTaskPaneController,
 } from './taskTerminalPaneLifecycle'
 export {
+  createTaskTerminalController,
+  type TaskTerminalBinding,
+  type TaskTerminalController,
+  type TaskTerminalControllerOptions,
+  type TaskTerminalControllerSnapshot,
+} from './taskTerminalController'
+export {
   TERMINAL_FOCUS_DESCRIPTION_TEXT,
   TERMINAL_TASK_PANE_KEYBOARD_FOCUS_PATH_TEXT,
   TERMINAL_TASK_PANE_WORKSPACE_RECOVERY_TEXT,

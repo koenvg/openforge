@@ -81,6 +81,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
     expect(packageJson.dependencies?.svelte).toBeUndefined()
     expect(packageJson.exports['./shortcuts']).toBe('./src/terminalShortcuts.ts')
     expect(packageJson.exports['./shortcutController']).toBe('./src/terminalShortcutController.ts')
+    expect(packageJson.exports['./taskTerminalController']).toBe('./src/taskTerminalController.ts')
     expect(packageJson.exports['./TerminalTabsShell']).toBe('./src/TerminalTabsShell.svelte')
     expect(packageJson.exports['./xterm.css']).toBe('./src/xterm.css')
   })
