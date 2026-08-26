@@ -175,28 +175,64 @@ impl super::Database {
         Ok(())
     }
 
-    /// Get a project config value
-    pub fn get_project_config(&self, project_id: &str, key: &str) -> Result<Option<String>> {
-        let conn = self.lock_conn()?;
+    fn project_config_value(
+        conn: &rusqlite::Connection,
+        project_id: &str,
+        key: &str,
+    ) -> Result<Option<String>> {
         let mut stmt =
             conn.prepare("SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2")?;
         let mut rows = stmt.query([project_id, key])?;
-
-        if let Some(row) = rows.next()? {
-            Ok(Some(row.get(0)?))
-        } else {
-            Ok(None)
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
         }
     }
 
-    /// Set a project config value
-    pub fn set_project_config(&self, project_id: &str, key: &str, value: &str) -> Result<()> {
-        let conn = self.lock_conn()?;
+    fn write_project_config_value(
+        conn: &rusqlite::Connection,
+        project_id: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<()> {
         conn.execute(
             "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
             [project_id, key, value],
         )?;
         Ok(())
+    }
+
+    /// Get a project config value
+    pub fn get_project_config(&self, project_id: &str, key: &str) -> Result<Option<String>> {
+        let conn = self.lock_conn()?;
+        Self::project_config_value(&conn, project_id, key)
+    }
+
+    /// Set a project config value
+    pub fn set_project_config(&self, project_id: &str, key: &str, value: &str) -> Result<()> {
+        let conn = self.lock_conn()?;
+        Self::write_project_config_value(&conn, project_id, key, value)
+    }
+
+    /// Atomically read and update a project config value under one connection lock.
+    ///
+    /// The callback runs while the connection is locked and must not call other database methods.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if locking, reading, or writing the database fails, or if the callback
+    /// rejects the update.
+    pub fn update_project_config<T>(
+        &self,
+        project_id: &str,
+        key: &str,
+        update: impl FnOnce(Option<&str>) -> Result<(String, T)>,
+    ) -> Result<T> {
+        let conn = self.lock_conn()?;
+        let stored = Self::project_config_value(&conn, project_id, key)?;
+        let (value, result) = update(stored.as_deref())?;
+        Self::write_project_config_value(&conn, project_id, key, &value)?;
+        Ok(result)
     }
 
     /// Clear an explicit project config value so callers inherit its global default.
@@ -487,6 +523,55 @@ mod tests {
         assert_eq!(nonexistent, None);
 
         drop(db);
+    }
+
+    #[test]
+    fn concurrent_project_config_updates_preserve_each_change() {
+        let (db, _temp_dir) = make_test_db("concurrent_project_config_updates");
+        let project_id = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project")
+            .id;
+        let db = std::sync::Arc::new(db);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+
+        let handles = (0..8)
+            .map(|index| {
+                let db = std::sync::Arc::clone(&db);
+                let barrier = std::sync::Arc::clone(&barrier);
+                let project_id = project_id.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    db.update_project_config(&project_id, "workers", |stored| {
+                        let mut workers = stored
+                            .unwrap_or_default()
+                            .split(',')
+                            .filter(|worker| !worker.is_empty())
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>();
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        workers.push(index.to_string());
+                        Ok((workers.join(","), ()))
+                    })
+                    .expect("update project config");
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for handle in handles {
+            handle.join().expect("join config update");
+        }
+
+        let mut workers = db
+            .get_project_config(&project_id, "workers")
+            .expect("read project config")
+            .expect("stored project config")
+            .split(',')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        workers.sort();
+
+        assert_eq!(workers, ["0", "1", "2", "3", "4", "5", "6", "7"]);
     }
 
     #[test]
