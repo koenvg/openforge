@@ -74,6 +74,18 @@ function createOpenForgeRootAliases() {
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TerminalTabsShell.svelte'),
     },
     {
+      find: /^@openforge-app\/terminal-runtime\/TaskTerminalSurface$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TaskTerminalSurface.svelte'),
+    },
+    {
+      find: /^@openforge-app\/terminal-runtime\/TerminalTabsSurface$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TerminalTabsSurface.svelte'),
+    },
+    {
+      find: /^@openforge-app\/terminal-runtime\/TerminalTaskPaneSurface$/,
+      replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/TerminalTaskPaneSurface.svelte'),
+    },
+    {
       find: /^@openforge-app\/terminal-runtime\/xterm\.css$/,
       replacement: resolve(process.cwd(), 'packages/terminal-runtime/src/xterm.css'),
     },

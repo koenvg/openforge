@@ -17,6 +17,8 @@ const { getTaskWorkspaceMock, terminalTabsRenderProps, shortcutCleanupMock, cont
 }))
 
 vi.mock('./lib/ipc', () => ({
+  spawnShellPty: vi.fn().mockResolvedValue(1),
+  killPty: vi.fn().mockResolvedValue(undefined),
   getTaskWorkspace: getTaskWorkspaceMock,
 }))
 

@@ -41,6 +41,7 @@ const { killPtyMock, spawnShellPtyMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('../../lib/ipc', () => ({
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
   spawnShellPty: spawnShellPtyMock,
   killPty: killPtyMock,
   writePty: vi.fn().mockResolvedValue(undefined),

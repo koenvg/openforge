@@ -59,14 +59,17 @@ describe('terminal plugin implementation boundary', () => {
     expect(typeof runtimeTaskPaneLifecycle).toBe('function')
   })
 
-  it('keeps task terminal pane lifecycle policy on the shared runtime helper', () => {
+  it('keeps task terminal pane lifecycle policy in the shared Terminal Surface', () => {
     const appLifecycleSource = readFileSync(join(process.cwd(), 'src/components/task-detail/TaskDetailLifecycle.svelte'), 'utf8')
     const appPaneSource = readFileSync(join(process.cwd(), 'src/components/task-detail/TerminalTaskPane.svelte'), 'utf8')
     const pluginPaneSource = readFileSync(join(process.cwd(), 'plugins/terminal/src/TerminalTaskPane.svelte'), 'utf8')
+    const sharedPaneSource = readFileSync(join(process.cwd(), 'packages/terminal-runtime/src/TerminalTaskPaneSurface.svelte'), 'utf8')
 
-    for (const source of [appLifecycleSource, appPaneSource, pluginPaneSource]) {
-      expect(source).toContain("createTaskTerminalPaneLifecycle")
-      expect(source).toContain("@openforge-app/terminal-runtime")
+    expect(appLifecycleSource).toContain('createTaskTerminalPaneLifecycle')
+    expect(sharedPaneSource).toContain('createTaskTerminalPaneLifecycle')
+    for (const source of [appPaneSource, pluginPaneSource]) {
+      expect(source).toContain('@openforge-app/terminal-runtime/TerminalTaskPaneSurface')
+      expect(source).not.toContain('createTaskTerminalPaneLifecycle')
     }
   })
 

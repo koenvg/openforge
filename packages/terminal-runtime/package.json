@@ -13,6 +13,9 @@
     "./shortcuts": "./src/terminalShortcuts.ts",
     "./shortcutController": "./src/terminalShortcutController.ts",
     "./TerminalTabsShell": "./src/TerminalTabsShell.svelte",
+    "./TaskTerminalSurface": "./src/TaskTerminalSurface.svelte",
+    "./TerminalTabsSurface": "./src/TerminalTabsSurface.svelte",
+    "./TerminalTaskPaneSurface": "./src/TerminalTaskPaneSurface.svelte",
     "./xterm.css": "./src/xterm.css"
   },
   "files": [

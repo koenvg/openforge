@@ -50,6 +50,7 @@ const { ipcMocks, terminalPoolMocks, mockEntry, lifecycleState } = vi.hoisted(()
 vi.mock('@openforge-app/terminal-runtime/xterm.css', () => ({}))
 
 vi.mock('./lib/ipc', () => ({
+  getTaskWorkspace: vi.fn().mockResolvedValue(null),
   spawnShellPty: ipcMocks.spawnShellPty,
   killPty: ipcMocks.killPty,
 }))

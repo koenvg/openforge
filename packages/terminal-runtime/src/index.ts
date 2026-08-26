@@ -112,3 +112,8 @@ export {
   type TerminalTabsControllerOptions,
   type TerminalTabsControllerSnapshot,
 } from './terminalControls'
+export {
+  type TerminalSurfaceAdapter,
+  type TerminalSurfaceRuntime,
+  type TerminalSurfaceWorkspace,
+} from './terminalSurfaceAdapter'
