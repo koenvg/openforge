@@ -35,15 +35,6 @@ jobs:
         id: backend-layout
         run: echo "backend-crate-root=$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" >> "$GITHUB_OUTPUT"
 
-      - name: Set version from git tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Updating version to $VERSION"
-          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
-          CARGO_MANIFEST_PATH="$(node scripts/rust-sidecar-layout.mjs manifest-path)"
-          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$CARGO_MANIFEST_PATH"
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -66,6 +57,16 @@ jobs:
 
       - name: Prepare Ghostty build dependencies
         uses: ./.github/actions/prepare-ghostty
+
+      - name: Set version from git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Updating version to $VERSION"
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+          CARGO_MANIFEST_PATH="$(node scripts/rust-sidecar-layout.mjs manifest-path)"
+          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$CARGO_MANIFEST_PATH"
+
       - name: Install frontend dependencies
         run: pnpm install
 
