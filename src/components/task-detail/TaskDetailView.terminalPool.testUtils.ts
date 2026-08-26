@@ -1,14 +1,16 @@
 import {
-  parsePtySessionKey,
+  createTerminalRuntime,
   type PoolEntry,
-  type ShellLifecycleState,
+  type TerminalTransport,
 } from '@openforge-app/terminal-runtime'
 import { createFakeTerminalView } from '@openforge-app/terminal-runtime/testUtils'
 import { vi } from 'vitest'
 
-const { taskTabSessions, terminalPoolEntries, terminalAttachmentDetach } = vi.hoisted(() => ({
+const { taskTabSessions, terminalRuntimeState, terminalAttachmentDetach } = vi.hoisted(() => ({
   taskTabSessions: new Map<string, { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }>(),
-  terminalPoolEntries: new Map<string, PoolEntry>(),
+  terminalRuntimeState: {
+    reset: null as (() => void) | null,
+  },
   terminalAttachmentDetach: vi.fn(),
 }))
 
@@ -50,6 +52,27 @@ vi.mock('../../lib/terminalPool', () => {
       }),
     })
   }
+
+  const transport: TerminalTransport = {
+    subscribeSession: vi.fn(async () => ({ dispose: vi.fn() })),
+    subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
+    readReplay: vi.fn(async () => ({
+      data: null,
+      isLive: false,
+      ptyInstanceId: null,
+    })),
+    writeUserInput: vi.fn(async () => undefined),
+    writeQueryResponse: vi.fn(async () => undefined),
+    resize: vi.fn(async () => undefined),
+    dispose: vi.fn(),
+  }
+  const terminalRuntime = createTerminalRuntime({
+    transport,
+    environment: { openLink: vi.fn(async () => undefined) },
+    createTerminalView: () => createTerminalView(),
+  })
+  const terminalPoolEntries = terminalRuntime._getPool()
+  terminalRuntimeState.reset = () => terminalRuntime.releaseAll()
 
   function createPoolEntry(shellSessionKey: string): PoolEntry {
     return {
@@ -106,57 +129,20 @@ vi.mock('../../lib/terminalPool', () => {
       entry.attached = false
     }),
     recoverActiveTerminal: vi.fn(async () => undefined),
-    restorePtyInstance: vi.fn(),
-    release: vi.fn((shellSessionKey: string) => {
-      terminalPoolEntries.delete(shellSessionKey)
-    }),
-    resetTerminal: vi.fn((entry: PoolEntry) => entry.view.reset()),
-    releaseAllForTask: vi.fn((taskId: string) => {
-      let released = 0
-      for (const shellSessionKey of terminalPoolEntries.keys()) {
-        const session = parsePtySessionKey(shellSessionKey)
-        if (session.kind !== 'indexed-shell' || session.taskId !== taskId) continue
-        terminalPoolEntries.delete(shellSessionKey)
-        released += 1
-      }
-      return released
-    }),
+    restorePtyInstance: vi.fn(terminalRuntime.restorePtyInstance),
+    release: vi.fn(terminalRuntime.release),
+    resetTerminal: vi.fn(terminalRuntime.resetTerminal),
+    releaseAllForTask: vi.fn(terminalRuntime.releaseAllForTask),
     focusTerminal: vi.fn((entry: PoolEntry) => entry.view.focus()),
-    shouldSpawnPty: vi.fn((entry: PoolEntry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+    shouldSpawnPty: vi.fn(terminalRuntime.shouldSpawnPty),
     getTerminalImageProtocol: vi.fn((entry: PoolEntry) => entry.view.imageProtocol),
-    markPtySpawnPending: vi.fn((entry: PoolEntry) => {
-      entry.spawnPending = true
-    }),
-    clearPtySpawnPending: vi.fn((entry: PoolEntry) => {
-      entry.spawnPending = false
-    }),
-    markShellPtyStarted: vi.fn((entry: PoolEntry, instanceId: number) => {
-      entry.currentPtyInstance = instanceId
-      entry.ptyActive = true
-      entry.needsClear = false
-    }),
-    subscribeShellLifecycle: vi.fn(() => () => {}),
-    getShellLifecycleState: vi.fn((shellSessionKey: string) => {
-      const entry = terminalPoolEntries.get(shellSessionKey)
-      return {
-        ptyActive: entry?.ptyActive ?? false,
-        shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
-        currentPtyInstance: entry?.currentPtyInstance ?? null,
-        hasOutput: entry?.hasOutput ?? false,
-      }
-    }),
-    updateShellLifecycleState: vi.fn((shellSessionKey: string, state: ShellLifecycleState) => {
-      const entry = terminalPoolEntries.get(shellSessionKey)
-      if (!entry) return
-      entry.ptyActive = state.ptyActive
-      entry.needsClear = state.shellExited
-      entry.currentPtyInstance = state.currentPtyInstance
-      entry.hasOutput = state.hasOutput
-    }),
-    isShellExited: vi.fn((shellSessionKey: string) => {
-      const entry = terminalPoolEntries.get(shellSessionKey)
-      return entry ? !entry.ptyActive && entry.needsClear : false
-    }),
+    markPtySpawnPending: vi.fn(terminalRuntime.markPtySpawnPending),
+    clearPtySpawnPending: vi.fn(terminalRuntime.clearPtySpawnPending),
+    markShellPtyStarted: vi.fn(terminalRuntime.markShellPtyStarted),
+    subscribeShellLifecycle: vi.fn(terminalRuntime.subscribeShellLifecycle),
+    getShellLifecycleState: vi.fn(terminalRuntime.getShellLifecycleState),
+    updateShellLifecycleState: vi.fn(terminalRuntime.updateShellLifecycleState),
+    isShellExited: vi.fn(terminalRuntime.isShellExited),
     getTaskTerminalTabsSession: vi.fn((taskId: string) => {
       const existing = taskTabSessions.get(taskId)
       if (existing) return existing
@@ -187,7 +173,7 @@ vi.mock('../../lib/liveTerminalPool', async (importOriginal) => {
 
 function resetTaskDetailViewTerminalPoolMocks() {
   taskTabSessions.clear()
-  terminalPoolEntries.clear()
+  terminalRuntimeState.reset?.()
   terminalAttachmentDetach.mockClear()
 }
 
