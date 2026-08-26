@@ -346,6 +346,44 @@ async fn safe_start_reports_unreadable_additional_instructions_config() {
     drop(state);
 }
 
+#[tokio::test]
+async fn safe_start_reports_plugin_activity_lookup_failures() {
+    let (state, _temp_dir) =
+        crate::app_invoke::test_support::test_state("task_start_plugin_activity_lookup_failure");
+    let plugin_id = "com.example.start-prompt";
+    let task_id = task_with_owned_start_prompt_contribution(&state, plugin_id);
+    let project_id = {
+        let db = db::acquire_db(&state.db);
+        let task = db
+            .get_task(&task_id)
+            .expect("get Task")
+            .expect("Task should exist");
+        db.lock_conn()
+            .expect("lock database")
+            .execute(
+                "UPDATE plugins SET package_metadata = ?1 WHERE id = ?2",
+                rusqlite::params!["not-json", plugin_id],
+            )
+            .expect("corrupt plugin package metadata");
+        task.project_id.expect("Task should belong to a Project")
+    };
+
+    let error = service_for_state(&state)
+        .with_provider_launcher(Arc::new(SuccessfulProviderLauncher))
+        .start(TaskStartRequest::safe(&task_id))
+        .await
+        .expect_err("plugin activity lookup failure must reject Task Start");
+    let TaskStartError::Persistence(message) = error else {
+        panic!("expected persistence error, got {error:?}");
+    };
+    assert!(message.contains("Failed to resolve activity"));
+    assert!(message.contains(plugin_id));
+    assert!(message.contains(&project_id));
+    assert!(message.contains("malformed JSON"));
+
+    drop(state);
+}
+
 #[test]
 fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_on_reenable() {
     let (state, _temp_dir) =
