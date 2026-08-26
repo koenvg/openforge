@@ -210,6 +210,8 @@ vi.mock('../../lib/terminalPool', () => {
       authority: null,
       terminalStateSource: 'bootstrapping',
       pendingPtyOutput: [],
+      terminalModelSequence: null,
+      pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,
       hasOutput: false,
     }
