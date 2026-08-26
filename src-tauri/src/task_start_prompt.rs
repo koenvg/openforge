@@ -58,11 +58,20 @@ pub(crate) fn upsert_start_prompt_contribution(
             project_id,
             START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
             |stored| {
-                let mut contributions = stored
-                    .and_then(|value| {
-                        serde_json::from_str::<Vec<StartPromptContribution>>(value).ok()
-                    })
-                    .unwrap_or_default();
+                let mut contributions = match stored {
+                    Some(value) => serde_json::from_str::<Vec<StartPromptContribution>>(value)
+                        .map_err(|error| {
+                            rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    format!(
+                                        "failed to parse stored start prompt contributions for project {project_id}: {error}"
+                                    ),
+                                ),
+                            ))
+                        })?,
+                    None => Vec::new(),
+                };
                 contributions.retain(|existing| {
                     existing.id != contribution.id
                         || (existing.owner_plugin_id.is_some()
@@ -240,6 +249,48 @@ mod tests {
             content: "Project start guidance for {{taskId}}".to_string(),
             order: 0,
         }]
+    }
+
+    #[test]
+    fn upsert_rejects_malformed_stored_contributions_without_overwriting_them() {
+        let (database, _temp_dir) =
+            db::test_helpers::make_test_db("malformed_start_prompt_contributions");
+        let project = database
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project");
+        let malformed = r#"[{"id":"existing","content":"missing closing bracket"}"#;
+        database
+            .set_project_config(
+                &project.id,
+                START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+                malformed,
+            )
+            .expect("seed malformed start prompt contributions");
+
+        let error = upsert_start_prompt_contribution(
+            &database,
+            &project.id,
+            StartPromptContribution {
+                owner_plugin_id: Some("test-plugin".to_string()),
+                id: "new-contribution".to_string(),
+                enabled: true,
+                content: "New contribution".to_string(),
+                order: 0,
+            },
+        )
+        .expect_err("malformed stored contributions must reject the update");
+
+        assert!(
+            error.contains("failed to parse stored start prompt contributions"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            database
+                .get_project_config(&project.id, START_PROMPT_CONTRIBUTIONS_CONFIG_KEY)
+                .expect("read stored start prompt contributions")
+                .as_deref(),
+            Some(malformed)
+        );
     }
 
     #[test]
