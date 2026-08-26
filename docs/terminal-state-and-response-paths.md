@@ -45,7 +45,6 @@ xterm-generated query responses are separated from user input and sent through `
 ## Ghostty-authoritative path
 
 ```text
-<<<<<<< HEAD
 PTY read
   -> libghostty-vt actor
      -> canonical parsed terminal state
@@ -59,20 +58,8 @@ PTY read
 ```
 
 The bytes rendered live by xterm are the same PTY bytes, but they are published only after Ghostty has accepted them. xterm therefore remains the renderer without becoming the backend state authority.
-=======
-plugin shell PTY read
-  -> Rust raw-byte reader
-  -> optional diagnostic Ghostty feed
-  -> Rust UTF-8 event batching and raw replay buffer
-  -> openforge.pty-output-<Shell Session Key>
-  -> Trusted Plugin TerminalTransport adapter
-  -> normalized output event
-  -> host Terminal Runtime
-  -> xterm parser and renderer
-```
 
-The built-in Terminal plugin requests view attachments from the same host-owned Terminal Runtime as agent terminals. The host transport reads PTY replay, subscribes to normalized output, and routes input and resize operations. The plugin does not select terminal authority, renderer type, or lower-level transport capabilities.
->>>>>>> 1b66ee00 (refactor(terminal): consolidate host session ownership)
+The built-in Terminal plugin requests view attachments from the same host-owned Terminal Runtime as agent terminals. The host transport reads restoration state, subscribes to normalized output, and routes input and resize operations. The plugin does not select terminal authority, renderer type, or lower-level transport capabilities.
 
 Ghostty's `on_pty_write` replies go directly through the Shell Session Key and PTY-instance-scoped ordered writer. Terminal Runtime drops xterm-generated replies in this mode, so a query has one response owner.
 

@@ -286,8 +286,8 @@ describe.each([
     harness.emitOutput('T-1-shell-2', 'live output', 7)
     harness.emitExit('T-1-shell-2', 6)
 
-    expect(view.bootstrap).toHaveBeenCalledWith(expect.stringContaining('replay'), 7)
-    expect(view.writeLive).toHaveBeenCalledWith({ data: 'live output', ptyInstanceId: 7 })
+    expect(view.bootstrap).toHaveBeenCalledWith(expect.stringContaining('replay'), 7, 0)
+    expect(view.writeLive).toHaveBeenCalledWith({ data: 'live output', ptyInstanceId: 7, sequence: 1 })
     expect(entry.ptyActive).toBe(true)
 
     harness.emitExit('T-1-shell-2', 7)
@@ -393,7 +393,7 @@ describe.each([
     harness.setReplay('reconnected replay', 7)
     harness.emitConnectionRestored()
     await vi.waitFor(() => {
-      expect(view.bootstrap).toHaveBeenLastCalledWith('reconnected replay', 7)
+      expect(view.bootstrap).toHaveBeenLastCalledWith('reconnected replay', 7, 0)
     })
 
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(4)
