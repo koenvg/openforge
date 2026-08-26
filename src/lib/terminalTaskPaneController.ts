@@ -1,26 +1,13 @@
-export interface TerminalTaskPaneController {
-  addTab(): void
-  closeActiveTab(): Promise<void>
-  focusActiveTab(): void
-  switchToTab(tabIndex: number): void
-}
+import {
+  createTerminalTaskPaneControllerRegistry,
+  type TerminalTaskPaneController,
+} from '@openforge-app/terminal-runtime'
 
-const controllers = new Map<string, TerminalTaskPaneController>()
+export type { TerminalTaskPaneController }
 
-export function registerTerminalTaskPaneController(taskId: string, controller: TerminalTaskPaneController): void {
-  controllers.set(taskId, controller)
-}
+const terminalTaskPaneControllerRegistry = createTerminalTaskPaneControllerRegistry()
 
-export function unregisterTerminalTaskPaneController(taskId: string, controller: TerminalTaskPaneController): void {
-  if (controllers.get(taskId) === controller) {
-    controllers.delete(taskId)
-  }
-}
-
-export function getTerminalTaskPaneController(taskId: string): TerminalTaskPaneController | undefined {
-  return controllers.get(taskId)
-}
-
-export function clearTerminalTaskPaneControllers(): void {
-  controllers.clear()
-}
+export const registerTerminalTaskPaneController = terminalTaskPaneControllerRegistry.register
+export const unregisterTerminalTaskPaneController = terminalTaskPaneControllerRegistry.unregister
+export const getTerminalTaskPaneController = terminalTaskPaneControllerRegistry.get
+export const clearTerminalTaskPaneControllers = terminalTaskPaneControllerRegistry.clear

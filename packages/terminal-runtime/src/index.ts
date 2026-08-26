@@ -87,6 +87,10 @@ export {
   type TerminalTaskPaneWorkspaceSnapshot,
 } from './taskPaneWorkspaceLookup'
 export {
+  createTerminalTaskPaneControllerRegistry,
+  type TerminalTaskPaneControllerRegistry,
+} from './terminalTaskPaneControllerRegistry'
+export {
   createTaskTerminalPaneLifecycle,
   type TaskTerminalPaneLifecycle,
   type TaskTerminalPaneLifecycleOptions,
