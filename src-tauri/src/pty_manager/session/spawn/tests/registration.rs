@@ -64,7 +64,7 @@ async fn stale_session_registration_reaps_the_unpublished_process() {
         reader,
         session,
         pid_file,
-        shadow_feeder: _,
+        terminal_model_feeder: _,
     } = spawned;
     let (current_token, current_lock) = manager.begin_agent_spawn(task_id, adapter.label()).await;
 

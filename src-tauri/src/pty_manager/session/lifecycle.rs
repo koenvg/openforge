@@ -1,5 +1,5 @@
 use super::super::authority::TerminalAuthorityContract;
-use crate::terminal_model::ShadowTerminalSession;
+use crate::terminal_model::TerminalModelSession;
 use log::{error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -141,7 +141,7 @@ pub(in super::super) struct PtySession {
     pub(in super::super) authority: TerminalAuthorityContract,
     pub(in super::super) kind: PtySessionKind,
     pub(in super::super) pid_file_name: String,
-    pub(in super::super) shadow_model: Option<Arc<ShadowTerminalSession>>,
+    pub(in super::super) terminal_model: Option<Arc<TerminalModelSession>>,
     pub(in super::super) managed_process: ManagedProcessIdentity,
 }
 

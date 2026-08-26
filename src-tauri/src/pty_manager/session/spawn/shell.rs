@@ -80,7 +80,7 @@ impl PtyManager {
             reader,
             session,
             pid_file,
-            shadow_feeder,
+            terminal_model_feeder,
         } = spawned;
 
         self.register_spawned_session(SessionRegistrationRequest {
@@ -104,7 +104,7 @@ impl PtyManager {
             session_key,
             instance_id,
             reader,
-            shadow_feeder,
+            terminal_model_feeder,
             stream_state,
             lifecycle_lock: lifecycle_lock.clone(),
             pid_file,

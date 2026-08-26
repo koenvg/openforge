@@ -11,7 +11,8 @@ const COMMAND_QUEUE_CAPACITY: usize = 64;
 const MAX_FEED_BYTES: usize = 8 * 1024;
 const QUEUE_CATCH_UP_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(50);
 #[cfg(test)]
-pub(crate) const SHADOW_BUFFERED_BYTES_CAPACITY: usize = COMMAND_QUEUE_CAPACITY * MAX_FEED_BYTES;
+pub(crate) const TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY: usize =
+    COMMAND_QUEUE_CAPACITY * MAX_FEED_BYTES;
 const DIAGNOSTIC_CAPACITY: usize = 32;
 const REPLY_CAPACITY: usize = 64;
 const REPLY_BYTES_CAPACITY: usize = 64 * 1024;
@@ -41,7 +42,7 @@ impl ShadowMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ShadowDiagnostic {
+pub(crate) struct TerminalModelDiagnostic {
     pub(crate) session_key: String,
     pub(crate) instance_id: u64,
     pub(crate) phase: &'static str,
@@ -71,15 +72,15 @@ pub(crate) struct PortableTerminalSnapshot {
     pub(crate) portable_vt: Vec<u8>,
 }
 
-struct ShadowState {
+struct TerminalModelState {
     disabled: AtomicBool,
-    diagnostics: Mutex<VecDeque<ShadowDiagnostic>>,
+    diagnostics: Mutex<VecDeque<TerminalModelDiagnostic>>,
     replies: Mutex<VecDeque<Vec<u8>>>,
     reply_bytes: Mutex<usize>,
     event_sink: Option<TerminalModelEventSink>,
 }
 
-impl ShadowState {
+impl TerminalModelState {
     fn new(event_sink: Option<TerminalModelEventSink>) -> Self {
         Self {
             disabled: AtomicBool::new(false),
@@ -94,7 +95,7 @@ impl ShadowState {
             return;
         }
         warn!(
-            "[terminal-shadow] key={} instance={} phase={} disabled: {}",
+            "[terminal-model] key={} instance={} phase={} disabled: {}",
             session_key, instance_id, phase, message
         );
         if let Some(event_sink) = &self.event_sink {
@@ -107,7 +108,7 @@ impl ShadowState {
         if diagnostics.len() == DIAGNOSTIC_CAPACITY {
             diagnostics.pop_front();
         }
-        diagnostics.push_back(ShadowDiagnostic {
+        diagnostics.push_back(TerminalModelDiagnostic {
             session_key: session_key.to_string(),
             instance_id,
             phase,
@@ -141,7 +142,7 @@ impl ShadowState {
     }
 }
 
-enum ShadowCommand {
+enum TerminalModelCommand {
     Feed(Vec<u8>),
     Resize {
         cols: u16,
@@ -157,14 +158,14 @@ enum ShadowCommand {
 }
 
 #[derive(Clone)]
-pub(crate) struct ShadowTerminalFeeder {
+pub(crate) struct TerminalModelFeeder {
     session_key: Arc<str>,
     instance_id: u64,
-    tx: mpsc::SyncSender<ShadowCommand>,
-    state: Arc<ShadowState>,
+    tx: mpsc::SyncSender<TerminalModelCommand>,
+    state: Arc<TerminalModelState>,
 }
 
-impl ShadowTerminalFeeder {
+impl TerminalModelFeeder {
     pub(crate) fn feed(&self, bytes: &[u8]) {
         if self.state.disabled.load(Ordering::Acquire) {
             return;
@@ -179,7 +180,7 @@ impl ShadowTerminalFeeder {
             return;
         }
         let deadline = std::time::Instant::now() + QUEUE_CATCH_UP_TIMEOUT;
-        let mut command = ShadowCommand::Feed(bytes.to_vec());
+        let mut command = TerminalModelCommand::Feed(bytes.to_vec());
         loop {
             match self.tx.try_send(command) {
                 Ok(()) => return,
@@ -213,20 +214,20 @@ impl ShadowTerminalFeeder {
     }
 }
 
-pub(crate) struct ShadowTerminalSession {
+pub(crate) struct TerminalModelSession {
     session_key: Arc<str>,
     instance_id: u64,
-    tx: mpsc::SyncSender<ShadowCommand>,
-    state: Arc<ShadowState>,
+    tx: mpsc::SyncSender<TerminalModelCommand>,
+    state: Arc<TerminalModelState>,
     worker: Option<JoinHandle<()>>,
 }
 
-impl ShadowTerminalSession {
+impl TerminalModelSession {
     pub(crate) fn start(
         session_key: String,
         instance_id: u64,
         options: TerminalModelOptions,
-    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+    ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
         Self::start_internal(session_key, instance_id, options, None)
     }
 
@@ -236,7 +237,7 @@ impl ShadowTerminalSession {
         instance_id: u64,
         options: TerminalModelOptions,
         event_sink: TerminalModelEventSink,
-    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+    ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
         Self::start_internal(session_key, instance_id, options, Some(event_sink))
     }
 
@@ -245,14 +246,14 @@ impl ShadowTerminalSession {
         instance_id: u64,
         options: TerminalModelOptions,
         event_sink: Option<TerminalModelEventSink>,
-    ) -> Result<(Self, ShadowTerminalFeeder), std::io::Error> {
+    ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
         let session_key: Arc<str> = Arc::from(session_key);
-        let state = Arc::new(ShadowState::new(event_sink));
+        let state = Arc::new(TerminalModelState::new(event_sink));
         let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
         let worker_key = Arc::clone(&session_key);
         let worker_state = Arc::clone(&state);
         let worker = std::thread::Builder::new()
-            .name(format!("terminal-shadow-{instance_id}"))
+            .name(format!("terminal-model-{instance_id}"))
             .spawn(move || {
                 let panic_key = Arc::clone(&worker_key);
                 let panic_state = Arc::clone(&worker_state);
@@ -268,7 +269,7 @@ impl ShadowTerminalSession {
                     panic_state.disable(&panic_key, instance_id, "panic", message);
                 }
             })?;
-        let feeder = ShadowTerminalFeeder {
+        let feeder = TerminalModelFeeder {
             session_key: Arc::clone(&session_key),
             instance_id,
             tx: tx.clone(),
@@ -290,7 +291,10 @@ impl ShadowTerminalSession {
         if self.state.disabled.load(Ordering::Acquire) {
             return;
         }
-        if let Err(error) = self.tx.try_send(ShadowCommand::Resize { cols, rows }) {
+        if let Err(error) = self
+            .tx
+            .try_send(TerminalModelCommand::Resize { cols, rows })
+        {
             self.state.disable(
                 &self.session_key,
                 self.instance_id,
@@ -307,29 +311,29 @@ impl ShadowTerminalSession {
 
     #[cfg(test)]
     pub(crate) fn snapshot(&self) -> Result<Vec<u8>, String> {
-        self.request(ShadowCommand::Snapshot)
+        self.request(TerminalModelCommand::Snapshot)
     }
 
     #[cfg(test)]
     pub(crate) fn portable_vt(&self) -> Result<Vec<u8>, String> {
-        self.request(ShadowCommand::PortableVt)
+        self.request(TerminalModelCommand::PortableVt)
     }
 
     #[cfg(test)]
     fn request(
         &self,
-        command: impl FnOnce(mpsc::SyncSender<Result<Vec<u8>, String>>) -> ShadowCommand,
+        command: impl FnOnce(mpsc::SyncSender<Result<Vec<u8>, String>>) -> TerminalModelCommand,
     ) -> Result<Vec<u8>, String> {
         if self.state.disabled.load(Ordering::Acquire) {
-            return Err("shadow model is disabled".to_string());
+            return Err("terminal model is disabled".to_string());
         }
         let (response_tx, response_rx) = mpsc::sync_channel(1);
         self.tx
             .send(command(response_tx))
-            .map_err(|error| format!("shadow model request failed: {error}"))?;
+            .map_err(|error| format!("terminal model request failed: {error}"))?;
         response_rx
             .recv_timeout(REQUEST_TIMEOUT)
-            .map_err(|error| format!("shadow model response failed: {error}"))?
+            .map_err(|error| format!("terminal model response failed: {error}"))?
     }
 
     #[cfg(test)]
@@ -343,7 +347,7 @@ impl ShadowTerminalSession {
     }
 
     #[cfg(test)]
-    pub(crate) fn diagnostics(&self) -> Vec<ShadowDiagnostic> {
+    pub(crate) fn diagnostics(&self) -> Vec<TerminalModelDiagnostic> {
         self.state
             .diagnostics
             .lock()
@@ -356,30 +360,30 @@ impl ShadowTerminalSession {
 
 #[cfg(test)]
 fn request_portable_snapshot(
-    tx: &mpsc::SyncSender<ShadowCommand>,
-    state: &ShadowState,
+    tx: &mpsc::SyncSender<TerminalModelCommand>,
+    state: &TerminalModelState,
 ) -> Result<PortableTerminalSnapshot, String> {
     if state.disabled.load(Ordering::Acquire) {
         return Err("terminal model is disabled".to_string());
     }
     let (response_tx, response_rx) = mpsc::sync_channel(1);
-    tx.send(ShadowCommand::PortableSnapshot(response_tx))
+    tx.send(TerminalModelCommand::PortableSnapshot(response_tx))
         .map_err(|error| format!("terminal model snapshot request failed: {error}"))?;
     response_rx
         .recv_timeout(REQUEST_TIMEOUT)
         .map_err(|error| format!("terminal model snapshot response failed: {error}"))?
 }
 
-impl Drop for ShadowTerminalSession {
+impl Drop for TerminalModelSession {
     fn drop(&mut self) {
         if !self.state.disabled.load(Ordering::Acquire) {
-            let _ = self.tx.send(ShadowCommand::Shutdown);
+            let _ = self.tx.send(TerminalModelCommand::Shutdown);
         }
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
         info!(
-            "[terminal-shadow] key={} instance={} disposed",
+            "[terminal-model] key={} instance={} disposed",
             self.session_key, self.instance_id
         );
     }
@@ -393,8 +397,8 @@ fn run_worker(
     session_key: Arc<str>,
     instance_id: u64,
     options: TerminalModelOptions,
-    rx: mpsc::Receiver<ShadowCommand>,
-    state: Arc<ShadowState>,
+    rx: mpsc::Receiver<TerminalModelCommand>,
+    state: Arc<TerminalModelState>,
 ) {
     let mut model = match GhosttyTerminalModel::new(options) {
         Ok(model) => model,
@@ -427,7 +431,7 @@ fn run_worker(
             return;
         }
         let result = match command {
-            ShadowCommand::Feed(bytes) => {
+            TerminalModelCommand::Feed(bytes) => {
                 bytes_since_checkpoint = bytes_since_checkpoint.saturating_add(bytes.len());
                 let result = model.feed(&bytes);
                 if result.is_ok() {
@@ -442,9 +446,9 @@ fn run_worker(
                 }
                 result
             }
-            ShadowCommand::Resize { cols, rows } => model.resize(cols, rows),
+            TerminalModelCommand::Resize { cols, rows } => model.resize(cols, rows),
             #[cfg(test)]
-            ShadowCommand::PortableSnapshot(response) => {
+            TerminalModelCommand::PortableSnapshot(response) => {
                 let result = model
                     .format_portable_vt()
                     .map(|portable_vt| PortableTerminalSnapshot {
@@ -457,18 +461,18 @@ fn run_worker(
                 continue;
             }
             #[cfg(test)]
-            ShadowCommand::Snapshot(response) => {
+            TerminalModelCommand::Snapshot(response) => {
                 let result = model.encode_snapshot().map_err(model_error);
                 let _ = response.send(result);
                 continue;
             }
             #[cfg(test)]
-            ShadowCommand::PortableVt(response) => {
+            TerminalModelCommand::PortableVt(response) => {
                 let result = model.format_portable_vt().map_err(model_error);
                 let _ = response.send(result);
                 continue;
             }
-            ShadowCommand::Shutdown => return,
+            TerminalModelCommand::Shutdown => return,
         };
         if let Err(error) = result {
             state.disable(&session_key, instance_id, "command", model_error(error));
@@ -494,12 +498,12 @@ mod tests {
 
     #[test]
     fn worker_preserves_raw_chunk_order_and_captures_replies() {
-        let (session, feeder) = ShadowTerminalSession::start(
+        let (session, feeder) = TerminalModelSession::start(
             "task-shell-0".to_string(),
             42,
             TerminalModelOptions::new(20, 4),
         )
-        .expect("shadow worker should start");
+        .expect("terminal model worker should start");
 
         feeder.feed(b"before \xF0\x9F");
         feeder.feed(b"\x98\x80\r\n\x1b[6n");
@@ -526,7 +530,7 @@ mod tests {
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .push(event);
         });
-        let (session, feeder) = ShadowTerminalSession::start_with_event_sink(
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
             "cutover-shell".to_string(),
             77,
             TerminalModelOptions::new(20, 4),
@@ -577,21 +581,21 @@ mod tests {
 
     #[test]
     fn stale_instance_feeder_cannot_mutate_successor_model() {
-        let (old_session, old_feeder) = ShadowTerminalSession::start(
+        let (old_session, old_feeder) = TerminalModelSession::start(
             "shared-key".to_string(),
             10,
             TerminalModelOptions::new(20, 4),
         )
-        .expect("old shadow worker should start");
+        .expect("old terminal model worker should start");
         old_feeder.feed(b"old-instance");
         drop(old_session);
 
-        let (new_session, new_feeder) = ShadowTerminalSession::start(
+        let (new_session, new_feeder) = TerminalModelSession::start(
             "shared-key".to_string(),
             11,
             TerminalModelOptions::new(20, 4),
         )
-        .expect("new shadow worker should start");
+        .expect("new terminal model worker should start");
         old_feeder.feed(b"stale-output");
         new_feeder.feed(b"new-instance");
 

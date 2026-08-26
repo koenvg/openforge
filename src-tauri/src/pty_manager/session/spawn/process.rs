@@ -1,6 +1,6 @@
 //! PTY command configuration and child-process creation.
 
-use crate::terminal_model::{ShadowTerminalFeeder, ShadowTerminalSession, TerminalModelOptions};
+use crate::terminal_model::{TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
 use crate::user_environment::user_environment;
 use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -32,7 +32,7 @@ pub(super) struct SpawnedPty {
     pub(super) reader: Box<dyn Read + Send>,
     pub(super) session: PtySession,
     pub(super) pid_file: PathBuf,
-    pub(super) shadow_feeder: Option<ShadowTerminalFeeder>,
+    pub(super) terminal_model_feeder: Option<TerminalModelFeeder>,
 }
 
 impl SpawnedPty {
@@ -158,8 +158,8 @@ impl PtyManager {
             ))
         })?;
 
-        let (shadow_model, shadow_feeder) = if self.terminal_model_enabled() {
-            match ShadowTerminalSession::start(
+        let (terminal_model, terminal_model_feeder) = if self.terminal_model_enabled() {
+            match TerminalModelSession::start(
                 request.session_key.clone(),
                 request.instance_id,
                 TerminalModelOptions::new(request.cols, request.rows),
@@ -167,7 +167,7 @@ impl PtyManager {
                 Ok((session, feeder)) => (Some(session), Some(feeder)),
                 Err(error) => {
                     warn!(
-                        "[terminal-shadow] key={} instance={} phase=create disabled: {}",
+                        "[terminal-model] key={} instance={} phase=create disabled: {}",
                         request.session_key, request.instance_id, error
                     );
                     (None, None)
@@ -187,11 +187,11 @@ impl PtyManager {
                 authority: self.terminal_authority_contract(),
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
-                shadow_model: shadow_model.map(Arc::new),
+                terminal_model: terminal_model.map(Arc::new),
                 managed_process,
             },
             pid_file,
-            shadow_feeder,
+            terminal_model_feeder,
         })
     }
 

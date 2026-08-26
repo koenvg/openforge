@@ -1,7 +1,7 @@
 //! Registration and startup of PTY output streams.
 
 use crate::app_events::AppEventSender;
-use crate::terminal_model::ShadowTerminalFeeder;
+use crate::terminal_model::TerminalModelFeeder;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -32,7 +32,7 @@ pub(super) struct AgentEventStreamRequest<'a> {
     pub(super) token: AgentSpawnToken,
     pub(super) instance_id: u64,
     pub(super) reader: Box<dyn Read + Send>,
-    pub(super) shadow_feeder: Option<ShadowTerminalFeeder>,
+    pub(super) terminal_model_feeder: Option<TerminalModelFeeder>,
     pub(super) stream_state: AgentStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
@@ -48,7 +48,7 @@ pub(super) struct ShellEventStreamRequest {
     pub(super) session_key: String,
     pub(super) instance_id: u64,
     pub(super) reader: Box<dyn Read + Send>,
-    pub(super) shadow_feeder: Option<ShadowTerminalFeeder>,
+    pub(super) terminal_model_feeder: Option<TerminalModelFeeder>,
     pub(super) stream_state: ShellStreamState,
     pub(super) lifecycle_lock: LifecycleLockLease,
     pub(super) pid_file: PathBuf,
@@ -229,7 +229,7 @@ impl PtyManager {
             token,
             instance_id,
             reader,
-            shadow_feeder,
+            terminal_model_feeder,
             stream_state,
             lifecycle_lock,
             pid_file,
@@ -254,7 +254,7 @@ impl PtyManager {
             task_id.to_string(),
             stream_state.last_output_time.as_ref().map(Arc::clone),
             Some(Arc::clone(&stream_state.attachment_hub)),
-            shadow_feeder,
+            terminal_model_feeder,
         );
         spawn_batched_pty_event_emitter(
             rx,
@@ -302,7 +302,7 @@ impl PtyManager {
             session_key,
             instance_id,
             reader,
-            shadow_feeder,
+            terminal_model_feeder,
             stream_state,
             lifecycle_lock,
             pid_file,
@@ -313,7 +313,7 @@ impl PtyManager {
             session_key.clone(),
             Some(Arc::clone(&stream_state.last_output_time)),
             None,
-            shadow_feeder,
+            terminal_model_feeder,
         );
         spawn_batched_pty_event_emitter(
             rx,

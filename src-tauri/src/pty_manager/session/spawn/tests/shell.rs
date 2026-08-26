@@ -193,7 +193,7 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
             task_id: "failed-shell-cleanup".to_string(),
         },
         pid_file_name: format!("{session_key}.pid"),
-        shadow_model: None,
+        terminal_model: None,
         managed_process: mismatched_identity.clone(),
     };
 
@@ -408,7 +408,7 @@ async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
         let session = sessions.get(&session_key).expect("live shell session");
         assert_eq!(session.instance_id, instance_id);
         let shadow = session
-            .shadow_model
+            .terminal_model
             .as_ref()
             .expect("shadow model should follow the live instance");
         let snapshot = shadow.snapshot().expect("canonical snapshot should encode");

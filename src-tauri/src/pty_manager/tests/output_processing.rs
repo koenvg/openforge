@@ -371,7 +371,7 @@ async fn test_spawn_pty_populates_output_buffer() {
 
 #[test]
 fn shadow_mode_observes_raw_bytes_without_changing_desktop_output() {
-    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+    let (shadow, feeder) = crate::terminal_model::TerminalModelSession::start(
         "task-reader".to_string(),
         42,
         crate::terminal_model::TerminalModelOptions::new(20, 4),
@@ -405,7 +405,7 @@ fn shadow_mode_observes_raw_bytes_without_changing_desktop_output() {
 
 #[test]
 fn shadow_creation_failure_does_not_change_desktop_output() {
-    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+    let (shadow, feeder) = crate::terminal_model::TerminalModelSession::start(
         "failed-shadow".to_string(),
         7,
         crate::terminal_model::TerminalModelOptions::new(0, 0),
@@ -430,7 +430,7 @@ fn shadow_creation_failure_does_not_change_desktop_output() {
 }
 
 fn measure_sustained_output(
-    shadow_feeder: Option<crate::terminal_model::ShadowTerminalFeeder>,
+    terminal_model_feeder: Option<crate::terminal_model::TerminalModelFeeder>,
 ) -> (std::time::Duration, usize) {
     const READ_COUNT: usize = 64;
     let mut reader = RepeatingReader {
@@ -452,7 +452,7 @@ fn measure_sustained_output(
         "throughput-guard",
         None,
         None,
-        shadow_feeder,
+        terminal_model_feeder,
     );
     let elapsed = started.elapsed();
     let bytes = consumer.join().expect("output consumer should finish");
@@ -462,7 +462,7 @@ fn measure_sustained_output(
 #[test]
 fn shadow_mode_sustained_output_stays_bounded_and_responsive() {
     let (baseline_elapsed, baseline_bytes) = measure_sustained_output(None);
-    let (shadow, feeder) = crate::terminal_model::ShadowTerminalSession::start(
+    let (shadow, feeder) = crate::terminal_model::TerminalModelSession::start(
         "throughput-guard".to_string(),
         99,
         crate::terminal_model::TerminalModelOptions::new(80, 24),
@@ -473,7 +473,7 @@ fn shadow_mode_sustained_output_stays_bounded_and_responsive() {
     assert_eq!(baseline_bytes, 64 * PTY_READ_BUFFER_SIZE);
     assert_eq!(shadow_bytes, baseline_bytes);
     assert_eq!(
-        crate::terminal_model::SHADOW_BUFFERED_BYTES_CAPACITY,
+        crate::terminal_model::TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY,
         512 * 1024,
     );
     let allowed = baseline_elapsed
