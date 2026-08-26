@@ -63,7 +63,7 @@ use std::{
     process::{Command as StdCommand, Output},
     time::Duration,
 };
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard};
 
 static PROVIDER_TEST_LOCK: Lazy<TokioMutex<()>> = Lazy::new(|| TokioMutex::new(()));
 static PROVIDER_TEST_SANDBOX: Lazy<ProviderTestSandbox> = Lazy::new(ProviderTestSandbox::new);
@@ -92,6 +92,63 @@ impl ProviderTestSandbox {
 
     fn clear_log(&self) {
         let _ = fs::remove_file(&self.log_path);
+    }
+}
+
+struct ProviderLifecycleFixture {
+    state: crate::http_server::AppState,
+    _db_temp_dir: tempfile::TempDir,
+    app_dir: Option<tempfile::TempDir>,
+    _provider_test_lock: TokioMutexGuard<'static, ()>,
+}
+
+impl ProviderLifecycleFixture {
+    async fn new(name: &str) -> Self {
+        Self::build(name, false).await
+    }
+
+    async fn with_backend_app(name: &str) -> Self {
+        Self::build(name, true).await
+    }
+
+    async fn build(name: &str, with_backend_app: bool) -> Self {
+        let provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
+        let sandbox = &*PROVIDER_TEST_SANDBOX;
+        sandbox.clear_log();
+
+        let (mut state, db_temp_dir, app_dir) = if with_backend_app {
+            let (state, db_temp_dir, app_dir) = test_state_with_backend_app(name);
+            (state, db_temp_dir, Some(app_dir))
+        } else {
+            let (state, db_temp_dir) = test_state(name);
+            (state, db_temp_dir, None)
+        };
+        configure_provider_test_path(&mut state, &sandbox.bin_dir);
+
+        Self {
+            state,
+            _db_temp_dir: db_temp_dir,
+            app_dir,
+            _provider_test_lock: provider_test_lock,
+        }
+    }
+
+    fn state(&self) -> &crate::http_server::AppState {
+        &self.state
+    }
+
+    fn state_mut(&mut self) -> &mut crate::http_server::AppState {
+        &mut self.state
+    }
+
+    fn log_path(&self) -> &Path {
+        &PROVIDER_TEST_SANDBOX.log_path
+    }
+
+    fn app_dir(&self) -> &tempfile::TempDir {
+        self.app_dir
+            .as_ref()
+            .expect("provider fixture should own a backend app directory")
     }
 }
 
@@ -289,12 +346,9 @@ fn init_committed_repo(repo_path: &Path) {
 
 #[tokio::test]
 async fn start_implementation_starts_configured_pi_provider_through_app_invoke_boundary() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_pi_provider_boundary").await;
+    let state = fixture.state();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_pi_provider_boundary");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -321,7 +375,7 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     };
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
@@ -338,7 +392,7 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
     assert_eq!(response["port"], 0);
 
     let log =
-        wait_for_provider_log_record(&sandbox.log_path, "pi", "Start through Pi provider").await;
+        wait_for_provider_log_record(fixture.log_path(), "pi", "Start through Pi provider").await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     let canonical_repo_dir = fs::canonicalize(&repo_dir).expect("repo dir should canonicalize");
     assert!(
@@ -380,13 +434,11 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
 
 #[tokio::test]
 async fn start_implementation_uses_authoritative_project_path_and_publishes_canonical_event() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture =
+        ProviderLifecycleFixture::new("app_invoke_start_authoritative_project_path").await;
+    let state = fixture.state();
     let (_project_temp, project_repo_dir) = provider_repo_dir();
     let (_spoofed_temp, spoofed_repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_authoritative_project_path");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let mut events = state
         .app_event_tx
         .as_ref()
@@ -418,7 +470,7 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
     };
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": spoofed_repo_dir.to_string_lossy() }),
     )
@@ -429,7 +481,7 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
         project_repo_dir.to_string_lossy().as_ref()
     );
     let log = wait_for_provider_log_record(
-        &sandbox.log_path,
+        fixture.log_path(),
         "pi",
         "Start from authoritative project state",
     )
@@ -455,12 +507,9 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
 
 #[tokio::test]
 async fn start_implementation_rejects_stale_non_backlog_task_state() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_rejects_stale_state").await;
+    let state = fixture.state();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_rejects_stale_state");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -487,7 +536,7 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
     };
 
     let error = invoke(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
@@ -497,7 +546,7 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
     assert_eq!(error.0, StatusCode::CONFLICT);
     assert!(error.1.contains("backlog"), "got: {}", error.1);
     assert!(
-        fs::read_to_string(&sandbox.log_path)
+        fs::read_to_string(fixture.log_path())
             .ok()
             .is_none_or(|log| !log.contains("Do not start stale state")),
         "provider must not launch for stale Task state"
@@ -506,12 +555,9 @@ async fn start_implementation_rejects_stale_non_backlog_task_state() {
 
 #[tokio::test]
 async fn start_implementation_injects_plugin_configured_review_workflow() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_plugin_review_workflow").await;
+    let state = fixture.state();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_plugin_review_workflow");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -551,7 +597,7 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
     };
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
@@ -559,7 +605,7 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
 
     assert_eq!(response["task_id"], task_id);
     let log = wait_for_provider_log_record(
-        &sandbox.log_path,
+        fixture.log_path(),
         "pi",
         "Start with plugin prompt contribution",
     )
@@ -585,13 +631,13 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
 
 #[tokio::test]
 async fn start_implementation_materializes_pasted_image_references_for_provider_prompt() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::with_backend_app(
+        "app_invoke_start_materializes_image_references",
+    )
+    .await;
+    let state = fixture.state();
+    let app_dir = fixture.app_dir();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir, app_dir) =
-        test_state_with_backend_app("app_invoke_start_materializes_image_references");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -618,13 +664,13 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
     };
 
     invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
     .await;
 
-    let log = wait_for_provider_log_record(&sandbox.log_path, "pi", "Inspect [image#1]").await;
+    let log = wait_for_provider_log_record(fixture.log_path(), "pi", "Inspect [image#1]").await;
     assert!(log.contains("provider=pi"), "got provider log: {log}");
     assert!(
         !log.contains("data:image/png;base64"),
@@ -652,12 +698,9 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
 
 #[tokio::test]
 async fn start_implementation_passes_task_agent_to_configured_opencode_provider() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_opencode_agent_boundary").await;
+    let state = fixture.state();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_opencode_agent_boundary");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -699,14 +742,14 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
         .subscribe();
 
     invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
     .await;
 
     let log =
-        read_provider_log_after_ready(&mut provider_events, &task_id, &sandbox.log_path).await;
+        read_provider_log_after_ready(&mut provider_events, &task_id, fixture.log_path()).await;
     assert!(log.contains("provider=opencode"), "got provider log: {log}");
     assert!(log.contains("arg1=--agent"), "got provider log: {log}");
     assert!(
@@ -737,12 +780,9 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
 
 #[tokio::test]
 async fn start_implementation_starts_configured_codex_provider_through_app_invoke_boundary() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_codex_provider_boundary").await;
+    let state = fixture.state();
     let (_temp, repo_dir) = provider_repo_dir();
-    let (mut state, _temp_dir) = test_state("app_invoke_start_codex_provider_boundary");
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -775,7 +815,7 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
         .subscribe();
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
@@ -789,7 +829,7 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
     assert_eq!(response["port"], 0);
 
     let log =
-        read_provider_log_after_ready(&mut provider_events, &task_id, &sandbox.log_path).await;
+        read_provider_log_after_ready(&mut provider_events, &task_id, fixture.log_path()).await;
     assert!(log.contains("provider=codex"), "got provider log: {log}");
     assert!(
         log.contains("Start through Codex provider"),
@@ -821,9 +861,8 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
 
 #[tokio::test]
 async fn start_implementation_uses_persisted_existing_worktree_branch() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let mut fixture =
+        ProviderLifecycleFixture::new("app_invoke_start_existing_branch_worktree").await;
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let worktree_root = temp.path().join("worktrees");
     let repo_dir = temp.path().join("repo");
@@ -832,9 +871,8 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
-    let (mut state, _temp_dir) = test_state("app_invoke_start_existing_branch_worktree");
-    state.task_start_worktree_root = Some(worktree_root.clone());
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
+    fixture.state_mut().task_start_worktree_root = Some(worktree_root.clone());
+    let state = fixture.state();
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -861,7 +899,7 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
     };
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
@@ -898,7 +936,7 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
         assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
     }
 
-    invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
+    invoke_ok(state, "delete_task", json!({ "id": task_id })).await;
     let workspace_dir = std::path::PathBuf::from(workspace_path);
     wait_for_background_cleanup("existing-branch worktree must be removed", || {
         !workspace_dir.exists()
@@ -917,9 +955,9 @@ async fn start_implementation_uses_persisted_existing_worktree_branch() {
 
 #[tokio::test]
 async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
-    let _provider_test_lock = PROVIDER_TEST_LOCK.lock().await;
-    let sandbox = &*PROVIDER_TEST_SANDBOX;
-    sandbox.clear_log();
+    let mut fixture =
+        ProviderLifecycleFixture::new("app_invoke_start_existing_branch_replaces_stale_worktree")
+            .await;
     let temp = tempfile::tempdir().expect("tempdir should be created");
     let worktree_root = temp.path().join("worktrees");
     let repo_dir = temp.path().join("repo");
@@ -928,10 +966,8 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
     fs::write(repo_dir.join("README.md"), "feature branch\n").expect("fixture file should write");
     assert_git_success(&repo_dir, &["commit", "-am", "feature change"]);
     assert_git_success(&repo_dir, &["checkout", "main"]);
-    let (mut state, _temp_dir) =
-        test_state("app_invoke_start_existing_branch_replaces_stale_worktree");
-    state.task_start_worktree_root = Some(worktree_root.clone());
-    configure_provider_test_path(&mut state, &sandbox.bin_dir);
+    fixture.state_mut().task_start_worktree_root = Some(worktree_root.clone());
+    let state = fixture.state();
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let project = db
@@ -978,7 +1014,7 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
     );
 
     let response = invoke_ok(
-        &state,
+        state,
         "start_implementation",
         json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
     )
