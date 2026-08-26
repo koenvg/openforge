@@ -311,10 +311,12 @@ describe.each([
     expect(view.bootstrap).toHaveBeenCalledWith(
       Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
       9,
+      0,
     )
     expect(view.writeLive).toHaveBeenCalledWith({
       data: Uint8Array.from(new TextEncoder().encode('model output')),
       ptyInstanceId: 9,
+      sequence: 1,
     })
     expect(entry.authority?.contract.mode).toBe('ghostty-authoritative')
     expect(entry.terminalModelSequence).toBe(4)

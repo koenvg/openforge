@@ -57,9 +57,11 @@ export function createTerminalStateView({
     const currentSequence = entry.terminalModelSequence
     if (currentSequence === null || event.sequence <= currentSequence) return true
     if (event.sequence !== currentSequence + 1) return false
+    entry.outputSequence += 1
     entry.view.writeLive({
       data: event.data,
       ptyInstanceId: event.ptyInstanceId,
+      sequence: entry.outputSequence,
     })
     entry.terminalModelSequence = event.sequence
     markOutput(entry)
@@ -117,6 +119,7 @@ export function createTerminalStateView({
     }
     entry.ptyActive = replay.isLive
     entry.needsClear = false
+    entry.outputSequence = 0
     entry.currentPtyInstance = replay.ptyInstanceId
     entry.authority = bindTerminalAuthority(
       GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT,
@@ -126,7 +129,7 @@ export function createTerminalStateView({
     entry.terminalStateSource = 'ghostty-snapshot'
     entry.terminalModelSequence = snapshot.watermark
     if (snapshot.data.length > 0) {
-      entry.view.bootstrap(snapshot.data, replay.ptyInstanceId)
+      entry.view.bootstrap(snapshot.data, replay.ptyInstanceId, entry.outputSequence)
       entry.hasOutput = true
     }
     flushPendingOutput(entry)

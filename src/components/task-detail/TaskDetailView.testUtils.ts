@@ -296,6 +296,14 @@ vi.mock('../../lib/terminalPool', () => {
   }
 })
 
+vi.mock('../../lib/liveTerminalPool', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/liveTerminalPool')>()
+  return {
+    ...actual,
+    releaseAllForTask: vi.fn().mockReturnValue(0),
+  }
+})
+
 const { mockResetToBoard } = vi.hoisted(() => ({
   mockResetToBoard: vi.fn(),
 }))

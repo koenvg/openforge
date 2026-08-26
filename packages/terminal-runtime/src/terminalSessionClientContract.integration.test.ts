@@ -45,7 +45,7 @@ describe('Terminal Session client contract', () => {
     host.emit('openforge-app-events-reconnected', { attempt: 1, reconnectedAt: 'now' })
     await vi.waitFor(() => expect(view.bootstrap).toHaveBeenCalledWith('reconnected', 1, 0))
 
-    client.markShellPtyStarted(entry, 2)
+    await client.markShellPtyStarted(entry, 2)
     instanceId = 2
     host.emit(`pty-output-${shellSessionKey}`, { data: 'stale', instance_id: 1 })
     host.emit(`pty-output-${shellSessionKey}`, { data: 'current', instance_id: 2 })

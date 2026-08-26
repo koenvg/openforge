@@ -26,7 +26,7 @@ describe('terminal output sequencing', () => {
       sequence: 2,
     })
 
-    runtime.markShellPtyStarted(entry, 9)
+    await runtime.markShellPtyStarted(entry, 9)
     host.emit('pty-output-T-1-shell-0', { data: 'replacement', instance_id: 9 })
 
     expect(view.writeLive).toHaveBeenNthCalledWith(3, {
