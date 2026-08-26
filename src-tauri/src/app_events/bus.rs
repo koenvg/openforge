@@ -1,193 +1,16 @@
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-const APP_EVENT_SCHEMA_VERSION: u16 = 1;
+use super::event_model::{
+    AppEvent, AppEventCursor, AppEventEnvelope, AppEventError, AppEventFrame, AppEventGap,
+    AppEventId, AppEventMeta, DeliveryClass, EmitReceipt, APP_EVENT_SCHEMA_VERSION,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AppEventId {
-    pub epoch: String,
-    pub seq: u64,
-}
-
-impl AppEventId {
-    pub fn as_sse_id(&self) -> String {
-        format!("{}:{}", self.epoch, self.seq)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AppEventCursor {
-    pub epoch: String,
-    pub seq: u64,
-}
-
-impl AppEventCursor {
-    #[allow(dead_code)]
-    pub fn after(id: AppEventId) -> Self {
-        Self {
-            epoch: id.epoch,
-            seq: id.seq,
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Self> {
-        let (epoch, seq) = value.rsplit_once(':')?;
-        let seq = seq.parse::<u64>().ok()?;
-        if epoch.is_empty() {
-            return None;
-        }
-        Some(Self {
-            epoch: epoch.to_string(),
-            seq,
-        })
-    }
-
-    pub fn as_sse_id(&self) -> String {
-        format!("{}:{}", self.epoch, self.seq)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum DeliveryClass {
-    RealtimeLossy,
-    StateInvalidation,
-    UserNotification,
-    Lifecycle,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AppEventMeta {
-    pub sequence: u64,
-    #[serde(rename = "emittedAtMs")]
-    pub emitted_at_ms: u64,
-    #[serde(rename = "orderingKey", skip_serializing_if = "Option::is_none")]
-    pub ordering_key: Option<String>,
-    pub delivery: DeliveryClass,
-    #[serde(rename = "schemaVersion")]
-    pub schema_version: u16,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct AppEventEnvelope {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<AppEventId>,
-    #[serde(rename = "eventName")]
-    pub event_name: String,
-    pub payload: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub meta: Option<AppEventMeta>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AppEventGap {
-    pub requested_after: AppEventCursor,
-    pub oldest_available: AppEventCursor,
-    pub newest_available: AppEventCursor,
-}
-
-impl AppEventGap {
-    pub fn event_name() -> &'static str {
-        "openforge-app-events-gap"
-    }
-
-    pub fn into_envelope(self) -> AppEventEnvelope {
-        AppEventEnvelope {
-            id: Some(AppEventId {
-                epoch: self.newest_available.epoch.clone(),
-                seq: self.newest_available.seq,
-            }),
-            event_name: Self::event_name().to_string(),
-            payload: serde_json::json!({
-                "requestedAfter": self.requested_after.as_sse_id(),
-                "oldestAvailable": self.oldest_available.as_sse_id(),
-                "newestAvailable": self.newest_available.as_sse_id(),
-            }),
-            meta: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AppEventFrame {
-    Event(AppEventEnvelope),
-    Gap(AppEventGap),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EmitReceipt {
-    pub id: AppEventId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AppEventError {
-    BusClosed,
-    Clock,
-}
-
-#[derive(Debug, Clone)]
-pub struct AppEvent {
-    event_name: String,
-    payload: serde_json::Value,
-    delivery: DeliveryClass,
-    ordering_key: Option<String>,
-}
-
-/// Adapter Interface at the Seam where Rust runtime lifecycle notifications become AppEventBus envelopes.
-///
-/// This Module keeps launch lifecycle producers from needing to know the AppEventBus
-/// Implementation while still giving Electron/Svelte durable, replayable envelopes.
-pub trait RustAppEventAdapter: Send + Sync {
-    fn emit(
-        &self,
-        event_name: &str,
-        payload: serde_json::Value,
-    ) -> Result<EmitReceipt, AppEventError>;
-}
-
-#[derive(Clone)]
-pub struct InMemoryAppEventAdapter {
-    bus: AppEventBus,
-}
-
-impl InMemoryAppEventAdapter {
-    pub fn new(bus: AppEventBus) -> Self {
-        Self { bus }
-    }
-}
-
-impl RustAppEventAdapter for InMemoryAppEventAdapter {
-    fn emit(
-        &self,
-        event_name: &str,
-        payload: serde_json::Value,
-    ) -> Result<EmitReceipt, AppEventError> {
-        let delivery = legacy_delivery_class(event_name);
-        let ordering_key = legacy_ordering_key(event_name, &payload);
-        self.bus
-            .try_emit(AppEvent::new(event_name, payload, delivery, ordering_key))
-    }
-}
-
-impl AppEvent {
-    pub fn new(
-        event_name: impl Into<String>,
-        payload: serde_json::Value,
-        delivery: DeliveryClass,
-        ordering_key: Option<String>,
-    ) -> Self {
-        Self {
-            event_name: event_name.into(),
-            payload,
-            delivery,
-            ordering_key,
-        }
-    }
-}
+pub type AppEventSender = tokio::sync::broadcast::Sender<AppEventEnvelope>;
 
 struct AppEventBusInner {
-    sender: tokio::sync::broadcast::Sender<AppEventEnvelope>,
+    sender: AppEventSender,
     replay: Mutex<VecDeque<AppEventEnvelope>>,
     replay_capacity: usize,
     sequence: AtomicU64,
@@ -342,6 +165,30 @@ impl AppEventBus {
     }
 }
 
+fn register_bus_sender(bus: &AppEventBus) {
+    if let Ok(mut registry) = bus_registry().lock() {
+        registry.retain(|registered| registered.upgrade().is_some());
+        registry.push(Arc::downgrade(&bus.inner));
+    }
+}
+
+fn bus_registry() -> &'static Mutex<Vec<Weak<AppEventBusInner>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Weak<AppEventBusInner>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub(super) fn bus_for_sender(sender: &AppEventSender) -> Option<AppEventBus> {
+    let mut registry = bus_registry().lock().ok()?;
+    registry.retain(|registered| registered.upgrade().is_some());
+    registry.iter().filter_map(Weak::upgrade).find_map(|inner| {
+        if inner.sender.same_channel(sender) {
+            Some(AppEventBus { inner })
+        } else {
+            None
+        }
+    })
+}
+
 pub struct AppEventSubscription {
     inner: Arc<AppEventBusInner>,
     queued: VecDeque<AppEventFrame>,
@@ -451,6 +298,7 @@ impl TaskEvents {
         // plugin consumers even though the Task row remains as reference data.
         self.changed("deleted", task_id, project_id)
     }
+
     fn changed(
         &self,
         action: &str,
@@ -500,70 +348,6 @@ impl GithubEvents {
     }
 }
 
-fn register_bus_sender(bus: &AppEventBus) {
-    if let Ok(mut registry) = bus_registry().lock() {
-        registry.retain(|registered| registered.upgrade().is_some());
-        registry.push(Arc::downgrade(&bus.inner));
-    }
-}
-
-fn bus_registry() -> &'static Mutex<Vec<Weak<AppEventBusInner>>> {
-    static REGISTRY: OnceLock<Mutex<Vec<Weak<AppEventBusInner>>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-fn bus_for_sender(sender: &AppEventSender) -> Option<AppEventBus> {
-    let mut registry = bus_registry().lock().ok()?;
-    registry.retain(|registered| registered.upgrade().is_some());
-    registry.iter().filter_map(Weak::upgrade).find_map(|inner| {
-        if inner.sender.same_channel(sender) {
-            Some(AppEventBus { inner })
-        } else {
-            None
-        }
-    })
-}
-
-fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
-    if event_name.starts_with("pty-output-") {
-        DeliveryClass::RealtimeLossy
-    } else if event_name.starts_with("pty-exit-")
-        || event_name.starts_with("plugin:")
-        || matches!(event_name, "session-resumed" | "startup-resume-complete")
-    {
-        DeliveryClass::Lifecycle
-    } else if matches!(
-        event_name,
-        "new-pr-comment" | "implementation-failed" | "github-rate-limited"
-    ) {
-        DeliveryClass::UserNotification
-    } else {
-        DeliveryClass::StateInvalidation
-    }
-}
-
-fn legacy_ordering_key(event_name: &str, payload: &serde_json::Value) -> Option<String> {
-    if let Some(session_key) = event_name
-        .strip_prefix("pty-output-")
-        .or_else(|| event_name.strip_prefix("pty-exit-"))
-    {
-        return Some(format!("pty:{session_key}"));
-    }
-    if matches!(event_name, "session-resumed" | "startup-resume-complete") {
-        return Some(format!("lifecycle:{event_name}"));
-    }
-    payload
-        .get("task_id")
-        .and_then(|value| value.as_str())
-        .map(|task_id| format!("task:{task_id}"))
-        .or_else(|| {
-            payload
-                .get("ticket_id")
-                .and_then(|value| value.as_str())
-                .map(|task_id| format!("task:{task_id}"))
-        })
-}
-
 fn envelope_cursor(envelope: &AppEventEnvelope) -> Option<AppEventCursor> {
     envelope.id.as_ref().map(|id| AppEventCursor {
         epoch: id.epoch.clone(),
@@ -583,96 +367,9 @@ fn now_ms() -> Result<u64, AppEventError> {
         .map_err(|_| AppEventError::Clock)
 }
 
-pub type AppEventSender = tokio::sync::broadcast::Sender<AppEventEnvelope>;
-
-pub fn publish_app_event(
-    sender: &Option<AppEventSender>,
-    event_name: &str,
-    payload: &serde_json::Value,
-) {
-    if let Some(sender) = sender {
-        if let Some(bus) = bus_for_sender(sender) {
-            if bus
-                .try_emit(AppEvent::new(
-                    event_name,
-                    payload.clone(),
-                    legacy_delivery_class(event_name),
-                    legacy_ordering_key(event_name, payload),
-                ))
-                .is_ok()
-            {
-                return;
-            }
-        }
-
-        let _ = sender.send(AppEventEnvelope {
-            id: None,
-            event_name: event_name.to_string(),
-            payload: payload.clone(),
-            meta: None,
-        });
-    }
-}
-
-pub fn publish_app_event_to_runtime(
-    app: Option<&crate::backend_runtime::AppHandle>,
-    sender: &Option<AppEventSender>,
-    event_name: &str,
-    payload: &serde_json::Value,
-) {
-    if let Some(app) = app {
-        if app.has_app_event_adapter() && app.emit(event_name, payload.clone()).is_ok() {
-            return;
-        }
-    }
-    publish_app_event(sender, event_name, payload);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_publish_app_event_fans_out_to_app_event_stream_sender() {
-        let (sender, mut receiver) = tokio::sync::broadcast::channel(16);
-        let payload = serde_json::json!({ "instance_id": 42 });
-
-        publish_app_event(&Some(sender), "pty-exit-T-1-shell-2", &payload);
-
-        let received = receiver.try_recv().expect("event should be published");
-        assert_eq!(received.event_name, "pty-exit-T-1-shell-2");
-        assert_eq!(received.payload["instance_id"], 42);
-    }
-
-    #[tokio::test]
-    async fn test_publish_app_event_uses_bus_metadata_when_sender_belongs_to_bus() {
-        let bus = AppEventBus::new(16, 8);
-        let mut subscription = bus.subscribe(None).expect("subscribe should work");
-        let sender = bus.sender();
-
-        publish_app_event(
-            &Some(sender),
-            "agent-status-changed",
-            &serde_json::json!({ "task_id": "T-1", "status": "running" }),
-        );
-
-        let AppEventFrame::Event(received) =
-            subscription.recv().await.expect("event should arrive")
-        else {
-            panic!("expected event frame");
-        };
-        assert_eq!(received.event_name, "agent-status-changed");
-        assert_eq!(received.id.as_ref().expect("id should be present").seq, 1);
-        assert_eq!(
-            received
-                .meta
-                .as_ref()
-                .expect("meta should be present")
-                .ordering_key
-                .as_deref(),
-            Some("task:T-1")
-        );
-    }
 
     #[tokio::test]
     async fn test_app_event_bus_assigns_sequence_metadata_and_preserves_legacy_shape() {
@@ -700,49 +397,6 @@ mod tests {
         assert_eq!(meta.sequence, 1);
         assert_eq!(meta.ordering_key.as_deref(), Some("task:T-1009"));
         assert_eq!(meta.delivery, DeliveryClass::StateInvalidation);
-    }
-
-    #[tokio::test]
-    async fn test_app_handle_emit_through_in_memory_adapter_is_replayed_to_late_subscribers() {
-        let bus = AppEventBus::new(16, 8);
-        let app = crate::backend_runtime::AppHandle::new();
-        app.set_app_event_adapter(std::sync::Arc::new(InMemoryAppEventAdapter::new(
-            bus.clone(),
-        )));
-
-        app.emit(
-            "pty-output-T-boot-shell-0",
-            serde_json::json!({ "data": "stale boot output" }),
-        )
-        .expect("non-lifecycle event should publish through adapter");
-
-        app.emit(
-            "session-resumed",
-            serde_json::json!({
-                "task_id": "T-boot",
-                "workspace_path": "/tmp/openforge/T-boot"
-            }),
-        )
-        .expect("app handle emit should publish through adapter");
-
-        let mut subscription = bus.subscribe(None).expect("subscribe should work");
-        let AppEventFrame::Event(received) = subscription
-            .recv()
-            .await
-            .expect("boot-time event should replay to late subscribers")
-        else {
-            panic!("expected replayed lifecycle event");
-        };
-
-        assert_eq!(received.event_name, "session-resumed");
-        assert_eq!(received.payload["task_id"], "T-boot");
-        assert_eq!(received.id.as_ref().expect("id should be assigned").seq, 2);
-        let meta = received.meta.as_ref().expect("meta should be assigned");
-        assert_eq!(meta.delivery, DeliveryClass::Lifecycle);
-        assert_eq!(
-            meta.ordering_key.as_deref(),
-            Some("lifecycle:session-resumed")
-        );
     }
 
     #[tokio::test]
