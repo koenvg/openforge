@@ -31,6 +31,63 @@ mod tests {
         }
     }
 
+    struct FirstOutputBlockingSink {
+        sink: Option<TerminalModelEventSink>,
+        entered_rx: mpsc::Receiver<()>,
+        release_tx: mpsc::SyncSender<()>,
+    }
+
+    impl FirstOutputBlockingSink {
+        fn new() -> Self {
+            Self::with_event_observer(|_| {})
+        }
+
+        fn with_event_observer(
+            observer: impl Fn(&TerminalModelEvent) + Send + Sync + 'static,
+        ) -> Self {
+            let first_output = AtomicBool::new(true);
+            let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+            let (release_tx, release_rx) = mpsc::sync_channel(1);
+            let release_rx = Mutex::new(release_rx);
+            let sink = Arc::new(move |event| {
+                observer(&event);
+                if matches!(event, TerminalModelEvent::Output(_))
+                    && first_output.swap(false, Ordering::AcqRel)
+                {
+                    let _ = entered_tx.send(());
+                    let _ = release_rx
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .recv();
+                }
+            });
+
+            Self {
+                sink: Some(sink),
+                entered_rx,
+                release_tx,
+            }
+        }
+
+        fn take_sink(&mut self) -> TerminalModelEventSink {
+            self.sink
+                .take()
+                .expect("event sink should only be installed once")
+        }
+
+        fn wait_until_entered(&self) {
+            self.entered_rx
+                .recv_timeout(REQUEST_TIMEOUT)
+                .expect("event sink should block the model worker");
+        }
+
+        fn release(&self) {
+            self.release_tx
+                .send(())
+                .expect("test should release the model worker");
+        }
+    }
+
     #[test]
     fn worker_preserves_raw_chunk_order_and_captures_replies() {
         let (session, feeder) = TerminalModelSession::start(
@@ -90,34 +147,17 @@ mod tests {
 
     #[test]
     fn authoritative_feeder_applies_backpressure_instead_of_disabling_on_output_bursts() {
-        let first_output = Arc::new(AtomicBool::new(true));
-        let sink_first_output = Arc::clone(&first_output);
-        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
-        let (release_tx, release_rx) = mpsc::sync_channel(1);
-        let release_rx = Mutex::new(release_rx);
-        let sink: TerminalModelEventSink = Arc::new(move |event| {
-            if matches!(event, TerminalModelEvent::Output(_))
-                && sink_first_output.swap(false, Ordering::AcqRel)
-            {
-                let _ = entered_tx.send(());
-                let _ = release_rx
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .recv();
-            }
-        });
+        let mut blocked_sink = FirstOutputBlockingSink::new();
         let (session, feeder) = TerminalModelSession::start_with_event_sink(
             "burst-shell".to_string(),
             92,
             TerminalModelOptions::new(80, 24),
-            sink,
+            blocked_sink.take_sink(),
         )
         .expect("terminal model worker should start");
 
         feeder.feed(b"first");
-        entered_rx
-            .recv_timeout(REQUEST_TIMEOUT)
-            .expect("event sink should block the model worker");
+        blocked_sink.wait_until_entered();
         for _ in 0..COMMAND_QUEUE_CAPACITY {
             feeder.feed(b"queued");
         }
@@ -136,9 +176,7 @@ mod tests {
         let completed_while_model_was_blocked = tail_complete_rx
             .recv_timeout(QUEUE_CATCH_UP_TIMEOUT + Duration::from_millis(50))
             .is_ok();
-        release_tx
-            .send(())
-            .expect("test should release the model worker");
+        blocked_sink.release();
         if !completed_while_model_was_blocked {
             tail_complete_rx
                 .recv_timeout(REQUEST_TIMEOUT)
@@ -154,44 +192,25 @@ mod tests {
 
     #[test]
     fn dropping_a_session_is_bounded_when_the_worker_and_command_queue_are_blocked() {
-        let first_output = Arc::new(AtomicBool::new(true));
-        let sink_first_output = Arc::clone(&first_output);
-        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
-        let (release_tx, release_rx) = mpsc::sync_channel(1);
-        let release_rx = Mutex::new(release_rx);
         let (worker_disconnected_tx, worker_disconnected_rx) = mpsc::sync_channel(1);
         let (worker_dropped_tx, worker_dropped_rx) = mpsc::sync_channel(1);
         let worker_drop_signal = DropSignal(worker_dropped_tx);
-        let sink: TerminalModelEventSink = Arc::new(move |event| {
+        let mut blocked_sink = FirstOutputBlockingSink::with_event_observer(move |event| {
             let _worker_drop_signal = &worker_drop_signal;
-            match event {
-                TerminalModelEvent::Output(_)
-                    if sink_first_output.swap(false, Ordering::AcqRel) =>
-                {
-                    let _ = entered_tx.send(());
-                    let _ = release_rx
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .recv();
-                }
-                TerminalModelEvent::Disabled { .. } => {
-                    let _ = worker_disconnected_tx.send(());
-                }
-                _ => {}
+            if matches!(event, TerminalModelEvent::Disabled { .. }) {
+                let _ = worker_disconnected_tx.send(());
             }
         });
         let (session, feeder) = TerminalModelSession::start_with_event_sink(
             "blocked-drop-shell".to_string(),
             93,
             TerminalModelOptions::new(80, 24),
-            sink,
+            blocked_sink.take_sink(),
         )
         .expect("terminal model worker should start");
 
         feeder.feed(b"first");
-        entered_rx
-            .recv_timeout(REQUEST_TIMEOUT)
-            .expect("event sink should block the model worker");
+        blocked_sink.wait_until_entered();
         for _ in 0..COMMAND_QUEUE_CAPACITY {
             feeder.feed(b"queued");
         }
@@ -205,9 +224,7 @@ mod tests {
             .recv_timeout(Duration::from_millis(250))
             .is_ok();
 
-        release_tx
-            .send(())
-            .expect("test should release the model worker");
+        blocked_sink.release();
         drop_thread
             .join()
             .expect("session drop thread should not panic");
