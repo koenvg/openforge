@@ -91,6 +91,7 @@ vi.mock('../../lib/stores', () => ({
   activeProjectId: writable('project-1'),
   startingTasks: writable(new Set()),
   completingTasks: writable(new Set()),
+  outOfFocusTaskIdsByProject: writable(new Map()),
   error: writable(null),
   taskRuntimeInfo: writable(new Map()),
   pendingManualComments: writable([]),
@@ -229,7 +230,7 @@ vi.mock('../../lib/router.svelte', () => ({
   }),
 }))
 
-import { completingTasks, taskActiveView, commandHeld, taskRuntimeInfo, tasks } from '../../lib/stores'
+import { completingTasks, taskActiveView, commandHeld, outOfFocusTaskIdsByProject, taskRuntimeInfo, tasks } from '../../lib/stores'
 import type { Task, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
@@ -294,6 +295,7 @@ function getTaskDetailViewTestDependencies() {
     completingTasks,
     enabledPluginIds,
     installedPlugins,
+    outOfFocusTaskIdsByProject,
     registerRenderableContributionComponent,
     runtimeContributionSources,
     taskActiveView,
@@ -308,6 +310,7 @@ function resetTaskDetailViewTestState() {
   taskRuntimeInfo.set(new Map())
   completingTasks.set(new Set())
   commandHeld.set(false)
+  outOfFocusTaskIdsByProject.set(new Map())
   tasks.set([])
   taskTabSessions.clear()
   clearTerminalTaskPaneControllers()
