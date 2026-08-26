@@ -23,6 +23,19 @@ interface TestReplayState {
   snapshot?: TestReplaySnapshot | null
 }
 
+interface RawPtyInstancePayload {
+  instance_id?: number
+  ptyInstanceId?: number
+}
+
+interface RawPtyOutputPayload extends RawPtyInstancePayload {
+  data: string
+}
+
+interface RawPtyModelOutputPayload extends RawPtyOutputPayload {
+  sequence: number
+}
+
 interface TestTransport extends TerminalTransport {
   subscribeSession: Mock<TerminalTransport['subscribeSession']>
   subscribeConnectionRestored: Mock<TerminalTransport['subscribeConnectionRestored']>
@@ -90,6 +103,25 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
     listenerRegistrationFailures?.throwIfRequested(eventName)
   }
 
+  function dispatchSessionEvent<TRawPayload extends RawPtyInstancePayload, TEvent>(
+    eventName: string,
+    eventPrefix: string,
+    payload: unknown,
+    decodeEvent: (rawPayload: TRawPayload, ptyInstanceId: number) => TEvent,
+    handleEvent: (handlers: TerminalSessionTransportHandlers, event: TEvent) => void,
+  ): boolean {
+    if (!eventName.startsWith(eventPrefix)) return false
+    const rawPayload = payload as TRawPayload
+    const ptyInstanceId = rawPayload.ptyInstanceId ?? rawPayload.instance_id
+    if (ptyInstanceId === undefined) return true
+    const event = decodeEvent(rawPayload, ptyInstanceId)
+    const shellSessionKey = eventName.slice(eventPrefix.length)
+    for (const handlers of sessionHandlers.get(shellSessionKey) ?? []) {
+      handleEvent(handlers, event)
+    }
+    return true
+  }
+
   const transport: TestTransport = {
     subscribeSession: vi.fn(async (shellSessionKey: string, handlers: TerminalSessionTransportHandlers) => {
       await registerEvent(`pty-output-${shellSessionKey}`)
@@ -153,45 +185,38 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
         for (const handler of connectionRestoredHandlers) handler()
         return
       }
-      const outputPrefix = 'pty-output-'
-      if (eventName.startsWith(outputPrefix)) {
-        const raw = payload as { data: string; instance_id?: number; ptyInstanceId?: number }
-        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
-        if (ptyInstanceId === undefined) return
-        for (const handlers of sessionHandlers.get(eventName.slice(outputPrefix.length)) ?? []) {
-          handlers.onOutput({ data: raw.data, ptyInstanceId })
-        }
-        return
-      }
-      const modelOutputPrefix = 'pty-model-output-'
-      if (eventName.startsWith(modelOutputPrefix)) {
-        const raw = payload as { data: string; instance_id?: number; ptyInstanceId?: number; sequence: number }
-        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
-        if (ptyInstanceId === undefined) return
-        for (const handlers of sessionHandlers.get(eventName.slice(modelOutputPrefix.length)) ?? []) {
-          handlers.onModelOutput({ data: decodeBase64(raw.data), ptyInstanceId, sequence: raw.sequence })
-        }
-        return
-      }
-      const modelDisabledPrefix = 'pty-model-disabled-'
-      if (eventName.startsWith(modelDisabledPrefix)) {
-        const raw = payload as { instance_id?: number; ptyInstanceId?: number }
-        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
-        if (ptyInstanceId === undefined) return
-        for (const handlers of sessionHandlers.get(eventName.slice(modelDisabledPrefix.length)) ?? []) {
-          handlers.onModelDisabled({ ptyInstanceId })
-        }
-        return
-      }
-      const exitPrefix = 'pty-exit-'
-      if (eventName.startsWith(exitPrefix)) {
-        const raw = payload as { instance_id?: number; ptyInstanceId?: number }
-        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
-        if (ptyInstanceId === undefined) return
-        for (const handlers of sessionHandlers.get(eventName.slice(exitPrefix.length)) ?? []) {
-          handlers.onExit({ ptyInstanceId })
-        }
-      }
+      if (dispatchSessionEvent(
+        eventName,
+        'pty-output-',
+        payload,
+        (raw: RawPtyOutputPayload, ptyInstanceId) => ({ data: raw.data, ptyInstanceId }),
+        (handlers, event) => handlers.onOutput(event),
+      )) return
+      if (dispatchSessionEvent(
+        eventName,
+        'pty-model-output-',
+        payload,
+        (raw: RawPtyModelOutputPayload, ptyInstanceId) => ({
+          data: decodeBase64(raw.data),
+          ptyInstanceId,
+          sequence: raw.sequence,
+        }),
+        (handlers, event) => handlers.onModelOutput(event),
+      )) return
+      if (dispatchSessionEvent(
+        eventName,
+        'pty-model-disabled-',
+        payload,
+        (_raw: RawPtyInstancePayload, ptyInstanceId) => ({ ptyInstanceId }),
+        (handlers, event) => handlers.onModelDisabled(event),
+      )) return
+      dispatchSessionEvent(
+        eventName,
+        'pty-exit-',
+        payload,
+        (_raw: RawPtyInstancePayload, ptyInstanceId) => ({ ptyInstanceId }),
+        (handlers, event) => handlers.onExit(event),
+      )
     },
     setBuffer(shellSessionKey: string, buffer: string | null) {
       buffers.set(shellSessionKey, buffer)
