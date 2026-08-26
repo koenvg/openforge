@@ -1,13 +1,11 @@
-import {
-  createHost,
-  resetTerminalRuntimeIntegrationHarness,
-} from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntimeHost.testSupport'
+import { resetTerminalRuntimeMocks } from './terminalRuntimeFeatures.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal runtime resizing', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('restores sizing and input when an inactive terminal resumes after attachment', async () => {
     const terminalKey = 'T-1'

@@ -1,14 +1,14 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
   imageAddonMocks,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal runtime inline image lifecycle', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('loads bounded iTerm image support before advertising the protocol', async () => {
     const runtime = createTerminalRuntime(createHost())
@@ -39,7 +39,7 @@ describe('terminal runtime inline image lifecycle', () => {
   })
 
   it('uses the configured logger name when image fallback initialization fails', async () => {
-    terminalMocks.failImageAddon = true
+    imageAddonMocks.failLoad = true
     const host = createHost()
     const error = new Error('image addon unavailable')
     host.loggerName = 'terminalPluginPool'

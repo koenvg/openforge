@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHost } from './terminalRuntime.integrationTestHarness'
+import { createHost } from './terminalRuntimeHost.testSupport'
 import { createFakeTerminalView } from './terminalView.testUtils'
 import { createTerminalRuntime } from './terminalRuntime'
 

@@ -1,13 +1,13 @@
+import { createHost } from './terminalRuntimeHost.testSupport'
 import {
-  createHost,
-  resetTerminalRuntimeIntegrationHarness,
+  resetTerminalRuntimeMocks,
   terminalMocks,
-} from './terminalRuntime.integrationTestHarness'
+} from './terminalRuntimeFeatures.testSupport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
 describe('terminal runtime attachment', () => {
-  beforeEach(resetTerminalRuntimeIntegrationHarness)
+  beforeEach(resetTerminalRuntimeMocks)
 
   it('defers xterm opening and WebGL setup until the first DOM attachment', async () => {
     const terminalKey = 'T-1-shell-0'

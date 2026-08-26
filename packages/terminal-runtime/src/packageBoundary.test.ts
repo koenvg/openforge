@@ -91,7 +91,8 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
 
     expect(source).not.toContain('vi.mock(')
     expect(source).not.toMatch(/from ['"]@xterm\//)
-    expect(source).not.toContain('terminalRuntime.integrationTestHarness')
+    expect(source).not.toContain('terminalRuntimeFeatures.testSupport')
+    expect(source).not.toContain('terminalRuntimeXtermMocks.testSupport')
   })
 
   it('keeps diff theming out of the public terminal runtime contract', async () => {
