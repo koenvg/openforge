@@ -78,18 +78,7 @@ pub(super) async fn handle_app_agent_generate_command(
             let project_id =
                 payload_optional_string(&request.payload, "projectId")?.unwrap_or_default();
             let model = payload_optional_string(&request.payload, "model")?;
-            let provider = match payload_optional_string(&request.payload, "provider")? {
-                Some(p) if !p.is_empty() => p,
-                _ => {
-                    let db = crate::db::acquire_db(&state.db);
-                    db.try_resolve_ai_provider(&project_id).map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("failed to resolve AI provider: {e}"),
-                        )
-                    })?
-                }
-            };
+            let provider = resolve_generation_provider(state, &request.payload, &project_id)?;
 
             let text = run_headless_generation(
                 &provider,
@@ -122,18 +111,7 @@ pub(super) async fn handle_app_agent_generate_command(
             let head_sha = payload_string(&request.payload, "headSha")?;
             let model = payload_optional_string(&request.payload, "model")?;
             let output_schema = payload_optional_string(&request.payload, "outputSchema")?;
-            let provider = match payload_optional_string(&request.payload, "provider")? {
-                Some(p) if !p.is_empty() => p,
-                _ => {
-                    let db = crate::db::acquire_db(&state.db);
-                    db.try_resolve_ai_provider(&project_id).map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("failed to resolve AI provider: {e}"),
-                        )
-                    })?
-                }
-            };
+            let provider = resolve_generation_provider(state, &request.payload, &project_id)?;
 
             // Bound concurrent repo-aware runs system-wide: extra callers wait here
             // for a permit rather than all spawning worktrees + agents at once. Held
@@ -193,6 +171,25 @@ pub(super) async fn handle_app_agent_generate_command(
     };
 
     Ok(Some(value))
+}
+
+fn resolve_generation_provider(
+    state: &AppState,
+    payload: &serde_json::Value,
+    project_id: &str,
+) -> AppResult<String> {
+    match payload_optional_string(payload, "provider")? {
+        Some(provider) if !provider.is_empty() => Ok(provider),
+        _ => {
+            let db = crate::db::acquire_db(&state.db);
+            db.try_resolve_ai_provider(project_id).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to resolve AI provider: {e}"),
+                )
+            })
+        }
+    }
 }
 
 fn abort_generation(session_key: &str) {
