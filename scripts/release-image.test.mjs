@@ -75,4 +75,22 @@ describe('Electron release image artifacts', () => {
     expect(workflow).toContain('steps.release-image.outputs.dmg-name')
     expect(workflow).not.toContain('openforge-${{ matrix.target }}.zip')
   })
+
+  it('prepares pinned Ghostty dependencies before packaging release DMGs', async () => {
+    const workflow = await readFile(join(import.meta.dirname, '..', '.github/workflows/release.yml'), 'utf8')
+    const zigStep = workflow.indexOf('- name: Install Zig 0.16')
+    const ghosttyStep = workflow.indexOf('- name: Prepare pinned Ghostty dependencies')
+    const ghosttyEnvExport = workflow.indexOf('grep \'^GHOSTTY_\' /tmp/ghostty-prepare.log >> "$GITHUB_ENV"')
+    const offlineCargoExport = workflow.indexOf('echo \'CARGO_NET_OFFLINE=true\' >> "$GITHUB_ENV"')
+    const packageStep = workflow.indexOf('- name: Package Electron app')
+
+    expect(zigStep).toBeGreaterThan(-1)
+    expect(workflow).toContain('uses: mlugg/setup-zig@v2')
+    expect(workflow).toContain('version: 0.16.0')
+    expect(ghosttyStep).toBeGreaterThan(zigStep)
+    expect(workflow).toContain('node scripts/prepare-ghostty-vt.mjs')
+    expect(ghosttyEnvExport).toBeGreaterThan(ghosttyStep)
+    expect(offlineCargoExport).toBeGreaterThan(ghosttyEnvExport)
+    expect(packageStep).toBeGreaterThan(offlineCargoExport)
+  })
 })
