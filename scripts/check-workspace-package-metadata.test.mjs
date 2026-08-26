@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import {
   formatMetadataErrors,
-  readWorkspacePackages,
   validateWorkspacePackageMetadata,
 } from './check-workspace-package-metadata.mjs'
+import { readWorkspacePackages } from './workspace-packages.mjs'
 
 async function createWorkspacePackage(root, dirName, manifest, files = {}) {
   const packageDir = join(root, 'packages', dirName)

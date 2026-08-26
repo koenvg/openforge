@@ -1,29 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isPublishableWorkspacePackage, readWorkspacePackages } from './workspace-packages.mjs'
 
 const SEE_LICENSE_PREFIX = 'SEE LICENSE IN '
-
-export function readPackageJson(packageDir) {
-  const packageJsonPath = join(packageDir, 'package.json')
-  try {
-    return JSON.parse(readFileSync(packageJsonPath, 'utf8'))
-  } catch (error) {
-    throw new Error(`Unable to read ${packageJsonPath}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-}
-
-export function readWorkspacePackages(repoRoot = process.cwd()) {
-  const packagesDir = join(repoRoot, 'packages')
-  return readdirSync(packagesDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => {
-      const packageDir = join(packagesDir, entry.name)
-      return { packageDir, manifest: readPackageJson(packageDir) }
-    })
-    .sort((left, right) => String(left.manifest.name).localeCompare(String(right.manifest.name)))
-}
 
 function validateLicenseFile(packageDir, manifest, errors) {
   const license = typeof manifest.license === 'string' ? manifest.license.trim() : ''
@@ -56,7 +37,8 @@ export function validateWorkspacePackageMetadata(packages) {
     const packageName = manifest.name || packageDir
     const isPrivate = manifest.private === true
     const hasLicense = typeof manifest.license === 'string' && manifest.license.trim().length > 0
-    const hasPublishConfig = manifest.publishConfig !== undefined
+    const hasPublishConfig = Boolean(manifest.publishConfig)
+    const isPublishable = isPublishableWorkspacePackage(manifest)
 
     if (isPrivate && hasPublishConfig) {
       errors.push(`${packageName} is private but still declares publishConfig.`)
@@ -66,7 +48,7 @@ export function validateWorkspacePackageMetadata(packages) {
       errors.push(`${packageName} must either set private:true or declare an explicit license.`)
     }
 
-    if (!isPrivate && !hasPublishConfig) {
+    if (!isPrivate && !isPublishable) {
       errors.push(`${packageName} is public/non-private but lacks publishConfig; set publishConfig for an intentional npm package or private:true for an internal package.`)
     }
 
