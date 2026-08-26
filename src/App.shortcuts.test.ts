@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { installedPluginRows } from './App.test-fixtures/ipc'
 import { mockExecutePluginCommand } from './App.test-fixtures/plugin-runtime'
+import { createTask } from './App.test-fixtures/tasks'
 
 describe('App shortcut behavior', () => {
   installAppTestLifecycle()
@@ -96,24 +96,10 @@ describe('App shortcut behavior', () => {
   it('shows task view shortcut section without a // prefix when a task is selected', async () => {
     const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
-    const selectedTask: Task = {
+    const selectedTask = createTask({
       id: 'task-123',
       initial_prompt: 'Selected task',
-      prompt: null,
-      title: null,
-      title_source: null,
-      title_generated_at: null,
-      status: 'doing',
-      agent: null,
-      permission_mode: null,
-      worktree_source: null,
-      worktree_branch: null,
-      source_ticket_url: null,
-      depends_on: [],
-      project_id: 'proj-1',
-      created_at: 1000,
-      updated_at: 1000,
-    }
+    })
     stores.tasks.set([selectedTask])
     stores.selectedTaskId.set(selectedTask.id)
 

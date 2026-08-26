@@ -1,9 +1,9 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
-import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
+import { createTask } from './App.test-fixtures/tasks'
 import App from './App.svelte'
 
 async function waitForProjectPluginsReady(): Promise<void> {
@@ -39,24 +39,10 @@ describe('App navigation shortcuts', () => {
       // Simulate being on a task detail view
       stores.selectedTaskId.set('task-123')
       stores.tasks.set([
-        {
+        createTask({
           id: 'task-123',
           initial_prompt: 'Finish task',
-          prompt: null,
-          title: null,
-          title_source: null,
-          title_generated_at: null,
-          status: 'doing',
-          agent: null,
-          permission_mode: null,
-          worktree_source: null,
-          worktree_branch: null,
-          source_ticket_url: null,
-          depends_on: [],
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
+        }),
       ])
       stores.currentView.set('settings')
 
@@ -176,24 +162,10 @@ describe('App navigation shortcuts', () => {
     it('CMD+P does not open the file quick-open overlay from task views', async () => {
       const stores = await import('./lib/stores')
       const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-123',
         initial_prompt: 'Finish task',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)

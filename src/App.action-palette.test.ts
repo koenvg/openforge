@@ -1,7 +1,8 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PullRequestInfo, PullRequestMergeMethod, Task } from './lib/types'
+import type { PullRequestInfo, PullRequestMergeMethod } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
+import { createTask } from './App.test-fixtures/tasks'
 
 describe('App action palette shortcuts', () => {
   installAppTestLifecycle()
@@ -17,24 +18,10 @@ describe('App action palette shortcuts', () => {
       const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
       const { get } = await import('svelte/store')
 
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-merge',
         initial_prompt: 'Merge ready PR',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       const readyPr: PullRequestInfo = {
         id: 42,
@@ -139,24 +126,10 @@ describe('App action palette shortcuts', () => {
       const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
       const { get } = await import('svelte/store')
 
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-merge-pending',
         initial_prompt: 'Merge pending PR',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       const readyPr: PullRequestInfo = {
         id: 42,
@@ -268,24 +241,10 @@ describe('App action palette shortcuts', () => {
       const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
       const { get } = await import('svelte/store')
 
-      const selectedTask: Task = {
+      const selectedTask = createTask({
         id: 'task-merge-many',
         initial_prompt: 'Task with multiple ready PRs',
-        prompt: null,
-        title: null,
-        title_source: null,
-        title_generated_at: null,
-        status: 'doing',
-        agent: null,
-        permission_mode: null,
-        worktree_source: null,
-        worktree_branch: null,
-        source_ticket_url: null,
-        depends_on: [],
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      }
+      })
 
       const firstReadyPr: PullRequestInfo = {
         id: 42,

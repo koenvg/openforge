@@ -100,6 +100,28 @@ vi.mock('../lib/plugin/pluginRegistry', async () => {
   }
 })
 
+export async function activateGithubGlobalView(): Promise<void> {
+  const pluginStore = await import('../lib/plugin/pluginStore')
+  const pluginRegistry = await import('../lib/plugin/pluginRegistry')
+  const { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_GLOBAL_VIEW_ID } = await import('../lib/githubSyncPlugin')
+  const { tick } = await import('svelte')
+
+  pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
+  await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
+  pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
+    views: [
+      {
+        id: GITHUB_SYNC_GLOBAL_VIEW_ID,
+        title: 'All Pull Requests',
+        icon: 'git-pull-request',
+        placement: 'sidebar',
+        order: 20,
+      },
+    ],
+  })
+  await tick()
+}
+
 export async function resetPluginRuntimeFixtures() {
   const pluginStore = await import('../lib/plugin/pluginStore')
   pluginStore.installedPlugins.set(new Map())
