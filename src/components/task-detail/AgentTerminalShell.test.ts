@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { listenCallbacks, resetAgentIpcMocks } from './agentIpcMocks.testUtils'
 import { resetActiveSessions, setActiveSession } from './activeAgentSessions.testUtils'
 import {
+  mockAttachment,
   mockPoolEntry,
   mockShellLifecycleState,
   resetAgentTerminalMocks,
@@ -43,7 +44,7 @@ describe('AgentTerminalShell', () => {
     setActiveSession(session)
     mockShellLifecycleState.ptyActive = true
 
-    const { acquire, attach, detach, release } = await import('../../lib/terminalPool')
+    const { acquire, attach, release } = await import('../../lib/terminalPool')
     const { killPty } = await import('../../lib/ipc')
 
     const firstRender = render(AgentTerminalShell, {
@@ -58,7 +59,7 @@ describe('AgentTerminalShell', () => {
     })
 
     firstRender.unmount()
-    expect(detach).toHaveBeenCalledWith(mockPoolEntry)
+    expect(mockAttachment.detach).toHaveBeenCalledOnce()
     expect(release).not.toHaveBeenCalled()
     expect(killPty).not.toHaveBeenCalled()
     expect(mockPoolEntry.view.reset).not.toHaveBeenCalled()

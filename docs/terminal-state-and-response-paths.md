@@ -18,7 +18,7 @@ Terminal Runtime receives terminal traffic only through `TerminalTransport`. The
 
 The desktop adapter translates preload and Electron IPC event names, Rust-shaped payloads, and PTY commands. The Trusted Plugin adapter translates `openforge.*` global events, indexed Shell Session Keys, and frontend shell capabilities. Terminal Runtime does not know those event names, capability calls, credentials, or connection details.
 
-Each Terminal Runtime owns its adapter. The core Agent Terminal and built-in Terminal plugin still use separate Terminal Runtime instances and separate session maps. An adapter may multiplex many Shell Session Keys. A restored connection is only a signal; Terminal Runtime selects active sessions and requests their restoration state.
+One host-owned Terminal Runtime owns the desktop adapter and shared session map used by the core Agent Terminal and built-in Terminal plugin. The adapter may multiplex many Shell Session Keys. A restored connection is only a signal; Terminal Runtime selects active sessions and requests their restoration state.
 
 ## Session identity
 
@@ -45,6 +45,7 @@ xterm-generated query responses are separated from user input and sent through `
 ## Ghostty-authoritative path
 
 ```text
+<<<<<<< HEAD
 PTY read
   -> libghostty-vt actor
      -> canonical parsed terminal state
@@ -58,6 +59,20 @@ PTY read
 ```
 
 The bytes rendered live by xterm are the same PTY bytes, but they are published only after Ghostty has accepted them. xterm therefore remains the renderer without becoming the backend state authority.
+=======
+plugin shell PTY read
+  -> Rust raw-byte reader
+  -> optional diagnostic Ghostty feed
+  -> Rust UTF-8 event batching and raw replay buffer
+  -> openforge.pty-output-<Shell Session Key>
+  -> Trusted Plugin TerminalTransport adapter
+  -> normalized output event
+  -> host Terminal Runtime
+  -> xterm parser and renderer
+```
+
+The built-in Terminal plugin requests view attachments from the same host-owned Terminal Runtime as agent terminals. The host transport reads PTY replay, subscribes to normalized output, and routes input and resize operations. The plugin does not select terminal authority, renderer type, or lower-level transport capabilities.
+>>>>>>> 1b66ee00 (refactor(terminal): consolidate host session ownership)
 
 Ghostty's `on_pty_write` replies go directly through the Shell Session Key and PTY-instance-scoped ordered writer. Terminal Runtime drops xterm-generated replies in this mode, so a query has one response owner.
 

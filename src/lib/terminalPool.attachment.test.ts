@@ -86,7 +86,7 @@ describe("terminalPool attachment", () => {
 			expect(entry).toBeDefined();
 			expect(getLoadedAddonNames(entry)).not.toContain("WebglAddon");
 			expect(warnSpy).toHaveBeenCalledWith(
-				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
+				"[terminalSessionService] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),
 			);
 		} finally {
@@ -107,7 +107,7 @@ describe("terminalPool attachment", () => {
 			expect(entry).toBeDefined();
 			expect(getLoadedAddonNames(entry)).toContain("WebglAddon");
 			expect(warnSpy).toHaveBeenCalledWith(
-				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
+				"[terminalSessionService] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),
 			);
 		} finally {
@@ -128,7 +128,7 @@ describe("terminalPool attachment", () => {
 			expect(webglContextLossDisposables[0]).toHaveBeenCalled();
 			expect(webglAddonInstances[0]?.dispose).toHaveBeenCalled();
 			expect(warnSpy).toHaveBeenCalledWith(
-				"[terminalPool] WebGL renderer context lost; falling back to the default renderer.",
+				"[terminalSessionService] WebGL renderer context lost; falling back to the default renderer.",
 			);
 		} finally {
 			warnSpy.mockRestore();
@@ -160,7 +160,7 @@ describe("terminalPool attachment", () => {
 			expect(loadAddonSpy).not.toHaveBeenCalled();
 			expect(refreshSpy).toHaveBeenCalled();
 			expect(warnSpy).toHaveBeenCalledWith(
-				"[terminalPool] WebGL renderer context lost; falling back to the default renderer.",
+				"[terminalSessionService] WebGL renderer context lost; falling back to the default renderer.",
 			);
 		} finally {
 			warnSpy.mockRestore();

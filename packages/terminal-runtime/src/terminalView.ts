@@ -7,6 +7,7 @@ export type TerminalViewData = string | Uint8Array
 export interface TerminalViewLiveOutput {
   data: TerminalViewData
   ptyInstanceId: number | null
+  sequence: number
 }
 
 export interface TerminalViewQueryResponse {
@@ -98,9 +99,9 @@ export interface TerminalViewRendererFailure {
 
 /**
  * Presents one Terminal Session without owning its PTY lifecycle.
- * Terminal Runtime bootstraps xterm from PTY byte replay before delivering live
- * output. Every write carries its source PTY instance so generated responses
- * remain bound to the generation whose bytes xterm parsed.
+ * Terminal Runtime bootstraps xterm from PTY byte replay at sequence zero, then
+ * delivers monotonic live output. Every write carries its source PTY instance so
+ * generated responses remain bound to the generation whose bytes xterm parsed.
  */
 export interface TerminalView {
   readonly geometry: TerminalViewGeometry
@@ -110,7 +111,7 @@ export interface TerminalView {
   mount(container: HTMLElement): void
   unmount(): void
   isMountedIn(container: HTMLElement): boolean
-  bootstrap(data: TerminalViewData, ptyInstanceId: number | null): void
+  bootstrap(data: TerminalViewData, ptyInstanceId: number | null, sequence: number): void
   writeLive(output: TerminalViewLiveOutput): void
   drainPresentation(): Promise<TerminalViewPresentationEvidence>
   capturePresentation(): TerminalViewPresentationSnapshot

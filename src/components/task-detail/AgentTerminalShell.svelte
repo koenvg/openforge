@@ -4,7 +4,14 @@
   import { activeSessions } from '../../lib/stores'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, getShellLifecycleState, recoverActiveTerminal, type PoolEntry } from '../../lib/terminalPool'
+  import {
+    acquire,
+    attach,
+    getShellLifecycleState,
+    recoverActiveTerminal,
+    type PoolEntry,
+    type TerminalViewAttachment,
+  } from '../../lib/terminalPool'
   import { hydrateAgentTerminalPtyInstance } from '../../lib/agentTerminalPanel'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
 
@@ -29,6 +36,7 @@
   let terminalEl: HTMLDivElement
   let unlisteners: DesktopUnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
+  let viewAttachment: TerminalViewAttachment | null = null
   let poolEntryAttached = $state(false)
   let terminalActive = $state(false)
   let destroyed = false
@@ -96,8 +104,12 @@
   onMount(async () => {
     poolEntry = await acquire(taskId)
     if (destroyed || !poolEntry) return
-    await attach(poolEntry, terminalEl)
-    if (destroyed) return
+    viewAttachment = await attach(poolEntry, terminalEl)
+    if (destroyed) {
+      viewAttachment.detach()
+      viewAttachment = null
+      return
+    }
     poolEntryAttached = true
 
     syncTerminalActiveFromLifecycle()
@@ -118,9 +130,8 @@
       fn()
     })
     poolEntryAttached = false
-    if (poolEntry) {
-      detach(poolEntry)
-    }
+    viewAttachment?.detach()
+    viewAttachment = null
   })
 </script>
 

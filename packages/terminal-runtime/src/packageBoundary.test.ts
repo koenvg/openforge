@@ -62,6 +62,7 @@ describe('@openforge-app/terminal-runtime package boundary', () => {
       'terminalRuntimeTypes.ts',
       'terminalRuntime.ts',
       'terminalTransport.ts',
+      'terminalSessionService.ts',
       'terminalAcquisition.ts',
       'terminalAttachment.ts',
       'terminalStateView.ts',

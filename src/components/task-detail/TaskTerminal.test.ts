@@ -48,7 +48,8 @@ vi.mock('../../lib/desktopIpc', () => ({
   }),
 }))
 
-const { mockPoolEntry } = vi.hoisted(() => ({
+const { attachmentDetaches, mockPoolEntry } = vi.hoisted(() => ({
+  attachmentDetaches: [] as Array<ReturnType<typeof vi.fn>>,
   mockPoolEntry: {
     taskId: '',
     view: {
@@ -76,6 +77,9 @@ vi.mock('../../lib/terminalPool', () => ({
   }),
   attach: vi.fn(async (entry) => {
     entry.attached = true
+    const detach = vi.fn(() => { entry.attached = false })
+    attachmentDetaches.push(detach)
+    return { generation: attachmentDetaches.length, detach }
   }),
   detach: vi.fn(),
   recoverActiveTerminal: vi.fn(),
@@ -162,6 +166,7 @@ describe('TaskTerminal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    attachmentDetaches.length = 0
     mockPoolEntry.taskId = ''
     mockPoolEntry.ptyActive = false
     mockPoolEntry.attached = false
@@ -419,7 +424,7 @@ describe('TaskTerminal', () => {
   })
 
   it('reacquires and attaches when the terminal key changes while the component stays mounted', async () => {
-    const { acquire, attach, detach } = await import('../../lib/terminalPool')
+    const { acquire, attach } = await import('../../lib/terminalPool')
 
     const nextEntry = {
       ...mockPoolEntry,
@@ -442,7 +447,7 @@ describe('TaskTerminal', () => {
     await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
 
     await vi.waitFor(() => {
-      expect(detach).toHaveBeenCalledWith(mockPoolEntry)
+      expect(attachmentDetaches[0]).toHaveBeenCalledOnce()
       expect(acquire).toHaveBeenCalledWith('project-P-2-shell-0')
       expect(attach).toHaveBeenCalledWith(nextEntry, expect.any(HTMLDivElement))
     })
@@ -499,7 +504,7 @@ describe('TaskTerminal', () => {
   })
 
   it('calls detach on component destroy', async () => {
-    const { detach, attach } = await import('../../lib/terminalPool')
+    const { attach } = await import('../../lib/terminalPool')
 
     const { unmount } = render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
@@ -507,7 +512,7 @@ describe('TaskTerminal', () => {
     })
 
     unmount()
-    expect(detach).toHaveBeenCalledWith(mockPoolEntry)
+    expect(attachmentDetaches[0]).toHaveBeenCalledOnce()
   })
 
   it('spawns shell PTY with terminalIndex when ptyActive is false', async () => {

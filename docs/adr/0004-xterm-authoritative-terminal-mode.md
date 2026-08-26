@@ -8,7 +8,7 @@ Date: 2026-08-25
 
 ADRs 0001 through 0003 describe a planned move toward sidecar-owned parsed terminal state, portable snapshots, sequenced model frames, and sidecar-generated protocol replies. The compatibility work is not complete. Shipping parts of that design behind the legacy Ghostty terminal-state setting created an unsafe mixed mode: renderer behavior, setting state, or snapshot API availability could decide which parser supplied state and which parser answered terminal queries.
 
-OpenForge currently has two desktop terminal paths. Agent terminals use the core renderer Terminal Runtime. Regular shells use the built-in Terminal plugin and the same runtime package. Both render through xterm. A Rust Ghostty model may inspect the same PTY bytes for diagnostics, but it has not passed the transition gates required to own production state or replies.
+OpenForge has two desktop terminal paths. Agent terminals are core surfaces, while regular shells are built-in Terminal plugin surfaces. Both use one host-owned Terminal Runtime and render through xterm. A Rust Ghostty model may inspect the same PTY bytes for diagnostics, but it has not passed the transition gates required to own production state or replies.
 
 Two parsers may inspect a query. Only one may reply. A reply also has to remain bound to the PTY generation that produced the query.
 

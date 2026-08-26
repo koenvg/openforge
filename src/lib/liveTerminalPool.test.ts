@@ -1,26 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getShellLifecycleState as appGetShellLifecycleState,
-  getTaskTerminalTabsSession as appGetTaskTerminalTabsSession,
-} from './terminalPool'
+  agentTerminalSessions,
+  regularTerminalSessions,
+} from './terminalSessionService'
 import {
-  getShellLifecycleState as pluginGetShellLifecycleState,
-  getTaskTerminalTabsSession as pluginGetTaskTerminalTabsSession,
-} from '../../plugins/terminal/src/lib/terminalPool'
-import { getShellLifecycleState, getTaskTerminalTabsSession } from './liveTerminalPool'
+  getShellLifecycleState,
+  getTaskTerminalTabsSession,
+  releaseAllForTask,
+} from './liveTerminalPool'
 
-// Regression guard for the "Run app hangs" bug: the task-view terminal is rendered
-// by the terminal PLUGIN, which owns its own createTerminalRuntime instance. Any code
-// that drives that terminal (e.g. the Run app button) must read session/lifecycle from
-// the PLUGIN runtime, not the app-local src/lib/terminalPool (a different instance).
-describe('liveTerminalPool bridge', () => {
-  it('binds to the terminal plugin runtime that renders the task-view terminal', () => {
-    expect(getTaskTerminalTabsSession).toBe(pluginGetTaskTerminalTabsSession)
-    expect(getShellLifecycleState).toBe(pluginGetShellLifecycleState)
+describe('live regular terminal client', () => {
+  it('binds core callers to the host-owned regular terminal client', () => {
+    expect(getTaskTerminalTabsSession).toBe(regularTerminalSessions.getTaskTerminalTabsSession)
+    expect(getShellLifecycleState).toBe(regularTerminalSessions.getShellLifecycleState)
+    expect(releaseAllForTask).toBe(regularTerminalSessions.releaseAllForTask)
   })
 
-  it('does not bind to the app-local terminal pool (a separate runtime instance)', () => {
-    expect(getTaskTerminalTabsSession).not.toBe(appGetTaskTerminalTabsSession)
-    expect(getShellLifecycleState).not.toBe(appGetShellLifecycleState)
+  it('shares lifecycle state with agent terminals without sharing client-owned disposal', () => {
+    expect(getTaskTerminalTabsSession).toBe(agentTerminalSessions.getTaskTerminalTabsSession)
+    expect(getShellLifecycleState).toBe(agentTerminalSessions.getShellLifecycleState)
+    expect(releaseAllForTask).not.toBe(agentTerminalSessions.releaseAllForTask)
   })
 })

@@ -12,8 +12,14 @@ export type TerminalRuntimeUnlistenFn = () => void
 
 export type TerminalStateSource = 'bootstrapping' | 'pty-byte-replay' | 'ghostty-snapshot'
 
+export interface TerminalSessionConfiguration {
+  renderer: 'xterm'
+  enableImages?: boolean
+}
+
 export interface TerminalRuntimeEnvironment {
   openLink(shellSessionKey: string, url: string): Promise<void>
+  sampleSessionConfiguration?(shellSessionKey: string): TerminalSessionConfiguration
   themeMode?: Readable<ThemeMode>
   loggerName?: string
   enableImages?: boolean
@@ -30,6 +36,7 @@ export interface PoolEntry {
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
   attached: boolean
+  attachmentGeneration: number
   spawnPending: boolean
   currentPtyInstance: number | null
   authority: TerminalAuthorityBinding | null
@@ -39,6 +46,7 @@ export interface PoolEntry {
   pendingTerminalModelOutput: TerminalModelOutputEvent[]
   terminalReplayRecovery: Promise<void> | null
   hasOutput: boolean
+  outputSequence: number
 }
 
 export interface TerminalTab {

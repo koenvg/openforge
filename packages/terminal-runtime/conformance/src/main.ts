@@ -39,7 +39,7 @@ const renderer = getTerminalConformanceRenderer(new URLSearchParams(location.sea
 rendererLabel.textContent = renderer.id
 
 const ptyInstanceId = 1
-
+let outputSequence = 0
 let view: TerminalView | null = null
 const inputRecorder = createCapturedEventRecorder<string>(event => event)
 const queryResponseRecorder = createCapturedEventRecorder<TerminalViewQueryResponse>(response => ({ ...response }))
@@ -64,6 +64,7 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
   view?.dispose()
   view = null
   host.replaceChildren()
+  outputSequence = 0
   openedLinks = []
   echoInput = options.echoInput ?? false
   inputPresentation = Promise.resolve(null)
@@ -88,7 +89,8 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
   })
   inputRecorder.subscribe(listener => nextView.onUserInput(listener), data => {
     if (!echoInput) return
-    nextView.writeLive({ data, ptyInstanceId })
+    outputSequence += 1
+    nextView.writeLive({ data, ptyInstanceId, sequence: outputSequence })
     inputPresentation = nextView.drainPresentation()
   })
   queryResponseRecorder.subscribe(listener => nextView.onQueryResponse(listener))
@@ -102,8 +104,13 @@ async function play(id: string): Promise<PlayResult> {
   const activeView = requireView()
   const recording = recordingById(id)
   recording.chunks.forEach((chunk, index) => {
-    if (index === 0) activeView.bootstrap(chunk, ptyInstanceId)
-    else activeView.writeLive({ data: chunk, ptyInstanceId })
+    if (index === 0) {
+      outputSequence = 0
+      activeView.bootstrap(chunk, ptyInstanceId, outputSequence)
+      return
+    }
+    outputSequence += 1
+    activeView.writeLive({ data: chunk, ptyInstanceId, sequence: outputSequence })
   })
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
@@ -112,7 +119,8 @@ async function play(id: string): Promise<PlayResult> {
 async function writeRepeated(data: string, repetitions: number): Promise<PlayResult> {
   const activeView = requireView()
   for (let index = 0; index < repetitions; index += 1) {
-    activeView.writeLive({ data, ptyInstanceId })
+    outputSequence += 1
+    activeView.writeLive({ data, ptyInstanceId, sequence: outputSequence })
   }
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
@@ -141,7 +149,8 @@ async function reconnect(id: string): Promise<PlayResult> {
   const activeView = requireView()
   activeView.reset()
   const recording = recordingById(id)
-  activeView.bootstrap(recording.chunks.join(''), ptyInstanceId)
+  outputSequence = 0
+  activeView.bootstrap(recording.chunks.join(''), ptyInstanceId, outputSequence)
   const evidence = await activeView.drainPresentation()
   return { evidence, presentation: activeView.capturePresentation() }
 }

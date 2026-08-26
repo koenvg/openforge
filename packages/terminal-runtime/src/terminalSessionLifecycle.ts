@@ -65,6 +65,7 @@ export function createTerminalSessionLifecycle(
   }
 
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
+    if (entry.currentPtyInstance !== instanceId) entry.outputSequence = 0
     entry.currentPtyInstance = instanceId
     if (instanceId === null) {
       entry.authority = null

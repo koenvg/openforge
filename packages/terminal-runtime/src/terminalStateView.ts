@@ -39,9 +39,11 @@ export function createTerminalStateView({
       resetEntry(entry)
       entry.needsClear = false
     }
+    entry.outputSequence += 1
     entry.view.writeLive({
       data: event.data,
       ptyInstanceId: event.ptyInstanceId,
+      sequence: entry.outputSequence,
     })
     markOutput(entry)
   }
@@ -90,6 +92,7 @@ export function createTerminalStateView({
     }
     entry.ptyActive = replay.isLive
     entry.needsClear = false
+    entry.outputSequence = 0
     entry.terminalStateSource = 'pty-byte-replay'
     entry.terminalModelSequence = null
     if (replay.ptyInstanceId !== null) {
@@ -97,7 +100,7 @@ export function createTerminalStateView({
       entry.authority = bindTerminalAuthority(authority, entry.shellSessionKey, replay.ptyInstanceId)
     }
     if (replay.data) {
-      entry.view.bootstrap(replay.data, replay.ptyInstanceId)
+      entry.view.bootstrap(replay.data, replay.ptyInstanceId, entry.outputSequence)
       entry.hasOutput = true
     }
     flushPendingOutput(entry)
