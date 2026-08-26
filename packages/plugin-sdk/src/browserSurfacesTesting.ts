@@ -4,6 +4,7 @@ import {
 } from './browserSurfaces'
 import type {
   BrowserSurfacesAPI,
+  BrowserDevToolsPanel,
   BrowserSurfaceCapture,
   BrowserSurfaceFeedbackSelection,
   BrowserSurfaceVisualFeedback,
@@ -19,7 +20,12 @@ export interface TestingBrowserSurfaceCalls {
   browserSurfaceDetaches: Array<{ taskId: string; id: string }>
   browserSurfaceDestroys: Array<{ taskId: string; id: string }>
   browserSurfaceNavigations: Array<{ taskId: string; id: string; url: string }>
-  browserSurfaceControls: Array<{ taskId: string; id: string; action: 'goBack' | 'goForward' | 'reload' | 'stop' }>
+  browserSurfaceControls: Array<{
+    taskId: string
+    id: string
+    action: 'goBack' | 'goForward' | 'reload' | 'stop' | 'openDevTools' | 'closeDevTools'
+    panel?: BrowserDevToolsPanel
+  }>
   browserSurfaceSelections: Array<{ taskId: string; id: string }>
   browserSurfaceFeedbackClears: Array<{ taskId: string; id: string }>
   browserSurfaceFeedbackReplacements: Array<{ taskId: string; id: string; feedback: BrowserSurfaceVisualFeedback[] }>
@@ -85,6 +91,7 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      devToolsOpen: false,
       error: null,
     }
   }
@@ -164,6 +171,25 @@ class TestingTaskBrowserSurface implements TaskBrowserSurfaceController {
     this.assertLive()
     this.calls.browserSurfaceControls.push({ taskId: this.taskId, id: this.id, action: 'stop' })
     this.publish({ loading: false })
+    return this.getState()
+  }
+
+  async openDevTools(panel?: BrowserDevToolsPanel): Promise<TaskBrowserSurfaceState> {
+    this.assertLive()
+    this.calls.browserSurfaceControls.push({
+      taskId: this.taskId,
+      id: this.id,
+      action: 'openDevTools',
+      ...(panel ? { panel } : {}),
+    })
+    this.publish({ devToolsOpen: true })
+    return this.getState()
+  }
+
+  async closeDevTools(): Promise<TaskBrowserSurfaceState> {
+    this.assertLive()
+    this.calls.browserSurfaceControls.push({ taskId: this.taskId, id: this.id, action: 'closeDevTools' })
+    this.publish({ devToolsOpen: false })
     return this.getState()
   }
 

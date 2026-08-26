@@ -21,6 +21,8 @@ function managerFake() {
     goForward: vi.fn(async () => ({ url: 'https://example.com' })),
     reload: vi.fn(async () => ({ url: 'https://example.com' })),
     stop: vi.fn(async () => ({ url: 'https://example.com' })),
+    openDevTools: vi.fn(async () => ({ devToolsOpen: true })),
+    closeDevTools: vi.fn(async () => ({ devToolsOpen: false })),
     selectVisibleRegion: vi.fn(async () => ({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 })),
     clearVisualFeedback: vi.fn(async () => undefined),
     replaceVisualFeedback: vi.fn(async () => undefined),
@@ -70,6 +72,13 @@ describe('Task Browser Surface IPC router', () => {
       attachmentGeneration: 2,
     }, 10)
     expect(manager.detach).toHaveBeenCalledWith('surface-1', 'attachment-2', 2)
+    expect(isTaskBrowserSurfaceCommand('task_browser_surface_open_devtools')).toBe(true)
+    await expect(router.handle('task_browser_surface_open_devtools', { surfaceId: 'surface-1', panel: 'console' }, 10))
+      .resolves.toEqual({ ok: true, value: { devToolsOpen: true } })
+    await expect(router.handle('task_browser_surface_close_devtools', { surfaceId: 'surface-1' }, 10))
+      .resolves.toEqual({ ok: true, value: { devToolsOpen: false } })
+    expect(manager.openDevTools).toHaveBeenCalledWith('surface-1', 'console')
+    expect(manager.closeDevTools).toHaveBeenCalledWith('surface-1')
   })
 
   it('routes capture and discard with explicit plugin, Task, window, and surface generation scope', async () => {
@@ -131,6 +140,21 @@ describe('Task Browser Surface IPC router', () => {
     expect(manager.destroy).not.toHaveBeenCalled()
   })
 
+  it('returns a host error when Chromium DevTools fail to open', async () => {
+    const manager = managerFake()
+    manager.openDevTools.mockRejectedValueOnce(new Error('Chromium Developer Tools did not open'))
+    const router = new TaskBrowserSurfaceIpcRouter(manager as never)
+
+    await expect(router.handle(
+      'task_browser_surface_open_devtools',
+      { surfaceId: 'surface-1' },
+      10,
+    )).resolves.toEqual({
+      ok: false,
+      error: { code: 'HOST_UNAVAILABLE', message: 'Chromium Developer Tools did not open' },
+    })
+  })
+
   it('fails missing Electron sender windows and malformed payloads with named errors', async () => {
     const router = new TaskBrowserSurfaceIpcRouter(managerFake() as never)
 
@@ -156,5 +180,7 @@ describe('Task Browser Surface IPC router', () => {
       ok: false,
       error: { code: 'INVALID_ID' },
     })
+    await expect(router.handle('task_browser_surface_open_devtools', { surfaceId: 'surface-1', panel: 'network' }, 10))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ID' } })
   })
 })

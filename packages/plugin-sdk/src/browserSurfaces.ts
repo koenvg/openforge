@@ -29,12 +29,15 @@ export interface BrowserSurfaceNavigationError {
   url: string
 }
 
+export type BrowserDevToolsPanel = 'elements' | 'console'
+
 export interface TaskBrowserSurfaceState {
   url: string
   title: string
   loading: boolean
   canGoBack: boolean
   canGoForward: boolean
+  devToolsOpen: boolean
   error: BrowserSurfaceNavigationError | null
 }
 
@@ -88,6 +91,8 @@ export interface TaskBrowserSurfaceController {
   goForward(): Promise<TaskBrowserSurfaceState>
   reload(): Promise<TaskBrowserSurfaceState>
   stop(): Promise<TaskBrowserSurfaceState>
+  openDevTools(panel?: BrowserDevToolsPanel): Promise<TaskBrowserSurfaceState>
+  closeDevTools(): Promise<TaskBrowserSurfaceState>
   selectVisibleRegion(): Promise<BrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>

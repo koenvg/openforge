@@ -1,5 +1,6 @@
 import {
   BrowserSurfaceError,
+  type BrowserDevToolsPanel,
   isAllowedBrowserSurfaceUrl,
   type Disposable,
   type FrontendOpenForgeAPI,
@@ -21,6 +22,8 @@ export interface BrowserTabSession {
   goForward(): Promise<TaskBrowserSurfaceState>
   reload(): Promise<TaskBrowserSurfaceState>
   stop(): Promise<TaskBrowserSurfaceState>
+  openDevTools(panel?: BrowserDevToolsPanel): Promise<TaskBrowserSurfaceState>
+  closeDevTools(): Promise<TaskBrowserSurfaceState>
   setPresentation(element: HTMLElement | null): Promise<void>
   dispose(): Promise<void>
 }
@@ -168,6 +171,12 @@ export async function createBrowserTabSession({
         if (shouldSuppressPersistence) persistenceSuppression = 'none'
         throw error
       }
+    },
+    openDevTools(panel) {
+      return surface.openDevTools(panel)
+    },
+    closeDevTools() {
+      return surface.closeDevTools()
     },
     setPresentation,
     async dispose() {

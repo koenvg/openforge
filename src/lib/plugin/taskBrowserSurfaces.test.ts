@@ -10,6 +10,7 @@ const blankState = {
   loading: false,
   canGoBack: false,
   canGoForward: false,
+  devToolsOpen: false,
   error: null,
 }
 
@@ -97,6 +98,8 @@ describe('renderer Task Browser Surface host adapter', () => {
       | 'goForward'
       | 'reload'
       | 'stop'
+      | 'openDevTools'
+      | 'closeDevTools'
       | 'selectVisibleRegion'
       | 'cancelVisibleRegionSelection'
       | 'clearVisualFeedback'
@@ -185,6 +188,9 @@ describe('renderer Task Browser Surface host adapter', () => {
         if (command === 'task_browser_surface_get_or_create') {
           return { ok: true, value: { surfaceId: 'surface-1', generation: 4, state: blankState } }
         }
+        if (command === 'task_browser_surface_open_devtools') {
+          return { ok: true, value: { ...blankState, devToolsOpen: true } }
+        }
         return { ok: true, value: blankState }
       },
       onEvent(eventName, handler) {
@@ -219,6 +225,8 @@ describe('renderer Task Browser Surface host adapter', () => {
       state: { ...blankState, title: 'Example' },
     })
     await controller.navigate('https://example.com/next')
+    await expect(controller.openDevTools('console')).resolves.toMatchObject({ devToolsOpen: true })
+    await expect(controller.closeDevTools()).resolves.toMatchObject({ devToolsOpen: false })
     await attachment.dispose()
     await subscription.dispose()
     await controller.destroy()
@@ -238,6 +246,14 @@ describe('renderer Task Browser Surface host adapter', () => {
     expect(invocations).toContainEqual({
       command: 'task_browser_surface_navigate',
       payload: { surfaceId: 'surface-1', url: 'https://example.com/next' },
+    })
+    expect(invocations).toContainEqual({
+      command: 'task_browser_surface_open_devtools',
+      payload: { surfaceId: 'surface-1', panel: 'console' },
+    })
+    expect(invocations).toContainEqual({
+      command: 'task_browser_surface_close_devtools',
+      payload: { surfaceId: 'surface-1' },
     })
     expect(invocations.some(call => call.command === 'task_browser_surface_detach')).toBe(true)
     expect(invocations.at(-1)).toEqual({

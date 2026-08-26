@@ -444,7 +444,7 @@ describe('runtime contribution registry', () => {
   })
 
   it('qualifies browser surface requests with the active frontend plugin and cleans them up on deactivation', async () => {
-    const state = { url: 'about:blank', title: '', loading: false, canGoBack: false, canGoForward: false, error: null }
+    const state = { url: 'about:blank', title: '', loading: false, canGoBack: false, canGoForward: false, devToolsOpen: false, error: null }
     const controller = {
       attach: vi.fn(async () => ({ dispose: () => undefined })),
       detach: vi.fn(async () => undefined),
@@ -456,6 +456,8 @@ describe('runtime contribution registry', () => {
       goForward: vi.fn(async () => state),
       reload: vi.fn(async () => state),
       stop: vi.fn(async () => state),
+      openDevTools: vi.fn(async () => ({ ...state, devToolsOpen: true })),
+      closeDevTools: vi.fn(async () => state),
       selectVisibleRegion: vi.fn(async () => ({
         region: { x: 0.1, y: 0.1, width: 0.4, height: 0.4 },
         comment: 'Example visual feedback',

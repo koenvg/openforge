@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, WebContentsView, app, session as electronSession } from 'electron'
+import { BrowserWindow, Menu, WebContentsView, app, session as electronSession } from 'electron'
 import type { DownloadItem, Event as ElectronEvent, Session, WebContents } from 'electron'
 import { TaskBrowserSurfaceError, integerTaskBrowserBounds } from './taskBrowserSurfaceManager.js'
 import {
@@ -13,6 +13,7 @@ import type {
   NativeTaskBrowserSurfaceFactory,
   TaskBrowserBounds,
   TaskBrowserNativeState,
+  TaskBrowserDevToolsPanel,
   TaskBrowserNavigationError,
   TaskBrowserSurfaceCreateOptions,
   TaskBrowserSurfaceVisualFeedback,
@@ -43,6 +44,78 @@ function isAbortedNavigationError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false
   const code = 'code' in error ? error.code : undefined
   return code === -3 || code === 'ERR_ABORTED'
+}
+
+interface TaskBrowserKeyboardInput {
+  type: string
+  key: string
+  control?: boolean
+  shift?: boolean
+  alt?: boolean
+  meta?: boolean
+}
+
+type TaskBrowserDevToolsShortcut = 'toggle' | TaskBrowserDevToolsPanel
+
+const DEVTOOLS_OPEN_TIMEOUT_MS = 2_000
+
+function taskBrowserDevToolsShortcut(
+  input: TaskBrowserKeyboardInput,
+  platform: NodeJS.Platform = process.platform,
+): TaskBrowserDevToolsShortcut | null {
+  if (input.type !== 'keyDown') return null
+  const key = input.key.toLowerCase()
+  if (key === 'f12') return 'toggle'
+  const modified = platform === 'darwin'
+    ? input.meta === true && input.alt === true && input.control !== true && input.shift !== true
+    : input.control === true && input.shift === true && input.meta !== true && input.alt !== true
+  if (!modified) return null
+  if (key === 'i') return 'toggle'
+  if (key === 'c') return 'elements'
+  return key === 'j' ? 'console' : null
+}
+
+function devToolsPanelInput(panel: TaskBrowserDevToolsPanel) {
+  const modifiers: Array<'control' | 'shift' | 'alt' | 'meta'> = process.platform === 'darwin'
+    ? ['meta', 'alt']
+    : ['control', 'shift']
+  return {
+    type: 'keyDown' as const,
+    keyCode: panel === 'elements' ? 'C' : 'J',
+    modifiers,
+  }
+}
+
+async function openTaskBrowserDevTools(
+  contents: WebContents,
+  panel?: TaskBrowserDevToolsPanel,
+): Promise<void> {
+  if (!contents.isDevToolsOpened()) {
+    await new Promise<void>((resolve, reject) => {
+      const opened = () => {
+        clearTimeout(timeout)
+        contents.removeListener('devtools-opened', opened)
+        resolve()
+      }
+      const timeout = setTimeout(() => {
+        contents.removeListener('devtools-opened', opened)
+        reject(new TaskBrowserSurfaceError(
+          'HOST_UNAVAILABLE',
+          'Chromium Developer Tools did not open',
+        ))
+      }, DEVTOOLS_OPEN_TIMEOUT_MS)
+      contents.on('devtools-opened', opened)
+      try {
+        contents.openDevTools()
+        if (contents.isDevToolsOpened()) opened()
+      } catch (error) {
+        clearTimeout(timeout)
+        contents.removeListener('devtools-opened', opened)
+        reject(error)
+      }
+    })
+  }
+  if (panel) contents.devToolsWebContents?.sendInputEvent(devToolsPanelInput(panel))
 }
 
 const INVALID_FILENAME_CHARACTERS = /[\u0000-\u001f\u007f<>:"|?*]/g
@@ -195,6 +268,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
         loading: false,
         canGoBack: false,
         canGoForward: false,
+        devToolsOpen: false,
         error: this.navigationError ? { ...this.navigationError } : null,
       }
     }
@@ -205,6 +279,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       loading: contents.isLoading(),
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
+      devToolsOpen: contents.isDevToolsOpened(),
       error: this.navigationError ? { ...this.navigationError } : null,
     }
   }
@@ -289,6 +364,19 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
   stop(): void {
     this.view.webContents.stop()
     this.publish()
+  }
+
+  async openDevTools(panel?: TaskBrowserDevToolsPanel): Promise<void> {
+    if (this.destroyed || this.view.webContents.isDestroyed()) {
+      throw new TaskBrowserSurfaceError('SURFACE_DESTROYED', 'Task Browser Surface has been destroyed')
+    }
+    await this.cancelVisibleRegionSelection()
+    await openTaskBrowserDevTools(this.view.webContents, panel)
+  }
+
+  async closeDevTools(): Promise<void> {
+    if (this.destroyed || this.view.webContents.isDestroyed()) return
+    this.view.webContents.closeDevTools()
   }
 
   async selectVisibleRegion() {
@@ -502,7 +590,37 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     this.activeDownloads.clear()
   }
 
-  private configureSecurityPolicy(contents: WebContents): void {
+  private runAfterCancelingSelection(action: () => void): void {
+    void this.cancelVisibleRegionSelection().then(action)
+  }
+
+  private configureSecurityPolicy(contents: WebContents, ownerWindow: BrowserWindow | null = null): void {
+    contents.on('before-input-event', (event, input) => {
+      const shortcut = taskBrowserDevToolsShortcut(input)
+      if (shortcut === null) return
+      event.preventDefault()
+      if (shortcut !== 'toggle') {
+        this.runAfterCancelingSelection(() => {
+          void openTaskBrowserDevTools(contents, shortcut)
+        })
+      } else if (contents.isDevToolsOpened()) {
+        contents.closeDevTools()
+      } else {
+        this.runAfterCancelingSelection(() => {
+          void openTaskBrowserDevTools(contents)
+        })
+      }
+    })
+    contents.on('context-menu', (_event, params) => {
+      const menu = Menu.buildFromTemplate([{
+        label: 'Inspect element',
+        click: () => this.runAfterCancelingSelection(
+          () => contents.inspectElement(params.x, params.y),
+        ),
+      }])
+      const window = ownerWindow ?? this.attachedWindow
+      menu.popup(window && !window.isDestroyed() ? { window } : {})
+    })
     contents.on('will-navigate', (event, url) => {
       if (!allowedTopLevelUrl(url)) {
         event.preventDefault()
@@ -538,7 +656,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
     return {
       ...this.options.webPreferences,
       partition: this.options.partition,
-      devTools: !app.isPackaged,
+      devTools: true,
     }
   }
 
@@ -556,7 +674,7 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       this.childWindows.delete(window)
       this.permissionRouter.unregister(window.webContents)
     })
-    this.configureSecurityPolicy(window.webContents)
+    this.configureSecurityPolicy(window.webContents, window)
   }
 
   private destroyChildWindows(): void {
@@ -582,6 +700,8 @@ class ElectronNativeTaskBrowserSurface implements NativeTaskBrowserSurface {
       this.publish()
     })
     contents.on('page-title-updated', () => this.publish())
+    contents.on('devtools-opened', () => this.publish())
+    contents.on('devtools-closed', () => this.publish())
     contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       if (!isMainFrame || errorCode === -3) return
       this.navigationError = {

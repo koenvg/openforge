@@ -123,6 +123,10 @@ _Avoid_: URL interceptor, browser command handler, link priority
 A browser presentation owned by a **Trusted Plugin** for one **Task** in one OpenForge window, identified within that window, plugin, and Task by a stable local surface identifier.
 _Avoid_: Webview, browser tab, raw WebContentsView
 
+**Task Browser DevTools**:
+The full Chromium inspection interface for one **Task Browser Surface**, including page elements, console output, network activity, sources, and site storage.
+_Avoid_: Chrome debugger, console panel, app DevTools
+
 **Plugin Browser Session**:
 The durable browsing identity and site data shared by all of a **Trusted Plugin's** browser surfaces, spanning every **Task** and project, isolated from every other plugin.
 _Avoid_: Task Browser Session, per-task login, surface state
@@ -389,9 +393,15 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Task Browser Attachment** reports bounds in renderer CSS pixels; Electron main converts them with the owning window's renderer zoom factor before clamping them against the window content bounds, so a zoomed UI still places the surface over its plugin-owned region.
 - A **Task Browser Surface** reports URL, title, loading, history availability, and navigation failure as one current state snapshot so plugins do not reconcile independently ordered event fragments.
 - Downloads from a **Task Browser Surface** require a host-owned save prompt for each file; plugins cannot choose download paths, auto-accept downloads, or access Electron download handles.
-- Every **Task Browser Surface** and host-owned child window uses a non-configurable sandboxed browser configuration with no Node integration, preload script, webview embedding, insecure-content override, drag-drop navigation, or packaged-build DevTools access.
+- Every **Task Browser Surface** and host-owned child window uses a non-configurable sandboxed browser configuration with no Node integration, preload script, webview embedding, insecure-content override, or drag-drop navigation.
+- **Task Browser DevTools** are available in development and packaged builds, use right-docked presentation only as the initial default, remember the user's Chromium dock preference across surfaces and restarts, and retain Chromium's native bottom-dock and undock controls.
+- Opening **Task Browser DevTools** cancels an active visual-feedback region selection without removing saved annotations or review markers.
+- Opening **Task Browser DevTools** only after an explicit user action is a **Trusted Plugin** UX contract; host authorization enforces surface ownership rather than attempting to prove renderer gesture provenance.
+- The open state of **Task Browser DevTools** belongs to its live **Task Browser Surface**: it survives detachment, docked tools hide and return with the surface, deliberately undocked tools remain visible, and destruction, session reset, or OpenForge window closure ends them.
+- Open **Task Browser DevTools** state is not restored after surface recreation or app restart.
+- A host-owned browser popup has its own **Task Browser DevTools** target: Inspect and standard shortcuts act on the focused popup, while the Browser-tab toolbar continues to act on the main **Task Browser Surface**.
 - Each OpenForge window keeps at most four detached **Task Browser Surfaces** alive; when capacity is exceeded, OpenForge destroys the least-recently-used detached surface while preserving its **Plugin Browser Session** and restorable URL.
-- The frontend-only browser-surface capability qualifies the owning plugin, requires a valid Task and plugin-local surface identifier, and returns only typed controls after verifying the plugin is enabled for the Task's project.
+- The frontend-only browser-surface capability qualifies the owning plugin, requires a valid Task and plugin-local surface identifier, and returns typed controls—including **Task Browser DevTools** controls—only for that plugin's own surfaces after verifying the plugin is enabled for the Task's project.
 - Plugin uninstall durably schedules its **Plugin Browser Session** purge until Electron completes and acknowledges it; permanent **Task** deletion schedules no browser purge.
 - On first launch after adopting **Plugin Browser Sessions**, OpenForge clears every legacy per-**Task** browser partition in its registry so no site data remains that no surface can reach and no reset can clear.
 - A plugin may omit a surface's initial URL; newly created surfaces start at `about:blank` until the plugin navigates them.

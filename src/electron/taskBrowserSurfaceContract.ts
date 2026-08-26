@@ -30,12 +30,15 @@ export interface TaskBrowserNavigationError {
   url: string
 }
 
+export type TaskBrowserDevToolsPanel = 'elements' | 'console'
+
 export interface TaskBrowserNativeState {
   url: string
   title: string
   loading: boolean
   canGoBack: boolean
   canGoForward: boolean
+  devToolsOpen: boolean
   error: TaskBrowserNavigationError | null
 }
 
@@ -112,6 +115,8 @@ export interface NativeTaskBrowserSurface {
   goForward(): Promise<void>
   reload(): Promise<void>
   stop(): void
+  openDevTools(panel?: TaskBrowserDevToolsPanel): Promise<void>
+  closeDevTools(): Promise<void>
   selectVisibleRegion(): Promise<TaskBrowserSurfaceFeedbackSelection | null>
   cancelVisibleRegionSelection(): Promise<void>
   clearVisualFeedback(): Promise<void>

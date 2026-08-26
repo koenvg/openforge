@@ -7,6 +7,7 @@ import type {
   NativeTaskBrowserSurface,
   TaskBrowserBounds,
   TaskBrowserNativeState,
+  TaskBrowserDevToolsPanel,
   PluginBrowserSessionPartition,
   TaskBrowserSurfaceManagerOptions,
   TaskBrowserSurfaceCapture,
@@ -32,6 +33,7 @@ export type {
   NativeTaskBrowserSurface,
   NativeTaskBrowserSurfaceFactory,
   TaskBrowserBounds,
+  TaskBrowserDevToolsPanel,
   TaskBrowserNavigationError,
   TaskBrowserNativeState,
   TaskBrowserPermissionController,
@@ -271,6 +273,21 @@ export class TaskBrowserSurfaceManager {
   async stop(surfaceId: string): Promise<TaskBrowserNativeState> {
     const surface = this.requireSurface(surfaceId)
     surface.native.stop()
+    return copyState(surface.native.getState())
+  }
+
+  async openDevTools(
+    surfaceId: string,
+    panel?: TaskBrowserDevToolsPanel,
+  ): Promise<TaskBrowserNativeState> {
+    const surface = this.requireSurface(surfaceId)
+    await surface.native.openDevTools(panel)
+    return copyState(surface.native.getState())
+  }
+
+  async closeDevTools(surfaceId: string): Promise<TaskBrowserNativeState> {
+    const surface = this.requireSurface(surfaceId)
+    await surface.native.closeDevTools()
     return copyState(surface.native.getState())
   }
 
