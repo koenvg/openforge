@@ -269,11 +269,13 @@ describe('plugin host commands', () => {
         projectId: 'P-1',
         id: 'workflow',
         content: 'First workflow',
+        enabled: true,
       }),
       second.configureStartPromptContribution?.({
         projectId: 'P-1',
         id: 'workflow',
         content: 'Second workflow',
+        enabled: true,
       }),
     ])
 
@@ -299,6 +301,7 @@ describe('plugin host commands', () => {
       projectId: 'P-1',
       id: 'workflow',
       content: 'Workflow',
+      enabled: true,
       order: 1.5,
     })).rejects.toThrow('safe integer')
     expect(invoke).not.toHaveBeenCalled()
@@ -307,6 +310,7 @@ describe('plugin host commands', () => {
       projectId: 'P-1',
       id: 'workflow',
       content: 'Workflow',
+      enabled: true,
       order: Number.MAX_SAFE_INTEGER,
     })
     expect(invoke).toHaveBeenCalledWith('configure_start_prompt_contribution', expect.objectContaining({
