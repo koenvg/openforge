@@ -85,15 +85,33 @@ describe('TaskDetailView active-view persistence', () => {
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
-  it('restores terminal mode from taskActiveView when task is rendered', async () => {
-    const { getTaskWorkspace } = await import('../../lib/ipc')
+  it('restores terminal mode and completes terminal activation without unhandled errors', async () => {
+    const { getTaskWorkspace, spawnShellPty } = await import('../../lib/ipc')
+    const { acquire, attach, markShellPtyStarted } = await import('../../lib/terminalPool')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+    vi.mocked(spawnShellPty).mockClear()
+    vi.mocked(acquire).mockClear()
+    vi.mocked(attach).mockClear()
+    vi.mocked(markShellPtyStarted).mockClear()
 
     taskActiveView.set(new Map([['T-42', TERMINAL_VIEW_ID]]))
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(acquire).toHaveBeenCalledWith('T-42-shell-0')
+      expect(attach).toHaveBeenCalledWith(
+        expect.objectContaining({
+          shellSessionKey: 'T-42-shell-0',
+          view: expect.objectContaining({ geometry: { cols: 80, rows: 24 } }),
+        }),
+        expect.any(HTMLDivElement),
+      )
+      expect(spawnShellPty).toHaveBeenCalledWith('T-42', '/tmp/wt', 80, 24, 0, 'iterm2')
+      expect(markShellPtyStarted).toHaveBeenCalledWith(
+        expect.objectContaining({ shellSessionKey: 'T-42-shell-0' }),
+        1,
+      )
     })
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
