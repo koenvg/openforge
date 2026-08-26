@@ -33,6 +33,6 @@ The milestone-one Companion Agent Terminal does not render inline images. Before
 
 ## Developer configuration
 
-`createTerminalRuntime` accepts `enableImages: false` for hosts that cannot or must not render images. Such runtimes do not load the image addon and `getTerminalImageProtocol(entry)` returns `null`; callers must omit PTY capability advertisement in that case.
+Set `environment.enableImages` to `false` when constructing Terminal Runtime for a Terminal Surface that cannot or must not render images. Such runtimes do not load the image addon and `getTerminalImageProtocol(entry)` returns `null`; callers must omit PTY capability advertisement in that case.
 
 PTY spawn boundaries use the optional camelCase field `terminalImageProtocol`. The only accepted value is `iterm2`. Backend and CLI starts that omit the field do not receive `ITERM_SESSION_ID`, preserving Pi's text fallback.

@@ -1,6 +1,12 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import { writable } from 'svelte/store'
-import type { TerminalRuntimeEvent, TerminalRuntimeHost, TerminalView } from './terminalRuntime'
+import type {
+  TerminalRuntimeEnvironment,
+  TerminalRuntimeOptions,
+  TerminalSessionTransportHandlers,
+  TerminalTransport,
+  TerminalView,
+} from './terminalRuntime'
 
 interface DiagnosticTerminalSnapshot {
   instanceId: number
@@ -129,7 +135,35 @@ vi.mock('@xterm/addon-image', () => ({
   }),
 }))
 
-export interface TestHost extends TerminalRuntimeHost {
+interface TestReplayState {
+  buffer?: string | null
+  data?: string | null
+  isLive: boolean
+  instanceId?: number | null
+  ptyInstanceId?: number | null
+}
+
+interface TestTransport extends TerminalTransport {
+  subscribeSession: Mock<TerminalTransport['subscribeSession']>
+  subscribeConnectionRestored: Mock<TerminalTransport['subscribeConnectionRestored']>
+  readReplay: Mock<TerminalTransport['readReplay']>
+  writeUserInput: Mock<TerminalTransport['writeUserInput']>
+  writeQueryResponse: Mock<TerminalTransport['writeQueryResponse']>
+  resize: Mock<TerminalTransport['resize']>
+  dispose: Mock<TerminalTransport['dispose']>
+}
+
+export interface TestHost extends TerminalRuntimeOptions {
+  transport: TestTransport
+  environment: TerminalRuntimeEnvironment & { openLink: ReturnType<typeof vi.fn> }
+  getPtyBuffer(taskId: string): Promise<TestReplayState>
+  writePty(taskId: string, data: string): Promise<void>
+  writeTerminalQueryResponse(response: unknown): Promise<void>
+  resizePty(taskId: string, cols: number, rows: number): Promise<void>
+  openLink: ReturnType<typeof vi.fn>
+  themeMode: TerminalRuntimeEnvironment['themeMode']
+  loggerName: string | undefined
+  enableImages: boolean | undefined
   emit<TPayload>(eventName: string, payload: TPayload): void
   setBuffer(shellSessionKey: string, buffer: string | null): void
   getTerminalViewSnapshot(shellSessionKey: string): Promise<DiagnosticTerminalSnapshot | null>
@@ -150,7 +184,8 @@ function createDeferredGate(): { promise: Promise<void>; release: () => void } {
 }
 
 export function createHost(): TestHost {
-  const listeners = new Map<string, Set<(event: TerminalRuntimeEvent<unknown>) => void>>()
+  const sessionHandlers = new Map<string, Set<TerminalSessionTransportHandlers>>()
+  const connectionRestoredHandlers = new Set<() => void>()
   const buffers = new Map<string, string | null>()
   const bufferReadGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const terminalViewSnapshots = new Map<string, DiagnosticTerminalSnapshot | null>()
@@ -158,19 +193,55 @@ export function createHost(): TestHost {
   const listenerRegistrationGates = new Map<string, ReturnType<typeof createDeferredGate>>()
   const listenerRegistrationFailures = new Set<string>()
   const openLink = vi.fn(async () => undefined)
-
-  return {
+  const environment: TestHost['environment'] = {
+    openLink,
     themeMode: writable('dark'),
-    async listenEvent<TPayload>(eventName: string, handler: (event: TerminalRuntimeEvent<TPayload>) => void) {
-      await listenerRegistrationGates.get(eventName)?.promise
-      if (listenerRegistrationFailures.delete(eventName)) {
-        throw new Error(`listener registration failed: ${eventName}`)
+  }
+  let host!: TestHost
+
+  async function registerEvent(eventName: string): Promise<void> {
+    await listenerRegistrationGates.get(eventName)?.promise
+    if (listenerRegistrationFailures.delete(eventName)) {
+      throw new Error(`listener registration failed: ${eventName}`)
+    }
+  }
+
+  const transport: TestTransport = {
+    subscribeSession: vi.fn(async (shellSessionKey: string, handlers: TerminalSessionTransportHandlers) => {
+      await registerEvent(`pty-output-${shellSessionKey}`)
+      await registerEvent(`pty-exit-${shellSessionKey}`)
+      const current = sessionHandlers.get(shellSessionKey) ?? new Set()
+      current.add(handlers)
+      sessionHandlers.set(shellSessionKey, current)
+      return { dispose: vi.fn(() => current.delete(handlers)) }
+    }),
+    subscribeConnectionRestored: vi.fn(async (handler: () => void) => {
+      await registerEvent('openforge-app-events-reconnected')
+      connectionRestoredHandlers.add(handler)
+      return { dispose: vi.fn(() => connectionRestoredHandlers.delete(handler)) }
+    }),
+    readReplay: vi.fn(async (shellSessionKey: string) => {
+      const replay = await host.getPtyBuffer(shellSessionKey)
+      return {
+        data: replay.data ?? replay.buffer ?? null,
+        isLive: replay.isLive,
+        ptyInstanceId: replay.ptyInstanceId ?? replay.instanceId ?? null,
       }
-      const current = listeners.get(eventName) ?? new Set()
-      current.add(handler as (event: TerminalRuntimeEvent<unknown>) => void)
-      listeners.set(eventName, current)
-      return () => current.delete(handler as (event: TerminalRuntimeEvent<unknown>) => void)
-    },
+    }),
+    writeUserInput: vi.fn((shellSessionKey: string, data: string) => host.writePty(shellSessionKey, data)),
+    writeQueryResponse: vi.fn(response => host.writeTerminalQueryResponse(response)),
+    resize: vi.fn((shellSessionKey: string, geometry: { cols: number; rows: number }) => (
+      host.resizePty(shellSessionKey, geometry.cols, geometry.rows)
+    )),
+    dispose: vi.fn(() => {
+      sessionHandlers.clear()
+      connectionRestoredHandlers.clear()
+    }),
+  }
+
+  host = {
+    transport,
+    environment,
     async getPtyBuffer(shellSessionKey: string) {
       await bufferReadGates.get(shellSessionKey)?.promise
       const buffer = buffers.get(shellSessionKey) ?? null
@@ -184,9 +255,32 @@ export function createHost(): TestHost {
     async writeTerminalQueryResponse() {},
     async resizePty() {},
     openLink,
+    themeMode: environment.themeMode,
+    loggerName: environment.loggerName,
+    enableImages: environment.enableImages,
     emit<TPayload>(eventName: string, payload: TPayload) {
-      for (const listener of listeners.get(eventName) ?? []) {
-        listener({ payload })
+      if (eventName === 'openforge-app-events-reconnected') {
+        for (const handler of connectionRestoredHandlers) handler()
+        return
+      }
+      const outputPrefix = 'pty-output-'
+      if (eventName.startsWith(outputPrefix)) {
+        const raw = payload as { data: string; instance_id?: number; ptyInstanceId?: number }
+        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
+        if (ptyInstanceId === undefined) return
+        for (const handlers of sessionHandlers.get(eventName.slice(outputPrefix.length)) ?? []) {
+          handlers.onOutput({ data: raw.data, ptyInstanceId })
+        }
+        return
+      }
+      const exitPrefix = 'pty-exit-'
+      if (eventName.startsWith(exitPrefix)) {
+        const raw = payload as { instance_id?: number; ptyInstanceId?: number }
+        const ptyInstanceId = raw.ptyInstanceId ?? raw.instance_id
+        if (ptyInstanceId === undefined) return
+        for (const handlers of sessionHandlers.get(eventName.slice(exitPrefix.length)) ?? []) {
+          handlers.onExit({ ptyInstanceId })
+        }
       }
     },
     setBuffer(shellSessionKey: string, buffer: string | null) {
@@ -223,15 +317,39 @@ export function createHost(): TestHost {
       listenerRegistrationFailures.add(eventName)
     },
     getListenerCount(eventName: string) {
-      return listeners.get(eventName)?.size ?? 0
+      if (eventName === 'openforge-app-events-reconnected') return connectionRestoredHandlers.size
+      if (eventName.startsWith('pty-output-')) {
+        return sessionHandlers.get(eventName.slice('pty-output-'.length))?.size ?? 0
+      }
+      if (eventName.startsWith('pty-exit-')) {
+        return sessionHandlers.get(eventName.slice('pty-exit-'.length))?.size ?? 0
+      }
+      return 0
     },
   }
+
+  Object.defineProperties(host, {
+    themeMode: {
+      get: () => environment.themeMode,
+      set: value => { environment.themeMode = value },
+    },
+    loggerName: {
+      get: () => environment.loggerName,
+      set: value => { environment.loggerName = value },
+    },
+    enableImages: {
+      get: () => environment.enableImages,
+      set: value => { environment.enableImages = value },
+    },
+  })
+
+  return host
 }
 
 export function createTrackedThemeMode() {
   const themeMode = writable<'light' | 'dark'>('dark')
   let subscriberCount = 0
-  const store: NonNullable<TerminalRuntimeHost['themeMode']> = {
+  const store: NonNullable<TerminalRuntimeEnvironment['themeMode']> = {
     subscribe(run) {
       subscriberCount += 1
       const unsubscribe = themeMode.subscribe(run)

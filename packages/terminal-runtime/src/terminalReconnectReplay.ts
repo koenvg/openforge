@@ -1,14 +1,10 @@
 import { terminalLogMessage } from './terminalLogging'
-import type {
-  PoolEntry,
-  TerminalRuntimeHost,
-  TerminalRuntimeUnlistenFn,
-} from './terminalRuntimeTypes'
-
-export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
+import type { TerminalTransport, TerminalTransportDisposable } from './terminalTransport'
+import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 
 interface TerminalReconnectReplayOptions {
-  host: TerminalRuntimeHost
+  transport: TerminalTransport
+  environment: TerminalRuntimeEnvironment
   getEntries(): Iterable<PoolEntry>
   hasEntries(): boolean
   resetEntry(entry: PoolEntry): void
@@ -17,15 +13,16 @@ interface TerminalReconnectReplayOptions {
 }
 
 export function createTerminalReconnectReplay({
-  host,
+  transport,
+  environment,
   getEntries,
   hasEntries,
   resetEntry,
   notifyLifecycle,
   recoverEntry,
 }: TerminalReconnectReplayOptions) {
-  let appEventsReconnectUnlisten: TerminalRuntimeUnlistenFn | null = null
-  let appEventsReconnectListenerPending: Promise<void> | null = null
+  let connectionRestoredSubscription: TerminalTransportDisposable | null = null
+  let connectionRestoredSubscriptionPending: Promise<void> | null = null
 
   async function replayEntry(entry: PoolEntry): Promise<void> {
     if (entry.needsClear) return
@@ -37,22 +34,22 @@ export function createTerminalReconnectReplay({
         if (entry.attached) entry.view.refresh()
         return
       }
-      const { buffer, isLive, instanceId } = await host.getPtyBuffer(entry.shellSessionKey)
-      entry.ptyActive = isLive
-      if (!buffer) {
+      const replay = await transport.readReplay(entry.shellSessionKey)
+      entry.ptyActive = replay.isLive
+      if (!replay.data) {
         notifyLifecycle(entry.shellSessionKey)
         return
       }
 
       resetEntry(entry)
       entry.needsClear = false
-      entry.view.bootstrap(buffer, instanceId)
+      entry.view.bootstrap(replay.data, replay.ptyInstanceId)
       entry.hasOutput = true
       notifyLifecycle(entry.shellSessionKey)
       if (entry.attached) entry.view.refresh()
     } catch (error) {
       console.error(
-        terminalLogMessage(host.loggerName, 'Failed to replay PTY buffer after app event reconnect:'),
+        terminalLogMessage(environment.loggerName, 'Failed to replay PTY buffer after transport reconnect:'),
         error,
       )
     }
@@ -63,33 +60,39 @@ export function createTerminalReconnectReplay({
   }
 
   async function retainListener(): Promise<void> {
-    if (appEventsReconnectUnlisten) return
-    if (appEventsReconnectListenerPending) return appEventsReconnectListenerPending
+    if (connectionRestoredSubscription) return
+    if (connectionRestoredSubscriptionPending) return connectionRestoredSubscriptionPending
 
-    appEventsReconnectListenerPending = host.listenEvent(APP_EVENTS_RECONNECTED_EVENT, () => {
+    connectionRestoredSubscriptionPending = transport.subscribeConnectionRestored(() => {
       void replayActiveTerminals()
     })
-      .then((unlisten) => {
+      .then((subscription) => {
         if (!hasEntries()) {
-          unlisten()
+          subscription.dispose()
           return
         }
-        appEventsReconnectUnlisten = unlisten
+        connectionRestoredSubscription = subscription
       })
       .finally(() => {
-        appEventsReconnectListenerPending = null
+        connectionRestoredSubscriptionPending = null
       })
 
-    return appEventsReconnectListenerPending
+    return connectionRestoredSubscriptionPending
   }
 
   function releaseListenerIfIdle(): void {
     if (hasEntries()) return
-    appEventsReconnectUnlisten?.()
-    appEventsReconnectUnlisten = null
+    connectionRestoredSubscription?.dispose()
+    connectionRestoredSubscription = null
+  }
+
+  function dispose(): void {
+    connectionRestoredSubscription?.dispose()
+    connectionRestoredSubscription = null
   }
 
   return {
+    dispose,
     releaseListenerIfIdle,
     replayActiveTerminals,
     retainListener,

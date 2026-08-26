@@ -9,11 +9,9 @@ import type { TerminalImageProtocol } from './terminalImages'
 import { terminalLogMessage } from './terminalLogging'
 import { preloadTerminalFonts, type TerminalFontReadiness } from './terminalOptions'
 import { createTerminalReconnectReplay } from './terminalReconnectReplay'
+import type { TerminalTransport } from './terminalTransport'
 import { createXtermTerminalView } from './xtermTerminalView'
-import type {
-  PoolEntry,
-  TerminalRuntimeHost,
-} from './terminalRuntimeTypes'
+import type { PoolEntry, TerminalRuntimeEnvironment } from './terminalRuntimeTypes'
 import type { TerminalViewFactory } from './terminalView'
 import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
 import { applyTerminalTheme } from './terminalThemePropagation'
@@ -26,25 +24,22 @@ export {
   type TerminalQueryResponseWrite,
   type XtermAuthoritativeTerminalContract,
 } from './terminalAuthority'
-export { APP_EVENTS_RECONNECTED_EVENT } from './terminalReconnectReplay'
 export type { TerminalImageProtocol } from './terminalImages'
-export {
-  ptyExitEventName,
-  ptyOutputEventName,
-} from './terminalRuntimeTypes'
 export type {
-  AppEventsReconnectedPayload,
+  TerminalExitEvent,
+  TerminalGeometry,
+  TerminalOutputEvent,
+  TerminalReplay,
+  TerminalSessionTransportHandlers,
+  TerminalTransport,
+  TerminalTransportDisposable,
+} from './terminalTransport'
+export type {
   PoolEntry,
-  PtyBufferState,
-  PtyExitEventPayload,
-  PtyOutputEventPayload,
   TerminalStateSource,
   ShellLifecycleState,
   TaskTerminalTabsSession,
-  TerminalRuntimeEvent,
-  TerminalRuntimeEventName,
-  TerminalRuntimeEventPayload,
-  TerminalRuntimeHost,
+  TerminalRuntimeEnvironment,
   TerminalRuntimeUnlistenFn,
   TerminalTab,
 } from './terminalRuntimeTypes'
@@ -65,35 +60,37 @@ export type {
 } from './terminalView'
 
 export interface TerminalRuntimeOptions {
+  transport: TerminalTransport
+  environment: TerminalRuntimeEnvironment
   authority?: TerminalAuthorityContract
   createTerminalView?: TerminalViewFactory
 }
 
-export function createTerminalRuntime(
-  host: TerminalRuntimeHost,
-  options: TerminalRuntimeOptions = {},
-) {
-  const authority = options.authority ?? XTERM_AUTHORITATIVE_TERMINAL_CONTRACT
-  const activeThemeMode = host.themeMode ?? defaultThemeMode
-  const createView = options.createTerminalView ?? createXtermTerminalView
+export function createTerminalRuntime({
+  transport,
+  environment,
+  authority = XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
+  createTerminalView = createXtermTerminalView,
+}: TerminalRuntimeOptions) {
+  const activeThemeMode = environment.themeMode ?? defaultThemeMode
   const pool = new Map<string, PoolEntry>()
-  const attachments = createTerminalAttachmentController(host)
+  const attachments = createTerminalAttachmentController(transport, environment)
   const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key), authority)
 
   function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
     return {
       shellSessionKey: terminalKey,
-      view: createView({
+      view: createTerminalView({
         terminalKey,
         themeMode: get(activeThemeMode),
-        openLink: url => host.openLink(terminalKey, url),
-        enableImages: host.enableImages,
-        loggerName: host.loggerName,
+        openLink: url => environment.openLink(terminalKey, url),
+        enableImages: environment.enableImages,
+        loggerName: environment.loggerName,
         fontReadiness,
       }),
       ptyActive: false,
       needsClear: false,
-      unlisteners: [],
+      transportSubscription: null,
       viewSubscriptions: [],
       resizeObserver: null,
       visibilityObserver: null,
@@ -116,15 +113,16 @@ export function createTerminalRuntime(
   function disposeTerminalEntry(entry: PoolEntry): void {
     attachments.detach(entry)
 
-    for (const unlisten of entry.unlisteners.splice(0)) {
+    if (entry.transportSubscription) {
       try {
-        unlisten()
+        entry.transportSubscription.dispose()
       } catch (error) {
         console.warn(
-          terminalLogMessage(host.loggerName, 'Failed to remove terminal event listener:'),
+          terminalLogMessage(environment.loggerName, 'Failed to remove terminal transport subscription:'),
           error,
         )
       }
+      entry.transportSubscription = null
     }
 
     for (const subscription of entry.viewSubscriptions.splice(0)) {
@@ -132,7 +130,7 @@ export function createTerminalRuntime(
         subscription.dispose()
       } catch (error) {
         console.warn(
-          terminalLogMessage(host.loggerName, 'Failed to remove terminal view listener:'),
+          terminalLogMessage(environment.loggerName, 'Failed to remove terminal view listener:'),
           error,
         )
       }
@@ -143,7 +141,8 @@ export function createTerminalRuntime(
 
   let recoverTerminalState: ((entry: PoolEntry) => Promise<void>) | null = null
   const reconnectReplay = createTerminalReconnectReplay({
-    host,
+    transport,
+    environment,
     getEntries: () => pool.values(),
     hasEntries: () => pool.size > 0,
     resetEntry: resetTerminal,
@@ -151,7 +150,8 @@ export function createTerminalRuntime(
     recoverEntry: entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
   })
   const acquisition = createTerminalAcquisition({
-    host,
+    transport,
+    environment,
     authority,
     pool,
     createEntry,
@@ -164,19 +164,53 @@ export function createTerminalRuntime(
   recoverTerminalState = acquisition.recoverTerminalState
 
   const unsubscribeThemeMode = activeThemeMode.subscribe(mode => applyTerminalTheme(pool.values(), mode))
+  let disposed = false
 
   function dispose(): void {
+    if (disposed) return
+    disposed = true
+    let disposalError: unknown = null
     try {
       releaseAll()
-    } finally {
-      unsubscribeThemeMode()
+    } catch (error) {
+      disposalError = error
     }
+    try {
+      reconnectReplay.dispose()
+    } catch (error) {
+      disposalError ??= error
+    }
+    try {
+      unsubscribeThemeMode()
+    } catch (error) {
+      disposalError ??= error
+    }
+    try {
+      transport.dispose()
+    } catch (error) {
+      disposalError ??= error
+    }
+    if (disposalError) throw disposalError
   }
 
   function releaseAll(): void {
-    acquisition.releaseAll()
-    sessionLifecycle.clearAll()
-    reconnectReplay.releaseListenerIfIdle()
+    let releaseError: unknown = null
+    try {
+      acquisition.releaseAll()
+    } catch (error) {
+      releaseError = error
+    }
+    try {
+      sessionLifecycle.clearAll()
+    } catch (error) {
+      releaseError ??= error
+    }
+    try {
+      reconnectReplay.releaseListenerIfIdle()
+    } catch (error) {
+      releaseError ??= error
+    }
+    if (releaseError) throw releaseError
   }
 
   function focusTerminal(terminalKey: string): void {

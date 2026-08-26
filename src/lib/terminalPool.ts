@@ -5,33 +5,44 @@ import {
   type PoolEntry,
   type ShellLifecycleState,
   type TaskTerminalTabsSession,
-  type TerminalRuntimeUnlistenFn,
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
-import { listenDesktopEvent } from './desktopIpc'
+import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
+import type { TerminalDesktopEventName } from './desktopIpcContract'
+import { createDesktopTerminalTransport } from './desktopTerminalTransport'
 import { getPtyBuffer, resizePty, writePty, writeTerminalQueryResponse } from './ipc'
 import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
 
-const terminalRuntime = createTerminalRuntime({
-  listenEvent: listenDesktopEvent,
+const transport = createDesktopTerminalTransport({
+  listenEvent: (eventName, handler) => listenDesktopEvent(
+    eventName as TerminalDesktopEventName,
+    handler,
+  ),
   getPtyBuffer,
   writeTerminalQueryResponse,
   writePty,
   resizePty,
-  openLink: (terminalKey, url) => taskLinkRouter.open({
-    taskId: parsePtySessionKey(terminalKey).taskId,
-    url,
-  }),
-  themeMode,
-  loggerName: 'terminalPool',
-}, { authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT })
+})
+
+const terminalRuntime = createTerminalRuntime({
+  transport,
+  environment: {
+    openLink: (terminalKey, url) => taskLinkRouter.open({
+      taskId: parsePtySessionKey(terminalKey).taskId,
+      url,
+    }),
+    themeMode,
+    loggerName: 'terminalPool',
+  },
+  authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
+})
 
 export type {
+  DesktopUnlistenFn,
   PoolEntry,
   ShellLifecycleState,
   TaskTerminalTabsSession,
-  TerminalRuntimeUnlistenFn as DesktopUnlistenFn,
   TerminalTab,
 }
 

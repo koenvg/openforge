@@ -12,9 +12,7 @@ describe('renderer-neutral terminal view runtime', () => {
     const firstView = createFakeTerminalView()
     const successorView = createFakeTerminalView()
     const views = [firstView, successorView]
-    const runtime = createTerminalRuntime(host, {
-      createTerminalView: () => views.shift() ?? createFakeTerminalView(),
-    })
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => views.shift() ?? createFakeTerminalView() })
 
     host.getPtyBuffer = async () => ({ buffer: 'first replay', isLive: true, instanceId: 5 })
     await runtime.acquire(terminalKey)

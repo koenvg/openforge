@@ -4,35 +4,33 @@ import {
   type PoolEntry,
   type ShellLifecycleState,
   type TaskTerminalTabsSession,
-  type TerminalRuntimeUnlistenFn,
   type TerminalTab,
 } from '@openforge-app/terminal-runtime'
 import {
-  getPtyBuffer,
-  listenOpenForgeEvent,
+  getTerminalOpenForgeApi,
   openTerminalLink,
-  resizePty,
-  writePty,
-  writeTerminalQueryResponse,
+  type OpenForgeEventUnlistenFn,
 } from './ipc'
 import { themeMode } from './theme'
+import { createTrustedPluginTerminalTransport } from './trustedPluginTerminalTransport'
+
+const transport = createTrustedPluginTerminalTransport(getTerminalOpenForgeApi)
 
 const terminalRuntime = createTerminalRuntime({
-  listenEvent: listenOpenForgeEvent,
-  getPtyBuffer,
-  writePty,
-  writeTerminalQueryResponse,
-  resizePty,
-  openLink: openTerminalLink,
-  themeMode,
-  loggerName: 'terminalPluginPool',
-}, { authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT })
+  transport,
+  environment: {
+    openLink: openTerminalLink,
+    themeMode,
+    loggerName: 'terminalPluginPool',
+  },
+  authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
+})
 
 export type {
+  OpenForgeEventUnlistenFn,
   PoolEntry,
   ShellLifecycleState,
   TaskTerminalTabsSession,
-  TerminalRuntimeUnlistenFn as OpenForgeEventUnlistenFn,
   TerminalTab,
 }
 
@@ -58,6 +56,7 @@ export const clearTaskTerminalTabsSession = terminalRuntime.clearTaskTerminalTab
 export const releaseAll = terminalRuntime.releaseAll
 export const releaseAllForTask = terminalRuntime.releaseAllForTask
 export const focusTerminal = terminalRuntime.focusTerminal
+export const hasTerminal = terminalRuntime.hasTerminal
 export const isPtyActive = terminalRuntime.isPtyActive
 export const recoverActiveTerminal = terminalRuntime.recoverActiveTerminal
 export const replayPtyBuffersForActiveTerminals = terminalRuntime.replayPtyBuffersForActiveTerminals

@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./terminalRuntime": "./src/terminalRuntime.ts",
+    "./terminalTransport": "./src/terminalTransport.ts",
     "./terminalOptions": "./src/terminalOptions.ts",
     "./theme": "./src/theme.ts",
     "./shortcuts": "./src/terminalShortcuts.ts",

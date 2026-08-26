@@ -5,7 +5,9 @@ import {
   terminalMocks,
 } from './terminalRuntime.integrationTestHarness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { APP_EVENTS_RECONNECTED_EVENT, createTerminalRuntime } from './terminalRuntime'
+import { createTerminalRuntime } from './terminalRuntime'
+
+const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 describe('terminal runtime reconnect replay', () => {
   beforeEach(resetTerminalRuntimeIntegrationHarness)

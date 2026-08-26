@@ -28,6 +28,8 @@ TypeScript and Rust each encode this decision in a `TerminalAuthorityContract`. 
 
 Terminal Runtime sends keyboard input and generated query responses through different boundaries. Generated responses include the source PTY instance. Rust verifies the Shell Session Key and instance before its ordered writer accepts the response.
 
+Terminal Runtime reaches replay, output, PTY exit, input, generated responses, resize, and connection-restored signals through `TerminalTransport`. Desktop IPC and Trusted Plugin capability adapters translate their lower-level event names and payloads into that interface. The seam cannot select parsed-state, replay, snapshot, or query-response authority.
+
 Replay responses also include the live instance. Terminal Runtime captures the expected instance before a replay request and discards the result if PTY replacement occurs before completion. Raw output and exit events already carry the instance and remain subject to the same generation check.
 
 The full paths are recorded in `docs/terminal-state-and-response-paths.md`.

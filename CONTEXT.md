@@ -187,6 +187,10 @@ _Avoid_: modal prompt, forced update banner, always-visible update button
 The shared OpenForge runtime that owns terminal session lifecycle for **Terminal Surfaces**.
 _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
 
+**Terminal Transport**:
+The runtime-owned carrier for Terminal Replay, live output, PTY exit, user input, terminal-generated responses, resize, and connection-restored signals across **Shell Session Keys**.
+_Avoid_: Terminal Session, Terminal View, IPC channel, socket connection
+
 **Terminal Session**:
 A desktop-owned terminal identity that combines a live PTY with its current terminal state independently of any **Terminal Surface**.
 _Avoid_: xterm instance, terminal DOM, renderer session
@@ -426,6 +430,8 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
 - The **Terminal Runtime** owns **Terminal Session** lifecycle and its xterm-authoritative parsed state, while the **Rust Sidecar** owns each PTY and bounded raw-byte replay.
+- One **Terminal Runtime** owns one **Terminal Transport**, which may multiplex many **Shell Session Keys** without owning **Terminal Session** lifecycle or replay policy.
+- A **Terminal Transport** reports restored connectivity; the **Terminal Runtime** decides which active **Terminal Sessions** need replay.
 - A **Terminal View Attachment** mounts the one xterm view for its **Terminal Session**. Initial acquisition and reconnect apply PTY byte replay for the current PTY instance before later live output.
 - The current xterm-authoritative mode has no production **Terminal Snapshot** route. A future snapshot owner requires an explicit authority-contract transition.
 - The active desktop **Terminal View Attachment** holds the **Terminal Geometry Lease**; one companion may hold it only while no desktop attachment exists.

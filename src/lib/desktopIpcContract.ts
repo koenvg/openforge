@@ -182,20 +182,37 @@ export interface AdditionalDesktopEventPayloads {
   'whisper-download-progress': WhisperDownloadProgressPayload
 }
 
+export type TerminalDesktopEventName =
+  | `pty-output-${string}`
+  | `pty-exit-${string}`
+  | 'openforge-app-events-reconnected'
+
+export interface TerminalDesktopEventPayloads {
+  output: { shell_session_key: string; data: string; instance_id: number }
+  exit: { instance_id: number }
+  connectionRestored: { attempt: number; reconnectedAt: string }
+}
+
+export type TerminalDesktopEventPayload<TEventName extends TerminalDesktopEventName> =
+  TEventName extends `pty-output-${string}`
+    ? TerminalDesktopEventPayloads['output']
+    : TEventName extends `pty-exit-${string}`
+      ? TerminalDesktopEventPayloads['exit']
+      : TerminalDesktopEventPayloads['connectionRestored']
+
 export type KnownDesktopEventName =
   | AppDesktopEventName
   | keyof AdditionalDesktopEventPayloads
-  | import('@openforge-app/terminal-runtime').TerminalRuntimeEventName
+  | TerminalDesktopEventName
 
 export type KnownDesktopEventPayload<TEventName extends KnownDesktopEventName> =
   TEventName extends AppDesktopEventName
     ? AppDesktopEventPayloads[TEventName]
     : TEventName extends keyof AdditionalDesktopEventPayloads
       ? AdditionalDesktopEventPayloads[TEventName]
-      : TEventName extends import('@openforge-app/terminal-runtime').TerminalRuntimeEventName
-        ? import('@openforge-app/terminal-runtime').TerminalRuntimeEventPayload<TEventName>
+      : TEventName extends TerminalDesktopEventName
+        ? TerminalDesktopEventPayload<TEventName>
         : never
-
 export const desktopCommandContracts =
   generatedDesktopCommandContracts satisfies readonly DesktopCommandContract[]
 

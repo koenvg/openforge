@@ -3,11 +3,9 @@ import type {
   AppDesktopEventPayloads,
   KnownDesktopEventName,
   KnownDesktopEventPayload,
+  TerminalDesktopEventName,
+  TerminalDesktopEventPayload,
 } from './desktopIpcContract'
-import type {
-  TerminalRuntimeEventName,
-  TerminalRuntimeEventPayload,
-} from '@openforge-app/terminal-runtime'
 
 export type DesktopUnlistenFn = () => void
 
@@ -66,9 +64,9 @@ export function listenDesktopEvent<TEventName extends AppDesktopEventName>(
   eventName: TEventName,
   handler: (event: DesktopEvent<AppDesktopEventPayloads[TEventName]>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn>
-export function listenDesktopEvent<TEventName extends TerminalRuntimeEventName>(
+export function listenDesktopEvent<TEventName extends TerminalDesktopEventName>(
   eventName: TEventName,
-  handler: (event: DesktopEvent<TerminalRuntimeEventPayload<TEventName>>) => void | Promise<void>,
+  handler: (event: DesktopEvent<TerminalDesktopEventPayload<TEventName>>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn>
 export function listenDesktopEvent<TEventName extends KnownDesktopEventName>(
   eventName: TEventName,

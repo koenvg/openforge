@@ -1,68 +1,15 @@
-import type { TerminalAuthorityBinding, TerminalQueryResponseWrite } from './terminalAuthority'
+import type { TerminalAuthorityBinding } from './terminalAuthority'
+import type { TerminalOutputEvent, TerminalTransportDisposable } from './terminalTransport'
 import type { TerminalView, TerminalViewDisposable } from './terminalView'
 import type { Readable } from 'svelte/store'
 import type { ThemeMode } from './theme'
 
 export type TerminalRuntimeUnlistenFn = () => void
 
-export interface TerminalRuntimeEvent<TPayload> {
-  payload: TPayload
-}
-
-export interface PtyOutputEventPayload {
-  shell_session_key: string
-  data: string
-  instance_id: number
-}
-
-
 export type TerminalStateSource = 'bootstrapping' | 'pty-byte-replay'
 
-export interface PtyExitEventPayload {
-  instance_id: number
-}
-
-export function ptyOutputEventName(terminalKey: string): `pty-output-${string}` {
-  return `pty-output-${terminalKey}`
-}
-
-
-export function ptyExitEventName(terminalKey: string): `pty-exit-${string}` {
-  return `pty-exit-${terminalKey}`
-}
-
-export interface AppEventsReconnectedPayload {
-  attempt: number
-  reconnectedAt: string
-}
-
-export type TerminalRuntimeEventName =
-  | `pty-output-${string}`
-  | `pty-exit-${string}`
-  | 'openforge-app-events-reconnected'
-export type TerminalRuntimeEventPayload<TEventName extends TerminalRuntimeEventName> =
-  TEventName extends `pty-output-${string}`
-    ? PtyOutputEventPayload
-    : TEventName extends `pty-exit-${string}`
-      ? PtyExitEventPayload
-      : AppEventsReconnectedPayload
-
-export interface PtyBufferState {
-  buffer: string | null
-  isLive: boolean
-  instanceId: number | null
-}
-
-export interface TerminalRuntimeHost {
-  listenEvent<TEventName extends TerminalRuntimeEventName>(
-    eventName: TEventName,
-    handler: (event: TerminalRuntimeEvent<TerminalRuntimeEventPayload<TEventName>>) => void,
-  ): Promise<TerminalRuntimeUnlistenFn>
-  getPtyBuffer(shellSessionKey: string): Promise<PtyBufferState>
-  writePty(shellSessionKey: string, data: string): Promise<void>
-  writeTerminalQueryResponse(response: TerminalQueryResponseWrite): Promise<void>
-  resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void>
-  openLink(terminalKey: string, url: string): Promise<void>
+export interface TerminalRuntimeEnvironment {
+  openLink(shellSessionKey: string, url: string): Promise<void>
   themeMode?: Readable<ThemeMode>
   loggerName?: string
   enableImages?: boolean
@@ -73,7 +20,7 @@ export interface PoolEntry {
   view: TerminalView
   ptyActive: boolean
   needsClear: boolean
-  unlisteners: TerminalRuntimeUnlistenFn[]
+  transportSubscription: TerminalTransportDisposable | null
   viewSubscriptions: TerminalViewDisposable[]
   resizeObserver: ResizeObserver | null
   visibilityObserver: IntersectionObserver | null
@@ -83,7 +30,7 @@ export interface PoolEntry {
   currentPtyInstance: number | null
   authority: TerminalAuthorityBinding | null
   terminalStateSource: TerminalStateSource
-  pendingPtyOutput: PtyOutputEventPayload[]
+  pendingPtyOutput: TerminalOutputEvent[]
   terminalReplayRecovery: Promise<void> | null
   hasOutput: boolean
 }

@@ -29,7 +29,7 @@ describe('terminal runtime resizing', () => {
       }),
     }), { resizeTarget: renderHost })
     Object.defineProperty(view, 'geometry', { get: () => geometry })
-    const runtime = createTerminalRuntime(host, { createTerminalView: () => view })
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
     let observedTarget: Element | null = null
     const resizeCallbacks: ResizeObserverCallback[] = []
 
