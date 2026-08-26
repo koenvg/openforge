@@ -7,8 +7,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
 		isDarkMode: false,
 		onThemeToggle: vi.fn(),
-		ghosttyTerminalDiagnosticsEnabled: false,
-		onGhosttyTerminalDiagnosticsChange: vi.fn(),
+		ghosttyTerminalStateEnabled: false,
+		onGhosttyTerminalStateChange: vi.fn(),
 		...overrides,
 	}
 }
@@ -64,22 +64,23 @@ describe('SettingsPreferencesCard', () => {
 		})
 	})
 
-	describe('Ghostty terminal diagnostics', () => {
-		it('offers the experimental diagnostic model disabled by default', async () => {
-			const onGhosttyTerminalDiagnosticsChange = vi.fn()
+	describe('Ghostty terminal model', () => {
+		it('offers the experimental backend state authority disabled by default', async () => {
+			const onGhosttyTerminalStateChange = vi.fn()
 			render(SettingsPreferencesCard, {
-				props: defaultProps({ onGhosttyTerminalDiagnosticsChange }),
+				props: defaultProps({ onGhosttyTerminalStateChange }),
 			})
+			expect(screen.getByText(/xterm continues rendering/)).toBeTruthy()
 
 			const toggle = requireElement(
-				screen.getByTestId('ghostty-terminal-diagnostics-toggle'),
+				screen.getByTestId('ghostty-terminal-state-toggle'),
 				HTMLInputElement,
 			)
 			expect(toggle.checked).toBe(false)
 
 			await fireEvent.click(toggle)
 
-			expect(onGhosttyTerminalDiagnosticsChange).toHaveBeenCalledWith(true)
+			expect(onGhosttyTerminalStateChange).toHaveBeenCalledWith(true)
 		})
 	})
 })

@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
-#[cfg(test)]
 use std::time::Duration;
 
 const COMMAND_QUEUE_CAPACITY: usize = 64;
@@ -18,7 +17,6 @@ const REPLY_CAPACITY: usize = 64;
 const REPLY_BYTES_CAPACITY: usize = 64 * 1024;
 const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
-#[cfg(test)]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -59,12 +57,12 @@ pub(crate) struct TerminalModelOutputFrame {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TerminalModelEvent {
     Output(TerminalModelOutputFrame),
+    ProtocolReply { instance_id: u64, bytes: Vec<u8> },
     Disabled { instance_id: u64 },
 }
 
 pub(crate) type TerminalModelEventSink = Arc<dyn Fn(TerminalModelEvent) + Send + Sync>;
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PortableTerminalSnapshot {
     pub(crate) instance_id: u64,
@@ -148,7 +146,6 @@ enum TerminalModelCommand {
         cols: u16,
         rows: u16,
     },
-    #[cfg(test)]
     PortableSnapshot(mpsc::SyncSender<Result<PortableTerminalSnapshot, String>>),
     #[cfg(test)]
     Snapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
@@ -157,11 +154,18 @@ enum TerminalModelCommand {
     Shutdown,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalModelQueuePolicy {
+    Backpressure,
+    DisableAfterTimeout,
+}
+
 #[derive(Clone)]
 pub(crate) struct TerminalModelFeeder {
     session_key: Arc<str>,
     instance_id: u64,
     tx: mpsc::SyncSender<TerminalModelCommand>,
+    queue_policy: TerminalModelQueuePolicy,
     state: Arc<TerminalModelState>,
 }
 
@@ -184,6 +188,19 @@ impl TerminalModelFeeder {
         loop {
             match self.tx.try_send(command) {
                 Ok(()) => return,
+                Err(mpsc::TrySendError::Full(returned))
+                    if self.queue_policy == TerminalModelQueuePolicy::Backpressure =>
+                {
+                    if self.tx.send(returned).is_err() {
+                        self.state.disable(
+                            &self.session_key,
+                            self.instance_id,
+                            "feed",
+                            "model worker disconnected".to_string(),
+                        );
+                    }
+                    return;
+                }
                 Err(mpsc::TrySendError::Full(returned)) if std::time::Instant::now() < deadline => {
                     command = returned;
                     std::thread::sleep(std::time::Duration::from_micros(50));
@@ -218,6 +235,7 @@ pub(crate) struct TerminalModelSession {
     session_key: Arc<str>,
     instance_id: u64,
     tx: mpsc::SyncSender<TerminalModelCommand>,
+    queue_policy: TerminalModelQueuePolicy,
     state: Arc<TerminalModelState>,
     worker: Option<JoinHandle<()>>,
 }
@@ -231,7 +249,6 @@ impl TerminalModelSession {
         Self::start_internal(session_key, instance_id, options, None)
     }
 
-    #[cfg(test)]
     pub(crate) fn start_with_event_sink(
         session_key: String,
         instance_id: u64,
@@ -248,6 +265,11 @@ impl TerminalModelSession {
         event_sink: Option<TerminalModelEventSink>,
     ) -> Result<(Self, TerminalModelFeeder), std::io::Error> {
         let session_key: Arc<str> = Arc::from(session_key);
+        let queue_policy = if event_sink.is_some() {
+            TerminalModelQueuePolicy::Backpressure
+        } else {
+            TerminalModelQueuePolicy::DisableAfterTimeout
+        };
         let state = Arc::new(TerminalModelState::new(event_sink));
         let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
         let worker_key = Arc::clone(&session_key);
@@ -273,6 +295,7 @@ impl TerminalModelSession {
             session_key: Arc::clone(&session_key),
             instance_id,
             tx: tx.clone(),
+            queue_policy,
             state: Arc::clone(&state),
         };
         Ok((
@@ -280,6 +303,7 @@ impl TerminalModelSession {
                 session_key,
                 instance_id,
                 tx,
+                queue_policy,
                 state,
                 worker: Some(worker),
             },
@@ -291,10 +315,17 @@ impl TerminalModelSession {
         if self.state.disabled.load(Ordering::Acquire) {
             return;
         }
-        if let Err(error) = self
-            .tx
-            .try_send(TerminalModelCommand::Resize { cols, rows })
-        {
+        let result = match self.queue_policy {
+            TerminalModelQueuePolicy::Backpressure => self
+                .tx
+                .send(TerminalModelCommand::Resize { cols, rows })
+                .map_err(|error| error.to_string()),
+            TerminalModelQueuePolicy::DisableAfterTimeout => self
+                .tx
+                .try_send(TerminalModelCommand::Resize { cols, rows })
+                .map_err(|error| error.to_string()),
+        };
+        if let Err(error) = result {
             self.state.disable(
                 &self.session_key,
                 self.instance_id,
@@ -304,7 +335,6 @@ impl TerminalModelSession {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn portable_snapshot(&self) -> Result<PortableTerminalSnapshot, String> {
         request_portable_snapshot(&self.tx, &self.state)
     }
@@ -358,7 +388,6 @@ impl TerminalModelSession {
     }
 }
 
-#[cfg(test)]
 fn request_portable_snapshot(
     tx: &mpsc::SyncSender<TerminalModelCommand>,
     state: &TerminalModelState,
@@ -447,7 +476,6 @@ fn run_worker(
                 result
             }
             TerminalModelCommand::Resize { cols, rows } => model.resize(cols, rows),
-            #[cfg(test)]
             TerminalModelCommand::PortableSnapshot(response) => {
                 let result = model
                     .format_portable_vt()
@@ -478,7 +506,14 @@ fn run_worker(
             state.disable(&session_key, instance_id, "command", model_error(error));
             return;
         }
-        state.capture_replies(model.take_protocol_replies());
+        let replies = model.take_protocol_replies();
+        if let Some(event_sink) = &state.event_sink {
+            for bytes in replies {
+                event_sink(TerminalModelEvent::ProtocolReply { instance_id, bytes });
+            }
+        } else {
+            state.capture_replies(replies);
+        }
         if bytes_since_checkpoint >= CHECKPOINT_INTERVAL_BYTES {
             checkpoint_due = true;
         }
@@ -518,6 +553,103 @@ mod tests {
             .any(|part| part == b"before"));
         assert_eq!(session.take_protocol_replies().len(), 1);
         assert!(session.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn authoritative_worker_publishes_ghostty_protocol_replies() {
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_events = Arc::clone(&captured);
+        let sink: TerminalModelEventSink = Arc::new(move |event| {
+            captured_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(event);
+        });
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
+            "reply-shell".to_string(),
+            91,
+            TerminalModelOptions::new(80, 24),
+            sink,
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"\x1b[6n");
+        session
+            .portable_snapshot()
+            .expect("snapshot request should cross the worker barrier");
+
+        let events = captured
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            TerminalModelEvent::ProtocolReply { instance_id: 91, bytes }
+                if bytes.starts_with(b"\x1b[") && bytes.ends_with(b"R")
+        )));
+    }
+
+    #[test]
+    fn authoritative_feeder_applies_backpressure_instead_of_disabling_on_output_bursts() {
+        let first_output = Arc::new(AtomicBool::new(true));
+        let sink_first_output = Arc::clone(&first_output);
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let release_rx = Mutex::new(release_rx);
+        let sink: TerminalModelEventSink = Arc::new(move |event| {
+            if matches!(event, TerminalModelEvent::Output(_))
+                && sink_first_output.swap(false, Ordering::AcqRel)
+            {
+                let _ = entered_tx.send(());
+                let _ = release_rx
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .recv();
+            }
+        });
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
+            "burst-shell".to_string(),
+            92,
+            TerminalModelOptions::new(80, 24),
+            sink,
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"first");
+        entered_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("event sink should block the model worker");
+        for _ in 0..COMMAND_QUEUE_CAPACITY {
+            feeder.feed(b"queued");
+        }
+        let tail_feeder = feeder.clone();
+        let (tail_started_tx, tail_started_rx) = mpsc::sync_channel(1);
+        let (tail_complete_tx, tail_complete_rx) = mpsc::sync_channel(1);
+        let tail_feed = std::thread::spawn(move || {
+            let _ = tail_started_tx.send(());
+            tail_feeder.feed(b"tail");
+            let _ = tail_complete_tx.send(());
+        });
+        tail_started_rx
+            .recv_timeout(REQUEST_TIMEOUT)
+            .expect("tail feeder should start");
+
+        let completed_while_model_was_blocked = tail_complete_rx
+            .recv_timeout(QUEUE_CATCH_UP_TIMEOUT + Duration::from_millis(50))
+            .is_ok();
+        release_tx
+            .send(())
+            .expect("test should release the model worker");
+        if !completed_while_model_was_blocked {
+            tail_complete_rx
+                .recv_timeout(REQUEST_TIMEOUT)
+                .expect("tail feed should finish after the model catches up");
+        }
+        tail_feed.join().expect("tail feeder should not panic");
+
+        assert!(!completed_while_model_was_blocked);
+        session
+            .portable_snapshot()
+            .expect("authoritative model should remain available after the burst");
     }
 
     #[test]

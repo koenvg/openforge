@@ -49,12 +49,22 @@ function createFakeTerminalView(overrides: Partial<TerminalView> = {}): Terminal
   }
 }
 
+interface AdapterReplay {
+  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
+  buffer: string | null
+  isLive: boolean
+  instanceId: number | null
+  snapshot?: { instanceId: number; watermark: number; data: string }
+}
+
 interface AdapterHarness {
   transport: TerminalTransport
   emitOutput(shellSessionKey: string, data: string, ptyInstanceId: number): void
+  emitModelOutput(shellSessionKey: string, data: string, ptyInstanceId: number, sequence: number): void
   emitExit(shellSessionKey: string, ptyInstanceId: number): void
   emitConnectionRestored(): void
   setReplay(data: string | null, ptyInstanceId: number | null): void
+  setGhosttyReplay(data: string, ptyInstanceId: number, watermark: number): void
   expectUserInput(shellSessionKey: string, data: string): void
   expectQueryResponse(shellSessionKey: string, data: string, ptyInstanceId: number): void
   expectResize(shellSessionKey: string, cols: number, rows: number): void
@@ -65,7 +75,7 @@ interface AdapterHarness {
 
 function createDesktopHarness(): AdapterHarness {
   const listeners = new Map<string, (event: { payload: unknown }) => void>()
-  let replay = { buffer: 'desktop replay' as string | null, isLive: true, instanceId: 7 as number | null }
+  let replay: AdapterReplay = { buffer: 'desktop replay', isLive: true, instanceId: 7 }
   let failExitSubscription = false
   const port = {
     listenEvent: vi.fn(async (eventName: string, handler: (event: { payload: unknown }) => void) => {
@@ -88,6 +98,11 @@ function createDesktopHarness(): AdapterHarness {
         payload: { task_id: 'ignored', data, instance_id: ptyInstanceId },
       })
     },
+    emitModelOutput(shellSessionKey, data, ptyInstanceId, sequence) {
+      listeners.get(`pty-model-output-${shellSessionKey}`)?.({
+        payload: { data: btoa(data), instance_id: ptyInstanceId, sequence },
+      })
+    },
     emitExit(shellSessionKey, ptyInstanceId) {
       listeners.get(`pty-exit-${shellSessionKey}`)?.({ payload: { instance_id: ptyInstanceId } })
     },
@@ -98,6 +113,15 @@ function createDesktopHarness(): AdapterHarness {
     },
     setReplay(data, ptyInstanceId) {
       replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
+    },
+    setGhosttyReplay(data, ptyInstanceId, watermark) {
+      replay = {
+        authority: 'ghostty-authoritative',
+        buffer: null,
+        isLive: true,
+        instanceId: ptyInstanceId,
+        snapshot: { instanceId: ptyInstanceId, watermark, data: btoa(data) },
+      }
     },
     expectUserInput(shellSessionKey, data) {
       expect(port.writePty).toHaveBeenCalledWith(shellSessionKey, data)
@@ -117,6 +141,8 @@ function createDesktopHarness(): AdapterHarness {
     },
     sessionListenerCount(shellSessionKey) {
       return Number(listeners.has(`pty-output-${shellSessionKey}`))
+        + Number(listeners.has(`pty-model-output-${shellSessionKey}`))
+        + Number(listeners.has(`pty-model-disabled-${shellSessionKey}`))
         + Number(listeners.has(`pty-exit-${shellSessionKey}`))
     },
     connectionListenerCount: () => Number(listeners.has('openforge-app-events-reconnected')),
@@ -126,7 +152,7 @@ function createDesktopHarness(): AdapterHarness {
 
 function createTrustedPluginHarness(): AdapterHarness {
   const listeners = new Map<string, (payload: unknown) => void>()
-  let replay = { buffer: 'plugin replay' as string | null, isLive: true, instanceId: 7 as number | null }
+  let replay: AdapterReplay = { buffer: 'plugin replay', isLive: true, instanceId: 7 }
   let failExitSubscription = false
   const port = {
     events: {
@@ -155,6 +181,13 @@ function createTrustedPluginHarness(): AdapterHarness {
         instance_id: ptyInstanceId,
       })
     },
+    emitModelOutput(shellSessionKey, data, ptyInstanceId, sequence) {
+      listeners.get(`openforge.pty-model-output-${shellSessionKey}`)?.({
+        data: btoa(data),
+        instance_id: ptyInstanceId,
+        sequence,
+      })
+    },
     emitExit(shellSessionKey, ptyInstanceId) {
       listeners.get(`openforge.pty-exit-${shellSessionKey}`)?.({ instance_id: ptyInstanceId })
     },
@@ -166,6 +199,15 @@ function createTrustedPluginHarness(): AdapterHarness {
     },
     setReplay(data, ptyInstanceId) {
       replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
+    },
+    setGhosttyReplay(data, ptyInstanceId, watermark) {
+      replay = {
+        authority: 'ghostty-authoritative',
+        buffer: null,
+        isLive: true,
+        instanceId: ptyInstanceId,
+        snapshot: { instanceId: ptyInstanceId, watermark, data: btoa(data) },
+      }
     },
     expectUserInput(_shellSessionKey, data) {
       expect(port.shell.write).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2, data })
@@ -191,6 +233,8 @@ function createTrustedPluginHarness(): AdapterHarness {
     },
     sessionListenerCount(shellSessionKey) {
       return Number(listeners.has(`openforge.pty-output-${shellSessionKey}`))
+        + Number(listeners.has(`openforge.pty-model-output-${shellSessionKey}`))
+        + Number(listeners.has(`openforge.pty-model-disabled-${shellSessionKey}`))
         + Number(listeners.has(`openforge.pty-exit-${shellSessionKey}`))
     },
     connectionListenerCount: () => Number(
@@ -250,6 +294,32 @@ describe.each([
     expect(entry.ptyActive).toBe(false)
   })
 
+  it('normalizes Ghostty snapshots and sequenced model output at the Terminal Runtime seam', async () => {
+    const harness = createHarness()
+    harness.setGhosttyReplay('ghostty snapshot', 9, 3)
+    const view = createFakeTerminalView()
+    const runtime = createTerminalRuntime({
+      transport: harness.transport,
+      environment: { openLink: vi.fn(async () => undefined) },
+      createTerminalView: () => view,
+    })
+
+    const entry = await runtime.acquire('T-1-shell-2')
+    harness.emitOutput('T-1-shell-2', 'raw output must be ignored', 9)
+    harness.emitModelOutput('T-1-shell-2', 'model output', 9, 4)
+
+    expect(view.bootstrap).toHaveBeenCalledWith(
+      Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
+      9,
+    )
+    expect(view.writeLive).toHaveBeenCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode('model output')),
+      ptyInstanceId: 9,
+    })
+    expect(entry.authority?.contract.mode).toBe('ghostty-authoritative')
+    expect(entry.terminalModelSequence).toBe(4)
+  })
+
   it('rolls back a partially registered session subscription and retries cleanly', async () => {
     const harness = createHarness()
     const failedView = createFakeTerminalView()
@@ -267,7 +337,7 @@ describe.each([
     expect(failedView.dispose).toHaveBeenCalledOnce()
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(0)
     await expect(runtime.acquire('T-1-shell-2')).resolves.toBeDefined()
-    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(4)
     runtime.dispose()
   })
 
@@ -326,7 +396,7 @@ describe.each([
       expect(view.bootstrap).toHaveBeenLastCalledWith('reconnected replay', 7)
     })
 
-    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(2)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(4)
     expect(harness.connectionListenerCount()).toBe(1)
     runtime.release('T-1-shell-2')
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(0)

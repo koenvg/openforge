@@ -77,9 +77,9 @@ describe('terminal runtime reconnect replay', () => {
 
     const replay = runtime.replayPtyBuffersForActiveTerminals()
     await vi.waitFor(() => expect(host.getPtyBuffer).toHaveBeenCalledTimes(2))
-    runtime.markShellPtyStarted(entry, 11)
+    const started = runtime.markShellPtyStarted(entry, 11)
     resolveReplay({ buffer: 'stale replay', isLive: true, instanceId: 10 })
-    await replay
+    await Promise.all([replay, started])
 
     expect(entry.authority?.ptyInstanceId).toBe(11)
     expect(terminalMocks.instances[0].write).not.toHaveBeenCalled()

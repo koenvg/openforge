@@ -1,6 +1,6 @@
 # Keep xterm authoritative in production terminal sessions
 
-Status: accepted
+Status: accepted as the default mode; amended by [ADR 0006](0006-ghostty-authoritative-terminal-mode.md)
 
 Date: 2026-08-25
 
@@ -44,9 +44,9 @@ The Ghostty terminal-diagnostics setting may enable diagnostic modeling. It cann
 
 OpenForge no longer exposes a desktop command for terminal-view snapshots. Internal Ghostty snapshots are not a compatibility contract.
 
-## Required transition for a future sidecar authority
+## Transition requirements for sidecar authority
 
-A future sidecar model cannot become authoritative through a flag flip or by adding a snapshot method. The transition requires one reviewed contract change that does all of the following:
+A sidecar model cannot become authoritative through an implicit flag flip or optional snapshot method. Any opt-in contract must land as one reviewed change that does all of the following:
 
 1. Add a new authority-contract variant naming the sidecar parsed-state owner, replay owner, snapshot owner, and query-response owner.
 2. Give each newly created Terminal Session that contract at spawn time. Existing sessions keep their original contract until they end.
@@ -56,4 +56,4 @@ A future sidecar model cannot become authoritative through a flag flip or by add
 6. Prove query parity, partial-sequence behavior, reconnect, replay, concurrent attachment, model-failure isolation, PTY replacement, images, IME, accessibility, and full-screen TUI behavior against xterm.
 7. Update this ADR and the terminal path document in the same change.
 
-Until every step lands together, `xterm-authoritative` remains the only production contract.
+ADR 0006 introduces the reviewed contract for experimental opt-in sessions. `xterm-authoritative` remains the default until the compatibility gates are complete.

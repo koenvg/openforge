@@ -3,7 +3,10 @@ mod session;
 
 #[cfg(test)]
 pub(crate) use session::TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY;
-pub(crate) use session::{ShadowMode, TerminalModelFeeder, TerminalModelSession};
+pub(crate) use session::{
+    ShadowMode, TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder,
+    TerminalModelSession,
+};
 
 use libghostty_vt::{
     fmt::{Format, Formatter, FormatterOptions},

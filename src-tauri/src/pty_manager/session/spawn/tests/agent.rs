@@ -1,3 +1,5 @@
+use crate::app_events::{AppEventBus, AppEventFrame, InMemoryAppEventAdapter};
+use crate::backend_runtime::AppHandle;
 use crate::pty_manager::session::provider_adapter::AgentPtyProviderAdapter;
 use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
 use std::collections::HashMap;
@@ -128,6 +130,65 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
         !manager.last_output.lock().await.contains_key(task_id),
         "last-output tracking should be removed on explicit kill"
     );
+}
+
+#[tokio::test]
+async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
+    let mut manager = PtyManager::new();
+    manager.set_ghostty_terminal_state_enabled(true);
+    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let task_id = "ghostty-agent-runtime-events";
+    let bus = AppEventBus::new(32, 8);
+    let app = AppHandle::new();
+    app.set_app_event_adapter(Arc::new(InMemoryAppEventAdapter::new(bus.clone())));
+    let mut events = bus.subscribe(None).expect("event subscription should open");
+    let adapter = LockCheckingAgentAdapter {
+        sessions: Arc::clone(&manager.sessions),
+        prepared_tx: None,
+        command_delay: Duration::ZERO,
+        script: "printf ghostty-agent-output",
+        check_lock: true,
+    };
+
+    let instance_id = manager
+        .spawn_agent_pty(
+            adapter,
+            PtySpawnContext {
+                task_id,
+                cwd: tmp_dir.path(),
+                cols: 80,
+                rows: 24,
+                app_handle: Some(app),
+                app_event_tx: None,
+            },
+            None,
+        )
+        .await
+        .expect("Ghostty agent PTY should spawn");
+
+    let model_event = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let AppEventFrame::Event(event) =
+                events.recv().await.expect("event stream should stay open")
+            else {
+                continue;
+            };
+            if event.event_name == format!("pty-model-output-{task_id}") {
+                return event;
+            }
+        }
+    })
+    .await
+    .expect("Ghostty model output should reach the runtime event adapter");
+
+    assert_eq!(model_event.payload["instance_id"], instance_id);
+    assert_eq!(model_event.payload["sequence"], 1);
+    assert!(model_event.payload["data"].is_string());
+    manager
+        .kill_pty(task_id)
+        .await
+        .expect("test PTY should be cleaned up");
 }
 
 #[tokio::test]

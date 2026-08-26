@@ -51,7 +51,7 @@ function hydratePtyInstanceFromStatusMetadata(
   if (typeof ptyInstanceId !== 'number') return
   if (!shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)) return
 
-  restorePtyInstance(taskId, ptyInstanceId)
+  void restorePtyInstance(taskId, ptyInstanceId)
 }
 
 function setAgentNeedsPermissionNotification(taskId: string, session: AgentSession): boolean {
@@ -126,7 +126,7 @@ export function createTaskSessionEventListeners(deps: TaskSessionEventDeps) {
       async (event) => {
         const taskId = event.payload.task_id
         if (typeof event.payload.pty_instance_id === 'number') {
-          restorePtyInstance(taskId, event.payload.pty_instance_id)
+          await restorePtyInstance(taskId, event.payload.pty_instance_id)
         }
         const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
         updatedRuntimeInfo.set(taskId, {

@@ -1,7 +1,13 @@
 //! PTY command configuration and child-process creation.
 
-use crate::terminal_model::{TerminalModelFeeder, TerminalModelOptions, TerminalModelSession};
+use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
+use crate::backend_runtime::AppHandle;
+use crate::terminal_model::{
+    TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
+    TerminalModelSession,
+};
 use crate::user_environment::user_environment;
+use base64::Engine;
 use log::{info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{self, Read};
@@ -9,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use super::super::super::authority::ParsedStateOwner;
 use super::super::super::managed_process::{force_kill_unverified_spawn, ManagedProcessIdentity};
 use super::super::super::ordered_writer::OrderedPtyWriter;
 use super::super::super::pids::pid_file_name_for_session_key;
@@ -54,6 +61,8 @@ struct PtyProcessRequest {
     description: String,
     pid_file_name: String,
     kind: PtySessionKind,
+    app_handle: Option<AppHandle>,
+    app_event_tx: Option<AppEventSender>,
 }
 
 pub(super) struct AgentProcessRequest<'a> {
@@ -62,6 +71,8 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_handle: Option<AppHandle>,
+    pub(super) app_event_tx: Option<AppEventSender>,
 }
 
 pub(super) struct ShellProcessRequest<'a> {
@@ -71,6 +82,8 @@ pub(super) struct ShellProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_handle: Option<AppHandle>,
+    pub(super) app_event_tx: Option<AppEventSender>,
     pub(super) command: CommandBuilder,
 }
 
@@ -93,6 +106,45 @@ where
     Err(PtyError::SpawnFailed(format!(
         "{description} did not expose a root PID{cleanup_context}"
     )))
+}
+
+fn terminal_model_event_sink(
+    session_key: &str,
+    app_handle: Option<AppHandle>,
+    app_event_tx: Option<AppEventSender>,
+    writer: Arc<OrderedPtyWriter>,
+) -> TerminalModelEventSink {
+    let session_key = session_key.to_string();
+    let output_event_name = format!("pty-model-output-{session_key}");
+    let disabled_event_name = format!("pty-model-disabled-{session_key}");
+    Arc::new(move |event| match event {
+        TerminalModelEvent::Output(frame) => publish_app_event_to_runtime(
+            app_handle.as_ref(),
+            &app_event_tx,
+            &output_event_name,
+            &serde_json::json!({
+                "instance_id": frame.instance_id,
+                "sequence": frame.sequence,
+                "data": base64::engine::general_purpose::STANDARD.encode(frame.bytes),
+            }),
+        ),
+        TerminalModelEvent::ProtocolReply { instance_id, bytes } => {
+            if let Err(error) =
+                writer.write_ghostty_query_response(&session_key, instance_id, &bytes)
+            {
+                warn!(
+                    "[terminal-model] key={} instance={} query response failed: {}",
+                    session_key, instance_id, error
+                );
+            }
+        }
+        TerminalModelEvent::Disabled { instance_id } => publish_app_event_to_runtime(
+            app_handle.as_ref(),
+            &app_event_tx,
+            &disabled_event_name,
+            &serde_json::json!({ "instance_id": instance_id }),
+        ),
+    })
 }
 
 impl PtyManager {
@@ -133,11 +185,12 @@ impl PtyManager {
             .master
             .take_writer()
             .map_err(|error| PtyError::SpawnFailed(format!("Failed to take writer: {error}")))?;
-        let writer =
+        let writer = Arc::new(
             OrderedPtyWriter::start(request.session_key.clone(), request.instance_id, raw_writer)
                 .map_err(|error| {
                 PtyError::SpawnFailed(format!("Failed to start ordered PTY writer: {error}"))
-            })?;
+            })?,
+        );
         let mut child = pair
             .slave
             .spawn_command(request.command)
@@ -158,12 +211,29 @@ impl PtyManager {
             ))
         })?;
 
+        let authority = self.terminal_authority_contract();
         let (terminal_model, terminal_model_feeder) = if self.terminal_model_enabled() {
-            match TerminalModelSession::start(
-                request.session_key.clone(),
-                request.instance_id,
-                TerminalModelOptions::new(request.cols, request.rows),
-            ) {
+            let options = TerminalModelOptions::new(request.cols, request.rows);
+            let started = if authority.parsed_state_owner == ParsedStateOwner::Ghostty {
+                TerminalModelSession::start_with_event_sink(
+                    request.session_key.clone(),
+                    request.instance_id,
+                    options,
+                    terminal_model_event_sink(
+                        &request.session_key,
+                        request.app_handle.clone(),
+                        request.app_event_tx.clone(),
+                        Arc::clone(&writer),
+                    ),
+                )
+            } else {
+                TerminalModelSession::start(
+                    request.session_key.clone(),
+                    request.instance_id,
+                    options,
+                )
+            };
+            match started {
                 Ok((session, feeder)) => (Some(session), Some(feeder)),
                 Err(error) => {
                     warn!(
@@ -182,9 +252,9 @@ impl PtyManager {
             session: PtySession {
                 child,
                 master: Arc::new(std::sync::Mutex::new(pair.master)),
-                writer: Arc::new(writer),
+                writer,
                 instance_id: request.instance_id,
-                authority: self.terminal_authority_contract(),
+                authority,
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
                 terminal_model: terminal_model.map(Arc::new),
@@ -227,6 +297,8 @@ impl PtyManager {
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
+            app_handle: request.app_handle,
+            app_event_tx: request.app_event_tx,
         })?;
         info!(
             "{} PTY for task {} started (PID: {})",
@@ -248,6 +320,8 @@ impl PtyManager {
             cols,
             rows,
             terminal_image_protocol,
+            app_handle,
+            app_event_tx,
             mut command,
         } = request;
         info!("Spawning shell PTY for task {task_id} ({cols}x{rows})");
@@ -263,6 +337,8 @@ impl PtyManager {
             kind: PtySessionKind::Shell {
                 task_id: task_id.to_string(),
             },
+            app_handle,
+            app_event_tx,
         })?;
         info!(
             "Shell PTY for task {} started (PID: {})",

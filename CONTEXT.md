@@ -204,8 +204,12 @@ A temporary presentation of one **Terminal Session** within a **Terminal Surface
 _Avoid_: Terminal Session, PTY owner, terminal instance
 
 **Terminal Snapshot**:
-A complete renderable view of a **Terminal Session** at one output boundary. OpenForge's current xterm-authoritative mode does not expose **Terminal Snapshots**; it recovers views from bounded PTY byte replay.
+A complete renderable view of a **Terminal Session** at one output boundary.
 _Avoid_: raw replay buffer, terminal transcript, durable terminal history
+
+**Terminal State Authority**:
+The canonical owner of a **Terminal Session's** parsed state, restoration state, and terminal-generated protocol replies.
+_Avoid_: renderer, diagnostic model, duplicate parser
 
 **Terminal Geometry Lease**:
 The exclusive, revocable right of one **Terminal View Attachment** to set the row and column dimensions of its **Terminal Session**.
@@ -439,14 +443,15 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **App Update** UI links to release notes rather than embedding a changelog in the Settings card.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
-- The **Terminal Runtime** owns **Terminal Session** lifecycle and its xterm-authoritative parsed state, while the **Rust Sidecar** owns each PTY and bounded raw-byte replay.
+- The **Terminal Runtime** owns **Terminal Session** lifecycle; the selected **Terminal State Authority** owns parsed state, replay, and snapshots, while the **Rust Sidecar** owns each PTY.
 - One **Terminal Runtime** owns one **Terminal Transport**, which may multiplex many **Shell Session Keys** without owning **Terminal Session** lifecycle or replay policy.
 - A **Terminal Transport** reports restored connectivity; the **Terminal Runtime** decides which active **Terminal Sessions** need replay.
-- A **Terminal View Attachment** mounts the one xterm view for its **Terminal Session**. Initial acquisition and reconnect apply PTY byte replay for the current PTY instance before later live output.
-- The current xterm-authoritative mode has no production **Terminal Snapshot** route. A future snapshot owner requires an explicit authority-contract transition.
+- Every **Terminal Session** has exactly one **Terminal State Authority**, fixed when the session is created; a **Terminal Surface** may mirror state for rendering without becoming authoritative.
+- A **Terminal View Attachment** restores from the replay or **Terminal Snapshot** supplied by its **Terminal State Authority** before consuming later live output.
+- A **Terminal State Authority** may supply a **Terminal Snapshot** with an output boundary so an attachment can reject older live output.
 - The active desktop **Terminal View Attachment** holds the **Terminal Geometry Lease**; one companion may hold it only while no desktop attachment exists.
-- xterm is the sole authority for terminal-generated protocol replies. **Terminal Runtime** sends each reply through a separate Shell Session Key and PTY-instance-scoped write boundary.
-- A reconnect requests bounded PTY byte replay. **Terminal Runtime** rejects replay, output, exits, and generated replies from a replaced PTY instance.
+- The **Terminal State Authority** is the sole producer of terminal-generated protocol replies, which remain bound to their **Shell Session Key** and PTY instance.
+- A reconnect requests fresh restoration state from the **Terminal State Authority** and rejects restoration, output, exits, and generated replies from a replaced PTY instance.
 - Replacing, hiding, or ending a **Terminal View Attachment** does not end its **Terminal Session** or accumulate an unbounded hidden-view output queue.
 - Explicit termination, PTY exit, applicable permanent **Task** deletion, or app shutdown ends a **Terminal Session**; ordinary view and renderer lifecycle events do not.
 - The **Terminal Runtime** is shared across **Terminal Surfaces** when they need one terminal lifecycle owner.

@@ -2,7 +2,7 @@ import { writePty } from './ipc'
 import { getShellLifecycleState, restorePtyInstance } from './terminalPool'
 
 export function hydrateAgentTerminalPtyInstance(taskId: string, currentPtyInstance: number): void {
-  restorePtyInstance(taskId, currentPtyInstance)
+  void restorePtyInstance(taskId, currentPtyInstance)
 }
 
 export async function writeAgentTerminalTranscription(taskId: string, text: string, logPrefix: string): Promise<void> {

@@ -595,8 +595,16 @@ export interface ShellResizeRequest extends ShellSessionRequest {
   rows: number
 }
 
+export interface TerminalViewSnapshot {
+  instanceId: number
+  watermark: number
+  data: string
+}
+
 export interface PtyBufferState {
+  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
+  snapshot?: TerminalViewSnapshot | null
   isLive: boolean
   instanceId: number | null
 }

@@ -11,6 +11,7 @@ import {
 	isShellExited,
 	isValidTerminalDimensions,
 	markPtySpawnPending,
+	markShellPtyStarted,
 	release,
 	releaseAll,
 	releaseAllForTask,
@@ -283,21 +284,24 @@ describe("terminalPool lifecycle", () => {
 		it("both entries have independent ptyActive state", async () => {
 			const agentEntry = await acquire("T-44");
 			const shellEntry = await acquire("T-44-shell");
+			await markShellPtyStarted(agentEntry, 44);
+			await markShellPtyStarted(shellEntry, 45);
+			shellEntry.ptyActive = false;
 
 			const agentOutputCb = getListenCallback("pty-output-T-44");
-			agentOutputCb({ payload: { data: "agent output" } });
+			agentOutputCb({ payload: { data: "agent output", instance_id: 44 } });
 
 			expect(agentEntry.ptyActive).toBe(true);
 			expect(shellEntry.ptyActive).toBe(false);
 
 			const shellOutputCb = getListenCallback("pty-output-T-44-shell");
-			shellOutputCb({ payload: { data: "shell output" } });
+			shellOutputCb({ payload: { data: "shell output", instance_id: 45 } });
 
 			expect(agentEntry.ptyActive).toBe(true);
 			expect(shellEntry.ptyActive).toBe(true);
 
 			const agentExitCb = getListenCallback("pty-exit-T-44");
-			agentExitCb({ payload: {} });
+			agentExitCb({ payload: { instance_id: 44 } });
 
 			expect(agentEntry.ptyActive).toBe(false);
 			expect(shellEntry.ptyActive).toBe(true);

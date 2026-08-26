@@ -93,7 +93,7 @@ export function createTaskTerminalController({
         binding.terminalIndex,
         adapter.runtime.getTerminalImageProtocol(entry),
       )
-      adapter.runtime.markShellPtyStarted(entry, instanceId)
+      await adapter.runtime.markShellPtyStarted(entry, instanceId)
       if (isCurrentBinding(binding)) {
         updateLifecycle(adapter.runtime.getShellLifecycleState(binding.terminalKey))
       }

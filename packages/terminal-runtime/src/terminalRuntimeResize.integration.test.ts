@@ -65,7 +65,7 @@ describe('terminal runtime resizing', () => {
       onUserInput?.('before resume')
       expect(writePty).not.toHaveBeenCalled()
 
-      runtime.restorePtyInstance(terminalKey, 42)
+      await runtime.restorePtyInstance(terminalKey, 42)
       expect(fit).toHaveBeenCalledTimes(2)
       expect(resizePty).toHaveBeenLastCalledWith(terminalKey, 80, 24)
       onUserInput?.('continue')

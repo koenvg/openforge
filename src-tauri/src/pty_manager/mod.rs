@@ -104,7 +104,7 @@ impl From<std::io::Error> for PtyError {
 // PTY Manager
 // ============================================================================
 
-pub(crate) const GHOSTTY_TERMINAL_DIAGNOSTICS_CONFIG: &str = "ghostty_terminal_state_enabled";
+pub(crate) const GHOSTTY_TERMINAL_STATE_CONFIG: &str = "ghostty_terminal_state_enabled";
 
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
@@ -123,9 +123,8 @@ pub struct PtyManager {
     agent_spawn_generations: AgentSpawnGenerations,
     #[cfg(test)]
     lifecycle_locks: LifecycleLockRegistry,
-    terminal_authority: TerminalAuthorityContract,
     shadow_mode: ShadowMode,
-    terminal_diagnostics_enabled: Arc<AtomicBool>,
+    ghostty_terminal_state_enabled: Arc<AtomicBool>,
     #[cfg(test)]
     pending_shell_spawns: Arc<dashmap::DashMap<String, (String, u64)>>,
     #[cfg(test)]
@@ -134,13 +133,24 @@ pub struct PtyManager {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PtyBufferState {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authority: Option<&'static str>,
     pub buffer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<TerminalViewSnapshot>,
     #[serde(rename = "isLive")]
     pub is_live: bool,
     #[serde(rename = "instanceId")]
     pub instance_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalViewSnapshot {
+    pub instance_id: u64,
+    pub watermark: u64,
+    pub data: String,
+}
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum TerminalSessionLifecycleState {
@@ -212,29 +222,32 @@ impl PtyManager {
             pending_shell_spawns: test_handles.pending_shell_spawns,
             terminal_sessions,
             pid_dir_override: None,
-            terminal_authority: TerminalAuthorityContract::xterm_authoritative(),
             shadow_mode: ShadowMode::from_environment(),
-            terminal_diagnostics_enabled: Arc::new(AtomicBool::new(false)),
+            ghostty_terminal_state_enabled: Arc::new(AtomicBool::new(false)),
             #[cfg(test)]
             agent_event_stream_start_gate: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
-    pub(crate) fn set_terminal_diagnostics_enabled(&self, enabled: bool) {
-        self.terminal_diagnostics_enabled
+    pub(crate) fn set_ghostty_terminal_state_enabled(&self, enabled: bool) {
+        self.ghostty_terminal_state_enabled
             .store(enabled, Ordering::Release);
     }
 
-    pub(crate) fn terminal_diagnostics_enabled(&self) -> bool {
-        self.terminal_diagnostics_enabled.load(Ordering::Acquire)
+    pub(crate) fn ghostty_terminal_state_enabled(&self) -> bool {
+        self.ghostty_terminal_state_enabled.load(Ordering::Acquire)
     }
 
     pub(crate) fn terminal_authority_contract(&self) -> TerminalAuthorityContract {
-        self.terminal_authority
+        if self.ghostty_terminal_state_enabled() {
+            TerminalAuthorityContract::ghostty_authoritative()
+        } else {
+            TerminalAuthorityContract::xterm_authoritative()
+        }
     }
 
     fn terminal_model_enabled(&self) -> bool {
-        self.shadow_mode.is_enabled() || self.terminal_diagnostics_enabled()
+        self.shadow_mode.is_enabled() || self.ghostty_terminal_state_enabled()
     }
 }
 

@@ -64,4 +64,32 @@ describe('terminal authority', () => {
       data: '\u001b[1;1R',
     })
   }) // query response routing
+
+  it('keeps xterm rendering but drops xterm-generated responses when Ghostty owns state', async () => {
+    const shellSessionKey = 'T-ghostty-shell-0'
+    let onQueryResponse: ((response: { data: string; ptyInstanceId: number | null }) => void) | undefined
+    const view = createFakeTerminalView({
+      onQueryResponse: vi.fn((listener: (response: { data: string; ptyInstanceId: number | null }) => void) => {
+        onQueryResponse = listener
+        return { dispose: vi.fn() }
+      }),
+    })
+    const host = createHost()
+    host.getPtyBuffer = async () => ({
+      authority: 'ghostty-authoritative',
+      buffer: null,
+      snapshot: { instanceId: 61, watermark: 0, data: btoa('rendered by xterm') },
+      isLive: true,
+      instanceId: 61,
+    })
+    const writeTerminalQueryResponse = vi.fn(async () => undefined)
+    host.writeTerminalQueryResponse = writeTerminalQueryResponse
+    const runtime = createTerminalRuntime({ ...host, createTerminalView: () => view })
+
+    await runtime.acquire(shellSessionKey)
+    onQueryResponse?.({ data: '\u001b[1;1R', ptyInstanceId: 61 })
+
+    expect(view.bootstrap).toHaveBeenCalledOnce()
+    expect(writeTerminalQueryResponse).not.toHaveBeenCalled()
+  })
 }) // terminal authority
