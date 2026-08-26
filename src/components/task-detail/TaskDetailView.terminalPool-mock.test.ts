@@ -38,6 +38,58 @@ describe('TaskDetailView terminal pool mock', () => {
     })
   })
 
+  it('tracks an exited shell transition for the acquired key', async () => {
+    const { acquire, getShellLifecycleState, isShellExited, updateShellLifecycleState } = await import('../../lib/terminalPool')
+    await acquire('T-42-shell-0')
+    await acquire('T-42-shell-1')
+
+    updateShellLifecycleState('T-42-shell-0', {
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 17,
+      hasOutput: true,
+    })
+
+    expect(isShellExited('T-42-shell-0')).toBe(true)
+    expect(getShellLifecycleState('T-42-shell-0')).toEqual({
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 17,
+      hasOutput: true,
+    })
+    expect(isShellExited('T-42-shell-1')).toBe(false)
+  })
+
+  it('tracks a restarted shell transition for the acquired key', async () => {
+    const { acquire, getShellLifecycleState, isShellExited, updateShellLifecycleState } = await import('../../lib/terminalPool')
+    const entry = await acquire('T-42-shell-0')
+
+    updateShellLifecycleState('T-42-shell-0', {
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 17,
+      hasOutput: true,
+    })
+    updateShellLifecycleState('T-42-shell-0', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 23,
+      hasOutput: false,
+    })
+
+    expect(isShellExited('T-42-shell-0')).toBe(false)
+    expect(getShellLifecycleState('T-42-shell-0')).toEqual({
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 23,
+      hasOutput: false,
+    })
+    expect(entry.ptyActive).toBe(true)
+    expect(entry.needsClear).toBe(false)
+    expect(entry.currentPtyInstance).toBe(23)
+    expect(entry.hasOutput).toBe(false)
+  })
+
   it('returns the keyed pool entry for duplicate acquisition', async () => {
     const { acquire, markShellPtyStarted } = await import('../../lib/terminalPool')
     const first = await acquire('T-42-shell-0')
