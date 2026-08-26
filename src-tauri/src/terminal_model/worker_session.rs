@@ -38,6 +38,32 @@ const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: Duration = Duration::from_millis(50);
 pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const WORKER_JOIN_TIMEOUT: Duration = Duration::from_millis(100);
+pub(super) const COMMAND_SUBMISSION_TIMEOUT: Duration = Duration::from_millis(50);
+
+fn send_command_with_timeout(
+    tx: &mpsc::SyncSender<TerminalModelCommand>,
+    mut command: TerminalModelCommand,
+) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + COMMAND_SUBMISSION_TIMEOUT;
+    loop {
+        match tx.try_send(command) {
+            Ok(()) => return Ok(()),
+            Err(mpsc::TrySendError::Full(returned)) if std::time::Instant::now() < deadline => {
+                command = returned;
+                std::thread::sleep(Duration::from_micros(50));
+            }
+            Err(mpsc::TrySendError::Full(_)) => {
+                return Err(format!(
+                    "command submission timed out after {} ms",
+                    COMMAND_SUBMISSION_TIMEOUT.as_millis()
+                ));
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                return Err("model worker disconnected while submitting command".to_string());
+            }
+        }
+    }
+}
 
 enum TerminalModelCommand {
     Feed(Vec<u8>),
@@ -232,17 +258,16 @@ impl TerminalModelSession {
             return;
         }
         let result = match self.queue_policy {
-            TerminalModelQueuePolicy::Backpressure => self
-                .tx
-                .send(TerminalModelCommand::Resize { cols, rows })
-                .map_err(|error| error.to_string()),
+            TerminalModelQueuePolicy::Backpressure => {
+                send_command_with_timeout(&self.tx, TerminalModelCommand::Resize { cols, rows })
+            }
             TerminalModelQueuePolicy::DisableAfterTimeout => self
                 .tx
                 .try_send(TerminalModelCommand::Resize { cols, rows })
                 .map_err(|error| error.to_string()),
         };
         if let Err(error) = result {
-            self.state.disable(
+            self.state.disable_without_blocking_event_sink(
                 &self.session_key,
                 self.instance_id,
                 "resize",
@@ -274,8 +299,7 @@ impl TerminalModelSession {
             return Err("terminal model is disabled".to_string());
         }
         let (response_tx, response_rx) = mpsc::sync_channel(1);
-        self.tx
-            .send(command(response_tx))
+        send_command_with_timeout(&self.tx, command(response_tx))
             .map_err(|error| format!("terminal model request failed: {error}"))?;
         response_rx
             .recv_timeout(REQUEST_TIMEOUT)
@@ -306,7 +330,7 @@ fn request_portable_snapshot(
         return Err("terminal model is disabled".to_string());
     }
     let (response_tx, response_rx) = mpsc::sync_channel(1);
-    tx.send(TerminalModelCommand::PortableSnapshot(response_tx))
+    send_command_with_timeout(tx, TerminalModelCommand::PortableSnapshot(response_tx))
         .map_err(|error| format!("terminal model snapshot request failed: {error}"))?;
     response_rx
         .recv_timeout(REQUEST_TIMEOUT)

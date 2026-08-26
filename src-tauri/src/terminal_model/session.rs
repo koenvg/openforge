@@ -17,7 +17,9 @@ use std::sync::{mpsc, Arc, Mutex};
 #[cfg(test)]
 use std::time::Duration;
 #[cfg(test)]
-use worker_session::{COMMAND_QUEUE_CAPACITY, QUEUE_CATCH_UP_TIMEOUT, REQUEST_TIMEOUT};
+use worker_session::{
+    COMMAND_QUEUE_CAPACITY, COMMAND_SUBMISSION_TIMEOUT, QUEUE_CATCH_UP_TIMEOUT, REQUEST_TIMEOUT,
+};
 
 #[cfg(test)]
 mod tests {
@@ -49,7 +51,11 @@ mod tests {
             let (entered_tx, entered_rx) = mpsc::sync_channel(1);
             let (release_tx, release_rx) = mpsc::sync_channel(1);
             let release_rx = Mutex::new(release_rx);
+            let callback_lock = Mutex::new(());
             let sink = Arc::new(move |event| {
+                let _callback_guard = callback_lock
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 observer(&event);
                 if matches!(event, TerminalModelEvent::Output(_))
                     && first_output.swap(false, Ordering::AcqRel)
@@ -86,6 +92,30 @@ mod tests {
                 .send(())
                 .expect("test should release the model worker");
         }
+    }
+
+    type TestRequest = fn(&TerminalModelSession) -> Result<Vec<u8>, String>;
+
+    fn start_worker_with_saturated_queue(
+        session_key: &str,
+        instance_id: u64,
+    ) -> (Arc<TerminalModelSession>, FirstOutputBlockingSink) {
+        let mut blocked_sink = FirstOutputBlockingSink::new();
+        let (session, feeder) = TerminalModelSession::start_with_event_sink(
+            session_key.to_string(),
+            instance_id,
+            TerminalModelOptions::new(80, 24),
+            blocked_sink.take_sink(),
+        )
+        .expect("terminal model worker should start");
+
+        feeder.feed(b"first");
+        blocked_sink.wait_until_entered();
+        for _ in 0..COMMAND_QUEUE_CAPACITY {
+            feeder.feed(b"queued");
+        }
+
+        (Arc::new(session), blocked_sink)
     }
 
     #[test]
@@ -242,6 +272,91 @@ mod tests {
         worker_dropped_rx
             .recv_timeout(REQUEST_TIMEOUT)
             .expect("released worker should finish orderly cleanup");
+    }
+
+    #[test]
+    fn resize_submission_is_bounded_when_authoritative_queue_is_saturated() {
+        let (session, blocked_sink) = start_worker_with_saturated_queue("resize-shell", 94);
+        let resize_session = Arc::clone(&session);
+        let (resize_complete_tx, resize_complete_rx) = mpsc::sync_channel(1);
+        let resize_thread = std::thread::spawn(move || {
+            resize_session.resize(120, 40);
+            let _ = resize_complete_tx.send(());
+        });
+
+        let completed_within_deadline = resize_complete_rx
+            .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200))
+            .is_ok();
+        blocked_sink.release();
+        resize_thread
+            .join()
+            .expect("resize thread should not panic");
+
+        assert!(
+            completed_within_deadline,
+            "resize must not wait indefinitely for a saturated authoritative queue"
+        );
+        assert!(session.diagnostics().iter().any(|diagnostic| {
+            diagnostic.phase == "resize" && diagnostic.message.contains("timed out")
+        }));
+    }
+
+    #[test]
+    fn portable_snapshot_submission_times_out_when_authoritative_queue_is_saturated() {
+        let (session, blocked_sink) =
+            start_worker_with_saturated_queue("portable-snapshot-shell", 95);
+        let snapshot_session = Arc::clone(&session);
+        let (snapshot_result_tx, snapshot_result_rx) = mpsc::sync_channel(1);
+        let snapshot_thread = std::thread::spawn(move || {
+            let _ = snapshot_result_tx.send(snapshot_session.portable_snapshot());
+        });
+
+        let result = snapshot_result_rx
+            .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200));
+        blocked_sink.release();
+        snapshot_thread
+            .join()
+            .expect("portable snapshot thread should not panic");
+
+        assert!(matches!(
+            result,
+            Ok(Err(error)) if error.contains("command submission timed out")
+        ));
+    }
+
+    #[test]
+    fn snapshot_and_portable_vt_submissions_time_out_when_authoritative_queue_is_saturated() {
+        let requests: [(&str, TestRequest); 2] = [
+            ("snapshot", TerminalModelSession::snapshot),
+            ("portable VT", TerminalModelSession::portable_vt),
+        ];
+
+        for (index, (request_name, request)) in requests.into_iter().enumerate() {
+            let (session, blocked_sink) = start_worker_with_saturated_queue(
+                &format!("test-request-{index}"),
+                96 + index as u64,
+            );
+            let request_session = Arc::clone(&session);
+            let (request_result_tx, request_result_rx) = mpsc::sync_channel(1);
+            let request_thread = std::thread::spawn(move || {
+                let _ = request_result_tx.send(request(&request_session));
+            });
+
+            let result = request_result_rx
+                .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200));
+            blocked_sink.release();
+            request_thread
+                .join()
+                .unwrap_or_else(|_| panic!("{request_name} request thread should not panic"));
+
+            assert!(
+                matches!(
+                    result,
+                    Ok(Err(error)) if error.contains("command submission timed out")
+                ),
+                "{request_name} submission should return the timeout error"
+            );
+        }
     }
 
     #[test]

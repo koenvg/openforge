@@ -82,16 +82,47 @@ impl TerminalModelState {
         phase: &'static str,
         message: String,
     ) {
-        if self.disabled.swap(true, Ordering::AcqRel) {
+        if let Some(event_sink) = self.mark_disabled(session_key, instance_id, phase, message) {
+            event_sink(TerminalModelEvent::Disabled { instance_id });
+        }
+    }
+
+    pub(super) fn disable_without_blocking_event_sink(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+        phase: &'static str,
+        message: String,
+    ) {
+        let Some(event_sink) = self.mark_disabled(session_key, instance_id, phase, message) else {
             return;
+        };
+        let thread_name = format!("terminal-model-disable-{instance_id}");
+        if let Err(error) = std::thread::Builder::new()
+            .name(thread_name)
+            .spawn(move || event_sink(TerminalModelEvent::Disabled { instance_id }))
+        {
+            warn!(
+                "[terminal-model] key={} instance={} failed to dispatch disabled event: {}",
+                session_key, instance_id, error
+            );
+        }
+    }
+
+    fn mark_disabled(
+        &self,
+        session_key: &str,
+        instance_id: u64,
+        phase: &'static str,
+        message: String,
+    ) -> Option<TerminalModelEventSink> {
+        if self.disabled.swap(true, Ordering::AcqRel) {
+            return None;
         }
         warn!(
             "[terminal-model] key={} instance={} phase={} disabled: {}",
             session_key, instance_id, phase, message
         );
-        if let Some(event_sink) = &self.event_sink {
-            event_sink(TerminalModelEvent::Disabled { instance_id });
-        }
         let mut diagnostics = self
             .diagnostics
             .lock()
@@ -105,6 +136,7 @@ impl TerminalModelState {
             phase,
             message,
         });
+        self.event_sink.clone()
     }
 
     pub(super) fn publish_output(&self, instance_id: u64, sequence: u64, bytes: Vec<u8>) {
