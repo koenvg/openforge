@@ -84,7 +84,17 @@ impl PtyManager {
     pub async fn get_pty_buffer(&self, session_key: &str) -> Option<String> {
         let buffers = self.terminal_sessions.output_buffers.lock().await;
         let buffer = buffers.get(session_key)?;
-        let buf = buffer.lock().unwrap();
+        let buf = match buffer.lock() {
+            Ok(buf) => buf,
+            Err(poisoned) => {
+                warn!(
+                    "[pty-manager] key={} output buffer lock poisoned; recovering buffered output",
+                    session_key
+                );
+                buffer.clear_poison();
+                poisoned.into_inner()
+            }
+        };
         let content = buf.snapshot();
         if content.is_empty() {
             None

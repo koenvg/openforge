@@ -369,6 +369,49 @@ async fn test_spawn_pty_populates_output_buffer() {
     );
 }
 
+#[tokio::test]
+async fn get_pty_buffer_recovers_content_from_a_poisoned_lock() {
+    let manager = PtyManager::new();
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+        CLAUDE_BUFFER_CAPACITY,
+    )));
+    ring.lock()
+        .expect("buffer lock should start healthy")
+        .push(b"recoverable output");
+
+    manager
+        .output_buffers
+        .lock()
+        .await
+        .insert("poisoned-buffer".to_string(), Arc::clone(&ring));
+
+    let poisoned_ring = Arc::clone(&ring);
+    assert!(
+        std::thread::spawn(move || {
+            let _guard = poisoned_ring
+                .lock()
+                .expect("buffer lock should start healthy");
+            panic!("poison buffer lock");
+        })
+        .join()
+        .is_err(),
+        "poisoning thread should panic"
+    );
+
+    assert_eq!(
+        manager.get_pty_buffer("poisoned-buffer").await.as_deref(),
+        Some("recoverable output")
+    );
+
+    ring.lock()
+        .expect("recovery should clear the poison state")
+        .push(b" after recovery");
+    assert_eq!(
+        manager.get_pty_buffer("poisoned-buffer").await.as_deref(),
+        Some("recoverable output after recovery")
+    );
+}
+
 #[test]
 fn shadow_mode_observes_raw_bytes_without_changing_desktop_output() {
     let (shadow, feeder) = crate::terminal_model::TerminalModelSession::start(
