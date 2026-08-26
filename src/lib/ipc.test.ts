@@ -23,8 +23,8 @@ import {
   fsSearchFiles,
   fsWriteFile,
   getAllTasks,
-  getSetAsideTasks,
   getTaskAttention,
+  getTaskLanes,
   getCommitBatchFileContents,
   getDeveloperLogSnapshot,
   getDeveloperLogs,
@@ -144,12 +144,13 @@ describe("ipc task attention projection", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_task_attention");
   });
 
-  it("requests the backend-owned set-aside rows", async () => {
-    invokeMock.mockResolvedValue([]);
+  it("requests the backend-owned four-lane rows", async () => {
+    const lanes = { focus: [], in_flight: [], out_of_focus: [], backlog: [] };
+    invokeMock.mockResolvedValue(lanes);
 
-    await expect(getSetAsideTasks()).resolves.toEqual([]);
+    await expect(getTaskLanes()).resolves.toEqual(lanes);
 
-    expect(invokeMock).toHaveBeenCalledWith("get_set_aside_tasks");
+    expect(invokeMock).toHaveBeenCalledWith("get_task_lanes");
   });
 });
 

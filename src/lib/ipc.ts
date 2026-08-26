@@ -6,7 +6,7 @@ import type {
   TerminalQueryResponseWrite,
 } from '@openforge-app/terminal-runtime'
 import type { DesktopPtyBufferState } from './desktopTerminalTransport'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, Task, TaskAttentionRow, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, CompanionGatewayStatus, DeveloperLogEntry, DeveloperLogSnapshot, DivergenceResolution, ExistingBranchPlan, FileContent, FileEntry, GitBranchInfo, GitStatusSummary, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, Task, TaskAttentionRow, TaskLabel, TaskLaneRows, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo, WorktreeSource, WritableBoardStatus } from "./types";
 import type { CompanionPairedDevice, CompanionPairingSession } from './types'
 import type { PullRequestMergeMethod } from './types'
 import type { ResolvedMarkdownMedia } from './markdown'
@@ -116,9 +116,12 @@ export async function getTaskAttention(): Promise<TaskAttentionRow[]> {
   return invoke<TaskAttentionRow[]>("get_task_attention");
 }
 
-/** Every set-aside ("Out of Focus") task across all projects, in attention-row shape. */
-export async function getSetAsideTasks(): Promise<TaskAttentionRow[]> {
-  return invoke<TaskAttentionRow[]>("get_set_aside_tasks");
+/**
+ * Every startable task across all projects, split into the four board lanes and sharing the
+ * attention-row shape. `focus` matches `getTaskAttention`.
+ */
+export async function getTaskLanes(): Promise<TaskLaneRows> {
+  return invoke<TaskLaneRows>("get_task_lanes");
 }
 
 export async function getProjectConfig(projectId: string, key: string): Promise<string | null> {

@@ -4,11 +4,12 @@
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
-  import { getAllTasks, getTaskAttention, getSetAsideTasks, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
-  import { buildAttentionOverview } from '../../lib/attentionOverview'
+  import { getAllTasks, getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
+  import { buildAttentionOverview, laneRowsByFilter, TASK_LANES, TASK_LANE_LABELS } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
+  import type { BoardFilter } from '../../lib/boardFilters'
   import type { ReviewPullRequest, Task } from '../../lib/types'
   import { TASK_STATE_COMPACT_LABELS } from '../../lib/taskStatePresentation'
 
@@ -28,12 +29,34 @@
   const CHIP_MUTED = 'border-base-300 bg-base-200/40 text-base-content/40 hover:text-base-content/70'
   // Coalesce store-change bursts (streaming agents, PR polls) into one reload while open.
   const REFRESH_DEBOUNCE_MS = 250
+  // How long a task may fly before its age is called out. Nothing enforces this; it only
+  // tints the number so a long-running agent stands out from a fresh one.
+  const STUCK_IN_FLIGHT_SECONDS = 4 * 3600
+
+  const EMPTY_LANE_COPY: Record<BoardFilter, { title: string; hint: string }> = {
+    focus: {
+      title: "You're all caught up",
+      hint: 'No focus tasks or review requests need you right now.',
+    },
+    'in-flight': {
+      title: 'Nothing is in flight',
+      hint: 'No project has a task running or waiting on CI.',
+    },
+    'out-of-focus': {
+      title: 'Nothing is set aside',
+      hint: 'No project has a task parked in Out of Focus.',
+    },
+    backlog: {
+      title: 'The backlog is empty',
+      hint: 'Every task in every project has been started.',
+    },
+  }
 
   interface DisplayGroup {
     id: string
     name: string
     isActive: boolean
-    /** Whichever task lane `E` currently selects, already filtered by `T`. */
+    /** Whichever board lane `T` currently selects. */
     taskItems: AttentionFocusTask[]
     reviewPrs: ReviewPullRequest[]
   }
@@ -49,9 +72,6 @@
     items: { row: NavRow; index: number }[]
   }
 
-  /** Which lane the task rows come from. Both are loaded; `E` picks between them. */
-  type TaskLane = 'focus' | 'set-aside'
-
   let loading = $state(true)
   let overviewRequestGeneration = 0
   let overview = $state<AttentionOverview | null>(null)
@@ -61,12 +81,11 @@
   let bodyEl = $state<HTMLElement | null>(null)
   let showReviews = $state(true)
   // Deliberately not persisted: the dialog is "Needs your attention" first, so it always
-  // reopens on the focus lane rather than in whatever mode it was last left in.
-  let taskLane = $state<TaskLane>('focus')
+  // reopens on the focus lane rather than in whatever lane it was last left in.
+  let taskLane = $state<BoardFilter>('focus')
 
-  let taskCount = $derived(
-    (taskLane === 'set-aside' ? overview?.totalSetAsideTasks : overview?.totalFocusTasks) ?? 0,
-  )
+  let laneLabel = $derived(TASK_LANE_LABELS[taskLane])
+  let taskCount = $derived(overview?.totalTasksByLane[taskLane] ?? 0)
   let reviewCount = $derived(overview?.totalReviewPrs ?? 0)
 
   // R is hiding reviews that do exist. Drives the empty state, so an empty list never claims
@@ -77,7 +96,7 @@
     if (!overview) return []
     const groups: DisplayGroup[] = []
     for (const group of overview.groups) {
-      const taskItems = taskLane === 'set-aside' ? group.setAsideTasks : group.focusTasks
+      const taskItems = group.tasksByLane[taskLane]
       const reviewPrs = showReviews ? group.reviewPrs : []
       // A project only earns a header when the current filters leave it something to show.
       if (taskItems.length === 0 && reviewPrs.length === 0) continue
@@ -167,9 +186,12 @@
     void persistFilters()
   }
 
-  /** Swap which task lane the list shows. The two lanes are exclusive; there is no "both". */
-  function toggleLane(): void {
-    taskLane = taskLane === 'set-aside' ? 'focus' : 'set-aside'
+  /**
+   * Step to the next board lane, wrapping back to Focus. The lanes are exclusive, so this
+   * swaps the whole list rather than adding to it, and the cursor restarts at the top.
+   */
+  function cycleLane(): void {
+    taskLane = TASK_LANES[(TASK_LANES.indexOf(taskLane) + 1) % TASK_LANES.length]
     focusedIndex = 0
   }
 
@@ -237,9 +259,9 @@
           e.preventDefault()
           toggleReviews()
           return true
-        case 'e':
+        case 't':
           e.preventDefault()
-          toggleLane()
+          cycleLane()
           return true
       }
     }
@@ -286,11 +308,7 @@
     const projectList = get(projects)
     const nextActiveId = get(activeProjectId)
 
-    const [allTasks, taskAttentionRows, setAsideTaskRows] = await Promise.all([
-      getAllTasks(),
-      getTaskAttention(),
-      getSetAsideTasks(),
-    ])
+    const [allTasks, laneRows] = await Promise.all([getAllTasks(), getTaskLanes()])
 
     const resolvedRepoByProject = new Map<string, string | null>()
     await Promise.all(
@@ -307,8 +325,7 @@
       overview: buildAttentionOverview({
         projects: projectList,
         allTasks,
-        taskAttentionRows,
-        setAsideTaskRows,
+        taskRowsByLane: laneRowsByFilter(laneRows),
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
@@ -423,12 +440,31 @@
     )
   })
 
+  function elapsed(seconds: number): number {
+    return Math.max(0, Date.now() / 1000 - seconds)
+  }
+
   function relTime(seconds: number): string {
     if (!seconds) return ''
-    const delta = Math.max(0, Date.now() / 1000 - seconds)
+    const delta = elapsed(seconds)
     if (delta < 3600) return `${Math.max(1, Math.round(delta / 60))}m ago`
     if (delta < 86400) return `${Math.round(delta / 3600)}h ago`
     return `${Math.round(delta / 86400)}d ago`
+  }
+
+  /**
+   * How long the task has been flying, read off its last recorded state change: for a running
+   * agent that is the moment it started, and for a task waiting on CI the moment the agent
+   * handed off. Nothing records lane transitions themselves, so this is the closest honest
+   * answer to "how long has this been sitting here".
+   */
+  function inFlightAge(seconds: number): string {
+    if (!seconds) return ''
+    const delta = elapsed(seconds)
+    if (delta < 60) return 'just now'
+    if (delta < 3600) return `${Math.round(delta / 60)}m`
+    if (delta < 86400) return `${Math.round(delta / 3600)}h`
+    return `${Math.round(delta / 86400)}d`
   }
 </script>
 
@@ -451,25 +487,27 @@
       </div>
       <div class="flex flex-col min-w-0">
         <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
-        {#if taskLane === 'set-aside'}
-          <span class="text-[11px] text-base-content/50 leading-tight">Showing set-aside tasks</span>
+        {#if taskLane !== 'focus'}
+          <span class="text-[11px] text-base-content/50 leading-tight">Showing the {laneLabel} lane</span>
         {/if}
       </div>
       <div class="flex-1"></div>
       <!-- Two chips, mirroring the two keyboard shortcuts, so the letters are discoverable
            without a legend and the current state is always on screen. R shows or hides the
-           reviews. E names the one task lane on screen and swaps to the other. -->
+           reviews. T names the one board lane on screen and steps to the next one. -->
       <div class="flex items-center gap-1.5 shrink-0">
         {#each [
           {
-            key: 'E',
-            label: taskLane === 'set-aside' ? 'Set aside' : 'Focus',
+            key: 'T',
+            label: laneLabel,
             count: taskCount,
-            pressed: taskLane === 'set-aside',
+            // Not aria-pressed: this steps through four lanes rather than switching one
+            // thing on and off, and its own label already says which lane is showing.
+            pressed: undefined,
             // Focus is the default lane, so it reads normal rather than switched-off; only
-            // the set-aside detour lights up.
-            tone: taskLane === 'set-aside' ? CHIP_ACTIVE : CHIP_NEUTRAL,
-            toggle: toggleLane,
+            // a detour into another lane lights up.
+            tone: taskLane === 'focus' ? CHIP_NEUTRAL : CHIP_ACTIVE,
+            toggle: cycleLane,
           },
           {
             key: 'R',
@@ -509,13 +547,15 @@
           {#if reviewsHidden}
             <p class="text-sm font-medium text-base-content m-0">Reviews are hidden</p>
             <p class="text-xs text-base-content/50 m-0">Press R to bring them back.</p>
-          {:else if taskLane === 'set-aside'}
-            <p class="text-sm font-medium text-base-content m-0">Nothing is set aside</p>
-            <p class="text-xs text-base-content/50 m-0">No project has a task parked in Out of Focus. Press E to go back.</p>
           {:else}
-            <span class="text-2xl">🎉</span>
-            <p class="text-sm font-medium text-base-content m-0">You're all caught up</p>
-            <p class="text-xs text-base-content/50 m-0">No focus tasks or review requests need you right now.</p>
+            {#if taskLane === 'focus'}
+              <span class="text-2xl">🎉</span>
+            {/if}
+            <p class="text-sm font-medium text-base-content m-0">{EMPTY_LANE_COPY[taskLane].title}</p>
+            <p class="text-xs text-base-content/50 m-0">
+              {EMPTY_LANE_COPY[taskLane].hint}
+              {#if taskLane !== 'focus'}Press T for the next lane.{/if}
+            </p>
           {/if}
         </div>
       {:else}
@@ -546,7 +586,7 @@
                 <span class="ml-auto flex items-center gap-1.5 shrink-0">
                   {#if ng.group.taskItems.length > 0}
                     <span class="badge badge-ghost badge-sm">
-                      {ng.group.taskItems.length} {taskLane === 'set-aside' ? 'set aside' : 'focus'}
+                      {ng.group.taskItems.length} {laneLabel.toLowerCase()}
                     </span>
                   {/if}
                   {#if ng.group.reviewPrs.length > 0}
@@ -584,6 +624,18 @@
                           {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>
                       </div>
+                      <!-- In Flight only: how long the task has been flying, in its own column
+                           so the ages line up and a stuck one is obvious at a glance. The
+                           reason line is truncated, so this cannot live inside it. -->
+                      {#if taskLane === 'in-flight'}
+                        {@const age = inFlightAge(it.row.item.activityAt)}
+                        {#if age}
+                          <span
+                            class="text-[11px] tabular-nums shrink-0 {elapsed(it.row.item.activityAt) >= STUCK_IN_FLIGHT_SECONDS ? 'text-warning font-medium' : 'text-base-content/40'}"
+                            title="In flight since the last state change ({relTime(it.row.item.activityAt)})"
+                          >{age}</span>
+                        {/if}
+                      {/if}
                       <span class="text-base-content/30 shrink-0">›</span>
                     </div>
                   {/if}

@@ -141,17 +141,17 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(attention)
         }
-        "get_set_aside_tasks" => {
-            let set_aside = {
+        "get_task_lanes" => {
+            let lanes = {
                 let db = crate::db::acquire_db(&state.db);
-                db.get_set_aside_task_rows().map_err(|e| {
+                db.get_task_lane_rows().map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to get set-aside tasks: {e}"),
+                        format!("Failed to get task lanes: {e}"),
                     )
                 })?
             };
-            json_value(set_aside)
+            json_value(lanes)
         }
         "get_task_detail" => {
             let task_id = payload_string(&request.payload, "taskId")?;
