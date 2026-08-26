@@ -1,64 +1,9 @@
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { getPtyBuffer, resizePty, writePty } from "./ipc";
-import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
-import {
-	_getPool,
-	acquire,
-	attach,
-	clearPtySpawnPending,
-	clearTaskTerminalTabsSession,
-	detach,
-	focusTerminal,
-	getShellLifecycleState,
-	getTaskTerminalTabsSession,
-	isPtyActive,
-	isShellExited,
-	isValidTerminalDimensions,
-	markPtySpawnPending,
-	markShellPtyStarted,
-	recoverActiveTerminal,
-	release,
-	releaseAll,
-	releaseAllForTask,
-	restorePtyInstance,
-	shouldSpawnPty,
-	subscribeShellLifecycle,
-	updateShellLifecycleState,
-	updateTaskTerminalTabsSession,
-} from "./terminalPool";
-
-export const terminalPoolApi = {
-	_getPool,
-	acquire,
-	attach,
-	clearPtySpawnPending,
-	clearTaskTerminalTabsSession,
-	detach,
-	focusTerminal,
-	getShellLifecycleState,
-	getTaskTerminalTabsSession,
-	isPtyActive,
-	isShellExited,
-	isValidTerminalDimensions,
-	markPtySpawnPending,
-	markShellPtyStarted,
-	recoverActiveTerminal,
-	release,
-	releaseAll,
-	releaseAllForTask,
-	restorePtyInstance,
-	shouldSpawnPty,
-	subscribeShellLifecycle,
-	updateShellLifecycleState,
-	updateTaskTerminalTabsSession,
-};
-
-export const ipcApi = { getPtyBuffer, resizePty, writePty };
-export const terminalFontFamily = TERMINAL_FONT_FAMILY;
+import { _getPool, releaseAll, type PoolEntry } from "./terminalPool";
 
 type ListenCallback = (event: unknown) => void;
 type UnlistenMock = Mock<() => void>;
-type TerminalPoolEntry = Awaited<ReturnType<typeof acquire>>;
+type TerminalPoolEntry = PoolEntry;
 
 // Track listen callbacks so tests can simulate events
 export const listenCallbacks = new Map<string, ListenCallback>();
@@ -349,36 +294,34 @@ export function setWebglContextLossOnLoad(enabled: boolean): void {
 	webglLoadShouldTriggerContextLoss = enabled;
 }
 
-export function installTerminalPoolTestHarness(): void {
 beforeEach(() => {
-		releaseAll();
-		listenCallbacks.clear();
-		unlistenFns.length = 0;
-		webLinksHandler = null;
-		webglConstructorShouldThrow = false;
-		webglLoadShouldThrow = false;
-		webglLoadShouldTriggerContextLoss = false;
-		webglContextLossListeners.length = 0;
-		webglContextLossDisposables.length = 0;
-		terminalInstances.length = 0;
-		fitAddonInstances.length = 0;
-		webglAddonInstances.length = 0;
-		fontLoadMock = vi.fn().mockResolvedValue([]);
-		Object.defineProperty(document, "fonts", {
-			configurable: true,
-			value: {
-				ready: Promise.resolve(),
-				load: fontLoadMock,
-			},
-		});
-		vi.clearAllMocks();
+	releaseAll();
+	listenCallbacks.clear();
+	unlistenFns.length = 0;
+	webLinksHandler = null;
+	webglConstructorShouldThrow = false;
+	webglLoadShouldThrow = false;
+	webglLoadShouldTriggerContextLoss = false;
+	webglContextLossListeners.length = 0;
+	webglContextLossDisposables.length = 0;
+	terminalInstances.length = 0;
+	fitAddonInstances.length = 0;
+	webglAddonInstances.length = 0;
+	fontLoadMock = vi.fn().mockResolvedValue([]);
+	Object.defineProperty(document, "fonts", {
+		configurable: true,
+		value: {
+			ready: Promise.resolve(),
+			load: fontLoadMock,
+		},
 	});
+	vi.clearAllMocks();
+});
 
 afterEach(() => {
-		Object.defineProperty(document, "fonts", {
-			configurable: true,
-			value: originalDocumentFonts,
-		});
-		releaseAll();
+	Object.defineProperty(document, "fonts", {
+		configurable: true,
+		value: originalDocumentFonts,
 	});
-}
+	releaseAll();
+});

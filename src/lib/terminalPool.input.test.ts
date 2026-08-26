@@ -1,26 +1,16 @@
-import {
-	describe,
-	expect,
-	it,
-	vi,
-} from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { writePty } from "./ipc";
+import { acquire } from "./terminalPool";
 import {
 	getLoadedAddonNames,
+	getTaskLinkOpenMock,
 	getTerminalMock,
 	getTerminalMocks,
 	getWebLinksHandler,
-	installTerminalPoolTestHarness,
-	getTaskLinkOpenMock,
 	webLinksHandler,
-	terminalPoolApi,
-	ipcApi,
-} from "./terminalPool.testHarness";
-
-const { acquire } = terminalPoolApi;
-const { writePty } = ipcApi;
+} from "./terminalPool.testSetup";
 
 describe("terminalPool input", () => {
-	installTerminalPoolTestHarness();
 
 	it("routes detected Agent Terminal Surface links with their Task context", async () => {
 		const entry = await acquire("T-42");
