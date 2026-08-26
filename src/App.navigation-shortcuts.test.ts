@@ -1,10 +1,13 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { makePluginViewKey } from './lib/plugin/types'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import type { Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
 import App from './App.svelte'
+
+const FILE_VIEWER_VIEW_KEY = makePluginViewKey('com.openforge.file-viewer', 'files')
 
 async function waitForProjectPluginsReady(): Promise<void> {
   const { tick } = await import('svelte')
@@ -91,7 +94,7 @@ describe('App navigation shortcuts', () => {
 
     await fireEvent.keyDown(window, { key: 'o', code: 'KeyO', metaKey: true, bubbles: true })
 
-    expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
+    expect(get(stores.currentView)).toBe(FILE_VIEWER_VIEW_KEY)
   })
 
     it('CMD+S navigates to the Task Schedules plugin view', async () => {

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
+import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerPlugin'
+import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
 import type { Project, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { callOrder, persistInstalledPluginRow } from './App.test-fixtures/ipc'
@@ -205,7 +207,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
   it('does not show the unrelated floating Create Task action on Task Schedules', async () => {
     const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
-    mockCurrentViewStore.set('plugin:com.openforge.task-schedules:schedules')
+    mockCurrentViewStore.set(TASK_SCHEDULES_VIEW_KEY)
 
     render(App)
     await vi.waitFor(() => expect(get(stores.activeProjectId)).toBe('proj-1'))
@@ -232,7 +234,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       updated_at: 1000,
     }
 
-    async function openCreateTaskDialog(initialView: 'board' | 'plugin:com.openforge.file-viewer:files' = 'board') {
+    async function openCreateTaskDialog(initialView: 'board' | typeof FILE_VIEWER_VIEW_KEY = 'board') {
       const App = (await import('./App.svelte')).default
       const addTaskDialogModule = await import('./components/AddTaskDialog.svelte')
       mockCurrentViewStore.set(initialView)
@@ -290,7 +292,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       vi.mocked(ipc.startImplementation).mockResolvedValue({ session_id: 'session-new', workspace_path: '/workspace/T-new', task_id: createdTask.id, port: 0 } as any)
       vi.mocked(ipc.getSessionStatus).mockResolvedValue({ ticket_id: createdTask.id, status: 'running' } as any)
 
-      const dialogProps = await openCreateTaskDialog('plugin:com.openforge.file-viewer:files')
+      const dialogProps = await openCreateTaskDialog(FILE_VIEWER_VIEW_KEY)
       await dialogProps.onRunAction(createdTask.id, '')
 
       expect(mockRouterResetToBoard).toHaveBeenCalled()
@@ -305,13 +307,13 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       const stores = await import('./lib/stores')
       vi.mocked(ipc.getTasksForProject).mockResolvedValue([createdTask])
 
-      const dialogProps = await openCreateTaskDialog('plugin:com.openforge.file-viewer:files')
+      const dialogProps = await openCreateTaskDialog(FILE_VIEWER_VIEW_KEY)
       await dialogProps.onTaskSaved(createdTask)
 
       expect(mockRouterResetToBoard).not.toHaveBeenCalled()
       expect(mockRouterNavigateToTask).not.toHaveBeenCalled()
       expect(ipc.startImplementation).not.toHaveBeenCalled()
-      expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
+      expect(get(stores.currentView)).toBe(FILE_VIEWER_VIEW_KEY)
     }, 15000)
   })
 

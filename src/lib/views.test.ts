@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { FILE_VIEWER_VIEW_KEY } from './fileViewerPlugin'
 import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
+import { TASK_SCHEDULES_VIEW_KEY } from './taskSchedulesPlugin'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { RuntimeContributionSource } from './plugin/contributionResolver'
 import { TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews, isCrossProjectView } from './views'
@@ -143,12 +145,12 @@ describe('views registry', () => {
       }),
     ])
 
-    expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
-    expect(pluginViews['plugin:com.openforge.task-schedules:schedules']).toBeDefined()
+    expect(pluginViews[FILE_VIEWER_VIEW_KEY]).toBeDefined()
+    expect(pluginViews[TASK_SCHEDULES_VIEW_KEY]).toBeDefined()
     expect(pluginViews[GITHUB_SYNC_VIEW_KEY]).toBeDefined()
     expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
-    expect(pluginViews['plugin:com.openforge.file-viewer:files']?.component).toBe(PluginSlot)
+    expect(pluginViews[FILE_VIEWER_VIEW_KEY]?.component).toBe(PluginSlot)
   })
 
   describe('isCrossProjectView', () => {
@@ -187,7 +189,7 @@ describe('views registry', () => {
       }),
     ])
 
-    const props = pluginViews['plugin:com.openforge.file-viewer:files']?.getProps({
+    const props = pluginViews[FILE_VIEWER_VIEW_KEY]?.getProps({
       projectId: 'proj-alpha',
       projectName: 'Project Alpha',
       projectPath: '/workspace/project-alpha',
@@ -198,7 +200,7 @@ describe('views registry', () => {
 
     expect(props).toEqual({
       slotType: 'views',
-      slotId: 'plugin:com.openforge.file-viewer:files',
+      slotId: FILE_VIEWER_VIEW_KEY,
       projectId: 'proj-alpha',
       projectName: 'Project Alpha',
       projectPath: '/workspace/project-alpha',

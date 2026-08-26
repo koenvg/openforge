@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { get } from 'svelte/store'
 import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
+import { TASK_SCHEDULES_VIEW_KEY } from './taskSchedulesPlugin'
 import { activeProjectId, currentView, focusBoardFilters, lastViewedTaskId, projects, projectViewSnapshots, selectedReviewPr, selectedTaskId, sidebarPluginViewKeys } from './stores'
 import { captureProjectView, pushNavState, resetHistory, resetToBoard, restoreProjectView, selectFocusBoardTab, useAppRouter } from './router.svelte'
 import { subscribeToPluginHostEvent } from './plugin/pluginHostEvents'
@@ -196,7 +197,7 @@ describe('useAppRouter', () => {
   })
 
   it('resetToBoard resets from a plugin view', () => {
-    currentView.set('plugin:com.openforge.task-schedules:schedules')
+    currentView.set(TASK_SCHEDULES_VIEW_KEY)
 
     resetToBoard()
 
@@ -472,7 +473,7 @@ describe('project view memory', () => {
 
   it('round-trips: leaving a project on a plugin tab then restoring it returns to that tab', () => {
     activeProjectId.set('proj-A')
-    currentView.set('plugin:com.openforge.task-schedules:schedules')
+    currentView.set(TASK_SCHEDULES_VIEW_KEY)
 
     // Switch away — the subscriber captures proj-A — then simulate returning.
     activeProjectId.set('proj-B')
@@ -480,7 +481,7 @@ describe('project view memory', () => {
     activeProjectId.set('proj-A')
     restoreProjectView('proj-A')
 
-    expect(get(currentView)).toBe('plugin:com.openforge.task-schedules:schedules')
+    expect(get(currentView)).toBe(TASK_SCHEDULES_VIEW_KEY)
   })
 
   it('cross-project back navigation captures the project being left with its own view', () => {

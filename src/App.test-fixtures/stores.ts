@@ -1,6 +1,7 @@
 import { derived, writable } from 'svelte/store'
 import { vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from '../lib/githubSyncPlugin'
+import { makePluginViewKey } from '../lib/plugin/types'
 import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from '../lib/prReviewBadgeCounts'
 import type {
   AgentSession,
@@ -13,6 +14,9 @@ import type {
   Task,
 } from '../lib/types'
 
+const FILE_VIEWER_VIEW_KEY = makePluginViewKey('com.openforge.file-viewer', 'files')
+const TASK_SCHEDULES_VIEW_KEY = makePluginViewKey('com.openforge.task-schedules', 'schedules')
+
 export const mockSelectedTaskIdStore = writable<string | null>(null)
 export const mockActiveProjectIdStore = writable<string | null>(null)
 export const mockMergingTaskIdsStore = writable<Set<string>>(new Set())
@@ -21,9 +25,9 @@ export const mockCurrentViewStore = writable<
   | 'files'
   | 'settings'
   | 'global_settings'
-  | 'plugin:com.openforge.file-viewer:files'
+  | typeof FILE_VIEWER_VIEW_KEY
   | typeof GITHUB_SYNC_VIEW_KEY
-  | 'plugin:com.openforge.task-schedules:schedules'
+  | typeof TASK_SCHEDULES_VIEW_KEY
 >('board')
 export const mockSelectedReviewPrStore = writable(null)
 
