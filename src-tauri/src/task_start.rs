@@ -423,7 +423,7 @@ impl TaskStartService {
                     "Failed to load additional_instructions config for Project {project_id}: {error}"
                 ))
             })?;
-        let mut start_prompt_contributions: Vec<StartPromptContribution> = db
+        let start_prompt_contributions: Vec<StartPromptContribution> = db
             .get_project_config(
                 &project_id,
                 agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
@@ -444,15 +444,24 @@ impl TaskStartService {
             })
             .transpose()?
             .unwrap_or_default();
-        start_prompt_contributions.retain(|contribution| {
-            contribution
-                .owner_plugin_id
-                .as_deref()
-                .is_none_or(|plugin_id| {
-                    db.is_plugin_active_for_project(&project_id, plugin_id)
-                        .unwrap_or(false)
-                })
-        });
+        let mut active_start_prompt_contributions =
+            Vec::with_capacity(start_prompt_contributions.len());
+        for contribution in start_prompt_contributions {
+            let is_active = match contribution.owner_plugin_id.as_deref() {
+                Some(plugin_id) => db
+                    .is_plugin_active_for_project(&project_id, plugin_id)
+                    .map_err(|error| {
+                        TaskStartError::Persistence(format!(
+                            "Failed to resolve activity for Plugin {plugin_id} while loading Task start-prompt contributions for Project {project_id}: {error}"
+                        ))
+                    })?,
+                None => true,
+            };
+            if is_active {
+                active_start_prompt_contributions.push(contribution);
+            }
+        }
+        let start_prompt_contributions = active_start_prompt_contributions;
 
         Ok(StartContext {
             code_cleanup_enabled: db.resolve_task_bool(
