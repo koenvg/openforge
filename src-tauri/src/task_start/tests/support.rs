@@ -129,6 +129,7 @@ pub(super) fn service_for_state(state: &crate::http_server::AppState) -> TaskSta
         state.pty_manager.clone(),
         state.app_event_tx.clone(),
         state.task_claims.clone(),
+        state.task_start_worktree_root.clone(),
     )
 }
 

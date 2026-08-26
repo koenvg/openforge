@@ -43,6 +43,7 @@ pub(crate) fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
             sidecar_readiness: SidecarReadinessState::new(),
             companion_gateway: None,
             task_claims: TaskClaims::new(),
+            task_start_worktree_root: Some(temp_dir.path().join("worktrees")),
             poll_context: crate::github_poller::PollContext::new(),
         },
         temp_dir,

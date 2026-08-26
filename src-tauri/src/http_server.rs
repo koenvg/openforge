@@ -104,6 +104,7 @@ pub struct AppState {
     pub sidecar_readiness: SidecarReadinessState,
     pub companion_gateway: Option<crate::companion_gateway::CompanionGatewayManager>,
     pub task_claims: TaskClaims,
+    pub task_start_worktree_root: Option<std::path::PathBuf>,
     pub poll_context: crate::github_poller::PollContext,
 }
 

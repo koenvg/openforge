@@ -211,6 +211,10 @@ impl ProviderLauncher for NativeProviderLauncher {
     }
 }
 
+pub(crate) fn default_worktree_root() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".openforge").join("worktrees"))
+}
+
 #[derive(Clone)]
 pub(crate) struct TaskStartService {
     app: Option<AppHandle>,
@@ -228,11 +232,11 @@ impl TaskStartService {
         pty_manager: Option<PtyManager>,
         app_event_tx: Option<AppEventSender>,
         task_claims: TaskClaims,
+        worktree_root: Option<PathBuf>,
     ) -> Self {
         let provider_launcher = pty_manager.map(|pty_manager| {
             Arc::new(NativeProviderLauncher { pty_manager }) as Arc<dyn ProviderLauncher>
         });
-        let worktree_root = dirs::home_dir().map(|home| home.join(".openforge").join("worktrees"));
         Self {
             app,
             db,

@@ -302,6 +302,7 @@ async fn start_http_server_with_app_state(
         sidecar_readiness,
         companion_gateway: Some(companion_gateway.clone()),
         task_claims,
+        task_start_worktree_root: crate::task_start::default_worktree_root(),
         poll_context: poll_context.clone(),
     };
 
