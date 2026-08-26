@@ -46,6 +46,23 @@ export default defineConfig({
             'packages/pr-review-ui/src/**/*.test.ts',
             'packages/terminal-runtime/src/**/*.test.ts',
           ],
+          exclude: ['src/lib/terminalPool.*.test.ts'],
+          alias: {
+            ...pluginRuntimeAliases,
+            ...pluginSdkAliases,
+            ...terminalRuntimeAliases,
+          },
+        },
+      },
+      {
+        plugins: [svelte(), svelteTesting()],
+        test: {
+          name: 'terminal-pool',
+          environment: 'jsdom',
+          pool: 'forks',
+          globals: true,
+          setupFiles: ['src/test-setup.ts', 'src/lib/terminalPool.testSetup.ts'],
+          include: ['src/lib/terminalPool.*.test.ts'],
           alias: {
             ...pluginRuntimeAliases,
             ...pluginSdkAliases,

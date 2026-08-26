@@ -1,20 +1,6 @@
+import { describe, expect, it, vi } from "vitest";
+import { getPtyBuffer, resizePty } from "./ipc";
 import {
-	describe,
-	expect,
-	it,
-	vi,
-} from "vitest";
-import {
-	getFitAddonMocks,
-	getListenCallback,
-	getTerminalMock,
-	getTerminalMocks,
-	installTerminalPoolTestHarness,
-	terminalPoolApi,
-	ipcApi,
-} from "./terminalPool.testHarness";
-
-const {
 	acquire,
 	attach,
 	markShellPtyStarted,
@@ -22,11 +8,15 @@ const {
 	restorePtyInstance,
 	subscribeShellLifecycle,
 	updateShellLifecycleState,
-} = terminalPoolApi;
-const { getPtyBuffer, resizePty } = ipcApi;
+} from "./terminalPool";
+import {
+	getFitAddonMocks,
+	getListenCallback,
+	getTerminalMock,
+	getTerminalMocks,
+} from "./terminalPool.testSetup";
 
 describe("terminalPool reconnect", () => {
-	installTerminalPoolTestHarness();
 
 	it("pty-output listener writes to terminal", async () => {
 		const entry = await acquire("task-10");

@@ -1,16 +1,18 @@
+import { describe, expect, it, vi } from "vitest";
 import {
-	describe,
-	expect,
-	it,
-	vi,
-} from "vitest";
+	acquire,
+	attach,
+	detach,
+	focusTerminal,
+	markShellPtyStarted,
+	recoverActiveTerminal,
+} from "./terminalPool";
 import {
 	getEntryIndex,
 	getFitAddonMocks,
 	getListenCallback,
 	getLoadedAddonNames,
 	getTerminalMocks,
-	installTerminalPoolTestHarness,
 	requireValue,
 	setWebglConstructorFailure,
 	setWebglContextLossOnLoad,
@@ -18,20 +20,9 @@ import {
 	webglAddonInstances,
 	webglContextLossDisposables,
 	webglContextLossListeners,
-	terminalPoolApi,
-} from "./terminalPool.testHarness";
-
-const {
-	acquire,
-	attach,
-	detach,
-	focusTerminal,
-	markShellPtyStarted,
-	recoverActiveTerminal,
-} = terminalPoolApi;
+} from "./terminalPool.testSetup";
 
 describe("terminalPool attachment", () => {
-	installTerminalPoolTestHarness();
 
 	it("attach appends hostDiv to wrapper and marks attached", async () => {
 		const entry = await acquire("task-4");

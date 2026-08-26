@@ -1,18 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
 import {
-	fontLoadMock,
-	getListenCallback,
-	getTerminalFontFamily,
-	getTerminalMock,
-	getTerminalMocks,
-	installTerminalPoolTestHarness,
-	listenCallbacks,
-	unlistenFns,
-	terminalPoolApi,
-	terminalFontFamily,
-} from "./terminalPool.testHarness";
-
-const {
 	_getPool,
 	acquire,
 	clearPtySpawnPending,
@@ -29,11 +17,18 @@ const {
 	shouldSpawnPty,
 	updateShellLifecycleState,
 	updateTaskTerminalTabsSession,
-} = terminalPoolApi;
-const TERMINAL_FONT_FAMILY = terminalFontFamily;
+} from "./terminalPool";
+import {
+	fontLoadMock,
+	getListenCallback,
+	getTerminalFontFamily,
+	getTerminalMock,
+	getTerminalMocks,
+	listenCallbacks,
+	unlistenFns,
+} from "./terminalPool.testSetup";
 
 describe("terminalPool lifecycle", () => {
-	installTerminalPoolTestHarness();
 
 	it("acquire creates a new pool entry", async () => {
 		const entry = await acquire("task-1");
