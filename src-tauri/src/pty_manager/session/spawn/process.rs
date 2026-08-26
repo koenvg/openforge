@@ -1,6 +1,7 @@
 //! PTY command configuration and child-process creation.
 
-use crate::app_events::{publish_app_event, AppEventSender};
+use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
+use crate::backend_runtime::AppHandle;
 use crate::terminal_model::{
     TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelOptions,
     TerminalModelSession,
@@ -60,6 +61,7 @@ struct PtyProcessRequest {
     description: String,
     pid_file_name: String,
     kind: PtySessionKind,
+    app_handle: Option<AppHandle>,
     app_event_tx: Option<AppEventSender>,
 }
 
@@ -69,6 +71,7 @@ pub(super) struct AgentProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_handle: Option<AppHandle>,
     pub(super) app_event_tx: Option<AppEventSender>,
 }
 
@@ -79,6 +82,7 @@ pub(super) struct ShellProcessRequest<'a> {
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) terminal_image_protocol: Option<TerminalImageProtocol>,
+    pub(super) app_handle: Option<AppHandle>,
     pub(super) app_event_tx: Option<AppEventSender>,
     pub(super) command: CommandBuilder,
 }
@@ -106,6 +110,7 @@ where
 
 fn terminal_model_event_sink(
     session_key: &str,
+    app_handle: Option<AppHandle>,
     app_event_tx: Option<AppEventSender>,
     writer: Arc<OrderedPtyWriter>,
 ) -> TerminalModelEventSink {
@@ -113,7 +118,8 @@ fn terminal_model_event_sink(
     let output_event_name = format!("pty-model-output-{session_key}");
     let disabled_event_name = format!("pty-model-disabled-{session_key}");
     Arc::new(move |event| match event {
-        TerminalModelEvent::Output(frame) => publish_app_event(
+        TerminalModelEvent::Output(frame) => publish_app_event_to_runtime(
+            app_handle.as_ref(),
             &app_event_tx,
             &output_event_name,
             &serde_json::json!({
@@ -132,7 +138,8 @@ fn terminal_model_event_sink(
                 );
             }
         }
-        TerminalModelEvent::Disabled { instance_id } => publish_app_event(
+        TerminalModelEvent::Disabled { instance_id } => publish_app_event_to_runtime(
+            app_handle.as_ref(),
             &app_event_tx,
             &disabled_event_name,
             &serde_json::json!({ "instance_id": instance_id }),
@@ -214,6 +221,7 @@ impl PtyManager {
                     options,
                     terminal_model_event_sink(
                         &request.session_key,
+                        request.app_handle.clone(),
                         request.app_event_tx.clone(),
                         Arc::clone(&writer),
                     ),
@@ -289,6 +297,7 @@ impl PtyManager {
             description: format!("{} PTY for task {}", adapter.label(), request.task_id),
             pid_file_name: adapter.pid_file_name(request.task_id),
             kind: PtySessionKind::Agent,
+            app_handle: request.app_handle,
             app_event_tx: request.app_event_tx,
         })?;
         info!(
@@ -311,6 +320,7 @@ impl PtyManager {
             cols,
             rows,
             terminal_image_protocol,
+            app_handle,
             app_event_tx,
             mut command,
         } = request;
@@ -327,6 +337,7 @@ impl PtyManager {
             kind: PtySessionKind::Shell {
                 task_id: task_id.to_string(),
             },
+            app_handle,
             app_event_tx,
         })?;
         info!(

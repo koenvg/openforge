@@ -121,7 +121,7 @@ async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering
     let state_view = invoke_ok(
         &state,
         "get_pty_buffer",
-        json!({ "taskId": "T-ghostty-shell-0" }),
+        json!({ "shellSessionKey": "T-ghostty-shell-0" }),
     )
     .await;
 

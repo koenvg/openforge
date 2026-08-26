@@ -50,7 +50,7 @@ fn terminal_model_bridge_routes_ghostty_reply_through_scoped_writer() {
         )
         .expect("ordered writer should start"),
     );
-    let sink = terminal_model_event_sink("reply-shell", None, writer);
+    let sink = terminal_model_event_sink("reply-shell", None, None, writer);
 
     sink(TerminalModelEvent::ProtocolReply {
         instance_id: 31,

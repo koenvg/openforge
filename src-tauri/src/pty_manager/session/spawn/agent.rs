@@ -264,6 +264,7 @@ impl PtyManager {
                 cols,
                 rows,
                 terminal_image_protocol,
+                app_handle: app_handle.clone(),
                 app_event_tx: app_event_tx.clone(),
             },
         )?;
