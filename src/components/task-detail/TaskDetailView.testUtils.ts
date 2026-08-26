@@ -77,6 +77,7 @@ vi.mock('../../lib/useCommentSelection.svelte', () => ({
 }))
 
 import { writable } from 'svelte/store'
+import type { PoolEntry, TerminalView } from '@openforge-app/terminal-runtime'
 import { vi } from 'vitest'
 
 vi.mock('../../lib/stores', () => ({
@@ -132,83 +133,151 @@ vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
-const { taskTabSessions } = vi.hoisted(() => ({
+const { taskTabSessions, terminalPoolEntries } = vi.hoisted(() => ({
   taskTabSessions: new Map<string, { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }>(),
+  terminalPoolEntries: new Map<string, PoolEntry>(),
 }))
 
-vi.mock('../../lib/terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue({
-    shellSessionKey: '',
-    view: {
-      geometry: { cols: 80, rows: 24 },
+vi.mock('../../lib/terminalPool', () => {
+  function createDisposable() {
+    return { dispose: vi.fn() }
+  }
+
+  function createTerminalView(): TerminalView {
+    const geometry = { cols: 80, rows: 24 }
+    let mountedHost: HTMLElement | null = null
+
+    return {
+      geometry,
       imageProtocol: 'iterm2',
-      isMountedIn: vi.fn().mockReturnValue(false),
+      resizeTarget: document.createElement('div'),
+      mount: vi.fn((host: HTMLElement) => {
+        mountedHost = host
+      }),
+      unmount: vi.fn(() => {
+        mountedHost = null
+      }),
+      isMountedIn: vi.fn((host: HTMLElement) => mountedHost === host),
+      bootstrap: vi.fn(),
+      writeLive: vi.fn(),
+      drainPresentation: vi.fn(async () => ({
+        writeGeneration: 0,
+        parsedGeneration: 0,
+        renderFrame: 0,
+        renderedRows: { start: 0, end: geometry.rows - 1 },
+        renderer: 'dom',
+        presentedAt: 0,
+        devicePixelRatio: 1,
+        geometry,
+      })),
+      capturePresentation: vi.fn(() => ({
+        geometry,
+        activeBuffer: 'normal' as const,
+        cursor: { x: 0, y: 0 },
+        selectionText: '',
+        lines: [],
+      })),
+      focus: vi.fn(),
       reset: vi.fn(),
-    },
-    ptyActive: false,
-    needsClear: false,
-    unlisteners: [],
-    viewSubscriptions: [],
-    resizeObserver: null,
-    visibilityObserver: null,
-    resizeTimeout: null,
-    attached: false,
-    spawnPending: false,
-    currentPtyInstance: null,
-    authority: null,
-    terminalStateSource: 'bootstrapping',
-    pendingPtyOutput: [],
-    terminalReplayRecovery: null,
-    hasOutput: false,
-  }),
-  attach: vi.fn(),
-  detach: vi.fn(),
-  recoverActiveTerminal: vi.fn(),
-  restorePtyInstance: vi.fn(),
-  release: vi.fn(),
-  resetTerminal: vi.fn((entry) => entry.view.reset()),
-  releaseAllForTask: vi.fn().mockReturnValue(0),
-  focusTerminal: vi.fn(),
-  shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
-  getTerminalImageProtocol: vi.fn(() => 'iterm2'),
-  markPtySpawnPending: vi.fn((entry) => {
-    entry.spawnPending = true
-  }),
-  clearPtySpawnPending: vi.fn((entry) => {
-    entry.spawnPending = false
-  }),
-  markShellPtyStarted: vi.fn((entry, instanceId) => {
-    entry.currentPtyInstance = instanceId
-    entry.ptyActive = true
-    entry.needsClear = false
-  }),
-  subscribeShellLifecycle: vi.fn(() => () => {}),
-  getShellLifecycleState: vi.fn((taskId: string) => ({
-    ptyActive: false,
-    shellExited: false,
-    currentPtyInstance: null,
-    taskId,
-  })),
-  updateShellLifecycleState: vi.fn(),
-  isShellExited: vi.fn((_taskId: string) => false),
-  getTaskTerminalTabsSession: vi.fn((taskId: string) => {
-    const existing = taskTabSessions.get(taskId)
-    if (existing) return existing
-    const session = {
-      tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
-      activeTabIndex: 0,
-      nextIndex: 1,
+      refresh: vi.fn(),
+      fit: vi.fn(() => geometry),
+      onUserInput: vi.fn(() => createDisposable()),
+      onQueryResponse: vi.fn(() => createDisposable()),
+      setKeyEventHandler: vi.fn(),
+      getSelectionText: vi.fn(() => ''),
+      setTheme: vi.fn(),
+      onRendererFailure: vi.fn(() => createDisposable()),
+      dispose: vi.fn(() => {
+        mountedHost = null
+      }),
     }
-    taskTabSessions.set(taskId, session)
-    return session
-  }),
-  updateTaskTerminalTabsSession: vi.fn((taskId: string, session) => {
-    taskTabSessions.set(taskId, session)
-  }),
-  clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
-    taskTabSessions.delete(taskId)
-  }),
-}))
+  }
+
+  function createPoolEntry(shellSessionKey: string): PoolEntry {
+    return {
+      shellSessionKey,
+      view: createTerminalView(),
+      ptyActive: false,
+      needsClear: false,
+      transportSubscription: null,
+      viewSubscriptions: [],
+      resizeObserver: null,
+      visibilityObserver: null,
+      resizeTimeout: null,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+      authority: null,
+      terminalStateSource: 'bootstrapping',
+      pendingPtyOutput: [],
+      terminalReplayRecovery: null,
+      hasOutput: false,
+    }
+  }
+
+  return {
+    acquire: vi.fn(async (shellSessionKey: string) => {
+      const existing = terminalPoolEntries.get(shellSessionKey)
+      if (existing) return existing
+      const entry = createPoolEntry(shellSessionKey)
+      terminalPoolEntries.set(shellSessionKey, entry)
+      return entry
+    }),
+    attach: vi.fn(async (entry: PoolEntry, host: HTMLElement) => {
+      entry.view.mount(host)
+      entry.attached = true
+    }),
+    detach: vi.fn((entry: PoolEntry) => {
+      entry.view.unmount()
+      entry.attached = false
+    }),
+    recoverActiveTerminal: vi.fn(async () => undefined),
+    restorePtyInstance: vi.fn(),
+    release: vi.fn(),
+    resetTerminal: vi.fn((entry: PoolEntry) => entry.view.reset()),
+    releaseAllForTask: vi.fn().mockReturnValue(0),
+    focusTerminal: vi.fn((entry: PoolEntry) => entry.view.focus()),
+    shouldSpawnPty: vi.fn((entry: PoolEntry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+    getTerminalImageProtocol: vi.fn((entry: PoolEntry) => entry.view.imageProtocol),
+    markPtySpawnPending: vi.fn((entry: PoolEntry) => {
+      entry.spawnPending = true
+    }),
+    clearPtySpawnPending: vi.fn((entry: PoolEntry) => {
+      entry.spawnPending = false
+    }),
+    markShellPtyStarted: vi.fn((entry: PoolEntry, instanceId: number) => {
+      entry.currentPtyInstance = instanceId
+      entry.ptyActive = true
+      entry.needsClear = false
+    }),
+    subscribeShellLifecycle: vi.fn(() => () => {}),
+    getShellLifecycleState: vi.fn(() => ({
+      ptyActive: false,
+      shellExited: false,
+      currentPtyInstance: null,
+      hasOutput: false,
+    })),
+    updateShellLifecycleState: vi.fn(),
+    isShellExited: vi.fn(() => false),
+    getTaskTerminalTabsSession: vi.fn((taskId: string) => {
+      const existing = taskTabSessions.get(taskId)
+      if (existing) return existing
+      const session = {
+        tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
+        activeTabIndex: 0,
+        nextIndex: 1,
+      }
+      taskTabSessions.set(taskId, session)
+      return session
+    }),
+    updateTaskTerminalTabsSession: vi.fn((taskId: string, session) => {
+      taskTabSessions.set(taskId, session)
+    }),
+    clearTaskTerminalTabsSession: vi.fn((taskId: string) => {
+      taskTabSessions.delete(taskId)
+    }),
+  }
+})
 
 const { mockResetToBoard } = vi.hoisted(() => ({
   mockResetToBoard: vi.fn(),
@@ -305,6 +374,7 @@ function resetTaskDetailViewTestState() {
   outOfFocusTaskIdsByProject.set(new Map())
   tasks.set([])
   taskTabSessions.clear()
+  terminalPoolEntries.clear()
   clearTerminalTaskPaneControllers()
   installedPlugins.set(new Map([[
     'com.openforge.terminal',
