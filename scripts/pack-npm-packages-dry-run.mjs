@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -12,6 +13,22 @@ function readPackageJson(packageDir) {
     return JSON.parse(readFileSync(packageJsonPath, 'utf8'));
   } catch (error) {
     throw new Error(`Unable to read ${packageJsonPath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function runCommand(command, args, cwd, description) {
+  const result = spawnSync(command, args, {
+    cwd,
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  if (result.error) {
+    throw new Error(`Failed to run ${description}: ${result.error.message}`);
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`${description} failed with exit code ${result.status ?? 1}.`);
   }
 }
 
@@ -28,23 +45,49 @@ if (candidates.length === 0) {
   process.exit(1);
 }
 
-for (const { packageDir, manifest } of candidates) {
-  console.log(`\n==> npm pack --dry-run ${manifest.name}@${manifest.version}`);
-  const result = spawnSync('npm', ['pack', '--dry-run'], {
-    cwd: packageDir,
-    stdio: 'inherit',
-    env: process.env,
-  });
+const smokeRoot = mkdtempSync(join(tmpdir(), 'openforge-npm-pack-smoke-'));
 
-  if (result.error) {
-    console.error(`Failed to run npm pack for ${manifest.name}: ${result.error.message}`);
-    process.exit(1);
+try {
+  for (const { packageDir, manifest } of candidates) {
+    const packageSlug = manifest.name.replace(/^@/, '').replaceAll('/', '-');
+    const packDir = join(smokeRoot, `${packageSlug}-pack`);
+    const installDir = join(smokeRoot, `${packageSlug}-install`);
+    mkdirSync(packDir);
+    mkdirSync(installDir);
+
+    console.log(`\n==> pnpm pack ${manifest.name}@${manifest.version}`);
+    runCommand('pnpm', ['pack', '--pack-destination', packDir], packageDir, `pnpm pack for ${manifest.name}`);
+
+    const tarballs = readdirSync(packDir).filter((entry) => entry.endsWith('.tgz'));
+    if (tarballs.length !== 1) {
+      throw new Error(`Expected one tarball for ${manifest.name}, found ${tarballs.length}.`);
+    }
+
+    writeFileSync(
+      join(installDir, 'package.json'),
+      `${JSON.stringify({ name: 'npm-install-smoke', private: true }, null, 2)}\n`,
+    );
+
+    console.log(`==> npm install ${manifest.name}@${manifest.version} packed tarball`);
+    runCommand(
+      'npm',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--package-lock=false',
+        join(packDir, tarballs[0]),
+      ],
+      installDir,
+      `npm install for ${manifest.name}`,
+    );
   }
 
-  if (result.status !== 0) {
-    console.error(`npm pack --dry-run failed for ${manifest.name} with exit code ${result.status}.`);
-    process.exit(result.status ?? 1);
-  }
+  console.log(`\nPacked and npm-installed ${candidates.length} publishable package(s).`);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+} finally {
+  rmSync(smokeRoot, { recursive: true, force: true });
 }
-
-console.log(`\nValidated npm pack dry-runs for ${candidates.length} publishable package(s).`);
