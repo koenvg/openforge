@@ -13,10 +13,10 @@ fn task_display_title_refresh_is_disabled_by_default() {
         raw_status_type: None,
     };
 
-    assert!(!should_start_task_display_title_refresh(
-        &state,
-        &notification
-    ));
+    assert!(
+        !should_start_task_display_title_refresh(&state, &notification)
+            .expect("resolve title refresh config")
+    );
 }
 
 #[test]
@@ -47,7 +47,8 @@ fn task_display_title_refresh_starts_for_supported_provider_activity_when_enable
         };
 
         assert!(
-            should_start_task_display_title_refresh(&state, &notification),
+            should_start_task_display_title_refresh(&state, &notification)
+                .expect("resolve title refresh config"),
             "{provider} {raw_event_type} should start title refresh"
         );
     }
@@ -117,7 +118,8 @@ fn task_display_title_refresh_ignores_unsupported_provider_activity() {
         };
 
         assert!(
-            !should_start_task_display_title_refresh(&state, &notification),
+            !should_start_task_display_title_refresh(&state, &notification)
+                .expect("resolve title refresh config"),
             "{provider} {raw_event_type} should not start title refresh"
         );
     }
@@ -169,7 +171,54 @@ fn task_display_title_refresh_reads_task_override() {
     };
 
     assert!(
-        should_start_task_display_title_refresh(&state, &notification),
+        should_start_task_display_title_refresh(&state, &notification)
+            .expect("resolve title refresh config"),
         "task-level title-update override should win over global config"
     );
+}
+
+#[tokio::test]
+async fn lifecycle_handler_reports_unreadable_global_title_refresh_config() {
+    let (state, _temp_dir) = test_state("title_refresh_unreadable_global_config");
+    let task_id = create_agent_session_fixture(
+        &state,
+        AgentSessionFixture {
+            task_title: "Unreadable title config",
+            session_id: "ses-unreadable-title-config",
+            status: "completed",
+            provider: "opencode",
+            pty_instance_id: 41,
+        },
+    );
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let conn = db.lock_conn().expect("lock database");
+        conn.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
+            rusqlite::params!["task_display_title_metadata_updates_enabled", vec![0xff_u8]],
+        )
+        .expect("store unreadable global title config");
+    }
+
+    let error = handle_agent_lifecycle_notification_with_refresh(
+        state,
+        crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: "opencode".to_string(),
+            task_id,
+            pty_instance_id: Some(41),
+            provider_session_id: Some("unreadable-title-config".to_string()),
+            kind: crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy,
+            raw_event_type: Some("message.updated".to_string()),
+            raw_status_type: None,
+        },
+        None,
+        None,
+        |_db, _queued_refresh| async {
+            panic!("title refresh must not start when config lookup fails")
+        },
+    )
+    .await
+    .expect_err("unreadable title config must fail the lifecycle request");
+
+    assert_eq!(error, StatusCode::INTERNAL_SERVER_ERROR);
 }
