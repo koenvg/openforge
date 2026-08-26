@@ -1,6 +1,17 @@
 export * from '@openforge-app/plugin-sdk/domain'
 
-import type { AppView, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
+import type { AppView, ReviewPullRequest, TaskAttentionRow } from '@openforge-app/plugin-sdk/domain'
+
+/**
+ * Every startable task, split into the four board lanes. Keys are the backend's snake_case
+ * lane names; `laneRowsByFilter` maps them onto the renderer's `BoardFilter` ids.
+ */
+export interface TaskLaneRows {
+  focus: TaskAttentionRow[]
+  in_flight: TaskAttentionRow[]
+  out_of_focus: TaskAttentionRow[]
+  backlog: TaskAttentionRow[]
+}
 
 /**
  * A project's last-viewed in-project location: the active tab plus whichever task

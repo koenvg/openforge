@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use crate::{
     project_board::{project_task_board, ProjectBoardProjection},
     task_attention::{
-        project_task_attention, TaskAttentionInput, TaskAttentionProject, TaskAttentionPullRequest,
-        TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
+        project_task_attention, project_task_lanes, TaskAttentionInput, TaskAttentionProject,
+        TaskAttentionPullRequest, TaskAttentionRow, TaskAttentionSession, TaskAttentionTask,
+        TaskLaneRows,
     },
 };
 
@@ -114,6 +115,11 @@ impl super::Database {
     /// Standalone review-request pull requests intentionally remain outside this seam.
     pub(crate) fn get_task_attention_rows(&self) -> Result<Vec<TaskAttentionRow>> {
         Ok(project_task_attention(self.get_task_projection_input()?))
+    }
+
+    /// Returns every startable Task across all Projects, split into the four Board lanes.
+    pub(crate) fn get_task_lane_rows(&self) -> Result<TaskLaneRows> {
+        Ok(project_task_lanes(self.get_task_projection_input()?))
     }
 
     /// Returns the backend-authoritative four-lane Board projection for a Project.

@@ -1,6 +1,33 @@
-import type { Project, ReviewPullRequest, Task, TaskAttentionRow } from './types'
+import type { Project, ReviewPullRequest, Task, TaskAttentionRow, TaskLaneRows } from './types'
 import type { TaskState } from './taskState'
+import type { BoardFilter } from './boardFilters'
 import { isUnopened } from './prReviewBadgeCounts'
+
+/** The board lanes, in the order the overview cycles through them. */
+export const TASK_LANES: readonly BoardFilter[] = ['focus', 'in-flight', 'out-of-focus', 'backlog']
+
+export const TASK_LANE_LABELS: Record<BoardFilter, string> = {
+  focus: 'Focus',
+  'in-flight': 'In Flight',
+  'out-of-focus': 'Out of Focus',
+  backlog: 'Backlog',
+}
+
+/** Rows per lane, keyed the way the renderer names lanes rather than the way the backend does. */
+export type LaneRows = Record<BoardFilter, TaskAttentionRow[]>
+
+export function laneRowsByFilter(rows: TaskLaneRows): LaneRows {
+  return {
+    focus: rows.focus,
+    'in-flight': rows.in_flight,
+    'out-of-focus': rows.out_of_focus,
+    backlog: rows.backlog,
+  }
+}
+
+export function emptyLaneRows(): LaneRows {
+  return { focus: [], 'in-flight': [], 'out-of-focus': [], backlog: [] }
+}
 
 /** A backend-projected task row joined to the full desktop Task record used for navigation. */
 export interface AttentionFocusTask {
@@ -8,12 +35,18 @@ export interface AttentionFocusTask {
   state: TaskState
   title: string
   reason: string
+  /**
+   * The task's last recorded state change. For a running agent that is the moment it started
+   * running, which is what lets the In Flight lane show how long a task has been flying.
+   */
+  activityAt: number
 }
 
-/** One project's slice of the overview: its attention tasks and its owed review PRs. */
+/** One project's slice of the overview: its four task lanes and its owed review PRs. */
 export interface AttentionProjectGroup {
   project: Project
-  focusTasks: AttentionFocusTask[]
+  /** One list per board lane. The dialog shows exactly one lane at a time. */
+  tasksByLane: Record<BoardFilter, AttentionFocusTask[]>
   reviewPrs: ReviewPullRequest[]
 }
 
@@ -22,7 +55,7 @@ export interface AttentionOverview {
   groups: AttentionProjectGroup[]
   /** Owed review PRs whose repo maps to no local project. */
   otherReviewPrs: ReviewPullRequest[]
-  totalFocusTasks: number
+  totalTasksByLane: Record<BoardFilter, number>
   totalReviewPrs: number
 }
 
@@ -31,8 +64,11 @@ export interface BuildAttentionOverviewInput {
   projects: Project[]
   /** Full desktop Task records used only to open selected backend-projected rows. */
   allTasks: Task[]
-  /** Backend-authoritative Task-only Needs Attention projection. */
-  taskAttentionRows: TaskAttentionRow[]
+  /**
+   * Backend-authoritative Task-only lane projection. The lanes are disjoint: a Task appears
+   * in exactly one of them.
+   */
+  taskRowsByLane: LaneRows
   /** All review-requested PRs (cross-repo), kept on their standalone path. */
   reviewPrs: ReviewPullRequest[]
   /** Globally excluded repos ("owner/name"). */
@@ -51,12 +87,12 @@ function prRepoKey(pr: ReviewPullRequest): string {
   return `${pr.repo_owner}/${pr.repo_name}`
 }
 
-function buildFocusTasks(
+function buildLaneTasks(
   project: Project,
   tasksById: ReadonlyMap<string, Task>,
-  taskAttentionRows: TaskAttentionRow[],
+  rows: TaskAttentionRow[],
 ): AttentionFocusTask[] {
-  return taskAttentionRows
+  return rows
     .filter((row) => row.project_id === project.id)
     .flatMap((row) => {
       const task = tasksById.get(row.task_id)
@@ -66,6 +102,7 @@ function buildFocusTasks(
         state: row.state,
         title: row.title,
         reason: row.reason,
+        activityAt: row.activity_at,
       }]
     })
 }
@@ -73,7 +110,7 @@ function buildFocusTasks(
 /**
  * Assemble the desktop overview from the backend-owned Task projection and the existing
  * standalone pull-request review path. Project order and hidden-project behavior remain
- * desktop concerns; Task membership, state, reason, title, and activity order do not.
+ * desktop concerns; Task membership, lane, state, reason, title, and activity order do not.
  */
 export function buildAttentionOverview(input: BuildAttentionOverviewInput): AttentionOverview {
   const hiddenProjectIds = input.hiddenProjectIds ?? new Set<string>()
@@ -116,19 +153,30 @@ export function buildAttentionOverview(input: BuildAttentionOverviewInput): Atte
   }
 
   const groups: AttentionProjectGroup[] = []
-  let totalFocusTasks = 0
+  const totalTasksByLane: Record<BoardFilter, number> = {
+    focus: 0,
+    'in-flight': 0,
+    'out-of-focus': 0,
+    backlog: 0,
+  }
   let totalReviewPrs = otherReviewPrs.length
 
   for (const project of input.projects) {
     if (hiddenProjectIds.has(project.id)) continue
-    const focusTasks = buildFocusTasks(project, tasksById, input.taskAttentionRows)
+    const tasksByLane = {} as Record<BoardFilter, AttentionFocusTask[]>
+    let taskCount = 0
+    for (const lane of TASK_LANES) {
+      const laneTasks = buildLaneTasks(project, tasksById, input.taskRowsByLane[lane])
+      tasksByLane[lane] = laneTasks
+      totalTasksByLane[lane] += laneTasks.length
+      taskCount += laneTasks.length
+    }
     const reviewPrs = reviewsByProject.get(project.id) ?? []
-    if (focusTasks.length === 0 && reviewPrs.length === 0) continue
+    if (taskCount === 0 && reviewPrs.length === 0) continue
 
-    groups.push({ project, focusTasks, reviewPrs })
-    totalFocusTasks += focusTasks.length
+    groups.push({ project, tasksByLane, reviewPrs })
     totalReviewPrs += reviewPrs.length
   }
 
-  return { groups, otherReviewPrs, totalFocusTasks, totalReviewPrs }
+  return { groups, otherReviewPrs, totalTasksByLane, totalReviewPrs }
 }

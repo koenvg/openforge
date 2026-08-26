@@ -714,6 +714,10 @@ export interface ProjectAttention {
 }
 
 export type TaskAttentionState =
+  // Lanes other than Focus reuse this row shape, which brings two more states with them:
+  // a running agent is 'active', and a task that has never been started is 'backlog'.
+  | 'active'
+  | 'backlog'
   | 'idle'
   | 'needs-input'
   | 'paused'

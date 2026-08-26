@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildAttentionOverview } from './attentionOverview'
+import { buildAttentionOverview, emptyLaneRows } from './attentionOverview'
 import type { Project, Task, TaskAttentionRow } from './types'
 
 interface CharacterizationFixture {
@@ -35,13 +35,13 @@ describe('desktop task attention characterization fixture', () => {
     const overview = buildAttentionOverview({
       projects: fixture.projects,
       allTasks: fixture.tasks.map(normalizeTask),
-      taskAttentionRows: fixture.expected,
+      taskRowsByLane: { ...emptyLaneRows(), focus: fixture.expected },
       reviewPrs: [],
       excludedRepos: new Set(),
       resolvedRepoByProject: new Map(),
     })
 
-    expect(overview.groups.flatMap((group) => group.focusTasks.map((item) => ({
+    expect(overview.groups.flatMap((group) => group.tasksByLane.focus.map((item) => ({
       task_id: item.task.id,
       project_id: group.project.id,
       project_name: group.project.name,

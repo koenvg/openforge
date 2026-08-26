@@ -127,6 +127,47 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         "No agent running. Start when ready."
     );
 
+    // Nothing is parked yet, so the Task sits in the lane projection's focus lane and the
+    // other three lanes are empty.
+    let lanes = invoke_ok(&state, "get_task_lanes", serde_json::Value::Null).await;
+    assert_eq!(lanes["focus"][0]["task_id"], task_id);
+    for lane in ["in_flight", "out_of_focus", "backlog"] {
+        assert_eq!(
+            lanes[lane].as_array().expect("lane rows").len(),
+            0,
+            "lane {lane}"
+        );
+    }
+
+    invoke_ok(
+        &state,
+        "set_project_config",
+        json!({
+            "projectId": project_id,
+            "key": "low_fire_task_ids",
+            "value": format!("[\"{task_id}\"]"),
+        }),
+    )
+    .await;
+
+    let lanes = invoke_ok(&state, "get_task_lanes", serde_json::Value::Null).await;
+    let set_aside_rows = lanes["out_of_focus"].as_array().expect("set-aside rows");
+    assert_eq!(set_aside_rows.len(), 1);
+    assert_eq!(set_aside_rows[0]["task_id"], task_id);
+    assert_eq!(set_aside_rows[0]["project_id"], project_id);
+    assert_eq!(set_aside_rows[0]["title"], "Plan migration");
+    // Parking moves the Task between lanes rather than into two of them at once.
+    assert_eq!(lanes["focus"].as_array().expect("focus rows").len(), 0);
+    // Parking the Task also drops it out of the attention projection.
+    assert_eq!(
+        invoke_ok(&state, "get_task_attention", serde_json::Value::Null)
+            .await
+            .as_array()
+            .expect("task attention rows")
+            .len(),
+        0
+    );
+
     invoke_ok(&state, "delete_task", json!({ "id": task_id })).await;
     let completed = crate::db::acquire_db(&state.db)
         .get_task(task_id)

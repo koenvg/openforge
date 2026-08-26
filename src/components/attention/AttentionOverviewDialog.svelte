@@ -4,11 +4,12 @@
   import { Bot, GitPullRequest } from '@lucide/svelte'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import { projects, activeProjectId, reviewPrs, globalExcludedPrRepos, ticketPrs, hiddenProjectIds, attentionCountByProject } from '../../lib/stores'
-  import { getAllTasks, getTaskAttention, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
-  import { buildAttentionOverview } from '../../lib/attentionOverview'
+  import { getAllTasks, getTaskLanes, getProjectConfig, getConfig, setConfig } from '../../lib/ipc'
+  import { buildAttentionOverview, laneRowsByFilter, TASK_LANES, TASK_LANE_LABELS } from '../../lib/attentionOverview'
   import { resolveFocusedIndex, subscribeDebounced } from '../../lib/attentionOverviewRefresh'
   import { stepFocus, initialFocusIndex, clampFocus, headerIndexForGroup } from '../../lib/attentionOverviewNav'
   import type { AttentionOverview, AttentionFocusTask } from '../../lib/attentionOverview'
+  import type { BoardFilter } from '../../lib/boardFilters'
   import type { ReviewPullRequest, Task } from '../../lib/types'
   import { TASK_STATE_COMPACT_LABELS } from '../../lib/taskStatePresentation'
 
@@ -21,15 +22,42 @@
   let { onClose, onOpenTask, onOpenPr }: Props = $props()
 
   const COLLAPSED_CONFIG_KEY = 'attention_overview_collapsed_projects'
+  const FILTERS_CONFIG_KEY = 'attention_overview_filters'
   const OTHER_ID = '__other__'
+  const CHIP_ACTIVE = 'border-primary/40 bg-primary/10 text-primary'
+  const CHIP_NEUTRAL = 'border-base-300 bg-base-200/60 text-base-content/70 hover:text-base-content'
+  const CHIP_MUTED = 'border-base-300 bg-base-200/40 text-base-content/40 hover:text-base-content/70'
   // Coalesce store-change bursts (streaming agents, PR polls) into one reload while open.
   const REFRESH_DEBOUNCE_MS = 250
+  // How long a task may fly before its age is called out. Nothing enforces this; it only
+  // tints the number so a long-running agent stands out from a fresh one.
+  const STUCK_IN_FLIGHT_SECONDS = 4 * 3600
+
+  const EMPTY_LANE_COPY: Record<BoardFilter, { title: string; hint: string }> = {
+    focus: {
+      title: "You're all caught up",
+      hint: 'No focus tasks or review requests need you right now.',
+    },
+    'in-flight': {
+      title: 'Nothing is in flight',
+      hint: 'No project has a task running or waiting on CI.',
+    },
+    'out-of-focus': {
+      title: 'Nothing is set aside',
+      hint: 'No project has a task parked in Out of Focus.',
+    },
+    backlog: {
+      title: 'The backlog is empty',
+      hint: 'Every task in every project has been started.',
+    },
+  }
 
   interface DisplayGroup {
     id: string
     name: string
     isActive: boolean
-    focusTasks: AttentionFocusTask[]
+    /** Whichever board lane `T` currently selects. */
+    taskItems: AttentionFocusTask[]
     reviewPrs: ReviewPullRequest[]
   }
 
@@ -51,22 +79,41 @@
   let focusedIndex = $state(0)
   let activeId = $state<string | null>(null)
   let bodyEl = $state<HTMLElement | null>(null)
+  let showReviews = $state(true)
+  // Deliberately not persisted: the dialog is "Needs your attention" first, so it always
+  // reopens on the focus lane rather than in whatever lane it was last left in.
+  let taskLane = $state<BoardFilter>('focus')
+
+  let laneLabel = $derived(TASK_LANE_LABELS[taskLane])
+  let taskCount = $derived(overview?.totalTasksByLane[taskLane] ?? 0)
+  let reviewCount = $derived(overview?.totalReviewPrs ?? 0)
+
+  // R is hiding reviews that do exist. Drives the empty state, so an empty list never claims
+  // "all caught up" when the filter is what emptied it.
+  let reviewsHidden = $derived(!showReviews && reviewCount > 0)
 
   let displayGroups = $derived.by<DisplayGroup[]>(() => {
     if (!overview) return []
-    const groups: DisplayGroup[] = overview.groups.map((group) => ({
-      id: group.project.id,
-      name: group.project.name,
-      isActive: group.project.id === activeId,
-      focusTasks: group.focusTasks,
-      reviewPrs: group.reviewPrs,
-    }))
-    if (overview.otherReviewPrs.length > 0) {
+    const groups: DisplayGroup[] = []
+    for (const group of overview.groups) {
+      const taskItems = group.tasksByLane[taskLane]
+      const reviewPrs = showReviews ? group.reviewPrs : []
+      // A project only earns a header when the current filters leave it something to show.
+      if (taskItems.length === 0 && reviewPrs.length === 0) continue
+      groups.push({
+        id: group.project.id,
+        name: group.project.name,
+        isActive: group.project.id === activeId,
+        taskItems,
+        reviewPrs,
+      })
+    }
+    if (showReviews && overview.otherReviewPrs.length > 0) {
       groups.push({
         id: OTHER_ID,
         name: 'Other repositories',
         isActive: false,
-        focusTasks: [],
+        taskItems: [],
         reviewPrs: overview.otherReviewPrs,
       })
     }
@@ -78,7 +125,7 @@
     for (const group of displayGroups) {
       out.push({ kind: 'header', group })
       if (!collapsedIds.has(group.id)) {
-        for (const item of group.focusTasks) out.push({ kind: 'task', group, item })
+        for (const item of group.taskItems) out.push({ kind: 'task', group, item })
         for (const pr of group.reviewPrs) out.push({ kind: 'review', group, pr })
       }
     }
@@ -116,6 +163,36 @@
     } catch (e) {
       console.error('Failed to persist attention-overview collapse state:', e)
     }
+  }
+
+  function applyStoredFilters(raw: string | null): void {
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.showReviews === 'boolean') showReviews = parsed.showReviews
+    } catch { /* ignore malformed config */ }
+  }
+
+  async function persistFilters(): Promise<void> {
+    try {
+      await setConfig(FILTERS_CONFIG_KEY, JSON.stringify({ showReviews }))
+    } catch (e) {
+      console.error('Failed to persist attention-overview filters:', e)
+    }
+  }
+
+  function toggleReviews(): void {
+    showReviews = !showReviews
+    void persistFilters()
+  }
+
+  /**
+   * Step to the next board lane, wrapping back to Focus. The lanes are exclusive, so this
+   * swaps the whole list rather than adding to it, and the cursor restarts at the top.
+   */
+  function cycleLane(): void {
+    taskLane = TASK_LANES[(TASK_LANES.indexOf(taskLane) + 1) % TASK_LANES.length]
+    focusedIndex = 0
   }
 
   function setCollapsed(id: string, collapsed: boolean): void {
@@ -174,6 +251,21 @@
     if (loading) return
     const row = rows[focusedIndex]
 
+    // Filter shortcuts, unmodified only, so ⌘R stays reload. Case-insensitive, so Shift+R
+    // works like R.
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      switch (e.key.toLowerCase()) {
+        case 'r':
+          e.preventDefault()
+          toggleReviews()
+          return true
+        case 't':
+          e.preventDefault()
+          cycleLane()
+          return true
+      }
+    }
+
     switch (e.key) {
       case 'ArrowDown':
       case 'j':
@@ -216,10 +308,7 @@
     const projectList = get(projects)
     const nextActiveId = get(activeProjectId)
 
-    const [allTasks, taskAttentionRows] = await Promise.all([
-      getAllTasks(),
-      getTaskAttention(),
-    ])
+    const [allTasks, laneRows] = await Promise.all([getAllTasks(), getTaskLanes()])
 
     const resolvedRepoByProject = new Map<string, string | null>()
     await Promise.all(
@@ -236,7 +325,7 @@
       overview: buildAttentionOverview({
         projects: projectList,
         allTasks,
-        taskAttentionRows,
+        taskRowsByLane: laneRowsByFilter(laneRows),
         reviewPrs: get(reviewPrs),
         excludedRepos: get(globalExcludedPrRepos),
         resolvedRepoByProject,
@@ -251,12 +340,15 @@
     loading = true
     try {
       const collapsedRawPromise = getConfig(COLLAPSED_CONFIG_KEY)
+      const filtersRawPromise = getConfig(FILTERS_CONFIG_KEY)
       const gathered = await gatherOverview()
       const collapsed = parseCollapsed(await collapsedRawPromise)
+      const filtersRaw = await filtersRawPromise
       if (generation !== overviewRequestGeneration) return
       overview = gathered.overview
       activeId = gathered.activeId
       collapsedIds = collapsed
+      applyStoredFilters(filtersRaw)
 
       await tick()
       if (generation !== overviewRequestGeneration) return
@@ -299,13 +391,39 @@
 
   // Keep the focused row scrolled into view and holding DOM focus as the cursor
   // moves, so Enter/Space activate the highlighted row.
+  //
+  // `loading` is read on purpose. The initial load picks the cursor row while the body still
+  // shows the spinner, so this effect finds no element and bails; without that dependency it
+  // would never re-run for an unchanged index and the opening row would look highlighted but
+  // hold no DOM focus, leaving Enter dead until the user nudged the cursor off and back.
   $effect(() => {
     const index = focusedIndex
-    if (!bodyEl) return
+    if (loading || !bodyEl) return
     const el = bodyEl.querySelector<HTMLElement>(`[data-attn-row="${index}"]`)
     if (!el) return
     el.scrollIntoView?.({ block: 'nearest' })
     if (document.activeElement !== el) el.focus?.({ preventScroll: true })
+  })
+
+  /**
+   * True when nothing inside the dialog meaningfully holds focus. Removing the focused row
+   * (a filter emptied the list, or a refresh dropped that row) leaves focus on `<body>`,
+   * outside the modal, so every key the dialog owns stops arriving. `bodyEl` counts as
+   * stranded too: it is only ever a parking spot, never a place the user aimed at.
+   */
+  function focusIsStranded(): boolean {
+    const active = document.activeElement
+    return !active || active === document.body || !active.isConnected || active === bodyEl
+  }
+
+  // Recover from that. Runs whenever the row list changes shape, but only takes focus when it
+  // is stranded, so a header chip the user clicked keeps it.
+  $effect(() => {
+    void rows.length
+    if (loading || !bodyEl) return
+    if (!focusIsStranded()) return
+    const el = bodyEl.querySelector<HTMLElement>(`[data-attn-row="${focusedIndex}"]`)
+    ;(el ?? bodyEl).focus?.({ preventScroll: true })
   })
 
   onMount(() => {
@@ -322,12 +440,31 @@
     )
   })
 
+  function elapsed(seconds: number): number {
+    return Math.max(0, Date.now() / 1000 - seconds)
+  }
+
   function relTime(seconds: number): string {
     if (!seconds) return ''
-    const delta = Math.max(0, Date.now() / 1000 - seconds)
+    const delta = elapsed(seconds)
     if (delta < 3600) return `${Math.max(1, Math.round(delta / 60))}m ago`
     if (delta < 86400) return `${Math.round(delta / 3600)}h ago`
     return `${Math.round(delta / 86400)}d ago`
+  }
+
+  /**
+   * How long the task has been flying, read off its last recorded state change: for a running
+   * agent that is the moment it started, and for a task waiting on CI the moment the agent
+   * handed off. Nothing records lane transitions themselves, so this is the closest honest
+   * answer to "how long has this been sitting here".
+   */
+  function inFlightAge(seconds: number): string {
+    if (!seconds) return ''
+    const delta = elapsed(seconds)
+    if (delta < 60) return 'just now'
+    if (delta < 3600) return `${Math.round(delta / 60)}m`
+    if (delta < 86400) return `${Math.round(delta / 3600)}h`
+    return `${Math.round(delta / 86400)}d`
   }
 </script>
 
@@ -337,9 +474,9 @@
   ariaLabel="Attention overview"
   showHeader={false}
   onKeydown={onKeydown}
-  boxClass="max-h-[82vh]"
+  boxClass="h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)]!"
 >
-  <div class="flex flex-col min-h-0 max-h-[82vh]">
+  <div class="flex flex-col min-h-0 h-full">
     <!-- Header -->
     <div class="flex items-center gap-3.5 px-5 py-4 border-b border-base-300">
       <div class="w-9 h-9 rounded-xl grid place-items-center shrink-0 bg-primary/15 text-primary">
@@ -350,13 +487,56 @@
       </div>
       <div class="flex flex-col min-w-0">
         <h2 class="text-base font-semibold text-base-content m-0 leading-tight">Needs your attention</h2>
+        {#if taskLane !== 'focus'}
+          <span class="text-[11px] text-base-content/50 leading-tight">Showing the {laneLabel} lane</span>
+        {/if}
       </div>
       <div class="flex-1"></div>
+      <!-- Two chips, mirroring the two keyboard shortcuts, so the letters are discoverable
+           without a legend and the current state is always on screen. R shows or hides the
+           reviews. T names the one board lane on screen and steps to the next one. -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        {#each [
+          {
+            key: 'T',
+            label: laneLabel,
+            count: taskCount,
+            // Not aria-pressed: this steps through four lanes rather than switching one
+            // thing on and off, and its own label already says which lane is showing.
+            pressed: undefined,
+            // Focus is the default lane, so it reads normal rather than switched-off; only
+            // a detour into another lane lights up.
+            tone: taskLane === 'focus' ? CHIP_NEUTRAL : CHIP_ACTIVE,
+            toggle: cycleLane,
+          },
+          {
+            key: 'R',
+            label: 'Reviews',
+            count: reviewCount,
+            pressed: showReviews,
+            tone: showReviews ? CHIP_ACTIVE : CHIP_MUTED,
+            toggle: toggleReviews,
+          },
+        ] as chip (chip.key)}
+          <button
+            type="button"
+            aria-pressed={chip.pressed}
+            class="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-lg border text-xs font-medium transition-colors {chip.tone}"
+            onclick={chip.toggle}
+          >
+            <kbd class="kbd kbd-xs">{chip.key}</kbd>
+            <span>{chip.label}</span>
+            <span class="tabular-nums opacity-70">{chip.count}</span>
+          </button>
+        {/each}
+      </div>
       <button class="btn btn-ghost btn-xs shrink-0" aria-label="Close dialog" type="button" onclick={onClose}>✕</button>
     </div>
 
     <!-- Body -->
-    <div bind:this={bodyEl} class="overflow-y-auto flex-1 min-h-0 px-3 py-2">
+    <!-- tabindex lets the scroll container hold focus while the list is empty, so the
+         dialog keeps receiving E and R instead of losing them to <body>. -->
+    <div bind:this={bodyEl} tabindex="-1" class="overflow-y-auto flex-1 min-h-0 px-3 py-2 outline-none">
       {#if loading}
         <div class="flex flex-col items-center justify-center gap-3 py-16 text-base-content/50 text-sm">
           <span class="loading loading-spinner loading-md text-primary"></span>
@@ -364,9 +544,19 @@
         </div>
       {:else if navGroups.length === 0}
         <div class="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <span class="text-2xl">🎉</span>
-          <p class="text-sm font-medium text-base-content m-0">You're all caught up</p>
-          <p class="text-xs text-base-content/50 m-0">No focus tasks or review requests need you right now.</p>
+          {#if reviewsHidden}
+            <p class="text-sm font-medium text-base-content m-0">Reviews are hidden</p>
+            <p class="text-xs text-base-content/50 m-0">Press R to bring them back.</p>
+          {:else}
+            {#if taskLane === 'focus'}
+              <span class="text-2xl">🎉</span>
+            {/if}
+            <p class="text-sm font-medium text-base-content m-0">{EMPTY_LANE_COPY[taskLane].title}</p>
+            <p class="text-xs text-base-content/50 m-0">
+              {EMPTY_LANE_COPY[taskLane].hint}
+              {#if taskLane !== 'focus'}Press T for the next lane.{/if}
+            </p>
+          {/if}
         </div>
       {:else}
         {#each navGroups as ng (ng.group.id)}
@@ -394,8 +584,10 @@
               <!-- Count badges only when collapsed -->
               {#if collapsed}
                 <span class="ml-auto flex items-center gap-1.5 shrink-0">
-                  {#if ng.group.focusTasks.length > 0}
-                    <span class="badge badge-ghost badge-sm">{ng.group.focusTasks.length} focus</span>
+                  {#if ng.group.taskItems.length > 0}
+                    <span class="badge badge-ghost badge-sm">
+                      {ng.group.taskItems.length} {laneLabel.toLowerCase()}
+                    </span>
                   {/if}
                   {#if ng.group.reviewPrs.length > 0}
                     <span class="badge badge-error badge-sm">{ng.group.reviewPrs.length} review{ng.group.reviewPrs.length > 1 ? 's' : ''}</span>
@@ -432,6 +624,18 @@
                           {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>
                       </div>
+                      <!-- In Flight only: how long the task has been flying, in its own column
+                           so the ages line up and a stuck one is obvious at a glance. The
+                           reason line is truncated, so this cannot live inside it. -->
+                      {#if taskLane === 'in-flight'}
+                        {@const age = inFlightAge(it.row.item.activityAt)}
+                        {#if age}
+                          <span
+                            class="text-[11px] tabular-nums shrink-0 {elapsed(it.row.item.activityAt) >= STUCK_IN_FLIGHT_SECONDS ? 'text-warning font-medium' : 'text-base-content/40'}"
+                            title="In flight since the last state change ({relTime(it.row.item.activityAt)})"
+                          >{age}</span>
+                        {/if}
+                      {/if}
                       <span class="text-base-content/30 shrink-0">›</span>
                     </div>
                   {/if}
