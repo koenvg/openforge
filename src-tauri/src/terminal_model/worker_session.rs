@@ -1,3 +1,5 @@
+#[cfg(test)]
+use super::super::TerminalModelQueueSaturationGate;
 use super::super::{GhosttyTerminalModel, TerminalModel, TerminalModelError, TerminalModelOptions};
 #[cfg(test)]
 use super::event_state::TerminalModelDiagnostic;
@@ -34,6 +36,8 @@ pub(super) const QUEUE_CATCH_UP_TIMEOUT: Duration = Duration::from_millis(50);
 #[cfg(test)]
 pub(crate) const TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY: usize =
     COMMAND_QUEUE_CAPACITY * MAX_FEED_BYTES;
+#[cfg(test)]
+pub(crate) const TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES: usize = 3 * MAX_FEED_BYTES;
 const CHECKPOINT_INTERVAL_BYTES: usize = 8 * 1024 * 1024;
 const CHECKPOINT_IDLE_INTERVAL: Duration = Duration::from_millis(50);
 pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -92,6 +96,8 @@ pub(crate) struct TerminalModelFeeder {
     tx: mpsc::SyncSender<TerminalModelCommand>,
     queue_policy: TerminalModelQueuePolicy,
     state: Arc<TerminalModelState>,
+    #[cfg(test)]
+    queue_saturation_gate: Option<TerminalModelQueueSaturationGate>,
 }
 
 impl TerminalModelFeeder {
@@ -118,6 +124,10 @@ impl TerminalModelFeeder {
                 {
                     #[cfg(test)]
                     self.state.mark_queue_saturated();
+                    #[cfg(test)]
+                    if let Some(gate) = &self.queue_saturation_gate {
+                        gate.mark_queue_saturated();
+                    }
                     if self.tx.send(returned).is_err() {
                         self.state.disable(
                             &self.session_key,
@@ -200,9 +210,26 @@ impl TerminalModelSession {
             TerminalModelQueuePolicy::DisableAfterTimeout
         };
         let state = Arc::new(TerminalModelState::new(event_sink));
+        #[cfg(test)]
+        let queue_saturation_gate =
+            if let super::super::TerminalModelTestFault::BlockFirstCommand(gate) =
+                &options.test_fault
+            {
+                Some(gate.clone())
+            } else {
+                None
+            };
         let shutdown_requested = Arc::new(AtomicBool::new(false));
         let (worker_done_tx, worker_done) = mpsc::channel();
-        let (tx, rx) = mpsc::sync_channel(COMMAND_QUEUE_CAPACITY);
+        #[cfg(test)]
+        let command_queue_capacity = if queue_saturation_gate.is_some() {
+            1
+        } else {
+            COMMAND_QUEUE_CAPACITY
+        };
+        #[cfg(not(test))]
+        let command_queue_capacity = COMMAND_QUEUE_CAPACITY;
+        let (tx, rx) = mpsc::sync_channel(command_queue_capacity);
         let worker_key = Arc::clone(&session_key);
         let worker_state = Arc::clone(&state);
         let worker_shutdown_requested = Arc::clone(&shutdown_requested);
@@ -237,6 +264,8 @@ impl TerminalModelSession {
             tx: tx.clone(),
             queue_policy,
             state: Arc::clone(&state),
+            #[cfg(test)]
+            queue_saturation_gate,
         };
         Ok((
             Self {
@@ -381,7 +410,12 @@ fn run_worker(
     shutdown_requested: Arc<AtomicBool>,
 ) {
     #[cfg(test)]
-    if options.test_fault == super::super::TerminalModelTestFault::CreateFailure {
+    let test_fault = options.test_fault.clone();
+    #[cfg(test)]
+    if matches!(
+        &test_fault,
+        super::super::TerminalModelTestFault::CreateFailure
+    ) {
         state.disable(
             &session_key,
             instance_id,
@@ -426,9 +460,9 @@ fn run_worker(
         #[cfg(test)]
         if first_command {
             first_command = false;
-            match options.test_fault {
-                super::super::TerminalModelTestFault::StallFirstCommand => {
-                    std::thread::sleep(Duration::from_millis(250));
+            match &test_fault {
+                super::super::TerminalModelTestFault::BlockFirstCommand(gate) => {
+                    gate.block_first_command();
                 }
                 super::super::TerminalModelTestFault::PanicOnFirstCommand => {
                     panic!("injected terminal model worker panic");

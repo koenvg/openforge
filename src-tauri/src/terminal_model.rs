@@ -1,11 +1,13 @@
 #[path = "terminal_model/session.rs"]
 mod session;
 
-#[cfg(test)]
-pub(crate) use session::TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY;
 pub(crate) use session::{
     ShadowMode, TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder,
     TerminalModelSession,
+};
+#[cfg(test)]
+pub(crate) use session::{
+    TERMINAL_MODEL_BUFFERED_BYTES_CAPACITY, TERMINAL_MODEL_QUEUE_SATURATION_TEST_BYTES,
 };
 
 use libghostty_vt::{
@@ -17,22 +19,64 @@ use libghostty_vt::{
     },
     Terminal,
 };
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::{Arc, Barrier};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 const DEFAULT_SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
 const DEFAULT_CONTINUATION_BYTES: usize = 65 * 1024 * 1024;
 
 #[cfg(test)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+pub(crate) struct TerminalModelQueueSaturationGate {
+    queue_saturated: Arc<Barrier>,
+    queue_saturation_signaled: Arc<AtomicBool>,
+    release_first_command: Arc<Barrier>,
+}
+
+#[cfg(test)]
+impl TerminalModelQueueSaturationGate {
+    pub(crate) fn new() -> Self {
+        Self {
+            queue_saturated: Arc::new(Barrier::new(2)),
+            queue_saturation_signaled: Arc::new(AtomicBool::new(false)),
+            release_first_command: Arc::new(Barrier::new(2)),
+        }
+    }
+
+    pub(crate) fn wait_until_queue_saturated(&self) {
+        self.queue_saturated.wait();
+    }
+
+    pub(crate) fn release_first_command(&self) {
+        self.release_first_command.wait();
+    }
+
+    fn mark_queue_saturated(&self) {
+        if !self.queue_saturation_signaled.swap(true, Ordering::AcqRel) {
+            self.queue_saturated.wait();
+        }
+    }
+
+    fn block_first_command(&self) {
+        self.release_first_command.wait();
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Default)]
 pub(crate) enum TerminalModelTestFault {
     #[default]
     None,
     CreateFailure,
-    StallFirstCommand,
+    BlockFirstCommand(TerminalModelQueueSaturationGate),
     PanicOnFirstCommand,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(test), derive(Clone, Copy, Debug, PartialEq, Eq))]
+#[cfg_attr(test, derive(Clone, Debug))]
 pub(crate) struct TerminalModelOptions {
     pub(crate) cols: u16,
     pub(crate) rows: u16,
