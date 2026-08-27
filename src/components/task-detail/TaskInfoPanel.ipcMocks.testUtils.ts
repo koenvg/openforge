@@ -1,24 +1,10 @@
 import { vi } from 'vitest'
 
+import { createEmptyGithubSyncResult } from './TaskInfoPanel.testFixtures'
+
 vi.mock('../../lib/ipc', () => ({
-  forceGithubSync: vi.fn().mockResolvedValue({
-    new_comments: 0,
-    ci_changes: 0,
-    review_changes: 0,
-    pr_changes: 0,
-    errors: 0,
-    rate_limited: false,
-    rate_limit_reset_at: null,
-  }),
-  refreshTaskGithubStatus: vi.fn().mockResolvedValue({
-    new_comments: 0,
-    ci_changes: 0,
-    review_changes: 0,
-    pr_changes: 0,
-    errors: 0,
-    rate_limited: false,
-    rate_limit_reset_at: null,
-  }),
+  forceGithubSync: vi.fn().mockImplementation(() => Promise.resolve(createEmptyGithubSyncResult())),
+  refreshTaskGithubStatus: vi.fn().mockImplementation(() => Promise.resolve(createEmptyGithubSyncResult())),
   getPullRequests: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   linkPullRequest: vi.fn().mockResolvedValue(undefined),
