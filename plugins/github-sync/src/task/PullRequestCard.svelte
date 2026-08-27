@@ -157,9 +157,9 @@
           <div class="text-[0.7rem] font-medium text-base-content/55">Unaddressed comments</div>
           {#each unaddressedComments as comment (comment.id)}
             <article class="rounded-md border border-base-300/70 bg-base-100 p-2.5" aria-label={`Comment by ${comment.author}`}>
-              <div class="flex justify-between gap-2">
-                <span class="text-[0.65rem] font-semibold text-base-content/60">{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
-                <button class="btn btn-ghost btn-xs text-success" onclick={() => void onMarkAddressed(comment.id)}>✓ Mark addressed</button>
+              <div class="flex items-start justify-between gap-2">
+                <span class="min-w-0 break-all text-[0.65rem] font-semibold text-base-content/60" title={comment.file_path ?? undefined}>{comment.author}{comment.file_path ? ` · ${comment.file_path}${comment.line_number ? `:${comment.line_number}` : ''}` : ''}</span>
+                <button type="button" class="btn btn-ghost btn-xs shrink-0 whitespace-nowrap text-success" onclick={() => void onMarkAddressed(comment.id)}>✓ Mark addressed</button>
               </div>
               <div class="text-xs text-base-content/75"><MarkdownContent content={comment.body} imageBaseUrl={getGitHubMarkdownImageBaseUrl(pr)} {resolveRemoteMedia} {onOpenUrl} /></div>
             </article>
