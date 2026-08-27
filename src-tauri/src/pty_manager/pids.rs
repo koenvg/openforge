@@ -120,6 +120,15 @@ fn process_exists(pid: i32) -> Result<bool, String> {
         _ => Err(format!("failed to probe legacy process PID {pid}: {error}")),
     }
 }
+fn remove_legacy_pid_metadata(path: &Path) -> Result<(), String> {
+    std::fs::remove_file(path).map_err(|error| {
+        format!(
+            "legacy PID metadata {} could not be removed: {error}",
+            path.display()
+        )
+    })
+}
+
 impl PtyManager {
     /// Recovers verified managed PTY trees left behind by a previous sidecar.
     /// Metadata is removed only after the full tree exits; unverifiable or
@@ -171,7 +180,10 @@ impl PtyManager {
                         path.display(),
                         pid
                     );
-                    let _ = std::fs::remove_file(&path);
+                    if let Err(error) = remove_legacy_pid_metadata(&path) {
+                        warn!("[PTY recovery] {error}");
+                        failures.push(error);
+                    }
                 }
                 Ok(pid) => match process_exists(pid) {
                     Ok(true) => {
@@ -188,7 +200,10 @@ impl PtyManager {
                             "[PTY recovery] Removing legacy metadata for an exited process: {}",
                             path.display()
                         );
-                        let _ = std::fs::remove_file(&path);
+                        if let Err(error) = remove_legacy_pid_metadata(&path) {
+                            warn!("[PTY recovery] {error}");
+                            failures.push(error);
+                        }
                     }
                     Err(error) => {
                         warn!(
@@ -205,7 +220,10 @@ impl PtyManager {
                         path.display(),
                         error
                     );
-                    let _ = std::fs::remove_file(&path);
+                    if let Err(error) = remove_legacy_pid_metadata(&path) {
+                        warn!("[PTY recovery] {error}");
+                        failures.push(error);
+                    }
                 }
             }
         }
@@ -342,6 +360,7 @@ fn managed_session_key_from_pid_file_name(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::CommandExt;
     use std::process::{Child, Command, Stdio};
     use std::time::Instant;
@@ -443,6 +462,65 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    async fn cleanup_with_read_only_pid_dir(
+        manager: &PtyManager,
+        pid_dir: &Path,
+    ) -> Result<(), PtyError> {
+        std::fs::set_permissions(pid_dir, std::fs::Permissions::from_mode(0o500))
+            .expect("PID directory should become read-only");
+        let result = manager.cleanup_stale_pids().await;
+        std::fs::set_permissions(pid_dir, std::fs::Permissions::from_mode(0o700))
+            .expect("PID directory permissions should be restored");
+        result
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_reports_invalid_legacy_metadata_removal_failure() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = temp_dir.path().join("invalid-pty.pid");
+        std::fs::write(&pid_file, "not a PID").expect("legacy PID metadata should write");
+        let mut manager = PtyManager::new();
+        manager.set_pid_dir(temp_dir.path().to_path_buf());
+        let result = cleanup_with_read_only_pid_dir(&manager, temp_dir.path()).await;
+        let error = result.expect_err("metadata deletion failure should be reported");
+        assert!(
+            error.to_string().contains("could not be removed"),
+            "unexpected cleanup error: {error}"
+        );
+        assert!(
+            pid_file.exists(),
+            "failed deletion should leave metadata observable"
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_reports_exited_legacy_metadata_removal_failure() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = temp_dir.path().join("exited-pty.pid");
+        let mut exited_process = Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .expect("short-lived process should spawn");
+        let exited_pid = i32::try_from(exited_process.id()).expect("PID should fit in i32");
+        exited_process
+            .wait()
+            .expect("short-lived process should exit");
+        assert_eq!(process_exists(exited_pid), Ok(false));
+        std::fs::write(&pid_file, exited_pid.to_string())
+            .expect("legacy PID metadata should write");
+        let mut manager = PtyManager::new();
+        manager.set_pid_dir(temp_dir.path().to_path_buf());
+
+        let result = cleanup_with_read_only_pid_dir(&manager, temp_dir.path()).await;
+
+        let error = result.expect_err("metadata deletion failure should be reported");
+        assert!(error.to_string().contains("could not be removed"));
+        assert!(
+            pid_file.exists(),
+            "failed deletion should preserve metadata"
+        );
     }
 
     #[tokio::test]
