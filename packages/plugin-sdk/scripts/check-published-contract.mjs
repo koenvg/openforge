@@ -37,7 +37,6 @@ const hostCapabilityReleases = [
       'config',
       'projectConfig',
       'browserSurfaces',
-      'taskLinks',
     ],
   },
   {

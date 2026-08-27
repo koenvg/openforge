@@ -297,39 +297,13 @@ Capabilities are host APIs exposed through the `openforge` object. Unsupported c
 | --- | --- | --- |
 | `commands`, `events`, `storage`, `context` | Supported | Supported |
 | `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig` | Supported through the renderer host bridge when wired for the active runtime | Supported through backend host callbacks |
-| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces`, `taskLinks` | Supported | Not exposed |
+| `views`, `taskUI` (`taskPane` compatibility alias), `settings`, `navigation`, `browserSurfaces` | Supported | Not exposed |
 | `backend.whenReady`, `backend.invoke` | Supported for same-plugin backend RPC | Not applicable |
 | `backend.registerMethod`, `background.register` | Not exposed | Supported |
 
 Current declared capability names are:
 
-`commands`, `events`, `views`, `injectionPoints`, `taskPane`, `taskStart`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig`, `browserSurfaces`, `taskLinks`, `appEnablement`, `customSidebarNavigation`.
-
-## Task links
-
-Frontend Trusted Plugins can declare `"taskLinks"` to open HTTP(S) links associated with a Task without coupling the caller to a specific browser plugin:
-
-```ts
-await openforge.taskLinks.open({ taskId, url })
-```
-
-The host routes each request to the one registered Task link handler. If no handler is registered or the handler returns `"declined"`, OpenForge preserves compatibility by opening the URL externally. A handler failure is reported to the caller and does not also open externally, because the handler may already have partially navigated. `openforge.system.openUrl(url)` remains the explicit always-external path.
-
-A frontend browser plugin can register the handler during activation:
-
-```ts
-context.subscriptions.add(openforge.taskLinks.registerHandler(async ({ taskId, url }) => {
-  const surface = await openforge.browserSurfaces.getOrCreate({ taskId, id: 'main' })
-  const state = await surface.navigate(url)
-  if (state.error !== null) throw new Error(state.error.message)
-  await openforge.navigation.navigate({ taskId, taskViewId: 'browser' })
-  return 'handled'
-}))
-```
-
-A successful `navigate(...)` call may return a state whose `loading` field is still `true`; this means the accepted navigation is in progress, not that it failed. Browser handlers should foreground their Task UI tab so it can display and observe that in-progress load. Only a non-null `error` reports navigation failure.
-
-Only one handler may be active in a renderer; duplicate registration fails. Disposing the registration restores the external fallback. `taskViewId` is plugin-local, requires a non-null `taskId`, and lets `navigation.navigate(...)` foreground one of the caller's own registered Task UI tabs. The testing fake records requests in `api.__testing.calls.taskLinkOpenRequests` and exercises a registered handler in memory.
+`commands`, `events`, `views`, `injectionPoints`, `taskPane`, `taskStart`, `settings`, `background`, `backend`, `storage`, `context`, `navigation`, `tasks`, `projects`, `fs`, `shell`, `notifications`, `attention`, `system.openUrl`, `system.writeClipboardText`, `config`, `projectConfig`, `browserSurfaces`, `appEnablement`, `customSidebarNavigation`.
 
 ## Task Browser Surfaces
 
@@ -523,7 +497,6 @@ Other host-mediated capabilities in this area:
 - Use `openforge.notifications.notify(...)` for host-mediated user notifications.
 - Use `openforge.system.openUrl(url)` for links that must always open externally.
 - Use `openforge.system.writeClipboardText(text)` only for an explicit user-triggered copy action; do not import browser, Electron, preload, or IPC clipboard APIs.
-- Use `openforge.taskLinks.open({ taskId, url })` for HTTP(S) links that should use the active in-app Task link handler when available and otherwise fall back externally.
 
 ## What is not available
 

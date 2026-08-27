@@ -297,7 +297,6 @@ export type OpenForgePluginCapability =
   | 'config'
   | 'projectConfig'
   | 'browserSurfaces'
-  | 'taskLinks'
   | 'appEnablement'
   | 'customSidebarNavigation'
   | 'reviewUI'

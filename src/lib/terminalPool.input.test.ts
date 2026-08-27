@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { writePty } from "./ipc";
+import { openUrl, writePty } from "./ipc";
 import { acquire } from "./terminalPool";
 import {
 	getLoadedAddonNames,
-	getTaskLinkOpenMock,
 	getTerminalMock,
 	getTerminalMocks,
 	getWebLinksHandler,
@@ -12,7 +11,7 @@ import {
 
 describe("terminalPool input", () => {
 
-	it("routes detected Agent Terminal Surface links with their Task context", async () => {
+	it("opens detected Agent Terminal Surface links externally", async () => {
 		const entry = await acquire("T-42");
 		const { loadAddon: loadAddonSpy } = getTerminalMocks(entry);
 		const event = new MouseEvent("click");
@@ -28,10 +27,10 @@ describe("terminalPool input", () => {
 
 		expect(preventDefault).toHaveBeenCalled();
 		expect(stopPropagation).toHaveBeenCalled();
-		expect(getTaskLinkOpenMock()).toHaveBeenCalledWith({ taskId: "T-42", url: "https://example.com/pool" });
+		expect(openUrl).toHaveBeenCalledWith("https://example.com/pool");
 	});
 
-	it("routes OSC 8 Agent Terminal Surface links instead of xterm default browser handling", async () => {
+	it("opens OSC 8 Agent Terminal Surface links instead of xterm default browser handling", async () => {
 		const entry = await acquire("T-43");
 		const event = new MouseEvent("click");
 		const preventDefault = vi.spyOn(event, "preventDefault");
@@ -45,7 +44,7 @@ describe("terminalPool input", () => {
 
 		expect(preventDefault).toHaveBeenCalled();
 		expect(stopPropagation).toHaveBeenCalled();
-		expect(getTaskLinkOpenMock()).toHaveBeenCalledWith({ taskId: "T-43", url: "https://example.com/osc8" });
+		expect(openUrl).toHaveBeenCalledWith("https://example.com/osc8");
 	});
 
 	it("agent terminals send Ctrl+J once and suppress xterm Shift+Enter keydown/keypress handling", async () => {

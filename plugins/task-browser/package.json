@@ -34,9 +34,7 @@
       "taskPane",
       "browserSurfaces",
       "tasks",
-      "storage",
-      "taskLinks",
-      "navigation"
+      "storage"
     ]
   }
 }

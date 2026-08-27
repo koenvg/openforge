@@ -14,7 +14,7 @@ const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 describe('terminal runtime acquisition', () => {
   beforeEach(resetTerminalRuntimeMocks)
 
-  it('passes the owning Terminal Surface key when a web link is activated', async () => {
+  it('opens an activated web link through the host environment', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)
     await runtime.acquire('T-1-shell-2')
@@ -24,7 +24,7 @@ describe('terminal runtime acquisition', () => {
 
     expect(event.preventDefault).toHaveBeenCalledOnce()
     expect(event.stopPropagation).toHaveBeenCalledOnce()
-    expect(host.openLink).toHaveBeenCalledWith('T-1-shell-2', 'https://openforge.dev/docs')
+    expect(host.openLink).toHaveBeenCalledWith('https://openforge.dev/docs')
   })
 
   it('rolls back a failed replay read and permits a clean retry', async () => {

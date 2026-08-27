@@ -94,7 +94,7 @@ export function createTerminalRuntime({
       view: createTerminalView({
         terminalKey,
         themeMode: get(activeThemeMode),
-        openLink: url => environment.openLink(terminalKey, url),
+        openLink: url => environment.openLink(url),
         enableImages: configuration.enableImages,
         loggerName: environment.loggerName,
         fontReadiness,

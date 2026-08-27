@@ -107,17 +107,9 @@ _Avoid_: Move to In Flight, change Board Status, configure run
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
-**Task Link**:
-An HTTP(S) URL activation associated with one **Task**, eligible for handling inside OpenForge while retaining external-browser fallback.
-_Avoid_: External URL, browser command, global link
-
 **Host-local URL**:
 An HTTP(S) URL emitted by a desktop tool whose loopback host refers to the OpenForge desktop rather than the paired phone.
-_Avoid_: Mobile localhost, public URL, Task Link
-
-**Task Link Handler**:
-The one active **Trusted Plugin** integration that may claim or decline **Task Links** for in-app presentation.
-_Avoid_: URL interceptor, browser command handler, link priority
+_Avoid_: Mobile localhost, public URL, phone loopback URL
 
 **Task Browser Surface**:
 A browser presentation owned by a **Trusted Plugin** for one **Task** in one OpenForge window, identified within that window, plugin, and Task by a stable local surface identifier.
@@ -383,9 +375,7 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - A **Paired Companion Device** may hold one **Companion Terminal Attachment** at a time; beginning another replaces that device's previous attachment without affecting attachments from other paired devices.
 - A new **Implementation Run** uses the **Project Agent Settings** rather than plugin-supplied provider or agent overrides.
 - A **Trusted Plugin** may start an **Implementation Run** for any **Task** when using the host-provided task capability.
-- A **Task Link** is offered to the active **Task Link Handler**; when no handler exists or it declines, OpenForge opens the URL externally.
-- A **Host-local URL** refers to the desktop host even when it is presented on a paired phone; it is not a **Task Link** or a URL on the phone's loopback interface.
-- A failed **Task Link Handler** does not also trigger external fallback because it may already have partially handled the link.
+- A **Host-local URL** refers to the desktop host even when it is presented on a paired phone; it is not a URL on the phone's loopback interface.
 - A live **Task Browser Surface** is uniquely identified by its owning OpenForge window, **Trusted Plugin**, **Task**, and plugin-local surface identifier.
 - Every **Task Browser Surface** owned by the same **Trusted Plugin** shares one **Plugin Browser Session** regardless of **Task** or project, so a login performed in one Task is available in every other; no browser session data is shared across plugins.
 - Detaching a **Task Browser Surface** hides it while preserving its live, background-throttled page state; destroying it releases that live page without deleting its **Plugin Browser Session**.

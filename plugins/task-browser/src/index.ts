@@ -1,7 +1,6 @@
 import { defineFrontendPlugin } from '@openforge-app/plugin-sdk/frontend'
 import TaskBrowserTab from './TaskBrowserTab.svelte'
 import { createTaskBrowserOpenCommand, disposeTaskBrowserOpenObservers } from './agentOpenCommand'
-import { createTaskBrowserLinkHandler } from './taskLinkHandler'
 
 export default defineFrontendPlugin({
   activate(openforge, context) {
@@ -14,6 +13,5 @@ export default defineFrontendPlugin({
       order: 20,
       component: TaskBrowserTab,
     }))
-    context.subscriptions.add(openforge.taskLinks.registerHandler(createTaskBrowserLinkHandler(openforge)))
   },
 })

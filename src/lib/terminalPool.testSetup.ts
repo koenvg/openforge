@@ -17,14 +17,6 @@ export const webglContextLossDisposables: UnlistenMock[] = [];
 export let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
 
-const { taskLinkOpenMock } = vi.hoisted(() => ({
-	taskLinkOpenMock: vi.fn().mockResolvedValue(undefined),
-}));
-
-export function getTaskLinkOpenMock(): Mock {
-	return taskLinkOpenMock;
-}
-
 interface TerminalMockOptions {
 	fontFamily?: string;
 	linkHandler?: {
@@ -235,10 +227,6 @@ vi.mock("./ipc", () => ({
 	resizePty: vi.fn().mockResolvedValue(undefined),
 	getPtyBuffer: vi.fn().mockResolvedValue({ buffer: null, isLive: false, instanceId: null }),
 	openUrl: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("./plugin/taskLinks", () => ({
-  taskLinkRouter: { open: taskLinkOpenMock },
 }));
 
 const MockResizeObserver: typeof ResizeObserver = class MockResizeObserver

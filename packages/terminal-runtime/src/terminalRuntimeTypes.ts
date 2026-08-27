@@ -18,7 +18,7 @@ export interface TerminalSessionConfiguration {
 }
 
 export interface TerminalRuntimeEnvironment {
-  openLink(shellSessionKey: string, url: string): Promise<void>
+  openLink(url: string): Promise<void>
   sampleSessionConfiguration?(shellSessionKey: string): TerminalSessionConfiguration
   themeMode?: Readable<ThemeMode>
   loggerName?: string
