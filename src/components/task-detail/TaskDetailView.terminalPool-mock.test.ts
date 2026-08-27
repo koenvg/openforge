@@ -9,11 +9,12 @@ describe('TaskDetailView terminal pool mock', () => {
       acquire,
       getShellLifecycleState,
       markShellPtyStarted,
+      updateShellLifecycleState,
     } = await import('../../lib/terminalPool')
     const activeEntry = await acquire('T-42-shell-0')
     await acquire('T-42-shell-1')
 
-    markShellPtyStarted(activeEntry, 17)
+    await markShellPtyStarted(activeEntry, 17)
 
     expect(getShellLifecycleState('T-42-shell-0')).toEqual({
       ptyActive: true,
@@ -21,9 +22,12 @@ describe('TaskDetailView terminal pool mock', () => {
       currentPtyInstance: 17,
       hasOutput: false,
     })
-    activeEntry.ptyActive = false
-    activeEntry.needsClear = true
-    activeEntry.hasOutput = true
+    updateShellLifecycleState('T-42-shell-0', {
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 17,
+      hasOutput: true,
+    })
     expect(getShellLifecycleState('T-42-shell-0')).toEqual({
       ptyActive: false,
       shellExited: true,
@@ -90,11 +94,39 @@ describe('TaskDetailView terminal pool mock', () => {
     expect(entry.hasOutput).toBe(false)
   })
 
+  it('uses production spawn lifecycle transitions', async () => {
+    const {
+      acquire,
+      clearPtySpawnPending,
+      getShellLifecycleState,
+      markPtySpawnPending,
+      shouldSpawnPty,
+      updateShellLifecycleState,
+    } = await import('../../lib/terminalPool')
+    const entry = await acquire('T-42-shell-0')
+
+    updateShellLifecycleState('T-42-shell-0', {
+      ptyActive: false,
+      shellExited: false,
+      currentPtyInstance: null,
+      hasOutput: true,
+    })
+
+    expect(shouldSpawnPty(entry)).toBe(true)
+    markPtySpawnPending(entry)
+
+    expect(shouldSpawnPty(entry)).toBe(false)
+    expect(getShellLifecycleState('T-42-shell-0').hasOutput).toBe(false)
+
+    clearPtySpawnPending(entry)
+    expect(shouldSpawnPty(entry)).toBe(true)
+  })
+
   it('returns the keyed pool entry for duplicate acquisition', async () => {
     const { acquire, markShellPtyStarted } = await import('../../lib/terminalPool')
     const first = await acquire('T-42-shell-0')
 
-    markShellPtyStarted(first, 17)
+    await markShellPtyStarted(first, 17)
 
     const duplicate = await acquire('T-42-shell-0')
     expect(duplicate).toBe(first)
@@ -111,8 +143,10 @@ describe('TaskDetailView terminal pool mock', () => {
     } = await import('../../lib/terminalPool')
     const releasedEntry = await acquire('T-42-shell-0')
     const retainedEntry = await acquire('T-42-shell-1')
-    markShellPtyStarted(releasedEntry, 17)
-    markShellPtyStarted(retainedEntry, 23)
+    await Promise.all([
+      markShellPtyStarted(releasedEntry, 17),
+      markShellPtyStarted(retainedEntry, 23),
+    ])
 
     release('T-42-shell-0')
 
