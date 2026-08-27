@@ -43,10 +43,78 @@ const READ_AND_GIT_HISTORY_TOOLS: &str =
 /// permission mode: even if a config widened permissions, these can't run.
 const DISALLOWED_EDIT_TOOLS: &str = "Write Edit";
 
+type GenerationAbortSender = oneshot::Sender<()>;
+type InFlightGenerations = HashMap<String, GenerationAbortSender>;
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+enum GenerationRegistryError {
+    #[error(
+        "agent generation registry was poisoned; all in-flight agent generations were aborted and \
+         the registry was reset; retry the request"
+    )]
+    Poisoned,
+}
+
+#[derive(Default)]
+struct GenerationRegistry {
+    in_flight: Mutex<InFlightGenerations>,
+}
+
+impl GenerationRegistry {
+    fn register(
+        &self,
+        session_key: &str,
+        abort_sender: GenerationAbortSender,
+    ) -> Result<(), GenerationRegistryError> {
+        self.with_in_flight(|in_flight| {
+            in_flight.insert(session_key.to_string(), abort_sender);
+        })
+    }
+
+    fn remove(&self, session_key: &str) -> Result<(), GenerationRegistryError> {
+        self.with_in_flight(|in_flight| {
+            in_flight.remove(session_key);
+        })
+    }
+
+    fn abort(&self, session_key: &str) -> Result<(), GenerationRegistryError> {
+        self.with_in_flight(|in_flight| {
+            if let Some(abort_sender) = in_flight.remove(session_key) {
+                // The receiver may already be gone if the generation just finished.
+                let _ = abort_sender.send(());
+            }
+        })
+    }
+
+    fn with_in_flight<T>(
+        &self,
+        operation: impl FnOnce(&mut InFlightGenerations) -> T,
+    ) -> Result<T, GenerationRegistryError> {
+        match self.in_flight.lock() {
+            Ok(mut in_flight) => Ok(operation(&mut in_flight)),
+            Err(poisoned) => {
+                let mut in_flight = poisoned.into_inner();
+                let abort_senders = in_flight
+                    .drain()
+                    .map(|(_, sender)| sender)
+                    .collect::<Vec<_>>();
+                self.in_flight.clear_poison();
+                drop(in_flight);
+
+                for abort_sender in abort_senders {
+                    let _ = abort_sender.send(());
+                }
+
+                Err(GenerationRegistryError::Poisoned)
+            }
+        }
+    }
+}
+
 /// In-flight generations, keyed by session key, so `abort_agent_generate` can cancel them.
-fn generation_registry() -> &'static Mutex<HashMap<String, oneshot::Sender<()>>> {
-    static REGISTRY: OnceLock<Mutex<HashMap<String, oneshot::Sender<()>>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+fn generation_registry() -> &'static GenerationRegistry {
+    static REGISTRY: OnceLock<GenerationRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(GenerationRegistry::default)
 }
 
 /// Ceiling on concurrent repo-aware generations. Each one spawns a throwaway
@@ -164,7 +232,9 @@ pub(super) async fn handle_app_agent_generate_command(
         }
         "abort_agent_generate" => {
             let session_key = payload_string(&request.payload, "sessionKey")?;
-            abort_generation(&session_key);
+            generation_registry()
+                .abort(&session_key)
+                .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
             json_value(serde_json::json!({ "aborted": true }))?
         }
         _ => return Ok(None),
@@ -192,13 +262,6 @@ fn resolve_generation_provider(
     }
 }
 
-fn abort_generation(session_key: &str) {
-    if let Some(tx) = generation_registry().lock().unwrap().remove(session_key) {
-        // Receiver may already be gone if the generation just finished; ignore.
-        let _ = tx.send(());
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn run_headless_generation(
     provider: &str,
@@ -222,9 +285,8 @@ async fn run_headless_generation(
 
     let (abort_tx, abort_rx) = oneshot::channel::<()>();
     generation_registry()
-        .lock()
-        .unwrap()
-        .insert(session_key.to_string(), abort_tx);
+        .register(session_key, abort_tx)
+        .map_err(|error| error.to_string())?;
 
     let result = run_child(
         &binary,
@@ -238,7 +300,9 @@ async fn run_headless_generation(
     .await;
 
     // Always drop the registry entry so a finished generation can't be "aborted" later.
-    generation_registry().lock().unwrap().remove(session_key);
+    generation_registry()
+        .remove(session_key)
+        .map_err(|error| error.to_string())?;
 
     // With a schema we run the CLI in `--output-format json`, whose stdout is a
     // *result envelope* — the model's actual answer is the string in `result`.
@@ -419,6 +483,16 @@ fn headless_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn poison_registry(registry: &GenerationRegistry) {
+        std::thread::scope(|scope| {
+            let handle = scope.spawn(|| {
+                let _guard = registry.in_flight.lock().expect("registry lock");
+                panic!("poison test registry");
+            });
+            assert!(handle.join().is_err(), "test thread must poison the mutex");
+        });
+    }
 
     #[test]
     fn repo_generation_semaphore_caps_concurrency_at_two() {
@@ -615,5 +689,81 @@ mod tests {
             .position(|a| a == "--json-schema")
             .expect("schema flag");
         assert_eq!(args[schema_idx + 1], schema);
+    }
+
+    #[test]
+    fn poisoned_registry_aborts_all_generations_and_recovers() {
+        let registry = GenerationRegistry::default();
+        let (abort_tx, mut abort_rx) = oneshot::channel();
+        registry
+            .register("active-session", abort_tx)
+            .expect("initial registration");
+
+        poison_registry(&registry);
+
+        let error = registry
+            .abort("active-session")
+            .expect_err("poisoned abort must report the recovery");
+
+        assert_eq!(error, GenerationRegistryError::Poisoned);
+        let error_message = error.to_string();
+        assert!(error_message.contains("all in-flight agent generations were aborted"));
+        assert!(error_message.contains("retry"));
+        assert_eq!(
+            abort_rx.try_recv(),
+            Ok(()),
+            "poison recovery must fail closed by aborting tracked generations"
+        );
+
+        let (replacement_tx, _replacement_rx) = oneshot::channel();
+        registry
+            .register("replacement-session", replacement_tx)
+            .expect("the registry must accept operations after recovery");
+    }
+
+    #[test]
+    fn poisoned_registry_rejects_registration_then_accepts_retry() {
+        let registry = GenerationRegistry::default();
+
+        poison_registry(&registry);
+
+        let (rejected_tx, mut rejected_rx) = oneshot::channel();
+        let error = registry
+            .register("rejected-session", rejected_tx)
+            .expect_err("the operation that detects poison must fail");
+
+        assert_eq!(error, GenerationRegistryError::Poisoned);
+        assert_eq!(
+            rejected_rx.try_recv(),
+            Err(oneshot::error::TryRecvError::Closed),
+            "a generation rejected during recovery must not retain an abort sender"
+        );
+
+        let (retry_tx, _retry_rx) = oneshot::channel();
+        registry
+            .register("retry-session", retry_tx)
+            .expect("a retry must succeed after recovery");
+    }
+
+    #[test]
+    fn poisoned_registry_cleanup_fails_and_aborts_tracked_generations() {
+        let registry = GenerationRegistry::default();
+        let (abort_tx, mut abort_rx) = oneshot::channel();
+        registry
+            .register("completed-session", abort_tx)
+            .expect("initial registration");
+
+        poison_registry(&registry);
+
+        let error = registry
+            .remove("completed-session")
+            .expect_err("poisoned cleanup must report the recovery");
+
+        assert_eq!(error, GenerationRegistryError::Poisoned);
+        assert_eq!(
+            abort_rx.try_recv(),
+            Ok(()),
+            "cleanup recovery must abort every sender before discarding the registry"
+        );
     }
 }
