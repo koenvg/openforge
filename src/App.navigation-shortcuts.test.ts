@@ -1,13 +1,11 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { makePluginViewKey } from './lib/plugin/types'
+import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
 import { GITHUB_SYNC_VIEW_KEY } from './lib/githubSyncPlugin'
 import { installAppTestLifecycle } from './App.test-harness'
 import { mockLoadEnabledForProject } from './App.test-fixtures/plugin-runtime'
 import { createTask } from './App.test-fixtures/tasks'
 import App from './App.svelte'
-
-const FILE_VIEWER_VIEW_KEY = makePluginViewKey('com.openforge.file-viewer', 'files')
 
 async function waitForProjectPluginsReady(): Promise<void> {
   const { tick } = await import('svelte')

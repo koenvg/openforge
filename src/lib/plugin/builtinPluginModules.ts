@@ -1,5 +1,5 @@
 import type { LoadedPluginModule } from './pluginLoader'
-import { FILE_VIEWER_PLUGIN_ID } from '../fileViewerPlugin'
+import { FILE_VIEWER_PLUGIN_ID } from '../fileViewerView'
 import { GITHUB_SYNC_PLUGIN_ID } from '../githubSyncPlugin'
 import { TASK_BROWSER_PLUGIN_ID } from '../taskBrowserPlugin'
 import { TASK_SCHEDULES_PLUGIN_ID } from '../taskSchedulesPlugin'

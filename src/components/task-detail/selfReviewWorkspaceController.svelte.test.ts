@@ -29,13 +29,9 @@ vi.mock('../../lib/ipc', () => ({
   resolveGithubAsset: vi.fn().mockResolvedValue(null),
 }))
 
-vi.mock('../../lib/fileViewerPlugin', async () => {
-  const { makePluginViewKey } = await import('../../lib/plugin/types')
-  return {
-    FILE_VIEWER_VIEW_KEY: makePluginViewKey('com.openforge.file-viewer', 'files'),
-    revealFileInFileViewer: vi.fn().mockResolvedValue(true),
-  }
-})
+vi.mock('../../lib/fileViewerPlugin', () => ({
+  revealFileInFileViewer: vi.fn().mockResolvedValue(true),
+}))
 
 import { getTaskBatchFileContents, getTaskDiff } from '../../lib/ipc'
 

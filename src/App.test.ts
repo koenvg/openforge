@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
-import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerPlugin'
+import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
 import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
 import type { Project, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
