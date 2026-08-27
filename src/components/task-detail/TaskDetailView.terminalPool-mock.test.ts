@@ -169,4 +169,16 @@ describe('TaskDetailView terminal pool mock', () => {
     expect(await acquire('T-42')).toBe(agentEntry)
     expect(await acquire('T-420-shell-0')).toBe(otherTaskShell)
   })
+
+  it('focuses an acquired terminal by its shell session key', async () => {
+    const { acquire, attach, focusTerminal } = await import('../../lib/terminalPool')
+    const focusedEntry = await acquire('T-42-shell-1')
+    const otherEntry = await acquire('T-42-shell-0')
+    await attach(focusedEntry, document.createElement('div'))
+
+    focusTerminal('T-42-shell-1')
+
+    expect(focusedEntry.view.focus).toHaveBeenCalledOnce()
+    expect(otherEntry.view.focus).not.toHaveBeenCalled()
+  })
 })
