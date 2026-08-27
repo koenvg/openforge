@@ -5,6 +5,7 @@
   import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
   import ListChecks from '@lucide/svelte/icons/list-checks'
   import Network from '@lucide/svelte/icons/network'
+  import FolderKanban from '@lucide/svelte/icons/folder-kanban'
 
   type RelationshipKind = 'dependencies' | 'dependents'
   type SectionDensity = 'full' | 'compact'
@@ -37,7 +38,7 @@
   let titleSpanClass = $derived(isFull ? 'truncate min-w-0' : 'hidden')
   let idSpanClass = $derived(isFull ? 'font-mono shrink-0' : 'font-mono')
   let statusSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
-  const projectSpanClass = 'shrink-0 font-medium'
+  const projectSpanClass = 'inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let clickableBadgeClass = $derived(`${badgeClass} hover:brightness-95 cursor-pointer`)
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')
@@ -65,7 +66,11 @@
   <span class={idSpanClass}>{item.id}</span>
   <span class={statusSpanClass}>{statusLabel}</span>
   {#if item.projectName}
-    <span class={projectSpanClass}>{item.projectName}</span>
+    <span class={projectSpanClass} title={`Other project: ${item.projectName}`}>
+      <FolderKanban size={11} aria-hidden="true" />
+      <span class="uppercase tracking-wide opacity-70">{isFull ? 'Other project:' : 'Other:'}</span>
+      <span>{item.projectName}</span>
+    </span>
   {/if}
   {#if hasDisplayTitle(item)}
     <span class={titleSpanClass}>{item.displayTitle}</span>
