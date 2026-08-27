@@ -1,6 +1,7 @@
 import { render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from './lib/types'
+import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { installAppTestLifecycle } from './App.test-harness'
 
 const projectList: Project[] = [
@@ -144,34 +145,15 @@ describe('App project navigation', () => {
       expect(iconRailModule.default).toHaveBeenCalled()
     })
 
-    const lastCall = vi.mocked(iconRailModule.default).mock.calls.at(-1)
-    expect(lastCall).toBeTruthy()
-
-    if (!lastCall) {
-      throw new Error('Expected IconRail to receive props')
-    }
-
-    const propsCandidate = lastCall
-      .flatMap((arg) => {
-        if (typeof arg !== 'object' || arg === null) {
-          return []
-        }
-
-        if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) {
-          return [arg, arg.props]
-        }
-
-        return [arg]
-      })
-      .find((arg): arg is { onNavigate: (view: string) => void } => 'onNavigate' in arg && typeof arg.onNavigate === 'function')
-
-    if (!propsCandidate) {
-      throw new Error('Expected IconRail props to include onNavigate')
-    }
+    const props = getLatestComponentProps<{ onNavigate: (view: string) => void }>(
+      vi.mocked(iconRailModule.default),
+      'onNavigate',
+      { latestCallOnly: true },
+    )
 
     vi.mocked(nav.resetToBoard).mockClear()
 
-    propsCandidate.onNavigate('board')
+    props.onNavigate('board')
 
     expect(nav.resetToBoard).toHaveBeenCalled()
   })
