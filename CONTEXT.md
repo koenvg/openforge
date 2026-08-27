@@ -248,7 +248,7 @@ The stable OpenForge identifier for one terminal shell tab, which selects that t
 _Avoid_: Task ID, terminal index, PID filename
 
 **Task Creation**:
-Recording a new project-owned backlog **Task** from a prompt, without choosing how an agent will run it.
+Recording a new project-owned backlog **Task** from a prompt and resolved creation defaults, without starting an **Implementation Run**.
 _Avoid_: Run scheduling, agent configuration, global task creation, status selection
 
 **Task Schedule**:
@@ -337,6 +337,10 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - The **Mobile Action Palette** presents only actions currently granted by **Companion Task Authority** and available for its Task or **Selected Project** context.
 - **GitHub Sync** remains app-wide when invoked from a **Selected Project** context; the **Selected Project** determines where the action appears, not what OpenForge refreshes.
 - **Task Creation** creates a project-owned backlog **Task**, not an **Implementation Run**.
+- Mobile **Task Creation** may suggest provider-specific skills and commands, but choosing one only inserts its invocation into the Task prompt; it does not execute it.
+- Mobile **Task Creation** suggestions come only from the **Selected Project**'s effective provider; they are not merged across providers and do not introduce a provider picker.
+- Mobile **Task Creation** pins that effective provider on every new **Task**, so later Project setting changes do not reinterpret its skill or command invocation.
+- Mobile **Task Creation** mirrors desktop prompt autocomplete for the effective provider, including its trigger, combined suggestion list, filtering, and whole-prompt insertion.
 - A **Task Display Title** belongs to a **Task** and does not change its initial or mutable prompt.
 - Automatic **Task Display Title** generation is an experimental opt-in feature; when enabled, it happens at most once early in **Agent Session** activity and only when the user has not manually set a title.
 - A **Task Label** may be created while assigning labels to a **Task**; removing a label from one **Task** is separate from deleting the reusable **Task Label** from the project.

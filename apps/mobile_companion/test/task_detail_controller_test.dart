@@ -53,6 +53,12 @@ final class _FakeClient implements CompanionClient {
     String projectId,
     String initialPrompt,
   ) => throw UnsupportedError('not used');
+  @override
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => throw UnsupportedError('not used');
+
   Object result = _detail;
   Completer<TaskDetail>? pendingDetail;
   var taskDetailCalls = 0;

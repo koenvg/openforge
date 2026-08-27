@@ -9,7 +9,7 @@ use super::{
     pairing::PairingCoordinator,
     project_board::CompanionProjectBoardSource,
     task_actions::CompanionTaskActionService,
-    task_creation::CompanionTaskCreator,
+    task_creation::CompanionTaskCreationService,
     task_detail::CompanionTaskDetailSource,
     task_start::CompanionTaskStarter,
 };
@@ -37,7 +37,7 @@ pub(super) struct CompanionGatewayRouteSources {
     pub(super) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(super) task_actions: Arc<dyn CompanionTaskActionService>,
     pub(super) action_palette: Arc<dyn CompanionActionPaletteService>,
-    pub(super) task_creator: Arc<dyn CompanionTaskCreator>,
+    pub(super) task_creator: Arc<dyn CompanionTaskCreationService>,
     pub(super) task_start: Arc<dyn CompanionTaskStarter>,
     pub(super) pty_manager: crate::pty_manager::PtyManager,
     pub(super) events: AppEventBus,

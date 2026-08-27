@@ -13,7 +13,7 @@ use super::{
     project_board::CompanionProjectBoardSource,
     rate_limit::{RateLimitError, SlidingWindowRateLimiter},
     task_actions::CompanionTaskActionService,
-    task_creation::CompanionTaskCreator,
+    task_creation::CompanionTaskCreationService,
     task_detail::CompanionTaskDetailSource,
     task_start::CompanionTaskStarter,
     terminal::CompanionTerminalRegistry,
@@ -333,7 +333,7 @@ pub(crate) struct CompanionRouterSources {
     pub(crate) task_detail: Arc<dyn CompanionTaskDetailSource>,
     pub(crate) task_actions: Arc<dyn CompanionTaskActionService>,
     pub(crate) action_palette: Arc<dyn CompanionActionPaletteService>,
-    pub(crate) task_creator: Arc<dyn CompanionTaskCreator>,
+    pub(crate) task_creator: Arc<dyn CompanionTaskCreationService>,
     pub(crate) task_start: Arc<dyn CompanionTaskStarter>,
     pub(crate) pty_manager: crate::pty_manager::PtyManager,
     pub(crate) events: AppEventBus,
@@ -350,7 +350,7 @@ struct CompanionRouterState {
     task_detail: Arc<dyn CompanionTaskDetailSource>,
     task_actions: Arc<dyn CompanionTaskActionService>,
     action_palette: Arc<dyn CompanionActionPaletteService>,
-    task_creator: Arc<dyn CompanionTaskCreator>,
+    task_creator: Arc<dyn CompanionTaskCreationService>,
     task_start: Arc<dyn CompanionTaskStarter>,
     pty_manager: crate::pty_manager::PtyManager,
     events: AppEventBus,
@@ -512,7 +512,7 @@ pub(crate) fn create_router_with_task_creation(
     authorizer: Arc<dyn CompanionAuthorizer>,
     pairing: Arc<PairingCoordinator>,
     project_board: Arc<dyn CompanionProjectBoardSource>,
-    task_creator: Arc<dyn CompanionTaskCreator>,
+    task_creator: Arc<dyn CompanionTaskCreationService>,
 ) -> Router {
     let stream_access = Arc::new(GatewayCompanionStreamAccess::new(Arc::clone(&authorizer)));
     create_router_with_sources_event_access_and_pty(

@@ -1646,7 +1646,7 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     }
     assert!(!api_description.to_ascii_lowercase().contains("read-only"));
     let paths = contract["paths"].as_object().expect("OpenAPI paths");
-    assert_eq!(paths.len(), 20);
+    assert_eq!(paths.len(), 21);
     let status_path = paths["/status"].as_object().expect("status path item");
     assert_eq!(
         status_path.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -1683,6 +1683,22 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         vec!["get"],
         "Project Board must expose no mutation or generic command capability"
     );
+    let task_prompt_catalog_path = paths["/projects/{projectId}/task-prompt-catalog"]
+        .as_object()
+        .expect("Task prompt catalog path item");
+    assert_eq!(
+        task_prompt_catalog_path
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["get"],
+        "Task prompt catalog must expose suggestions without generic command execution",
+    );
+    assert_eq!(
+        task_prompt_catalog_path["get"]["operationId"],
+        "getCompanionTaskPromptCatalog",
+    );
+    assert!(task_prompt_catalog_path["get"].get("requestBody").is_none());
     let task_create_path = paths["/projects/{projectId}/tasks"]
         .as_object()
         .expect("Task creation path item");
@@ -1893,6 +1909,12 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
     for status in ["200", "401", "409", "429", "503"] {
         assert!(attention_responses.contains_key(status));
     }
+    let task_prompt_catalog_responses = task_prompt_catalog_path["get"]["responses"]
+        .as_object()
+        .expect("Task prompt catalog responses");
+    for status in ["200", "401", "404", "409", "429", "503"] {
+        assert!(task_prompt_catalog_responses.contains_key(status));
+    }
     let task_create_responses = task_create_path["post"]["responses"]
         .as_object()
         .expect("Task Create responses");
@@ -1950,6 +1972,18 @@ async fn status_and_error_responses_conform_to_the_v1_openapi_schemas() {
         .expect("dependent Task schema") =
         contract["components"]["schemas"]["DependentTask"].clone();
     assert_schema_accepts(&task_detail_schema, &fixtures["taskDetail"]);
+    let mut task_prompt_suggestion_schema =
+        contract["components"]["schemas"]["TaskPromptSuggestion"].clone();
+    *task_prompt_suggestion_schema
+        .pointer_mut("/properties/kind")
+        .expect("Task prompt suggestion kind schema") =
+        contract["components"]["schemas"]["TaskPromptSuggestionKind"].clone();
+    let mut task_prompt_catalog_schema =
+        contract["components"]["schemas"]["TaskPromptCatalog"].clone();
+    *task_prompt_catalog_schema
+        .pointer_mut("/properties/suggestions/items")
+        .expect("Task prompt suggestion schema") = task_prompt_suggestion_schema;
+    assert_schema_accepts(&task_prompt_catalog_schema, &fixtures["taskPromptCatalog"]);
     assert_schema_accepts(
         &contract["components"]["schemas"]["TaskCreateResult"],
         &fixtures["taskCreate"],

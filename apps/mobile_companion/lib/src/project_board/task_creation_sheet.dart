@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../design_system/quiet_paper_theme.dart';
@@ -8,11 +10,13 @@ import 'project_board_controller.dart';
 class TaskCreationSheet extends StatefulWidget {
   const TaskCreationSheet({
     required this.projectName,
+    required this.loadPromptCatalog,
     required this.onCreate,
     super.key,
   });
 
   final String projectName;
+  final Future<TaskPromptCatalog> Function() loadPromptCatalog;
   final Future<TaskCreateResult> Function(String initialPrompt) onCreate;
 
   @override
@@ -21,11 +25,70 @@ class TaskCreationSheet extends StatefulWidget {
 
 class _TaskCreationSheetState extends State<TaskCreationSheet> {
   final _promptController = TextEditingController();
+  TaskPromptCatalog? _promptCatalog;
+  Future<TaskPromptCatalog>? _promptCatalogLoad;
+  List<TaskPromptSuggestion> _suggestions = const <TaskPromptSuggestion>[];
   bool _submitting = false;
   String? _error;
 
   bool get _canSubmit =>
       !_submitting && _promptController.text.trim().isNotEmpty;
+
+  void _handlePromptChanged(String text) {
+    setState(() {
+      if (_error != null) _error = null;
+      if (!_couldBePromptQuery(text)) {
+        _suggestions = const <TaskPromptSuggestion>[];
+      }
+    });
+    if (_couldBePromptQuery(text)) {
+      unawaited(_loadAndFilterSuggestions(text));
+    }
+  }
+
+  bool _couldBePromptQuery(String text) => RegExp(r'^[/$]\S*$').hasMatch(text);
+
+  Future<void> _loadAndFilterSuggestions(String requestedText) async {
+    try {
+      final catalog =
+          _promptCatalog ??
+          await (_promptCatalogLoad ??= widget.loadPromptCatalog());
+      _promptCatalog = catalog;
+      if (!mounted || _promptController.text != requestedText) return;
+
+      final matchesTrigger = requestedText.startsWith(catalog.trigger);
+      final query = requestedText.substring(1).toLowerCase();
+      setState(() {
+        _suggestions = matchesTrigger
+            ? catalog.suggestions
+                  .where(
+                    (suggestion) =>
+                        suggestion.name.toLowerCase().contains(query),
+                  )
+                  .toList(growable: false)
+            : const <TaskPromptSuggestion>[];
+      });
+    } on Object {
+      _promptCatalogLoad = null;
+      if (!mounted || _promptController.text != requestedText) return;
+      setState(() {
+        _suggestions = const <TaskPromptSuggestion>[];
+      });
+    }
+  }
+
+  void _selectSuggestion(TaskPromptSuggestion suggestion) {
+    final catalog = _promptCatalog;
+    if (catalog == null) return;
+    final text = '${catalog.trigger}${suggestion.name} ';
+    _promptController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    setState(() {
+      _suggestions = const <TaskPromptSuggestion>[];
+    });
+  }
 
   @override
   void dispose() {
@@ -130,10 +193,61 @@ class _TaskCreationSheetState extends State<TaskCreationSheet> {
                     border: const OutlineInputBorder(),
                     errorText: _error,
                   ),
-                  onChanged: (_) => setState(() {
-                    if (_error != null) _error = null;
-                  }),
+                  onChanged: _handlePromptChanged,
                 ),
+                if (_suggestions.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: QuietPaperSpacing.compact),
+                  Material(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: theme.colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(
+                        QuietPaperShapes.controlRadius,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240),
+                      child: ListView.builder(
+                        primary: false,
+                        shrinkWrap: true,
+                        itemCount: _suggestions.length,
+                        itemBuilder: (context, index) {
+                          final suggestion = _suggestions[index];
+                          final description = suggestion.description?.trim();
+                          final source = suggestion.source?.trim();
+                          return ListTile(
+                            leading: Icon(
+                              suggestion.kind == TaskPromptSuggestionKind.skill
+                                  ? Icons.bolt_outlined
+                                  : Icons.terminal_outlined,
+                              semanticLabel:
+                                  suggestion.kind ==
+                                      TaskPromptSuggestionKind.skill
+                                  ? 'Skill'
+                                  : 'Command',
+                            ),
+                            title: Text(suggestion.name),
+                            subtitle: description == null || description.isEmpty
+                                ? null
+                                : Text(description),
+                            trailing:
+                                suggestion.kind ==
+                                        TaskPromptSuggestionKind.command &&
+                                    source != null &&
+                                    source.isNotEmpty
+                                ? Text(
+                                    source,
+                                    style: theme.textTheme.labelSmall,
+                                  )
+                                : null,
+                            onTap: () => _selectSuggestion(suggestion),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 OverflowBar(
                   alignment: MainAxisAlignment.end,
