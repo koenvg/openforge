@@ -65,6 +65,8 @@ mod terminal_model;
 mod terminal_task_completion;
 #[cfg(test)]
 mod terminal_task_completion_tests;
+#[cfg(test)]
+mod test_support;
 mod unix_timestamp;
 mod user_environment;
 mod whisper_manager;
