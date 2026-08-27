@@ -1,18 +1,13 @@
 import { render, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Task } from './lib/types'
+import type { ComponentProps } from 'svelte'
 import { installAppTestLifecycle } from './App.test-harness'
+import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { createTask } from './App.test-fixtures/tasks'
 
-function latestDialogProps(mockComponent: { mock: { calls: unknown[][] } }): Record<string, unknown> {
-  for (const call of [...mockComponent.mock.calls].reverse()) {
-    const props = call.find(
-      (arg): arg is Record<string, unknown> => typeof arg === 'object' && arg !== null && 'promptSeed' in arg,
-    )
-    if (props) return props
-  }
-  throw new Error('Expected AddTaskDialog to be rendered with a promptSeed')
-}
+type ComposeDialogProps = ComponentProps<
+  typeof import('./components/AddTaskDialog.svelte').default
+>
 
 const task = createTask({ id: 'T-9' })
 
@@ -39,7 +34,10 @@ describe('App compose dialog', () => {
     })
 
     await waitFor(() => {
-      const props = latestDialogProps(AddTaskDialog as never)
+      const props = getLatestComponentProps<ComposeDialogProps>(
+        vi.mocked(AddTaskDialog),
+        'promptSeed',
+      )
       expect(props.mode).toBe('create')
       expect(props.promptSeed).toBe('Implement GitHub issue #412')
       expect(props.sourceTicketUrlSeed).toBe('https://github.com/me/app/issues/412')
@@ -54,10 +52,10 @@ describe('App compose dialog', () => {
     render(App)
 
     const pending = requestTaskCompose({ projectId: 'P-1', initialPrompt: 'Seed' })
-    await waitFor(() => latestDialogProps(AddTaskDialog as never))
-
-    const props = latestDialogProps(AddTaskDialog as never)
-    ;(props.onClose as () => void)()
+    const props = await waitFor(() =>
+      getLatestComponentProps<ComposeDialogProps>(vi.mocked(AddTaskDialog), 'promptSeed'),
+    )
+    props.onClose()
 
     await expect(pending).resolves.toBeNull()
   })
@@ -69,10 +67,10 @@ describe('App compose dialog', () => {
     render(App)
 
     const pending = requestTaskCompose({ projectId: 'P-1', initialPrompt: 'Seed' })
-    await waitFor(() => latestDialogProps(AddTaskDialog as never))
-
-    const props = latestDialogProps(AddTaskDialog as never)
-    await (props.onTaskSaved as (task: Task, options: { started: boolean }) => Promise<void>)(task, {
+    const props = await waitFor(() =>
+      getLatestComponentProps<ComposeDialogProps>(vi.mocked(AddTaskDialog), 'promptSeed'),
+    )
+    await props.onTaskSaved(task, {
       started: true,
     })
 
