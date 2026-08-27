@@ -1,4 +1,4 @@
-import type { PullRequestInfo, Task, TaskLabel } from '../../lib/types'
+import type { PollResult, PullRequestInfo, Task, TaskLabel } from '../../lib/types'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -63,5 +63,18 @@ function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullReques
   }
 }
 
-export { baseTask, bugLabel, createPullRequest, taskWithLabels, uiLabel }
+function createEmptyGithubSyncResult(): PollResult {
+  return {
+    new_comments: 0,
+    ci_changes: 0,
+    review_changes: 0,
+    pr_changes: 0,
+    errors: 0,
+    rate_limited: false,
+    rate_limit_reset_at: null,
+    outcome: 'completed',
+  }
+}
+
+export { baseTask, bugLabel, createEmptyGithubSyncResult, createPullRequest, taskWithLabels, uiLabel }
 export type { Task }
