@@ -212,6 +212,27 @@ describe('terminal runtime shell output lifecycle', () => {
     expect(lifecycleUpdates.at(-1)).toMatchObject({ hasOutput: true, currentPtyInstance: 7 })
   })
 
+  it('changes explicit exit state only for the current PTY instance', async () => {
+    const host = createHost()
+    const runtime = createTerminalRuntime(host)
+    const entry = await runtime.acquire('T-1-shell-0')
+
+    await runtime.markShellPtyStarted(entry, 7)
+    host.emit('pty-exit-T-1-shell-0', { instance_id: 8 })
+
+    expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
+      ptyActive: true,
+      shellExited: false,
+    })
+
+    host.emit('pty-exit-T-1-shell-0', { instance_id: 7 })
+
+    expect(runtime.getShellLifecycleState('T-1-shell-0')).toMatchObject({
+      ptyActive: false,
+      shellExited: true,
+    })
+  })
+
   it('defers output from a pending shell spawn until its PTY instance becomes authoritative', async () => {
     const host = createHost()
     const runtime = createTerminalRuntime(host)

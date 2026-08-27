@@ -80,6 +80,7 @@ vi.mock('../../lib/terminalPool', () => {
       view: createTerminalView(),
       ptyActive: false,
       needsClear: false,
+      shellExited: false,
       transportSubscription: null,
       viewSubscriptions: [],
       resizeObserver: null,

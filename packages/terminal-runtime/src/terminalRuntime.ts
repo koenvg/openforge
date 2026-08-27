@@ -101,6 +101,7 @@ export function createTerminalRuntime({
       }),
       ptyActive: false,
       needsClear: false,
+      shellExited: false,
       transportSubscription: null,
       viewSubscriptions: [],
       resizeObserver: null,

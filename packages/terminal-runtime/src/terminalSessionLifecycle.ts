@@ -18,6 +18,7 @@ export function createTerminalSessionLifecycle(
     setCurrentPtyInstance(entry, instanceId)
     entry.spawnPending = false
     entry.ptyActive = true
+    entry.shellExited = false
     entry.needsClear = false
     shellLifecycle.notify(entry.shellSessionKey)
   }
@@ -41,18 +42,20 @@ export function createTerminalSessionLifecycle(
 
   function markPtyOutput(entry: PoolEntry): void {
     entry.ptyActive = true
+    entry.shellExited = false
     entry.hasOutput = true
     shellLifecycle.notify(entry.shellSessionKey)
   }
 
   function markPtyExited(entry: PoolEntry): void {
     entry.ptyActive = false
+    entry.shellExited = true
     entry.needsClear = true
     shellLifecycle.notify(entry.shellSessionKey)
   }
 
   function shouldSpawnPty(entry: PoolEntry): boolean {
-    return !entry.ptyActive && !entry.spawnPending && !entry.needsClear
+    return !entry.ptyActive && !entry.spawnPending && !entry.shellExited
   }
 
   function markPtySpawnPending(entry: PoolEntry): void {
@@ -76,14 +79,14 @@ export function createTerminalSessionLifecycle(
 
   function isShellExited(terminalKey: string): boolean {
     const entry = getEntry(terminalKey)
-    return entry ? !entry.ptyActive && entry.needsClear : false
+    return entry?.shellExited ?? false
   }
 
   function updateShellLifecycleState(terminalKey: string, state: ShellLifecycleState): void {
     const entry = getEntry(terminalKey)
     if (!entry) return
     entry.ptyActive = state.ptyActive
-    entry.needsClear = state.shellExited
+    entry.shellExited = state.shellExited
     setCurrentPtyInstance(entry, state.currentPtyInstance)
     entry.hasOutput = state.hasOutput
     shellLifecycle.notify(terminalKey)

@@ -8,7 +8,7 @@ import type {
 function getStateFromEntry(entry: PoolEntry | undefined): ShellLifecycleState {
   return {
     ptyActive: entry?.ptyActive ?? false,
-    shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
+    shellExited: entry?.shellExited ?? false,
     currentPtyInstance: entry?.currentPtyInstance ?? null,
     hasOutput: entry?.hasOutput ?? false,
   }

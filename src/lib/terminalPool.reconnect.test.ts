@@ -65,7 +65,7 @@ describe("terminalPool reconnect", () => {
 		expect(entry.currentPtyInstance).toBe(42);
 	});
 
-	it("pty-exit listener marks ptyActive false and needsClear true", async () => {
+	it("pty-exit listener records shell exit and presentation reset independently", async () => {
 		const entry = await acquire("task-11");
 		entry.ptyActive = true;
 
@@ -74,6 +74,7 @@ describe("terminalPool reconnect", () => {
 
 		expect(entry.ptyActive).toBe(false);
 		expect(entry.needsClear).toBe(true);
+		expect(entry.shellExited).toBe(true);
 	});
 
 	it("pty-exit listener ignores stale instance ids", async () => {
@@ -86,6 +87,7 @@ describe("terminalPool reconnect", () => {
 
 		expect(entry.ptyActive).toBe(true);
 		expect(entry.needsClear).toBe(false);
+		expect(entry.shellExited).toBe(false);
 	});
 
 	it("notifies shell lifecycle subscribers only for accepted pty-exit events", async () => {

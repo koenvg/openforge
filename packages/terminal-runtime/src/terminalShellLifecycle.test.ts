@@ -6,6 +6,7 @@ function createEntry(overrides: Partial<PoolEntry> = {}): PoolEntry {
   return {
     ptyActive: false,
     needsClear: false,
+    shellExited: false,
     currentPtyInstance: null,
     hasOutput: false,
     ...overrides,
@@ -16,7 +17,7 @@ describe('terminal shell lifecycle store', () => {
   it('derives shell state from the current pooled terminal', () => {
     const entries = new Map([[
       'T-1-shell-0',
-      createEntry({ ptyActive: false, needsClear: true, currentPtyInstance: 8, hasOutput: true }),
+      createEntry({ ptyActive: false, needsClear: false, shellExited: true, currentPtyInstance: 8, hasOutput: true }),
     ]])
     const store = createTerminalShellLifecycleStore(key => entries.get(key))
 
@@ -41,6 +42,7 @@ describe('terminal shell lifecycle store', () => {
     const unsubscribe = store.subscribe('T-1-shell-0', listener)
 
     entry.ptyActive = true
+    entry.needsClear = true
     entry.currentPtyInstance = 3
     store.notify('T-1-shell-0')
     unsubscribe()
