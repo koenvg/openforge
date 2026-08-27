@@ -5,6 +5,7 @@ use super::super::{GhosttyTerminalModel, TerminalModel, TerminalModelError, Term
 use super::event_state::TerminalModelDiagnostic;
 use super::event_state::{PortableTerminalSnapshot, TerminalModelEventSink, TerminalModelState};
 use log::{info, warn};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
@@ -66,6 +67,43 @@ fn send_command_with_timeout(
                 return Err("model worker disconnected while submitting command".to_string());
             }
         }
+    }
+}
+
+const TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY: usize = 256 * 1024;
+
+struct BoundedCompatibilityReplay {
+    bytes: VecDeque<u8>,
+}
+
+impl BoundedCompatibilityReplay {
+    fn new() -> Self {
+        Self {
+            bytes: VecDeque::with_capacity(TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY),
+        }
+    }
+
+    fn push(&mut self, bytes: &[u8]) {
+        if bytes.len() >= TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY {
+            self.bytes.clear();
+            self.bytes.extend(
+                bytes[bytes.len() - TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY..]
+                    .iter()
+                    .copied(),
+            );
+            return;
+        }
+        let overflow = self
+            .bytes
+            .len()
+            .saturating_add(bytes.len())
+            .saturating_sub(TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY);
+        self.bytes.drain(..overflow);
+        self.bytes.extend(bytes.iter().copied());
+    }
+
+    fn snapshot(&self) -> Vec<u8> {
+        self.bytes.iter().copied().collect()
     }
 }
 
@@ -436,6 +474,7 @@ fn run_worker(
     let mut bytes_since_checkpoint = 0usize;
     let mut checkpoint_due = true;
     let mut output_sequence = 0u64;
+    let mut compatibility_replay = BoundedCompatibilityReplay::new();
     #[cfg(test)]
     let mut first_command = true;
     loop {
@@ -479,6 +518,7 @@ fn run_worker(
                 bytes_since_checkpoint = bytes_since_checkpoint.saturating_add(bytes.len());
                 let result = model.feed(&bytes);
                 if result.is_ok() {
+                    compatibility_replay.push(&bytes);
                     output_sequence = output_sequence.saturating_add(1);
                     state.publish_output(instance_id, output_sequence, bytes);
                 }
@@ -492,6 +532,7 @@ fn run_worker(
                         instance_id,
                         watermark: output_sequence,
                         portable_vt,
+                        compatibility_replay: compatibility_replay.snapshot(),
                     })
                     .map_err(model_error);
                 let _ = response.send(result);
@@ -527,4 +568,21 @@ fn validate_checkpoint(model: &GhosttyTerminalModel) -> Result<(), TerminalModel
     let restored = GhosttyTerminalModel::decode_snapshot(&snapshot)?;
     let _portable_vt = restored.format_portable_vt()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compatibility_replay_keeps_only_the_bounded_tail() {
+        let mut replay = BoundedCompatibilityReplay::new();
+        replay.push(&vec![b'a'; TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY]);
+        const IMAGE_SEQUENCE: &[u8] = b"\x1b]1337;File=size=3;inline=1:AAAA\x07";
+        replay.push(IMAGE_SEQUENCE);
+
+        let snapshot = replay.snapshot();
+        assert_eq!(snapshot.len(), TERMINAL_MODEL_COMPATIBILITY_REPLAY_CAPACITY);
+        assert!(snapshot.ends_with(IMAGE_SEQUENCE));
+    }
 }

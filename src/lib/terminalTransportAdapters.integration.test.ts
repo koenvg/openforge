@@ -5,7 +5,10 @@ import {
   createTerminalRuntime,
   type TerminalTransport,
 } from '@openforge-app/terminal-runtime'
-import { createFakeTerminalView } from '@openforge-app/terminal-runtime/testUtils'
+import {
+  INLINE_IMAGE_COMPATIBILITY_REPLAY,
+  createFakeTerminalView,
+} from '@openforge-app/terminal-runtime/testUtils'
 
 
 interface AdapterReplay {
@@ -13,7 +16,7 @@ interface AdapterReplay {
   buffer: string | null
   isLive: boolean
   instanceId: number | null
-  snapshot?: { instanceId: number; watermark: number; data: string }
+  snapshot?: { instanceId: number; watermark: number; data: string; compatibilityData?: string }
 }
 
 interface AdapterHarness {
@@ -23,7 +26,7 @@ interface AdapterHarness {
   emitExit(shellSessionKey: string, ptyInstanceId: number): void
   emitConnectionRestored(): void
   setReplay(data: string | null, ptyInstanceId: number | null): void
-  setGhosttyReplay(data: string, ptyInstanceId: number, watermark: number): void
+  setGhosttyReplay(data: string, ptyInstanceId: number, watermark: number, compatibilityReplay?: string): void
   expectUserInput(shellSessionKey: string, data: string): void
   expectQueryResponse(shellSessionKey: string, data: string, ptyInstanceId: number): void
   expectResize(shellSessionKey: string, cols: number, rows: number): void
@@ -73,13 +76,18 @@ function createDesktopHarness(): AdapterHarness {
     setReplay(data, ptyInstanceId) {
       replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
     },
-    setGhosttyReplay(data, ptyInstanceId, watermark) {
+    setGhosttyReplay(data, ptyInstanceId, watermark, compatibilityReplay) {
       replay = {
         authority: 'ghostty-authoritative',
         buffer: null,
         isLive: true,
         instanceId: ptyInstanceId,
-        snapshot: { instanceId: ptyInstanceId, watermark, data: btoa(data) },
+        snapshot: {
+          instanceId: ptyInstanceId,
+          watermark,
+          data: btoa(data),
+          compatibilityData: compatibilityReplay ? btoa(compatibilityReplay) : undefined,
+        },
       }
     },
     expectUserInput(shellSessionKey, data) {
@@ -159,13 +167,18 @@ function createTrustedPluginHarness(): AdapterHarness {
     setReplay(data, ptyInstanceId) {
       replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
     },
-    setGhosttyReplay(data, ptyInstanceId, watermark) {
+    setGhosttyReplay(data, ptyInstanceId, watermark, compatibilityReplay) {
       replay = {
         authority: 'ghostty-authoritative',
         buffer: null,
         isLive: true,
         instanceId: ptyInstanceId,
-        snapshot: { instanceId: ptyInstanceId, watermark, data: btoa(data) },
+        snapshot: {
+          instanceId: ptyInstanceId,
+          watermark,
+          data: btoa(data),
+          compatibilityData: compatibilityReplay ? btoa(compatibilityReplay) : undefined,
+        },
       }
     },
     expectUserInput(_shellSessionKey, data) {
@@ -255,7 +268,8 @@ describe.each([
 
   it('normalizes Ghostty snapshots and sequenced model output at the Terminal Runtime seam', async () => {
     const harness = createHarness()
-    harness.setGhosttyReplay('ghostty snapshot', 9, 3)
+    const compatibilityReplay = INLINE_IMAGE_COMPATIBILITY_REPLAY
+    harness.setGhosttyReplay('ghostty snapshot', 9, 3, compatibilityReplay)
     const view = createFakeTerminalView()
     const runtime = createTerminalRuntime({
       transport: harness.transport,
@@ -267,7 +281,14 @@ describe.each([
     harness.emitOutput('T-1-shell-2', 'raw output must be ignored', 9)
     harness.emitModelOutput('T-1-shell-2', 'model output', 9, 4)
 
-    expect(view.bootstrap).toHaveBeenCalledWith(
+    expect(view.bootstrap).toHaveBeenNthCalledWith(
+      1,
+      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      9,
+      0,
+    )
+    expect(view.bootstrap).toHaveBeenNthCalledWith(
+      2,
       Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
       9,
       0,

@@ -130,6 +130,12 @@ export function createTerminalStateView({
     )
     entry.terminalStateSource = 'ghostty-snapshot'
     entry.terminalModelSequence = snapshot.watermark
+    // Seed renderer-only state, such as inline images, before the Ghostty snapshot
+    // establishes the canonical parsed terminal state.
+    if (snapshot.compatibilityData?.length) {
+      entry.view.bootstrap(snapshot.compatibilityData, replay.ptyInstanceId, entry.outputSequence)
+      entry.hasOutput = true
+    }
     if (snapshot.data.length > 0) {
       entry.view.bootstrap(snapshot.data, replay.ptyInstanceId, entry.outputSequence)
       entry.hasOutput = true

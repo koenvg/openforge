@@ -166,6 +166,7 @@ pub struct TerminalViewSnapshot {
     pub instance_id: u64,
     pub watermark: u64,
     pub data: String,
+    pub compatibility_data: String,
 }
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
