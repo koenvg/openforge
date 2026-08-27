@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'svelte'
-import type { PullRequestInfo } from './lib/types'
+import { createGithubSyncResult, createPullRequest } from './App.test-fixtures/github'
 import { installAppTestLifecycle } from './App.test-harness'
 import { getLatestComponentProps } from './App.test-fixtures/component-props'
 import { createTask } from './App.test-fixtures/tasks'
@@ -29,56 +29,12 @@ describe('App action palette shortcuts', () => {
         initial_prompt: 'Merge ready PR',
       })
 
-      const readyPr: PullRequestInfo = {
-        id: 42,
-        pr_number: 42,
-        ticket_id: selectedTask.id,
-        repo_owner: 'owner',
-        repo_name: 'repo',
-        title: 'Ready PR',
-        url: 'https://github.com/owner/repo/pull/42',
-        state: 'open',
-        head_sha: 'abc123',
-        ci_status: 'success',
-        ci_check_runs: null,
-        review_status: 'approved',
-        mergeable: true,
-        mergeable_state: 'clean',
-        merged_at: null,
-        created_at: 1000,
-        updated_at: 1000,
-        draft: false,
-        is_queued: false,
-        unaddressed_comment_count: 0,
-    merge_readiness_status: null,
-    merge_readiness_action: null,
-    merge_readiness_blockers: null,
-    merge_readiness_warnings: null,
-    readiness_source_head_sha: null,
-    merge_group_sha: null,
-    required_checks_policy_known: null,
-    required_reviews_policy_known: null,
-    merge_queue_required: null,
-    merge_queue_state: null,
-    readiness_updated_at: null,
-    merge_methods_policy_known: true,
-    allowed_merge_methods: '["squash"]',
-    default_merge_method: 'squash',
-      }
+      const readyPr = createPullRequest({ ticket_id: selectedTask.id })
 
       vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
       vi.mocked(ipc.getPullRequests).mockResolvedValue([readyPr])
       vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
-      vi.mocked(ipc.forceGithubSync).mockResolvedValue({
-        new_comments: 0,
-        ci_changes: 0,
-        review_changes: 0,
-        pr_changes: 0,
-        errors: 0,
-        rate_limited: false,
-        rate_limit_reset_at: null,
-        outcome: 'completed',
-      })
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)
@@ -130,42 +86,7 @@ describe('App action palette shortcuts', () => {
         initial_prompt: 'Merge pending PR',
       })
 
-      const readyPr: PullRequestInfo = {
-        id: 42,
-        pr_number: 42,
-        ticket_id: selectedTask.id,
-        repo_owner: 'owner',
-        repo_name: 'repo',
-        title: 'Ready PR',
-        url: 'https://github.com/owner/repo/pull/42',
-        state: 'open',
-        head_sha: 'abc123',
-        ci_status: 'success',
-        ci_check_runs: null,
-        review_status: 'approved',
-        mergeable: true,
-        mergeable_state: 'clean',
-        merged_at: null,
-        created_at: 1000,
-        updated_at: 1000,
-        draft: false,
-        is_queued: false,
-        unaddressed_comment_count: 0,
-    merge_readiness_status: null,
-    merge_readiness_action: null,
-    merge_readiness_blockers: null,
-    merge_readiness_warnings: null,
-    readiness_source_head_sha: null,
-    merge_group_sha: null,
-    required_checks_policy_known: null,
-    required_reviews_policy_known: null,
-    merge_queue_required: null,
-    merge_queue_state: null,
-    readiness_updated_at: null,
-    merge_methods_policy_known: true,
-    allowed_merge_methods: '["squash"]',
-    default_merge_method: 'squash',
-      }
+      const readyPr = createPullRequest({ ticket_id: selectedTask.id })
 
       let resolveMerge!: () => void
       vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
@@ -173,16 +94,7 @@ describe('App action palette shortcuts', () => {
       vi.mocked(ipc.mergePullRequest).mockImplementationOnce(() => new Promise<void>((resolve) => {
         resolveMerge = resolve
       }))
-      vi.mocked(ipc.forceGithubSync).mockResolvedValue({
-        new_comments: 0,
-        ci_changes: 0,
-        review_changes: 0,
-        pr_changes: 0,
-        errors: 0,
-        rate_limited: false,
-        rate_limit_reset_at: null,
-        outcome: 'completed',
-      })
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)
@@ -238,64 +150,23 @@ describe('App action palette shortcuts', () => {
         initial_prompt: 'Task with multiple ready PRs',
       })
 
-      const firstReadyPr: PullRequestInfo = {
-        id: 42,
-        pr_number: 42,
+      const firstReadyPr = createPullRequest({
         ticket_id: selectedTask.id,
-        repo_owner: 'owner',
-        repo_name: 'repo',
         title: 'First ready PR',
-        url: 'https://github.com/owner/repo/pull/42',
-        state: 'open',
-        head_sha: 'abc123',
-        ci_status: 'success',
-        ci_check_runs: null,
-        review_status: 'approved',
-        mergeable: true,
-        mergeable_state: 'clean',
-        merged_at: null,
-        created_at: 1000,
-        updated_at: 1000,
-        draft: false,
-        is_queued: false,
-        unaddressed_comment_count: 0,
-    merge_readiness_status: null,
-    merge_readiness_action: null,
-    merge_readiness_blockers: null,
-    merge_readiness_warnings: null,
-    readiness_source_head_sha: null,
-    merge_group_sha: null,
-    required_checks_policy_known: null,
-    required_reviews_policy_known: null,
-    merge_queue_required: null,
-    merge_queue_state: null,
-    readiness_updated_at: null,
-    merge_methods_policy_known: true,
-    allowed_merge_methods: '["squash"]',
-    default_merge_method: 'squash',
-      }
+      })
 
-      const secondReadyPr: PullRequestInfo = {
-        ...firstReadyPr,
+      const secondReadyPr = createPullRequest({
         id: 99,
+        ticket_id: selectedTask.id,
         title: 'Second ready PR',
         url: 'https://github.com/owner/repo/pull/99',
         head_sha: 'def456',
-      }
+      })
 
       vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
       vi.mocked(ipc.getPullRequests).mockResolvedValue([firstReadyPr, secondReadyPr])
       vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
-      vi.mocked(ipc.forceGithubSync).mockResolvedValue({
-        new_comments: 0,
-        ci_changes: 0,
-        review_changes: 0,
-        pr_changes: 0,
-        errors: 0,
-        rate_limited: false,
-        rate_limit_reset_at: null,
-        outcome: 'completed',
-      })
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue(createGithubSyncResult())
 
       stores.tasks.set([selectedTask])
       stores.pendingTask.set(null)
