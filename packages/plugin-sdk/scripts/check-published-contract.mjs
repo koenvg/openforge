@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { validRange } from 'semver'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -140,21 +141,38 @@ try {
   const tarballs = readdirSync(tempRoot).filter(name => name.endsWith('.tgz'))
   if (tarballs.length !== 1) fail(`Expected one packed Plugin SDK tarball, found ${tarballs.length}.`)
 
-  run('npm', [
-    'install',
-    '--ignore-scripts',
-    '--no-audit',
-    '--no-fund',
-    join(tempRoot, tarballs[0]),
-  ], {
-    cwd: tempRoot,
-    env: { ...process.env, npm_config_dry_run: 'false' },
-  })
-  const installedPackageRoot = join(tempRoot, 'node_modules', '@openforge-app', 'plugin-sdk')
+  const tarballPath = join(tempRoot, tarballs[0])
+  for (const packageManager of ['npm', 'bun']) {
+    const consumerRoot = join(tempRoot, `${packageManager}-consumer`)
+    mkdirSync(consumerRoot)
+    writeFileSync(join(consumerRoot, 'package.json'), `${JSON.stringify({
+      name: `plugin-sdk-${packageManager}-release-contract`,
+      private: true,
+      type: 'module',
+      dependencies: {
+        [sourceManifest.name]: `file:${tarballPath}`,
+      },
+    }, null, 2)}\n`)
 
+    const installArgs = packageManager === 'npm'
+      ? ['install', '--ignore-scripts', '--no-audit', '--no-fund']
+      : ['install', '--ignore-scripts']
+    run(packageManager, installArgs, {
+      cwd: consumerRoot,
+      env: { ...process.env, npm_config_dry_run: 'false' },
+    })
+  }
+  const consumerRoot = join(tempRoot, 'bun-consumer')
+  const installedPackageRoot = join(consumerRoot, 'node_modules', '@openforge-app', 'plugin-sdk')
   const packedManifest = JSON.parse(readFileSync(join(installedPackageRoot, 'package.json'), 'utf8'))
   if (packedManifest.name !== sourceManifest.name || packedManifest.version !== sourceManifest.version) {
     fail(`Packed identity ${packedManifest.name}@${packedManifest.version} does not match ${sourceManifest.name}@${sourceManifest.version}.`)
+  }
+
+  for (const [dependencyName, range] of Object.entries(packedManifest.dependencies ?? {})) {
+    if (typeof range !== 'string' || validRange(range) === null) {
+      fail(`Packed dependency ${dependencyName} must use a concrete semver range; received ${String(range)}.`)
+    }
   }
 
   const targets = [packedManifest.main, packedManifest.types, ...exportTargets(packedManifest.exports)]
@@ -163,15 +181,15 @@ try {
     if (!existsSync(targetPath)) fail(`Packed export target is missing: ${target}`)
   }
 
-  writeFileSync(join(tempRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')
+  writeFileSync(join(consumerRoot, 'esm-resolution.mjs'), `const testing = await import('@openforge-app/plugin-sdk/testing')
 if (typeof testing.createMockOpenForgeApi !== 'function') {
   throw new Error('Installed Plugin SDK testing entry point did not expose createMockOpenForgeApi.')
 }
 `)
-  run(process.execPath, ['./esm-resolution.mjs'], { cwd: tempRoot })
+  run(process.execPath, ['./esm-resolution.mjs'], { cwd: consumerRoot })
 
-  writeFileSync(join(tempRoot, 'authoring-contract.ts'), readFileSync(fixturePath, 'utf8'))
-  writeFileSync(join(tempRoot, 'tsconfig.json'), `${JSON.stringify({
+  writeFileSync(join(consumerRoot, 'authoring-contract.ts'), readFileSync(fixturePath, 'utf8'))
+  writeFileSync(join(consumerRoot, 'tsconfig.json'), `${JSON.stringify({
     compilerOptions: {
       target: 'ES2022',
       module: 'ESNext',
@@ -184,8 +202,8 @@ if (typeof testing.createMockOpenForgeApi !== 'function') {
     files: ['./authoring-contract.ts'],
   }, null, 2)}\n`)
 
-  run('pnpm', ['exec', 'tsc', '--project', join(tempRoot, 'tsconfig.json')])
-  console.log(`Validated packed ${packedManifest.name}@${packedManifest.version} exports and current host authoring contract.`)
+  run('pnpm', ['exec', 'tsc', '--project', join(consumerRoot, 'tsconfig.json')], { cwd: consumerRoot })
+  console.log(`Validated packed ${packedManifest.name}@${packedManifest.version} with clean npm and Bun consumers.`)
 } finally {
   rmSync(tempRoot, { recursive: true, force: true })
 }

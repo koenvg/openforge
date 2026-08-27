@@ -107,6 +107,7 @@
   "devDependencies": {
     "@types/node": "catalog:pinned",
     "svelte": "catalog:pinned",
+    "semver": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "vscode-material-icons": "^0.1.1"

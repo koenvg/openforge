@@ -200,6 +200,7 @@ describe('package build scripts', () => {
     expect(sdkPackage.scripts.prepublishOnly).toBe('pnpm run check:contract')
     expect(rootPackage.scripts['packages:contract:check']).toBe('pnpm --filter @openforge-app/plugin-sdk check:contract')
     expect(ciWorkflow).toContain('pnpm packages:contract:check')
+    expect(ciWorkflow).toContain('oven-sh/setup-bun@v2')
 
     const sharedPublishSteps = [
       'Set SDK package version',
@@ -210,6 +211,7 @@ describe('package build scripts', () => {
       'pnpm packages:metadata:check',
       'pnpm pack --dry-run',
       'npm install --global npm@^11.5.1',
+      'oven-sh/setup-bun@v2',
       'pnpm publish --no-git-checks --access public --provenance',
     ]
 
