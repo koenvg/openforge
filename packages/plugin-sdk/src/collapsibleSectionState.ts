@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store'
+import { writable, type Writable } from 'svelte/store'
 
 // Collapsed/expanded state for `CollapsibleSection`. State is GLOBAL (one map shared by
 // every task, project, and plugin), keyed by a stable section key, and persisted to
@@ -14,6 +14,12 @@ export type CollapsedSectionsState = Record<string, boolean>
 // deliberately unchanged: renaming it would reset every user's collapsed sections.
 export const COLLAPSED_SECTIONS_STORAGE_KEY = 'openforge.infoPanelSectionCollapse.v1'
 
+const SHARED_STATE_SYMBOL = Symbol.for('com.openforge.plugin-sdk.collapsible-section-state.v1')
+
+interface SharedCollapsedSectionsState {
+  store: Writable<CollapsedSectionsState>
+}
+
 export function pluginSectionKey(pluginId: string, sectionKey: string): string {
   return `plugin:${pluginId}:${sectionKey}`
 }
@@ -26,9 +32,9 @@ function getLocalStorage(): Storage | null {
   }
 }
 
-function readPersisted(): CollapsedSectionsState {
+function readPersisted(fallback: CollapsedSectionsState = {}): CollapsedSectionsState {
   const storage = getLocalStorage()
-  if (storage === null) return {}
+  if (storage === null) return fallback
 
   try {
     const rawValue = storage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY)
@@ -42,7 +48,7 @@ function readPersisted(): CollapsedSectionsState {
     }
     return state
   } catch {
-    return {}
+    return fallback
   }
 }
 
@@ -67,7 +73,35 @@ function writePersisted(state: CollapsedSectionsState): void {
   }
 }
 
-const { subscribe, set, update } = writable<CollapsedSectionsState>(readPersisted())
+function updatePersistedSection(
+  current: CollapsedSectionsState,
+  key: string,
+  collapsed: boolean,
+): CollapsedSectionsState {
+  // localStorage is the cross-realm source of truth. Re-read it for every mutation so
+  // a bundle that cannot share this page's singleton still cannot overwrite newer keys.
+  const next = { ...readPersisted(current) }
+  if (collapsed) next[key] = true
+  else delete next[key]
+  writePersisted(next)
+  return next
+}
+
+function getSharedState(): SharedCollapsedSectionsState {
+  const registry = globalThis as typeof globalThis & {
+    [key: symbol]: SharedCollapsedSectionsState | undefined
+  }
+  const existing = registry[SHARED_STATE_SYMBOL]
+  if (existing !== undefined) return existing
+
+  // Trusted Plugin bundles contain their own copy of this module. Symbol.for gives those
+  // copies and the host one live access to the same Svelte store in this renderer realm.
+  const shared = { store: writable<CollapsedSectionsState>(readPersisted()) }
+  registry[SHARED_STATE_SYMBOL] = shared
+  return shared
+}
+
+const { subscribe, set, update } = getSharedState().store
 
 export const collapsedSections = { subscribe }
 
@@ -76,18 +110,13 @@ export function isSectionCollapsed(state: CollapsedSectionsState, key: string): 
 }
 
 export function setSectionCollapsed(key: string, collapsed: boolean): void {
-  update((current) => {
-    const next = { ...current, [key]: collapsed }
-    writePersisted(next)
-    return next
-  })
+  update((current) => updatePersistedSection(current, key, collapsed))
 }
 
 export function toggleSection(key: string): void {
   update((current) => {
-    const next = { ...current, [key]: !isSectionCollapsed(current, key) }
-    writePersisted(next)
-    return next
+    const latest = readPersisted(current)
+    return updatePersistedSection(latest, key, !isSectionCollapsed(latest, key))
   })
 }
 

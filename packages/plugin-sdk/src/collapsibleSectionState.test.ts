@@ -50,6 +50,20 @@ describe('collapsibleSectionState', () => {
     expect(JSON.parse(raw as string)['initial-prompt']).toBe(true)
   })
 
+  it('preserves unrelated persisted keys written after this bundle initialized', () => {
+    localStorage.setItem(
+      COLLAPSED_SECTIONS_STORAGE_KEY,
+      JSON.stringify({ [pluginSectionKey('another-plugin', 'details')]: true }),
+    )
+
+    setSectionCollapsed('initial-prompt', true)
+
+    expect(JSON.parse(localStorage.getItem(COLLAPSED_SECTIONS_STORAGE_KEY) as string)).toEqual({
+      [pluginSectionKey('another-plugin', 'details')]: true,
+      'initial-prompt': true,
+    })
+  })
+
   it('stores a single global map (not scoped per task or project)', () => {
     setSectionCollapsed('changes', true)
 
