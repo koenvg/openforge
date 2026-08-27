@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { isPublishableWorkspacePackage, readWorkspacePackages } from './workspace-packages.mjs'
 
 const repoRoot = join(import.meta.dirname, '..')
 
@@ -17,25 +18,6 @@ async function pluginPackagePaths() {
     .sort()
 }
 
-async function publishablePackageManifests() {
-  const packageEntries = await readdir(join(repoRoot, 'packages'), { withFileTypes: true })
-  const packagePaths = packageEntries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => `packages/${entry.name}/package.json`)
-    .sort()
-
-  const packages = await Promise.all(
-    packagePaths.map(async (packagePath) => ({
-      packagePath,
-      packageJson: await readJson(packagePath),
-    })),
-  )
-
-  return packages.filter(
-    ({ packageJson }) => packageJson.private !== true && packageJson.publishConfig,
-  )
-}
-
 describe('package build scripts', () => {
   it('builds the plugin SDK package once before built-in plugin bundles', async () => {
     const packageJson = await readJson('package.json')
@@ -47,14 +29,16 @@ describe('package build scripts', () => {
 
   it('builds and tests every publishable workspace package', async () => {
     const rootPackage = await readJson('package.json')
-    const publishablePackages = await publishablePackageManifests()
+    const publishablePackages = readWorkspacePackages(repoRoot).filter(({ manifest }) =>
+      isPublishableWorkspacePackage(manifest),
+    )
 
     expect(publishablePackages.length).toBeGreaterThan(0)
 
     for (const scriptName of ['build', 'test']) {
-      const expectedCommands = publishablePackages.map(({ packagePath, packageJson }) => {
-        expect(packageJson.scripts?.[scriptName], packagePath).toBeTruthy()
-        return `pnpm --filter ${packageJson.name} ${scriptName}`
+      const expectedCommands = publishablePackages.map(({ packageDir, manifest }) => {
+        expect(manifest.scripts?.[scriptName], join(packageDir, 'package.json')).toBeTruthy()
+        return `pnpm --filter ${manifest.name} ${scriptName}`
       })
 
       expect(rootPackage.scripts[`packages:${scriptName}`].split(' && ')).toEqual(expectedCommands)
