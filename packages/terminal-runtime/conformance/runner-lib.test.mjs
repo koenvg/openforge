@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PNG } from 'pngjs'
 import {
   assertPresentation,
+  assertTerminalScreenshotCursorAtCell,
   assertTerminalScreenshotHasInk,
   comparePngBuffers,
   summarizeChromiumProcessMemory,
@@ -79,6 +80,32 @@ describe('terminal presentation harness runner', () => {
     })).toThrow('no visible terminal text')
     expect(() => assertTerminalScreenshotHasInk(visible, { topFraction: 1, minimumInkPixels: 1 }))
       .not.toThrow()
+  })
+
+  it('verifies that the painted cursor occupies the semantic cursor cell', () => {
+    const image = new PNG({ width: 4, height: 2 })
+    for (let y = 0; y < image.height; y += 1) {
+      for (let x = 0; x < image.width; x += 1) {
+        const color = x >= 2 ? [216, 212, 222, 255] : [28, 27, 32, 255]
+        image.data.set(color, (y * image.width + x) * 4)
+      }
+    }
+    const screenshot = PNG.sync.write(image)
+    const options = {
+      screen: { x: 0, y: 0, width: 4, height: 2 },
+      geometry: { cols: 2, rows: 1 },
+      cursorColor: [216, 212, 222, 255],
+      minimumCoverage: 0.75,
+    }
+
+    expect(() => assertTerminalScreenshotCursorAtCell(screenshot, {
+      ...options,
+      cursor: { x: 1, y: 0 },
+    })).not.toThrow()
+    expect(() => assertTerminalScreenshotCursorAtCell(screenshot, {
+      ...options,
+      cursor: { x: 0, y: 0 },
+    })).toThrow('painted cursor')
   })
 
   it('applies a bounded visual pixel ratio and returns a diff image', () => {
