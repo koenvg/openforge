@@ -9,10 +9,12 @@ export interface TerminalSnapshot {
   data: Uint8Array
   ptyInstanceId: number
   watermark: number
+  compatibilityData?: Uint8Array
 }
 
 export interface TerminalReplay {
   authority?: TerminalAuthorityContract['mode']
+  /** Bounded canonical replay for xterm-authoritative sessions. */
   data: string | null
   isLive: boolean
   ptyInstanceId: number | null

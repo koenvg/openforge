@@ -1,4 +1,5 @@
 use super::*;
+use base64::Engine;
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -136,15 +137,19 @@ async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering
         .as_ref()
         .expect("event sender")
         .subscribe();
+    const IMAGE_SEQUENCE: &str =
+        "\u{1b}]1337;File=size=34;inline=1:R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==\u{7}";
+    let print_image =
+        "printf '\\033]1337;File=size=34;inline=1:R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==\\007ghostty-model-output\\n'\n";
     state
         .pty_manager
         .as_ref()
         .expect("pty manager")
-        .write_pty("T-ghostty-shell-0", b"printf ghostty-model-output\\n\n")
+        .write_pty("T-ghostty-shell-0", print_image.as_bytes())
         .await
         .expect("shell input should write");
     let model_event = loop {
-        let event = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+        let event = tokio::time::timeout(std::time::Duration::from_secs(10), events.recv())
             .await
             .expect("model output event deadline")
             .expect("model output event");
@@ -157,6 +162,40 @@ async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering
     assert!(model_event.payload["data"]
         .as_str()
         .is_some_and(|data| !data.is_empty()));
+
+    let compatibility_replay = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let replay = invoke_ok(
+                &state,
+                "get_pty_buffer",
+                json!({ "shellSessionKey": "T-ghostty-shell-0" }),
+            )
+            .await;
+            if let Some(encoded) = replay["snapshot"]["compatibilityData"].as_str() {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .expect("compatibility replay should be base64");
+                let has_image = decoded
+                    .windows(IMAGE_SEQUENCE.len())
+                    .any(|window| window == IMAGE_SEQUENCE.as_bytes());
+                let has_output = decoded
+                    .windows(b"ghostty-model-output".len())
+                    .any(|window| window == b"ghostty-model-output");
+                if has_image && has_output {
+                    break decoded;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("bounded compatibility replay should include accepted raw output");
+    assert!(compatibility_replay
+        .windows(IMAGE_SEQUENCE.len())
+        .any(|window| window == IMAGE_SEQUENCE.as_bytes()));
+    assert!(compatibility_replay
+        .windows(b"ghostty-model-output".len())
+        .any(|window| window == b"ghostty-model-output"));
 
     state
         .pty_manager

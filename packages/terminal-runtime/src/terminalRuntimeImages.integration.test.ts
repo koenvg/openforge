@@ -4,6 +4,7 @@ import {
   resetTerminalRuntimeMocks,
   terminalMocks,
 } from './terminalRuntimeFeatures.testSupport'
+import { INLINE_IMAGE_COMPATIBILITY_REPLAY } from './terminalView.testUtils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalRuntime } from './terminalRuntime'
 
@@ -70,6 +71,40 @@ describe('terminal runtime inline image lifecycle', () => {
     expect(runtime.getTerminalImageProtocol(entry)).toBeNull()
     expect(imageAddonMocks.instances[0].dispose).toHaveBeenCalledOnce()
     warn.mockRestore()
+  })
+
+  it('restores bounded image compatibility replay before a Ghostty snapshot on reconnect', async () => {
+    const compatibilityReplay = INLINE_IMAGE_COMPATIBILITY_REPLAY
+    const host = createHost()
+    host.getPtyBuffer = async () => ({
+      authority: 'ghostty-authoritative',
+      buffer: null,
+      snapshot: {
+        instanceId: 7,
+        watermark: 1,
+        data: btoa('ghostty snapshot'),
+        compatibilityData: btoa(compatibilityReplay),
+      },
+      isLive: true,
+      instanceId: 7,
+    })
+    const runtime = createTerminalRuntime(host)
+    await runtime.acquire('T-1')
+    terminalMocks.instances[0].write.mockClear()
+
+    host.emit('openforge-app-events-reconnected', {})
+
+    await vi.waitFor(() => expect(terminalMocks.instances[0].write).toHaveBeenCalledTimes(2))
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      1,
+      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      expect.any(Function),
+    )
+    expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
+      2,
+      Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
+      expect.any(Function),
+    )
   })
 
   it('resets retained images on reconnect and disposes them with the terminal', async () => {

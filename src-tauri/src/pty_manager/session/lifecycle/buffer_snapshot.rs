@@ -42,6 +42,8 @@ impl PtyManager {
                             watermark: snapshot.watermark,
                             data: base64::engine::general_purpose::STANDARD
                                 .encode(snapshot.portable_vt),
+                            compatibility_data: base64::engine::general_purpose::STANDARD
+                                .encode(snapshot.compatibility_replay),
                         })
                     }
                     Ok(Ok(_)) => None,

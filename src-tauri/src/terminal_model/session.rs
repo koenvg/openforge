@@ -401,7 +401,8 @@ mod tests {
         )
         .expect("terminal model worker should start");
 
-        feeder.feed(b"bootstrap");
+        let bootstrap = b"bootstrap\x1b]1337;File=size=3;inline=1:AAAA\x07";
+        feeder.feed(bootstrap);
         let snapshot = session
             .portable_snapshot()
             .expect("portable snapshot should be available");
@@ -412,6 +413,7 @@ mod tests {
 
         assert_eq!(snapshot.instance_id, 77);
         assert_eq!(snapshot.watermark, 1);
+        assert_eq!(snapshot.compatibility_replay, bootstrap);
         assert!(snapshot
             .portable_vt
             .windows(b"bootstrap".len())
@@ -421,6 +423,7 @@ mod tests {
             .windows(b"later".len())
             .any(|part| part == b"later"));
         assert_eq!(final_snapshot.watermark, 2);
+        assert!(final_snapshot.compatibility_replay.ends_with(b"later"));
 
         let events = captured
             .lock()
@@ -431,7 +434,7 @@ mod tests {
                 TerminalModelEvent::Output(TerminalModelOutputFrame {
                     instance_id: 77,
                     sequence: 1,
-                    bytes: b"bootstrap".to_vec(),
+                    bytes: bootstrap.to_vec(),
                 }),
                 TerminalModelEvent::Output(TerminalModelOutputFrame {
                     instance_id: 77,
