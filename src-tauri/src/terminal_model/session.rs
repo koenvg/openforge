@@ -39,13 +39,10 @@ mod tests {
         sink: Option<TerminalModelEventSink>,
         entered_rx: mpsc::Receiver<()>,
         release_tx: mpsc::SyncSender<()>,
+        released: AtomicBool,
     }
 
     impl FirstOutputBlockingSink {
-        fn new() -> Self {
-            Self::with_event_observer(|_| {})
-        }
-
         fn with_event_observer(
             observer: impl Fn(&TerminalModelEvent) + Send + Sync + 'static,
         ) -> Self {
@@ -74,6 +71,7 @@ mod tests {
                 sink: Some(sink),
                 entered_rx,
                 release_tx,
+                released: AtomicBool::new(false),
             }
         }
 
@@ -89,36 +87,113 @@ mod tests {
                 .expect("event sink should block the model worker");
         }
 
-        fn release(&self) {
-            self.release_tx
-                .send(())
-                .expect("test should release the model worker");
+        fn try_unblock(&self) -> Result<(), mpsc::SendError<()>> {
+            if self.released.swap(true, Ordering::AcqRel) {
+                return Ok(());
+            }
+            self.release_tx.send(())
+        }
+
+        fn unblock(&self) {
+            self.try_unblock()
+                .expect("test should unblock the model worker");
+        }
+    }
+
+    struct BlockedTerminalModelWorker {
+        session: Option<Arc<TerminalModelSession>>,
+        feeder: Option<TerminalModelFeeder>,
+        blocked_sink: FirstOutputBlockingSink,
+    }
+
+    impl BlockedTerminalModelWorker {
+        fn start(session_key: &str, instance_id: u64) -> Self {
+            Self::with_event_observer(session_key, instance_id, |_| {})
+        }
+
+        fn with_event_observer(
+            session_key: &str,
+            instance_id: u64,
+            observer: impl Fn(&TerminalModelEvent) + Send + Sync + 'static,
+        ) -> Self {
+            let mut blocked_sink = FirstOutputBlockingSink::with_event_observer(observer);
+            let (session, feeder) = TerminalModelSession::start_with_event_sink(
+                session_key.to_string(),
+                instance_id,
+                TerminalModelOptions::new(80, 24),
+                blocked_sink.take_sink(),
+            )
+            .expect("terminal model worker should start");
+
+            feeder.feed(b"first");
+            blocked_sink.wait_until_entered();
+            for _ in 0..COMMAND_QUEUE_CAPACITY {
+                feeder.feed(b"queued");
+            }
+
+            Self {
+                session: Some(Arc::new(session)),
+                feeder: Some(feeder),
+                blocked_sink,
+            }
+        }
+
+        fn session(&self) -> &Arc<TerminalModelSession> {
+            self.session
+                .as_ref()
+                .expect("blocked worker session should still be available")
+        }
+
+        fn feeder(&self) -> &TerminalModelFeeder {
+            self.feeder
+                .as_ref()
+                .expect("blocked worker feeder should still be available")
+        }
+
+        fn take_session(&mut self) -> Arc<TerminalModelSession> {
+            self.session
+                .take()
+                .expect("blocked worker session should only be taken once")
+        }
+
+        fn take_feeder(&mut self) -> TerminalModelFeeder {
+            self.feeder
+                .take()
+                .expect("blocked worker feeder should only be taken once")
+        }
+
+        fn unblock(&self) {
+            self.blocked_sink.unblock();
+        }
+
+        fn run_session_operation<T: Send + 'static>(
+            &self,
+            operation_name: &str,
+            operation: impl FnOnce(Arc<TerminalModelSession>) -> T + Send + 'static,
+        ) -> Result<T, mpsc::RecvTimeoutError> {
+            let session = Arc::clone(self.session());
+            let (result_tx, result_rx) = mpsc::sync_channel(1);
+            let operation_thread = std::thread::spawn(move || {
+                let _ = result_tx.send(operation(session));
+            });
+
+            let result =
+                result_rx.recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200));
+            self.unblock();
+            operation_thread
+                .join()
+                .unwrap_or_else(|_| panic!("{operation_name} thread should not panic"));
+            result
+        }
+    }
+
+    impl Drop for BlockedTerminalModelWorker {
+        fn drop(&mut self) {
+            let _ = self.blocked_sink.try_unblock();
         }
     }
 
     type TestRequest = fn(&TerminalModelSession) -> Result<Vec<u8>, String>;
-
-    fn start_worker_with_saturated_queue(
-        session_key: &str,
-        instance_id: u64,
-    ) -> (Arc<TerminalModelSession>, FirstOutputBlockingSink) {
-        let mut blocked_sink = FirstOutputBlockingSink::new();
-        let (session, feeder) = TerminalModelSession::start_with_event_sink(
-            session_key.to_string(),
-            instance_id,
-            TerminalModelOptions::new(80, 24),
-            blocked_sink.take_sink(),
-        )
-        .expect("terminal model worker should start");
-
-        feeder.feed(b"first");
-        blocked_sink.wait_until_entered();
-        for _ in 0..COMMAND_QUEUE_CAPACITY {
-            feeder.feed(b"queued");
-        }
-
-        (Arc::new(session), blocked_sink)
-    }
 
     #[test]
     fn worker_preserves_raw_chunk_order_and_captures_replies() {
@@ -179,21 +254,8 @@ mod tests {
 
     #[test]
     fn authoritative_feeder_applies_backpressure_instead_of_disabling_on_output_bursts() {
-        let mut blocked_sink = FirstOutputBlockingSink::new();
-        let (session, feeder) = TerminalModelSession::start_with_event_sink(
-            "burst-shell".to_string(),
-            92,
-            TerminalModelOptions::new(80, 24),
-            blocked_sink.take_sink(),
-        )
-        .expect("terminal model worker should start");
-
-        feeder.feed(b"first");
-        blocked_sink.wait_until_entered();
-        for _ in 0..COMMAND_QUEUE_CAPACITY {
-            feeder.feed(b"queued");
-        }
-        let tail_feeder = feeder.clone();
+        let worker = BlockedTerminalModelWorker::start("burst-shell", 92);
+        let tail_feeder = worker.feeder().clone();
         let (tail_started_tx, tail_started_rx) = mpsc::sync_channel(1);
         let (tail_complete_tx, tail_complete_rx) = mpsc::sync_channel(1);
         let tail_feed = std::thread::spawn(move || {
@@ -208,7 +270,7 @@ mod tests {
         let completed_while_model_was_blocked = tail_complete_rx
             .recv_timeout(QUEUE_CATCH_UP_TIMEOUT + Duration::from_millis(50))
             .is_ok();
-        blocked_sink.release();
+        worker.unblock();
         if !completed_while_model_was_blocked {
             tail_complete_rx
                 .recv_timeout(REQUEST_TIMEOUT)
@@ -217,7 +279,8 @@ mod tests {
         tail_feed.join().expect("tail feeder should not panic");
 
         assert!(!completed_while_model_was_blocked);
-        session
+        worker
+            .session()
             .portable_snapshot()
             .expect("authoritative model should remain available after the burst");
     }
@@ -227,26 +290,18 @@ mod tests {
         let (worker_disconnected_tx, worker_disconnected_rx) = mpsc::sync_channel(1);
         let (worker_dropped_tx, worker_dropped_rx) = mpsc::sync_channel(1);
         let worker_drop_signal = DropSignal(worker_dropped_tx);
-        let mut blocked_sink = FirstOutputBlockingSink::with_event_observer(move |event| {
-            let _worker_drop_signal = &worker_drop_signal;
-            if matches!(event, TerminalModelEvent::Disabled { .. }) {
-                let _ = worker_disconnected_tx.send(());
-            }
-        });
-        let (session, feeder) = TerminalModelSession::start_with_event_sink(
-            "blocked-drop-shell".to_string(),
+        let mut worker = BlockedTerminalModelWorker::with_event_observer(
+            "blocked-drop-shell",
             93,
-            TerminalModelOptions::new(80, 24),
-            blocked_sink.take_sink(),
-        )
-        .expect("terminal model worker should start");
-
-        feeder.feed(b"first");
-        blocked_sink.wait_until_entered();
-        for _ in 0..COMMAND_QUEUE_CAPACITY {
-            feeder.feed(b"queued");
-        }
-
+            move |event| {
+                let _worker_drop_signal = &worker_drop_signal;
+                if matches!(event, TerminalModelEvent::Disabled { .. }) {
+                    let _ = worker_disconnected_tx.send(());
+                }
+            },
+        );
+        let session = worker.take_session();
+        let feeder = worker.take_feeder();
         let (drop_complete_tx, drop_complete_rx) = mpsc::sync_channel(1);
         let drop_thread = std::thread::spawn(move || {
             drop(session);
@@ -256,7 +311,7 @@ mod tests {
             .recv_timeout(Duration::from_millis(250))
             .is_ok();
 
-        blocked_sink.release();
+        worker.unblock();
         drop_thread
             .join()
             .expect("session drop thread should not panic");
@@ -278,47 +333,24 @@ mod tests {
 
     #[test]
     fn resize_submission_is_bounded_when_authoritative_queue_is_saturated() {
-        let (session, blocked_sink) = start_worker_with_saturated_queue("resize-shell", 94);
-        let resize_session = Arc::clone(&session);
-        let (resize_complete_tx, resize_complete_rx) = mpsc::sync_channel(1);
-        let resize_thread = std::thread::spawn(move || {
-            resize_session.resize(120, 40);
-            let _ = resize_complete_tx.send(());
-        });
-
-        let completed_within_deadline = resize_complete_rx
-            .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200))
+        let worker = BlockedTerminalModelWorker::start("resize-shell", 94);
+        let completed_within_deadline = worker
+            .run_session_operation("resize", |session| session.resize(120, 40))
             .is_ok();
-        blocked_sink.release();
-        resize_thread
-            .join()
-            .expect("resize thread should not panic");
-
         assert!(
             completed_within_deadline,
             "resize must not wait indefinitely for a saturated authoritative queue"
         );
-        assert!(session.diagnostics().iter().any(|diagnostic| {
+        assert!(worker.session().diagnostics().iter().any(|diagnostic| {
             diagnostic.phase == "resize" && diagnostic.message.contains("timed out")
         }));
     }
 
     #[test]
     fn portable_snapshot_submission_times_out_when_authoritative_queue_is_saturated() {
-        let (session, blocked_sink) =
-            start_worker_with_saturated_queue("portable-snapshot-shell", 95);
-        let snapshot_session = Arc::clone(&session);
-        let (snapshot_result_tx, snapshot_result_rx) = mpsc::sync_channel(1);
-        let snapshot_thread = std::thread::spawn(move || {
-            let _ = snapshot_result_tx.send(snapshot_session.portable_snapshot());
-        });
-
-        let result = snapshot_result_rx
-            .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200));
-        blocked_sink.release();
-        snapshot_thread
-            .join()
-            .expect("portable snapshot thread should not panic");
+        let worker = BlockedTerminalModelWorker::start("portable-snapshot-shell", 95);
+        let result = worker
+            .run_session_operation("portable snapshot", |session| session.portable_snapshot());
 
         assert!(matches!(
             result,
@@ -334,22 +366,12 @@ mod tests {
         ];
 
         for (index, (request_name, request)) in requests.into_iter().enumerate() {
-            let (session, blocked_sink) = start_worker_with_saturated_queue(
+            let worker = BlockedTerminalModelWorker::start(
                 &format!("test-request-{index}"),
                 96 + index as u64,
             );
-            let request_session = Arc::clone(&session);
-            let (request_result_tx, request_result_rx) = mpsc::sync_channel(1);
-            let request_thread = std::thread::spawn(move || {
-                let _ = request_result_tx.send(request(&request_session));
-            });
-
-            let result = request_result_rx
-                .recv_timeout(COMMAND_SUBMISSION_TIMEOUT + Duration::from_millis(200));
-            blocked_sink.release();
-            request_thread
-                .join()
-                .unwrap_or_else(|_| panic!("{request_name} request thread should not panic"));
+            let result =
+                worker.run_session_operation(request_name, move |session| request(&session));
 
             assert!(
                 matches!(
