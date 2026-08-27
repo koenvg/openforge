@@ -296,6 +296,45 @@ fn test_pty_output_batcher_flushes_at_threshold_to_event_and_ring_buffer() {
 }
 
 #[test]
+fn pty_output_batcher_recovers_poisoned_ring_buffer_before_writing() {
+    let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
+    let mut batcher = PtyOutputBatcher::new("task-poisoned".to_string(), 43, Arc::clone(&ring), 64);
+    let mut emitted = Vec::new();
+
+    batcher.push_output("retained output", &mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    });
+
+    let poisoned_ring = Arc::clone(&ring);
+    assert!(
+        std::thread::spawn(move || {
+            let _guard = poisoned_ring
+                .lock()
+                .expect("buffer lock should start healthy");
+            panic!("poison buffer lock");
+        })
+        .join()
+        .is_err(),
+        "poisoning thread should panic"
+    );
+
+    assert!(batcher.flush_pending(&mut |event_name, payload| {
+        emitted.push((event_name.to_string(), payload.clone()));
+        Ok(())
+    }));
+
+    assert_eq!(emitted.len(), 1);
+    assert_eq!(emitted[0].1["data"], "retained output");
+    assert_eq!(
+        ring.lock()
+            .expect("write recovery should clear the poison state")
+            .snapshot(),
+        "retained output"
+    );
+}
+
+#[test]
 fn test_pty_output_batcher_flush_pending_returns_false_for_empty_buffer() {
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(64)));
     let mut batcher = PtyOutputBatcher::new("task-empty".to_string(), 7, ring, 10);
