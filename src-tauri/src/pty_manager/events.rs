@@ -262,9 +262,19 @@ impl PtyOutputBatcher {
         }
 
         let data = std::mem::take(&mut self.pending);
-        if let Ok(mut buf) = self.ring_buffer.lock() {
-            buf.push(data.as_bytes());
-        }
+        let mut buf = match self.ring_buffer.lock() {
+            Ok(buf) => buf,
+            Err(poisoned) => {
+                warn!(
+                    "[PTY] key={} output buffer lock poisoned; recovering before write",
+                    self.session_key
+                );
+                self.ring_buffer.clear_poison();
+                poisoned.into_inner()
+            }
+        };
+        buf.push(data.as_bytes());
+        drop(buf);
 
         let event_name = format!("pty-output-{}", self.session_key);
         let payload = serde_json::json!({
