@@ -28,7 +28,6 @@ describe('SettingsView autosave global persistence', () => {
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
     expect(requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement).disabled).toBe(true)
-    expect(requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement).disabled).toBe(true)
     expect(requireElement(screen.getByTestId('task_display_title_metadata_updates_enabled'), HTMLInputElement).disabled).toBe(true)
 
     await openSettingsCategory(/GitHub & Credentials/)
@@ -40,7 +39,6 @@ describe('SettingsView autosave global persistence', () => {
     })
     resolvers.get('task_id_prefix')?.('OF')
     resolvers.get('github_token')?.('ghp_old')
-    resolvers.get('code_cleanup_tasks_enabled')?.('false')
     resolvers.get('task_display_title_metadata_updates_enabled')?.('false')
     resolvers.get('github_poll_interval')?.('60')
     resolvers.get('use_worktrees')?.('true')
@@ -54,7 +52,7 @@ describe('SettingsView autosave global persistence', () => {
     })
     await fireEvent.click(screen.getByRole('button', { name: /^General/ }))
     expect(requireElement(screen.getByTestId('task_id_prefix'), HTMLInputElement).disabled).toBe(false)
-    expect(requireElement(screen.getByTestId('code_cleanup_tasks_enabled'), HTMLInputElement).disabled).toBe(false)
+    expect(requireElement(screen.getByTestId('task_display_title_metadata_updates_enabled'), HTMLInputElement).disabled).toBe(false)
   })
 
   it('saves global settings after debounce when a field changes', async () => {

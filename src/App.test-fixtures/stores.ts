@@ -100,7 +100,6 @@ vi.mock('../lib/stores', () => {
     focusBoardFilters: writable(new Map()),
     outOfFocusTaskIdsByProject: writable(new Map()),
     startingTasks: writable<Set<string>>(new Set()),
-    codeCleanupTasksEnabled: writable(false),
   }
 })
 

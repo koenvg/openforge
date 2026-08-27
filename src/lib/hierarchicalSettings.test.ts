@@ -7,7 +7,7 @@ import {
 describe('hierarchical settings registry', () => {
   it('marks task-applicable settings correctly', () => {
     const byKey = Object.fromEntries(HIERARCHICAL_SETTINGS.map((s) => [s.key, s]))
-    expect(byKey['code_cleanup_tasks_enabled'].levels).toContain('task')
+    expect(byKey['task_display_title_metadata_updates_enabled'].levels).toContain('task')
     expect(byKey['ai_provider'].levels).toContain('task')
     // Project-only settings do not cascade to tasks.
     expect(byKey['task_id_prefix'].levels).not.toContain('task')
@@ -15,10 +15,10 @@ describe('hierarchical settings registry', () => {
   })
 
   it('project raw override wins over global, absence inherits global', () => {
-    const global = { code_cleanup_tasks_enabled: 'false', ai_provider: 'claude-code' }
-    const projectRaw = { code_cleanup_tasks_enabled: 'true' } // ai_provider absent
+    const global = { task_display_title_metadata_updates_enabled: 'false', ai_provider: 'claude-code' }
+    const projectRaw = { task_display_title_metadata_updates_enabled: 'true' } // ai_provider absent
     const eff = computeEffectiveProjectSettings(global, projectRaw)
-    expect(eff.code_cleanup_tasks_enabled).toBe('true')
+    expect(eff.task_display_title_metadata_updates_enabled).toBe('true')
     expect(eff.ai_provider).toBe('claude-code')
   })
 

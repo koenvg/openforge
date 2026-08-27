@@ -15,14 +15,6 @@ export interface HierarchicalSettingDef {
 
 export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
   {
-    key: 'code_cleanup_tasks_enabled',
-    label: 'Code Cleanup Tasks',
-    description: 'Agents create tasks for code that needs cleanup or splitting',
-    control: 'toggle',
-    levels: ['global', 'project', 'task'],
-    default: 'false',
-  },
-  {
     key: 'task_display_title_metadata_updates_enabled',
     label: 'Task Display Title Updates',
     description: 'Generate task display titles from agent activity metadata',

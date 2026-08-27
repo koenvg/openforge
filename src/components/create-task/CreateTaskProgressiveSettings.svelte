@@ -32,10 +32,6 @@
     <ChevronDown size={16} class="transition-transform group-open:rotate-180" aria-hidden="true" />
   </summary>
   <div class="grid gap-3 border-t border-base-300 p-4 sm:grid-cols-2">
-    <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80">
-      <input type="checkbox" class="toggle toggle-primary toggle-sm" aria-label="Code cleanup tasks" bind:checked={draft.codeCleanupEnabled} />
-      <span>Create code cleanup tasks</span>
-    </label>
     <label class="flex min-w-0 items-center gap-2 text-xs font-medium text-base-content/80 sm:col-span-2">
       <input type="checkbox" class="toggle toggle-primary toggle-sm" aria-label="Task display title updates" bind:checked={draft.taskDisplayTitleUpdatesEnabled} />
       <span>Auto-update task display title</span>

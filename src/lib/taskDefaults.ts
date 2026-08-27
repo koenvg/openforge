@@ -2,7 +2,6 @@ import { getConfig, getProjectConfig, getResolvedAiProvider } from './ipc'
 import { computeEffectiveProjectSettings, HIERARCHICAL_SETTINGS } from './hierarchicalSettings'
 
 export interface TaskLevelDefaults {
-  codeCleanupEnabled: boolean
   taskDisplayTitleUpdatesEnabled: boolean
   aiProvider: string
   useWorktrees: boolean
@@ -39,7 +38,6 @@ export async function loadTaskLevelDefaults(projectId: string | null): Promise<T
   const effective = computeEffectiveProjectSettings(global, projectRaw)
 
   return {
-    codeCleanupEnabled: effective.code_cleanup_tasks_enabled === 'true',
     taskDisplayTitleUpdatesEnabled: effective.task_display_title_metadata_updates_enabled === 'true',
     aiProvider,
     useWorktrees: effective.use_worktrees === 'true',

@@ -51,27 +51,6 @@ async fn assert_unreadable_config_rejects_task_start(
 }
 
 #[tokio::test]
-async fn safe_start_reports_unreadable_cleanup_config_at_each_scope() {
-    for (test_name, scope) in [
-        (
-            "task_start_unreadable_task_cleanup_config",
-            UnreadableConfigScope::Task,
-        ),
-        (
-            "task_start_unreadable_project_cleanup_config",
-            UnreadableConfigScope::Project,
-        ),
-        (
-            "task_start_unreadable_global_cleanup_config",
-            UnreadableConfigScope::Global,
-        ),
-    ] {
-        assert_unreadable_config_rejects_task_start(test_name, "code_cleanup_tasks_enabled", scope)
-            .await;
-    }
-}
-
-#[tokio::test]
 async fn safe_start_reports_unreadable_provider_config_at_each_scope() {
     for (test_name, scope) in [
         (

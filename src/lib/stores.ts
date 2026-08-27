@@ -119,8 +119,6 @@ export const startingTasks = writable<Set<string>>(new Set());
 /** Set of Task IDs with completion in flight, awaiting the backend lifecycle. */
 export const completingTasks = writable<Set<string>>(new Set());
 
-export const codeCleanupTasksEnabled = writable<boolean>(false);
-
 /** Per-task active view identifier preserved across navigation. */
 export const taskActiveView = writable<Map<string, string>>(new Map());
 

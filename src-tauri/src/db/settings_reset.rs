@@ -3,7 +3,6 @@ use rusqlite::Result;
 /// project_config keys that participate in the unified settings hierarchy and are
 /// therefore cleared by "Default to global settings".
 pub const HIERARCHY_PROJECT_CONFIG_KEYS: &[&str] = &[
-    "code_cleanup_tasks_enabled",
     "task_display_title_metadata_updates_enabled",
     "ai_provider",
     "use_worktrees",
@@ -38,8 +37,12 @@ mod tests {
     fn test_reset_clears_project_overrides_only() {
         let (db, _temp_dir) = make_test_db("reset_settings");
         let project = db.create_project("P", "/tmp/p").unwrap();
-        db.set_project_config(&project.id, "code_cleanup_tasks_enabled", "true")
-            .unwrap();
+        db.set_project_config(
+            &project.id,
+            "task_display_title_metadata_updates_enabled",
+            "true",
+        )
+        .unwrap();
         db.set_project_config(&project.id, "additional_instructions", "keep me")
             .unwrap();
 
@@ -47,7 +50,7 @@ mod tests {
 
         // Hierarchy key cleared -> inherits (None).
         assert_eq!(
-            db.get_project_config(&project.id, "code_cleanup_tasks_enabled")
+            db.get_project_config(&project.id, "task_display_title_metadata_updates_enabled")
                 .unwrap(),
             None
         );

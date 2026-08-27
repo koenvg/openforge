@@ -14,8 +14,6 @@ export interface CreateTaskOptions {
   title?: string | null
   /** Optional link to the source ticket (e.g. GitHub issue / Jira URL); null/empty stores nothing. */
   sourceTicketUrl?: string | null
-  /** Task-level cleanup override; omit to inherit the project/global default. */
-  codeCleanupEnabled?: boolean
   /** Task-level title-auto-update override; omit to inherit the project/global default. */
   taskDisplayTitleUpdatesEnabled?: boolean
   /** Task-level AI provider override; null/omit to inherit the project/global default. */
@@ -30,11 +28,10 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
     worktreeBranch = null,
     title = null,
     sourceTicketUrl = null,
-    codeCleanupEnabled,
     taskDisplayTitleUpdatesEnabled,
     aiProvider = null,
   } = options
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, codeCleanupEnabled, taskDisplayTitleUpdatesEnabled, aiProvider });
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames, worktreeSource, worktreeBranch, title, sourceTicketUrl, taskDisplayTitleUpdatesEnabled, aiProvider });
   return normalizeTask(task)
 }
 

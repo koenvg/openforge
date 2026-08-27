@@ -340,10 +340,10 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			sourceTicketUrl: null,
-			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});
+		expect(invokeMock.mock.calls[0]?.[1]).not.toHaveProperty("codeCleanupEnabled");
 	});
 
 	it("sends persisted worktree branch source when creating a task", async () => {
@@ -378,7 +378,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: "feature/open-pr",
 			title: null,
 			sourceTicketUrl: null,
-			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});
@@ -416,7 +415,6 @@ describe("ipc spawnShellPty", () => {
 			worktreeBranch: null,
 			title: null,
 			sourceTicketUrl: null,
-			codeCleanupEnabled: undefined,
 			taskDisplayTitleUpdatesEnabled: undefined,
 			aiProvider: null,
 		});

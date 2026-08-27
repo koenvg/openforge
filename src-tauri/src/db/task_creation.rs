@@ -59,9 +59,6 @@ pub struct NewTaskOptions<'a> {
     pub worktree_branch: Option<&'a str>,
     pub title: Option<&'a str>,
     pub source_ticket_url: Option<&'a str>,
-    /// When `Some`, snapshot `code_cleanup_tasks_enabled` into `task_config` at
-    /// creation. `None` leaves it unset so the runtime resolves project/global.
-    pub code_cleanup_enabled: Option<bool>,
     /// When `Some`, snapshot `task_display_title_metadata_updates_enabled` into
     /// `task_config` at creation. `None` leaves it unset.
     pub task_display_title_updates_enabled: Option<bool>,
@@ -139,7 +136,6 @@ struct NormalizedTaskOptions<'a> {
     worktree_branch: Option<String>,
     title: Option<String>,
     source_ticket_url: Option<String>,
-    code_cleanup_enabled: Option<bool>,
     task_display_title_updates_enabled: Option<bool>,
     ai_provider: Option<&'a str>,
 }
@@ -158,7 +154,6 @@ fn normalize_task_options<'a>(
         worktree_branch,
         title,
         source_ticket_url,
-        code_cleanup_enabled,
         task_display_title_updates_enabled,
         ai_provider,
     } = opts;
@@ -183,7 +178,6 @@ fn normalize_task_options<'a>(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string),
-        code_cleanup_enabled,
         task_display_title_updates_enabled,
         ai_provider,
     })
@@ -316,12 +310,6 @@ fn persist_task_config_snapshots(
     opts: &NormalizedTaskOptions<'_>,
 ) -> Result<()> {
     let bool_str = |value: bool| if value { "true" } else { "false" };
-    if let Some(value) = opts.code_cleanup_enabled {
-        conn.execute(
-            "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
-            [task_id, "code_cleanup_tasks_enabled", bool_str(value)],
-        )?;
-    }
     if let Some(value) = opts.task_display_title_updates_enabled {
         conn.execute(
             "INSERT OR REPLACE INTO task_config (task_id, key, value) VALUES (?1, ?2, ?3)",
@@ -443,7 +431,6 @@ impl super::Database {
             worktree_branch: worktree.branch,
             title: None,
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })

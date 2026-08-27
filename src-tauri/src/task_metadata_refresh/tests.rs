@@ -164,22 +164,21 @@ fn refresh_task_display_title_once_sets_generated_title() {
 }
 
 #[test]
-fn build_task_display_title_prompt_uses_snapshot_without_cleanup_blocks() {
+fn build_task_display_title_prompt_uses_snapshot_activity() {
     let (db, _temp_dir) = make_test_db("metadata_title_prompt_snapshot");
     let task = db
         .create_task("Initial vague request", "doing", None, None, None)
         .expect("create task");
     let snapshot = MetadataJobSnapshot {
-            transcript_path: None,
-            transcript_excerpt: Some("Actual topic: repair OAuth token refresh race".to_string()),
-            activity_excerpt: Some("<openforge_code_cleanup>noise</openforge_code_cleanup>\nTool activity: edited auth middleware".to_string()),
-        };
+        transcript_path: None,
+        transcript_excerpt: Some("Actual topic: repair OAuth token refresh race".to_string()),
+        activity_excerpt: Some("Tool activity: edited auth middleware".to_string()),
+    };
 
     let prompt = build_task_display_title_prompt(&task, Some(&snapshot));
 
     assert!(prompt.contains("repair OAuth token refresh race"));
     assert!(prompt.contains("edited auth middleware"));
-    assert!(!prompt.contains("openforge_code_cleanup"));
     assert!(prompt.contains("Return only JSON"));
 }
 
@@ -662,7 +661,6 @@ fn refresh_task_display_title_once_skips_manual_title() {
             worktree_branch: None,
             title: Some("Manual title"),
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
