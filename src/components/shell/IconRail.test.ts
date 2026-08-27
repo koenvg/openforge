@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
-import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
+import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
 import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
 import IconRail from './IconRail.svelte'
 import type { AppView } from '../../lib/types'

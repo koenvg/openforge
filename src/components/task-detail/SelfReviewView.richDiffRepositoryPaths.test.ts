@@ -14,10 +14,8 @@ import {
 	getTaskDiff,
 	getTaskFileContents,
 } from "../../lib/ipc";
-import {
-	FILE_VIEWER_VIEW_KEY,
-	revealFileInFileViewer,
-} from "../../lib/fileViewerPlugin";
+import { revealFileInFileViewer } from "../../lib/fileViewerPlugin";
+import { FILE_VIEWER_VIEW_KEY } from "../../lib/fileViewerView";
 
 setupSelfReviewViewTestSuite();
 

@@ -1,6 +1,7 @@
 import { derived, writable } from 'svelte/store'
 import { vi } from 'vitest'
 import { GITHUB_SYNC_VIEW_KEY } from '../lib/githubSyncPlugin'
+import { FILE_VIEWER_VIEW_KEY } from '../lib/fileViewerView'
 import { makePluginViewKey } from '../lib/plugin/types'
 import { countAllReposUnopenedReviews, countRepoUnopenedReviews } from '../lib/prReviewBadgeCounts'
 import type {
@@ -14,7 +15,6 @@ import type {
   Task,
 } from '../lib/types'
 
-const FILE_VIEWER_VIEW_KEY = makePluginViewKey('com.openforge.file-viewer', 'files')
 const TASK_SCHEDULES_VIEW_KEY = makePluginViewKey('com.openforge.task-schedules', 'schedules')
 
 export const mockSelectedTaskIdStore = writable<string | null>(null)

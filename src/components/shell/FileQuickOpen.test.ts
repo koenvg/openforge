@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
-import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
+import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
 
 const mockActiveProjectId = writable<string | null>('test-project-id')
 const mockFsSearchFiles = vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>()
@@ -22,13 +22,9 @@ vi.mock('../../lib/router.svelte', () => ({
   useAppRouter: () => ({ navigate: mockNavigate }),
 }))
 
-vi.mock('../../lib/fileViewerPlugin', async () => {
-  const { makePluginViewKey } = await import('../../lib/plugin/types')
-  return {
-    FILE_VIEWER_VIEW_KEY: makePluginViewKey('com.openforge.file-viewer', 'files'),
-    revealFileInFileViewer: mockRevealFileInFileViewer,
-  }
-})
+vi.mock('../../lib/fileViewerPlugin', () => ({
+  revealFileInFileViewer: mockRevealFileInFileViewer,
+}))
 
 Element.prototype.scrollIntoView = vi.fn()
 

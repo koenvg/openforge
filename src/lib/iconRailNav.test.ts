@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FILE_VIEWER_VIEW_KEY } from './fileViewerPlugin'
+import { FILE_VIEWER_VIEW_KEY } from './fileViewerView'
 import { GITHUB_SYNC_VIEW_KEY } from './githubSyncPlugin'
 import { TASK_SCHEDULES_VIEW_KEY } from './taskSchedulesPlugin'
 import { getIconRailNavItems } from './iconRailNav'

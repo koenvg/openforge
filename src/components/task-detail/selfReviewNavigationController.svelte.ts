@@ -1,5 +1,6 @@
 import { tick } from 'svelte'
-import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin'
+import { revealFileInFileViewer } from '../../lib/fileViewerPlugin'
+import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerView'
 import { openUrl } from '../../lib/ipc'
 import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
 import type { PrComment, PullRequestInfo } from '../../lib/types'
