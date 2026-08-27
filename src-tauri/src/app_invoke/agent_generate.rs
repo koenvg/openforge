@@ -14,6 +14,7 @@ use super::*;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -44,7 +45,18 @@ const READ_AND_GIT_HISTORY_TOOLS: &str =
 const DISALLOWED_EDIT_TOOLS: &str = "Write Edit";
 
 type GenerationAbortSender = oneshot::Sender<()>;
-type InFlightGenerations = HashMap<String, GenerationAbortSender>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GenerationRegistrationId(u64);
+
+struct InFlightGeneration {
+    registration_id: GenerationRegistrationId,
+    abort_sender: GenerationAbortSender,
+}
+
+/// Duplicate session keys share one abort group. Each run keeps its own registration so
+/// completion only removes that run, while aborting the key cancels every remaining run.
+type InFlightGenerations = HashMap<String, Vec<InFlightGeneration>>;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 enum GenerationRegistryError {
@@ -58,6 +70,7 @@ enum GenerationRegistryError {
 #[derive(Default)]
 struct GenerationRegistry {
     in_flight: Mutex<InFlightGenerations>,
+    next_registration_id: AtomicU64,
 }
 
 impl GenerationRegistry {
@@ -65,23 +78,43 @@ impl GenerationRegistry {
         &self,
         session_key: &str,
         abort_sender: GenerationAbortSender,
-    ) -> Result<(), GenerationRegistryError> {
+    ) -> Result<GenerationRegistrationId, GenerationRegistryError> {
+        let registration_id =
+            GenerationRegistrationId(self.next_registration_id.fetch_add(1, Ordering::Relaxed));
         self.with_in_flight(|in_flight| {
-            in_flight.insert(session_key.to_string(), abort_sender);
+            in_flight
+                .entry(session_key.to_string())
+                .or_default()
+                .push(InFlightGeneration {
+                    registration_id,
+                    abort_sender,
+                });
+            registration_id
         })
     }
 
-    fn remove(&self, session_key: &str) -> Result<(), GenerationRegistryError> {
+    fn remove(
+        &self,
+        session_key: &str,
+        registration_id: GenerationRegistrationId,
+    ) -> Result<(), GenerationRegistryError> {
         self.with_in_flight(|in_flight| {
-            in_flight.remove(session_key);
+            if let Some(generations) = in_flight.get_mut(session_key) {
+                generations.retain(|generation| generation.registration_id != registration_id);
+                if generations.is_empty() {
+                    in_flight.remove(session_key);
+                }
+            }
         })
     }
 
     fn abort(&self, session_key: &str) -> Result<(), GenerationRegistryError> {
         self.with_in_flight(|in_flight| {
-            if let Some(abort_sender) = in_flight.remove(session_key) {
-                // The receiver may already be gone if the generation just finished.
-                let _ = abort_sender.send(());
+            if let Some(generations) = in_flight.remove(session_key) {
+                for generation in generations {
+                    // The receiver may already be gone if the generation just finished.
+                    let _ = generation.abort_sender.send(());
+                }
             }
         })
     }
@@ -96,7 +129,8 @@ impl GenerationRegistry {
                 let mut in_flight = poisoned.into_inner();
                 let abort_senders = in_flight
                     .drain()
-                    .map(|(_, sender)| sender)
+                    .flat_map(|(_, generations)| generations)
+                    .map(|generation| generation.abort_sender)
                     .collect::<Vec<_>>();
                 self.in_flight.clear_poison();
                 drop(in_flight);
@@ -284,7 +318,7 @@ async fn run_headless_generation(
         .ok_or_else(|| format!("{binary_name} executable was not found on PATH"))?;
 
     let (abort_tx, abort_rx) = oneshot::channel::<()>();
-    generation_registry()
+    let registration_id = generation_registry()
         .register(session_key, abort_tx)
         .map_err(|error| error.to_string())?;
 
@@ -299,9 +333,9 @@ async fn run_headless_generation(
     )
     .await;
 
-    // Always drop the registry entry so a finished generation can't be "aborted" later.
+    // Remove only this run's registration. Other runs may share the session key.
     generation_registry()
-        .remove(session_key)
+        .remove(session_key, registration_id)
         .map_err(|error| error.to_string())?;
 
     // With a schema we run the CLI in `--output-format json`, whose stdout is a
@@ -692,6 +726,76 @@ mod tests {
     }
 
     #[test]
+    fn aborting_duplicate_session_key_aborts_every_generation() {
+        let registry = GenerationRegistry::default();
+        let barrier = std::sync::Barrier::new(2);
+        let (first_tx, mut first_rx) = oneshot::channel();
+        let (second_tx, second_rx) = oneshot::channel();
+
+        registry
+            .register("shared-session", first_tx)
+            .expect("first registration");
+
+        std::thread::scope(|scope| {
+            let registry = &registry;
+            let barrier = &barrier;
+            let second_generation = scope.spawn(move || {
+                registry
+                    .register("shared-session", second_tx)
+                    .expect("duplicate registration");
+                barrier.wait();
+                second_rx.blocking_recv()
+            });
+
+            barrier.wait();
+            registry.abort("shared-session").expect("abort duplicates");
+
+            assert_eq!(first_rx.try_recv(), Ok(()));
+            assert_eq!(
+                second_generation.join().expect("second generation thread"),
+                Ok(())
+            );
+        });
+    }
+
+    #[test]
+    fn cleanup_only_removes_the_registration_owned_by_that_generation() {
+        let registry = GenerationRegistry::default();
+        let barrier = std::sync::Barrier::new(2);
+        let (first_tx, _first_rx) = oneshot::channel();
+        let (second_tx, second_rx) = oneshot::channel();
+
+        let first_registration = registry
+            .register("shared-session", first_tx)
+            .expect("first registration");
+
+        std::thread::scope(|scope| {
+            let registry = &registry;
+            let barrier = &barrier;
+            let second_generation = scope.spawn(move || {
+                registry
+                    .register("shared-session", second_tx)
+                    .expect("duplicate registration");
+                barrier.wait();
+                second_rx.blocking_recv()
+            });
+
+            barrier.wait();
+            registry
+                .remove("shared-session", first_registration)
+                .expect("first generation cleanup");
+            registry
+                .abort("shared-session")
+                .expect("abort remaining generation");
+
+            assert_eq!(
+                second_generation.join().expect("second generation thread"),
+                Ok(())
+            );
+        });
+    }
+
+    #[test]
     fn poisoned_registry_aborts_all_generations_and_recovers() {
         let registry = GenerationRegistry::default();
         let (abort_tx, mut abort_rx) = oneshot::channel();
@@ -749,14 +853,14 @@ mod tests {
     fn poisoned_registry_cleanup_fails_and_aborts_tracked_generations() {
         let registry = GenerationRegistry::default();
         let (abort_tx, mut abort_rx) = oneshot::channel();
-        registry
+        let registration_id = registry
             .register("completed-session", abort_tx)
             .expect("initial registration");
 
         poison_registry(&registry);
 
         let error = registry
-            .remove("completed-session")
+            .remove("completed-session", registration_id)
             .expect_err("poisoned cleanup must report the recovery");
 
         assert_eq!(error, GenerationRegistryError::Poisoned);
