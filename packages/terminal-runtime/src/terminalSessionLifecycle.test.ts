@@ -8,6 +8,7 @@ function createEntry(terminalKey: string): PoolEntry {
     shellSessionKey: terminalKey,
     ptyActive: false,
     needsClear: true,
+    shellExited: false,
     spawnPending: false,
     currentPtyInstance: null,
     hasOutput: false,
@@ -72,6 +73,21 @@ describe('terminal session lifecycle', () => {
     })
   })
 
+  it('tracks shell exit independently from the presentation reset flag', () => {
+    const entry = createEntry('T-1-shell-0')
+    const lifecycle = createTerminalSessionLifecycle(() => entry, XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+
+    expect(lifecycle.shouldSpawnPty(entry)).toBe(true)
+    expect(lifecycle.isShellExited(entry.shellSessionKey)).toBe(false)
+
+    entry.needsClear = false
+    entry.shellExited = true
+
+    expect(lifecycle.shouldSpawnPty(entry)).toBe(false)
+    expect(lifecycle.isShellExited(entry.shellSessionKey)).toBe(true)
+    expect(lifecycle.getShellLifecycleState(entry.shellSessionKey).shellExited).toBe(true)
+  })
+
   it('rebinds terminal authority when restored shell state selects another PTY instance', () => {
     const entry = createEntry('T-1-shell-0')
     const lifecycle = createTerminalSessionLifecycle(() => entry, XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
@@ -83,6 +99,7 @@ describe('terminal session lifecycle', () => {
       hasOutput: true,
     })
 
+    expect(entry.needsClear).toBe(true)
     expect(entry.authority).toMatchObject({
       shellSessionKey: 'T-1-shell-0',
       ptyInstanceId: 7,

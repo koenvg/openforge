@@ -93,6 +93,7 @@ export function createTerminalStateView({
       entry.hasOutput = false
     }
     entry.ptyActive = replay.isLive
+    entry.shellExited = !replay.isLive && replay.ptyInstanceId !== null
     entry.needsClear = false
     entry.outputSequence = 0
     entry.terminalStateSource = 'pty-byte-replay'
@@ -118,6 +119,7 @@ export function createTerminalStateView({
       entry.hasOutput = false
     }
     entry.ptyActive = replay.isLive
+    entry.shellExited = !replay.isLive
     entry.needsClear = false
     entry.outputSequence = 0
     entry.currentPtyInstance = replay.ptyInstanceId

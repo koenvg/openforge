@@ -140,18 +140,19 @@ describe("terminalPool lifecycle", () => {
 	});
 
 	describe("shell exited state", () => {
-		it("reports shell exited when entry is inactive and needs clear", async () => {
+		it("reports the explicit shell exit state independently of presentation reset", async () => {
 			const entry = await acquire("task-shell-exited");
 			entry.ptyActive = false;
-			entry.needsClear = true;
+			entry.needsClear = false;
+			entry.shellExited = true;
 
 			expect(isShellExited("task-shell-exited")).toBe(true);
 		});
 
-		it("reports false when shell entry is active", async () => {
+		it("reports false when only a presentation reset is pending", async () => {
 			const entry = await acquire("task-shell-active");
-			entry.ptyActive = true;
-			entry.needsClear = false;
+			entry.ptyActive = false;
+			entry.needsClear = true;
 
 			expect(isShellExited("task-shell-active")).toBe(false);
 		});
@@ -159,7 +160,8 @@ describe("terminalPool lifecycle", () => {
 		it("exposes pool-owned shell lifecycle state object", async () => {
 			const entry = await acquire("task-shell-state");
 			entry.ptyActive = false;
-			entry.needsClear = true;
+			entry.needsClear = false;
+			entry.shellExited = true;
 
 			const state = getShellLifecycleState("task-shell-state");
 

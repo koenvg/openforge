@@ -30,6 +30,7 @@ export interface PoolEntry {
   view: TerminalView
   ptyActive: boolean
   needsClear: boolean
+  shellExited: boolean
   transportSubscription: TerminalTransportDisposable | null
   viewSubscriptions: TerminalViewDisposable[]
   resizeObserver: ResizeObserver | null
