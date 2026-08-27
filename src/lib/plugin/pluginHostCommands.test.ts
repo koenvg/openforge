@@ -208,6 +208,38 @@ describe('plugin host commands', () => {
     })
     expect(invoke).not.toHaveBeenCalledWith('start_implementation', expect.anything())
   })
+
+  it('distinguishes missing and empty start prompt contributions from malformed configuration', async () => {
+    const { invoke } = installDesktopBridge(null)
+
+    await expect(invokePluginHostCommand('listStartPromptContributions', {
+      projectId: 'P-missing',
+    })).resolves.toEqual([])
+
+    invoke.mockResolvedValueOnce('[]')
+    await expect(invokePluginHostCommand('listStartPromptContributions', {
+      projectId: 'P-empty',
+    })).resolves.toEqual([])
+
+    const malformedConfigs = [
+      ['not valid json', 'Unexpected token'],
+      ['{}', 'expected an array'],
+      ['[null]', 'invalid contribution at index 0'],
+      ['[{"id":"workflow","content":"Workflow","ownerPluginId":42}]', 'ownerPluginId must be a string or null'],
+      ['[{"id":"workflow","content":"Workflow","enabled":"yes"}]', 'enabled must be a boolean'],
+      ['[{"id":"workflow","content":"Workflow","order":1.5}]', 'order must be a safe integer'],
+    ] as const
+
+    for (const [stored, detail] of malformedConfigs) {
+      invoke.mockResolvedValueOnce(stored)
+      await expect(invokePluginHostCommand('listStartPromptContributions', {
+        projectId: 'P-malformed',
+      })).rejects.toThrow(
+        `failed to parse stored start prompt contributions for project P-malformed: ${detail}`,
+      )
+    }
+  })
+
   it('persists the requesting frontend plugin as the contribution owner', async () => {
     const { invoke } = installDesktopBridge(null)
     invoke.mockResolvedValueOnce([{

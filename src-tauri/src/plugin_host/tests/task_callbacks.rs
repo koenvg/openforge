@@ -74,6 +74,60 @@ async fn plugin_host_prompt_contribution_order_requires_i64_and_preserves_safe_m
 }
 
 #[tokio::test]
+async fn plugin_host_prompt_contribution_list_distinguishes_empty_from_malformed_config() {
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_prompt_contribution_list");
+    let empty_project = database
+        .create_project("Empty Plugin Prompts", "/tmp/empty-plugin-prompts")
+        .expect("empty project fixture");
+    database
+        .set_project_config(
+            &empty_project.id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            "[]",
+        )
+        .expect("empty contribution fixture");
+    let malformed_project = database
+        .create_project("Malformed Plugin Prompts", "/tmp/malformed-plugin-prompts")
+        .expect("malformed project fixture");
+    database
+        .set_project_config(
+            &malformed_project.id,
+            crate::agent_lifecycle::START_PROMPT_CONTRIBUTIONS_CONFIG_KEY,
+            "not valid json",
+        )
+        .expect("malformed contribution fixture");
+
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+
+    let contributions = host
+        .handle_host_callback(
+            "openforge.tasks.listStartPromptContributions",
+            &json!({ "projectId": empty_project.id }),
+        )
+        .await
+        .expect("stored empty config must produce an empty contribution list");
+    assert_eq!(contributions, json!([]));
+
+    let error = host
+        .handle_host_callback(
+            "openforge.tasks.listStartPromptContributions",
+            &json!({ "projectId": malformed_project.id }),
+        )
+        .await
+        .expect_err("malformed config must reject the contribution list request");
+    assert!(
+        error.contains(&format!(
+            "failed to parse stored start prompt contributions for project {}",
+            malformed_project.id
+        )),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
 async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_follow_up_callback");

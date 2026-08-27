@@ -106,23 +106,47 @@ async function sendTaskFollowUpFromPluginRequest(request: SendTaskFollowUpReques
   }
 }
 
-function normalizeStartPromptContributions(value: string | null): StartPromptContribution[] {
-  if (!value) return []
+function normalizeStartPromptContributions(
+  value: string | null,
+  projectId: string,
+): StartPromptContribution[] {
+  if (value === null) return []
+
+  const errorPrefix = `failed to parse stored start prompt contributions for project ${projectId}`
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(value)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((entry): entry is StartPromptContribution => entry && typeof entry === 'object' && typeof entry.id === 'string' && typeof entry.content === 'string')
-      .map((entry) => ({
-        ...(typeof entry.ownerPluginId === 'string' ? { ownerPluginId: entry.ownerPluginId } : {}),
-        id: entry.id,
-        enabled: entry.enabled !== false,
-        content: entry.content,
-        order: typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : 0,
-      }))
-  } catch {
-    return []
+    parsed = JSON.parse(value)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`${errorPrefix}: ${detail}`)
   }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${errorPrefix}: expected an array`)
+  }
+
+  return parsed.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string' || typeof entry.content !== 'string') {
+      throw new Error(`${errorPrefix}: invalid contribution at index ${index}`)
+    }
+    if (entry.ownerPluginId !== undefined && entry.ownerPluginId !== null && typeof entry.ownerPluginId !== 'string') {
+      throw new Error(`${errorPrefix}: ownerPluginId must be a string or null at index ${index}`)
+    }
+    if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
+      throw new Error(`${errorPrefix}: enabled must be a boolean at index ${index}`)
+    }
+    if (entry.order !== undefined && !Number.isSafeInteger(entry.order)) {
+      throw new Error(`${errorPrefix}: order must be a safe integer at index ${index}`)
+    }
+
+    return {
+      ...(typeof entry.ownerPluginId === 'string' ? { ownerPluginId: entry.ownerPluginId } : {}),
+      id: entry.id,
+      enabled: entry.enabled ?? true,
+      content: entry.content,
+      order: entry.order ?? 0,
+    }
+  })
 }
 
 async function listStartPromptContributionsForProject(projectId: string): Promise<StartPromptContribution[]> {
@@ -130,7 +154,10 @@ async function listStartPromptContributionsForProject(projectId: string): Promis
     throw new Error('start prompt contributions require projectId')
   }
 
-  return normalizeStartPromptContributions(await getProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY))
+  return normalizeStartPromptContributions(
+    await getProjectConfig(projectId, START_PROMPT_CONTRIBUTIONS_KEY),
+    projectId,
+  )
 }
 
 async function configureStartPromptContributionForProject(
