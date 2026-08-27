@@ -133,7 +133,7 @@ vi.mock('../../lib/terminalPool', () => {
     release: vi.fn(terminalRuntime.release),
     resetTerminal: vi.fn(terminalRuntime.resetTerminal),
     releaseAllForTask: vi.fn(terminalRuntime.releaseAllForTask),
-    focusTerminal: vi.fn((entry: PoolEntry) => entry.view.focus()),
+    focusTerminal: vi.fn(terminalRuntime.focusTerminal),
     shouldSpawnPty: vi.fn(terminalRuntime.shouldSpawnPty),
     getTerminalImageProtocol: vi.fn((entry: PoolEntry) => entry.view.imageProtocol),
     markPtySpawnPending: vi.fn(terminalRuntime.markPtySpawnPending),
