@@ -38,6 +38,33 @@ final class _RecordingTransport implements CompanionV1Transport {
 }
 
 void main() {
+  test('Task prompt catalog uses an authenticated Project read', () async {
+    final transport = _RecordingTransport(
+      const CompanionV1HttpResponse(
+        statusCode: 200,
+        body:
+            '{"provider":"pi","trigger":"/","suggestions":[{"name":"skill:review","description":"Review changes","kind":"skill","source":"skill"}]}',
+      ),
+    );
+    final client = GeneratedCompanionClient(
+      transportFactory: (_) =>
+          CompanionEndpointTransport(transport: transport, close: () {}),
+    );
+
+    final catalog = await client.fetchTaskPromptCatalog(_trustRecord, 'P-4');
+
+    expect(catalog.provider, 'pi');
+    expect(catalog.trigger, '/');
+    expect(catalog.suggestions.single.name, 'skill:review');
+    expect(catalog.suggestions.single.kind, TaskPromptSuggestionKind.skill);
+    expect(transport.requests, hasLength(1));
+    final request = transport.requests.single;
+    expect(request.method, 'GET');
+    expect(request.uri.path, '/companion/v1/projects/P-4/task-prompt-catalog');
+    expect(request.headers['authorization'], 'Bearer credential-1');
+    expect(request.body, isNull);
+  });
+
   test('Task creation makes one authenticated mutation attempt', () async {
     final transport = _RecordingTransport(
       const SocketException('response lost after request'),

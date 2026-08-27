@@ -189,6 +189,38 @@
         }
       }
     },
+    "/projects/{projectId}/task-prompt-catalog": {
+      "get": {
+        "operationId": "getCompanionTaskPromptCatalog",
+        "summary": "List desktop Task prompt suggestions for one visible Project",
+        "description": "Returns the effective provider, its Task prompt trigger, and the same ordered skill and command suggestions used by desktop Task Creation. This read does not execute a command or start an Implementation Run.",
+        "security": [{ "companionDeviceBearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CompanionProtocolVersion" },
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current Task prompt catalog for the visible Project",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TaskPromptCatalog" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/CompanionError" },
+          "404": { "$ref": "#/components/responses/CompanionError" },
+          "409": { "$ref": "#/components/responses/CompanionError" },
+          "429": { "$ref": "#/components/responses/CompanionError" },
+          "503": { "$ref": "#/components/responses/CompanionError" }
+        }
+      }
+    },
     "/projects/{projectId}/tasks": {
       "post": {
         "operationId": "createCompanionTask",
@@ -1223,6 +1255,34 @@
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" },
           "agentUpdatedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "TaskPromptSuggestionKind": {
+        "type": "string",
+        "enum": ["skill", "command"]
+      },
+      "TaskPromptSuggestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "kind", "source"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": ["string", "null"] },
+          "kind": { "$ref": "#/components/schemas/TaskPromptSuggestionKind" },
+          "source": { "type": ["string", "null"] }
+        }
+      },
+      "TaskPromptCatalog": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "trigger", "suggestions"],
+        "properties": {
+          "provider": { "type": "string", "minLength": 1 },
+          "trigger": { "type": "string", "minLength": 1, "maxLength": 1 },
+          "suggestions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TaskPromptSuggestion" }
+          }
         }
       },
       "TaskCreateRequest": {

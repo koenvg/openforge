@@ -33,8 +33,9 @@ of the source contract.
 - authenticated host status;
 - authenticated Project catalog and four-lane Project Board snapshots;
 - authenticated attention snapshots and task-detail domain reads;
+- authenticated, read-only Task prompt catalogs whose provider trigger and ordered skill and command suggestions match desktop Task Creation;
 - authenticated ordered Action Palette descriptors whose labels, keywords, confirmation flags, destructive treatment, and semantic icons are desktop-authoritative;
-- authenticated prompt-only backlog Task Create in a visible Project without automatic mutation retry;
+- authenticated prompt-only backlog Task Create in a visible Project that pins the effective provider and never retries automatically;
 - authenticated identity-only Companion Task Start without automatic mutation retry;
 - authenticated backlog Task Delete without automatic mutation retry;
 - authenticated Task-scoped Complete through the shared terminal Task lifecycle; and

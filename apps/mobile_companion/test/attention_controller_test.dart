@@ -39,6 +39,13 @@ final class _FakeClient implements CompanionClient {
     String projectId,
     String initialPrompt,
   ) => throw UnsupportedError('not used');
+
+  @override
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => throw UnsupportedError('not used');
+
   @override
   Future<TaskDeleteReceipt> deleteBacklogTask(
     CompanionTrustRecord trustRecord,

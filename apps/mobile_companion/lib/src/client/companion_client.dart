@@ -71,6 +71,11 @@ abstract interface class CompanionClient {
     String projectId,
   );
 
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  );
+
   Future<TaskCreateResult> createTask(
     CompanionTrustRecord trustRecord,
     String projectId,
@@ -306,6 +311,19 @@ final class GeneratedCompanionClient
       credential: trustRecord.deviceCredential,
     ),
   );
+
+  @override
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) => _authenticatedRead(
+    trustRecord,
+    (client) => client.getCompanionTaskPromptCatalog(
+      projectId: projectId,
+      credential: trustRecord.deviceCredential,
+    ),
+  );
+
   @override
   Future<TaskCreateResult> createTask(
     CompanionTrustRecord trustRecord,
