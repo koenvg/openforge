@@ -16,9 +16,21 @@ impl PtyManager {
             .child
             .process_id()
             .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
+        let pid = i32::try_from(pid)
+            .ok()
+            .filter(|pid| *pid > 0)
+            .ok_or_else(|| {
+                PtyError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("PTY process ID for task {task_id} is not a positive Unix pid_t"),
+                ))
+            })?;
 
-        unsafe {
-            libc::kill(pid as i32, libc::SIGINT);
+        // SAFETY: portable_pty supplied this child PID, and the validation above proved it is
+        // positive and fits pid_t, so kill targets one process. SIGINT is a valid Unix signal.
+        let signal_result = unsafe { libc::kill(pid, libc::SIGINT) };
+        if signal_result == -1 {
+            return Err(PtyError::IoError(std::io::Error::last_os_error()));
         }
 
         Ok(())
@@ -31,7 +43,11 @@ impl PtyManager {
             session.child.process_id()?
         };
 
-        let is_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+        let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+        // SAFETY: portable_pty supplied this child PID, and the validation above proved it is
+        // positive and fits pid_t, so kill targets one process. Signal 0 is the Unix existence
+        // check and does not deliver a signal.
+        let is_alive = unsafe { libc::kill(pid, 0) == 0 };
         if !is_alive {
             return None;
         }
