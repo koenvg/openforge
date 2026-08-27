@@ -1,15 +1,17 @@
 import { writePty } from './ipc'
 
 /**
- * Writes text to a PTY and sends Enter (\r) as a separate write after a delay.
- *
- * Terminal CLIs like Claude Code detect bulk input arriving in a single read()
- * as "paste" and treat embedded \r as literal newlines. Splitting the text and
- * the Enter keystroke into separate writes ensures the CLI processes the text
- * first, then receives Enter as a distinct submit action.
+ * `\r` is Enter to the agent CLI; `\n` and `\t` are prompt content.
+ * `terminal_follow_up_input` in `src-tauri/src/agent_follow_up.rs` sanitizes the same way.
+ */
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g
+
+/**
+ * Enter is a separate write, 50ms later, so the CLI reads the text as a paste
+ * and the keystroke as a submit rather than as part of the pasted body.
  */
 export async function writePtyWithSubmit(taskId: string, text: string): Promise<void> {
-  await writePty(taskId, text)
+  await writePty(taskId, text.replace(CONTROL_CHARACTERS, ''))
   await new Promise(resolve => setTimeout(resolve, 50))
   await writePty(taskId, '\r')
 }

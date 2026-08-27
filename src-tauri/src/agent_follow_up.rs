@@ -303,6 +303,7 @@ fn disposition_for_status(status: &str) -> Option<AgentFollowUpDisposition> {
     }
 }
 
+/// `writePtyWithSubmit` in `src/lib/ptySubmit.ts` sanitizes the same way.
 fn terminal_follow_up_input(message: &str) -> Vec<u8> {
     let sanitized: String = message
         .chars()
