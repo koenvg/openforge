@@ -36,8 +36,7 @@
       "shell",
       "events",
       "config",
-      "system.openUrl",
-      "taskLinks"
+      "system.openUrl"
     ]
   }
 }

@@ -1,6 +1,6 @@
 import { createTestingBrowserSurfaces } from '../browserSurfacesTesting.js'
 import type { TestingBrowserSurfaces } from '../browserSurfacesTesting'
-import { isAllowedBrowserSurfaceUrl, type TaskBrowserSurfaceState } from '../browserSurfaces.js'
+import type { TaskBrowserSurfaceState } from '../browserSurfaces'
 import type {
   Disposable,
   FrontendOpenForgeAPI,
@@ -10,7 +10,6 @@ import type {
   PluginReviewRowActionRegistration,
   PluginTaskUISectionRegistration,
   PluginViewRegistration,
-  TaskLinkHandler,
   TaskStartPrefixProviderRegistration,
 } from '../types'
 import {
@@ -31,7 +30,7 @@ import type {
 
 type TestingFrontendContributionApi = Pick<
   FrontendOpenForgeAPI,
-  'browserSurfaces' | 'taskLinks' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
+  'browserSurfaces' | 'views' | 'taskUI' | 'reviewUI' | 'taskPane' | 'settings' | 'backend' | 'injectionPoints' | 'taskStart'
 >
 
 export class TestingFrontendContributionFake {
@@ -43,7 +42,6 @@ export class TestingFrontendContributionFake {
   private readonly injectionPoints = new Map<string, TestingInjectionPointContribution>()
   private readonly taskStartPrefixProviders = new Map<string, TestingTaskStartPrefixProviderContribution>()
   private readonly browserSurfaces: TestingBrowserSurfaces
-  private taskLinkHandler: TaskLinkHandler | null = null
   private api: TestingFrontendContributionApi | null = null
 
   constructor(
@@ -58,35 +56,6 @@ export class TestingFrontendContributionFake {
 
     const api: TestingFrontendContributionApi = {
       browserSurfaces: this.browserSurfaces.api,
-      taskLinks: {
-        open: async (request) => {
-          this.services.calls.taskLinkOpenRequests.push(request)
-          if (!isAllowedBrowserSurfaceUrl(request.url)) {
-            throw new Error('Task links must use a valid HTTP(S) URL')
-          }
-          if (this.taskLinkHandler === null) {
-            this.services.calls.openUrl.push(request.url)
-            return
-          }
-          const result = await this.taskLinkHandler(request)
-          if (result === 'declined') {
-            this.services.calls.openUrl.push(request.url)
-            return
-          }
-          if (result !== 'handled') {
-            throw new Error(`Task link handler returned an invalid result: ${String(result)}`)
-          }
-        },
-        registerHandler: (handler) => {
-          if (this.taskLinkHandler !== null) {
-            throw new Error('A Task link handler is already registered')
-          }
-          this.taskLinkHandler = handler
-          return createDisposable(() => {
-            if (this.taskLinkHandler === handler) this.taskLinkHandler = null
-          })
-        },
-      },
       views: {
         register: (registration) => this.registerView(registration),
       },

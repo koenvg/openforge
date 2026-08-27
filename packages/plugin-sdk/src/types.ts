@@ -70,7 +70,6 @@ const OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
   'config',
   'projectConfig',
   'browserSurfaces',
-  'taskLinks',
   'appEnablement',
   'customSidebarNavigation',
   'reviewUI',
@@ -158,19 +157,6 @@ export interface OpenForgeNavigationRequest {
 export interface NavigationAPI {
   get(): OpenForgeNavigationSnapshot
   navigate(request: OpenForgeNavigationRequest): Promise<OpenForgeNavigationSnapshot>
-}
-
-export interface TaskLinkOpenRequest {
-  taskId: string
-  url: string
-}
-
-export type TaskLinkHandlerResult = 'handled' | 'declined'
-export type TaskLinkHandler = (request: TaskLinkOpenRequest) => Promise<TaskLinkHandlerResult>
-
-export interface TaskLinksAPI {
-  open(request: TaskLinkOpenRequest): Promise<void>
-  registerHandler(handler: TaskLinkHandler): Disposable
 }
 
 export interface OpenForgePluginContext {
@@ -797,7 +783,6 @@ export interface OpenForgeCommonAPI {
 
 export interface FrontendOpenForgeAPI extends OpenForgeCommonAPI {
   browserSurfaces: BrowserSurfacesAPI
-  taskLinks: TaskLinksAPI
   navigation: NavigationAPI
   views: FrontendViewRegistry
   taskUI: FrontendTaskUIRegistry

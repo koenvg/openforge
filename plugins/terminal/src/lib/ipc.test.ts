@@ -11,10 +11,9 @@ function installShellApi() {
 }
 
 function installLinkApi() {
-  const taskLinks = { open: vi.fn(async () => undefined) }
   const system = { openUrl: vi.fn(async () => undefined) }
-  setTerminalOpenForgeApi({ taskLinks, system } as unknown as FrontendOpenForgeAPI)
-  return { taskLinks, system }
+  setTerminalOpenForgeApi({ system } as unknown as FrontendOpenForgeAPI)
+  return system
 }
 
 describe('terminal plugin IPC shell callbacks', () => {
@@ -22,22 +21,12 @@ describe('terminal plugin IPC shell callbacks', () => {
     setTerminalOpenForgeApi(null)
   })
 
-  it('routes Task terminal links through taskLinks with the Task id', async () => {
-    const { taskLinks, system } = installLinkApi()
+  it('opens terminal links in the external browser', async () => {
+    const system = installLinkApi()
 
-    await openTerminalLink('T-1-shell-2', 'https://openforge.dev/docs')
-
-    expect(taskLinks.open).toHaveBeenCalledWith({ taskId: 'T-1', url: 'https://openforge.dev/docs' })
-    expect(system.openUrl).not.toHaveBeenCalled()
-  })
-
-  it('keeps project terminal links on the existing external browser path', async () => {
-    const { taskLinks, system } = installLinkApi()
-
-    await openTerminalLink('project-P-1-shell-2', 'https://openforge.dev/docs')
+    await openTerminalLink('https://openforge.dev/docs')
 
     expect(system.openUrl).toHaveBeenCalledWith('https://openforge.dev/docs')
-    expect(taskLinks.open).not.toHaveBeenCalled()
   })
 
   it('converts indexed terminal keys back to plugin ShellAPI taskId and terminalIndex requests', async () => {

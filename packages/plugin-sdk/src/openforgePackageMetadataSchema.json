@@ -21,15 +21,6 @@
     },
     {
       "if": {
-        "properties": {
-          "requires": { "contains": { "const": "taskLinks" } }
-        },
-        "required": ["requires"]
-      },
-      "then": { "required": ["frontend"] }
-    },
-    {
-      "if": {
         "properties": { "enablement": { "const": "app" } },
         "required": ["enablement"]
       },
@@ -136,7 +127,6 @@
           "config",
           "projectConfig",
           "browserSurfaces",
-          "taskLinks",
           "appEnablement",
           "customSidebarNavigation",
           "reviewUI"

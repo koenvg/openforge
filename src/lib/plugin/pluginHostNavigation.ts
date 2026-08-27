@@ -2,8 +2,6 @@ import { get } from 'svelte/store'
 import type {
   OpenForgeNavigationRequest,
   OpenForgeNavigationSnapshot,
-  TaskLinkHandler,
-  TaskLinkOpenRequest,
 } from '@openforge-app/plugin-sdk'
 import { openUrl, writeClipboardText } from '../ipc'
 import { activeProjectId, currentView, selectedTaskId, taskActiveView } from '../stores'
@@ -12,7 +10,6 @@ import type { PluginHostCommandEntries } from './pluginHostCommandRegistry'
 import { emitPluginHostEvent, getContextSnapshot } from './pluginHostEvents'
 import type { RuntimeHostBridge } from './runtimeContributionTypes'
 import { createHostBrowserSurfaces, destroyHostPluginBrowserSurfaces } from './taskBrowserSurfaces'
-import { taskLinkRouter } from './taskLinks'
 import { isPluginViewKey } from './types'
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
@@ -21,8 +18,6 @@ type NavigationHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'notify'
   | 'openUrl'
   | 'writeClipboardText'
-  | 'openTaskLink'
-  | 'registerTaskLinkHandler'
   | 'getNavigation'
   | 'navigate'
   | 'getOrCreateBrowserSurface'
@@ -101,11 +96,6 @@ export function createPluginNavigationHostCapabilities(pluginId: string): Naviga
     },
     openUrl: (url) => openUrl(url),
     writeClipboardText: (text) => writeClipboardText(text),
-    openTaskLink: (request: TaskLinkOpenRequest) => taskLinkRouter.open(request),
-    registerTaskLinkHandler: (qualifiedPluginId: string, handler: TaskLinkHandler) => {
-      if (qualifiedPluginId !== pluginId) throw new Error('Task link handler plugin identity mismatch')
-      return taskLinkRouter.registerHandler(pluginId, handler)
-    },
     getNavigation: getNavigationSnapshot,
     navigate: (request) => navigate(pluginId, request),
     getOrCreateBrowserSurface: (qualifiedPluginId, request) => {

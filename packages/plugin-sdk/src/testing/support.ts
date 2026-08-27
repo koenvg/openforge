@@ -63,7 +63,6 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     emittedGlobalEvents: [],
     openUrl: [],
     clipboardWrites: [],
-    taskLinkOpenRequests: [],
     navigationRequests: [],
     notify: [],
     taskCreations: [],

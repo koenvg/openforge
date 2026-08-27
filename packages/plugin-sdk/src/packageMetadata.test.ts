@@ -119,21 +119,6 @@ describe('package.json#openforge metadata contract', () => {
     })
   })
 
-  it('accepts taskLinks only as a declared frontend capability', () => {
-    expect(validateOpenForgePackageMetadata(validMetadata({
-      requires: ['taskLinks'],
-    }))).toEqual([])
-    expect(OPENFORGE_PLUGIN_CAPABILITIES).toContain('taskLinks')
-    expect(validateOpenForgePackageMetadata(validMetadata({
-      frontend: undefined,
-      frontendStyles: undefined,
-      requires: ['taskLinks'],
-    }))).toContainEqual({
-      path: 'requires',
-      message: 'taskLinks capability requires a frontend entry',
-    })
-  })
-
   it('rejects legacy manifest contribution arrays', () => {
     const errors = validateOpenForgePackageMetadata(validMetadata({
       contributes: {

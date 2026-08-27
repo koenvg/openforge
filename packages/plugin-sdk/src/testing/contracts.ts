@@ -24,7 +24,6 @@ import type {
   ShellSpawnRequest,
   SendTaskFollowUpRequest,
   StartTaskImplementationRequest,
-  TaskLinkOpenRequest,
   TaskStartPrefixContext,
   ExternalReadDirectoryRequest,
   ExternalReadFileRequest,
@@ -75,7 +74,6 @@ export interface TestingOpenForgeApiCalls {
   emittedGlobalEvents: Array<{ qualifiedEvent: string; payload: unknown }>
   openUrl: string[]
   clipboardWrites: string[]
-  taskLinkOpenRequests: TaskLinkOpenRequest[]
   navigationRequests: OpenForgeNavigationRequest[]
   notify: NotificationRequest[]
   taskCreations: CreateTaskRequest[]

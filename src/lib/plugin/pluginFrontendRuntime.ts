@@ -80,14 +80,6 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
         )
       },
     },
-    taskLinks: {
-      open: unavailable('taskLinks.open'),
-      registerHandler: () => {
-        throw new Error(
-          `OpenForge frontend runtime API is unavailable for plugin ${pluginId}: taskLinks.registerHandler`,
-        )
-      },
-    },
     commands: {
       register: () => ({ dispose: () => undefined }),
       invoke: unavailable('commands.invoke'),

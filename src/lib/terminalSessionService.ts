@@ -2,7 +2,6 @@ import {
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
   createTerminalSessionService,
-  parsePtySessionKey,
 } from '@openforge-app/terminal-runtime'
 import { listenDesktopEvent } from './desktopIpc'
 import type { TerminalDesktopEventName } from './desktopIpcContract'
@@ -14,17 +13,7 @@ import {
   writePty,
   writeTerminalQueryResponse,
 } from './ipc'
-import { taskLinkRouter } from './plugin/taskLinks'
 import { themeMode } from './theme'
-
-export async function openTerminalLink(shellSessionKey: string, url: string): Promise<void> {
-  const session = parsePtySessionKey(shellSessionKey)
-  if (session.kind === 'indexed-shell' && session.taskId.startsWith('project-')) {
-    await openUrl(url)
-    return
-  }
-  await taskLinkRouter.open({ taskId: session.taskId, url })
-}
 
 const transport = createDesktopTerminalTransport({
   listenEvent: (eventName, handler) => listenDesktopEvent(
@@ -41,7 +30,7 @@ const terminalRuntime = createTerminalRuntime({
   transport,
   environment: {
     sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
-    openLink: openTerminalLink,
+    openLink: url => openUrl(url),
     themeMode,
     loggerName: 'terminalSessionService',
   },

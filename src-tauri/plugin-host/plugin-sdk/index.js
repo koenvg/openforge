@@ -30,32 +30,22 @@ var openforgePackageMetadataSchema_default = {
 		"description"
 	],
 	dependentRequired: { "frontendStyles": ["frontend"] },
-	allOf: [
-		{
-			"if": {
-				"properties": { "requires": { "contains": { "const": "browserSurfaces" } } },
-				"required": ["requires"]
-			},
-			"then": { "required": ["frontend"] }
+	allOf: [{
+		"if": {
+			"properties": { "requires": { "contains": { "const": "browserSurfaces" } } },
+			"required": ["requires"]
 		},
-		{
-			"if": {
-				"properties": { "requires": { "contains": { "const": "taskLinks" } } },
-				"required": ["requires"]
-			},
-			"then": { "required": ["frontend"] }
+		"then": { "required": ["frontend"] }
+	}, {
+		"if": {
+			"properties": { "enablement": { "const": "app" } },
+			"required": ["enablement"]
 		},
-		{
-			"if": {
-				"properties": { "enablement": { "const": "app" } },
-				"required": ["enablement"]
-			},
-			"then": {
-				"properties": { "requires": { "contains": { "const": "appEnablement" } } },
-				"required": ["requires"]
-			}
+		"then": {
+			"properties": { "requires": { "contains": { "const": "appEnablement" } } },
+			"required": ["requires"]
 		}
-	],
+	}],
 	properties: {
 		"id": {
 			"type": "string",
@@ -145,7 +135,6 @@ var openforgePackageMetadataSchema_default = {
 				"config",
 				"projectConfig",
 				"browserSurfaces",
-				"taskLinks",
 				"appEnablement",
 				"customSidebarNavigation",
 				"reviewUI"
@@ -198,7 +187,6 @@ var OPENFORGE_PLUGIN_CAPABILITY_TYPE_MEMBERS = [
 	"config",
 	"projectConfig",
 	"browserSurfaces",
-	"taskLinks",
 	"appEnablement",
 	"customSidebarNavigation",
 	"reviewUI"
@@ -376,10 +364,6 @@ function validateOpenForgePackageMetadata(data) {
 		path: "requires",
 		message: "browserSurfaces capability requires a frontend entry"
 	});
-	if (Array.isArray(data.requires) && data.requires.includes("taskLinks") && !isNonEmptyString(data.frontend)) errors.push({
-		path: "requires",
-		message: "taskLinks capability requires a frontend entry"
-	});
 	if (data.contributes !== void 0) errors.push({
 		path: "contributes",
 		message: "Manifest contribution arrays are not supported; register contributions at runtime"
@@ -431,7 +415,6 @@ function createTestingCalls() {
 		emittedGlobalEvents: [],
 		openUrl: [],
 		clipboardWrites: [],
-		taskLinkOpenRequests: [],
 		navigationRequests: [],
 		notify: [],
 		taskCreations: [],
@@ -1387,7 +1370,6 @@ var TestingFrontendContributionFake = class {
 	injectionPoints = /* @__PURE__ */ new Map();
 	taskStartPrefixProviders = /* @__PURE__ */ new Map();
 	browserSurfaces;
-	taskLinkHandler = null;
 	api = null;
 	constructor(services, invokeBackendMethod) {
 		this.services = services;
@@ -1398,29 +1380,6 @@ var TestingFrontendContributionFake = class {
 		if (this.api) return this.api;
 		const api = {
 			browserSurfaces: this.browserSurfaces.api,
-			taskLinks: {
-				open: async (request) => {
-					this.services.calls.taskLinkOpenRequests.push(request);
-					if (!isAllowedBrowserSurfaceUrl(request.url)) throw new Error("Task links must use a valid HTTP(S) URL");
-					if (this.taskLinkHandler === null) {
-						this.services.calls.openUrl.push(request.url);
-						return;
-					}
-					const result = await this.taskLinkHandler(request);
-					if (result === "declined") {
-						this.services.calls.openUrl.push(request.url);
-						return;
-					}
-					if (result !== "handled") throw new Error(`Task link handler returned an invalid result: ${String(result)}`);
-				},
-				registerHandler: (handler) => {
-					if (this.taskLinkHandler !== null) throw new Error("A Task link handler is already registered");
-					this.taskLinkHandler = handler;
-					return createDisposable(() => {
-						if (this.taskLinkHandler === handler) this.taskLinkHandler = null;
-					});
-				}
-			},
 			views: { register: (registration) => this.registerView(registration) },
 			taskUI: {
 				registerTab: (registration) => this.registerTaskPaneTab(registration),

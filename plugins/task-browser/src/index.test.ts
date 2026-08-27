@@ -1,7 +1,6 @@
 import { isOpenForgePackageMetadata } from '@openforge-app/plugin-sdk'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge-app/plugin-sdk/frontend'
 import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge-app/plugin-sdk/frontend'
-import { createOpenForgeRegistryFake } from '@openforge-app/plugin-sdk/testing'
 import { describe, expect, it, vi } from 'vitest'
 import packageJson from '../package.json'
 
@@ -16,7 +15,6 @@ function makeRuntimeHarness() {
   const api = {
     commands: { register: vi.fn(() => ({ dispose: vi.fn() })) },
     taskUI: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
-    taskLinks: { registerHandler: vi.fn(() => ({ dispose: vi.fn() })) },
   } as unknown as FrontendOpenForgeAPI
   const context = {
     pluginId: packageJson.openforge.id,
@@ -31,7 +29,7 @@ describe('task-browser plugin', () => {
   it('declares valid frontend Task Browser Surface metadata', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
-    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['taskPane', 'browserSurfaces', 'tasks', 'storage', 'taskLinks', 'navigation']))
+    expect(packageJson.openforge.requires).toEqual(expect.arrayContaining(['taskPane', 'browserSurfaces', 'tasks', 'storage']))
   })
 
   it('registers one Task browser tab and owns its cleanup through subscriptions', async () => {
@@ -49,25 +47,6 @@ describe('task-browser plugin', () => {
       component: mockTaskBrowserTab,
     })
     expect(api.commands.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'open' }))
-    expect(api.taskLinks.registerHandler).toHaveBeenCalledOnce()
-    expect(subscriptions.add).toHaveBeenCalledTimes(4)
-  })
-
-  it('opens a Task link in the durable main surface, persists it, and foregrounds Browser', async () => {
-    const { default: plugin } = await import('./index')
-    const registry = createOpenForgeRegistryFake({ pluginId: packageJson.openforge.id })
-    const request = { taskId: 'T-1', url: 'https://openforge.dev/docs' }
-
-    await registry.activateFrontend(plugin)
-    await registry.frontendApi.taskLinks.open(request)
-
-    expect(registry.calls.browserSurfaceGetOrCreate).toEqual([{ taskId: 'T-1', id: 'main' }])
-    expect(registry.calls.browserSurfaceNavigations).toEqual([{ ...request, id: 'main' }])
-    expect(registry.calls.navigationRequests).toEqual([{ taskId: 'T-1', taskViewId: 'browser' }])
-    await expect(registry.frontendApi.storage.task('T-1').get('lastBrowserUrl')).resolves.toBe(request.url)
-
-    await registry.disposeAll()
-    await registry.frontendApi.taskLinks.open(request)
-    expect(registry.calls.openUrl).toEqual([request.url])
+    expect(subscriptions.add).toHaveBeenCalledTimes(3)
   })
 })

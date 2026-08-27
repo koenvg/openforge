@@ -147,9 +147,6 @@ export function validateOpenForgePackageMetadata(data: unknown): ValidationError
   if (Array.isArray(data.requires) && data.requires.includes('browserSurfaces') && !isNonEmptyString(data.frontend)) {
     errors.push({ path: 'requires', message: 'browserSurfaces capability requires a frontend entry' })
   }
-  if (Array.isArray(data.requires) && data.requires.includes('taskLinks') && !isNonEmptyString(data.frontend)) {
-    errors.push({ path: 'requires', message: 'taskLinks capability requires a frontend entry' })
-  }
 
   if (data.contributes !== undefined) {
     errors.push({ path: 'contributes', message: 'Manifest contribution arrays are not supported; register contributions at runtime' })

@@ -41,14 +41,8 @@ export async function getTaskWorkspace(taskId: string): Promise<TaskWorkspaceInf
   return getTerminalOpenForgeApi().tasks.getWorkspace(taskId)
 }
 
-export async function openTerminalLink(terminalKey: string, url: string): Promise<void> {
-  const { taskId } = parseShellSessionKey(terminalKey)
-  const api = getTerminalOpenForgeApi()
-  if (taskId.startsWith('project-')) {
-    await api.system.openUrl(url)
-    return
-  }
-  await api.taskLinks.open({ taskId, url })
+export async function openTerminalLink(url: string): Promise<void> {
+  await getTerminalOpenForgeApi().system.openUrl(url)
 }
 
 export async function spawnShellPty(
