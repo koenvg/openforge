@@ -100,13 +100,26 @@ pub(super) async fn terminate_and_remove_managed_process(
     })
 }
 
-fn process_exists(pid: i32) -> bool {
-    if unsafe { libc::kill(pid, 0) } == 0 {
-        return true;
+fn process_exists(pid: i32) -> Result<bool, String> {
+    if pid <= 1 {
+        return Err(format!(
+            "legacy process PID must be greater than 1, got {pid}"
+        ));
     }
-    std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    // SAFETY: libc::kill with signal 0 performs an existence/permission probe and
+    // does not deliver a signal. The guard above ensures the target is one positive,
+    // non-system PID rather than kill's reserved 0 or -1 process-set targets.
+    let result = unsafe { libc::kill(pid, 0) };
+    if result == 0 {
+        return Ok(true);
+    }
+    let error = std::io::Error::last_os_error();
+    match error.raw_os_error() {
+        Some(libc::ESRCH) => Ok(false),
+        Some(libc::EPERM) => Ok(true),
+        _ => Err(format!("failed to probe legacy process PID {pid}: {error}")),
+    }
 }
-
 impl PtyManager {
     /// Recovers verified managed PTY trees left behind by a previous sidecar.
     /// Metadata is removed only after the full tree exits; unverifiable or
@@ -152,22 +165,40 @@ impl PtyManager {
             }
 
             match contents.trim().parse::<i32>() {
-                Ok(pid) if process_exists(pid) => {
-                    let message = format!(
-                        "legacy PID metadata {} names live PID {} without a process start identity; refusing to signal it because the PID may have been reused",
+                Ok(pid) if pid <= 1 => {
+                    warn!(
+                        "[PTY recovery] Removing invalid reserved PID metadata {}: {}",
                         path.display(),
                         pid
                     );
-                    warn!("[PTY recovery] {}; preserving metadata", message);
-                    failures.push(message);
-                }
-                Ok(_) => {
-                    info!(
-                        "[PTY recovery] Removing legacy metadata for an exited process: {}",
-                        path.display()
-                    );
                     let _ = std::fs::remove_file(&path);
                 }
+                Ok(pid) => match process_exists(pid) {
+                    Ok(true) => {
+                        let message = format!(
+                            "legacy PID metadata {} names live PID {} without a process start identity; refusing to signal it because the PID may have been reused",
+                            path.display(),
+                            pid
+                        );
+                        warn!("[PTY recovery] {}; preserving metadata", message);
+                        failures.push(message);
+                    }
+                    Ok(false) => {
+                        info!(
+                            "[PTY recovery] Removing legacy metadata for an exited process: {}",
+                            path.display()
+                        );
+                        let _ = std::fs::remove_file(&path);
+                    }
+                    Err(error) => {
+                        warn!(
+                            "[PTY recovery] Failed to probe PID from {}; preserving metadata: {}",
+                            path.display(),
+                            error
+                        );
+                        failures.push(format!("{}: {error}", path.display()));
+                    }
+                },
                 Err(error) => {
                     warn!(
                         "[PTY recovery] Removing invalid PID metadata {}: {}",
@@ -383,6 +414,8 @@ mod tests {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // SAFETY: the pre_exec closure runs after fork and calls only libc::setsid,
+        // an async-signal-safe operation, then immediately captures errno on failure.
         unsafe {
             command.pre_exec(|| {
                 if libc::setsid() == -1 {
@@ -403,12 +436,29 @@ mod tests {
                 }
             }
             if Instant::now() >= deadline {
-                super::super::managed_process::force_kill_unverified_spawn(root.id());
+                super::super::managed_process::force_kill_unverified_spawn(root.id())
+                    .expect("timed-out recovery process tree should accept SIGKILL");
                 let _ = root.wait();
                 panic!("descendant PID file did not contain a PID");
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_removes_legacy_metadata_with_reserved_pid() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = temp_dir.path().join("reserved-pty.pid");
+        std::fs::write(&pid_file, "0").expect("legacy PID metadata should write");
+        let mut manager = PtyManager::new();
+        manager.set_pid_dir(temp_dir.path().to_path_buf());
+
+        manager
+            .cleanup_stale_pids()
+            .await
+            .expect("reserved legacy PID metadata should be discarded");
+
+        assert!(!pid_file.exists(), "reserved PID metadata survived cleanup");
     }
 
     #[tokio::test]
@@ -465,9 +515,8 @@ mod tests {
             process_is_alive(identity.root_pid),
             "mismatched PID was signaled"
         );
-        unsafe {
-            libc::kill(-identity.process_group_id, libc::SIGKILL);
-        }
+        super::super::managed_process::force_kill_unverified_spawn(root.id())
+            .expect("mismatched recovery process tree should accept SIGKILL");
         let _ = root.try_wait();
     }
 }

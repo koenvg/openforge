@@ -763,7 +763,8 @@ async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
         .take_managed_recovery_for_test(session_key, instance_id)
         .await
         .expect("failed passive cleanup should retain ownership");
-    crate::pty_manager::managed_process::force_kill_unverified_spawn(pid);
+    crate::pty_manager::managed_process::force_kill_unverified_spawn(pid)
+        .expect("recovery process tree should accept SIGKILL");
     let _ = recovery.child.kill();
     let _ = recovery.child.try_wait();
 }

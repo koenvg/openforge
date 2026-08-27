@@ -161,7 +161,7 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
         .take_managed_recovery_for_test("metadata-write-failure", instance_id)
         .await
         .expect("ownership must remain in memory when metadata persistence fails");
-    force_kill_unverified_spawn(pid);
+    force_kill_unverified_spawn(pid).expect("retained shell process tree should accept SIGKILL");
     let _ = retained.child.kill();
     let _ = retained.child.try_wait();
 }

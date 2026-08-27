@@ -164,10 +164,13 @@ impl PtyManager {
             cleanup_result
         })?;
         let managed_process = ManagedProcessIdentity::capture(pid).map_err(|error| {
-            force_kill_unverified_spawn(pid);
+            let cleanup_error = force_kill_unverified_spawn(pid).err();
             let _ = child.try_wait();
+            let cleanup_detail = cleanup_error
+                .map(|cleanup_error| format!("; emergency cleanup failed: {cleanup_error}"))
+                .unwrap_or_default();
             PtyError::SpawnFailed(format!(
-                "Failed to capture managed process identity for {}: {error}",
+                "Failed to capture managed process identity for {}: {error}{cleanup_detail}",
                 request.description
             ))
         })?;

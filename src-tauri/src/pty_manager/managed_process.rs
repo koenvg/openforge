@@ -36,6 +36,11 @@ impl ManagedProcessIdentity {
     pub(super) fn capture(root_pid: u32) -> Result<Self, String> {
         let root_pid = i32::try_from(root_pid)
             .map_err(|_| format!("managed process PID {root_pid} is out of range"))?;
+        if root_pid <= 1 {
+            return Err(format!(
+                "managed process PID must be greater than 1, got {root_pid}"
+            ));
+        }
         let system = System::new_all();
         let Some(process) = system.process(Pid::from(root_pid as usize)) else {
             return Ok(Self {
@@ -48,13 +53,15 @@ impl ManagedProcessIdentity {
         };
         let process_group_id = process_group_id(root_pid)?;
         let session_id = session_id(root_pid)?;
-        Ok(Self {
+        let identity = Self {
             version: PROCESS_IDENTITY_VERSION,
             root_pid,
             process_group_id,
             session_id,
             root_start_time: process.start_time(),
-        })
+        };
+        identity.validate()?;
+        Ok(identity)
     }
 
     pub(super) fn validate(&self) -> Result<(), String> {
@@ -64,9 +71,10 @@ impl ManagedProcessIdentity {
                 self.version
             ));
         }
-        if self.root_pid <= 0 || self.process_group_id <= 0 || self.session_id <= 0 {
+        if self.root_pid <= 1 || self.process_group_id <= 1 || self.session_id <= 1 {
             return Err(
-                "managed process identity contains a non-positive PID, PGID, or SID".to_string(),
+                "managed process identity contains a PID, PGID, or SID that is not greater than 1"
+                    .to_string(),
             );
         }
         Ok(())
@@ -74,6 +82,11 @@ impl ManagedProcessIdentity {
 }
 
 fn process_group_id(pid: i32) -> Result<i32, String> {
+    if pid <= 1 {
+        return Err(format!("process PID must be greater than 1, got {pid}"));
+    }
+    // SAFETY: libc::getpgid accepts a process identifier and does not dereference
+    // pointers. The guard above restricts the lookup to one positive, non-system PID.
     let process_group_id = unsafe { libc::getpgid(pid) };
     if process_group_id < 0 {
         let error = std::io::Error::last_os_error();
@@ -90,6 +103,11 @@ fn process_group_id(pid: i32) -> Result<i32, String> {
 }
 
 fn session_id(pid: i32) -> Result<i32, String> {
+    if pid <= 1 {
+        return Err(format!("process PID must be greater than 1, got {pid}"));
+    }
+    // SAFETY: libc::getsid accepts a process identifier and does not dereference
+    // pointers. The guard above restricts the lookup to one positive, non-system PID.
     let session_id = unsafe { libc::getsid(pid) };
     if session_id < 0 {
         let error = std::io::Error::last_os_error();
@@ -105,13 +123,76 @@ fn session_id(pid: i32) -> Result<i32, String> {
     }
 }
 
-pub(super) fn force_kill_unverified_spawn(root_pid: u32) {
-    let Ok(root_pid) = i32::try_from(root_pid) else {
-        return;
+#[derive(Clone, Copy, Debug)]
+enum SignalTarget {
+    Process(i32),
+    ProcessGroup(i32),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ManagedSignal {
+    Terminate,
+    Kill,
+}
+
+impl ManagedSignal {
+    fn as_raw(self) -> i32 {
+        match self {
+            Self::Terminate => libc::SIGTERM,
+            Self::Kill => libc::SIGKILL,
+        }
+    }
+}
+
+fn send_signal(target: SignalTarget, signal: ManagedSignal) -> std::io::Result<()> {
+    let raw_target = match target {
+        SignalTarget::Process(pid) if pid > 1 => pid,
+        SignalTarget::Process(pid) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("process PID must be greater than 1, got {pid}"),
+            ));
+        }
+        SignalTarget::ProcessGroup(process_group_id) if process_group_id > 1 => -process_group_id,
+        SignalTarget::ProcessGroup(process_group_id) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("process group ID must be greater than 1, got {process_group_id}"),
+            ));
+        }
     };
-    unsafe {
-        libc::kill(-root_pid, libc::SIGKILL);
-        libc::kill(root_pid, libc::SIGKILL);
+    // SAFETY: libc::kill accepts integer identifiers without dereferencing pointers.
+    // SignalTarget permits only individual PIDs above 1 or group IDs above 1 encoded
+    // as values below -1; ManagedSignal permits only SIGTERM or SIGKILL.
+    let result = unsafe { libc::kill(raw_target, signal.as_raw()) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+pub(super) fn force_kill_unverified_spawn(root_pid: u32) -> Result<(), String> {
+    let root_pid = i32::try_from(root_pid)
+        .map_err(|_| format!("unverified spawn PID {root_pid} is out of range"))?;
+    let mut errors = Vec::new();
+    for (target, description) in [
+        (SignalTarget::ProcessGroup(root_pid), "process group"),
+        (SignalTarget::Process(root_pid), "process"),
+    ] {
+        if let Err(error) = send_signal(target, ManagedSignal::Kill) {
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                errors.push(format!(
+                    "failed to SIGKILL unverified {description} {root_pid}: {error}"
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
     }
 }
 
@@ -122,9 +203,14 @@ fn process_snapshot() -> HashMap<i32, ProcessSnapshot> {
         .values()
         .filter_map(|process| {
             let pid = i32::try_from(usize::from(process.pid())).ok()?;
+            if pid <= 1 {
+                return None;
+            }
             let parent_pid = process
                 .parent()
                 .and_then(|parent| i32::try_from(usize::from(parent)).ok());
+            // SAFETY: libc::getpgid accepts an integer PID without pointer or lifetime
+            // requirements. The filter above excludes reserved/system process IDs.
             let process_group_id = unsafe { libc::getpgid(pid) };
             let session_id = process
                 .session_id()
@@ -209,8 +295,9 @@ fn collect_managed_processes(
         .collect())
 }
 
-fn signal_processes(processes: &[ProcessSnapshot], signal: i32) -> Result<(), String> {
+fn signal_processes(processes: &[ProcessSnapshot], signal: ManagedSignal) -> Result<(), String> {
     let own_pid = i32::try_from(std::process::id()).unwrap_or(i32::MAX);
+    let own_process_group_id = process_group_id(own_pid).ok();
     let mut attempted_groups = HashSet::new();
     let mut successfully_signaled_groups = HashSet::new();
     let mut errors = Vec::new();
@@ -220,19 +307,19 @@ fn signal_processes(processes: &[ProcessSnapshot], signal: i32) -> Result<(), St
             errors.push(format!("refusing to signal sidecar PID {own_pid}"));
             continue;
         }
-        if process.process_group_id > 0 && attempted_groups.insert(process.process_group_id) {
-            let result = unsafe { libc::kill(-process.process_group_id, signal) };
-            if result == 0 {
-                successfully_signaled_groups.insert(process.process_group_id);
-            }
-            if result != 0 {
-                let error = std::io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
-                    errors.push(format!(
-                        "failed to signal managed process group {}: {}",
-                        process.process_group_id, error
-                    ));
+        if process.process_group_id > 1
+            && Some(process.process_group_id) != own_process_group_id
+            && attempted_groups.insert(process.process_group_id)
+        {
+            match send_signal(SignalTarget::ProcessGroup(process.process_group_id), signal) {
+                Ok(()) => {
+                    successfully_signaled_groups.insert(process.process_group_id);
                 }
+                Err(error) if error.raw_os_error() == Some(libc::ESRCH) => {}
+                Err(error) => errors.push(format!(
+                    "failed to signal managed process group {}: {}",
+                    process.process_group_id, error
+                )),
             }
         }
     }
@@ -243,15 +330,13 @@ fn signal_processes(processes: &[ProcessSnapshot], signal: i32) -> Result<(), St
         {
             continue;
         }
-        let result = unsafe { libc::kill(process.pid, signal) };
-        if result != 0 {
-            let error = std::io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                errors.push(format!(
-                    "failed to signal managed PID {}: {}",
-                    process.pid, error
-                ));
-            }
+        match send_signal(SignalTarget::Process(process.pid), signal) {
+            Ok(()) => {}
+            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => {}
+            Err(error) => errors.push(format!(
+                "failed to signal managed PID {}: {}",
+                process.pid, error
+            )),
         }
     }
 
@@ -324,14 +409,14 @@ pub(super) async fn terminate_managed_process_tree_with_root_reaper(
         return Ok(());
     }
 
-    signal_processes(&managed, libc::SIGTERM)?;
+    signal_processes(&managed, ManagedSignal::Terminate)?;
     let remaining =
         wait_for_managed_exit(identity, &mut tracked, term_timeout, &mut root_reaper).await?;
     if remaining.is_empty() {
         return Ok(());
     }
 
-    signal_processes(&remaining, libc::SIGKILL)?;
+    signal_processes(&remaining, ManagedSignal::Kill)?;
     root_reaper(RootReapMode::Wait);
     let remaining = wait_for_managed_exit(
         identity,
@@ -402,6 +487,8 @@ mod tests {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // SAFETY: the pre_exec closure runs after fork and calls only libc::setsid,
+        // an async-signal-safe operation, then immediately captures errno on failure.
         unsafe {
             command.pre_exec(|| {
                 if libc::setsid() == -1 {
@@ -414,7 +501,8 @@ mod tests {
     }
 
     fn kill_and_reap_spawned_root(root: &mut Child) {
-        force_kill_unverified_spawn(root.id());
+        force_kill_unverified_spawn(root.id())
+            .expect("spawned test process tree should accept SIGKILL");
         let _ = root.wait();
     }
 
@@ -439,6 +527,48 @@ mod tests {
         (root, identity, descendant_pid)
     }
 
+    #[test]
+    fn identity_capture_rejects_reserved_pid() {
+        let error = ManagedProcessIdentity::capture(0)
+            .expect_err("PID zero must not produce managed process identity");
+
+        assert!(
+            error.contains("greater than 1"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn identity_validation_rejects_reserved_system_process_ids() {
+        let identity = ManagedProcessIdentity {
+            version: PROCESS_IDENTITY_VERSION,
+            root_pid: 1,
+            process_group_id: 1,
+            session_id: 1,
+            root_start_time: 0,
+        };
+
+        let error = identity
+            .validate()
+            .expect_err("PID 1 must never be accepted for managed cleanup");
+
+        assert!(
+            error.contains("greater than 1"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn unverified_spawn_kill_reports_invalid_pid() {
+        let error = force_kill_unverified_spawn(0)
+            .expect_err("PID zero must never be passed to libc::kill");
+
+        assert!(
+            error.contains("greater than 1"),
+            "unexpected error: {error}"
+        );
+    }
+
     #[tokio::test]
     async fn term_timeout_kill_terminates_root_and_long_lived_descendant() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -447,9 +577,8 @@ mod tests {
 
         let result = terminate_managed_process_tree(&identity, Duration::from_millis(100)).await;
         if result.is_err() {
-            unsafe {
-                libc::kill(-identity.process_group_id, libc::SIGKILL);
-            }
+            force_kill_unverified_spawn(root.id())
+                .expect("failed cleanup process tree should accept SIGKILL");
         }
         let _ = root.wait();
 
@@ -539,9 +668,8 @@ mod tests {
         )
         .await;
         if result.is_err() {
-            unsafe {
-                libc::kill(-identity.process_group_id, libc::SIGKILL);
-            }
+            force_kill_unverified_spawn(root.id())
+                .expect("failed cleanup process tree should accept SIGKILL");
         }
         let _ = root.wait();
 
@@ -587,6 +715,8 @@ while True:
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // SAFETY: the pre_exec closure runs after fork and calls only libc::setsid,
+        // an async-signal-safe operation, then immediately captures errno on failure.
         unsafe {
             command.pre_exec(|| {
                 if libc::setsid() == -1 {
@@ -629,9 +759,8 @@ while True:
         assert!(process_is_alive(
             i32::try_from(root.id()).expect("PID should fit")
         ));
-        unsafe {
-            libc::kill(-identity.process_group_id, libc::SIGKILL);
-        }
+        force_kill_unverified_spawn(root.id())
+            .expect("mismatched identity process tree should accept SIGKILL");
         let _ = root.wait();
     }
 }
