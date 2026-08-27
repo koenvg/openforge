@@ -168,6 +168,7 @@ vi.mock("@xterm/xterm", () => {
 		});
 		refresh = vi.fn();
 		focus = vi.fn();
+		blur = vi.fn();
 		reset = vi.fn();
 		cols = 80;
 		rows = 24;
