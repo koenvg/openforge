@@ -35,6 +35,7 @@ fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
                 .clone()
                 .expect("submitted_at should exist"),
         }],
+        comments_snapshot_complete: true,
         check_runs: None,
         combined_status: None,
         reviews: Some(vec![review]),
@@ -92,6 +93,7 @@ fn make_review_comment_poll_result(
             outdated,
             created_at: "2024-01-01T00:00:00Z".to_string(),
         }],
+        comments_snapshot_complete: true,
         check_runs: None,
         combined_status: None,
         reviews: None,
@@ -469,7 +471,32 @@ async fn github_poller_events_match_renderer_contracts() {
 }
 
 #[test]
-#[ignore = "known bug KVG-4224"]
+fn polling_replaces_a_manual_placeholder_with_the_github_title() {
+    let (db, _temp_dir) = make_test_db("persist_fetched_pr_title");
+    insert_test_task(&db);
+    db.insert_pull_request(
+        144,
+        "T-100",
+        "acme",
+        "repo",
+        "acme/repo#144",
+        "https://github.com/acme/repo/pull/144",
+        "open",
+        1000,
+        1000,
+        false,
+    )
+    .expect("insert PR");
+    let mut result = make_review_comment_poll_result(144, 902, false);
+    result.pr_title = "Fetched pull request title".to_string();
+
+    assert_eq!(persist_pr_snapshot(&db, &result), 0);
+
+    let pull_requests = db.get_all_pull_requests().expect("get pull requests");
+    assert_eq!(pull_requests[0].title, "Fetched pull request title");
+}
+
+#[test]
 fn polling_refreshes_the_body_of_an_edited_github_comment() {
     let (db, _temp_dir) = make_test_db("persist_edited_comment");
     insert_test_task(&db);
@@ -505,7 +532,6 @@ fn polling_refreshes_the_body_of_an_edited_github_comment() {
 }
 
 #[test]
-#[ignore = "known bug KVG-4224"]
 fn polling_removes_a_github_comment_that_was_deleted_remotely() {
     let (db, _temp_dir) = make_test_db("persist_deleted_comment");
     insert_test_task(&db);

@@ -5,8 +5,6 @@ import type { PollResult, PrComment, PullRequestInfo } from '@openforge-app/plug
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
 
-const knownBug = process.env.RUN_KNOWN_BUGS === '1' ? it : it.skip
-
 const emptyPollResult: PollResult = {
   new_comments: 0,
   ci_changes: 0,
@@ -89,51 +87,51 @@ async function openLinkForm(url = 'https://github.com/owner/repo/pull/42'): Prom
   await fireEvent.input(screen.getByLabelText('GitHub pull request URL'), { target: { value: url } })
 }
 
-describe('known Task pull request bugs', () => {
+describe('Task pull request regressions', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  knownBug('asks for confirmation before merging a pull request', async () => {
+  it('asks for confirmation before merging a pull request', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return [createPullRequest()]
       if (method === 'getTaskPrComments') return []
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Create a merge commit' }))
-
+  
     expect(screen.getByRole('dialog', { name: 'Merge pull request confirmation' })).toBeTruthy()
     expect(invoke.mock.calls.filter(([method]) => method === 'mergeTaskPullRequest')).toHaveLength(0)
   })
 
-  knownBug('shows an error when pull request comments cannot be loaded', async () => {
+  it('shows an error when pull request comments cannot be loaded', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return [createPullRequest({ unaddressed_comment_count: 1 })]
       if (method === 'getTaskPrComments') throw new Error('comments offline')
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await screen.findByText('Test PR')
-
+  
     expect(await screen.findByText(/Could not load pull request comments.*comments offline/i)).toBeTruthy()
   })
 
-  knownBug('shows an error when marking a comment addressed fails', async () => {
+  it('shows an error when marking a comment addressed fails', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return [createPullRequest({ unaddressed_comment_count: 1 })]
       if (method === 'getTaskPrComments') return [reviewComment]
       if (method === 'markTaskPrCommentAddressed') throw new Error('write failed')
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: '✓ Mark addressed' }))
-
+  
     expect(await screen.findByText(/Could not mark comment addressed.*write failed/i)).toBeTruthy()
   })
 
-  knownBug('closes the link form when linking succeeds but the local reload fails', async () => {
+  it('closes the link form when linking succeeds but the local reload fails', async () => {
     let listCalls = 0
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') {
@@ -145,24 +143,24 @@ describe('known Task pull request bugs', () => {
       if (method === 'getTaskPrComments') return []
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await openLinkForm()
     await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
-
+  
     await waitFor(() => expect(screen.queryByLabelText('GitHub pull request URL')).toBeNull())
   })
 
-  knownBug('discards an unfinished link form when the selected Task changes', async () => {
+  it('discards an unfinished link form when the selected Task changes', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return []
       if (method === 'getTaskPrComments') return []
       return emptyPollResult
     })
-
+  
     const { api, rerender } = renderSection(invoke)
     await openLinkForm('https://github.com/owner/repo/pull/77')
-
+  
     await rerender({
       api,
       context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-99' },
@@ -170,11 +168,11 @@ describe('known Task pull request bugs', () => {
       projectId: 'P-1',
       taskActionPending: false,
     })
-
+  
     expect(screen.queryByLabelText('GitHub pull request URL')).toBeNull()
   })
 
-  knownBug('refreshes the original Task when navigation happens during linking', async () => {
+  it('refreshes the original Task when navigation happens during linking', async () => {
     let resolveLink!: (pr: PullRequestInfo) => void
     const linkRequest = new Promise<PullRequestInfo>((resolve) => { resolveLink = resolve })
     const listCalls: string[] = []
@@ -187,12 +185,12 @@ describe('known Task pull request bugs', () => {
       if (method === 'getTaskPrComments') return []
       return emptyPollResult
     })
-
+  
     const { api, rerender } = renderSection(invoke)
     await openLinkForm()
     await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
     await waitFor(() => expect(invoke.mock.calls.some(([method]) => method === 'linkTaskPullRequest')).toBe(true))
-
+  
     await rerender({
       api,
       context: { pluginId: 'com.openforge.github-sync', projectId: 'P-1', taskId: 'T-99' },
@@ -201,14 +199,14 @@ describe('known Task pull request bugs', () => {
       taskActionPending: false,
     })
     await waitFor(() => expect(listCalls.filter(taskId => taskId === 'T-99')).toHaveLength(1))
-
+  
     resolveLink(createPullRequest())
-
+  
     await waitFor(() => expect(listCalls.filter(taskId => taskId === 'T-42')).toHaveLength(2))
     expect(listCalls.filter(taskId => taskId === 'T-99')).toHaveLength(1)
   })
 
-  knownBug('refreshes GitHub before presenting a newly linked pull request', async () => {
+  it('refreshes GitHub before presenting a newly linked pull request', async () => {
     let listCalls = 0
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') {
@@ -221,28 +219,29 @@ describe('known Task pull request bugs', () => {
       if (method === 'getTaskPrComments') return []
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await openLinkForm()
     await fireEvent.click(screen.getByRole('button', { name: 'Link PR' }))
     await screen.findByText('Hydrated title')
-
+  
     expect(invoke.mock.calls.filter(([method]) => method === 'refreshTaskGithubStatus')).toHaveLength(1)
   })
 
-  knownBug('warns when GitHub merged the pull request but local persistence failed', async () => {
+  it('warns when GitHub merged the pull request but local persistence failed', async () => {
     const invoke = vi.fn(async (method: string) => {
       if (method === 'listTaskPullRequests') return [createPullRequest()]
       if (method === 'getTaskPrComments') return []
       if (method === 'mergeTaskPullRequest') {
-        throw new Error('Failed to persist merged pull request: database is locked')
+        throw new Error('Pull request merged on GitHub, but local state could not be updated: database is locked')
       }
       return emptyPollResult
     })
-
+  
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Create a merge commit' }))
-
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
+  
     expect(
       await screen.findByText(/Pull request merged on GitHub.*local state could not be updated/i),
     ).toBeTruthy()

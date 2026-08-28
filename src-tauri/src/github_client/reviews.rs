@@ -21,8 +21,7 @@ impl GitHubClient {
             owner, repo, pr_number
         );
 
-        self.get_with_etag::<Vec<PrReviewComment>>(&url, token)
-            .await
+        self.get_all_pages(&url, token).await
     }
 
     /// Submit a PR review with inline comments
@@ -155,7 +154,7 @@ impl GitHubClient {
             "https://api.github.com/repos/{}/{}/pulls/{}/reviews?per_page=100",
             owner, repo, pr_number
         );
-        self.get_with_etag::<Vec<PrReview>>(&url, token).await
+        self.get_all_pages(&url, token).await
     }
 
     /// Get required pull request reviews policy from branch protection rules.

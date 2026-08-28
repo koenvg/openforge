@@ -352,7 +352,8 @@ describe('GitHub Sync Task pull request section', () => {
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Squash and merge' }))
 
-    expect(screen.queryByText('Merge owner/repo pull request #42 “Test PR”?')).toBeNull()
+    expect(screen.getByText('Merge owner/repo pull request #42 “Test PR”?')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
     expect((screen.getByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Merging…' }))
@@ -397,6 +398,7 @@ describe('GitHub Sync Task pull request section', () => {
 
     const { rerender } = renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Create a merge commit' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
     await rerender({
       taskId: 'T-99',
       projectId: 'P-1',

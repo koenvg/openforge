@@ -41,9 +41,14 @@ pub fn mark_comment_addressed(
     comment_id: i64,
 ) -> Result<(), String> {
     let db_lock = crate::db::acquire_db(db);
-    db_lock
+    let updated = db_lock
         .mark_comment_addressed(comment_id)
-        .map_err(|e| format!("Failed to mark comment addressed: {e}"))
+        .map_err(|e| format!("Failed to mark comment addressed: {e}"))?;
+    if updated {
+        Ok(())
+    } else {
+        Err(format!("Comment not found: {comment_id}"))
+    }
 }
 
 pub async fn get_pr_file_diffs(

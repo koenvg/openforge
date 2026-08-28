@@ -14,7 +14,21 @@ fn runtime_error(error: String) -> (StatusCode, String) {
 fn link_pull_request_error(error: String) -> (StatusCode, String) {
     if error.starts_with("Invalid pull request URL") {
         (StatusCode::BAD_REQUEST, error)
-    } else if error.starts_with("Task not found") {
+    } else if error.starts_with("Task not found") || error.starts_with("Pull request not found") {
+        (StatusCode::NOT_FOUND, error)
+    } else if error.starts_with("Pull request is already linked") {
+        (StatusCode::CONFLICT, error)
+    } else if error.starts_with("GitHub token not configured")
+        || error.starts_with("GitHub authentication failed")
+    {
+        (StatusCode::UNAUTHORIZED, error)
+    } else {
+        runtime_error(error)
+    }
+}
+
+fn mark_comment_addressed_error(error: String) -> (StatusCode, String) {
+    if error.starts_with("Comment not found") {
         (StatusCode::NOT_FOUND, error)
     } else {
         runtime_error(error)
@@ -103,8 +117,14 @@ pub(super) async fn handle_app_github_review_command(
             let task_id = payload_string(&request.payload, "taskId")?;
             let pr_url = payload_string(&request.payload, "prUrl")?;
             to_app_value(
-                crate::github_runtime::link_pull_request(&state.db, &task_id, &pr_url)
-                    .map_err(link_pull_request_error)?,
+                crate::github_runtime::link_pull_request(
+                    &state.db,
+                    &state.github_client,
+                    &task_id,
+                    &pr_url,
+                )
+                .await
+                .map_err(link_pull_request_error)?,
             )?
         }
         "get_pr_comments" => {
@@ -116,7 +136,7 @@ pub(super) async fn handle_app_github_review_command(
         "mark_comment_addressed" => {
             let comment_id = payload_i64(&request.payload, "commentId")?;
             crate::github_runtime::mark_comment_addressed(&state.db, comment_id)
-                .map_err(runtime_error)?;
+                .map_err(mark_comment_addressed_error)?;
             publish_comment_addressed(state);
             return Ok(Some(serde_json::Value::Null));
         }

@@ -39,6 +39,8 @@ use log::warn;
 use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, Response, StatusCode};
 use response_cache::{CachedResponse, EtagResponseCache};
 use serde::de::DeserializeOwned;
+#[cfg(test)]
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 enum ConditionalResponse {
@@ -60,6 +62,8 @@ pub struct GitHubClient {
     etag_cache: Arc<Mutex<EtagResponseCache>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
     token_source: GitHubTokenSource,
+    #[cfg(test)]
+    test_pull_requests: Option<Arc<HashMap<(String, String, i64), PullRequest>>>,
 }
 
 /// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
@@ -98,6 +102,8 @@ impl GitHubClient {
             etag_cache: Arc::new(Mutex::new(EtagResponseCache::new())),
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
             token_source: GitHubTokenSource::SecureStore,
+            #[cfg(test)]
+            test_pull_requests: None,
         }
     }
 
@@ -107,6 +113,52 @@ impl GitHubClient {
             token_source: GitHubTokenSource::Fixed(result),
             ..Self::new()
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_pull_requests(
+        pull_requests: Vec<(String, String, PullRequest)>,
+    ) -> Self {
+        let pull_requests = pull_requests
+            .into_iter()
+            .map(|(owner, repo, pull_request)| {
+                (
+                    (
+                        owner.to_ascii_lowercase(),
+                        repo.to_ascii_lowercase(),
+                        pull_request.number,
+                    ),
+                    pull_request,
+                )
+            })
+            .collect();
+        Self {
+            token_source: GitHubTokenSource::Fixed(Ok(Some("test-token".to_string()))),
+            test_pull_requests: Some(Arc::new(pull_requests)),
+            ..Self::new()
+        }
+    }
+
+    #[cfg(test)]
+    fn test_pull_request(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: i64,
+    ) -> Option<Result<PullRequest, GitHubError>> {
+        self.test_pull_requests.as_ref().map(|pull_requests| {
+            pull_requests
+                .get(&(
+                    owner.to_ascii_lowercase(),
+                    repo.to_ascii_lowercase(),
+                    number,
+                ))
+                .cloned()
+                .ok_or_else(|| GitHubError::ApiError {
+                    status: 404,
+                    message: "Not Found".to_string(),
+                })
+        })
     }
 
     pub(crate) async fn github_token(&self) -> Result<Option<String>, String> {
@@ -371,6 +423,28 @@ impl GitHubClient {
 
                 Ok(result)
             }
+        }
+    }
+
+    async fn get_all_pages<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<Vec<T>, GitHubError> {
+        const PAGE_SIZE: usize = 100;
+        let separator = if url.contains('?') { '&' } else { '?' };
+        let mut page = 1;
+        let mut all_items = Vec::new();
+
+        loop {
+            let page_url = format!("{url}{separator}page={page}");
+            let mut items: Vec<T> = self.get_with_etag(&page_url, token).await?;
+            let page_was_full = items.len() == PAGE_SIZE;
+            all_items.append(&mut items);
+            if !page_was_full {
+                return Ok(all_items);
+            }
+            page += 1;
         }
     }
 
@@ -778,5 +852,46 @@ mod tests {
             classify_repo_access_status(500),
             RepoAccess::Unknown
         ));
+    }
+
+    #[tokio::test]
+    async fn get_all_pages_fetches_every_full_page() {
+        use axum::{extract::Query, routing::get, Json, Router};
+        use std::collections::HashMap;
+
+        async fn items(
+            Query(query): Query<HashMap<String, String>>,
+        ) -> Json<Vec<serde_json::Value>> {
+            let page = query
+                .get("page")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(1);
+            let count = if page == 1 { 100 } else { 1 };
+            Json(
+                (0..count)
+                    .map(|index| serde_json::json!({ "page": page, "index": index }))
+                    .collect(),
+            )
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test server");
+        let address = listener.local_addr().expect("read test server address");
+        let server = tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/items", get(items)))
+                .await
+                .expect("serve paginated fixture");
+        });
+        let client = GitHubClient::new();
+
+        let items: Vec<serde_json::Value> = client
+            .get_all_pages(&format!("http://{address}/items?per_page=100"), "token")
+            .await
+            .expect("fetch every page");
+
+        server.abort();
+        assert_eq!(items.len(), 101);
+        assert_eq!(items[100]["page"], 2);
     }
 }

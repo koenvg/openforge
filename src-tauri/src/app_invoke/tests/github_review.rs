@@ -1,5 +1,44 @@
 use super::*;
 
+fn linkable_pull_request(
+    owner: &str,
+    repo: &str,
+    number: i64,
+) -> crate::github_client::PullRequest {
+    crate::github_client::PullRequest {
+        number,
+        title: format!("Pull request {number}"),
+        state: "open".to_string(),
+        html_url: format!("https://github.com/{owner}/{repo}/pull/{number}"),
+        user: crate::github_client::GitHubUser {
+            login: "octocat".to_string(),
+            extra: serde_json::json!({}),
+        },
+        head: crate::github_client::GitHubHead {
+            ref_name: format!("feature/{number}"),
+            sha: format!("head-{number}"),
+            extra: serde_json::json!({}),
+        },
+        draft: Some(false),
+        mergeable: Some(true),
+        mergeable_state: Some("clean".to_string()),
+        extra: serde_json::json!({ "id": 10_000 + number }),
+    }
+}
+
+fn allow_linking_pull_request(
+    state: &mut crate::http_server::AppState,
+    owner: &str,
+    repo: &str,
+    number: i64,
+) {
+    state.github_client = crate::github_client::GitHubClient::with_test_pull_requests(vec![(
+        owner.to_string(),
+        repo.to_string(),
+        linkable_pull_request(owner, repo, number),
+    )]);
+}
+
 #[tokio::test]
 async fn handler_uses_shared_boundary() {
     let (state, _temp_dir) = test_state("app_invoke_github_shared_boundary");
@@ -81,13 +120,14 @@ async fn get_pull_requests_scopes_results_to_the_requested_task() {
 
 #[tokio::test]
 async fn link_pull_request_persists_pr_for_task() {
-    let (state, _temp_dir) = test_state("app_invoke_link_pull_request");
+    let (mut state, _temp_dir) = test_state("app_invoke_link_pull_request");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Link PR task", "doing", None, None, None)
             .expect("create task")
             .id
     };
+    allow_linking_pull_request(&mut state, "owner", "repo", 123);
 
     let value = invoke_ok(
         &state,
@@ -100,6 +140,8 @@ async fn link_pull_request_persists_pr_for_task() {
     assert_eq!(value["repo_owner"], "owner");
     assert_eq!(value["repo_name"], "repo");
     assert_eq!(value["pr_number"], 123);
+    assert_eq!(value["title"], "Pull request 123");
+    assert_eq!(value["head_sha"], "head-123");
     assert_eq!(value["url"], "https://github.com/owner/repo/pull/123");
 
     let prs = invoke_ok(&state, "get_pull_requests", serde_json::Value::Null).await;
@@ -453,15 +495,15 @@ async fn handles_db_backed_commands_and_events() {
 }
 
 #[tokio::test]
-#[ignore = "known bug KVG-4224"]
 async fn linking_rejects_a_well_formed_url_for_a_nonexistent_pull_request() {
-    let (state, _temp_dir) = test_state("app_invoke_link_nonexistent_pr");
+    let (mut state, _temp_dir) = test_state("app_invoke_link_nonexistent_pr");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Reject nonexistent PR", "doing", None, None, None)
             .expect("create task")
             .id
     };
+    state.github_client = crate::github_client::GitHubClient::with_test_pull_requests(Vec::new());
 
     invoke(
         &state,
@@ -476,9 +518,8 @@ async fn linking_rejects_a_well_formed_url_for_a_nonexistent_pull_request() {
 }
 
 #[tokio::test]
-#[ignore = "known bug KVG-4224"]
 async fn linking_a_pull_request_to_another_task_does_not_remove_the_original_link() {
-    let (state, _temp_dir) = test_state("app_invoke_link_pr_to_two_tasks");
+    let (mut state, _temp_dir) = test_state("app_invoke_link_pr_to_two_tasks");
     let (original_task_id, other_task_id) = {
         let db = state.db.lock().expect("db lock");
         let original = db
@@ -489,6 +530,7 @@ async fn linking_a_pull_request_to_another_task_does_not_remove_the_original_lin
             .expect("create other task");
         (original.id, other.id)
     };
+    allow_linking_pull_request(&mut state, "owner", "repo", 77);
     let pr_url = "https://github.com/owner/repo/pull/77";
 
     invoke_ok(
@@ -497,12 +539,14 @@ async fn linking_a_pull_request_to_another_task_does_not_remove_the_original_lin
         json!({ "taskId": original_task_id, "prUrl": pr_url }),
     )
     .await;
-    let _second_link = invoke(
+    let error = invoke(
         &state,
         "link_pull_request",
         json!({ "taskId": other_task_id, "prUrl": pr_url }),
     )
-    .await;
+    .await
+    .expect_err("a pull request linked elsewhere must not be moved silently");
+    assert_eq!(error.0, StatusCode::CONFLICT);
 
     let original_pull_requests = invoke_ok(
         &state,
@@ -518,15 +562,15 @@ async fn linking_a_pull_request_to_another_task_does_not_remove_the_original_lin
 }
 
 #[tokio::test]
-#[ignore = "known bug KVG-4224"]
 async fn linking_accepts_a_case_insensitive_github_hostname() {
-    let (state, _temp_dir) = test_state("app_invoke_link_mixed_case_host");
+    let (mut state, _temp_dir) = test_state("app_invoke_link_mixed_case_host");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Mixed-case GitHub host", "doing", None, None, None)
             .expect("create task")
             .id
     };
+    allow_linking_pull_request(&mut state, "owner", "repo", 77);
 
     invoke(
         &state,
@@ -541,15 +585,32 @@ async fn linking_accepts_a_case_insensitive_github_hostname() {
 }
 
 #[tokio::test]
-#[ignore = "known bug KVG-4224"]
 async fn linking_repository_paths_with_different_case_does_not_duplicate_the_pull_request() {
-    let (state, _temp_dir) = test_state("app_invoke_link_mixed_case_repo");
+    let (mut state, _temp_dir) = test_state("app_invoke_link_mixed_case_repo");
     let task_id = {
         let db = state.db.lock().expect("db lock");
         db.create_task("Mixed-case repository", "doing", None, None, None)
             .expect("create task")
             .id
     };
+    {
+        let db = state.db.lock().expect("db lock");
+        db.insert_pull_request_with_number(
+            -77,
+            77,
+            &task_id,
+            "Owner",
+            "Repo",
+            "Legacy manual link",
+            "https://github.com/Owner/Repo/pull/77",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert legacy mixed-case PR");
+    }
+    allow_linking_pull_request(&mut state, "owner", "repo", 77);
 
     invoke_ok(
         &state,
@@ -579,7 +640,6 @@ async fn linking_repository_paths_with_different_case_does_not_duplicate_the_pul
 }
 
 #[tokio::test]
-#[ignore = "known bug KVG-4224"]
 async fn marking_a_nonexistent_comment_addressed_returns_not_found() {
     let (state, _temp_dir) = test_state("app_invoke_mark_missing_comment_addressed");
 
