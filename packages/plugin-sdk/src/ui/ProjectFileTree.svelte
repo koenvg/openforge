@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import FileTypeIcon from '@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte'
+  import FileTypeIcon from './FileTypeIcon.svelte'
   import {
     buildProjectFileTree,
     flattenVisibleProjectFileTree,
@@ -10,8 +10,8 @@
     getProjectFileTreeKeyboardAction,
     projectFileTreePathToId,
     type ProjectFileTreeNode,
-  } from '@openforge-app/plugin-sdk/projectFileTree'
-  import type { FileEntry } from '../lib/types'
+  } from '../projectFileTree'
+  import type { FileEntry } from '../domain'
 
   interface Props {
     entries: FileEntry[]
@@ -21,6 +21,7 @@
     onSelectFile: (path: string) => void
     initialScrollTop?: number
     onScrollTopChange?: (scrollTop: number) => void
+    focusSelectedRequest?: number | null
   }
 
   type TreeNode = ProjectFileTreeNode<FileEntry>
@@ -33,12 +34,14 @@
     onSelectFile,
     initialScrollTop = 0,
     onScrollTopChange,
+    focusSelectedRequest = null,
   }: Props = $props()
 
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let appliedInitialScrollTop = $state<number | null>(null)
   let focusedPath = $state<string | null>(null)
   let lastSelectedPath = $state<string | null>(null)
+  let appliedFocusSelectedRequest = $state<number | null>(null)
 
   const treeNodes = $derived(buildProjectFileTree(entries))
   const visibleNodes = $derived(flattenVisibleProjectFileTree(treeNodes, expandedDirs))
@@ -57,8 +60,8 @@
   }
 
   function activateNode(node: TreeNode) {
-    void focusPath(node.entry.path)
     if (node.entry.isDir) {
+      void focusPath(node.entry.path)
       onToggleDir(node.entry.path)
     } else {
       onSelectFile(node.entry.path)
@@ -111,9 +114,17 @@
 
     lastSelectedPath = selectedPath
   })
+
+  $effect(() => {
+    if (focusSelectedRequest === null || appliedFocusSelectedRequest === focusSelectedRequest) return
+    appliedFocusSelectedRequest = focusSelectedRequest
+    if (selectedPath !== null && visiblePaths.includes(selectedPath)) {
+      void focusPath(selectedPath)
+    }
+  })
 </script>
 
-<div class="flex flex-col h-full bg-base-200 border-r border-base-300">
+<div class="flex h-full flex-col border-r border-base-300 bg-base-100">
   <div
     class="flex-1 overflow-y-auto py-2"
     bind:this={scrollContainer}
@@ -131,6 +142,7 @@
         {@const sizeId = `${projectFileTreePathToId(entry.path)}-size`}
         {@const a11y = getProjectFileTreeItemAccessibility(node, { expandedDirs, selectedPath, labelId, sizeId })}
         <div
+          class="outline-none [&:focus-visible>div:first-child]:ring-2 [&:focus-visible>div:first-child]:ring-inset [&:focus-visible>div:first-child]:ring-primary/60"
           role="treeitem"
           tabindex={focusedPath === entry.path ? 0 : -1}
           aria-level={a11y.level}
@@ -152,7 +164,7 @@
           }}
         >
           <div
-            class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer transition-colors py-1.5 pr-3 {entry.isDir ? 'hover:bg-base-content/5' : isSelected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-base-content/5'}"
+            class="w-full flex items-center gap-2 text-xs cursor-pointer transition-colors py-1.5 pr-3 {entry.isDir ? 'text-base-content hover:bg-base-content/5' : isSelected ? 'bg-primary/10 text-primary font-medium border-l-2 border-l-primary hover:bg-primary/15' : 'text-base-content hover:bg-base-content/5'}"
             style="padding-left: {entry.isDir || !isSelected ? 12 + getProjectFileTreeDepth(entry.path) * 16 : 10 + getProjectFileTreeDepth(entry.path) * 16}px"
           >
             {#if entry.isDir}

@@ -23,6 +23,7 @@ describe('plugin-sdk public UI exports', () => {
       'PluginViewState',
       'PluginSidebarLink',
       'FileTypeIcon',
+      'ProjectFileTree',
       'CollapsibleSection',
     ])
 
