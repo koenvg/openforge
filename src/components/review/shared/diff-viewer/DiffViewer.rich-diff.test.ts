@@ -107,6 +107,32 @@ describe('DiffViewer Rich Diff View', () => {
     }])
   })
 
+
+  it('closes a Rich Markdown inline comment when Escape is pressed', async () => {
+    const markdownFile: PrFileDiff = {
+      ...modifiedFileWithPatch,
+      filename: 'README.md',
+      patch: '@@ -1,2 +1,2 @@\n # Guide\n-Old details\n+Updated details',
+    }
+
+    render(DiffViewer, {
+      props: {
+        files: [markdownFile],
+        batchFetchFileContents: vi.fn().mockResolvedValue(new Map([[markdownFile.filename, {
+          oldContent: '# Guide\nOld details',
+          newContent: '# Guide\nUpdated details',
+        }]])),
+      },
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Show rich diff for README.md' }))
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add comment to README.md line 2' }))
+
+    const editor = screen.getByRole('textbox', { name: 'Inline review comment for README.md line 2' })
+    await fireEvent.keyDown(editor, { key: 'Escape' })
+
+    expect(screen.queryByRole('textbox', { name: 'Inline review comment for README.md line 2' })).toBeNull()
+  })
   it('comments on individual changed list items and table rows', async () => {
     const markdownFile: PrFileDiff = {
       ...modifiedFileWithPatch,
