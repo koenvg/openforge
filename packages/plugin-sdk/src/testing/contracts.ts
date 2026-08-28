@@ -11,6 +11,7 @@ import type {
   CreateTaskRequest,
   FrontendOpenForgeAPI,
   InjectionPointLocation,
+  ListTaskSessionsRequest,
   JsonValue,
   NotificationRequest,
   OpenForgeNavigationRequest,
@@ -32,7 +33,7 @@ import type {
   UserDataFileRequest,
   UserDataFileWriteRequest,
 } from '../types'
-import type { Task } from '../domain'
+import type { AgentSession, Task } from '../domain'
 
 export type TestingRuntimeScope = 'global' | 'project' | 'task'
 export type TestingRuntimeKind = 'commands' | 'events' | 'views' | 'taskPane' | 'taskUI' | 'reviewUI' | 'settings' | 'backend' | 'background'
@@ -62,6 +63,8 @@ export interface TestingOpenForgeApiOptions {
    * mirroring the host capability. Defaults to an empty list.
    */
   tasks?: Task[]
+  /** Agent Sessions returned by `tasks.listSessions`. Defaults to an empty list. */
+  agentSessions?: AgentSession[]
   /** UTF-8 files returned by `fs.external.readTextFileChunks`. Defaults to none. */
   externalTextFiles?: TestingExternalTextFile[]
 }
@@ -82,6 +85,7 @@ export interface TestingOpenForgeApiCalls {
   taskImplementationStarts: StartTaskImplementationRequest[]
   taskFollowUps: SendTaskFollowUpRequest[]
   taskListRequests: Array<{ projectId: string | null; includeDone: boolean }>
+  taskSessionListRequests: ListTaskSessionsRequest[]
   taskStatusUpdates: Array<{ taskId: string; status: string }>
   configWrites: Array<{ key: string; value: JsonValue; projectId: string | null }>
   fsWrites: Array<{ projectId: string; path: string; content: string }>

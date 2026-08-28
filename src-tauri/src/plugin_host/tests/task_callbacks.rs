@@ -157,6 +157,58 @@ async fn plugin_host_task_follow_up_routes_through_agent_session_delivery() {
 }
 
 #[tokio::test]
+async fn plugin_host_lists_filtered_task_agent_sessions() {
+    let (database, _temp_dir) =
+        crate::db::test_helpers::make_test_db("plugin_host_task_agent_sessions");
+    let task = database
+        .create_task("Usage attribution", "doing", None, None, None)
+        .expect("Task fixture");
+    for (id, provider) in [
+        ("old-pi", "pi"),
+        ("new-claude", "claude-code"),
+        ("new-pi", "pi"),
+    ] {
+        database
+            .create_agent_session(id, &task.id, None, "implement", "completed", provider)
+            .expect("Agent Session fixture");
+    }
+    database
+        .connection()
+        .lock()
+        .expect("lock connection")
+        .execute(
+            "UPDATE agent_sessions SET created_at = CASE id WHEN 'old-pi' THEN 100 WHEN 'new-pi' THEN 200 ELSE 300 END",
+            [],
+        )
+        .expect("adjust Agent Session timestamps");
+    let app = AppHandle::new();
+    app.manage(Arc::new(Mutex::new(database)));
+    let host = PluginHost::new(app);
+
+    let sessions = host
+        .handle_host_callback(
+            "openforge.tasks.listSessions",
+            &json!({
+                "taskId": task.id,
+                "provider": "pi",
+                "createdAtOrAfter": 150,
+            }),
+        )
+        .await
+        .expect("list Agent Sessions callback");
+
+    assert_eq!(
+        sessions
+            .as_array()
+            .expect("Agent Sessions")
+            .iter()
+            .map(|session| session["id"].as_str().expect("Agent Session id"))
+            .collect::<Vec<_>>(),
+        vec!["new-pi"]
+    );
+}
+
+#[tokio::test]
 async fn plugin_host_task_compose_round_trips_through_the_desktop_renderer() {
     let (database, _temp_dir) =
         crate::db::test_helpers::make_test_db("plugin_host_task_compose_callback");

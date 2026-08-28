@@ -423,6 +423,7 @@ function createTestingCalls() {
 		taskImplementationStarts: [],
 		taskFollowUps: [],
 		taskListRequests: [],
+		taskSessionListRequests: [],
 		taskStatusUpdates: [],
 		configWrites: [],
 		fsWrites: [],
@@ -566,6 +567,7 @@ var TestingRegistryServices = class {
 	storage;
 	config = /* @__PURE__ */ new Map();
 	seededTasks;
+	seededAgentSessions;
 	externalTextFiles;
 	claims = new TestingContributionClaims();
 	constructor(options = {}) {
@@ -582,6 +584,7 @@ var TestingRegistryServices = class {
 		this.calls = createTestingCalls();
 		this.storage = options.storage ?? createMemoryPluginStorage(this.calls);
 		this.seededTasks = options.tasks ?? [];
+		this.seededAgentSessions = options.agentSessions ?? [];
 		this.externalTextFiles = options.externalTextFiles ?? [];
 	}
 	localQualifiedId(kind, id) {
@@ -814,7 +817,14 @@ var TestingCommonApiFake = class {
 					};
 				},
 				getWorkspace: async () => null,
-				getLatestSession: async () => null
+				getLatestSession: async () => null,
+				listSessions: async (request) => {
+					this.services.calls.taskSessionListRequests.push({ ...request });
+					return this.services.seededAgentSessions.map((session, index) => ({
+						session,
+						index
+					})).filter(({ session }) => session.ticket_id === request.taskId).filter(({ session }) => request.provider === void 0 || session.provider === request.provider).filter(({ session }) => request.createdAtOrAfter === void 0 || session.created_at >= request.createdAtOrAfter).sort((left, right) => right.session.created_at - left.session.created_at || right.index - left.index).map(({ session }) => session);
+				}
 			},
 			projects: {
 				list: async () => [],

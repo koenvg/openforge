@@ -151,6 +151,29 @@ describe('plugin host commands', () => {
     })
   })
 
+  it('routes Task Agent Session history through the typed desktop bridge', async () => {
+    const sessions = [{
+      id: 'S-2',
+      ticket_id: 'T-2',
+      provider: 'pi',
+      pi_session_id: 'pi-S-2',
+      created_at: 200,
+    }]
+    const { invoke } = installDesktopBridge(sessions)
+    const host = createPluginRuntimeHost('com.openforge.usage')
+
+    await expect(host.listTaskSessions?.({
+      taskId: 'T-2',
+      provider: 'pi',
+      createdAtOrAfter: 150,
+    })).resolves.toEqual(sessions)
+    expect(invoke).toHaveBeenCalledWith('get_agent_sessions', {
+      taskId: 'T-2',
+      provider: 'pi',
+      createdAtOrAfter: 150,
+    })
+  })
+
   it('preserves typed retryable Task follow-up failures', async () => {
     const { invoke } = installDesktopBridge()
     invoke

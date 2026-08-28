@@ -48,6 +48,7 @@ fn command_domain(command: &str) -> Option<CommandDomain> {
         | "get_task_workspace" => Some(CommandDomain::Task),
         "get_session_status"
         | "get_latest_session"
+        | "get_agent_sessions"
         | "get_latest_sessions"
         | "finalize_agent_session" => Some(CommandDomain::AgentSession),
         "get_project_task_labels"
@@ -122,6 +123,7 @@ mod tests {
             ("get_task_workspace", CommandDomain::Task),
             ("get_session_status", CommandDomain::AgentSession),
             ("get_latest_session", CommandDomain::AgentSession),
+            ("get_agent_sessions", CommandDomain::AgentSession),
             ("get_latest_sessions", CommandDomain::AgentSession),
             ("finalize_agent_session", CommandDomain::AgentSession),
             ("get_project_task_labels", CommandDomain::TaskLabel),

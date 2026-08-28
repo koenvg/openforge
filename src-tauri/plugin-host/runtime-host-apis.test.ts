@@ -32,7 +32,8 @@ describe('plugin-host backend host APIs', () => {
               const run = await openforge.tasks.startImplementation({ taskId: created.id })
               const workspace = await openforge.tasks.getWorkspace(created.id)
               const latestSession = await openforge.tasks.getLatestSession(created.id)
-              return { projectTasks, allTasks, existing, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession }
+              const sessions = await openforge.tasks.listSessions({ taskId: created.id, provider: 'pi', createdAtOrAfter: 2 })
+              return { projectTasks, allTasks, existing, created, composed, followUp, beforeContributions, contributions, run, workspace, latestSession, sessions }
             }
           }))
         }
@@ -72,6 +73,7 @@ describe('plugin-host backend host APIs', () => {
         case 'openforge.tasks.startImplementation': return { task_id: request.params.taskId, session_id: 'session-1', workspace_path: '/workspace/T-created', port: 0 }
         case 'openforge.tasks.getWorkspace': return { id: 7, task_id: request.params.taskId, project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 }
         case 'openforge.tasks.getLatestSession': return { id: 'session-1', ticket_id: request.params.taskId, opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }
+        case 'openforge.tasks.listSessions': return [{ id: 'session-1', ticket_id: request.params.taskId, opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }]
         default: throw new Error(`unexpected host callback: ${request.method}`)
       }
     }
@@ -88,6 +90,7 @@ describe('plugin-host backend host APIs', () => {
       run: { taskId: 'T-created', sessionId: 'session-1', workspacePath: '/workspace/T-created' },
       workspace: { id: 7, task_id: 'T-created', project_id: 'P-1', workspace_path: '/workspace/T-created', repo_path: '/repo', kind: 'project_dir', branch_name: null, provider_name: 'pi', status: 'active', created_at: 2, updated_at: 2 },
       latestSession: { id: 'session-1', ticket_id: 'T-created', opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' },
+      sessions: [{ id: 'session-1', ticket_id: 'T-created', opencode_session_id: null, stage: 'implementing', status: 'running', checkpoint_data: null, pty_instance_id: null, error_message: null, created_at: 3, updated_at: 3, provider: 'pi', claude_session_id: null, pi_session_id: 'pi-session-1' }],
     })
     expect(calls).toEqual([
       { method: 'openforge.tasks.list', params: { projectId: 'P-1', includeDone: true } },
@@ -102,6 +105,7 @@ describe('plugin-host backend host APIs', () => {
       { method: 'openforge.tasks.startImplementation', params: { taskId: 'T-created' } },
       { method: 'openforge.tasks.getWorkspace', params: { taskId: 'T-created' } },
       { method: 'openforge.tasks.getLatestSession', params: { taskId: 'T-created' } },
+      { method: 'openforge.tasks.listSessions', params: { taskId: 'T-created', provider: 'pi', createdAtOrAfter: 2 } },
     ])
   })
 

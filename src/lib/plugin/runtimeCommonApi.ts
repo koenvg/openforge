@@ -144,6 +144,7 @@ export class RuntimeCommonApiRegistry {
         sendFollowUp: async (request) => this.services.host.sendTaskFollowUp ? this.services.host.sendTaskFollowUp(request) : unavailableCapability('tasks.sendFollowUp'),
         getWorkspace: async (taskId) => this.services.host.getTaskWorkspace ? this.services.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
         getLatestSession: async (taskId) => this.services.host.getLatestSession ? this.services.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
+        listSessions: async (request) => this.services.host.listTaskSessions ? this.services.host.listTaskSessions(request) : unavailableCapability('tasks.listSessions'),
       },
       projects: {
         list: async () => this.services.host.listProjects ? this.services.host.listProjects() : unavailableCapability('projects.list'),

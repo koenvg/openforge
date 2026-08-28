@@ -1,4 +1,4 @@
-use super::callbacks::{optional_param_string, required_param_string};
+use super::callbacks::{optional_param_string, optional_param_u64, required_param_string};
 use super::PluginHost;
 use crate::app_events::publish_app_event;
 use serde_json::{json, Value};
@@ -258,6 +258,24 @@ impl PluginHost {
             .map_err(|error| format!("failed to get latest session: {error}"))?;
         serde_json::to_value(session)
             .map_err(|error| format!("failed to serialize latest session: {error}"))
+    }
+
+    pub(super) fn list_task_sessions_for_host(&self, params: &Value) -> Result<Value, String> {
+        let task_id = required_param_string(params, "taskId")?;
+        let provider = optional_param_string(params, "provider")?;
+        let created_at_or_after = optional_param_u64(params, "createdAtOrAfter")?
+            .map(i64::try_from)
+            .transpose()
+            .map_err(|_| {
+                "plugin host callback integer param out of range: createdAtOrAfter".to_string()
+            })?;
+        let db_state = self.database_state_for_host()?;
+        let db = crate::db::acquire_db(db_state.as_ref());
+        let sessions = db
+            .get_agent_sessions_for_task(&task_id, provider.as_deref(), created_at_or_after)
+            .map_err(|error| format!("failed to list Agent Sessions: {error}"))?;
+        serde_json::to_value(sessions)
+            .map_err(|error| format!("failed to serialize Agent Sessions: {error}"))
     }
 }
 

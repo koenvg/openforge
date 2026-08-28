@@ -12,7 +12,7 @@ import type {
   StartPromptContribution,
   SubscriptionSink,
 } from '../types'
-import type { Task } from '../domain'
+import type { AgentSession, Task } from '../domain'
 import type {
   TestingCommandContribution,
   TestingMaybePromise,
@@ -71,6 +71,7 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     taskImplementationStarts: [],
     taskFollowUps: [],
     taskListRequests: [],
+    taskSessionListRequests: [],
     taskStatusUpdates: [],
     configWrites: [],
     fsWrites: [],
@@ -237,6 +238,7 @@ export class TestingRegistryServices {
   readonly storage: PluginStorage
   readonly config = new Map<string, JsonValue>()
   readonly seededTasks: Task[]
+  readonly seededAgentSessions: AgentSession[]
   readonly externalTextFiles: TestingExternalTextFile[]
   readonly claims = new TestingContributionClaims()
 
@@ -254,6 +256,7 @@ export class TestingRegistryServices {
     this.calls = createTestingCalls()
     this.storage = options.storage ?? createMemoryPluginStorage(this.calls)
     this.seededTasks = options.tasks ?? []
+    this.seededAgentSessions = options.agentSessions ?? []
     this.externalTextFiles = options.externalTextFiles ?? []
   }
 
