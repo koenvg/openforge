@@ -29,7 +29,6 @@ pub(super) struct BranchPolicyInputs {
     pub(super) required_reviews_policy_known: bool,
     pub(super) requires_up_to_date_branch: bool,
     pub(super) conversations_blocking: bool,
-    pub(super) merge_queue_required_by_policy: bool,
     pub(super) merge_methods_policy_known: bool,
     pub(super) allowed_merge_methods: Vec<PullRequestMergeMethod>,
     pub(super) default_merge_method: Option<PullRequestMergeMethod>,
@@ -421,10 +420,6 @@ pub(super) fn select_branch_policy_inputs(
         && graphql_snapshot
             .and_then(|snapshot| snapshot.unresolved_conversations)
             .unwrap_or(false);
-    let merge_queue_required_by_policy = graphql_snapshot
-        .filter(|snapshot| snapshot.policy.merge_queue_required.known)
-        .and_then(|snapshot| snapshot.policy.merge_queue_required.value)
-        .unwrap_or(false);
     let repository_merge_methods = graphql_snapshot
         .filter(|snapshot| snapshot.policy.allowed_merge_methods.known)
         .map(|snapshot| snapshot.policy.allowed_merge_methods.value.clone());
@@ -455,7 +450,6 @@ pub(super) fn select_branch_policy_inputs(
         required_reviews_policy_known,
         requires_up_to_date_branch,
         conversations_blocking,
-        merge_queue_required_by_policy,
         merge_methods_policy_known,
         allowed_merge_methods,
         default_merge_method,

@@ -207,6 +207,7 @@ export interface MergeReadinessInfo extends MergeStatusInfo {
   review_status?: string | null;
   draft?: boolean;
   is_queued?: boolean;
+  merge_queue_required?: boolean | null;
   unaddressed_comment_count?: number;
   head_sha?: string | null;
   updated_at?: number | null;
@@ -500,10 +501,11 @@ export function getMergeReadiness(pr: MergeReadinessInfo, options: MergeReadines
   }
 
   if (hasDirectMergeability || isUnprotectedFallback) {
+    const mergeQueueRequired = options.requireMergeQueue === true || pr.merge_queue_required === true;
     return mergeReadinessResult(
       pr,
-      options.requireMergeQueue === true ? 'ready_to_enqueue' : 'ready_to_merge',
-      options.requireMergeQueue === true ? 'enqueue' : 'merge',
+      mergeQueueRequired ? 'ready_to_enqueue' : 'ready_to_merge',
+      mergeQueueRequired ? 'enqueue' : 'merge',
       blockers,
       warnings,
     );

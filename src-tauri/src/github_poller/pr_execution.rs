@@ -252,7 +252,7 @@ pub(super) async fn poll_single_pr(
         graphql_snapshot.as_ref(),
         &result_head_sha,
         readiness_is_queued,
-        branch_policy_inputs.merge_queue_required_by_policy,
+        pr.merge_queue_required,
         0,
         0,
     );

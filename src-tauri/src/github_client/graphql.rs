@@ -17,6 +17,7 @@ query OpenForgePullRequestReadiness($owner: String!, $repo: String!, $number: In
       mergeStateStatus
       reviewDecision
       autoMergeRequest { enabledAt }
+      isMergeQueueEnabled
       mergeQueueEntry { state }
       commits(last: 1) {
         nodes {
@@ -91,8 +92,8 @@ query OpenForgePullRequestReadinessCore($owner: String!, $repo: String!, $number
 "#;
 
 const ENQUEUE_PULL_REQUEST_MUTATION: &str = r#"
-mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!) {
-  enqueuePullRequest(input: { pullRequestId: $pullRequestId }) {
+mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!, $expectedHeadOid: GitObjectID!) {
+  enqueuePullRequest(input: { pullRequestId: $pullRequestId, expectedHeadOid: $expectedHeadOid }) {
     pullRequest {
       id
       mergeQueueEntry { state }
@@ -100,6 +101,15 @@ mutation OpenForgeEnqueuePullRequest($pullRequestId: ID!) {
   }
 }
 "#;
+
+pub struct EnqueuePullRequestRequest<'a> {
+    pub pull_request_id: &'a str,
+    pub expected_head_oid: &'a str,
+    pub owner: &'a str,
+    pub repo: &'a str,
+    pub pr_number: i64,
+    pub actor_login: &'a str,
+}
 
 impl GitHubClient {
     pub async fn get_pr_readiness_snapshot(
@@ -130,41 +140,31 @@ impl GitHubClient {
     }
     pub async fn enqueue_pull_request_by_node_id(
         &self,
-        pull_request_id: &str,
-        owner: &str,
-        repo: &str,
-        pr_number: i64,
+        request: EnqueuePullRequestRequest<'_>,
         token: &str,
-        actor_login: &str,
     ) -> Result<(), GitHubError> {
         let body = self
-            .send_enqueue_pull_request_mutation(pull_request_id, token)
+            .send_graphql_payload(
+                enqueue_pull_request_payload(request.pull_request_id, request.expected_head_oid),
+                token,
+            )
             .await?;
 
-        classify_enqueue_graphql_errors(&body, actor_login, owner, repo, pr_number).map_err(
-            |message| GitHubError::ApiError {
-                status: 422,
-                message,
-            },
-        )?;
+        classify_enqueue_graphql_errors(
+            &body,
+            request.actor_login,
+            request.owner,
+            request.repo,
+            request.pr_number,
+        )
+        .map_err(|message| GitHubError::ApiError {
+            status: 422,
+            message,
+        })?;
         extract_enqueue_pull_request_result(&body).map_err(|message| GitHubError::ApiError {
             status: 422,
             message,
         })
-    }
-
-    async fn send_enqueue_pull_request_mutation(
-        &self,
-        pull_request_id: &str,
-        token: &str,
-    ) -> Result<Value, GitHubError> {
-        let payload = json!({
-            "query": ENQUEUE_PULL_REQUEST_MUTATION,
-            "variables": {
-                "pullRequestId": pull_request_id,
-            },
-        });
-        self.send_graphql_payload(payload, token).await
     }
 
     async fn send_graphql_payload(
@@ -234,6 +234,16 @@ impl GitHubClient {
     }
 }
 
+fn enqueue_pull_request_payload(pull_request_id: &str, expected_head_oid: &str) -> Value {
+    json!({
+        "query": ENQUEUE_PULL_REQUEST_MUTATION,
+        "variables": {
+            "pullRequestId": pull_request_id,
+            "expectedHeadOid": expected_head_oid,
+        },
+    })
+}
+
 fn graphql_error_messages(body: &Value) -> Vec<String> {
     body.get("errors")
         .and_then(Value::as_array)
@@ -262,7 +272,6 @@ fn parse_pr_readiness_fallback(
     };
 
     snapshot.policy = super::types::RepositoryPolicyFacts::unknown(policy_error.clone());
-    snapshot.merge_queue_required = None;
     snapshot.warnings.push(policy_error);
     Ok(snapshot)
 }
@@ -273,7 +282,9 @@ fn is_unsupported_enqueue_error(message: &str) -> bool {
         && (lower.contains("doesn't exist")
             || lower.contains("does not exist")
             || lower.contains("undefinedfield")
-            || lower.contains("unknown field"))
+            || lower.contains("unknown field")
+            || lower.contains("doesn't accept argument")
+            || lower.contains("does not accept argument"))
 }
 
 fn is_enqueue_permission_error(message: &str) -> bool {
@@ -367,9 +378,35 @@ mod tests {
 
     #[test]
     fn readiness_query_only_uses_supported_github_schema_fields() {
+        assert!(PR_READINESS_QUERY.contains("isMergeQueueEnabled"));
         assert!(PR_READINESS_QUERY.contains("mergeQueueEntry { state }"));
         assert!(!PR_READINESS_QUERY.contains("mergeGroup"));
         assert!(!PR_READINESS_QUERY.contains("requiresMergeQueue"));
+    }
+
+    #[test]
+    fn enqueue_payload_sends_the_expected_head_oid() {
+        let payload = enqueue_pull_request_payload("PR_node", "head-sha-42");
+
+        assert_eq!(
+            payload
+                .pointer("/variables/expectedHeadOid")
+                .and_then(Value::as_str),
+            Some("head-sha-42")
+        );
+    }
+
+    #[test]
+    fn enqueue_treats_a_rejected_expected_head_oid_argument_as_an_unsupported_merge_queue() {
+        let body = json!({
+            "errors": [{
+                "message": "InputObject 'EnqueuePullRequestInput' doesn't accept argument 'expectedHeadOid'"
+            }]
+        });
+
+        let err = extract_enqueue_pull_request_result(&body)
+            .expect_err("unsupported argument should error");
+        assert!(err.contains("GitHub merge queue enqueue is not supported"));
     }
 
     #[test]
@@ -428,7 +465,7 @@ mod tests {
     fn readiness_fallback_preserves_head_sha_but_marks_policy_unknown() {
         let primary_body = json!({
             "errors": [{
-                "message": "Field 'requiresMergeQueue' doesn't exist on type 'BranchProtectionRule'"
+                "message": "Field 'isMergeQueueEnabled' doesn't exist on type 'PullRequest'"
             }]
         });
         let fallback_body = json!({
@@ -460,11 +497,10 @@ mod tests {
         assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-42"));
         assert!(!snapshot.policy.required_checks.known);
         assert!(!snapshot.policy.required_reviews.known);
-        assert!(!snapshot.policy.merge_queue_required.known);
-        assert_eq!(snapshot.merge_queue_required, None);
+        assert_eq!(snapshot.merge_queue_enabled, None);
         assert!(snapshot
             .warnings
             .iter()
-            .any(|warning| warning.contains("requiresMergeQueue")));
+            .any(|warning| warning.contains("isMergeQueueEnabled")));
     }
 }

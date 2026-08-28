@@ -212,6 +212,28 @@ describe('getMergeReadiness', () => {
     expect(isReadyToMerge(pr, { requireMergeQueue: true })).toBe(false)
   })
 
+  it('prefers fresh persisted readiness over the pull request merge-queue requirement', () => {
+    const pr = createPullRequest({
+      merge_queue_required: true,
+      merge_readiness_status: 'ready_to_merge',
+      merge_readiness_action: 'merge',
+      readiness_source_head_sha: 'abc123',
+      readiness_updated_at: 2000,
+    })
+
+    expect(getMergeReadiness(pr)).toMatchObject({ status: 'ready_to_merge', action: 'merge' })
+  })
+
+  it('returns ready-to-enqueue when the pull request itself reports that the merge queue is required', () => {
+    const pr = createPullRequest({ merge_queue_required: true })
+
+    expect(getMergeReadiness(pr)).toMatchObject({
+      status: 'ready_to_enqueue',
+      action: 'enqueue',
+      blockers: [],
+    })
+  })
+
   it('returns queued-pull-request status for pull requests already in the merge queue', () => {
     const result = getMergeReadiness(createPullRequest({ is_queued: true, mergeable: null, mergeable_state: null }))
 

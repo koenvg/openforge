@@ -2025,7 +2025,10 @@ function getMergeReadiness(pr, options = {}) {
 	const hasNoReviewStatus = reviewStatus === null || reviewStatus === "none";
 	const isUnprotectedFallback = mergeableState === null && pr.mergeable === true && hasNoCiStatus && hasNoReviewStatus;
 	if (isUnprotectedFallback) warnings.push(mergeReadinessDetail("unprotected_fallback", "Using simple mergeability because no protected-branch checks or review state are available."));
-	if (hasDirectMergeability || isUnprotectedFallback) return mergeReadinessResult(pr, options.requireMergeQueue === true ? "ready_to_enqueue" : "ready_to_merge", options.requireMergeQueue === true ? "enqueue" : "merge", blockers, warnings);
+	if (hasDirectMergeability || isUnprotectedFallback) {
+		const mergeQueueRequired = options.requireMergeQueue === true || pr.merge_queue_required === true;
+		return mergeReadinessResult(pr, mergeQueueRequired ? "ready_to_enqueue" : "ready_to_merge", mergeQueueRequired ? "enqueue" : "merge", blockers, warnings);
+	}
 	if (mergeableState === "unknown" || pr.mergeable === null || mergeableState === null && pr.mergeable !== false) {
 		warnings.push(mergeReadinessDetail("mergeability_unknown", "GitHub has not reported definitive mergeability yet."));
 		return mergeReadinessResult(pr, "readiness_unknown", "wait_for_github", blockers, warnings);
