@@ -27,7 +27,7 @@ Use these layer names in docs, reviews, and follow-up tasks.
 | Renderer pure UI primitives | OpenForge renderer only | Svelte/browser APIs, other primitives, and presentation-only renderer utilities; no IPC, stores, or domain rules | Concrete imports from app source only; not a plugin contract | `src/components/shared/ui/*` |
 | Renderer app-bound adapters | OpenForge renderer surfaces using shared host capabilities | Pure primitives plus typed `src/lib/*` app APIs such as IPC, markdown, and audio | Concrete imports from app source only; not a plugin contract | `src/components/shared/adapters/*` |
 | Renderer feature/domain shared UI | OpenForge renderer features within one domain | Same-domain types/helpers plus adapters and pure primitives | Shared inside the app/domain; not generic SDK UI | `src/components/shared/tasks/*`, `src/components/shared/pr/*` |
-| Plugin-safe SDK UI | Trusted plugin authors using public SDK exports | Only SDK/public helpers and normal Svelte/browser APIs; no app internals | Stable public package exports from `@openforge-app/plugin-sdk` | `MarkdownContent.svelte`, `ResizablePanel.svelte`, `Modal.svelte` |
+| Plugin-safe SDK UI | Trusted plugin authors using public SDK exports | Only SDK/public helpers and normal Svelte/browser APIs; no app internals | Stable public package exports from `@openforge-app/plugin-sdk` | `MarkdownContent.svelte`, `ResizablePanel.svelte`, `Modal.svelte`, `CollapsibleSection.svelte` |
 | Internal package UI | Internal workspace packages for a domain | Package-local domain helpers; avoid app-private imports unless the package explicitly owns that boundary | Package-public but domain-scoped, not generic UI | `packages/pr-review-ui` |
 | Host-shared runtime UI | Runtime packages that must own singleton/lifecycle behavior | Runtime package internals plus public plugin capabilities | Public or host-shared runtime API, not core SDK atoms | `packages/terminal-runtime` |
 | Plugin-local UI | One built-in or external plugin | Plugin SDK exports, public runtime packages, plugin-local code | Private to that plugin until reuse is proven | `plugins/*/src/**` components |
@@ -71,6 +71,15 @@ All new or substantially changed Svelte components must follow the project Svelt
 - Do not use `$effect` return cleanup for resources keyed by a prop value. Compare the previous logical key inside the effect and use `onDestroy` for component teardown.
 
 Plugin component entry points also receive `api` and `context` props from the plugin host. They should use SDK capabilities instead of importing OpenForge app internals.
+
+### Collapsible plugin sections
+
+The public `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` component owns the disclosure control, accessibility attributes, and shared collapse-state behavior. Import `pluginSectionKey(...)` and programmatic state helpers from `@openforge-app/plugin-sdk/collapsibleSectionState`.
+
+- Build plugin keys with `pluginSectionKey(context.pluginId, localKey)`. Do not pass bare names such as `details`, because collapse-state keys are global across the host and all plugins.
+- Every mounted section with the same key shares live state. The SDK persists collapsed keys to local storage across reloads, and a key with no stored value starts expanded.
+- Keep local keys stable. Add a task, project, or other entity identifier only when each entity should remember a separate state.
+- If a header action reveals content inside a collapsed section, call `setSectionCollapsed(sectionKey, false)` before showing that content.
 
 ## Accessibility requirements
 
