@@ -109,16 +109,6 @@ impl PluginHost {
             .app_handle
             .try_state::<crate::pty_manager::PtyManager>()
             .map(|state| state.inner().clone());
-        let completed_session_reaper = self
-            .app_handle
-            .try_state::<crate::completed_session_reaper::CompletedSessionReaper>()
-            .map(|state| state.inner().clone())
-            .unwrap_or_else(|| {
-                crate::completed_session_reaper::CompletedSessionReaper::new(
-                    Arc::clone(&db),
-                    pty_manager.clone().unwrap_or_default(),
-                )
-            });
         let github_client = self
             .app_handle
             .try_state::<crate::github_client::GitHubClient>()
@@ -130,7 +120,6 @@ impl PluginHost {
             db,
             backend_token: None,
             pty_manager,
-            completed_session_reaper,
             github_client,
             frontend_host_requests: self.frontend_host_requests.clone(),
             plugin_host: Some(self.clone()),

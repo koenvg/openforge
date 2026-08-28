@@ -1,7 +1,6 @@
 use crate::{
     app_events::{AppEventSender, RuntimeEventPublisher},
     backend_runtime::AppHandle,
-    completed_session_reaper::CompletedSessionReaper,
     db::{self, AgentSessionRow, Database},
     providers::{Provider, ProviderSessionResult, ProviderStartContext},
     pty_manager::{PtyError, PtyManager},
@@ -151,7 +150,6 @@ impl AgentFollowUpRuntime for PtyAgentFollowUpRuntime {
 
 pub(crate) struct AgentFollowUpService {
     db: Arc<Mutex<Database>>,
-    completed_session_reaper: CompletedSessionReaper,
     runtime: Arc<dyn AgentFollowUpRuntime>,
 }
 
@@ -161,11 +159,9 @@ impl AgentFollowUpService {
         db: Arc<Mutex<Database>>,
         pty_manager: PtyManager,
         app_event_tx: Option<AppEventSender>,
-        completed_session_reaper: CompletedSessionReaper,
     ) -> Self {
         Self {
             db,
-            completed_session_reaper,
             runtime: Arc::new(PtyAgentFollowUpRuntime {
                 app,
                 app_event_tx,
@@ -175,16 +171,8 @@ impl AgentFollowUpService {
     }
 
     #[cfg(test)]
-    fn with_runtime(
-        db: Arc<Mutex<Database>>,
-        completed_session_reaper: CompletedSessionReaper,
-        runtime: Arc<dyn AgentFollowUpRuntime>,
-    ) -> Self {
-        Self {
-            db,
-            completed_session_reaper,
-            runtime,
-        }
+    fn with_runtime(db: Arc<Mutex<Database>>, runtime: Arc<dyn AgentFollowUpRuntime>) -> Self {
+        Self { db, runtime }
     }
 
     pub(crate) async fn deliver(
@@ -199,7 +187,6 @@ impl AgentFollowUpService {
             }
         })?;
 
-        self.completed_session_reaper.active(task_id).await;
         match self
             .runtime
             .write(task_id, &terminal_follow_up_input(message))
@@ -210,7 +197,7 @@ impl AgentFollowUpService {
                 return Err(AgentFollowUpError::LiveDelivery(error));
             }
             Err(AgentFollowUpRuntimeError::Missing) => {
-                self.resume_reclaimed_session(task_id, message, &session)
+                self.resume_session_without_live_pty(task_id, message, &session)
                     .await?;
             }
         }
@@ -231,7 +218,7 @@ impl AgentFollowUpService {
             })
     }
 
-    async fn resume_reclaimed_session(
+    async fn resume_session_without_live_pty(
         &self,
         task_id: &str,
         message: &str,
@@ -358,9 +345,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reclaimed_completed_session_resumes_provider_for_follow_up() {
+    async fn completed_session_without_live_pty_resumes_provider_for_follow_up() {
         let (state, _temp_dir) =
-            crate::app_invoke::test_support::test_state("reclaimed_completed_session_follow_up");
+            crate::app_invoke::test_support::test_state("completed_session_without_live_pty");
         let workspace = tempfile::tempdir().expect("workspace tempdir");
         let task_id = {
             let db = db::acquire_db(&state.db);
@@ -403,11 +390,7 @@ mod tests {
             task.id
         };
         let runtime = Arc::new(RestartingRuntime::default());
-        let service = AgentFollowUpService::with_runtime(
-            Arc::clone(&state.db),
-            state.completed_session_reaper.clone(),
-            runtime.clone(),
-        );
+        let service = AgentFollowUpService::with_runtime(Arc::clone(&state.db), runtime.clone());
 
         let outcome = service
             .deliver(&task_id, "Review this follow-up")

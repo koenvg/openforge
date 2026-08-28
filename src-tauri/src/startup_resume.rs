@@ -109,7 +109,7 @@ pub(crate) fn persist_resumed_session_state(
     );
 }
 
-async fn schedule_completed_session_recovery(
+async fn capture_recovered_completed_session_replay(
     app: &crate::backend_runtime::AppHandle,
     session: &db::AgentSessionRow,
 ) {
@@ -117,15 +117,20 @@ async fn schedule_completed_session_recovery(
         return;
     }
 
-    let Some(reaper) = app.try_state::<crate::completed_session_reaper::CompletedSessionReaper>()
-    else {
+    let Some(manager) = app.try_state::<PtyManager>() else {
         warn!(
             "[startup] Completed Agent Session {} for task {} reattached without replay capture",
             session.id, session.ticket_id
         );
         return;
     };
-    reaper.completed(&session.ticket_id).await;
+    let database = app.state::<Arc<Mutex<db::Database>>>();
+    crate::completed_session_replay::capture_completed_session_replay(
+        database.inner(),
+        manager.inner(),
+        &session.ticket_id,
+    )
+    .await;
 }
 
 pub(crate) async fn resume_task_sessions(
@@ -297,7 +302,7 @@ pub(crate) async fn resume_task_sessions(
                     };
                 }
 
-                schedule_completed_session_recovery(&app, session_ref).await;
+                capture_recovered_completed_session_replay(&app, session_ref).await;
 
                 let _ = app.emit(
                     "session-resumed",
@@ -471,9 +476,9 @@ pub(crate) fn restore_resumed_session_state(
 #[cfg(test)]
 mod tests {
     use super::{
-        latest_session_allows_startup_resume, load_resume_targets, persist_resumed_session_state,
-        restore_resumed_session_state, resume_task_sessions, schedule_completed_session_recovery,
-        ResumeTarget,
+        capture_recovered_completed_session_replay, latest_session_allows_startup_resume,
+        load_resume_targets, persist_resumed_session_state, restore_resumed_session_state,
+        resume_task_sessions, ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db;
@@ -519,8 +524,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn completed_replay_recovery_is_handed_to_idle_reaper() {
-        let (database, _temp_dir) = make_test_db("completed_replay_recovery_reaper");
+    async fn completed_replay_recovery_persists_empty_replay_without_live_buffer() {
+        let (database, _temp_dir) = make_test_db("completed_replay_recovery_capture");
         let project = database
             .create_project("Replay recovery", "/tmp/replay-recovery")
             .expect("create project");
@@ -540,12 +545,8 @@ mod tests {
 
         let database = Arc::new(Mutex::new(database));
         let app = crate::backend_runtime::AppHandle::new();
-        app.manage(
-            crate::completed_session_reaper::CompletedSessionReaper::new(
-                Arc::clone(&database),
-                crate::pty_manager::PtyManager::new(),
-            ),
-        );
+        app.manage(Arc::clone(&database));
+        app.manage(crate::pty_manager::PtyManager::new());
         let session = database
             .lock()
             .expect("database lock")
@@ -553,7 +554,7 @@ mod tests {
             .expect("load latest Agent Session")
             .expect("latest Agent Session missing");
 
-        schedule_completed_session_recovery(&app, &session).await;
+        capture_recovered_completed_session_replay(&app, &session).await;
 
         assert_eq!(
             database

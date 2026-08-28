@@ -1648,6 +1648,23 @@ INSERT OR IGNORE INTO config (key, value)
         Ok(())
     }),
     M::up("DROP TABLE IF EXISTS self_review_comments;"),
+    M::up_with_hook("", |tx| {
+        let config_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'config'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if config_exists {
+            tx.execute(
+                "DELETE FROM config WHERE key = 'completed_session_idle_timeout_seconds'",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -2264,6 +2281,7 @@ mod tests {
         LegacyOpencodeServerColumnRemoval,
         PluginStorageScopedKeyMigration,
         AgentSessionPtyInstanceBackfill,
+        SelfReviewCommentsRemoval,
     }
 
     impl MigrationBoundary {
@@ -2277,6 +2295,7 @@ mod tests {
                 Self::LegacyOpencodeServerColumnRemoval => 24,
                 Self::PluginStorageScopedKeyMigration => 25,
                 Self::AgentSessionPtyInstanceBackfill => 26,
+                Self::SelfReviewCommentsRemoval => 52,
             }
         }
     }
@@ -2305,6 +2324,18 @@ mod tests {
             LATEST_USER_VERSION,
             migration_count(),
             "LATEST_USER_VERSION must stay aligned with the number of declared migrations"
+        );
+    }
+
+    #[test]
+    fn obsolete_completed_session_idle_timeout_config_is_removed() {
+        let (db, _temp_dir) =
+            crate::db::test_helpers::make_test_db("completed_session_idle_timeout_removed");
+
+        assert_eq!(
+            db.get_config("completed_session_idle_timeout_seconds")
+                .expect("load obsolete completed session timeout"),
+            None
         );
     }
 
@@ -2567,7 +2598,7 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
             .expect("Failed to count config rows");
 
-        assert_eq!(config_count, 8, "Default config values should be inserted");
+        assert_eq!(config_count, 7, "Default config values should be inserted");
 
         let jira_columns: i32 = conn
             .query_row(
@@ -3886,8 +3917,7 @@ mod tests {
                 VALUES ('KVG-1', 'general', 'legacy feedback', 1);",
             )
             .expect("create legacy self-review comments table");
-            conn.pragma_update(None, "user_version", migration_count() - 1)
-                .expect("set previous schema version");
+            set_user_version_before(&conn, MigrationBoundary::SelfReviewCommentsRemoval);
         }
 
         let db = Database::new(path).expect("upgrade database");

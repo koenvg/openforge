@@ -138,12 +138,14 @@ where
     if let Some(change) = status_change {
         emit_agent_status_changed(&state, &change);
         if change.status == "completed" {
-            state
-                .completed_session_reaper
-                .completed(&change.task_id)
+            if let Some(manager) = state.pty_manager.as_ref() {
+                crate::completed_session_replay::capture_completed_session_replay(
+                    &state.db,
+                    manager,
+                    &change.task_id,
+                )
                 .await;
-        } else {
-            state.completed_session_reaper.active(&change.task_id).await;
+            }
         }
         let should_start_title_refresh =
             should_start_task_display_title_refresh(&state, &notification).map_err(|error| {
