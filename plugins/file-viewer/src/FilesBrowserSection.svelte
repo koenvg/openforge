@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search, X } from '@lucide/svelte'
+  import { FolderCog, Search, X } from '@lucide/svelte'
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
   import type { FileBrowserProjectState } from './lib/fileExplorer'
@@ -26,6 +26,8 @@
     fileContent: FileBrowserProjectState['fileContent']
     previewFocusRequest: number | null
     treeFocusRequest: number | null
+    hiddenRootEntryCount: number
+    showHiddenRootEntries: boolean
     searchQuery: string
     searchActive: boolean
     searchLoading: boolean
@@ -36,6 +38,7 @@
     searchLimit: number
     onSearchInput: (value: string) => void
     onClearSearch: () => void
+    onToggleHiddenRootEntries: () => void
     onRetrySearch: () => void
     onRetryRootLoad: () => void
     onRetryDirectoryLoad: (path: string) => void
@@ -66,6 +69,8 @@
     fileContent,
     previewFocusRequest,
     treeFocusRequest,
+    hiddenRootEntryCount,
+    showHiddenRootEntries,
     searchQuery,
     searchActive,
     searchLoading,
@@ -76,6 +81,7 @@
     searchLimit,
     onSearchInput,
     onClearSearch,
+    onToggleHiddenRootEntries,
     onRetrySearch,
     onRetryRootLoad,
     onRetryDirectoryLoad,
@@ -87,9 +93,13 @@
     onContentScrollTopChange,
     onReturnFocusToSelectedFile,
   }: Props = $props()
+
+  const hiddenRootEntriesToggleLabel = $derived(
+    showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`,
+  )
 </script>
 
-<div class="flex flex-1 min-h-0 overflow-hidden">
+<div class="flex flex-1 min-h-0 overflow-hidden bg-base-100">
   {#if !activeProjectId}
     <PluginViewState empty emptyTitle="Select a project to browse files" />
   {:else if loading}
@@ -104,28 +114,42 @@
   {:else}
     <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
       <div class="flex h-full min-h-0 flex-col">
-        <div class="border-b border-base-300 p-2">
-          <label class="input input-bordered input-sm flex w-full items-center gap-2">
-            <Search size={16} class="shrink-0 text-base-content/50" />
-            <input
-              type="search"
-              class="grow"
-              placeholder="Search files…"
-              aria-label="Search files"
-              value={searchQuery}
-              oninput={(event) => onSearchInput(event.currentTarget.value)}
-            />
-            {#if searchQuery.length > 0}
+        <div class="border-b border-base-300 bg-base-100 p-3">
+          <div class="flex items-center gap-2">
+            <label class="input input-bordered input-sm flex h-9 min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-base-100 transition-shadow focus-within:border-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/15">
+              <Search size={16} class="shrink-0 text-base-content/50" />
+              <input
+                type="search"
+                class="min-w-0 grow"
+                placeholder="Search files…"
+                aria-label="Search files"
+                value={searchQuery}
+                oninput={(event) => onSearchInput(event.currentTarget.value)}
+              />
+              {#if searchQuery.length > 0}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-circle btn-xs"
+                  aria-label="Clear search"
+                  onclick={onClearSearch}
+                >
+                  <X size={14} />
+                </button>
+              {/if}
+            </label>
+            {#if hiddenRootEntryCount > 0}
               <button
                 type="button"
-                class="btn btn-ghost btn-circle btn-xs"
-                aria-label="Clear search"
-                onclick={onClearSearch}
+                class="btn btn-outline btn-sm btn-square h-9 min-h-9 w-9 shrink-0 {showHiddenRootEntries ? 'border-primary bg-primary/10 text-primary' : ''}"
+                aria-label={hiddenRootEntriesToggleLabel}
+                title={hiddenRootEntriesToggleLabel}
+                aria-pressed={showHiddenRootEntries}
+                onclick={onToggleHiddenRootEntries}
               >
-                <X size={14} />
+                <FolderCog size={16} />
               </button>
             {/if}
-          </label>
+          </div>
         </div>
         {#if directoryError !== null}
           <div class="border-b border-base-300 bg-base-100 p-3 text-xs">
