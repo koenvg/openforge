@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/svelte'
 import { get } from 'svelte/store'
 import { describe, expect, it, vi, type MockInstance } from 'vitest'
 import { FILE_VIEWER_VIEW_KEY } from './lib/fileViewerView'
-import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
 import type { Project, Task } from './lib/types'
 import { installAppTestLifecycle } from './App.test-harness'
 import { getLatestComponentProps } from './App.test-fixtures/component-props'
@@ -198,10 +197,10 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
     expect(mockRouterNavigate).toHaveBeenCalledWith('settings')
   }, 15000)
 
-  it('does not show the unrelated floating Create Task action on Task Schedules', async () => {
+  it('does not show the floating Create Task action on plugin views', async () => {
     const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
-    mockCurrentViewStore.set(TASK_SCHEDULES_VIEW_KEY)
+    mockCurrentViewStore.set(FILE_VIEWER_VIEW_KEY)
 
     render(App)
     await vi.waitFor(() => expect(get(stores.activeProjectId)).toBe('proj-1'))
@@ -228,8 +227,7 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
         const boardProps = getLatestComponentProps<{ onNewTask: () => void }>(vi.mocked(focusBoardModule.default), 'onNewTask')
         boardProps.onNewTask()
       } else {
-        const createTaskButton = await screen.findByRole('button', { name: 'Create new task' })
-        await fireEvent.click(createTaskButton)
+        await fireEvent.keyDown(window, { key: 'n', metaKey: true, bubbles: true })
       }
 
       await vi.waitFor(() => {
