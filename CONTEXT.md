@@ -107,6 +107,10 @@ _Avoid_: Move to In Flight, change Board Status, configure run
 An installed OpenForge extension that may act across tasks when using explicit host capabilities.
 _Avoid_: Sandboxed widget, project-only script
 
+**Plugin Page Shell**:
+The standard full-height boundary for a **Trusted Plugin's** registered page View, separating its fixed header from a flexing body whose content owns scrolling.
+_Avoid_: Generic plugin layout, task-pane shell, plugin dashboard
+
 **Host-local URL**:
 An HTTP(S) URL emitted by a desktop tool whose loopback host refers to the OpenForge desktop rather than the paired phone.
 _Avoid_: Mobile localhost, public URL, phone loopback URL

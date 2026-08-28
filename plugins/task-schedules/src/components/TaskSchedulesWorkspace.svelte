@@ -1,6 +1,7 @@
 <script lang="ts">
   import { CalendarClock, Plus } from '@lucide/svelte'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import TaskScheduleComposerSection from './TaskScheduleComposerSection.svelte'
@@ -24,16 +25,18 @@
   })
 </script>
 
-<div class="flex h-full min-h-0 flex-col overflow-hidden bg-base-100">
-  <PluginPageHeader title="Task Schedules" subtitle="Manage one-off and recurring project Task Schedules" surface="default">
-    {#snippet actions()}
-      {#if controller.projectId}
-        <button bind:this={newScheduleButton} class="btn btn-primary min-h-10" type="button" onclick={controller.openNewSchedule}>
-          <Plus class="size-4" aria-hidden="true" /> New Task Schedule
-        </button>
-      {/if}
-    {/snippet}
-  </PluginPageHeader>
+<PluginPageShell>
+  {#snippet header()}
+    <PluginPageHeader title="Task Schedules" subtitle="Manage one-off and recurring project Task Schedules">
+      {#snippet actions()}
+        {#if controller.projectId}
+          <button bind:this={newScheduleButton} class="btn btn-primary min-h-10" type="button" onclick={controller.openNewSchedule}>
+            <Plus class="size-4" aria-hidden="true" /> New Task Schedule
+          </button>
+        {/if}
+      {/snippet}
+    </PluginPageHeader>
+  {/snippet}
 
   <div class="sr-only" role="status" aria-live="polite">{controller.announcement}</div>
 
@@ -125,4 +128,4 @@
       {/if}
     </div>
   {/if}
-</div>
+</PluginPageShell>

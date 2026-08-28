@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AuthoredPullRequest, PrWalkthrough, ReviewPullRequest } from '@openforge-app/plugin-sdk/domain'
   import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
   import AuthoredPrCard from '@openforge-app/pr-review-ui/AuthoredPrCard.svelte'
   import ReviewPrCard from '@openforge-app/pr-review-ui/ReviewPrCard.svelte'
@@ -96,27 +97,29 @@
   }: Props = $props()
 </script>
 
-<div class="flex flex-col h-full overflow-hidden">
-  <PluginPageHeader
-    title={headerTitle}
-    subtitle={headerSubtitle}
-  >
-    {#snippet actions()}
-      {#if showFilters}
-        <RepositoryFilterSection
-          {excludedRepos}
-          {showFilterDropdown}
-          {newRepoInput}
-          {suggestedRepos}
-          onToggleDropdown={onToggleFilterDropdown}
-          onCloseDropdown={onCloseFilterDropdown}
-          onNewRepoInputChange={onNewRepoInputChange}
-          onAddExcludedRepo={onAddExcludedRepo}
-          onRemoveExcludedRepo={onRemoveExcludedRepo}
-        />
-      {/if}
-    {/snippet}
-  </PluginPageHeader>
+<PluginPageShell>
+  {#snippet header()}
+    <PluginPageHeader
+      title={headerTitle}
+      subtitle={headerSubtitle}
+    >
+      {#snippet actions()}
+        {#if showFilters}
+          <RepositoryFilterSection
+            {excludedRepos}
+            {showFilterDropdown}
+            {newRepoInput}
+            {suggestedRepos}
+            onToggleDropdown={onToggleFilterDropdown}
+            onCloseDropdown={onCloseFilterDropdown}
+            onNewRepoInputChange={onNewRepoInputChange}
+            onAddExcludedRepo={onAddExcludedRepo}
+            onRemoveExcludedRepo={onRemoveExcludedRepo}
+          />
+        {/if}
+      {/snippet}
+    </PluginPageHeader>
+  {/snippet}
 
   {#if projectHasNoRepo}
     <PluginViewState
@@ -280,4 +283,4 @@
       </div>
     </div>
   {/if}
-</div>
+</PluginPageShell>

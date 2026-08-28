@@ -7,6 +7,7 @@ const PUBLIC_UI_COMPONENT_NAMES = Object.freeze([
   'ResizablePanel',
   'Modal',
   'PluginPageHeader',
+  'PluginPageShell',
   'PluginViewState',
   'PluginSidebarLink',
   'FileTypeIcon',
