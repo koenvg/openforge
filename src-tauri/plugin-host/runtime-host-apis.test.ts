@@ -206,6 +206,136 @@ describe('plugin-host backend host APIs', () => {
     ])
   })
 
+  it('routes external stat and bounded ranged reads through the host callback bridge', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('tail', {
+            async handler() {
+              const metadata = await openforge.fs.external.stat({ root: '/collector', path: 'events.jsonl' })
+              let content = ''
+              for await (const chunk of openforge.fs.external.readTextFileChunks({
+                root: '/collector',
+                path: 'events.jsonl',
+                expectedIdentity: metadata.identity,
+                startOffsetBytes: 2,
+                maxBytes: 4,
+                chunkSizeBytes: 4
+              })) {
+                content += chunk
+              }
+              let zeroRangeError = null
+              try {
+                for await (const chunk of openforge.fs.external.readTextFileChunks({
+                  root: '/collector',
+                  path: 'events.jsonl',
+                  expectedIdentity: 'stale',
+                  maxBytes: 0
+                })) {
+                  void chunk
+                }
+              } catch (error) {
+                zeroRangeError = error.message
+              }
+              return { metadata, content, zeroRangeError }
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.fs.external.stat') {
+        return { identity: '41:9', sizeBytes: 10, modifiedAtMs: 1_767_225_600_000 }
+      }
+      if (request.method === 'openforge.fs.external.readTextFileChunk') {
+        return { content: '🙂', nextOffset: 6, eof: false }
+      }
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'skill-usage',
+      backendPath,
+      command: 'tail',
+    })).resolves.toEqual({
+      metadata: { identity: '41:9', sizeBytes: 10, modifiedAtMs: 1_767_225_600_000 },
+      content: '🙂',
+      zeroRangeError: 'External file identity changed: expected stale, received 41:9',
+    })
+    expect(calls).toEqual([
+      {
+        method: 'openforge.fs.external.stat',
+        params: { pluginId: 'skill-usage', root: '/collector', path: 'events.jsonl' },
+      },
+      {
+        method: 'openforge.fs.external.readTextFileChunk',
+        params: {
+          pluginId: 'skill-usage',
+          root: '/collector',
+          path: 'events.jsonl',
+          expectedIdentity: '41:9',
+          offset: 2,
+          maxBytes: 4,
+        },
+      },
+      {
+        method: 'openforge.fs.external.stat',
+        params: { pluginId: 'skill-usage', root: '/collector', path: 'events.jsonl' },
+      },
+    ])
+  })
+
+  it('routes durable user-data append results before atomic pointer writes', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('commit', {
+            async handler() {
+              const append = await openforge.fs.userData.appendTextFile({
+                path: 'events/index.jsonl',
+                content: 'event\\n'
+              })
+              await openforge.fs.userData.writeTextFile({
+                path: 'events/state.json',
+                content: JSON.stringify({ committedBytes: append.sizeBytes })
+              })
+              return append
+            }
+          }))
+        }
+      }
+    `)
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const hostCallbacks = async (request: { method: string; params: Record<string, unknown> }) => {
+      calls.push(request)
+      if (request.method === 'openforge.fs.userData.appendTextFile') return { sizeBytes: 6 }
+      if (request.method === 'openforge.fs.userData.writeTextFile') return null
+      throw new Error(`unexpected host callback: ${request.method}`)
+    }
+
+    await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+      pluginId: 'skill-usage',
+      backendPath,
+      command: 'commit',
+    })).resolves.toEqual({ sizeBytes: 6 })
+    expect(calls).toEqual([
+      {
+        method: 'openforge.fs.userData.appendTextFile',
+        params: { pluginId: 'skill-usage', path: 'events/index.jsonl', content: 'event\n' },
+      },
+      {
+        method: 'openforge.fs.userData.writeTextFile',
+        params: {
+          pluginId: 'skill-usage',
+          path: 'events/state.json',
+          content: '{"committedBytes":6}',
+        },
+      },
+    ])
+  })
+
   it('cancels an in-flight external text chunk callback when iteration is aborted', async () => {
     const backendPath = await writeBackendModule(`
       export default {

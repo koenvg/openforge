@@ -529,6 +529,10 @@ export interface UserDataFileWriteRequest extends UserDataFileRequest {
   content: string
 }
 
+export interface UserDataFileAppendResult {
+  sizeBytes: number
+}
+
 export interface ExternalReadDirectoryRequest {
   root: string
   path?: string | null
@@ -537,6 +541,13 @@ export interface ExternalReadDirectoryRequest {
 export interface ExternalReadFileRequest {
   root: string
   path: string
+}
+
+export interface ExternalFileMetadata {
+  /** Stable while the same filesystem object is appended in place. */
+  identity: string
+  sizeBytes: number
+  modifiedAtMs: number | null
 }
 
 export const DEFAULT_EXTERNAL_TEXT_FILE_CHUNK_SIZE_BYTES = 64 * 1024
@@ -561,6 +572,12 @@ export function resolveExternalTextFileChunkSize(chunkSizeBytes?: number): numbe
 export interface ExternalReadTextFileChunksRequest extends ExternalReadFileRequest {
   /** UTF-8 chunks contain at most this many bytes. Defaults to 64 KiB. */
   chunkSizeBytes?: number
+  /** First byte to read. Must be a UTF-8 code point boundary. Defaults to zero. */
+  startOffsetBytes?: number
+  /** Maximum total bytes to read. The range end must be a UTF-8 code point boundary. */
+  maxBytes?: number
+  /** Fails the read if the file no longer has this identity. */
+  expectedIdentity?: string
   /** Stops future reads. An in-flight host read may finish, but its result is discarded. */
   signal?: AbortSignal
 }
@@ -568,12 +585,16 @@ export interface ExternalReadTextFileChunksRequest extends ExternalReadFileReque
 export interface UserDataFileSystemAPI {
   readDir(request?: UserDataDirectoryRequest): Promise<FileEntry[]>
   readTextFile(request: UserDataFileRequest): Promise<string>
+  /** Atomically replaces the file and syncs its contents before resolving. */
   writeTextFile(request: UserDataFileWriteRequest): Promise<void>
+  /** Appends and syncs content before returning the resulting UTF-8 byte size. */
+  appendTextFile(request: UserDataFileWriteRequest): Promise<UserDataFileAppendResult>
 }
 
 export interface ExternalReadFileSystemAPI {
   readDir(request: ExternalReadDirectoryRequest): Promise<FileEntry[]>
   readTextFile(request: ExternalReadFileRequest): Promise<string>
+  stat(request: ExternalReadFileRequest): Promise<ExternalFileMetadata>
   /** Lazily reads a UTF-8 file without retaining a host file handle between chunks. */
   readTextFileChunks(request: ExternalReadTextFileChunksRequest): AsyncIterable<string>
 }

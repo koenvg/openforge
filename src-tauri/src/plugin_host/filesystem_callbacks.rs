@@ -4,11 +4,13 @@ use super::callbacks::{
 };
 use super::PluginHost;
 use serde_json::{json, Value};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 const DEFAULT_EXTERNAL_TEXT_CHUNK_BYTES: usize = 64 * 1024;
-const MIN_EXTERNAL_TEXT_CHUNK_BYTES: usize = 4;
+const MIN_EXTERNAL_TEXT_CHUNK_BYTES: usize = 1;
 const MAX_EXTERNAL_TEXT_CHUNK_BYTES: usize = 1024 * 1024;
 
 impl PluginHost {
@@ -97,10 +99,19 @@ impl PluginHost {
         let path = required_param_string(params, "path")?;
         let content = required_param_string_allow_empty(params, "content")?;
         let root = self.plugin_user_data_root_for_host(params).await?;
-        crate::project_fs::write_file(&root, &path, &content)
-            .await
-            .map_err(|error| error.to_string())?;
+        write_text_file_atomically_under_root(&root, &path, &content).await?;
         Ok(Value::Null)
+    }
+
+    pub(super) async fn append_plugin_user_data_text_file_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let path = required_param_string(params, "path")?;
+        let content = required_param_string_allow_empty(params, "content")?;
+        let root = self.plugin_user_data_root_for_host(params).await?;
+        let size_bytes = append_text_file_under_root(&root, &path, &content).await?;
+        Ok(json!({ "sizeBytes": size_bytes }))
     }
 
     pub(super) async fn read_external_dir_for_host(&self, params: &Value) -> Result<Value, String> {
@@ -125,11 +136,37 @@ impl PluginHost {
             .map(Value::String)
     }
 
+    pub(super) async fn stat_external_file_for_host(
+        &self,
+        params: &Value,
+    ) -> Result<Value, String> {
+        let path = required_param_string(params, "path")?;
+        let root = self.external_read_root_for_host(params)?;
+        let full_path = crate::project_fs::resolve_existing_path(&root, Some(&path))
+            .map_err(|error| error.to_string())?;
+        let metadata = tokio::fs::metadata(&full_path)
+            .await
+            .map_err(|error| format!("failed to inspect external file: {error}"))?;
+        if !metadata.is_file() {
+            return Err("external filesystem path is not a file".to_string());
+        }
+        let modified_at_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|time| crate::unix_timestamp::milliseconds(time).ok());
+        Ok(json!({
+            "identity": external_file_identity(&metadata)?,
+            "sizeBytes": metadata.len(),
+            "modifiedAtMs": modified_at_ms,
+        }))
+    }
+
     pub(super) async fn read_external_text_file_chunk_for_host(
         &self,
         params: &Value,
     ) -> Result<Value, String> {
         let path = required_param_string(params, "path")?;
+        let expected_identity = optional_param_string(params, "expectedIdentity")?;
         let offset = optional_param_u64(params, "offset")?.unwrap_or(0);
         let max_bytes =
             optional_param_usize(params, "maxBytes")?.unwrap_or(DEFAULT_EXTERNAL_TEXT_CHUNK_BYTES);
@@ -139,8 +176,14 @@ impl PluginHost {
             ));
         }
         let root = self.external_read_root_for_host(params)?;
-        let (content, next_offset, eof) =
-            read_text_file_chunk_under_root(&root, &path, offset, max_bytes).await?;
+        let (content, next_offset, eof) = read_text_file_chunk_under_root(
+            &root,
+            &path,
+            expected_identity.as_deref(),
+            offset,
+            max_bytes,
+        )
+        .await?;
         Ok(json!({
             "content": content,
             "nextOffset": next_offset,
@@ -183,6 +226,118 @@ impl PluginHost {
     }
 }
 
+async fn user_data_write_target(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let target =
+        crate::project_fs::resolve_write_path(root, path).map_err(|error| error.to_string())?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "user-data file path must include a parent directory".to_string())?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|error| format!("failed to create user-data parent directory: {error}"))?;
+    crate::project_fs::resolve_write_path(root, path).map_err(|error| error.to_string())
+}
+
+async fn write_text_file_atomically_under_root(
+    root: &Path,
+    path: &str,
+    content: &str,
+) -> Result<(), String> {
+    ensure_durable_user_data_supported()?;
+    let target = user_data_write_target(root, path).await?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "user-data file path must include a parent directory".to_string())?;
+    let file_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "user-data file path must have a UTF-8 file name".to_string())?;
+    let temporary = target.with_file_name(format!(".{file_name}.{}.tmp", uuid::Uuid::new_v4()));
+    let result = async {
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .await
+            .map_err(|error| format!("failed to create temporary user-data file: {error}"))?;
+        file.write_all(content.as_bytes())
+            .await
+            .map_err(|error| format!("failed to write temporary user-data file: {error}"))?;
+        file.sync_all()
+            .await
+            .map_err(|error| format!("failed to sync temporary user-data file: {error}"))?;
+        drop(file);
+        crate::project_fs::resolve_write_path(root, path).map_err(|error| error.to_string())?;
+        tokio::fs::rename(&temporary, &target)
+            .await
+            .map_err(|error| format!("failed to atomically replace user-data file: {error}"))?;
+        sync_parent_directory(parent).await
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&temporary).await;
+    }
+    result
+}
+
+async fn append_text_file_under_root(
+    root: &Path,
+    path: &str,
+    content: &str,
+) -> Result<u64, String> {
+    ensure_durable_user_data_supported()?;
+    let target = user_data_write_target(root, path).await?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "user-data file path must include a parent directory".to_string())?;
+    let mut file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&target)
+        .await
+        .map_err(|error| format!("failed to open user-data file for append: {error}"))?;
+    file.write_all(content.as_bytes())
+        .await
+        .map_err(|error| format!("failed to append user-data file: {error}"))?;
+    file.sync_all()
+        .await
+        .map_err(|error| format!("failed to sync appended user-data file: {error}"))?;
+    let size_bytes = file
+        .metadata()
+        .await
+        .map_err(|error| format!("failed to inspect appended user-data file: {error}"))?
+        .len();
+    drop(file);
+    sync_parent_directory(parent).await?;
+    Ok(size_bytes)
+}
+
+#[cfg(unix)]
+fn ensure_durable_user_data_supported() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ensure_durable_user_data_supported() -> Result<(), String> {
+    Err("durable user-data writes are unavailable on this platform".to_string())
+}
+
+#[cfg(unix)]
+async fn sync_parent_directory(parent: &Path) -> Result<(), String> {
+    let directory = tokio::fs::File::open(parent)
+        .await
+        .map_err(|error| format!("failed to open user-data parent directory: {error}"))?;
+    directory
+        .sync_all()
+        .await
+        .map_err(|error| format!("failed to sync user-data parent directory: {error}"))
+}
+
+#[cfg(not(unix))]
+async fn sync_parent_directory(_parent: &Path) -> Result<(), String> {
+    Err("durable user-data parent sync is unavailable on this platform".to_string())
+}
+
 async fn read_text_file_under_root(root: &Path, path: &str) -> Result<String, String> {
     let full_path = crate::project_fs::resolve_existing_path(root, Some(path))
         .map_err(|error| error.to_string())?;
@@ -194,6 +349,7 @@ async fn read_text_file_under_root(root: &Path, path: &str) -> Result<String, St
 async fn read_text_file_chunk_under_root(
     root: &Path,
     path: &str,
+    expected_identity: Option<&str>,
     offset: u64,
     max_bytes: usize,
 ) -> Result<(String, u64, bool), String> {
@@ -202,11 +358,19 @@ async fn read_text_file_chunk_under_root(
     let mut file = tokio::fs::File::open(full_path)
         .await
         .map_err(|error| format!("failed to open UTF-8 text file: {error}"))?;
-    let file_len = file
+    let metadata = file
         .metadata()
         .await
-        .map_err(|error| format!("failed to inspect UTF-8 text file: {error}"))?
-        .len();
+        .map_err(|error| format!("failed to inspect UTF-8 text file: {error}"))?;
+    let identity = external_file_identity(&metadata)?;
+    if let Some(expected_identity) = expected_identity {
+        if expected_identity != identity {
+            return Err(format!(
+                "external file identity changed: expected {expected_identity}, received {identity}"
+            ));
+        }
+    }
+    let file_len = metadata.len();
     if offset >= file_len {
         return Ok((String::new(), offset, true));
     }
@@ -244,6 +408,16 @@ async fn read_text_file_chunk_under_root(
         next_offset,
         read_was_empty || next_offset >= file_len,
     ))
+}
+
+#[cfg(unix)]
+fn external_file_identity(metadata: &std::fs::Metadata) -> Result<String, String> {
+    Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn external_file_identity(_metadata: &std::fs::Metadata) -> Result<String, String> {
+    Err("stable external file identity is unavailable on this platform".to_string())
 }
 
 fn filesystem_plugin_id(params: &Value) -> Result<String, String> {

@@ -78,8 +78,10 @@ export function createTestingCalls(): TestingOpenForgeApiCalls {
     fsUserDataReadDirs: [],
     fsUserDataReads: [],
     fsUserDataWrites: [],
+    fsUserDataAppends: [],
     fsExternalReadDirs: [],
     fsExternalReads: [],
+    fsExternalStats: [],
     fsExternalReadTextFileChunks: [],
     shellSpawns: [],
     shellWrites: [],
@@ -240,6 +242,7 @@ export class TestingRegistryServices {
   readonly seededTasks: Task[]
   readonly seededAgentSessions: AgentSession[]
   readonly externalTextFiles: TestingExternalTextFile[]
+  readonly userDataTextFiles = new Map<string, string>()
   readonly claims = new TestingContributionClaims()
 
   constructor(options: TestingOpenForgeApiOptions = {}) {
@@ -258,6 +261,9 @@ export class TestingRegistryServices {
     this.seededTasks = options.tasks ?? []
     this.seededAgentSessions = options.agentSessions ?? []
     this.externalTextFiles = options.externalTextFiles ?? []
+    for (const file of options.userDataTextFiles ?? []) {
+      this.userDataTextFiles.set(file.path, file.content)
+    }
   }
 
   localQualifiedId(kind: TestingRuntimeKind, id: string): string {

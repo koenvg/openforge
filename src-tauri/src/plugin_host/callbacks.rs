@@ -46,10 +46,15 @@ impl PluginHost {
             "openforge.fs.userData.writeTextFile" => {
                 self.write_plugin_user_data_text_file_for_host(params).await
             }
+            "openforge.fs.userData.appendTextFile" => {
+                self.append_plugin_user_data_text_file_for_host(params)
+                    .await
+            }
             "openforge.fs.external.readDir" => self.read_external_dir_for_host(params).await,
             "openforge.fs.external.readTextFile" => {
                 self.read_external_text_file_for_host(params).await
             }
+            "openforge.fs.external.stat" => self.stat_external_file_for_host(params).await,
             "openforge.fs.external.readTextFileChunk" => {
                 self.read_external_text_file_chunk_for_host(params).await
             }

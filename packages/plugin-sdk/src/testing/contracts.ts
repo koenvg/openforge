@@ -43,6 +43,9 @@ export type TestingEventHandler = (payload: unknown) => void
 
 export interface TestingExternalTextFile extends ExternalReadFileRequest {
   content: string
+  /** Defaults to a deterministic identity derived from root and path. */
+  identity?: string
+  modifiedAtMs?: number | null
 }
 
 export type TestingExternalTextFileChunksCall = Omit<ExternalReadTextFileChunksRequest, 'signal' | 'chunkSizeBytes'> & {
@@ -57,6 +60,8 @@ export interface TestingOpenForgeApiOptions {
   viewId?: string
   packageMetadata?: OpenForgePackageMetadata
   storage?: PluginStorage
+  /** Initial files exposed through `fs.userData`. Defaults to none. */
+  userDataTextFiles?: UserDataFileWriteRequest[]
   /**
    * Tasks returned by `tasks.list`. The mock filters them by the requested
    * `projectId` (when given) and drops `done` tasks unless `includeDone: true`,
@@ -92,8 +97,10 @@ export interface TestingOpenForgeApiCalls {
   fsUserDataReadDirs: UserDataDirectoryRequest[]
   fsUserDataReads: UserDataFileRequest[]
   fsUserDataWrites: UserDataFileWriteRequest[]
+  fsUserDataAppends: UserDataFileWriteRequest[]
   fsExternalReadDirs: ExternalReadDirectoryRequest[]
   fsExternalReads: ExternalReadFileRequest[]
+  fsExternalStats: ExternalReadFileRequest[]
   fsExternalReadTextFileChunks: TestingExternalTextFileChunksCall[]
   shellSpawns: ShellSpawnRequest[]
   shellWrites: Array<{ taskId: string; terminalIndex: number; data: string }>

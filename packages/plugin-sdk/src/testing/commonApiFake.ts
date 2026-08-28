@@ -21,9 +21,40 @@ import type {
   TestingCommandHandler,
   TestingEventHandler,
   TestingEventListenerContribution,
+  TestingExternalTextFile,
 } from './contracts'
 
 const UTF8_ENCODER = new TextEncoder()
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true })
+
+function assertNonNegativeSafeInteger(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative safe integer`)
+  }
+}
+
+function testingExternalFileIdentity(file: TestingExternalTextFile): string {
+  return file.identity ?? `${file.root}:${file.path}`
+}
+
+function readTestingExternalTextRange(
+  file: TestingExternalTextFile,
+  startOffsetBytes: number,
+  maxBytes: number | undefined,
+  expectedIdentity: string | undefined,
+): string {
+  assertNonNegativeSafeInteger(startOffsetBytes, 'startOffsetBytes')
+  if (maxBytes !== undefined) assertNonNegativeSafeInteger(maxBytes, 'maxBytes')
+  const identity = testingExternalFileIdentity(file)
+  if (expectedIdentity !== undefined && expectedIdentity !== identity) {
+    throw new Error(`External file identity changed: expected ${expectedIdentity}, received ${identity}`)
+  }
+  const bytes = UTF8_ENCODER.encode(file.content)
+  const endOffsetBytes = maxBytes === undefined
+    ? bytes.byteLength
+    : Math.min(bytes.byteLength, startOffsetBytes + maxBytes)
+  return UTF8_DECODER.decode(bytes.slice(startOffsetBytes, endOffsetBytes))
+}
 
 
 function* splitExternalTextFile(content: string, maxBytes: number): Generator<string> {
@@ -251,10 +282,17 @@ export class TestingCommonApiFake {
           },
           readTextFile: async (request) => {
             this.services.calls.fsUserDataReads.push(request)
-            return ''
+            return this.services.userDataTextFiles.get(request.path) ?? ''
           },
           writeTextFile: async (request) => {
             this.services.calls.fsUserDataWrites.push(request)
+            this.services.userDataTextFiles.set(request.path, request.content)
+          },
+          appendTextFile: async (request) => {
+            this.services.calls.fsUserDataAppends.push(request)
+            const content = `${this.services.userDataTextFiles.get(request.path) ?? ''}${request.content}`
+            this.services.userDataTextFiles.set(request.path, content)
+            return { sizeBytes: UTF8_ENCODER.encode(content).byteLength }
           },
         },
         external: {
@@ -266,16 +304,55 @@ export class TestingCommonApiFake {
             this.services.calls.fsExternalReads.push(request)
             return ''
           },
+          stat: async (request) => {
+            this.services.calls.fsExternalStats.push(request)
+            const file = this.services.externalTextFiles.find(
+              candidate => candidate.root === request.root && candidate.path === request.path,
+            )
+            if (!file) throw new Error(`External file not found: ${request.root}/${request.path}`)
+            return {
+              identity: testingExternalFileIdentity(file),
+              sizeBytes: UTF8_ENCODER.encode(file.content).byteLength,
+              modifiedAtMs: file.modifiedAtMs ?? null,
+            }
+          },
           readTextFileChunks: (request) => {
             const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes)
-            const { root, path, signal } = request
-            this.services.calls.fsExternalReadTextFileChunks.push({ root, path, chunkSizeBytes })
-            const content = this.services.externalTextFiles.find(
-              file => file.root === root && file.path === path,
-            )?.content ?? ''
+            const {
+              root,
+              path,
+              signal,
+              expectedIdentity,
+              startOffsetBytes = 0,
+              maxBytes,
+            } = request
+            this.services.calls.fsExternalReadTextFileChunks.push({
+              root,
+              path,
+              chunkSizeBytes,
+              ...(expectedIdentity === undefined ? {} : { expectedIdentity }),
+              ...(request.startOffsetBytes === undefined ? {} : { startOffsetBytes }),
+              ...(maxBytes === undefined ? {} : { maxBytes }),
+            })
+            const file = this.services.externalTextFiles.find(
+              candidate => candidate.root === root && candidate.path === path,
+            )
             return (async function* () {
+              signal?.throwIfAborted()
+              if (!file) throw new Error(`External file not found: ${root}/${path}`)
+              const content = readTestingExternalTextRange(
+                file,
+                startOffsetBytes,
+                maxBytes,
+                expectedIdentity,
+              )
               for (const chunk of splitExternalTextFile(content, chunkSizeBytes)) {
                 signal?.throwIfAborted()
+                if (expectedIdentity !== undefined && testingExternalFileIdentity(file) !== expectedIdentity) {
+                  throw new Error(
+                    `External file identity changed: expected ${expectedIdentity}, received ${testingExternalFileIdentity(file)}`,
+                  )
+                }
                 yield chunk
               }
               signal?.throwIfAborted()

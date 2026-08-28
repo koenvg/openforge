@@ -73,6 +73,122 @@ describe('testing capability fakes', () => {
     }])
   })
 
+  it('stats an external file and reads only the requested identity-bound byte range', async () => {
+    const api = createMockBackendOpenForgeApi({
+      externalTextFiles: [{
+        root: '/sessions',
+        path: 'collector.jsonl',
+        content: 'old\nab🙂cd\n',
+        identity: '41:9',
+        modifiedAtMs: 1_767_225_600_000,
+      }],
+    })
+
+    await expect(api.fs.external.stat({
+      root: '/sessions',
+      path: 'collector.jsonl',
+    })).resolves.toEqual({
+      identity: '41:9',
+      sizeBytes: 13,
+      modifiedAtMs: 1_767_225_600_000,
+    })
+
+    const chunks: string[] = []
+    for await (const chunk of api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'collector.jsonl',
+      expectedIdentity: '41:9',
+      startOffsetBytes: 4,
+      maxBytes: 6,
+      chunkSizeBytes: 4,
+    })) {
+      chunks.push(chunk)
+    }
+
+    expect(chunks).toEqual(['ab', '🙂'])
+    expect(api.__testing.calls.fsExternalStats).toEqual([{
+      root: '/sessions',
+      path: 'collector.jsonl',
+    }])
+    expect(api.__testing.calls.fsExternalReadTextFileChunks).toContainEqual({
+      root: '/sessions',
+      path: 'collector.jsonl',
+      expectedIdentity: '41:9',
+      startOffsetBytes: 4,
+      maxBytes: 6,
+      chunkSizeBytes: 4,
+    })
+  })
+
+  it('models durable user-data append followed by an atomic pointer replacement', async () => {
+    const api = createMockBackendOpenForgeApi({
+      userDataTextFiles: [{ path: 'events/index.jsonl', content: 'one\n' }],
+    })
+
+    await expect(api.fs.userData.appendTextFile({
+      path: 'events/index.jsonl',
+      content: 'two\n',
+    })).resolves.toEqual({ sizeBytes: 8 })
+    await api.fs.userData.writeTextFile({
+      path: 'events/state.json',
+      content: '{"committedBytes":8}\n',
+    })
+
+    await expect(api.fs.userData.readTextFile({ path: 'events/index.jsonl' }))
+      .resolves.toBe('one\ntwo\n')
+    await expect(api.fs.userData.readTextFile({ path: 'events/state.json' }))
+      .resolves.toBe('{"committedBytes":8}\n')
+    expect(api.__testing.calls.fsUserDataAppends).toEqual([{
+      path: 'events/index.jsonl',
+      content: 'two\n',
+    }])
+  })
+
+  it('starts fake ranged I/O lazily and mirrors missing, replacement, and UTF-8 failures', async () => {
+    const file = {
+      root: '/sessions',
+      path: 'collector.jsonl',
+      content: 'abcd🙂ef',
+      identity: '41:9',
+    }
+    const api = createMockBackendOpenForgeApi({ externalTextFiles: [file] })
+    const stale = api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'collector.jsonl',
+      expectedIdentity: 'stale',
+      maxBytes: 1,
+    })[Symbol.asyncIterator]()
+
+    await expect(stale.next()).rejects.toThrow('External file identity changed')
+
+    const missing = api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'missing.jsonl',
+      maxBytes: 1,
+    })[Symbol.asyncIterator]()
+    await expect(missing.next()).rejects.toThrow('External file not found')
+
+    const replaced = api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'collector.jsonl',
+      expectedIdentity: '41:9',
+      maxBytes: 8,
+      chunkSizeBytes: 4,
+    })[Symbol.asyncIterator]()
+    await expect(replaced.next()).resolves.toEqual({ value: 'abcd', done: false })
+    file.identity = '41:10'
+    await expect(replaced.next()).rejects.toThrow('External file identity changed')
+
+    file.identity = '41:9'
+    const splitCodePoint = api.fs.external.readTextFileChunks({
+      root: '/sessions',
+      path: 'collector.jsonl',
+      startOffsetBytes: 5,
+      maxBytes: 4,
+    })[Symbol.asyncIterator]()
+    await expect(splitCodePoint.next()).rejects.toThrow()
+  })
+
   it('stops fake external text iteration after cancellation', async () => {
     const api = createMockBackendOpenForgeApi({
       externalTextFiles: [{ root: '/sessions', path: 'session.jsonl', content: 'abcdef' }],

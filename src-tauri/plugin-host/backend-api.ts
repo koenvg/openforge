@@ -5,6 +5,7 @@ import type {
   ComposeTaskResult,
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
+  ExternalFileMetadata,
   FileContent,
   FileEntry,
   ImplementationRun,
@@ -17,6 +18,7 @@ import type {
   Task,
   TaskFollowUpReceipt,
   TaskWorkspaceInfo,
+  UserDataFileAppendResult,
   WritableBoardStatus,
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
@@ -84,6 +86,44 @@ function validateExternalTextFileChunk(
   ) {
     throw new Error('OpenForge host returned an invalid external text file chunk')
   }
+}
+
+function resolveExternalTextRangeValue(value: number | undefined, name: string, fallback?: number): number | undefined {
+  const resolved = value ?? fallback
+  if (resolved !== undefined && (!Number.isSafeInteger(resolved) || resolved < 0)) {
+    throw new RangeError(`${name} must be a non-negative safe integer`)
+  }
+  return resolved
+}
+
+function normalizeExternalFileMetadata(value: unknown): ExternalFileMetadata {
+  if (value === null || typeof value !== 'object') {
+    throw new Error('OpenForge host returned invalid external file metadata')
+  }
+  const { identity, sizeBytes, modifiedAtMs } = value as Record<string, unknown>
+  if (
+    typeof identity !== 'string'
+    || identity.length === 0
+    || typeof sizeBytes !== 'number'
+    || !Number.isSafeInteger(sizeBytes)
+    || sizeBytes < 0
+    || (modifiedAtMs !== null
+      && (typeof modifiedAtMs !== 'number' || !Number.isSafeInteger(modifiedAtMs) || modifiedAtMs < 0))
+  ) {
+    throw new Error('OpenForge host returned invalid external file metadata')
+  }
+  return { identity, sizeBytes, modifiedAtMs }
+}
+
+function normalizeUserDataFileAppendResult(value: unknown): UserDataFileAppendResult {
+  if (value === null || typeof value !== 'object') {
+    throw new Error('OpenForge host returned an invalid user-data append result')
+  }
+  const { sizeBytes } = value as Record<string, unknown>
+  if (typeof sizeBytes !== 'number' || !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+    throw new Error('OpenForge host returned an invalid user-data append result')
+  }
+  return { sizeBytes }
 }
 
 export const DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS = 10_000
@@ -221,6 +261,7 @@ export function createBackendApi(
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.userData.readDir', pluginFileCallbackParams(state.pluginId, request)),
         readTextFile: async request => await hostCallback<string>('openforge.fs.userData.readTextFile', pluginFileCallbackParams(state.pluginId, request)),
         writeTextFile: async request => { await hostCallback<void>('openforge.fs.userData.writeTextFile', pluginFileCallbackParams(state.pluginId, request)) },
+        appendTextFile: async request => normalizeUserDataFileAppendResult(await hostCallback<unknown>('openforge.fs.userData.appendTextFile', pluginFileCallbackParams(state.pluginId, request))),
       },
       external: {
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.external.readDir', pluginFileCallbackParams(state.pluginId, request)),
@@ -232,16 +273,63 @@ export function createBackendApi(
             timeoutLabel: 'OpenForge external text file host callback',
           },
         ),
+        stat: async request => normalizeExternalFileMetadata(await hostCallback<unknown>(
+          'openforge.fs.external.stat',
+          pluginFileCallbackParams(state.pluginId, request),
+          {
+            timeoutMs: runtime.externalTextFileReadTimeoutMs,
+            timeoutLabel: 'OpenForge external file stat host callback',
+          },
+        )),
         readTextFileChunks: (request) => {
           const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes)
-          const { root, path, signal } = request
+          const startOffsetBytes = resolveExternalTextRangeValue(
+            request.startOffsetBytes,
+            'startOffsetBytes',
+            0,
+          ) as number
+          const maxBytes = resolveExternalTextRangeValue(request.maxBytes, 'maxBytes')
+          const { root, path, signal, expectedIdentity } = request
+          if (expectedIdentity !== undefined && expectedIdentity.length === 0) {
+            throw new TypeError('expectedIdentity must be a non-empty string')
+          }
           return (async function* () {
-            let offset = 0
-            while (true) {
+            let offset = startOffsetBytes
+            let remainingBytes = maxBytes
+            if (remainingBytes === 0) {
               signal?.throwIfAborted()
+              const metadata = normalizeExternalFileMetadata(await hostCallback<unknown>(
+                'openforge.fs.external.stat',
+                { pluginId: state.pluginId, root, path },
+                {
+                  signal,
+                  timeoutMs: runtime.externalTextFileReadTimeoutMs,
+                  timeoutLabel: 'OpenForge external file stat host callback',
+                },
+              ))
+              signal?.throwIfAborted()
+              if (expectedIdentity !== undefined && metadata.identity !== expectedIdentity) {
+                throw new Error(
+                  `External file identity changed: expected ${expectedIdentity}, received ${metadata.identity}`,
+                )
+              }
+              return
+            }
+            while (remainingBytes === undefined || remainingBytes > 0) {
+              signal?.throwIfAborted()
+              const readSizeBytes = remainingBytes === undefined
+                ? chunkSizeBytes
+                : Math.min(chunkSizeBytes, remainingBytes)
               const chunk = await hostCallback<ExternalTextFileChunkResult>(
                 'openforge.fs.external.readTextFileChunk',
-                { pluginId: state.pluginId, root, path, offset, maxBytes: chunkSizeBytes },
+                {
+                  pluginId: state.pluginId,
+                  root,
+                  path,
+                  ...(expectedIdentity === undefined ? {} : { expectedIdentity }),
+                  offset,
+                  maxBytes: readSizeBytes,
+                },
                 {
                   signal,
                   timeoutMs: runtime.externalTextFileReadTimeoutMs,
@@ -249,10 +337,12 @@ export function createBackendApi(
                 },
               )
               signal?.throwIfAborted()
-              validateExternalTextFileChunk(chunk, offset, chunkSizeBytes)
+              validateExternalTextFileChunk(chunk, offset, readSizeBytes)
+              const chunkBytes = chunk.nextOffset - offset
               if (chunk.content.length > 0) yield chunk.content
               if (chunk.eof) return
               offset = chunk.nextOffset
+              if (remainingBytes !== undefined) remainingBytes -= chunkBytes
             }
           })()
         },

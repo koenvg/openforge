@@ -215,6 +215,61 @@ async fn host_filesystem_callbacks_scope_user_data_and_external_reads() {
 }
 
 #[tokio::test]
+async fn host_filesystem_callbacks_commit_user_data_with_durable_append_and_atomic_replace() {
+    let app_data_dir = tempfile::tempdir().expect("app data dir");
+    let resource_dir = tempfile::tempdir().expect("resource dir");
+    let app = AppHandle::with_app_paths(
+        app_data_dir.path().to_path_buf(),
+        resource_dir.path().to_path_buf(),
+    );
+    let host = PluginHost::new(app);
+
+    let first_append = host
+        .handle_host_callback(
+            "openforge.fs.userData.appendTextFile",
+            &json!({ "pluginId": "skill-usage", "path": "events/index.jsonl", "content": "one\n" }),
+        )
+        .await
+        .expect("append first user-data record");
+    assert_eq!(first_append, json!({ "sizeBytes": 4 }));
+
+    let second_append = host
+        .handle_host_callback(
+            "openforge.fs.userData.appendTextFile",
+            &json!({ "pluginId": "skill-usage", "path": "events/index.jsonl", "content": "two\n" }),
+        )
+        .await
+        .expect("append second user-data record");
+    assert_eq!(second_append, json!({ "sizeBytes": 8 }));
+
+    host.handle_host_callback(
+        "openforge.fs.userData.writeTextFile",
+        &json!({ "pluginId": "skill-usage", "path": "events/state.json", "content": "{\"committedBytes\":8}" }),
+    )
+    .await
+    .expect("atomically replace generation pointer");
+
+    let plugin_root = app_data_dir.path().join("plugin-data/skill-usage/events");
+    assert_eq!(
+        std::fs::read_to_string(plugin_root.join("index.jsonl")).expect("appended index"),
+        "one\ntwo\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(plugin_root.join("state.json")).expect("generation pointer"),
+        "{\"committedBytes\":8}"
+    );
+    let paths = std::fs::read_dir(plugin_root)
+        .expect("user-data directory")
+        .map(|entry| entry.expect("user-data entry").file_name())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths.len(),
+        2,
+        "atomic replacement must not leave temporary files"
+    );
+}
+
+#[tokio::test]
 async fn host_filesystem_callbacks_stream_external_text_in_byte_bounded_chunks() {
     let app_data_dir = tempfile::tempdir().expect("app data dir");
     let resource_dir = tempfile::tempdir().expect("resource dir");
@@ -257,6 +312,83 @@ async fn host_filesystem_callbacks_stream_external_text_in_byte_bounded_chunks()
 }
 
 #[tokio::test]
+async fn host_filesystem_callbacks_stat_and_identity_bind_external_ranges() {
+    let app_data_dir = tempfile::tempdir().expect("app data dir");
+    let resource_dir = tempfile::tempdir().expect("resource dir");
+    let external_root = tempfile::tempdir().expect("external root");
+    let path = external_root.path().join("collector.jsonl");
+    std::fs::write(&path, "old\nab🙂cd\n").expect("collector fixture");
+    let app = AppHandle::with_app_paths(
+        app_data_dir.path().to_path_buf(),
+        resource_dir.path().to_path_buf(),
+    );
+    let host = PluginHost::new(app);
+
+    let first_stat = host
+        .handle_host_callback(
+            "openforge.fs.external.stat",
+            &json!({
+                "pluginId": "skill-usage",
+                "root": external_root.path(),
+                "path": "collector.jsonl",
+            }),
+        )
+        .await
+        .expect("stat external file");
+    let second_stat = host
+        .handle_host_callback(
+            "openforge.fs.external.stat",
+            &json!({
+                "pluginId": "skill-usage",
+                "root": external_root.path(),
+                "path": "collector.jsonl",
+            }),
+        )
+        .await
+        .expect("stat external file again");
+    assert_eq!(first_stat, second_stat);
+    assert_eq!(first_stat["sizeBytes"], 13);
+    assert!(first_stat["identity"]
+        .as_str()
+        .is_some_and(|value| !value.is_empty()));
+    assert!(first_stat["modifiedAtMs"].as_u64().is_some());
+
+    let chunk = host
+        .handle_host_callback(
+            "openforge.fs.external.readTextFileChunk",
+            &json!({
+                "pluginId": "skill-usage",
+                "root": external_root.path(),
+                "path": "collector.jsonl",
+                "expectedIdentity": first_stat["identity"],
+                "offset": 4,
+                "maxBytes": 6,
+            }),
+        )
+        .await
+        .expect("read identity-bound range");
+    assert_eq!(chunk["content"], "ab🙂");
+    assert_eq!(chunk["nextOffset"], 10);
+    assert_eq!(chunk["eof"], false);
+
+    let stale_identity = host
+        .handle_host_callback(
+            "openforge.fs.external.readTextFileChunk",
+            &json!({
+                "pluginId": "skill-usage",
+                "root": external_root.path(),
+                "path": "collector.jsonl",
+                "expectedIdentity": "stale",
+                "offset": 4,
+                "maxBytes": 6,
+            }),
+        )
+        .await
+        .expect_err("stale identity should fail");
+    assert!(stale_identity.contains("external file identity changed"));
+}
+
+#[tokio::test]
 async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
     let app_data_dir = tempfile::tempdir().expect("app data dir");
     let resource_dir = tempfile::tempdir().expect("resource dir");
@@ -287,6 +419,15 @@ async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
         .await
         .expect_err("external traversal should fail");
     assert!(external_traversal.contains("Path traversal detected"));
+
+    let external_stat_traversal = host
+        .handle_host_callback(
+            "openforge.fs.external.stat",
+            &json!({ "pluginId": "skill-usage", "root": &external_root, "path": "../secret.txt" }),
+        )
+        .await
+        .expect_err("external stat traversal should fail");
+    assert!(external_stat_traversal.contains("Path traversal detected"));
 
     let external_chunk_traversal = host
         .handle_host_callback(
@@ -324,6 +465,18 @@ async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
             .await
             .expect_err("external chunk symlink escape should fail");
         assert!(external_chunk_symlink.contains("Path traversal detected"));
+        let external_stat_symlink = host
+            .handle_host_callback(
+                "openforge.fs.external.stat",
+                &json!({
+                    "pluginId": "skill-usage",
+                    "root": &external_root,
+                    "path": "linked-secret.txt",
+                }),
+            )
+            .await
+            .expect_err("external stat symlink escape should fail");
+        assert!(external_stat_symlink.contains("Path traversal detected"));
     }
 
     let user_data_traversal = host
@@ -334,6 +487,15 @@ async fn host_filesystem_callbacks_reject_paths_outside_the_selected_root() {
         .await
         .expect_err("user data traversal should fail");
     assert!(user_data_traversal.contains("Path traversal detected"));
+
+    let user_data_append_traversal = host
+        .handle_host_callback(
+            "openforge.fs.userData.appendTextFile",
+            &json!({ "pluginId": "skill-usage", "path": "../escape.txt", "content": "no" }),
+        )
+        .await
+        .expect_err("user data append traversal should fail");
+    assert!(user_data_append_traversal.contains("Path traversal detected"));
 
     let invalid_plugin_id = host
         .handle_host_callback(
