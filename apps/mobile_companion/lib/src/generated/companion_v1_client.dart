@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 const companionV1OpenApiSha256 =
-    '1cd6617e54a42e50ef5f18370e98e97482eeacc94da1cf126dc7f8501e48a554';
+    '5b75e33f14e500b8b1ae25e8b9fa0ada8a2ef0b0e11d26f110ed61ccfe15dce0';
 const companionV1ProtocolVersionHeader = 'openforge-companion-protocol-version';
 const companionV1ProtocolVersion = '3';
 
@@ -166,6 +166,27 @@ enum ProjectBoardLane {
       (throw FormatException('Invalid ProjectBoardLane value: $value.'));
 
   static ProjectBoardLane? tryFromWire(String value) {
+    for (final candidate in values) {
+      if (candidate.wireValue == value) return candidate;
+    }
+    return null;
+  }
+}
+
+enum TaskPromptSuggestionKind {
+  skill('skill'),
+  command('command'),
+  ;
+
+  const TaskPromptSuggestionKind(this.wireValue);
+
+  final String wireValue;
+
+  static TaskPromptSuggestionKind fromWire(String value) =>
+      tryFromWire(value) ??
+      (throw FormatException('Invalid TaskPromptSuggestionKind value: $value.'));
+
+  static TaskPromptSuggestionKind? tryFromWire(String value) {
     for (final candidate in values) {
       if (candidate.wireValue == value) return candidate;
     }
@@ -1046,6 +1067,66 @@ final class TaskDetail {
   final DateTime? agentUpdatedAt;
 }
 
+final class TaskPromptSuggestion {
+  const TaskPromptSuggestion({
+    required this.name,
+    required this.description,
+    required this.kind,
+    required this.source,
+  });
+
+  factory TaskPromptSuggestion.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'name', 'description', 'kind', 'source'});
+    final model = TaskPromptSuggestion(
+      name: _required(json, 'name', (value) => _asString(value, 'name', minLength: 1)),
+      description: _requiredNullable(json, 'description', (value) => _asString(value, 'description')),
+      kind: _required(json, 'kind', (value) => TaskPromptSuggestionKind.fromWire(_asString(value, 'kind'))),
+      source: _requiredNullable(json, 'source', (value) => _asString(value, 'source')),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'name': name,
+      'description': description == null ? null : description!,
+      'kind': kind.wireValue,
+      'source': source == null ? null : source!,
+  };
+
+  final String name;
+  final String? description;
+  final TaskPromptSuggestionKind kind;
+  final String? source;
+}
+
+final class TaskPromptCatalog {
+  TaskPromptCatalog({
+    required this.provider,
+    required this.trigger,
+    required List<TaskPromptSuggestion> suggestions,
+  }) : suggestions = List<TaskPromptSuggestion>.unmodifiable(suggestions);
+
+  factory TaskPromptCatalog.fromJson(Map<String, Object?> json) {
+    _expectOnly(json, const <String>{'provider', 'trigger', 'suggestions'});
+    final model = TaskPromptCatalog(
+      provider: _required(json, 'provider', (value) => _asString(value, 'provider', minLength: 1)),
+      trigger: _required(json, 'trigger', (value) => _asString(value, 'trigger', minLength: 1, maxLength: 1)),
+      suggestions: _required(json, 'suggestions', (value) => _asList(value, 'suggestions').map((item) => TaskPromptSuggestion.fromJson(_asObject(item, 'suggestionsItem'))).toList()),
+    );
+    return model;
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+      'provider': provider,
+      'trigger': trigger,
+      'suggestions': suggestions.map((item) => item.toJson()).toList(),
+  };
+
+  final String provider;
+  final String trigger;
+  final List<TaskPromptSuggestion> suggestions;
+}
+
 final class TaskCreateRequest {
   const TaskCreateRequest({
     required this.initialPrompt,
@@ -1377,6 +1458,23 @@ final class CompanionV1Client {
       },
     );
     return ProjectBoard.fromJson(
+      _successJson(response, const <int>{200}),
+    );
+  }
+
+  Future<TaskPromptCatalog> getCompanionTaskPromptCatalog({
+    required String projectId,
+    required String credential,
+  }) async {
+    final response = await transport.send(
+      method: 'GET',
+      uri: baseUrl.resolve('/companion/v1/projects/${Uri.encodeComponent(projectId)}/task-prompt-catalog'),
+      headers: <String, String>{
+      'authorization': 'Bearer $credential',
+      companionV1ProtocolVersionHeader: companionV1ProtocolVersion,
+      },
+    );
+    return TaskPromptCatalog.fromJson(
       _successJson(response, const <int>{200}),
     );
   }

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHost } from './terminalRuntimeHost.testSupport'
 import { resetTerminalRuntimeMocks } from './terminalRuntimeFeatures.testSupport'
-import { createFakeTerminalView } from './terminalView.testUtils'
+import {
+  INLINE_IMAGE_COMPATIBILITY_REPLAY,
+  createFakeTerminalView,
+} from './terminalView.testUtils'
 import {
   XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
@@ -63,8 +66,9 @@ describe('terminal authority', () => {
     })
   }) // query response routing
 
-  it('keeps xterm rendering but drops xterm-generated responses when Ghostty owns state', async () => {
+  it('restores bounded raw compatibility state before the authoritative Ghostty snapshot', async () => {
     const shellSessionKey = 'T-ghostty-shell-0'
+    const compatibilityReplay = INLINE_IMAGE_COMPATIBILITY_REPLAY
     let onQueryResponse: ((response: { data: string; ptyInstanceId: number | null }) => void) | undefined
     const view = createFakeTerminalView({
       onQueryResponse: vi.fn((listener: (response: { data: string; ptyInstanceId: number | null }) => void) => {
@@ -76,7 +80,12 @@ describe('terminal authority', () => {
     host.getPtyBuffer = async () => ({
       authority: 'ghostty-authoritative',
       buffer: null,
-      snapshot: { instanceId: 61, watermark: 0, data: btoa('rendered by xterm') },
+      snapshot: {
+        instanceId: 61,
+        watermark: 0,
+        data: btoa('rendered by xterm'),
+        compatibilityData: btoa(compatibilityReplay),
+      },
       isLive: true,
       instanceId: 61,
     })
@@ -87,7 +96,18 @@ describe('terminal authority', () => {
     await runtime.acquire(shellSessionKey)
     onQueryResponse?.({ data: '\u001b[1;1R', ptyInstanceId: 61 })
 
-    expect(view.bootstrap).toHaveBeenCalledOnce()
+    expect(view.bootstrap).toHaveBeenNthCalledWith(
+      1,
+      Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
+      61,
+      0,
+    )
+    expect(view.bootstrap).toHaveBeenNthCalledWith(
+      2,
+      Uint8Array.from(new TextEncoder().encode('rendered by xterm')),
+      61,
+      0,
+    )
     expect(writeTerminalQueryResponse).not.toHaveBeenCalled()
   })
 }) // terminal authority

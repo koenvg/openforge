@@ -1,6 +1,8 @@
 import { vi } from 'vitest'
 import type { TerminalView } from './terminalRuntime'
 
+export const INLINE_IMAGE_COMPATIBILITY_REPLAY = '\u001b]1337;File=size=34;inline=1:R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==\u0007'
+
 export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): TerminalView {
   return {
     geometry: { cols: 80, rows: 24 },

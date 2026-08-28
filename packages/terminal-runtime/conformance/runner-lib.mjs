@@ -72,6 +72,32 @@ export function assertTerminalScreenshotHasInk(screenshotBuffer, options) {
   return { inkPixels, inspectedPixels }
 }
 
+export function assertTerminalScreenshotCursorAtCell(screenshotBuffer, options) {
+  const image = PNG.sync.read(screenshotBuffer)
+  const { screen, geometry, cursor, cursorColor } = options
+  const left = Math.max(0, Math.floor(screen.x + cursor.x * screen.width / geometry.cols))
+  const right = Math.min(image.width, Math.ceil(screen.x + (cursor.x + 1) * screen.width / geometry.cols))
+  const top = Math.max(0, Math.floor(screen.y + cursor.y * screen.height / geometry.rows))
+  const bottom = Math.min(image.height, Math.ceil(screen.y + (cursor.y + 1) * screen.height / geometry.rows))
+  let matchingPixels = 0
+  const inspectedPixels = Math.max(0, right - left) * Math.max(0, bottom - top)
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const offset = (y * image.width + x) * 4
+      if (cursorColor.every((channel, index) => image.data[offset + index] === channel)) {
+        matchingPixels += 1
+      }
+    }
+  }
+  const coverage = inspectedPixels === 0 ? 0 : matchingPixels / inspectedPixels
+  if (coverage < options.minimumCoverage) {
+    throw new Error(
+      `painted cursor covers ${coverage.toFixed(3)} of semantic cell (${cursor.x}, ${cursor.y}); expected at least ${options.minimumCoverage}`,
+    )
+  }
+  return { coverage, matchingPixels, inspectedPixels }
+}
+
 export function comparePngBuffers(baselineBuffer, actualBuffer, bounds) {
   const baseline = PNG.sync.read(baselineBuffer)
   const actual = PNG.sync.read(actualBuffer)

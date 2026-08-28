@@ -115,6 +115,7 @@ class _ProjectBoardHomeState extends State<ProjectBoardHome>
       showDragHandle: true,
       builder: (context) => TaskCreationSheet(
         projectName: state.board.projectName,
+        loadPromptCatalog: widget.controller.fetchTaskPromptCatalog,
         onCreate: widget.controller.createTask,
       ),
     );

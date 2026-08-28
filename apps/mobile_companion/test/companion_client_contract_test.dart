@@ -45,6 +45,7 @@ void main() {
       expect(encodedContract, contains('getCompanionAttention'));
       expect(encodedContract, contains('getCompanionProjects'));
       expect(encodedContract, contains('getCompanionProjectBoard'));
+      expect(encodedContract, contains('getCompanionTaskPromptCatalog'));
       expect(encodedContract, contains('createCompanionTask'));
       expect(encodedContract, contains('getCompanionTaskDetail'));
       expect(encodedContract, contains('completeCompanionTask'));
@@ -69,6 +70,7 @@ void main() {
           '/attention',
           '/projects',
           '/projects/{projectId}/board',
+          '/projects/{projectId}/task-prompt-catalog',
           '/projects/{projectId}/tasks',
           '/tasks/{taskId}',
           '/tasks/{taskId}/complete',

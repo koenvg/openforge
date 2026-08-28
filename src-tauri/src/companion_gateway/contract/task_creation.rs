@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -21,10 +21,36 @@ struct CompanionTaskCreateRequest {
 }
 
 pub(super) fn routes() -> Router<CompanionRouterState> {
-    Router::new().route(
-        "/companion/v1/projects/:project_id/tasks",
-        post(create_task_handler),
-    )
+    Router::new()
+        .route(
+            "/companion/v1/projects/:project_id/tasks",
+            post(create_task_handler),
+        )
+        .route(
+            "/companion/v1/projects/:project_id/task-prompt-catalog",
+            get(task_prompt_catalog_handler),
+        )
+}
+
+async fn task_prompt_catalog_handler(
+    State(state): State<CompanionRouterState>,
+    Path(project_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(code) = authorize_versioned_request(&state, &headers) {
+        return authorization_error_response(code);
+    }
+
+    match state.project_board.is_project_visible(&project_id) {
+        Ok(true) => {}
+        Ok(false) => return task_creation_not_found(),
+        Err(_) => return task_prompt_catalog_unavailable(),
+    }
+
+    match state.task_creator.prompt_catalog(&project_id) {
+        Ok(catalog) => Json(catalog).into_response(),
+        Err(_) => task_prompt_catalog_unavailable(),
+    }
 }
 
 async fn create_task_handler(
@@ -79,6 +105,14 @@ fn task_creation_not_found() -> Response {
         StatusCode::NOT_FOUND,
         CompanionErrorCode::NotFound,
         "Project was not found",
+    )
+}
+
+fn task_prompt_catalog_unavailable() -> Response {
+    error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        CompanionErrorCode::TemporarilyUnavailable,
+        "Task prompt suggestions are temporarily unavailable",
     )
 }
 

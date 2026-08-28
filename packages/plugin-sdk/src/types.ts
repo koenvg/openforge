@@ -615,6 +615,7 @@ export interface TerminalViewSnapshot {
   instanceId: number
   watermark: number
   data: string
+  compatibilityData?: string
 }
 
 export interface PtyBufferState {

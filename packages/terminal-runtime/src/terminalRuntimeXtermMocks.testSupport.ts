@@ -10,6 +10,7 @@ const hoistedTerminalMocks = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>
     refresh: ReturnType<typeof vi.fn>
     focus: ReturnType<typeof vi.fn>
+    blur: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
     onData: ReturnType<typeof vi.fn>
     onWriteParsed: ReturnType<typeof vi.fn>
@@ -58,6 +59,7 @@ vi.mock('@xterm/xterm', () => ({
       }),
       refresh: vi.fn(),
       focus: vi.fn(),
+      blur: vi.fn(),
       loadAddon: vi.fn((addon: { activate?: unknown; dispose?: () => void; options?: { iipSupport?: boolean } }) => {
         if (hoistedTerminalMocks.failImageAddon && addon.options?.iipSupport) {
           throw new Error('image addon unavailable')

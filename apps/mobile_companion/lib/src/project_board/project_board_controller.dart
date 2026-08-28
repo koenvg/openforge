@@ -98,6 +98,27 @@ final class ProjectBoardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog() async {
+    final projectId = _selectedProjectId;
+    if (projectId == null) {
+      throw StateError('No Project is selected.');
+    }
+    final trustRecord = await _storage.load();
+    if (trustRecord == null) {
+      _authorizationLost();
+      throw StateError('Companion authorization is unavailable.');
+    }
+
+    try {
+      return await _client.fetchTaskPromptCatalog(trustRecord, projectId);
+    } on CompanionV1Exception catch (error) {
+      if (error.code == 'revoked' || error.code == 'unauthenticated') {
+        _authorizationLost();
+      }
+      rethrow;
+    }
+  }
+
   Future<TaskCreateResult> createTask(String initialPrompt) async {
     final prompt = initialPrompt.trim();
     if (prompt.isEmpty) {

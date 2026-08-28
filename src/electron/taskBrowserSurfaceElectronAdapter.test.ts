@@ -338,12 +338,18 @@ function preventableEvent() {
   }
 }
 
-const platformDevToolsModifiers = () => process.platform === 'darwin'
-  ? { meta: true, alt: true }
+type PlatformDevToolsShortcut = 'toggle' | 'elements' | 'console'
+
+const platformDevToolsModifiers = (shortcut: PlatformDevToolsShortcut = 'toggle') => process.platform === 'darwin'
+  ? shortcut === 'elements'
+    ? { meta: true, shift: true }
+    : { meta: true, alt: true }
   : { control: true, shift: true }
 
-const platformDevToolsInputModifiers = () => process.platform === 'darwin'
-  ? ['meta', 'alt']
+const platformDevToolsInputModifiers = (shortcut: PlatformDevToolsShortcut = 'toggle') => process.platform === 'darwin'
+  ? shortcut === 'elements'
+    ? ['meta', 'shift']
+    : ['meta', 'alt']
   : ['control', 'shift']
 
 describe('Electron Task Browser Surface navigation adapter', () => {
@@ -520,14 +526,14 @@ describe('Electron Task Browser Surface navigation adapter', () => {
       popupPolicy: SECURE_TASK_BROWSER_POPUP_POLICY,
     })
     const contents = electronFakes.views[0].webContents
-    const elementsInput = { type: 'keyDown', key: 'c', ...platformDevToolsModifiers() }
+    const elementsInput = { type: 'keyDown', key: 'c', ...platformDevToolsModifiers('elements') }
     const elementsEvent = preventableEvent()
 
     contents.emit('before-input-event', elementsEvent, elementsInput)
     expect(elementsEvent.prevented).toBe(true)
     await vi.waitFor(() => expect(contents.openDevToolsCalls).toEqual([undefined]))
     expect(contents.devToolsInputEvents).toEqual([
-      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers() },
+      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers('elements') },
     ])
 
     const consoleInput = { type: 'keyDown', key: 'j', ...platformDevToolsModifiers() }
@@ -536,7 +542,7 @@ describe('Electron Task Browser Surface navigation adapter', () => {
     expect(consoleEvent.prevented).toBe(true)
     expect(contents.openDevToolsCalls).toHaveLength(1)
     await vi.waitFor(() => expect(contents.devToolsInputEvents).toEqual([
-      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers() },
+      { type: 'keyDown', keyCode: 'C', modifiers: platformDevToolsInputModifiers('elements') },
       { type: 'keyDown', keyCode: 'J', modifiers: platformDevToolsInputModifiers() },
     ]))
   })

@@ -70,6 +70,24 @@
     "projectId": "P-4",
     "boardStatus": "backlog"
   },
+  "taskPromptCatalog": {
+    "provider": "pi",
+    "trigger": "/",
+    "suggestions": [
+      {
+        "name": "skill:review",
+        "description": "Review current changes",
+        "kind": "skill",
+        "source": "skill"
+      },
+      {
+        "name": "release",
+        "description": "Prepare a release",
+        "kind": "command",
+        "source": "prompt"
+      }
+    ]
+  },
   "taskCompleteResult": {
     "taskId": "KVG-2946",
     "boardStatus": "done",

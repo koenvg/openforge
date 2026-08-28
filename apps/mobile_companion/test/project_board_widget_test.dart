@@ -22,6 +22,7 @@ final class _WidgetClient
         CompanionTaskActionClient,
         CompanionActionPaletteClient {
   final List<(String, String)> creationRequests = <(String, String)>[];
+  final List<String> promptCatalogRequests = <String>[];
   final List<String> actionRequests = <String>[];
   Object? creationError;
   Object? githubRefreshError;
@@ -46,6 +47,26 @@ final class _WidgetClient
     CompanionTrustRecord trustRecord,
     String projectId,
   ) async => _board(projectId, projectId == 'P-1' ? 'Alpha' : 'Beta');
+
+  @override
+  Future<TaskPromptCatalog> fetchTaskPromptCatalog(
+    CompanionTrustRecord trustRecord,
+    String projectId,
+  ) async {
+    promptCatalogRequests.add(projectId);
+    return TaskPromptCatalog(
+      provider: 'pi',
+      trigger: '/',
+      suggestions: const <TaskPromptSuggestion>[
+        TaskPromptSuggestion(
+          name: 'skill:release-notes',
+          description: 'Draft release notes',
+          kind: TaskPromptSuggestionKind.skill,
+          source: 'skill',
+        ),
+      ],
+    );
+  }
 
   @override
   Future<TaskCreateResult> createTask(
@@ -271,6 +292,36 @@ void main() {
       ('P-1', 'Investigate mobile creation'),
     ]);
     expect(selectedTasks, <String>['T-new']);
+  });
+
+  testWidgets('creates a Task with a desktop prompt suggestion', (
+    tester,
+  ) async {
+    final client = _WidgetClient();
+    final controller = ProjectBoardController(
+      client: client,
+      storage: _WidgetStorage(),
+    );
+    await controller.refresh();
+    await tester.pumpWidget(
+      MaterialApp(home: ProjectBoardHome(controller: controller)),
+    );
+
+    await tester.tap(find.bySemanticsLabel('Create new Task'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '/release');
+    await tester.pumpAndSettle();
+
+    expect(find.text('skill:release-notes'), findsOneWidget);
+    await tester.tap(find.text('skill:release-notes'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Task'));
+    await tester.pumpAndSettle();
+
+    expect(client.promptCatalogRequests, <String>['P-1']);
+    expect(client.creationRequests, <(String, String)>[
+      ('P-1', '/skill:release-notes'),
+    ]);
   });
 
   testWidgets('warns before retrying after an uncertain creation response', (
