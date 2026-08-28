@@ -3,7 +3,7 @@
   import type { FrontendOpenForgeAPI } from '@openforge-app/plugin-sdk/frontend'
   import type { FileEntry } from '@openforge-app/plugin-sdk/domain'
   import type { FileBrowserProjectState } from './lib/fileExplorer'
-  import ProjectFileTree from './ProjectFileTree.svelte'
+  import ProjectFileTree from '@openforge-app/plugin-sdk/ui/ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
   import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
   import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'

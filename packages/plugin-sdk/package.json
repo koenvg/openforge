@@ -81,6 +81,7 @@
     "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte",
     "./ui/PluginSidebarLink.svelte": "./dist/ui/PluginSidebarLink.svelte",
     "./ui/FileTypeIcon.svelte": "./dist/ui/FileTypeIcon.svelte",
+    "./ui/ProjectFileTree.svelte": "./dist/ui/ProjectFileTree.svelte",
     "./ui/CollapsibleSection.svelte": "./dist/ui/CollapsibleSection.svelte"
   },
   "files": [
