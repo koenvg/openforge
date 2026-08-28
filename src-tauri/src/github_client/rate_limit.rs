@@ -63,10 +63,12 @@ impl GitHubClient {
         &self,
         status: StatusCode,
         headers: &HeaderMap,
-    ) {
-        if let Some(reset_at) = Self::rate_limit_reset_from_headers(status, headers) {
+    ) -> Option<i64> {
+        let reset_at = Self::rate_limit_reset_from_headers(status, headers);
+        if let Some(reset_at) = reset_at {
             *self.last_rate_limit_reset.lock().unwrap() = Some(reset_at);
         }
+        reset_at
     }
 
     pub(super) fn format_rate_limit_log_message(
@@ -152,8 +154,10 @@ mod tests {
         headers.insert("x-ratelimit-remaining", HeaderValue::from_static("0"));
         headers.insert("x-ratelimit-reset", HeaderValue::from_static("12345"));
 
-        client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers);
+        let reset_at =
+            client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers);
 
+        assert_eq!(reset_at, Some(12345));
         assert_eq!(client.get_last_rate_limit_reset(), Some(12345));
     }
 
@@ -163,8 +167,9 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-ratelimit-reset", HeaderValue::from_static("12345"));
 
-        client.capture_rate_limit_reset_from_headers(StatusCode::OK, &headers);
+        let reset_at = client.capture_rate_limit_reset_from_headers(StatusCode::OK, &headers);
 
+        assert_eq!(reset_at, None);
         assert_eq!(client.get_last_rate_limit_reset(), None);
     }
 
