@@ -96,7 +96,11 @@ async fn spawns_without_backend_app_emitter() {
 
 #[tokio::test]
 async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering() {
-    let (state, _temp_dir) = test_state("app_invoke_ghostty_snapshot");
+    let (mut state, _temp_dir) = test_state("app_invoke_ghostty_snapshot");
+    // Raw and model PTY chunks share this receiver. Size this test-local channel for the
+    // bounded shell exchange so an unrelated burst cannot evict the event under test.
+    let (app_event_tx, _) = tokio::sync::broadcast::channel(1_024);
+    state.app_event_tx = Some(app_event_tx);
     invoke_ok(
         &state,
         "set_config",
@@ -137,6 +141,14 @@ async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering
         .as_ref()
         .expect("event sender")
         .subscribe();
+    // Exceed the shared fixture's 16-event capacity to reproduce the former CI failure.
+    for sequence in 0..32 {
+        crate::app_events::publish_app_event(
+            &state.app_event_tx,
+            "unrelated-test-event",
+            &json!({ "sequence": sequence }),
+        );
+    }
     const IMAGE_SEQUENCE: &str =
         "\u{1b}]1337;File=size=34;inline=1:R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==\u{7}";
     let print_image =
