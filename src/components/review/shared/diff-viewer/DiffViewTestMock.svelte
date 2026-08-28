@@ -2,10 +2,12 @@
   type WidgetConfig = {
     lineNumber: number
     side: number
+    initiallyOpen?: boolean
   }
 
   type Props = {
     diffFile?: unknown
+    onAddWidgetClick?: (lineNumber: number, side: number) => void
     renderWidgetLine?: (props: {
       lineNumber: number
       side: number
@@ -14,7 +16,11 @@
     }) => unknown
   }
 
-  let { diffFile, renderWidgetLine }: Props = $props()
+  const initialWidgetConfig = (globalThis as typeof globalThis & {
+    __diffViewerTestWidget?: WidgetConfig
+  }).__diffViewerTestWidget
+  let { diffFile, onAddWidgetClick, renderWidgetLine }: Props = $props()
+  let widgetOpen = $state(initialWidgetConfig?.initiallyOpen !== false)
 
   const widgetConfig = $derived((globalThis as typeof globalThis & {
     __diffViewerTestWidget?: WidgetConfig
@@ -22,12 +28,22 @@
 </script>
 
 <div data-testid="mock-diff-view">
-  {#if widgetConfig && renderWidgetLine}
+  {#if widgetConfig?.initiallyOpen === false}
+    <button
+      type="button"
+      aria-label="Add comment to source diff line {widgetConfig.lineNumber}"
+      onmousedown={() => {
+        onAddWidgetClick?.(widgetConfig.lineNumber, widgetConfig.side)
+        widgetOpen = true
+      }}
+    >+</button>
+  {/if}
+  {#if widgetConfig && widgetOpen && renderWidgetLine}
     {@render renderWidgetLine({
       lineNumber: widgetConfig.lineNumber,
       side: widgetConfig.side,
       diffFile,
-      onClose: () => {},
+      onClose: () => { widgetOpen = false },
     })}
   {/if}
 </div>

@@ -7,7 +7,7 @@ const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
 
 declare global {
   // eslint-disable-next-line no-var
-  var __diffViewerTestWidget: { lineNumber: number; side: number } | undefined
+  var __diffViewerTestWidget: { lineNumber: number; side: number; initiallyOpen?: boolean } | undefined
 }
 
 vi.mock('@git-diff-view/svelte', async () => {

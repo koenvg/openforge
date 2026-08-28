@@ -116,6 +116,21 @@ describe('DiffViewer inline textarea drafts', () => {
     globalThis.__diffViewerTestWidget = { lineNumber, side }
   }
 
+
+  it('focuses the inline comment textarea after the source diff add button finishes handling its press', async () => {
+    globalThis.__diffViewerTestWidget = { lineNumber: 2, side: 2, initiallyOpen: false }
+    render(DiffViewer, { props: { files: [modifiedFileWithPatch] } })
+
+    const addComment = await screen.findByRole('button', { name: 'Add comment to source diff line 2' })
+    await fireEvent.mouseDown(addComment)
+    addComment.focus()
+    expect(document.activeElement).toBe(addComment)
+
+    const textarea = await screen.findByRole('textbox', { name: 'Inline review comment for src/test.ts line 2' })
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    expect(document.activeElement).toBe(textarea)
+  })
   it('restores an open self-review inline textarea draft after the diff viewer remounts', async () => {
     renderOpenInlineWidget(2, 2)
     const firstRender = render(DiffViewer, {

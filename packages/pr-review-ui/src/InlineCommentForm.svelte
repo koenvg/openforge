@@ -35,7 +35,12 @@
   const helpId = $derived(`inline-comment-help-${filename.replace(/[^a-zA-Z0-9_-]/g, '-')}-${lineNumber}-${String(side).replace(/[^a-zA-Z0-9_-]/g, '-')}`)
 
   function autofocus(node: HTMLElement) {
-    node.focus()
+    const frame = requestAnimationFrame(() => node.focus())
+    return {
+      destroy() {
+        cancelAnimationFrame(frame)
+      },
+    }
   }
 </script>
 
@@ -64,6 +69,12 @@
         onTextChange(event.currentTarget.value)
       }}
       onkeydown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          onCancel()
+          return
+        }
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault()
           onSubmit()
