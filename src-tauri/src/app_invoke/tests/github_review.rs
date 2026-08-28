@@ -451,3 +451,145 @@ async fn handles_db_backed_commands_and_events() {
         "Authored by me"
     );
 }
+
+#[tokio::test]
+#[ignore = "known bug KVG-4224"]
+async fn linking_rejects_a_well_formed_url_for_a_nonexistent_pull_request() {
+    let (state, _temp_dir) = test_state("app_invoke_link_nonexistent_pr");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Reject nonexistent PR", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    invoke(
+        &state,
+        "link_pull_request",
+        json!({
+            "taskId": task_id,
+            "prUrl": "https://github.com/owner/repo/pull/999999999",
+        }),
+    )
+    .await
+    .expect_err("a nonexistent pull request must not be persisted");
+}
+
+#[tokio::test]
+#[ignore = "known bug KVG-4224"]
+async fn linking_a_pull_request_to_another_task_does_not_remove_the_original_link() {
+    let (state, _temp_dir) = test_state("app_invoke_link_pr_to_two_tasks");
+    let (original_task_id, other_task_id) = {
+        let db = state.db.lock().expect("db lock");
+        let original = db
+            .create_task("Original PR task", "doing", None, None, None)
+            .expect("create original task");
+        let other = db
+            .create_task("Other PR task", "doing", None, None, None)
+            .expect("create other task");
+        (original.id, other.id)
+    };
+    let pr_url = "https://github.com/owner/repo/pull/77";
+
+    invoke_ok(
+        &state,
+        "link_pull_request",
+        json!({ "taskId": original_task_id, "prUrl": pr_url }),
+    )
+    .await;
+    let _second_link = invoke(
+        &state,
+        "link_pull_request",
+        json!({ "taskId": other_task_id, "prUrl": pr_url }),
+    )
+    .await;
+
+    let original_pull_requests = invoke_ok(
+        &state,
+        "get_pull_requests",
+        json!({ "taskId": original_task_id }),
+    )
+    .await;
+    assert_eq!(
+        original_pull_requests.as_array().map(Vec::len),
+        Some(1),
+        "linking elsewhere must not silently remove the original Task association"
+    );
+}
+
+#[tokio::test]
+#[ignore = "known bug KVG-4224"]
+async fn linking_accepts_a_case_insensitive_github_hostname() {
+    let (state, _temp_dir) = test_state("app_invoke_link_mixed_case_host");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Mixed-case GitHub host", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    invoke(
+        &state,
+        "link_pull_request",
+        json!({
+            "taskId": task_id,
+            "prUrl": "https://GitHub.com/owner/repo/pull/77",
+        }),
+    )
+    .await
+    .expect("DNS hostnames are case-insensitive");
+}
+
+#[tokio::test]
+#[ignore = "known bug KVG-4224"]
+async fn linking_repository_paths_with_different_case_does_not_duplicate_the_pull_request() {
+    let (state, _temp_dir) = test_state("app_invoke_link_mixed_case_repo");
+    let task_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_task("Mixed-case repository", "doing", None, None, None)
+            .expect("create task")
+            .id
+    };
+
+    invoke_ok(
+        &state,
+        "link_pull_request",
+        json!({
+            "taskId": task_id,
+            "prUrl": "https://github.com/owner/repo/pull/77",
+        }),
+    )
+    .await;
+    invoke_ok(
+        &state,
+        "link_pull_request",
+        json!({
+            "taskId": task_id,
+            "prUrl": "https://github.com/Owner/Repo/pull/77",
+        }),
+    )
+    .await;
+
+    let pull_requests = invoke_ok(&state, "get_pull_requests", json!({ "taskId": task_id })).await;
+    assert_eq!(
+        pull_requests.as_array().map(Vec::len),
+        Some(1),
+        "GitHub owner and repository identity is case-insensitive"
+    );
+}
+
+#[tokio::test]
+#[ignore = "known bug KVG-4224"]
+async fn marking_a_nonexistent_comment_addressed_returns_not_found() {
+    let (state, _temp_dir) = test_state("app_invoke_mark_missing_comment_addressed");
+
+    let error = invoke(
+        &state,
+        "mark_comment_addressed",
+        json!({ "commentId": 999999 }),
+    )
+    .await
+    .expect_err("a missing comment must not report a successful update");
+
+    assert_eq!(error.0, StatusCode::NOT_FOUND);
+}
