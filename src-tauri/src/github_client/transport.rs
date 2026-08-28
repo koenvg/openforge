@@ -29,9 +29,8 @@ impl GitHubClient {
             .map_err(|error| GitHubError::NetworkError(error.to_string()))?;
 
         if let Some(reset_at) =
-            Self::rate_limit_reset_from_headers(response.status(), response.headers())
+            self.capture_rate_limit_reset_from_headers(response.status(), response.headers())
         {
-            self.capture_rate_limit_reset_from_headers(response.status(), response.headers());
             warn!(
                 "{}",
                 Self::format_rate_limit_log_message(
