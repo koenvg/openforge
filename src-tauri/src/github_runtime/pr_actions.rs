@@ -11,7 +11,6 @@ struct GitHubPrLink {
     owner: String,
     repo: String,
     number: i64,
-    normalized_url: String,
 }
 
 pub fn get_pull_requests(db: &Arc<Mutex<db::Database>>) -> Result<Vec<db::PrRow>, String> {
@@ -43,13 +42,18 @@ pub fn get_pr_comments(
 
 fn parse_github_pr_url(pr_url: &str) -> Result<GitHubPrLink, String> {
     let trimmed = pr_url.trim();
-    let without_scheme = trimmed
-        .strip_prefix("https://")
-        .or_else(|| trimmed.strip_prefix("http://"))
+    let (scheme, remainder) = trimmed
+        .split_once("://")
         .ok_or_else(|| "Invalid pull request URL: expected a GitHub PR URL".to_string())?;
-    let without_host = without_scheme
-        .strip_prefix("github.com/")
+    if !scheme.eq_ignore_ascii_case("https") && !scheme.eq_ignore_ascii_case("http") {
+        return Err("Invalid pull request URL: expected a GitHub PR URL".to_string());
+    }
+    let (host, without_host) = remainder
+        .split_once('/')
         .ok_or_else(|| "Invalid pull request URL: expected github.com".to_string())?;
+    if !host.eq_ignore_ascii_case("github.com") {
+        return Err("Invalid pull request URL: expected github.com".to_string());
+    }
     let path = without_host
         .split(['?', '#'])
         .next()
@@ -77,7 +81,6 @@ fn parse_github_pr_url(pr_url: &str) -> Result<GitHubPrLink, String> {
     }
 
     Ok(GitHubPrLink {
-        normalized_url: format!("https://github.com/{owner}/{repo}/pull/{number}"),
         owner,
         repo,
         number,
@@ -87,7 +90,12 @@ fn parse_github_pr_url(pr_url: &str) -> Result<GitHubPrLink, String> {
 fn synthetic_pr_id(link: &GitHubPrLink) -> i64 {
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
-    let key = format!("{}/{}/{}", link.owner, link.repo, link.number);
+    let key = format!(
+        "{}/{}/{}",
+        link.owner.to_ascii_lowercase(),
+        link.repo.to_ascii_lowercase(),
+        link.number
+    );
     let hash = key.as_bytes().iter().fold(FNV_OFFSET, |acc, byte| {
         (acc ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
     });
@@ -95,50 +103,72 @@ fn synthetic_pr_id(link: &GitHubPrLink) -> i64 {
     -(positive as i64)
 }
 
-pub fn link_pull_request(
+pub async fn link_pull_request(
     db: &Arc<Mutex<db::Database>>,
+    github_client: &GitHubClient,
     task_id: &str,
     pr_url: &str,
 ) -> Result<db::PrRow, String> {
     let link = parse_github_pr_url(pr_url)?;
     let now = current_unix_timestamp()?;
 
-    let db_lock = crate::db::acquire_db(db);
-    if db_lock
-        .get_task(task_id)
-        .map_err(|e| format!("Failed to find task: {e}"))?
-        .is_none()
-    {
-        return Err(format!("Task not found: {task_id}"));
+    let existing_pr = {
+        let db_lock = crate::db::acquire_db(db);
+        if db_lock
+            .get_task(task_id)
+            .map_err(|e| format!("Failed to find task: {e}"))?
+            .is_none()
+        {
+            return Err(format!("Task not found: {task_id}"));
+        }
+        db_lock
+            .get_all_pull_requests()
+            .map_err(|e| format!("Failed to read existing pull requests: {e}"))?
+            .into_iter()
+            .find(|pr| {
+                pr.repo_owner.eq_ignore_ascii_case(&link.owner)
+                    && pr.repo_name.eq_ignore_ascii_case(&link.repo)
+                    && pr.pr_number == link.number
+            })
+    };
+
+    if let Some(existing_pr) = &existing_pr {
+        if existing_pr.ticket_id != task_id {
+            return Err(format!(
+                "Pull request is already linked to task {}",
+                existing_pr.ticket_id
+            ));
+        }
     }
 
-    let existing_pr = db_lock
-        .get_all_pull_requests()
-        .map_err(|e| format!("Failed to read existing pull requests: {e}"))?
-        .into_iter()
-        .find(|pr| {
-            pr.repo_owner == link.owner && pr.repo_name == link.repo && pr.pr_number == link.number
-        });
+    let token = github_client
+        .github_token()
+        .await
+        .map_err(|e| format!("Failed to get GitHub token: {e}"))?
+        .ok_or_else(|| "GitHub token not configured".to_string())?;
+    let details = github_client
+        .get_pr_details(&link.owner, &link.repo, link.number, &token)
+        .await
+        .map_err(|error| match error {
+            crate::github_client::GitHubError::ApiError { status: 404, .. } => {
+                "Pull request not found or inaccessible".to_string()
+            }
+            crate::github_client::GitHubError::ApiError { status: 401, .. } => {
+                "GitHub authentication failed while loading pull request".to_string()
+            }
+            error => format!("Failed to load pull request from GitHub: {error}"),
+        })?;
 
-    let row_id = existing_pr
-        .as_ref()
-        .map(|pr| pr.id)
+    let row_id = details
+        .extra
+        .get("id")
+        .and_then(serde_json::Value::as_i64)
+        .or_else(|| existing_pr.as_ref().map(|pr| pr.id))
         .unwrap_or_else(|| synthetic_pr_id(&link));
-    let title = existing_pr
-        .as_ref()
-        .map(|pr| pr.title.clone())
-        .unwrap_or_else(|| format!("{}/{}#{}", link.owner, link.repo, link.number));
-    let url = existing_pr
-        .as_ref()
-        .map(|pr| pr.url.clone())
-        .unwrap_or_else(|| link.normalized_url.clone());
-    let state = existing_pr
-        .as_ref()
-        .map(|pr| pr.state.clone())
-        .unwrap_or_else(|| "open".to_string());
     let created_at = existing_pr.as_ref().map(|pr| pr.created_at).unwrap_or(now);
-    let draft = existing_pr.as_ref().map(|pr| pr.draft).unwrap_or(false);
+    let draft = details.draft.unwrap_or(false);
 
+    let db_lock = crate::db::acquire_db(db);
     db_lock
         .insert_pull_request_with_number(
             row_id,
@@ -146,14 +176,24 @@ pub fn link_pull_request(
             task_id,
             &link.owner,
             &link.repo,
-            &title,
-            &url,
-            &state,
+            &details.title,
+            &details.html_url,
+            &details.state,
             created_at,
             now,
             draft,
         )
         .map_err(|e| format!("Failed to link pull request: {e}"))?;
+    db_lock
+        .update_pr_head_sha(row_id, &details.head.sha)
+        .map_err(|e| format!("Failed to persist linked pull request head: {e}"))?;
+    db_lock
+        .update_pr_mergeability(
+            row_id,
+            details.mergeable,
+            details.mergeable_state.as_deref(),
+        )
+        .map_err(|e| format!("Failed to persist linked pull request mergeability: {e}"))?;
 
     db_lock
         .get_all_pull_requests()
@@ -284,13 +324,22 @@ pub async fn merge_task_pull_request(
     }
 
     let db_lock = crate::db::acquire_db(db);
-    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Merge)?;
+    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Merge)
+        .map_err(|e| {
+            format!("Pull request merged on GitHub, but local state could not be updated: {e}")
+        })?;
     db_lock
         .get_pull_requests_for_task(task_id)
-        .map_err(|e| format!("Failed to read merged pull request: {e}"))?
+        .map_err(|e| {
+            format!(
+                "Pull request merged on GitHub, but local state could not be updated: failed to read local state: {e}"
+            )
+        })?
         .into_iter()
         .find(|row| row.id == pr_id)
-        .ok_or_else(|| "Merged pull request disappeared from local state".to_string())
+        .ok_or_else(|| {
+            "Pull request merged on GitHub, but local state could not be updated: pull request disappeared from local state".to_string()
+        })
 }
 
 pub async fn enqueue_task_pull_request(
@@ -335,18 +384,54 @@ pub async fn enqueue_task_pull_request(
         .map_err(|e| format!("Failed to enqueue pull request: {e}"))?;
 
     let db_lock = crate::db::acquire_db(db);
-    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Enqueue)?;
+    persist_successful_task_pull_request_action(&db_lock, pr_id, TaskPullRequestAction::Enqueue)
+        .map_err(|e| {
+            format!("Pull request enqueued on GitHub, but local state could not be updated: {e}")
+        })?;
     db_lock
         .get_pull_requests_for_task(task_id)
-        .map_err(|e| format!("Failed to read queued pull request: {e}"))?
+        .map_err(|e| {
+            format!(
+                "Pull request enqueued on GitHub, but local state could not be updated: failed to read local state: {e}"
+            )
+        })?
         .into_iter()
         .find(|row| row.id == pr_id)
-        .ok_or_else(|| "Queued pull request disappeared from local state".to_string())
+        .ok_or_else(|| {
+            "Pull request enqueued on GitHub, but local state could not be updated: pull request disappeared from local state".to_string()
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use crate::db::test_helpers::make_test_db;
+
+    fn github_client_with_pull_request(number: i64, id: i64) -> crate::github_client::GitHubClient {
+        let pull_request = crate::github_client::PullRequest {
+            number,
+            title: "Fetched GitHub title".to_string(),
+            state: "open".to_string(),
+            html_url: format!("https://github.com/owner/repo/pull/{number}"),
+            user: crate::github_client::GitHubUser {
+                login: "octocat".to_string(),
+                extra: serde_json::json!({}),
+            },
+            head: crate::github_client::GitHubHead {
+                ref_name: "feature".to_string(),
+                sha: "head-sha".to_string(),
+                extra: serde_json::json!({}),
+            },
+            draft: Some(false),
+            mergeable: Some(true),
+            mergeable_state: Some("clean".to_string()),
+            extra: serde_json::json!({ "id": id }),
+        };
+        crate::github_client::GitHubClient::with_test_pull_requests(vec![(
+            "owner".to_string(),
+            "repo".to_string(),
+            pull_request,
+        )])
+    }
 
     #[test]
     fn parses_github_pull_request_url() {
@@ -358,35 +443,39 @@ mod tests {
         assert_eq!(parsed.owner, "openforge");
         assert_eq!(parsed.repo, "app");
         assert_eq!(parsed.number, 1431);
-        assert_eq!(
-            parsed.normalized_url,
-            "https://github.com/openforge/app/pull/1431"
-        );
     }
 
-    #[test]
-    fn link_pull_request_persists_synthetic_pr_for_task() {
+    #[tokio::test]
+    async fn link_pull_request_persists_verified_pr_for_task() {
         let (db, _temp_dir) = make_test_db("link_pull_request_persists");
         let task = db
             .create_task("Link a PR", "doing", None, None, None)
             .expect("create task");
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
+        let github_client = github_client_with_pull_request(77, 123456);
 
-        let pr = super::link_pull_request(&db, &task.id, "https://github.com/owner/repo/pull/77")
-            .expect("link PR");
+        let pr = super::link_pull_request(
+            &db,
+            &github_client,
+            &task.id,
+            "https://github.com/owner/repo/pull/77",
+        )
+        .await
+        .expect("link PR");
 
         assert_eq!(pr.ticket_id, task.id);
         assert_eq!(pr.repo_owner, "owner");
         assert_eq!(pr.repo_name, "repo");
         assert_eq!(pr.pr_number, 77);
-        assert!(pr.id < 0, "manual links use a synthetic negative row id");
-        assert_eq!(pr.title, "owner/repo#77");
+        assert_eq!(pr.id, 123456);
+        assert_eq!(pr.title, "Fetched GitHub title");
+        assert_eq!(pr.head_sha, "head-sha");
         assert_eq!(pr.state, "open");
     }
 
-    #[test]
-    fn link_pull_request_reuses_existing_pr_row_for_same_repository_number() {
-        let (db, _temp_dir) = make_test_db("link_pull_request_reuses_existing");
+    #[tokio::test]
+    async fn link_pull_request_rejects_a_pull_request_linked_to_another_task() {
+        let (db, _temp_dir) = make_test_db("link_pull_request_rejects_existing");
         let old_task = db
             .create_task("Old link", "doing", None, None, None)
             .expect("create old task");
@@ -408,14 +497,21 @@ mod tests {
         )
         .expect("insert existing PR");
         let db = std::sync::Arc::new(std::sync::Mutex::new(db));
+        let github_client = github_client_with_pull_request(77, 123456);
 
-        let pr =
-            super::link_pull_request(&db, &new_task.id, "https://github.com/owner/repo/pull/77")
-                .expect("link PR");
+        let error = super::link_pull_request(
+            &db,
+            &github_client,
+            &new_task.id,
+            "https://github.com/owner/repo/pull/77",
+        )
+        .await
+        .expect_err("a PR linked elsewhere must not be moved silently");
 
-        assert_eq!(pr.id, 123456);
-        assert_eq!(pr.ticket_id, new_task.id);
-        assert_eq!(pr.title, "Fetched GitHub title");
+        assert!(error.contains("already linked"));
+        let linked = super::get_pull_requests_for_task(&db, &old_task.id).expect("read old link");
+        assert_eq!(linked.len(), 1);
+        assert_eq!(linked[0].ticket_id, old_task.id);
     }
     #[test]
     fn successful_task_actions_persist_terminal_local_state() {
