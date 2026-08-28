@@ -1,6 +1,54 @@
 use super::*;
 
 #[tokio::test]
+async fn lists_filtered_agent_sessions_for_a_task() {
+    let (state, _temp_dir) = test_state("app_invoke_agent_session_history");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Usage attribution", "doing", None, None, None)
+            .expect("create Task");
+        for (id, provider) in [
+            ("old-pi", "pi"),
+            ("new-claude", "claude-code"),
+            ("new-pi", "pi"),
+        ] {
+            db.create_agent_session(id, &task.id, None, "implement", "completed", provider)
+                .expect("create Agent Session");
+        }
+        db.connection()
+            .lock()
+            .expect("lock connection")
+            .execute(
+                "UPDATE agent_sessions SET created_at = CASE id WHEN 'old-pi' THEN 100 WHEN 'new-pi' THEN 200 ELSE 300 END",
+                [],
+            )
+            .expect("adjust Agent Session timestamps");
+        task.id
+    };
+
+    let sessions = invoke_ok(
+        &state,
+        "get_agent_sessions",
+        json!({
+            "taskId": task_id,
+            "provider": "pi",
+            "createdAtOrAfter": 150,
+        }),
+    )
+    .await;
+
+    assert_eq!(
+        sessions
+            .as_array()
+            .expect("filtered Agent Sessions")
+            .iter()
+            .map(|session| session["id"].as_str().expect("Agent Session id"))
+            .collect::<Vec<_>>(),
+        vec!["new-pi"]
+    );
+}
+#[tokio::test]
 async fn handles_config_projects_tasks_and_unmatched_commands() {
     let (state, _temp_dir) = test_state("app_invoke_config_projects_tasks");
 

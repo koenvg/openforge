@@ -708,6 +708,15 @@ export class TaskFollowUpError extends Error {
   }
 }
 
+export interface ListTaskSessionsRequest {
+  taskId: string
+  /** Inclusive Unix timestamp in seconds. Omit to return the Task's full Agent Session history. */
+  createdAtOrAfter?: number
+  /** Open-ended provider identifier such as `pi`. Omit to include every provider. */
+  provider?: string
+}
+
+
 export interface TasksAPI {
   /**
    * Lists tasks, optionally scoped to a project. By default done tasks are
@@ -733,6 +742,8 @@ export interface TasksAPI {
   sendFollowUp(request: SendTaskFollowUpRequest): Promise<TaskFollowUpReceipt>
   getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession(taskId: string): Promise<AgentSession | null>
+  /** Returns matching Agent Sessions newest first. */
+  listSessions(request: ListTaskSessionsRequest): Promise<AgentSession[]>
 }
 
 export interface ProjectsAPI {

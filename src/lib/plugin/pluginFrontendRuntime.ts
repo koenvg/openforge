@@ -113,6 +113,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       sendFollowUp: unavailable('tasks.sendFollowUp'),
       getWorkspace: unavailable('tasks.getWorkspace'),
       getLatestSession: unavailable('tasks.getLatestSession'),
+      listSessions: unavailable('tasks.listSessions'),
     },
     projects: {
       list: unavailable('projects.list'),

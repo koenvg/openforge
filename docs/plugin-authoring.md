@@ -433,6 +433,25 @@ await openforge.tasks.configureStartPromptContribution({
 })
 ```
 
+
+To map provider sessions back to their authoritative OpenForge Task, query the Task's Agent Session history:
+
+```ts
+const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60
+const piSessions = await openforge.tasks.listSessions({
+  taskId: task.id,
+  provider: 'pi',
+  createdAtOrAfter: thirtyDaysAgo
+})
+
+for (const session of piSessions) {
+  if (session.pi_session_id) {
+    await attributePiUsage(task.id, session.pi_session_id)
+  }
+}
+```
+
+`listSessions` returns the existing public `AgentSession` structure, newest first. `ticket_id` contains the OpenForge Task ID; provider-specific identifiers include `pi_session_id`, `claude_session_id`, `opencode_session_id`, and `grok_session_id`. `createdAtOrAfter` is an inclusive Unix timestamp in seconds. Omit either optional filter to include every creation time or provider for that Task.
 Behavior and limits:
 
 - `projectId` is required for plugin-created Tasks.
@@ -444,7 +463,7 @@ Behavior and limits:
 - The host records the configuring plugin as the contribution owner. Contribution IDs are local to that owner, so two plugins may use the same ID without replacing each other.
 - An owned contribution is injected only while its plugin is installed and enabled for the Task's Project. Disabling or uninstalling the plugin suppresses injection without deleting the saved contribution; re-enabling, or reinstalling and then enabling, restores the saved configuration.
 - Starting an Implementation Run can fail when dependencies are unmet, an active Agent Session already exists, the Task/Project cannot be resolved, the checkout/workspace cannot be prepared, or the configured provider/PTY runtime is unavailable.
-- `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state.
+- `tasks.getWorkspace(taskId)` and `tasks.getLatestSession(taskId)` return `null` until OpenForge has recorded that state. `tasks.listSessions(...)` returns an empty array when no Agent Sessions match.
 
 ## Files, shell, notifications, and links
 
@@ -555,7 +574,7 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs`, `fsExternalReads`, and `fsExternalReadTextFileChunks`. Seed chunked reads with the `externalTextFiles` option. The fake splits seeded content on the same UTF-8 byte limit and honors `AbortSignal` cancellation.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs`, `fsExternalReads`, and `fsExternalReadTextFileChunks`. Seed chunked reads with the `externalTextFiles` option. The fake splits seeded content on the same UTF-8 byte limit and honors `AbortSignal` cancellation.
 
 ## Authoring checklist
 

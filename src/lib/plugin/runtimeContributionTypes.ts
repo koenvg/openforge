@@ -25,6 +25,7 @@ import type {
   FileContent,
   FileEntry,
   ImplementationRun,
+  ListTaskSessionsRequest,
   InjectionPointLocation,
   JsonSchema,
   OpenForgeNavigationRequest,
@@ -71,6 +72,7 @@ export type RuntimeHostBridge = {
   sendTaskFollowUp?(request: SendTaskFollowUpRequest): Promise<TaskFollowUpReceipt>
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
+  listTaskSessions?(request: ListTaskSessionsRequest): Promise<AgentSession[]>
   listCommandCatalog?(request?: { projectId?: string | null }): Promise<CommandInfo[]>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile?(request: { projectId: string; path: string }): Promise<FileContent>

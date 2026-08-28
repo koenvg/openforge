@@ -8,6 +8,7 @@ import type {
   FileContent,
   FileEntry,
   ImplementationRun,
+  ListTaskSessionsRequest,
   JsonValue,
   Project,
   ProjectAttention,
@@ -205,6 +206,7 @@ export function createBackendApi(
       sendFollowUp: async request => await hostCallback<TaskFollowUpReceipt>('openforge.tasks.sendFollowUp', objectCallbackParams(request)),
       getWorkspace: async (taskId: string) => await hostCallback<TaskWorkspaceInfo | null>('openforge.tasks.getWorkspace', { taskId }),
       getLatestSession: async (taskId: string) => await hostCallback<AgentSession | null>('openforge.tasks.getLatestSession', { taskId }),
+      listSessions: async (request: ListTaskSessionsRequest) => await hostCallback<AgentSession[]>('openforge.tasks.listSessions', objectCallbackParams(request)),
     },
     projects: {
       list: async () => await hostCallback<Project[]>('openforge.projects.list'),

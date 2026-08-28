@@ -149,6 +149,16 @@ export class TestingCommonApiFake {
         },
         getWorkspace: async () => null,
         getLatestSession: async () => null,
+        listSessions: async (request) => {
+          this.services.calls.taskSessionListRequests.push({ ...request })
+          return this.services.seededAgentSessions
+            .map((session, index) => ({ session, index }))
+            .filter(({ session }) => session.ticket_id === request.taskId)
+            .filter(({ session }) => request.provider === undefined || session.provider === request.provider)
+            .filter(({ session }) => request.createdAtOrAfter === undefined || session.created_at >= request.createdAtOrAfter)
+            .sort((left, right) => right.session.created_at - left.session.created_at || right.index - left.index)
+            .map(({ session }) => session)
+        },
       },
       projects: {
         list: async () => [],

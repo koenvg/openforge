@@ -234,6 +234,51 @@ describe('plugin SDK testing utilities', () => {
     ])
   })
 
+  it('lists every seeded Agent Session for a Task with optional provider and creation-time filters', async () => {
+    const session = (id: string, taskId: string, provider: string, createdAt: number) => ({
+      id,
+      ticket_id: taskId,
+      opencode_session_id: null,
+      stage: 'implementing',
+      status: 'completed',
+      checkpoint_data: null,
+      pty_instance_id: null,
+      error_message: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+      provider,
+      claude_session_id: null,
+      pi_session_id: provider === 'pi' ? `pi-${id}` : null,
+      grok_session_id: null,
+    })
+    const api = createMockFrontendOpenForgeApi({
+      pluginId: 'usage',
+      agentSessions: [
+        session('older-pi', 'T-1', 'pi', 100),
+        session('other-provider', 'T-1', 'claude-code', 300),
+        session('newer-pi', 'T-1', 'pi', 200),
+        session('other-task', 'T-2', 'pi', 400),
+      ],
+    })
+
+    await expect(api.tasks.listSessions({
+      taskId: 'T-1',
+      provider: 'pi',
+      createdAtOrAfter: 150,
+    })).resolves.toEqual([
+      session('newer-pi', 'T-1', 'pi', 200),
+    ])
+    await expect(api.tasks.listSessions({ taskId: 'T-1' })).resolves.toEqual([
+      session('other-provider', 'T-1', 'claude-code', 300),
+      session('newer-pi', 'T-1', 'pi', 200),
+      session('older-pi', 'T-1', 'pi', 100),
+    ])
+    expect(api.__testing.calls.taskSessionListRequests).toEqual([
+      { taskId: 'T-1', provider: 'pi', createdAtOrAfter: 150 },
+      { taskId: 'T-1' },
+    ])
+  })
+
   it('keeps agent access explicit and independent from user-facing command discovery', async () => {
     const registry = createOpenForgeRegistryFake({ pluginId: 'sync', projectId: 'P-1' })
 

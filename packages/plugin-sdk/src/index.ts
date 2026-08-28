@@ -75,6 +75,7 @@ export type {
   UserDataFileSystemAPI,
   UserDataFileWriteRequest,
   ImplementationRun,
+  ListTaskSessionsRequest,
   InjectionPointLocation,
   JsonObject,
   JsonPrimitive,

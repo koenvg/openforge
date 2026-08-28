@@ -1,4 +1,4 @@
-import type { TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
+import type { ListTaskSessionsRequest, TaskFollowUpReceipt } from '@openforge-app/plugin-sdk'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { AgentSession, AutocompleteAgentInfo, CommandInfo, ProviderModelInfo } from '../types'
 
@@ -12,6 +12,14 @@ export async function abortSession(sessionId: string): Promise<void> {
 
 export async function getLatestSession(taskId: string): Promise<AgentSession | null> {
   return invoke<AgentSession | null>("get_latest_session", { taskId });
+}
+
+export async function listAgentSessions(request: ListTaskSessionsRequest): Promise<AgentSession[]> {
+  return invoke<AgentSession[]>('get_agent_sessions', {
+    taskId: request.taskId,
+    provider: request.provider,
+    createdAtOrAfter: request.createdAtOrAfter,
+  })
 }
 
 export async function sendAgentFollowUp(taskId: string, message: string): Promise<TaskFollowUpReceipt> {

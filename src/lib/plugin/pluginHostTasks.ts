@@ -5,6 +5,7 @@ import type {
   ConfigureStartPromptContributionRequest,
   CreateTaskRequest,
   ImplementationRun,
+  ListTaskSessionsRequest,
   SendTaskFollowUpRequest,
   StartPromptContribution,
   StartTaskImplementationRequest,
@@ -14,6 +15,7 @@ import {
   createTask,
   getAllTasks,
   getLatestSession,
+  listAgentSessions,
   getProjectConfig,
   getProjects,
   getTaskDetail,
@@ -44,6 +46,7 @@ type TaskHostCapabilities = Required<Pick<RuntimeHostBridge,
   | 'sendTaskFollowUp'
   | 'getTaskWorkspace'
   | 'getLatestSession'
+  | 'listTaskSessions'
 >>
 
 function createTaskFromPluginRequest(request: CreateTaskRequest) {
@@ -220,6 +223,7 @@ export function createPluginTaskHostCapabilities(pluginId: string): TaskHostCapa
     sendTaskFollowUp: sendTaskFollowUpFromPluginRequest,
     getTaskWorkspace: (taskId) => getTaskWorkspace(taskId),
     getLatestSession: (taskId) => getLatestSession(taskId),
+    listTaskSessions: (request: ListTaskSessionsRequest) => listAgentSessions(request),
   }
 }
 

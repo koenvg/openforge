@@ -35,6 +35,33 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
             };
             json_value(session)
         }
+        "get_agent_sessions" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let provider = payload_optional_string(&request.payload, "provider")?;
+            let created_at_or_after = request
+                .payload
+                .get("createdAtOrAfter")
+                .filter(|value| !value.is_null())
+                .map(|_| payload_i64(&request.payload, "createdAtOrAfter"))
+                .transpose()?;
+            if created_at_or_after.is_some_and(|timestamp| timestamp < 0) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "createdAtOrAfter must be a non-negative Unix timestamp".to_string(),
+                ));
+            }
+            let sessions = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_agent_sessions_for_task(&task_id, provider.as_deref(), created_at_or_after)
+                    .map_err(|error| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get Agent Sessions: {error}"),
+                        )
+                    })?
+            };
+            json_value(sessions)
+        }
         "get_latest_sessions" => {
             let task_ids = payload_string_vec(&request.payload, "taskIds")?;
             let sessions = {

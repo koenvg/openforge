@@ -28,6 +28,21 @@ describe('RuntimeCommonApiRegistry', () => {
     await event.dispose()
     await command.dispose()
   })
+  it('forwards Task Agent Session history requests through the runtime host', async () => {
+    const sessions = [{ id: 'S-1', ticket_id: 'T-1', provider: 'pi', created_at: 200 }] as never
+    const listTaskSessions = vi.fn().mockResolvedValue(sessions)
+    const registry = new RuntimeCommonApiRegistry(new RuntimeRegistryServices({
+      pluginId: 'usage',
+      projectId: null,
+      host: { listTaskSessions },
+    }))
+    const api = registry.createApi()
+    const request = { taskId: 'T-1', provider: 'pi', createdAtOrAfter: 150 }
+
+    await expect(api.tasks.listSessions(request)).resolves.toEqual(sessions)
+    expect(listTaskSessions).toHaveBeenCalledWith(request)
+  })
+
 
   it('creates isolated capability facades over shared registry state', () => {
     const registry = new RuntimeCommonApiRegistry(

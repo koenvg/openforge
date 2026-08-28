@@ -267,6 +267,32 @@ impl super::Database {
         Ok(result)
     }
 
+    pub fn get_agent_sessions_for_task(
+        &self,
+        task_id: &str,
+        provider: Option<&str>,
+        created_at_or_after: Option<i64>,
+    ) -> Result<Vec<AgentSessionRow>> {
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS}
+               FROM agent_sessions
+              WHERE ticket_id = ?1
+                AND (?2 IS NULL OR provider = ?2)
+                AND (?3 IS NULL OR created_at >= ?3)
+              ORDER BY created_at DESC, rowid DESC"
+        ))?;
+        let rows = stmt.query_map(
+            rusqlite::params![task_id, provider, created_at_or_after],
+            agent_session_from_row,
+        )?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     pub fn get_agent_sessions_for_tickets(
         &self,
         ticket_ids: &[String],
@@ -705,6 +731,41 @@ mod tests {
         );
 
         drop(db);
+    }
+
+    #[test]
+    fn test_get_agent_sessions_for_task_filters_provider_and_creation_time() {
+        let (db, _temp_dir) = make_test_db("agent_sessions_for_task_filters");
+        insert_test_task(&db);
+
+        for (id, provider) in [
+            ("ses-old-pi", "pi"),
+            ("ses-claude", "claude-code"),
+            ("ses-new-pi", "pi"),
+        ] {
+            db.create_agent_session(id, "T-100", None, "implement", "completed", provider)
+                .expect("create Agent Session");
+        }
+        db.conn
+            .lock()
+            .expect("lock connection")
+            .execute(
+                "UPDATE agent_sessions SET created_at = CASE id WHEN 'ses-old-pi' THEN 100 WHEN 'ses-claude' THEN 300 ELSE 200 END",
+                [],
+            )
+            .expect("adjust created timestamps");
+
+        let sessions = db
+            .get_agent_sessions_for_task("T-100", Some("pi"), Some(150))
+            .expect("list filtered Agent Sessions");
+
+        assert_eq!(
+            sessions
+                .iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ses-new-pi"]
+        );
     }
 
     #[test]

@@ -30,6 +30,7 @@ impl PluginHost {
             "openforge.tasks.sendFollowUp" => self.send_task_follow_up_for_host(params).await,
             "openforge.tasks.getWorkspace" => self.get_task_workspace_for_host(params),
             "openforge.tasks.getLatestSession" => self.get_latest_session_for_host(params),
+            "openforge.tasks.listSessions" => self.list_task_sessions_for_host(params),
             "openforge.projects.list" => self.list_projects_for_host(),
             "openforge.projects.get" => self.get_project_for_host(params),
             "openforge.fs.readDir" => self.read_project_dir_for_host(params).await,
