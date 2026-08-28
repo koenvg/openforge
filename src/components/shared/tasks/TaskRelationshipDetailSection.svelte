@@ -38,7 +38,10 @@
   let titleSpanClass = $derived(isFull ? 'truncate min-w-0' : 'hidden')
   let idSpanClass = $derived(isFull ? 'font-mono shrink-0' : 'font-mono')
   let statusSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
-  const projectSpanClass = 'inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
+  let projectSpanClass = $derived(isDependencies
+    ? 'inline-flex shrink-0 items-center gap-1 border-l border-current/20 pl-1.5 font-semibold'
+    : 'inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-px font-semibold text-primary'
+  )
   let readinessSpanClass = $derived(isFull ? 'opacity-80 shrink-0' : 'opacity-80')
   let clickableBadgeClass = $derived(`${badgeClass} hover:brightness-95 cursor-pointer`)
   let dependencyLabel = $derived(isFull ? 'dependency' : 'dep')
@@ -68,7 +71,9 @@
   {#if item.projectName}
     <span class={projectSpanClass} title={`Other project: ${item.projectName}`}>
       <FolderKanban size={11} aria-hidden="true" />
-      <span class="uppercase tracking-wide opacity-70">{isFull ? 'Other project:' : 'Other:'}</span>
+      {#if !isDependencies}
+        <span class="uppercase tracking-wide opacity-70">{isFull ? 'Other project:' : 'Other:'}</span>
+      {/if}
       <span>{item.projectName}</span>
     </span>
   {/if}
