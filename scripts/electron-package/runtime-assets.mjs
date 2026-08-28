@@ -5,7 +5,10 @@ import { assertExists, pathExists } from './file-system.mjs'
 import { repoRootFromScript } from './repo-root.mjs'
 
 export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
-export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze(['es-module-lexer'])
+export const ELECTRON_APP_RUNTIME_DEPENDENCIES = Object.freeze([
+  '@openforge-app/plugin-sdk',
+  'es-module-lexer',
+])
 const OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE = 'runtime-assets.json'
 
 export function validateOpenForgeCliRuntimeAssetManifest(manifest, manifestPath = OPENFORGE_CLI_RUNTIME_ASSET_MANIFEST_FILE) {

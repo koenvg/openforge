@@ -1,5 +1,6 @@
 import { mkdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   APP_NAME,
@@ -40,7 +41,10 @@ async function writeElectronBuildOutputs(repoRoot) {
   await mkdir(join(repoRoot, 'dist'), { recursive: true })
   await writeFile(join(repoRoot, 'dist/index.html'), '<!doctype html>')
   await mkdir(join(repoRoot, 'dist-electron', 'plugin-host'), { recursive: true })
-  await writeFile(join(repoRoot, 'dist-electron/main.js'), 'console.log("main")')
+  await writeFile(
+    join(repoRoot, 'dist-electron/main.js'),
+    "import { classifyTaskBrowserDevToolsShortcut } from '@openforge-app/plugin-sdk/taskBrowserDevToolsShortcuts'\nexport { classifyTaskBrowserDevToolsShortcut }\n",
+  )
   await writeFile(join(repoRoot, 'dist-electron', 'plugin-host', 'index.js'), 'console.log("bundled backend plugin host")')
 }
 
@@ -58,6 +62,23 @@ async function writeElectronRuntimeDependencyArtifacts(repoRoot) {
     exports: './dist/lexer.js',
   }))
   await writeFile(join(dependencyRoot, 'dist', 'lexer.js'), 'export const init = Promise.resolve(); export function parse() { return [[]]; }\n')
+
+  const pluginSdkRoot = join(repoRoot, 'packages', 'plugin-sdk')
+  await mkdir(join(pluginSdkRoot, 'dist'), { recursive: true })
+  await writeFile(join(pluginSdkRoot, 'package.json'), JSON.stringify({
+    name: '@openforge-app/plugin-sdk',
+    version: '0.2.5',
+    type: 'module',
+    exports: {
+      './taskBrowserDevToolsShortcuts': './dist/taskBrowserDevToolsShortcuts.js',
+    },
+  }))
+  await writeFile(
+    join(pluginSdkRoot, 'dist', 'taskBrowserDevToolsShortcuts.js'),
+    'export function classifyTaskBrowserDevToolsShortcut() { return null; }\n',
+  )
+  await mkdir(join(repoRoot, 'node_modules', '@openforge-app'), { recursive: true })
+  await symlink(pluginSdkRoot, join(repoRoot, 'node_modules', '@openforge-app', 'plugin-sdk'))
 }
 
 async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName, pluginId = `com.openforge.${directoryName}`) {
@@ -441,7 +462,10 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readBuiltinPluginCatalog(root)).resolves.toEqual(builtInPluginCatalog)
 
     await packageElectronApp({ repoRoot: root })
-
+    const packagedElectronMain = await import(pathToFileURL(
+      join(output, 'Contents/Resources/app/dist-electron/main.js'),
+    ).href)
+    expect(packagedElectronMain.classifyTaskBrowserDevToolsShortcut).toBeTypeOf('function')
     await expect(stat(join(output, 'Contents/MacOS/Open Forge'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
@@ -465,13 +489,23 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
       main: 'dist-electron/main.js',
-      dependencies: { 'es-module-lexer': '2.1.0' },
+      dependencies: {
+        '@openforge-app/plugin-sdk': '0.2.5',
+        'es-module-lexer': '2.1.0',
+      },
     })
     await expect(readFile(join(output, 'Contents/Resources/app/node_modules/es-module-lexer/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
       name: 'es-module-lexer',
       version: '2.1.0',
     })
     await expect(readFile(join(output, 'Contents/Resources/app/node_modules/es-module-lexer/dist/lexer.js'), 'utf8')).resolves.toContain('parse')
+    await expect(readFile(join(output, 'Contents/Resources/app/node_modules/@openforge-app/plugin-sdk/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      name: '@openforge-app/plugin-sdk',
+      exports: {
+        './taskBrowserDevToolsShortcuts': './dist/taskBrowserDevToolsShortcuts.js',
+      },
+    })
+    await expect(readFile(join(output, 'Contents/Resources/app/node_modules/@openforge-app/plugin-sdk/dist/taskBrowserDevToolsShortcuts.js'), 'utf8')).resolves.toContain('classifyTaskBrowserDevToolsShortcut')
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>CFBundleIdentifier<\/key>\s*<string>com\.openforge\.app\.electron<\/string>/)
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>ApplePressAndHoldEnabled<\/key>\s*<false\/>/)
