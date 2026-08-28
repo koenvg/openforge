@@ -163,6 +163,18 @@ _Avoid_: Webhook service, hosted sync, GitHub polling when referring to the prod
 A product area whose language, contracts, and workflows belong to a **Trusted Plugin** rather than OpenForge core.
 _Avoid_: Core capability, host feature
 
+**File Viewer**:
+A **Trusted Plugin** for navigating a Project's repository files and inspecting the content of one selected file.
+_Avoid_: File Browser when referring to the whole plugin, File Editor
+
+**Project File Tree**:
+The hierarchical file navigation within the **File Viewer**.
+_Avoid_: File Browser when referring to the whole plugin, repository sidebar
+
+**File Preview**:
+The **File Viewer** presentation of a selected file's supported content and metadata.
+_Avoid_: File Editor, Diff File Section
+
 **Rust Sidecar**:
 The supervised Rust process that owns OpenForge backend domain logic for the Electron desktop app.
 _Avoid_: Tauri backend, `src-tauri`, backend service

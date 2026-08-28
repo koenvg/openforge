@@ -89,7 +89,7 @@
   }: Props = $props()
 </script>
 
-<div class="flex flex-1 min-h-0 overflow-hidden">
+<div class="flex flex-1 min-h-0 overflow-hidden bg-base-100">
   {#if !activeProjectId}
     <PluginViewState empty emptyTitle="Select a project to browse files" />
   {:else if loading}
@@ -104,8 +104,8 @@
   {:else}
     <ResizablePanel storageKey="files-tree" defaultWidth={240} side="left">
       <div class="flex h-full min-h-0 flex-col">
-        <div class="border-b border-base-300 p-2">
-          <label class="input input-bordered input-sm flex w-full items-center gap-2">
+        <div class="border-b border-base-300 bg-base-100 p-3">
+          <label class="input input-bordered input-sm flex h-9 min-h-9 w-full items-center gap-2 rounded-lg bg-base-100 transition-shadow focus-within:border-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/15">
             <Search size={16} class="shrink-0 text-base-content/50" />
             <input
               type="search"

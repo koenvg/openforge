@@ -410,13 +410,14 @@
   <PluginPageHeader
     title={`${projectName || 'Project'} — Files`}
     subtitle="Browse and preview project files"
+    surface="default"
   >
     {#snippet actions()}
       {#if hasLoaded && !loading}
         <div class="flex items-center gap-2 shrink-0">
           {#if hiddenRootEntryCount > 0}
             <button
-              class="btn btn-ghost btn-xs"
+              class="btn btn-outline btn-sm h-9 min-h-9 px-3 text-[13px] font-medium"
               type="button"
               onclick={toggleHiddenRootEntries}
               aria-pressed={showHiddenRootEntries}
@@ -424,7 +425,7 @@
               {showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`}
             </button>
           {/if}
-          <span class="badge badge-neutral badge-sm">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
+          <span class="badge badge-ghost badge-sm h-7 px-2.5 font-mono text-xs">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
         </div>
       {/if}
     {/snippet}

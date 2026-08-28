@@ -5,6 +5,8 @@
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import MarkdownFilePreview from './MarkdownFilePreview.svelte'
 
+  const RETURN_TO_TREE_BUTTON_CLASS = 'btn btn-outline btn-sm h-9 min-h-9 shrink-0 px-3 text-xs font-medium'
+
   interface Props {
     api: FrontendOpenForgeAPI
     content: FileContent | null
@@ -110,7 +112,7 @@
         <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
         <p class="text-sm text-base-content/70">Loading {fileName}…</p>
         {#if onReturnFocusToTree}
-          <button class="btn btn-ghost btn-xs" type="button" onclick={() => onReturnFocusToTree?.()}>
+          <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
             Return focus to selected file in tree
           </button>
         {/if}
@@ -132,7 +134,7 @@
             </button>
           {/if}
           {#if onReturnFocusToTree}
-            <button class="btn btn-ghost btn-xs" type="button" onclick={() => onReturnFocusToTree?.()}>
+            <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
               Return focus to selected file in tree
             </button>
           {/if}
@@ -141,25 +143,25 @@
     </div>
   {:else if content !== null}
     <div class="flex h-full min-h-0 flex-col">
-      <div class="shrink-0 border-b border-base-300 px-4 py-3 bg-base-100/70">
+      <div class="shrink-0 border-b border-base-300 bg-base-100 px-5 py-3">
         <div class="flex items-start justify-between gap-3">
-          <div class="text-sm font-medium text-base-content break-all">{fileName}</div>
+          <div class="text-base font-semibold tracking-tight text-base-content break-all">{fileName}</div>
           {#if onReturnFocusToTree}
-            <button class="btn btn-ghost btn-xs shrink-0" type="button" onclick={() => onReturnFocusToTree?.()}>
+            <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
               Return focus to selected file in tree
             </button>
           {/if}
         </div>
-        <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-base-content/60">
+        <div class="mt-1.5 flex flex-wrap items-center gap-y-1 text-xs text-base-content/60">
           <span>{formatFileSize(content.size)}</span>
           {#if content.mimeType}
-            <span class="font-mono">{content.mimeType}</span>
+            <span class="ml-3 border-l border-base-300 pl-3 font-mono">{content.mimeType}</span>
           {/if}
           {#if lineCount !== null}
-            <span>{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
+            <span class="ml-3 border-l border-base-300 pl-3">{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
           {/if}
           {#if modifiedAt !== null}
-            <span>Modified {formatModifiedAt(modifiedAt)}</span>
+            <span class="ml-3 border-l border-base-300 pl-3">Modified {formatModifiedAt(modifiedAt)}</span>
           {/if}
         </div>
       </div>
