@@ -1,6 +1,7 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
 import { createPluginHostRuntime } from './index'
-import { expectOnlyPluginHostStderr, writeBackendModule } from './backend-module.test-fixtures'
+import { expectOnlyPluginHostStderr, unicodeLineSeparatorFixturePath, writeBackendModule } from './backend-module.test-fixtures'
 
 describe('plugin-host backend host APIs', () => {
   it('routes backend task APIs through host callbacks and normalizes implementation runs', async () => {
@@ -131,6 +132,7 @@ describe('plugin-host backend host APIs', () => {
   })
 
   it('routes backend user data and external read roots through host callbacks with plugin identity', async () => {
+    const sessionFixture = await readFile(unicodeLineSeparatorFixturePath, 'utf8')
     const backendPath = await writeBackendModule(`
       export default {
         async activate(openforge, context) {
@@ -144,7 +146,7 @@ describe('plugin-host backend host APIs', () => {
               for await (const chunk of openforge.fs.external.readTextFileChunks({
                 root: '/Users/test/.pi/agent/sessions',
                 path: '2026/session.jsonl',
-                chunkSizeBytes: 4
+                chunkSizeBytes: 1024
               })) {
                 streamedSession += chunk
               }
@@ -159,30 +161,134 @@ describe('plugin-host backend host APIs', () => {
       calls.push(request)
       if (request.method === 'openforge.fs.userData.readTextFile') return '{"runs":1}'
       if (request.method === 'openforge.fs.userData.writeTextFile') return null
-      if (request.method === 'openforge.fs.external.readDir') return [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }]
-      if (request.method === 'openforge.fs.external.readTextFile') return '{}\n'
+      if (request.method === 'openforge.fs.external.readDir') {
+        return [{
+          name: 'session.jsonl',
+          path: '2026/session.jsonl',
+          isDir: false,
+          size: Buffer.byteLength(sessionFixture),
+          modifiedAt: null,
+        }]
+      }
+      if (request.method === 'openforge.fs.external.readTextFile') return sessionFixture
       if (request.method === 'openforge.fs.external.readTextFileChunk') {
-        return request.params.offset === 0
-          ? { content: '{}\n', nextOffset: 3, eof: false }
-          : { content: 'x\n', nextOffset: 5, eof: true }
+        return {
+          content: sessionFixture,
+          nextOffset: Buffer.byteLength(sessionFixture),
+          eof: true,
+        }
       }
       throw new Error(`unexpected host callback: ${request.method}`)
     }
 
     await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({ pluginId: 'skill-usage', backendPath, command: 'filesystemApis' })).resolves.toEqual({
       userData: '{"runs":1}',
-      sessions: [{ name: 'session.jsonl', path: '2026/session.jsonl', isDir: false, size: 12, modifiedAt: null }],
-      session: '{}\n',
-      streamedSession: '{}\nx\n',
+      sessions: [{
+        name: 'session.jsonl',
+        path: '2026/session.jsonl',
+        isDir: false,
+        size: Buffer.byteLength(sessionFixture),
+        modifiedAt: null,
+      }],
+      session: sessionFixture,
+      streamedSession: sessionFixture,
     })
     expect(calls).toEqual([
       { method: 'openforge.fs.userData.readTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json' } },
       { method: 'openforge.fs.userData.writeTextFile', params: { pluginId: 'skill-usage', path: 'telemetry/usage.json', content: '{"runs":2}' } },
       { method: 'openforge.fs.external.readDir', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026' } },
       { method: 'openforge.fs.external.readTextFile', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl' } },
-      { method: 'openforge.fs.external.readTextFileChunk', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl', offset: 0, maxBytes: 4 } },
-      { method: 'openforge.fs.external.readTextFileChunk', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl', offset: 3, maxBytes: 4 } },
+      { method: 'openforge.fs.external.readTextFileChunk', params: { pluginId: 'skill-usage', root: '/Users/test/.pi/agent/sessions', path: '2026/session.jsonl', offset: 0, maxBytes: 1024 } },
     ])
+  })
+
+  it('cancels an in-flight external text chunk callback when iteration is aborted', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('read', {
+            async handler() {
+              const controller = new AbortController()
+              queueMicrotask(() => controller.abort(new Error('stream cancelled')))
+              for await (const chunk of openforge.fs.external.readTextFileChunks({
+                root: '/tmp',
+                path: 'session.jsonl',
+                signal: controller.signal
+              })) {
+                void chunk
+              }
+            }
+          }))
+        }
+      }
+    `)
+    let callbackSignal: AbortSignal | undefined
+    const hostCallbacks = (_request: unknown, options?: { signal?: AbortSignal }) => {
+      callbackSignal = options?.signal
+      return new Promise<never>(() => undefined)
+    }
+
+    await expectOnlyPluginHostStderr([
+      '[plugin:cancellable-reader] handler error in cancellable-reader.read: stream cancelled',
+    ], async () => {
+      await expect(createPluginHostRuntime({ hostCallbacks }).invokeBackend({
+        pluginId: 'cancellable-reader',
+        backendPath,
+        command: 'read',
+      })).rejects.toThrow('stream cancelled')
+    })
+    expect(callbackSignal?.aborted).toBe(true)
+  })
+
+  it('times out a stuck external text callback without leaving background startup pending', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.background.register({
+            id: 'transcript-index',
+            scope: 'global',
+            async start() {
+              await openforge.fs.external.readTextFile({ root: '/tmp', path: 'session.jsonl' })
+            }
+          }))
+        }
+      }
+    `)
+    let callbackSignal: AbortSignal | undefined
+    const hostCallbacks = (_request: unknown, options?: { signal?: AbortSignal }) => {
+      callbackSignal = options?.signal
+      return new Promise<never>(() => undefined)
+    }
+    const runtime = createPluginHostRuntime({
+      hostCallbacks,
+      externalTextFileReadTimeoutMs: 20,
+    })
+    const timeoutMessage = 'OpenForge external text file host callback timed out after 20ms: openforge.fs.external.readTextFile'
+
+    await expectOnlyPluginHostStderr([
+      `[plugin:stuck-reader] background service start error in stuck-reader.transcript-index: ${timeoutMessage}`,
+      `[plugin:stuck-reader] activation error: ${timeoutMessage}`,
+    ], async () => {
+      const activation = runtime.activateBackend({ pluginId: 'stuck-reader', backendPath })
+      let guardTimeout: ReturnType<typeof setTimeout> | undefined
+      try {
+        const guardedActivation = Promise.race([
+          activation,
+          new Promise<never>((_resolve, reject) => {
+            guardTimeout = setTimeout(() => reject(new Error('test guard: activation remained pending')), 250)
+          }),
+        ])
+        await expect(guardedActivation).rejects.toThrow(timeoutMessage)
+      } finally {
+        if (guardTimeout) clearTimeout(guardTimeout)
+      }
+    })
+
+    expect(callbackSignal?.aborted).toBe(true)
+    await expect(runtime.getBackendState('stuck-reader')).resolves.toMatchObject({
+      state: 'error',
+      backgroundServices: [],
+    })
   })
 
   it('routes remaining backend core OpenForge APIs through durable host callbacks', async () => {

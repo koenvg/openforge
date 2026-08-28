@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, realpath } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { describe, expect, it } from 'vitest'
 import { buildBackendPluginHostRuntime } from '../../scripts/electron-build.mjs'
 import { createPluginHostRuntime } from './index'
-import { writeBackendModule } from './backend-module.test-fixtures'
+import { unicodeLineSeparatorFixturePath, writeBackendModule } from './backend-module.test-fixtures'
 
 describe('plugin-host JSON-RPC and stdio transport', () => {
   it('services independent stdio requests concurrently', async () => {
@@ -80,6 +80,112 @@ describe('plugin-host JSON-RPC and stdio transport', () => {
     }
   })
 
+  it('completes external text reads and propagates errors through the built stdio host', async () => {
+    const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-fs-'))
+    const hostPath = await realpath(await buildBackendPluginHostRuntime(process.cwd(), hostOutDir))
+    const fixture = await readFile(unicodeLineSeparatorFixturePath, 'utf8')
+    const fixtureBytes = Buffer.byteLength(fixture)
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('read', {
+            async handler(input) {
+              if (input.fail) {
+                return await openforge.fs.external.readTextFile({ root: '/tmp', path: 'error.jsonl' })
+              }
+              const whole = await openforge.fs.external.readTextFile({ root: '/tmp', path: 'fixture.jsonl' })
+              let streamed = ''
+              for await (const chunk of openforge.fs.external.readTextFileChunks({
+                root: '/tmp',
+                path: 'fixture.jsonl'
+              })) {
+                streamed += chunk
+              }
+              return {
+                wholeBytes: Buffer.byteLength(whole),
+                streamedBytes: Buffer.byteLength(streamed),
+                same: whole === streamed
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const child = spawn(process.execPath, [hostPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const lines = createInterface({ input: child.stdout })
+    const stderr: string[] = []
+    child.stderr.on('data', chunk => stderr.push(String(chunk)))
+
+    const responses = new Promise<Map<number, { result?: unknown; error?: { message: string } }>>((resolve, reject) => {
+      const completed = new Map<number, { result?: unknown; error?: { message: string } }>()
+      const responseTimeout = setTimeout(() => {
+        reject(new Error(`Timed out waiting for external text responses: ${stderr.join('')}`))
+      }, 2_000)
+
+      lines.on('line', (line) => {
+        const message = JSON.parse(line) as {
+          id?: number
+          method?: string
+          params?: { path?: string }
+          result?: unknown
+          error?: { message: string }
+        }
+        if (message.method === 'openforge.fs.external.readTextFile') {
+          const response = message.params?.path === 'error.jsonl'
+            ? { jsonrpc: '2.0', id: message.id, error: { code: -32603, message: 'fixture read failed' } }
+            : { jsonrpc: '2.0', id: message.id, result: fixture }
+          child.stdin.write(`${JSON.stringify(response)}\n`)
+          return
+        }
+        if (message.method === 'openforge.fs.external.readTextFileChunk') {
+          child.stdin.write(`${JSON.stringify({
+            jsonrpc: '2.0',
+            id: message.id,
+            result: { content: fixture, nextOffset: fixtureBytes, eof: true },
+          })}\n`)
+          return
+        }
+        if (message.id !== 101 && message.id !== 102) return
+        completed.set(message.id, { result: message.result, error: message.error })
+        if (completed.size === 2) {
+          clearTimeout(responseTimeout)
+          resolve(completed)
+        }
+      })
+      child.once('exit', (code) => {
+        if (completed.size < 2) {
+          clearTimeout(responseTimeout)
+          reject(new Error(`Plugin host exited with code ${code}: ${stderr.join('')}`))
+        }
+      })
+    })
+
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 101,
+      method: 'fixture-reader.read',
+      params: { pluginId: 'fixture-reader', backendPath, command: 'read', payload: { fail: false } },
+    })}\n`)
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 102,
+      method: 'fixture-reader.read',
+      params: { pluginId: 'fixture-reader', backendPath, command: 'read', payload: { fail: true } },
+    })}\n`)
+
+    try {
+      const completed = await responses
+      expect(completed.get(101)?.result).toEqual({
+        wholeBytes: fixtureBytes,
+        streamedBytes: fixtureBytes,
+        same: true,
+      })
+      expect(completed.get(102)?.error?.message).toBe('fixture read failed')
+    } finally {
+      lines.close()
+      child.kill()
+    }
+  })
   it('exposes backend readiness through explicit JSON-RPC state and whenReady methods without hijacking dotted plugin methods', async () => {
     const backendPath = await writeBackendModule(`
       export default {

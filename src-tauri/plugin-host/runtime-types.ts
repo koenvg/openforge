@@ -59,13 +59,20 @@ export type HostCallbackRequest = {
   method: string
   params: Record<string, unknown>
 }
+export type HostCallbackOptions = {
+  signal?: AbortSignal
+}
 
-export type HostCallbackHandler = (request: HostCallbackRequest) => Promise<unknown> | unknown
+export type HostCallbackHandler = (
+  request: HostCallbackRequest,
+  options?: HostCallbackOptions,
+) => Promise<unknown> | unknown
 
 export type RuntimeOptions = {
   crashLoopLimit?: number
   crashLoopWindowMs?: number
   hostCallbacks?: HostCallbackHandler
+  externalTextFileReadTimeoutMs?: number
 }
 
 export type ActivateBackendInput = {

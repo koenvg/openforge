@@ -1,7 +1,12 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, vi } from 'vitest'
+
+export const unicodeLineSeparatorFixturePath = fileURLToPath(
+  new URL('./fixtures/external-text-unicode-line-separator.jsonl', import.meta.url),
+)
 
 export async function writeBackendModule(source: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'openforge-plugin-host-'))
