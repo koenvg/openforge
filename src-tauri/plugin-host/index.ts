@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url'
 import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValidation'
 import type { AgentCommandDescriptor, CommandDescriptor, PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
-import { createBackendApi } from './backend-api'
+import { createBackendApi, DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS } from './backend-api'
 import { BackendLifecycle } from './backend-lifecycle'
 import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
 import { globalContributionRegistry } from './contribution-registry'
@@ -34,6 +34,7 @@ export class PluginHostRuntime {
       contributions: globalContributionRegistry,
       createBackendApi: state => createBackendApi(state, {
         hostCallbacks: this.hostCallbacks,
+        externalTextFileReadTimeoutMs: options.externalTextFileReadTimeoutMs ?? DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS,
         invokeCommand: input => this.invokeCommand(input),
         invokeGlobalCommand: (qualifiedId, payload, callerPluginId) => this.invokeGlobalCommand(qualifiedId, payload, callerPluginId),
         listCommands: () => this.listCommands(),

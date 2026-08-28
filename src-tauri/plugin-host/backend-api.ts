@@ -20,7 +20,7 @@ import type {
 } from '@openforge-app/plugin-sdk'
 import type { BackendOpenForgeAPI } from '@openforge-app/plugin-sdk/backend'
 import type { ContributionRegistry } from './contribution-registry'
-import type { HostCallbackHandler, InvokeBackendInput, RuntimeEventHandler, RuntimePluginState } from './runtime-types'
+import type { HostCallbackHandler, HostCallbackOptions, InvokeBackendInput, RuntimeEventHandler, RuntimePluginState } from './runtime-types'
 
 function requireImplementationRunString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.length > 0) return value
@@ -84,8 +84,72 @@ function validateExternalTextFileChunk(
     throw new Error('OpenForge host returned an invalid external text file chunk')
   }
 }
+
+export const DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS = 10_000
+
+type HostCallbackInvocationOptions = HostCallbackOptions & {
+  timeoutMs?: number
+  timeoutLabel?: string
+}
+
+function waitForHostCallback<T>(callback: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return callback
+  signal.throwIfAborted()
+
+  return new Promise<T>((resolve, reject) => {
+    const finish = (settle: () => void): void => {
+      signal.removeEventListener('abort', onAbort)
+      settle()
+    }
+    const onAbort = (): void => finish(() => {
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Host callback cancelled'))
+    })
+
+    signal.addEventListener('abort', onAbort, { once: true })
+    callback.then(
+      value => finish(() => resolve(value)),
+      error => finish(() => reject(error)),
+    )
+  })
+}
+
+async function invokeHostCallback<T>(
+  handler: HostCallbackHandler,
+  method: string,
+  params: Record<string, unknown>,
+  options?: HostCallbackInvocationOptions,
+): Promise<T> {
+  options?.signal?.throwIfAborted()
+  const timeoutMs = options?.timeoutMs
+  const timeoutController = timeoutMs === undefined ? null : new AbortController()
+  const forwardAbort = (): void => timeoutController?.abort(options?.signal?.reason)
+  const signal = timeoutController?.signal ?? options?.signal
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  if (timeoutController) {
+    if (timeoutMs === undefined || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('External text file read timeout must be a positive number')
+    }
+    options?.signal?.addEventListener('abort', forwardAbort, { once: true })
+    timeoutId = setTimeout(() => {
+      timeoutController.abort(new Error(
+        `${options?.timeoutLabel ?? 'OpenForge host callback'} timed out after ${timeoutMs}ms: ${method}`,
+      ))
+    }, timeoutMs)
+  }
+
+  try {
+    const callback = Promise.resolve(handler({ method, params }, signal ? { signal } : undefined)) as Promise<T>
+    return await waitForHostCallback(callback, signal)
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+    options?.signal?.removeEventListener('abort', forwardAbort)
+  }
+}
+
 export type BackendApiRuntime = {
   hostCallbacks: HostCallbackHandler | null
+  externalTextFileReadTimeoutMs: number
   invokeCommand(input: InvokeBackendInput): Promise<unknown>
   invokeGlobalCommand(qualifiedId: string, payload?: unknown, callerPluginId?: string): Promise<unknown>
   listCommands(): Promise<ReturnType<ContributionRegistry['listCommands']>>
@@ -96,11 +160,15 @@ export function createBackendApi(
   runtime: BackendApiRuntime,
   contributions: ContributionRegistry,
 ): BackendOpenForgeAPI {
-  const hostCallback = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+  const hostCallback = async <T>(
+    method: string,
+    params: Record<string, unknown> = {},
+    options?: HostCallbackInvocationOptions,
+  ): Promise<T> => {
     if (!runtime.hostCallbacks) {
       throw new Error(`OpenForge host capability is unavailable: ${method}`)
     }
-    return await runtime.hostCallbacks({ method, params }) as T
+    return await invokeHostCallback<T>(runtime.hostCallbacks, method, params, options)
   }
 
   const api: BackendOpenForgeAPI = {
@@ -154,7 +222,14 @@ export function createBackendApi(
       },
       external: {
         readDir: async request => await hostCallback<FileEntry[]>('openforge.fs.external.readDir', pluginFileCallbackParams(state.pluginId, request)),
-        readTextFile: async request => await hostCallback<string>('openforge.fs.external.readTextFile', pluginFileCallbackParams(state.pluginId, request)),
+        readTextFile: async request => await hostCallback<string>(
+          'openforge.fs.external.readTextFile',
+          pluginFileCallbackParams(state.pluginId, request),
+          {
+            timeoutMs: runtime.externalTextFileReadTimeoutMs,
+            timeoutLabel: 'OpenForge external text file host callback',
+          },
+        ),
         readTextFileChunks: (request) => {
           const chunkSizeBytes = resolveExternalTextFileChunkSize(request.chunkSizeBytes)
           const { root, path, signal } = request
@@ -165,6 +240,11 @@ export function createBackendApi(
               const chunk = await hostCallback<ExternalTextFileChunkResult>(
                 'openforge.fs.external.readTextFileChunk',
                 { pluginId: state.pluginId, root, path, offset, maxBytes: chunkSizeBytes },
+                {
+                  signal,
+                  timeoutMs: runtime.externalTextFileReadTimeoutMs,
+                  timeoutLabel: 'OpenForge external text file host callback',
+                },
               )
               signal?.throwIfAborted()
               validateExternalTextFileChunk(chunk, offset, chunkSizeBytes)
