@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { getPtyBuffer } from './ipc'
 import {
 	acquire,
 	attach,
@@ -285,6 +286,12 @@ describe("terminalPool attachment", () => {
 
 	it("terminal survives detach/re-attach cycle", async () => {
 		const entry = await acquire("task-13");
+		vi.mocked(getPtyBuffer).mockResolvedValueOnce({
+			buffer: null,
+			isLive: true,
+			instanceId: 42,
+			snapshot: { instanceId: 42, watermark: 0, data: btoa('') },
+		})
 		await markShellPtyStarted(entry, 42);
 		const wrapper1 = document.createElement("div");
 		const wrapper2 = document.createElement("div");
@@ -294,15 +301,15 @@ describe("terminalPool attachment", () => {
 		expect(entry.attached).toBe(true);
 
 		// Simulate pty output while attached
-		const outputCb = getListenCallback("pty-output-task-13");
-		outputCb({ payload: { data: "first output", instance_id: 42 } });
+		const outputCb = getListenCallback("pty-model-output-task-13");
+		outputCb({ payload: { data: btoa("first output"), instance_id: 42, sequence: 1 } });
 
 		detach(entry);
 		expect(entry.attached).toBe(false);
 
 		// Output while detached still writes to terminal
-		outputCb({ payload: { data: "background output", instance_id: 42 } });
-		expect(writeSpy).toHaveBeenCalledWith("background output", expect.any(Function));
+		outputCb({ payload: { data: btoa("background output"), instance_id: 42, sequence: 2 } });
+		expect(writeSpy).toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("background output")));
 
 		// Re-acquire returns same entry
 		const reacquired = await acquire("task-13");

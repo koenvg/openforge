@@ -8,7 +8,6 @@ const WRITE_QUEUE_CAPACITY: usize = 64;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum PtyWriteSource {
     UserInput,
-    XtermQueryResponse,
     GhosttyQueryResponse,
 }
 
@@ -16,7 +15,6 @@ impl std::fmt::Display for PtyWriteSource {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UserInput => formatter.write_str("user input"),
-            Self::XtermQueryResponse => formatter.write_str("xterm query response"),
             Self::GhosttyQueryResponse => formatter.write_str("Ghostty query response"),
         }
     }
@@ -149,20 +147,6 @@ impl OrderedPtyWriter {
             .write(session_key, instance_id, PtyWriteSource::UserInput, bytes)
     }
 
-    pub(super) fn write_xterm_query_response(
-        &self,
-        session_key: &str,
-        instance_id: u64,
-        bytes: &[u8],
-    ) -> Result<(), OrderedPtyWriteError> {
-        self.shared.write(
-            session_key,
-            instance_id,
-            PtyWriteSource::XtermQueryResponse,
-            bytes,
-        )
-    }
-
     pub(super) fn write_ghostty_query_response(
         &self,
         session_key: &str,
@@ -217,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn user_input_and_xterm_query_responses_are_serialized_as_distinct_writes() {
+    fn user_input_and_ghostty_query_responses_are_serialized_as_distinct_writes() {
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer = Arc::new(
             OrderedPtyWriter::start(
@@ -244,8 +228,8 @@ mod tests {
         let response = std::thread::spawn(move || {
             response_barrier.wait();
             response_writer
-                .write_xterm_query_response("task-shell-0", 41, b"response")
-                .expect("xterm query response should write");
+                .write_ghostty_query_response("task-shell-0", 41, b"response")
+                .expect("Ghostty query response should write");
         });
 
         barrier.wait();
@@ -259,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn stale_xterm_query_response_cannot_write_to_a_successor_instance() {
+    fn stale_ghostty_query_response_cannot_write_to_a_successor_instance() {
         let successor_bytes = Arc::new(Mutex::new(Vec::new()));
         let successor_writer = OrderedPtyWriter::start(
             "shared-shell".to_string(),
@@ -271,10 +255,10 @@ mod tests {
         .expect("successor ordered writer should start");
 
         assert!(successor_writer
-            .write_xterm_query_response("shared-shell", 10, b"stale")
+            .write_ghostty_query_response("shared-shell", 10, b"stale")
             .is_err());
         successor_writer
-            .write_xterm_query_response("shared-shell", 11, b"current")
+            .write_ghostty_query_response("shared-shell", 11, b"current")
             .expect("current query response should write");
 
         assert_eq!(

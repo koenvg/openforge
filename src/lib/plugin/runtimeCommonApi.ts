@@ -159,9 +159,6 @@ export class RuntimeCommonApiRegistry {
       shell: {
         spawn: async (request) => this.services.host.spawnShell ? this.services.host.spawnShell(request) : unavailableCapability('shell.spawn'),
         write: async (request) => this.services.host.writeShell ? this.services.host.writeShell(request) : unavailableCapability('shell.write'),
-        writeTerminalQueryResponse: async (request) => this.services.host.writeTerminalQueryResponse
-          ? this.services.host.writeTerminalQueryResponse(request)
-          : unavailableCapability('shell.writeTerminalQueryResponse'),
         resize: async (request) => this.services.host.resizeShell ? this.services.host.resizeShell(request) : unavailableCapability('shell.resize'),
         kill: async (request) => this.services.host.killShell ? this.services.host.killShell(request) : unavailableCapability('shell.kill'),
         getBuffer: async (request) => this.services.host.getShellBuffer ? this.services.host.getShellBuffer(request) : unavailableCapability('shell.getBuffer'),

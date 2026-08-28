@@ -1,7 +1,6 @@
 mod attachment;
 #[cfg(test)]
 mod attachment_tests;
-mod authority;
 mod commands;
 pub(crate) use commands::PiSessionTarget;
 mod events;
@@ -18,7 +17,6 @@ use attachment::PtyAttachmentHub;
 #[cfg(test)]
 use attachment::PtyAttachmentHubs;
 pub(crate) use attachment::{AgentTerminalAttachmentError, AgentTerminalEvent};
-use authority::TerminalAuthorityContract;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
@@ -144,8 +142,6 @@ pub struct PtyManager {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PtyBufferState {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authority: Option<&'static str>,
     pub buffer: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<TerminalViewSnapshot>,
@@ -244,10 +240,6 @@ impl PtyManager {
             #[cfg(test)]
             test_environment: std::collections::HashMap::new(),
         }
-    }
-
-    pub(crate) fn terminal_authority_contract(&self) -> TerminalAuthorityContract {
-        TerminalAuthorityContract::ghostty_authoritative()
     }
 }
 

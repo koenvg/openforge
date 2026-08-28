@@ -95,7 +95,7 @@ async fn spawns_without_backend_app_emitter() {
 }
 
 #[tokio::test]
-async fn ghostty_authority_returns_canonical_terminal_snapshot_for_xterm_rendering() {
+async fn returns_canonical_terminal_snapshot_for_xterm_rendering() {
     let (mut state, _temp_dir) = test_state("app_invoke_ghostty_snapshot");
     // Raw and model PTY chunks share this receiver. Size this test-local channel for the
     // bounded shell exchange so an unrelated burst cannot evict the event under test.
@@ -121,7 +121,6 @@ async fn ghostty_authority_returns_canonical_terminal_snapshot_for_xterm_renderi
     )
     .await;
 
-    assert_eq!(state_view["authority"], "ghostty-authoritative");
     assert!(state_view["buffer"].is_null());
     assert_eq!(state_view["instanceId"], instance_id);
     assert_eq!(state_view["snapshot"]["instanceId"], instance_id);
@@ -207,47 +206,6 @@ async fn ghostty_authority_returns_canonical_terminal_snapshot_for_xterm_renderi
         .kill_shells_for_task("T-ghostty")
         .await
         .expect("Ghostty shell should stop");
-}
-
-#[tokio::test]
-async fn ghostty_authority_rejects_xterm_generated_query_responses() {
-    let (state, _temp_dir) = test_state("app_invoke_ghostty_authority");
-    let instance_id = invoke_ok(
-        &state,
-        "pty_spawn_shell",
-        json!({
-            "taskId": "T-ghostty-authority",
-            "cwd": "/tmp",
-            "cols": 80,
-            "rows": 24,
-            "terminalIndex": 0,
-        }),
-    )
-    .await
-    .as_u64()
-    .expect("instance id");
-
-    let error = invoke(
-        &state,
-        "pty_write_terminal_query_response",
-        json!({
-            "shellSessionKey": "T-ghostty-authority-shell-0",
-            "ptyInstanceId": instance_id,
-            "data": "\u{1b}[1;1R",
-        }),
-    )
-    .await
-    .expect_err("xterm responses must not write when Ghostty owns terminal state");
-
-    assert_eq!(error.0, StatusCode::CONFLICT);
-    assert!(error.1.contains("Ghostty owns terminal query responses"));
-
-    let _ = state
-        .pty_manager
-        .as_ref()
-        .expect("PTY manager")
-        .kill_shells_for_task("T-ghostty-authority")
-        .await;
 }
 
 #[tokio::test]

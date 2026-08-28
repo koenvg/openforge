@@ -200,7 +200,7 @@ The shared OpenForge runtime that owns terminal session lifecycle for **Terminal
 _Avoid_: Terminal plugin internals, ordinary plugin dependency, private terminal pool, private forwarding package
 
 **Terminal Transport**:
-The runtime-owned carrier for Terminal Replay, live output, PTY exit, user input, terminal-generated responses, resize, and connection-restored signals across **Shell Session Keys**.
+The runtime-owned carrier for Terminal Replay, live output, PTY exit, user input, resize, and connection-restored signals across **Shell Session Keys**.
 _Avoid_: Terminal Session, Terminal View, IPC channel, socket connection
 
 **Terminal Session**:
@@ -453,10 +453,10 @@ _Avoid_: AI SaaS hype visuals, metric-heavy dashboard aesthetic, abstract robot 
 - **App Update** UI links to release notes rather than embedding a changelog in the Settings card.
 - Electron main supervises the **Rust Sidecar** rather than embedding backend domain logic in the renderer or relying on a Tauri shell.
 - A **Terminal Surface** uses the **Terminal Runtime** and does not own shell process state.
-- The **Terminal Runtime** owns **Terminal Session** lifecycle; the selected **Terminal State Authority** owns parsed state, replay, and snapshots, while the **Rust Sidecar** owns each PTY.
+- The **Terminal Runtime** owns **Terminal Session** lifecycle; the **Terminal State Authority** owns parsed state, replay, and snapshots, while the **Rust Sidecar** owns each PTY.
 - One **Terminal Runtime** owns one **Terminal Transport**, which may multiplex many **Shell Session Keys** without owning **Terminal Session** lifecycle or replay policy.
 - A **Terminal Transport** reports restored connectivity; the **Terminal Runtime** decides which active **Terminal Sessions** need replay.
-- Every **Terminal Session** has exactly one **Terminal State Authority**, fixed when the session is created; a **Terminal Surface** may mirror state for rendering without becoming authoritative.
+- Every **Terminal Session** has exactly one **Terminal State Authority**; a **Terminal Surface** may mirror state for rendering without becoming authoritative.
 - A **Terminal View Attachment** restores from the replay or **Terminal Snapshot** supplied by its **Terminal State Authority** before consuming later live output.
 - A **Terminal State Authority** may supply a **Terminal Snapshot** with an output boundary so an attachment can reject older live output.
 - The active desktop **Terminal View Attachment** holds the **Terminal Geometry Lease**; one companion may hold it only while no desktop attachment exists.

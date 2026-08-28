@@ -19,7 +19,7 @@ const runtime = createTerminalRuntime({
 })
 ```
 
-One Terminal Runtime owns one transport. The transport may multiplex many Shell Session Keys. It normalizes live output, PTY exit, connection restoration, and Terminal Replay into camelCase domain types. It also keeps user input separate from PTY-instance-scoped terminal query responses.
+One Terminal Runtime owns one transport. The transport may multiplex many Shell Session Keys. It normalizes live model output, PTY exit, connection restoration, and Terminal Replay into camelCase domain types. It sends user input to the PTY; the Rust Sidecar routes terminal-generated replies directly.
 
 Terminal Runtime continues to own Terminal Session lifecycle, replay ordering, current PTY instance checks, Terminal View Attachments, and Terminal Geometry Leases. A transport restores connectivity but does not decide replay policy. `TerminalView` does not receive transport, IPC, capability, or connection details.
 

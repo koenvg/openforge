@@ -10,7 +10,6 @@ vi.mock('../../lib/ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
   writePty: vi.fn().mockResolvedValue(undefined),
-  writeTerminalQueryResponse: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
   transcribeAudio: vi.fn(),

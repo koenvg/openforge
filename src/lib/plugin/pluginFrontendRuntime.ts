@@ -128,7 +128,6 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     shell: {
       spawn: unavailable('shell.spawn'),
       write: unavailable('shell.write'),
-      writeTerminalQueryResponse: unavailable('shell.writeTerminalQueryResponse'),
       resize: unavailable('shell.resize'),
       kill: unavailable('shell.kill'),
       getBuffer: unavailable('shell.getBuffer'),

@@ -7,7 +7,6 @@ import {
 	recoverActiveTerminal,
 	restorePtyInstance,
 	subscribeShellLifecycle,
-	updateShellLifecycleState,
 } from "./terminalPool";
 import {
 	getFitAddonMocks,
@@ -16,54 +15,45 @@ import {
 	getTerminalMocks,
 } from "./terminalPool.testSetup";
 
+function ghosttyReplay(data: string, instanceId: number) {
+	return {
+		buffer: null,
+		isLive: true,
+		instanceId,
+		snapshot: { instanceId, watermark: 0, data: btoa(data) },
+	};
+}
+
+function emitModelOutput(shellSessionKey: string, data: string, instanceId: number, sequence = 1): void {
+	const callback = getListenCallback(`pty-model-output-${shellSessionKey}`);
+	callback({ payload: { data: btoa(data), instance_id: instanceId, sequence } });
+}
 describe("terminalPool reconnect", () => {
 
-	it("pty-output listener writes to terminal", async () => {
+	it("model-output listener writes to terminal", async () => {
 		const entry = await acquire("task-10");
+		vi.mocked(getPtyBuffer).mockResolvedValueOnce(ghosttyReplay("", 42));
 		await markShellPtyStarted(entry, 42);
 		const { write: writeSpy } = getTerminalMocks(entry);
 
-		const outputCb = getListenCallback("pty-output-task-10");
-		outputCb({ payload: { data: "hello world", instance_id: 42 } });
+		emitModelOutput("task-10", "hello world", 42);
 
-		expect(writeSpy).toHaveBeenCalledWith("hello world", expect.any(Function));
+		expect(writeSpy).toHaveBeenCalledWith(Uint8Array.from(new TextEncoder().encode("hello world")));
 		expect(entry.ptyActive).toBe(true);
 	});
 
-	it("pty-output listener ignores stale instance ids", async () => {
+	it("model-output listener ignores stale instance ids", async () => {
 		const entry = await acquire("task-10-stale-output");
 		const { write: writeSpy } = getTerminalMocks(entry);
+		vi.mocked(getPtyBuffer).mockResolvedValueOnce(ghosttyReplay("", 2));
 		await markShellPtyStarted(entry, 2);
 
-		const outputCb = getListenCallback("pty-output-task-10-stale-output");
-		outputCb({ payload: { data: "old output", instance_id: 1 } });
+		emitModelOutput("task-10-stale-output", "old output", 1);
 
 		expect(writeSpy).not.toHaveBeenCalled();
 		expect(entry.ptyActive).toBe(true);
 	});
 
-	it("accepts only current instance output after PTY instance metadata is hydrated", async () => {
-		const entry = await acquire("task-10-hydrated-output");
-		const { write: writeSpy, reset: resetSpy } = getTerminalMocks(entry);
-
-		updateShellLifecycleState("task-10-hydrated-output", {
-			ptyActive: true,
-			shellExited: false,
-			currentPtyInstance: 42,
-			hasOutput: false,
-		});
-
-		const outputCb = getListenCallback("pty-output-task-10-hydrated-output");
-		outputCb({ payload: { data: "old output", instance_id: 41 } });
-		outputCb({ payload: { data: "current output", instance_id: 42 } });
-
-		expect(writeSpy).toHaveBeenCalledTimes(1);
-		expect(writeSpy).toHaveBeenCalledWith("current output", expect.any(Function));
-		expect(resetSpy).not.toHaveBeenCalled();
-		expect(entry.ptyActive).toBe(true);
-		expect(entry.needsClear).toBe(false);
-		expect(entry.currentPtyInstance).toBe(42);
-	});
 
 	it("pty-exit listener records shell exit and presentation reset independently", async () => {
 		const entry = await acquire("task-11");
@@ -114,24 +104,11 @@ describe("terminalPool reconnect", () => {
 		unsubscribe();
 	});
 
-	it("needsClear causes terminal.reset on next pty-output", async () => {
-		const entry = await acquire("task-12");
-		await markShellPtyStarted(entry, 42);
-		entry.needsClear = true;
-		const { reset: resetSpy, write: writeSpy } = getTerminalMocks(entry);
 
-		const outputCb = getListenCallback("pty-output-task-12");
-		outputCb({ payload: { data: "new session output", instance_id: 42 } });
-
-		expect(resetSpy).toHaveBeenCalled();
-		expect(writeSpy).toHaveBeenCalledWith("new session output", expect.any(Function));
-		expect(entry.needsClear).toBe(false);
-	});
-
-	it("replays backend buffers for active terminals after the app event stream reconnects", async () => {
+	it("restores backend snapshots for active terminals after the app event stream reconnects", async () => {
 		vi.mocked(getPtyBuffer).mockImplementation(async (taskId: string) => {
-			if (taskId === "task-reconnect-a") return { buffer: "latest buffer a", isLive: true, instanceId: 42 };
-			if (taskId === "task-reconnect-b") return { buffer: "latest buffer b", isLive: true, instanceId: 42 };
+			if (taskId === "task-reconnect-a") return ghosttyReplay("latest buffer a", 42);
+			if (taskId === "task-reconnect-b") return ghosttyReplay("latest buffer b", 42);
 			return { buffer: null, isLive: false, instanceId: null };
 		});
 		const entryA = await acquire("task-reconnect-a");
@@ -145,11 +122,15 @@ describe("terminalPool reconnect", () => {
 
 		const reconnectCb = getListenCallback("openforge-app-events-reconnected");
 		reconnectCb({ payload: { attempt: 1 } });
-		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith("latest buffer a", expect.any(Function)));
+		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith(
+			Uint8Array.from(new TextEncoder().encode("latest buffer a")),
+		));
 
 		expect(resetA).toHaveBeenCalled();
 		expect(resetB).toHaveBeenCalled();
-		expect(writeB).toHaveBeenCalledWith("latest buffer b", expect.any(Function));
+		expect(writeB).toHaveBeenCalledWith(
+			Uint8Array.from(new TextEncoder().encode("latest buffer b")),
+		);
 		expect(entryA.ptyActive).toBe(true);
 		expect(entryA.needsClear).toBe(false);
 		expect(entryB.ptyActive).toBe(true);

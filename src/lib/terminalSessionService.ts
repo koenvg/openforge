@@ -1,5 +1,4 @@
 import {
-  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalRuntime,
   createTerminalSessionService,
 } from '@openforge-app/terminal-runtime'
@@ -11,7 +10,6 @@ import {
   openUrl,
   resizePty,
   writePty,
-  writeTerminalQueryResponse,
 } from './ipc'
 import { themeMode } from './theme'
 
@@ -21,7 +19,6 @@ const transport = createDesktopTerminalTransport({
     handler,
   ),
   getPtyBuffer,
-  writeTerminalQueryResponse,
   writePty,
   resizePty,
 })
@@ -34,7 +31,6 @@ const terminalRuntime = createTerminalRuntime({
     themeMode,
     loggerName: 'terminalSessionService',
   },
-  authority: XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
 })
 
 export const terminalSessionService = createTerminalSessionService(terminalRuntime)

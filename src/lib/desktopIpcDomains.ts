@@ -98,7 +98,6 @@ export const desktopIpcFunctionDomains = {
   submitPrReview: 'github-review',
   spawnShellPty: 'agent-session-pty',
   writePty: 'agent-session-pty',
-  writeTerminalQueryResponse: 'agent-session-pty',
   resizePty: 'agent-session-pty',
   killPty: 'agent-session-pty',
   killShellsForTask: 'agent-session-pty',

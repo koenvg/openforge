@@ -1,8 +1,4 @@
 import { get } from 'svelte/store'
-import {
-  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
-  type TerminalAuthorityContract,
-} from './terminalAuthority'
 import { createTerminalAcquisition } from './terminalAcquisition'
 import { createTerminalAttachmentController, isValidTerminalDimensions } from './terminalAttachment'
 import type { TerminalImageProtocol } from './terminalImages'
@@ -17,15 +13,6 @@ import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
 import { applyTerminalTheme } from './terminalThemePropagation'
 import { themeMode as defaultThemeMode } from './theme'
 
-export {
-  GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT,
-  XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
-  type TerminalAuthorityBinding,
-  type TerminalAuthorityContract,
-  type TerminalQueryResponseWrite,
-  type GhosttyAuthoritativeTerminalContract,
-  type XtermAuthoritativeTerminalContract,
-} from './terminalAuthority'
 export type { TerminalViewAttachment } from './terminalAttachment'
 export type { TerminalImageProtocol } from './terminalImages'
 export type {
@@ -33,7 +20,6 @@ export type {
   TerminalGeometry,
   TerminalModelDisabledEvent,
   TerminalModelOutputEvent,
-  TerminalOutputEvent,
   TerminalReplay,
   TerminalSnapshot,
   TerminalSessionTransportHandlers,
@@ -69,20 +55,18 @@ export type {
 export interface TerminalRuntimeOptions {
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
-  authority?: TerminalAuthorityContract
   createTerminalView?: TerminalViewFactory
 }
 
 export function createTerminalRuntime({
   transport,
   environment,
-  authority = XTERM_AUTHORITATIVE_TERMINAL_CONTRACT,
   createTerminalView = createXtermTerminalView,
 }: TerminalRuntimeOptions) {
   const activeThemeMode = environment.themeMode ?? defaultThemeMode
   const pool = new Map<string, PoolEntry>()
   const attachments = createTerminalAttachmentController(transport, environment)
-  const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key), authority)
+  const sessionLifecycle = createTerminalSessionLifecycle(key => pool.get(key))
 
   function createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry {
     const configuration = environment.sampleSessionConfiguration?.(terminalKey) ?? {
@@ -111,9 +95,7 @@ export function createTerminalRuntime({
       attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,
-      authority: null,
       terminalStateSource: 'bootstrapping',
-      pendingPtyOutput: [],
       terminalModelSequence: null,
       pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,
@@ -161,14 +143,12 @@ export function createTerminalRuntime({
     environment,
     getEntries: () => pool.values(),
     hasEntries: () => pool.size > 0,
-    resetEntry: resetTerminal,
     notifyLifecycle: sessionLifecycle.notifyShellLifecycle,
     recoverEntry: entry => recoverTerminalState?.(entry) ?? Promise.resolve(),
   })
   const acquisition = createTerminalAcquisition({
     transport,
     environment,
-    authority,
     pool,
     createEntry,
     preloadEntry: preloadTerminalFonts,

@@ -1,6 +1,6 @@
 # Keep xterm authoritative in production terminal sessions
 
-Status: accepted as the default mode; amended by [ADR 0006](0006-ghostty-authoritative-terminal-mode.md)
+Status: superseded by the Ghostty cutover documented in [Terminal state and protocol-response paths](../terminal-state-and-response-paths.md)
 
 Date: 2026-08-25
 

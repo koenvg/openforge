@@ -152,8 +152,8 @@ describe('xterm TerminalView adapter', () => {
     expect(view.fit()).toEqual({ cols: 80, rows: 24 })
     expect(view.geometry).toEqual({ cols: 80, rows: 24 })
     expect(view.getSelectionText()).toBe('selected text')
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot', expect.any(Function))
-    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]), expect.any(Function))
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(1, 'snapshot')
+    expect(mocks.terminal.write).toHaveBeenNthCalledWith(2, Uint8Array.from([65]))
     expect(mocks.terminal.onData).toHaveBeenCalledOnce()
     expect(onInput).toHaveBeenCalledWith('typed input')
     expect(mocks.terminal.attachCustomKeyEventHandler).toHaveBeenCalledOnce()
@@ -161,6 +161,25 @@ describe('xterm TerminalView adapter', () => {
     expect(mocks.terminal.focus).toHaveBeenCalledOnce()
     expect(mocks.terminal.reset).toHaveBeenCalledOnce()
     expect(mocks.fit).toHaveBeenCalledOnce()
+  })
+
+  it('discards terminal-generated responses instead of treating them as user input', () => {
+    const view = createXtermTerminalView({
+      terminalKey: 'T-1-shell-0',
+      themeMode: 'dark',
+      openLink: vi.fn(async () => undefined),
+      fontReadiness: READY_FONT_READINESS,
+    })
+    const onInput = vi.fn()
+    view.onUserInput(onInput)
+    const onXtermData = mocks.terminal.onData.mock.calls[0]?.[0] as (data: string) => void
+
+    onXtermData('\u001b[1;1R')
+    onXtermData('typed input')
+
+    expect(onInput).toHaveBeenCalledOnce()
+    expect(onInput).toHaveBeenCalledWith('typed input')
+    view.dispose()
   })
 
   it.each([

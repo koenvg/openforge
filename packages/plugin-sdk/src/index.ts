@@ -125,7 +125,6 @@ export type {
   TerminalViewSnapshot,
   ShellSessionRequest,
   ShellSpawnRequest,
-  ShellTerminalQueryResponseRequest,
   ShellWriteRequest,
   StartPromptContribution,
   SendTaskFollowUpRequest,

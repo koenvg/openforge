@@ -1,5 +1,4 @@
 import type {
-  TerminalQueryResponseWrite,
   TerminalSessionTransportHandlers,
   TerminalTransport,
   TerminalTransportDisposable,
@@ -9,11 +8,6 @@ interface DesktopTerminalEvent<TPayload> {
   payload: TPayload
 }
 
-interface DesktopPtyOutputPayload {
-  data: string
-  instance_id: number
-  shell_session_key: string
-}
 
 interface DesktopPtyExitPayload {
   instance_id: number
@@ -36,7 +30,6 @@ interface DesktopTerminalSnapshot {
   watermark: number
 }
 export interface DesktopPtyBufferState {
-  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   isLive: boolean
   instanceId: number | null
@@ -50,7 +43,6 @@ export interface DesktopTerminalTransportPort {
   ): Promise<() => void>
   getPtyBuffer(shellSessionKey: string): Promise<DesktopPtyBufferState>
   writePty(shellSessionKey: string, data: string): Promise<void>
-  writeTerminalQueryResponse(response: TerminalQueryResponseWrite): Promise<void>
   resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void>
 }
 
@@ -90,10 +82,6 @@ export function createDesktopTerminalTransport(
     ensureActive()
     const unlisteners: Array<() => void> = []
     try {
-      unlisteners.push(await port.listenEvent(`pty-output-${shellSessionKey}`, (event) => {
-        const payload = event.payload as DesktopPtyOutputPayload
-        handlers.onOutput({ data: payload.data, ptyInstanceId: payload.instance_id })
-      }))
       unlisteners.push(await port.listenEvent(`pty-model-output-${shellSessionKey}`, (event) => {
         const payload = event.payload as DesktopTerminalModelOutputPayload
         handlers.onModelOutput({
@@ -142,8 +130,7 @@ export function createDesktopTerminalTransport(
       ensureActive()
       const replay = await port.getPtyBuffer(shellSessionKey)
       return {
-        authority: replay.authority,
-        data: replay.buffer,
+        historicalData: replay.buffer,
         isLive: replay.isLive,
         ptyInstanceId: replay.instanceId,
         snapshot: replay.snapshot
@@ -161,10 +148,6 @@ export function createDesktopTerminalTransport(
     async writeUserInput(shellSessionKey, data) {
       ensureActive()
       await port.writePty(shellSessionKey, data)
-    },
-    async writeQueryResponse(response) {
-      ensureActive()
-      await port.writeTerminalQueryResponse(response)
     },
     async resize(shellSessionKey, geometry) {
       ensureActive()

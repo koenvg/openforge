@@ -2,7 +2,7 @@
 
 Research date: 2026-08-24
 
-> Current production authority is defined by [ADR 0004](adr/0004-xterm-authoritative-terminal-mode.md). xterm owns parsed state and query responses. Sidecar-authoritative snapshots and sequenced model frames in this research document are prospective.
+> Historical renderer research. Current production authority is documented in [Terminal state and protocol-response paths](terminal-state-and-response-paths.md): Ghostty owns backend terminal state and replies while xterm remains the renderer.
 
 ## Decision in one page
 

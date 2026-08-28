@@ -15,9 +15,7 @@ interface TestReplaySnapshot {
 }
 
 interface TestReplayState {
-  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer?: string | null
-  data?: string | null
   isLive: boolean
   instanceId?: number | null
   ptyInstanceId?: number | null
@@ -29,16 +27,13 @@ interface RawPtyInstancePayload {
   ptyInstanceId?: number
 }
 
-interface RawPtyOutputPayload extends RawPtyInstancePayload {
-  data: string
-}
 
-interface RawPtyModelOutputPayload extends RawPtyOutputPayload {
+interface RawPtyModelOutputPayload extends RawPtyInstancePayload {
+  data: string
   sequence: number
 }
 
 const SESSION_EVENT_PREFIXES = {
-  output: 'pty-output-',
   modelOutput: 'pty-model-output-',
   modelDisabled: 'pty-model-disabled-',
   exit: 'pty-exit-',
@@ -54,7 +49,6 @@ interface TestTransport extends TerminalTransport {
   subscribeConnectionRestored: Mock<TerminalTransport['subscribeConnectionRestored']>
   readReplay: Mock<TerminalTransport['readReplay']>
   writeUserInput: Mock<TerminalTransport['writeUserInput']>
-  writeQueryResponse: Mock<TerminalTransport['writeQueryResponse']>
   resize: Mock<TerminalTransport['resize']>
   dispose: Mock<TerminalTransport['dispose']>
 }
@@ -72,7 +66,6 @@ export interface TestHost extends TerminalRuntimeOptions {
   environment: TerminalRuntimeEnvironment & { openLink: ReturnType<typeof vi.fn> }
   getPtyBuffer(taskId: string): Promise<TestReplayState>
   writePty(taskId: string, data: string): Promise<void>
-  writeTerminalQueryResponse(response: unknown): Promise<void>
   resizePty(taskId: string, cols: number, rows: number): Promise<void>
   openLink: ReturnType<typeof vi.fn>
   themeMode: TerminalRuntimeEnvironment['themeMode']
@@ -153,8 +146,7 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
     readReplay: vi.fn(async (shellSessionKey: string) => {
       const replay = await host.getPtyBuffer(shellSessionKey)
       return {
-        authority: replay.authority,
-        data: replay.data ?? replay.buffer ?? null,
+        historicalData: replay.buffer ?? null,
         isLive: replay.isLive,
         ptyInstanceId: replay.ptyInstanceId ?? replay.instanceId ?? null,
         snapshot: replay.snapshot
@@ -170,7 +162,6 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
       }
     }),
     writeUserInput: vi.fn((shellSessionKey: string, data: string) => host.writePty(shellSessionKey, data)),
-    writeQueryResponse: vi.fn(response => host.writeTerminalQueryResponse(response)),
     resize: vi.fn((shellSessionKey: string, geometry: { cols: number; rows: number }) => (
       host.resizePty(shellSessionKey, geometry.cols, geometry.rows)
     )),
@@ -186,10 +177,15 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
     async getPtyBuffer(shellSessionKey: string) {
       await bufferReadGates.get(shellSessionKey)?.promise
       const buffer = buffers.get(shellSessionKey) ?? null
-      return { buffer, isLive: buffer !== null, instanceId: null }
+      if (buffer === null) return { buffer: null, isLive: false, instanceId: null }
+      return {
+        buffer: null,
+        isLive: true,
+        instanceId: 1,
+        snapshot: { instanceId: 1, watermark: 0, data: btoa(buffer) },
+      }
     },
     async writePty() {},
-    async writeTerminalQueryResponse() {},
     async resizePty() {},
     openLink,
     themeMode: environment.themeMode,
@@ -200,13 +196,6 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
         for (const handler of connectionRestoredHandlers) handler()
         return
       }
-      if (dispatchSessionEvent(
-        eventName,
-        SESSION_EVENT_PREFIXES.output,
-        payload,
-        (raw: RawPtyOutputPayload, ptyInstanceId) => ({ data: raw.data, ptyInstanceId }),
-        (handlers, event) => handlers.onOutput(event),
-      )) return
       if (dispatchSessionEvent(
         eventName,
         SESSION_EVENT_PREFIXES.modelOutput,

@@ -1,5 +1,4 @@
 import { parsePtySessionKey } from './ptySessionKey'
-import type { TerminalAuthorityContract } from './terminalAuthority'
 import { terminalLogMessage } from './terminalLogging'
 import type { TerminalFontReadiness } from './terminalOptions'
 import { createTerminalStateView } from './terminalStateView'
@@ -31,7 +30,6 @@ interface TerminalAcquisitionReconnectReplay {
 interface TerminalAcquisitionOptions {
   transport: TerminalTransport
   environment: TerminalRuntimeEnvironment
-  authority: TerminalAuthorityContract
   pool: Map<string, PoolEntry>
   createEntry(terminalKey: string, fontReadiness: TerminalFontReadiness): PoolEntry
   preloadEntry(): Promise<TerminalFontReadiness>
@@ -44,7 +42,6 @@ interface TerminalAcquisitionOptions {
 export function createTerminalAcquisition({
   transport,
   environment,
-  authority,
   pool,
   createEntry,
   preloadEntry,
@@ -56,7 +53,6 @@ export function createTerminalAcquisition({
   const pendingAcquisitions = new Map<string, PendingTerminalAcquisition>()
   const terminalStateView = createTerminalStateView({
     transport,
-    authority,
     resetEntry,
     markOutput: lifecycle.markPtyOutput,
   })
@@ -116,7 +112,6 @@ export function createTerminalAcquisition({
       operation,
       entry,
       transport.subscribeSession(terminalKey, {
-        onOutput: event => terminalStateView.handlePtyOutput(entry, event),
         onModelOutput: event => terminalStateView.handleTerminalModelOutput(entry, event),
         onModelDisabled: event => terminalStateView.handleTerminalModelDisabled(entry, event),
         onExit: event => {
@@ -136,20 +131,6 @@ export function createTerminalAcquisition({
       if (!entry.ptyActive) return
       transport.writeUserInput(terminalKey, data).catch(error => {
         console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
-      })
-    }))
-    entry.viewSubscriptions.push(entry.view.onQueryResponse((response) => {
-      const binding = entry.authority
-      if (!entry.ptyActive
-        || !binding
-        || binding.contract.queryResponseOwner !== 'xterm'
-        || response.ptyInstanceId !== binding.ptyInstanceId) return
-      transport.writeQueryResponse({
-        shellSessionKey: binding.shellSessionKey,
-        ptyInstanceId: binding.ptyInstanceId,
-        data: response.data,
-      }).catch(error => {
-        console.error(terminalLogMessage(environment.loggerName, 'query response write failed:'), error)
       })
     }))
 

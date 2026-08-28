@@ -1,7 +1,6 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { isValidTerminalDimensions } from './terminalAttachment'
-import { isTerminalQueryResponse } from './terminalAuthority'
 import { loadXtermImageSupport } from './xtermImageSupport'
 import { terminalLogMessage } from './terminalLogging'
 import { createTerminalLinkHandler, loadTerminalWebLinksAddon } from './terminalLinks'
@@ -11,12 +10,17 @@ import type {
   TerminalView,
   TerminalViewFactoryOptions,
   TerminalViewGeometry,
-  TerminalViewQueryResponse,
   TerminalViewRendererFailure,
 } from './terminalView'
 import { createXtermWebglRendererLifecycle } from './xtermWebglRenderer'
 
 export interface XtermTerminalViewOptions extends TerminalViewFactoryOptions {}
+
+function isTerminalQueryResponse(data: string): boolean {
+  return /^\u001b\[(?:[?>]?[\d;]*c|\??\d+(?:;\d+)?[nR]|\??\d+;\d+\$y|[468];\d+;\d+t)$/.test(data)
+    || /^\u001bP[01]\$r[\s\S]*\u001b\\$/.test(data)
+    || /^\u001b\](?:4;\d+|1[012]);rgb:[^\u001b]*(?:\u0007|\u001b\\)$/.test(data)
+}
 
 function createHostDiv(): HTMLDivElement {
   const div = document.createElement('div')
@@ -42,14 +46,8 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
   const hostDiv = createHostDiv()
   const rendererFailureListeners = new Set<(failure: TerminalViewRendererFailure) => void>()
   const userInputListeners = new Set<(data: string) => void>()
-  const queryResponseListeners = new Set<(response: TerminalViewQueryResponse) => void>()
-  const pendingWrites: Array<{ ptyInstanceId: number | null }> = []
   const xtermDataSubscription = terminal.onData((data) => {
-    if (isTerminalQueryResponse(data)) {
-      const response = { data, ptyInstanceId: pendingWrites[0]?.ptyInstanceId ?? null }
-      for (const listener of queryResponseListeners) listener(response)
-      return
-    }
+    if (isTerminalQueryResponse(data)) return
     for (const listener of userInputListeners) listener(data)
   })
   let opened = false
@@ -129,14 +127,9 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     refresh,
   })
 
-  function writeScoped(data: string | Uint8Array, ptyInstanceId: number | null): void {
+  function write(data: string | Uint8Array): void {
     presentation.recordWrite()
-    const pendingWrite = { ptyInstanceId }
-    pendingWrites.push(pendingWrite)
-    terminal.write(data, () => {
-      const index = pendingWrites.indexOf(pendingWrite)
-      if (index >= 0) pendingWrites.splice(index, 1)
-    })
+    terminal.write(data)
   }
 
   return {
@@ -166,11 +159,11 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     isMountedIn(container) {
       return hostDiv.parentNode === container
     },
-    bootstrap(data, ptyInstanceId) {
-      writeScoped(data, ptyInstanceId)
+    bootstrap(data) {
+      write(data)
     },
     writeLive(output) {
-      writeScoped(output.data, output.ptyInstanceId)
+      write(output.data)
     },
     drainPresentation() {
       return presentation.drain()
@@ -190,10 +183,6 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
     onUserInput(listener) {
       userInputListeners.add(listener)
       return { dispose: () => userInputListeners.delete(listener) }
-    },
-    onQueryResponse(listener) {
-      queryResponseListeners.add(listener)
-      return { dispose: () => queryResponseListeners.delete(listener) }
     },
     setKeyEventHandler(handler) {
       terminal.attachCustomKeyEventHandler(handler)
@@ -215,8 +204,6 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       hostDiv.parentNode?.removeChild(hostDiv)
       rendererFailureListeners.clear()
       userInputListeners.clear()
-      queryResponseListeners.clear()
-      pendingWrites.length = 0
       xtermDataSubscription.dispose()
       webglRenderer.dispose()
       terminal.dispose()

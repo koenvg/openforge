@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
+import { getPtyBuffer } from './ipc'
 import {
 	_getPool,
 	acquire,
@@ -65,9 +66,10 @@ describe("terminalPool lifecycle", () => {
 		expect(entry1).toBe(entry2);
 	});
 
-	it("acquire sets up pty-output and pty-exit listeners", async () => {
+	it("acquire sets up model-output, model-disabled, and PTY-exit listeners", async () => {
 		await acquire("task-3");
-		expect(listenCallbacks.has("pty-output-task-3")).toBe(true);
+		expect(listenCallbacks.has("pty-model-output-task-3")).toBe(true);
+		expect(listenCallbacks.has("pty-model-disabled-task-3")).toBe(true);
 		expect(listenCallbacks.has("pty-exit-task-3")).toBe(true);
 	});
 
@@ -286,18 +288,27 @@ describe("terminalPool lifecycle", () => {
 		it("both entries have independent ptyActive state", async () => {
 			const agentEntry = await acquire("T-44");
 			const shellEntry = await acquire("T-44-shell");
+			vi.mocked(getPtyBuffer).mockImplementation(async (shellSessionKey) => {
+				const instanceId = shellSessionKey === "T-44" ? 44 : 45;
+				return {
+					buffer: null,
+					isLive: true,
+					instanceId,
+					snapshot: { instanceId, watermark: 0, data: btoa("") },
+				};
+			});
 			await markShellPtyStarted(agentEntry, 44);
 			await markShellPtyStarted(shellEntry, 45);
 			shellEntry.ptyActive = false;
 
-			const agentOutputCb = getListenCallback("pty-output-T-44");
-			agentOutputCb({ payload: { data: "agent output", instance_id: 44 } });
+			const agentOutputCb = getListenCallback("pty-model-output-T-44");
+			agentOutputCb({ payload: { data: btoa("agent output"), instance_id: 44, sequence: 1 } });
 
 			expect(agentEntry.ptyActive).toBe(true);
 			expect(shellEntry.ptyActive).toBe(false);
 
-			const shellOutputCb = getListenCallback("pty-output-T-44-shell");
-			shellOutputCb({ payload: { data: "shell output", instance_id: 45 } });
+			const shellOutputCb = getListenCallback("pty-model-output-T-44-shell");
+			shellOutputCb({ payload: { data: btoa("shell output"), instance_id: 45, sequence: 1 } });
 
 			expect(agentEntry.ptyActive).toBe(true);
 			expect(shellEntry.ptyActive).toBe(true);

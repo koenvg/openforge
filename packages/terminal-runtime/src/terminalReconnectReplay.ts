@@ -7,9 +7,8 @@ interface TerminalReconnectReplayOptions {
   environment: TerminalRuntimeEnvironment
   getEntries(): Iterable<PoolEntry>
   hasEntries(): boolean
-  resetEntry(entry: PoolEntry): void
   notifyLifecycle(terminalKey: string): void
-  recoverEntry?(entry: PoolEntry): Promise<void>
+  recoverEntry(entry: PoolEntry): Promise<void>
 }
 
 export function createTerminalReconnectReplay({
@@ -17,7 +16,6 @@ export function createTerminalReconnectReplay({
   environment,
   getEntries,
   hasEntries,
-  resetEntry,
   notifyLifecycle,
   recoverEntry,
 }: TerminalReconnectReplayOptions) {
@@ -28,29 +26,12 @@ export function createTerminalReconnectReplay({
     if (entry.needsClear) return
 
     try {
-      if (recoverEntry) {
-        await recoverEntry(entry)
-        notifyLifecycle(entry.shellSessionKey)
-        if (entry.attached) entry.view.refresh()
-        return
-      }
-      const replay = await transport.readReplay(entry.shellSessionKey)
-      entry.ptyActive = replay.isLive
-      if (!replay.data) {
-        notifyLifecycle(entry.shellSessionKey)
-        return
-      }
-
-      resetEntry(entry)
-      entry.needsClear = false
-      entry.outputSequence = 0
-      entry.view.bootstrap(replay.data, replay.ptyInstanceId, entry.outputSequence)
-      entry.hasOutput = true
+      await recoverEntry(entry)
       notifyLifecycle(entry.shellSessionKey)
       if (entry.attached) entry.view.refresh()
     } catch (error) {
       console.error(
-        terminalLogMessage(environment.loggerName, 'Failed to replay PTY buffer after transport reconnect:'),
+        terminalLogMessage(environment.loggerName, 'Failed to restore terminal state after transport reconnect:'),
         error,
       )
     }

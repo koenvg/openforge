@@ -1,6 +1,5 @@
 import {
   parsePtySessionKey,
-  type TerminalQueryResponseWrite,
   type TerminalSessionTransportHandlers,
   type TerminalTransport,
   type TerminalTransportDisposable,
@@ -10,11 +9,6 @@ interface TrustedPluginDisposable {
   dispose(): void | Promise<void>
 }
 
-interface TrustedPluginPtyOutputPayload {
-  data: string
-  instance_id: number
-  task_id?: string
-}
 
 interface TrustedPluginPtyExitPayload {
   instance_id: number
@@ -37,7 +31,6 @@ interface TrustedPluginTerminalSnapshot {
   watermark: number
 }
 interface TrustedPluginPtyBufferState {
-  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   isLive: boolean
   instanceId: number | null
@@ -56,9 +49,6 @@ export interface TrustedPluginTerminalPort {
   shell: {
     getBuffer(request: IndexedShellRequest): Promise<TrustedPluginPtyBufferState>
     write(request: IndexedShellRequest & { data: string }): Promise<void>
-    writeTerminalQueryResponse(
-      request: IndexedShellRequest & { ptyInstanceId: number; data: string },
-    ): Promise<void>
     resize(request: IndexedShellRequest & { cols: number; rows: number }): Promise<void>
   }
 }
@@ -117,10 +107,6 @@ export function createTrustedPluginTerminalTransport(
     const events = getPort().events
     const subscriptions: TrustedPluginDisposable[] = []
     try {
-      subscriptions.push(events.onGlobal<TrustedPluginPtyOutputPayload>(
-        `openforge.pty-output-${shellSessionKey}`,
-        payload => handlers.onOutput({ data: payload.data, ptyInstanceId: payload.instance_id }),
-      ))
       subscriptions.push(events.onGlobal<TrustedPluginTerminalModelOutputPayload>(
         `openforge.pty-model-output-${shellSessionKey}`,
         payload => handlers.onModelOutput({
@@ -164,8 +150,7 @@ export function createTrustedPluginTerminalTransport(
     ensureActive()
     const replay = await getPort().shell.getBuffer(parseIndexedShellSessionKey(shellSessionKey))
     return {
-      authority: replay.authority,
-      data: replay.buffer,
+      historicalData: replay.buffer,
       isLive: replay.isLive,
       ptyInstanceId: replay.instanceId,
       snapshot: replay.snapshot
@@ -186,14 +171,6 @@ export function createTrustedPluginTerminalTransport(
     await getPort().shell.write({ ...parseIndexedShellSessionKey(shellSessionKey), data })
   }
 
-  async function writeQueryResponse(response: TerminalQueryResponseWrite): Promise<void> {
-    ensureActive()
-    await getPort().shell.writeTerminalQueryResponse({
-      ...parseIndexedShellSessionKey(response.shellSessionKey),
-      ptyInstanceId: response.ptyInstanceId,
-      data: response.data,
-    })
-  }
 
   async function resize(shellSessionKey: string, geometry: { cols: number; rows: number }): Promise<void> {
     ensureActive()
@@ -209,7 +186,6 @@ export function createTrustedPluginTerminalTransport(
     subscribeConnectionRestored,
     readReplay,
     writeUserInput,
-    writeQueryResponse,
     resize,
     dispose() {
       if (disposed) return

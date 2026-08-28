@@ -92,7 +92,6 @@ async fn failed_unregistered_shell_cleanup_persists_recovery_metadata() {
                 .expect("ordered writer should start"),
         ),
         instance_id,
-        authority: harness.manager.terminal_authority_contract(),
         kind: PtySessionKind::Shell {
             task_id: "failed-shell-cleanup".to_string(),
         },

@@ -33,15 +33,6 @@
       }
     },
     {
-      "name": "write_terminal_query_response",
-      "command": "pty_write_terminal_query_response",
-      "payload": {
-        "shellSessionKey": "T-pty-shell-2",
-        "ptyInstanceId": 42,
-        "data": "\u001b[1;1R"
-      }
-    },
-    {
       "name": "resize_pty",
       "command": "pty_resize",
       "payload": {
@@ -101,15 +92,6 @@
         "data": "echo ready\n"
       },
       "errorContains": "shell_session_key"
-    },
-    {
-      "name": "missing_query_response_instance_is_rejected",
-      "command": "pty_write_terminal_query_response",
-      "payload": {
-        "shellSessionKey": "T-pty-shell-2",
-        "data": "\u001b[1;1R"
-      },
-      "errorContains": "ptyInstanceId"
     },
     {
       "name": "out_of_range_cols_is_rejected",

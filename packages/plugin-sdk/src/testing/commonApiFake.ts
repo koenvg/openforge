@@ -211,7 +211,6 @@ export class TestingCommonApiFake {
         write: async (request) => {
           this.services.calls.shellWrites.push(request)
         },
-        writeTerminalQueryResponse: async () => {},
         resize: async (request) => {
           this.services.calls.shellResizes.push(request)
         },

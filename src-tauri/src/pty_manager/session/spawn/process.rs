@@ -174,7 +174,6 @@ impl PtyManager {
             ))
         })?;
 
-        let authority = self.terminal_authority_contract();
         let options = TerminalModelOptions::new(request.cols, request.rows);
         #[cfg(test)]
         let options = options.with_test_fault(self.take_terminal_model_test_fault());
@@ -232,7 +231,6 @@ impl PtyManager {
                 master: Arc::new(std::sync::Mutex::new(pair.master)),
                 writer,
                 instance_id: request.instance_id,
-                authority,
                 kind: request.kind,
                 pid_file_name: request.pid_file_name,
                 terminal_model: terminal_model.map(Arc::new),

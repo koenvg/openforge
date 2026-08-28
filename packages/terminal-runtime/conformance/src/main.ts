@@ -6,7 +6,6 @@ import { getTerminalTheme, type ThemeMode } from '../../src/theme'
 import type {
   TerminalView,
   TerminalViewPresentationEvidence,
-  TerminalViewQueryResponse,
   TerminalViewPresentationSnapshot,
 } from '../../src/terminalView'
 import './style.css'
@@ -42,7 +41,6 @@ const ptyInstanceId = 1
 let outputSequence = 0
 let view: TerminalView | null = null
 const inputRecorder = createCapturedEventRecorder<string>(event => event)
-const queryResponseRecorder = createCapturedEventRecorder<TerminalViewQueryResponse>(response => ({ ...response }))
 let openedLinks: string[] = []
 let echoInput = false
 let inputPresentation = Promise.resolve<TerminalViewPresentationEvidence | null>(null)
@@ -60,7 +58,6 @@ function recordingById(id: string) {
 
 async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvidence> {
   inputRecorder.reset()
-  queryResponseRecorder.reset()
   view?.dispose()
   view = null
   host.replaceChildren()
@@ -93,7 +90,6 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
     nextView.writeLive({ data, ptyInstanceId, sequence: outputSequence })
     inputPresentation = nextView.drainPresentation()
   })
-  queryResponseRecorder.subscribe(listener => nextView.onQueryResponse(listener))
   nextView.mount(host)
   nextView.fit()
   view = nextView
@@ -184,7 +180,6 @@ const api = {
   capture: () => requireView().capturePresentation(),
   clearInput: () => { inputRecorder.clear() },
   inputEvents: () => inputRecorder.snapshot(),
-  queryResponses: () => queryResponseRecorder.snapshot(),
   openedLinks: () => [...openedLinks],
   waitForInputCount,
 }
