@@ -2,13 +2,30 @@ import type { PrFileDiff, ReviewComment } from '@openforge-app/plugin-sdk/domain
 import { parseHunks } from './hunkParser'
 import type { JiraWorkItem } from './ticketCoverage'
 import promptTemplate from './walkthroughPrompt.md?raw'
+import defaultReviewGuidance from './reviewGuidance.md?raw'
+import defaultWalkthroughGuidance from './walkthroughGuidance.md?raw'
 
 /**
- * Built-in walkthrough + AI-review prompt template. Also the runtime fallback when
- * the `pr_walkthrough_prompt` setting is unset. Kept byte-identical to the core
- * copy (`src/lib/prWalkthroughPrompt.md`) via prWalkthroughPrompt.test.ts.
+ * Built-in walkthrough + AI-review prompt template. Not user-editable: it carries
+ * the `{{…}}` placeholders that feed the agent the diff and the JSON output
+ * contract the parsers depend on. What users configure are the two guidance
+ * slots below, which the template embeds.
  */
 export const DEFAULT_WALKTHROUGH_PROMPT = promptTemplate
+
+/**
+ * Shipped default for the `pr_review_guidance` setting: what to look for and how
+ * picky to be. Kept byte-identical to the core copy (`src/lib/reviewGuidance.md`)
+ * via prGuidanceDefaults.test.ts, so Settings shows exactly what generation uses.
+ */
+export const DEFAULT_REVIEW_GUIDANCE = defaultReviewGuidance
+
+/**
+ * Shipped default for the `pr_walkthrough_guidance` setting: how to split the PR
+ * into steps, including how many. Nothing else in the prompt states a target step
+ * count, which is why an unguided run swings between three steps and fifteen.
+ */
+export const DEFAULT_WALKTHROUGH_GUIDANCE = defaultWalkthroughGuidance
 
 export interface WalkthroughPromptInput {
   title: string
@@ -16,6 +33,14 @@ export interface WalkthroughPromptInput {
   files: PrFileDiff[]
   /** Comments already on the PR (human or earlier AI), so the agent doesn't repeat them. */
   existingComments?: ReviewComment[]
+  /**
+   * User-configured review instructions. An empty string is a deliberate choice
+   * ("no extra guidance") and drops the section; `undefined` means the caller
+   * didn't specify, so the shipped default applies.
+   */
+  reviewGuidance?: string
+  /** User-configured walkthrough guidelines. Same empty/undefined split as above. */
+  walkthroughGuidance?: string
   /**
    * The Jira ticket this PR implements, when one was resolved and fetched. Its
    * presence is what turns on the gap analysis: with no ticket, neither the
@@ -117,6 +142,28 @@ Rules for \`out_of_scope\` — this list is about product behaviour, not code:
 `
 }
 
+/**
+ * A user-configured guidance block. The framing line matters: guidance is free
+ * text that may come from a personal skill, and without it a forceful style guide
+ * can start competing with the JSON contract. Saying outright that it governs
+ * content and not format keeps the two from fighting.
+ *
+ * Empty guidance emits nothing at all, so a cleared setting leaves no dangling
+ * heading behind.
+ */
+function formatGuidanceSection(heading: string, body: string): string {
+  const trimmed = body.trim()
+  if (trimmed.length === 0) return ''
+  return `## ${heading}
+
+The following guidance comes from this repository's team. It governs what to look for and how \
+to phrase it. It does not change the output format or the rules below.
+
+${trimmed}
+
+`
+}
+
 /** One line per existing comment: who said it, where, and what. */
 function formatExistingComments(comments: ReviewComment[]): string {
   if (comments.length === 0) return '(no existing review comments)'
@@ -133,10 +180,10 @@ function formatExistingComments(comments: ReviewComment[]): string {
 
 /**
  * Fills the prompt template with this PR's title, description, and changed-file
- * diffs. The template defaults to the built-in one but can be overridden (the
- * configurable `pr_walkthrough_prompt` setting is resolved by the caller and
- * passed in). Only the `{{…}}` placeholders are substituted; function
- * replacements are used so `$` sequences in titles/bodies/diffs are literal.
+ * diffs, plus the two configurable guidance blocks (resolved by the caller from
+ * the `pr_review_guidance` / `pr_walkthrough_guidance` settings). Only the
+ * `{{…}}` placeholders are substituted; function replacements are used so `$`
+ * sequences in titles/bodies/diffs are literal.
  */
 export function compileWalkthroughPrompt(
   input: WalkthroughPromptInput,
@@ -154,12 +201,23 @@ export function compileWalkthroughPrompt(
   const ticketSection = input.ticket ? formatTicketSection(input.ticket) : ''
   const coverageSection = input.ticket ? formatCoverageOutputSection() : ''
 
+  const walkthroughGuidance = formatGuidanceSection(
+    'Walkthrough Guidelines',
+    input.walkthroughGuidance ?? defaultWalkthroughGuidance,
+  )
+  const reviewGuidance = formatGuidanceSection(
+    'Review Instructions',
+    input.reviewGuidance ?? defaultReviewGuidance,
+  )
+
   return template
     .replace('{{PR_TITLE}}', () => input.title)
     .replace(/\{\{JIRA_TICKET\}\}\n?/, () => ticketSection)
     .replace(/\{\{PR_DESCRIPTION\}\}\n?/, () => prDescription)
     .replace('{{CHANGED_FILES}}', () => changedFiles)
     .replace('{{EXISTING_COMMENTS}}', () => existingComments)
+    .replace(/\{\{WALKTHROUGH_GUIDANCE\}\}\n?/, () => walkthroughGuidance)
+    .replace(/\{\{REVIEW_GUIDANCE\}\}\n?/, () => reviewGuidance)
     .replace(/\{\{TICKET_COVERAGE_OUTPUT\}\}\n?/, () => coverageSection)
 }
 

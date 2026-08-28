@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { createRawSnippet } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
-import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
+import { DEFAULT_PR_REVIEW_GUIDANCE, DEFAULT_PR_WALKTHROUGH_GUIDANCE } from '../../lib/prGuidanceDefaults'
 import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
 
 const baseValues: Record<string, string> = {
@@ -10,7 +10,8 @@ const baseValues: Record<string, string> = {
   use_worktrees: 'true',
   task_id_prefix: 'WEB',
   github_poll_interval: '60',
-  pr_walkthrough_prompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
+  pr_review_guidance: DEFAULT_PR_REVIEW_GUIDANCE,
+  pr_walkthrough_guidance: DEFAULT_PR_WALKTHROUGH_GUIDANCE,
 }
 
 const pluginRows = [{ id: 'demo', name: 'Demo Plugin', enabled: true }]
@@ -129,7 +130,7 @@ describe('HierarchicalSettingsCard long-text settings', () => {
       props: { mode: 'global', values: baseValues, onChange: vi.fn() },
     })
 
-    expect(screen.getByTestId('row-pr_walkthrough_prompt').dataset.layout).toBe('stacked')
+    expect(screen.getByTestId('row-pr_review_guidance').dataset.layout).toBe('stacked')
     expect(screen.getByTestId('row-task_id_prefix').dataset.layout).toBe('split')
   })
 
@@ -138,17 +139,17 @@ describe('HierarchicalSettingsCard long-text settings', () => {
       props: { mode: 'global', values: baseValues, onChange: vi.fn() },
     })
 
-    const collapsed = screen.getByTestId('expand-pr_walkthrough_prompt')
+    const collapsed = screen.getByTestId('expand-pr_review_guidance')
     expect(collapsed.getAttribute('aria-expanded')).toBe('false')
     expect(collapsed.textContent).toContain('Expand')
 
     await fireEvent.click(collapsed)
-    const expanded = screen.getByTestId('expand-pr_walkthrough_prompt')
+    const expanded = screen.getByTestId('expand-pr_review_guidance')
     expect(expanded.getAttribute('aria-expanded')).toBe('true')
     expect(expanded.textContent).toContain('Collapse')
 
     await fireEvent.click(expanded)
-    expect(screen.getByTestId('expand-pr_walkthrough_prompt').getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByTestId('expand-pr_review_guidance').getAttribute('aria-expanded')).toBe('false')
   })
 
   it('offers reset to default in global mode only once the value drifts from the shipped default', async () => {
@@ -157,32 +158,52 @@ describe('HierarchicalSettingsCard long-text settings', () => {
       props: { mode: 'global', values: baseValues, onChange },
     })
 
-    expect(screen.queryByTestId('reset-default-pr_walkthrough_prompt')).toBeNull()
+    expect(screen.queryByTestId('reset-default-pr_review_guidance')).toBeNull()
 
     await rerender({
       mode: 'global',
-      values: { ...baseValues, pr_walkthrough_prompt: 'Hand-edited prompt' },
+      values: { ...baseValues, pr_review_guidance: 'Hand-edited prompt' },
       onChange,
     })
 
-    await fireEvent.click(screen.getByTestId('reset-default-pr_walkthrough_prompt'))
-    expect(onChange).toHaveBeenCalledWith('pr_walkthrough_prompt', DEFAULT_PR_WALKTHROUGH_PROMPT)
+    await fireEvent.click(screen.getByTestId('reset-default-pr_review_guidance'))
+    expect(onChange).toHaveBeenCalledWith('pr_review_guidance', DEFAULT_PR_REVIEW_GUIDANCE)
+  })
+
+  it('warns above each PR guidance field about what a skill reference can reach', () => {
+    render(HierarchicalSettingsCard, { props: { mode: 'global', values: baseValues, onChange: vi.fn() } })
+
+    for (const key of ['pr_review_guidance', 'pr_walkthrough_guidance']) {
+      // The limits a user would otherwise only discover by hitting them: the
+      // feature is Claude Code only, and marketplace skills don't resolve.
+      const notice = screen.getByTestId(`notice-${key}`).textContent ?? ''
+      expect(notice).toContain('Claude Code provider')
+      expect(notice).toContain('~/.claude/skills')
+      expect(notice).toContain('.claude/skills')
+      expect(notice).toContain('plugin or marketplace')
+    }
+  })
+
+  it('leaves settings without a notice unadorned', () => {
+    render(HierarchicalSettingsCard, { props: { mode: 'global', values: baseValues, onChange: vi.fn() } })
+
+    expect(screen.queryByTestId('notice-task_id_prefix')).toBeNull()
   })
 
   it('keeps the project card on reset-to-global rather than reset-to-default', () => {
     render(HierarchicalSettingsCard, {
       props: {
         mode: 'project',
-        values: { ...baseValues, pr_walkthrough_prompt: 'Project prompt' },
-        overrides: { pr_walkthrough_prompt: 'Project prompt' },
+        values: { ...baseValues, pr_review_guidance: 'Project prompt' },
+        overrides: { pr_review_guidance: 'Project prompt' },
         onChange: vi.fn(),
         onResetSetting: vi.fn(),
       },
     })
 
-    expect(screen.queryByTestId('reset-default-pr_walkthrough_prompt')).toBeNull()
+    expect(screen.queryByTestId('reset-default-pr_review_guidance')).toBeNull()
     expect(
-      screen.getByRole('button', { name: 'Reset PR Walkthrough + AI Review Prompt to global default' }),
+      screen.getByRole('button', { name: 'Reset AI Review Instructions to global default' }),
     ).toBeTruthy()
   })
 })

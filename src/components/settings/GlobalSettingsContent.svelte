@@ -7,6 +7,7 @@
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsProviderField from './SettingsProviderField.svelte'
+  import { PR_GUIDANCE_KEYS, PR_GUIDANCE_SECTION } from '../../lib/hierarchicalSettings'
   import type { SettingsViewController } from './settingsViewController.svelte'
 
   interface Props {
@@ -48,6 +49,16 @@
       />
     {/snippet}
   </HierarchicalSettingsCard>
+  <HierarchicalSettingsCard
+    mode="global"
+    sectionId={PR_GUIDANCE_SECTION.id}
+    title={PR_GUIDANCE_SECTION.title}
+    subtitle={PR_GUIDANCE_SECTION.subtitle}
+    values={controller.globalHierarchyValues}
+    includeKeys={PR_GUIDANCE_KEYS}
+    onChange={controller.handleGlobalSettingChange}
+    disabled={!controller.globalSettingsLoaded}
+  />
 {:else if activeSection === 'github'}
   <SettingsCredentialsCard
     githubToken={controller.githubToken}

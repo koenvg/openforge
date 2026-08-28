@@ -8,6 +8,7 @@ mod files_review;
 mod github_review;
 mod jira;
 mod lifecycle;
+mod local_skills;
 mod plugins;
 mod pty;
 mod pty_payload;

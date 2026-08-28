@@ -1,0 +1,3 @@
+- Prefer a few high-value remarks over exhaustive nitpicking. An empty review is a valid outcome for a clean PR.
+- Comment on correctness, missed edge cases, and mismatches between the code and its stated intent. Skip formatting, naming taste, and anything a linter already enforces.
+- When you are unsure whether something is wrong, ask a question rather than assert a defect.

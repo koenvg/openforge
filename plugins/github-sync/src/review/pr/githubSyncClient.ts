@@ -102,7 +102,8 @@ export interface GithubSyncPrReviewClient {
     headSha: string
     reviewPrId: number
     projectId: string | null
-    promptTemplate: string
+    reviewGuidance: string
+    walkthroughGuidance: string
   }): Promise<{ walkthrough_session_key: string }>
   abortAgentWalkthrough(request: { walkthroughSessionKey: string }): Promise<void>
   getAiThreads(request: { reviewPrId: number; headSha: string }): Promise<AiThread[]>

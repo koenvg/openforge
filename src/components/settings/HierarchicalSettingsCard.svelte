@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronsDownUp, ChevronsUpDown, RotateCcw, SlidersHorizontal } from '@lucide/svelte'
+  import { ChevronsDownUp, ChevronsUpDown, Info, RotateCcw, SlidersHorizontal } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
   import { HIERARCHICAL_SETTINGS } from '../../lib/hierarchicalSettings'
   import type { HierarchicalSettingDef, SettingLevel } from '../../lib/hierarchicalSettings'
@@ -14,6 +14,14 @@
     onResetToGlobal?: () => void
     onResetSetting?: (key: string) => void
     excludeKeys?: string[]
+    /** Render only these keys, in HIERARCHICAL_SETTINGS order. Overrides excludeKeys. */
+    includeKeys?: string[]
+    /** Card heading. Defaults to the scope name ("Global defaults" / "Project configuration"). */
+    title?: string
+    /** Text under the heading. Defaults to the inheritance explainer. */
+    subtitle?: string
+    /** Distinguishes the DOM ids when more than one card renders on a page. */
+    sectionId?: string
     providerField?: Snippet
     disabled?: boolean
     resettingKey?: string | null
@@ -29,23 +37,30 @@
     onResetToGlobal,
     onResetSetting,
     excludeKeys = [],
+    includeKeys,
+    title,
+    subtitle,
+    sectionId = 'configuration',
     providerField,
     disabled = false,
     resettingKey = null,
   }: Props = $props()
 
   const visibleSettings = $derived(
-    HIERARCHICAL_SETTINGS.filter(
-      (setting) =>
-        setting.levels.includes(mode as SettingLevel) && !excludeKeys.includes(setting.key),
-    ),
+    HIERARCHICAL_SETTINGS.filter((setting) => {
+      if (!setting.levels.includes(mode as SettingLevel)) return false
+      return includeKeys ? includeKeys.includes(setting.key) : !excludeKeys.includes(setting.key)
+    }),
   )
 
   const helperText = $derived(
-    mode === 'global'
-      ? 'These defaults apply app-wide. A project can override individual settings without changing other projects.'
-      : 'Settings inherited from your global defaults. Change one to override it for this project only; reset it to resume inheriting.',
+    subtitle ??
+      (mode === 'global'
+        ? 'These defaults apply app-wide. A project can override individual settings without changing other projects.'
+        : 'Settings inherited from your global defaults. Change one to override it for this project only; reset it to resume inheriting.'),
   )
+
+  const heading = $derived(title ?? (mode === 'global' ? 'Global defaults' : 'Project configuration'))
 
   let expandedKeys = $state<Record<string, boolean>>({})
 
@@ -130,8 +145,8 @@
 {/snippet}
 
 <section
-  id="section-configuration"
-  aria-labelledby="configuration-heading"
+  id="section-{sectionId}"
+  aria-labelledby="{sectionId}-heading"
   class="overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-sm"
 >
   <div class="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-base-300 px-5 py-3">
@@ -140,8 +155,8 @@
         <SlidersHorizontal size={18} />
       </div>
       <div class="min-w-0">
-        <h2 id="configuration-heading" class="m-0 text-sm font-semibold text-base-content">
-          {mode === 'global' ? 'Global defaults' : 'Project configuration'}
+        <h2 id="{sectionId}-heading" class="m-0 text-sm font-semibold text-base-content">
+          {heading}
         </h2>
         <p class="m-0 mt-0.5 text-xs leading-5 text-base-content/60">{helperText}</p>
       </div>
@@ -225,6 +240,17 @@
         </div>
 
         <div class="flex min-w-0 gap-3 {fullWidth ? 'flex-col items-stretch' : 'items-center justify-between md:justify-end'}">
+          {#if setting.notice}
+            <!-- Sits above the field, not in the description, because it states what
+                 the value can and cannot do — easy to miss once the field is expanded. -->
+            <p
+              class="m-0 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-xs leading-5 text-base-content/75"
+              data-testid="notice-{setting.key}"
+            >
+              <Info size={14} class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+              <span>{setting.notice}</span>
+            </p>
+          {/if}
           {#if setting.control === 'toggle'}
             <label class="flex min-h-10 cursor-pointer items-center gap-2">
               <input
