@@ -1,4 +1,6 @@
-use serde::Serialize;
+use super::{GitHubClient, GitHubError};
+use reqwest::{RequestBuilder, Response, StatusCode};
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -45,20 +47,20 @@ impl EtagResponseCache {
         }
     }
 
-    pub(super) fn diagnostics(&self) -> GitHubResponseCacheDiagnostics {
+    fn diagnostics(&self) -> GitHubResponseCacheDiagnostics {
         GitHubResponseCacheDiagnostics {
             entry_count: self.entries.len(),
             body_bytes: self.body_bytes,
         }
     }
 
-    pub(super) fn lookup(&mut self, url: &str) -> Option<CachedResponse> {
+    fn lookup(&mut self, url: &str) -> Option<CachedResponse> {
         let cached = self.entries.get(url).cloned()?;
         self.touch(url);
         Some(cached)
     }
 
-    pub(super) fn store(&mut self, url: &str, etag: Option<String>, body: &str) {
+    fn store(&mut self, url: &str, etag: Option<String>, body: &str) {
         self.remove(url);
 
         let Some(etag) = etag else {
@@ -109,9 +111,100 @@ impl EtagResponseCache {
     }
 }
 
+pub(super) enum ConditionalResponse {
+    NotModified(Option<Arc<str>>),
+    Fresh(Response),
+}
+
+impl GitHubClient {
+    fn cached_response_for_url(&self, url: &str) -> Option<CachedResponse> {
+        self.etag_cache.lock().unwrap().lookup(url)
+    }
+
+    fn apply_cached_etag(req: RequestBuilder, cached: Option<&CachedResponse>) -> RequestBuilder {
+        if let Some(cached) = cached {
+            req.header("If-None-Match", &cached.etag)
+        } else {
+            req
+        }
+    }
+
+    pub(super) fn cache_response_body(&self, url: &str, etag: Option<String>, body: &str) {
+        self.etag_cache.lock().unwrap().store(url, etag, body);
+    }
+
+    /// Return the current response-cache entry count and cached body bytes.
+    pub fn response_cache_diagnostics(&self) -> GitHubResponseCacheDiagnostics {
+        self.etag_cache.lock().unwrap().diagnostics()
+    }
+
+    pub(super) async fn conditional_get(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<ConditionalResponse, GitHubError> {
+        let cached = self.cached_response_for_url(url);
+        let request = Self::apply_cached_etag(self.github_get(url, token), cached.as_ref());
+        let response = self.send_github(request).await?;
+
+        if response.status() == StatusCode::NOT_MODIFIED {
+            return Ok(ConditionalResponse::NotModified(
+                cached.map(|cached| cached.body),
+            ));
+        }
+
+        Ok(ConditionalResponse::Fresh(response))
+    }
+
+    /// Make a GET request with ETag conditional request support.
+    ///
+    /// Sends `If-None-Match` header when a cached ETag exists for the URL.
+    /// On 304 Not Modified, returns the cached deserialized response.
+    /// On 200, caches the response body + ETag and returns the parsed result.
+    pub(super) async fn get_with_etag<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<T, GitHubError> {
+        match self.conditional_get(url, token).await? {
+            ConditionalResponse::NotModified(Some(cached_body)) => {
+                serde_json::from_str(&cached_body)
+                    .map_err(|error| GitHubError::ParseError(error.to_string()))
+            }
+            ConditionalResponse::NotModified(None) => Err(GitHubError::ParseError(
+                "Received 304 but no cached response found".to_string(),
+            )),
+            ConditionalResponse::Fresh(response) => {
+                if !response.status().is_success() {
+                    return Err(Self::api_error_from_response(response).await);
+                }
+
+                let etag = response
+                    .headers()
+                    .get("etag")
+                    .and_then(|value| value.to_str().ok())
+                    .map(String::from);
+
+                let body = response
+                    .text()
+                    .await
+                    .map_err(|error| GitHubError::NetworkError(error.to_string()))?;
+
+                let result: T = serde_json::from_str(&body)
+                    .map_err(|error| GitHubError::ParseError(error.to_string()))?;
+
+                self.cache_response_body(url, etag, &body);
+
+                Ok(result)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reqwest::header::{HeaderValue, IF_NONE_MATCH};
 
     #[test]
     fn replacement_updates_body_and_byte_diagnostics() {
@@ -179,5 +272,81 @@ mod tests {
                 body_bytes: 0,
             }
         );
+    }
+
+    #[test]
+    fn client_cache_is_initialized_empty() {
+        let client = GitHubClient::new();
+
+        assert_eq!(
+            client.response_cache_diagnostics(),
+            GitHubResponseCacheDiagnostics {
+                entry_count: 0,
+                body_bytes: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn apply_cached_etag_sets_if_none_match_header() {
+        let client = GitHubClient::new();
+        client.cache_response_body(
+            "https://example.com/resource",
+            Some("W/\"etag-123\"".to_string()),
+            "{}",
+        );
+        let cached = client.cached_response_for_url("https://example.com/resource");
+        let request = GitHubClient::apply_cached_etag(
+            client.github_get("https://example.com/resource", "token"),
+            cached.as_ref(),
+        )
+        .build()
+        .expect("request should build");
+
+        assert_eq!(
+            request.headers().get(IF_NONE_MATCH),
+            Some(&HeaderValue::from_static("W/\"etag-123\""))
+        );
+    }
+
+    #[test]
+    fn apply_cached_etag_leaves_header_absent_when_cache_missing() {
+        let client = GitHubClient::new();
+
+        let request = GitHubClient::apply_cached_etag(
+            client.github_get("https://example.com/resource", "token"),
+            None,
+        )
+        .build()
+        .expect("request should build");
+
+        assert!(request.headers().get(IF_NONE_MATCH).is_none());
+    }
+
+    #[test]
+    fn cache_response_body_stores_body_when_etag_present() {
+        let client = GitHubClient::new();
+
+        client.cache_response_body(
+            "https://example.com/resource",
+            Some("W/\"etag-123\"".to_string()),
+            "{\"ok\":true}",
+        );
+
+        let cached = client
+            .cached_response_for_url("https://example.com/resource")
+            .expect("response should be cached");
+
+        assert_eq!(cached.etag, "W/\"etag-123\"");
+        assert_eq!(cached.body.as_ref(), "{\"ok\":true}");
+    }
+
+    #[test]
+    fn cache_response_body_skips_cache_when_etag_missing() {
+        let client = GitHubClient::new();
+
+        client.cache_response_body("https://example.com/resource", None, "{\"ok\":true}");
+
+        assert_eq!(client.response_cache_diagnostics().entry_count, 0);
     }
 }
