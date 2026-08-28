@@ -244,4 +244,85 @@ describe('InlineCommentThread', () => {
     })
     expect(setup.onPendingCommentsChange).not.toHaveBeenCalled()
   })
+  it('queues a trimmed reply to an existing GitHub comment and closes the editor', async () => {
+    const onAddReplyToReview = vi.fn()
+    const data: CommentDisplayData = {
+      comments: [{
+        body: 'Existing review comment',
+        type: 'existing',
+        author: 'reviewer',
+        commentId: 23,
+      }],
+    }
+    const setup = makeProps({ data, onReplyToExistingComment: vi.fn(), onAddReplyToReview })
+    render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply to this comment' }))
+    const editor = screen.getByRole('textbox', { name: 'Reply to this comment' })
+    await fireEvent.input(editor, { target: { value: '  Hold this reply  ' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to review' }))
+
+    expect(onAddReplyToReview).toHaveBeenCalledWith(23, 'Hold this reply')
+    expect(screen.queryByRole('textbox', { name: 'Reply to this comment' })).toBeNull()
+  })
+
+  it('asks about an AI review comment with its diff location', async () => {
+    const onAskAboutComment = vi.fn()
+    const agentComment = makeAgentComment()
+    const data: CommentDisplayData = {
+      comments: [{
+        body: agentComment.body,
+        type: 'agent',
+        commentId: agentComment.id,
+        status: agentComment.status,
+        filePath: agentComment.file_path ?? undefined,
+        lineNumber: agentComment.line_number ?? undefined,
+        commentSide: agentComment.side ?? undefined,
+      }],
+    }
+    const setup = makeProps({ data, agentComments: [agentComment], onAskAboutComment })
+    render(InlineCommentThread, { props: setup.props })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Ask the agent about this AI review comment' }))
+    const editor = screen.getByRole('textbox', { name: 'Ask the agent about this AI review comment' })
+    await fireEvent.input(editor, { target: { value: '  Why this change?  ' } })
+    await fireEvent.keyDown(editor, { key: 'Enter' })
+
+    expect(onAskAboutComment).toHaveBeenCalledWith({
+      commentId: agentComment.id,
+      filename: 'src/example.ts',
+      line: 12,
+      side: 'RIGHT',
+      body: 'Why this change?',
+    })
+    expect(screen.queryByRole('textbox', { name: 'Ask the agent about this AI review comment' })).toBeNull()
+  })
+
+  it('replies to an answered AI Q&A thread', async () => {
+    const onReplyToThread = vi.fn()
+    const data: CommentDisplayData = {
+      comments: [{
+        body: '',
+        type: 'ai-thread',
+        thread: {
+          id: 'thread-1',
+          anchor: { type: 'line', filename: 'src/example.ts', line: 12, side: 'RIGHT' },
+          status: 'answered',
+          messages: [{ role: 'user', body: 'Why?', created_at: 1 }],
+          created_at: 1,
+          updated_at: 1,
+        },
+      }],
+    }
+    const setup = makeProps({ data, onReplyToThread })
+    render(InlineCommentThread, { props: setup.props })
+
+    const editor = screen.getByRole('textbox', { name: 'Reply to the AI author' })
+    await fireEvent.input(editor, { target: { value: '  One more question  ' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+
+    expect(onReplyToThread).toHaveBeenCalledWith('thread-1', 'One more question')
+    expect((editor as HTMLInputElement).value).toBe('')
+  })
+
 })
