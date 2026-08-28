@@ -131,6 +131,7 @@ export const desktopCommandContracts = [
   {"functionName":"getTaskAttention","moduleName":"tasks","ipcCommand":"get_task_attention","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getTaskLanes","moduleName":"tasks","ipcCommand":"get_task_lanes","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getAllTasks","moduleName":"tasks","ipcCommand":"get_tasks","payloadKeys":[],"owner":"rust-sidecar","domain":"tasks-projects"},
+  {"functionName":"getTaskRelationshipReferences","moduleName":"tasks","ipcCommand":"get_task_relationship_references","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getTasksForProject","moduleName":"tasks","ipcCommand":"get_tasks_for_project","payloadKeys":["projectId","includeDone"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getProjectTaskLabels","moduleName":"tasks","ipcCommand":"get_project_task_labels","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"createTaskLabel","moduleName":"tasks","ipcCommand":"create_task_label","payloadKeys":["projectId","name"],"owner":"rust-sidecar","domain":"tasks-projects"},

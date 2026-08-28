@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Task, TaskLabel } from '../../lib/types'
+  import type { Task, TaskLabel, TaskRelationshipReference } from '../../lib/types'
   import { activeSessions, dependencyReferenceTasks, mergingTaskIds, projects, tasks as allTasks } from '../../lib/stores'
   import { addTaskLabel, removeTaskLabel, updateTaskSourceTicketUrl } from '../../lib/ipc'
   import { getAgentSessionResumeCommand } from '../../lib/agentResumeCommand'
@@ -19,7 +19,7 @@
     task: Task
     workspacePath: string | null
     allTasksOverride?: Task[]
-    dependencyReferenceTasksOverride?: Task[]
+    dependencyReferenceTasksOverride?: TaskRelationshipReference[]
     surface?: 'default' | 'transparent'
     density?: 'default' | 'inspector'
     onEditPrompt?: () => void

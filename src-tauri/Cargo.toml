@@ -51,6 +51,7 @@ tempfile = "3"
 thiserror = "2"
 
 [dev-dependencies]
+rusqlite = { version = "0.40", features = ["trace"] }
 tower = { version = "0.5", features = ["util"] }
 jsonschema = { version = "0.33", default-features = false }
 tokio-tungstenite = "0.24"

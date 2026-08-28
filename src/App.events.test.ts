@@ -163,5 +163,51 @@ describe('App desktop events', { timeout: 15_000 }, () => {
         expect(get(stores.taskSpawned)).toEqual({ taskId: 'T-99', promptText: 'Prompt from task detail' })
       })
     })
+
+    it('coalesces a burst of task-changed and session lifecycle refreshes', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+      let resolveTasks!: () => void
+      stores.activeProjectId.set('proj-1')
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(eventListeners.has('task-changed')).toBe(true)
+        expect(eventListeners.has('implementation-failed')).toBe(true)
+        expect(ipc.getTaskRelationshipReferences).toHaveBeenCalled()
+        expect(get(stores.isLoading)).toBe(false)
+      })
+      stores.activeProjectId.set('proj-1')
+
+      vi.mocked(ipc.getTasksForProject).mockClear()
+      vi.mocked(ipc.getTaskRelationshipReferences).mockClear()
+      vi.mocked(ipc.getTasksForProject).mockReturnValueOnce(new Promise((resolve) => {
+        resolveTasks = () => resolve([])
+      }))
+
+      const taskChanged = requireDefined(eventListeners.get('task-changed'), 'Expected task-changed listener')
+      const implementationFailed = requireDefined(
+        eventListeners.get('implementation-failed'),
+        'Expected implementation-failed listener',
+      )
+      const refreshes = Array.from({ length: 10 }, (_, index) => Promise.all([
+        taskChanged({ payload: { action: 'updated', task_id: `T-${index}` } }),
+        implementationFailed({ payload: { task_id: `T-${index}`, error: 'failed' } }),
+      ]))
+
+      await vi.waitFor(() => {
+        expect(ipc.getTasksForProject).toHaveBeenCalledOnce()
+        expect(ipc.getTaskRelationshipReferences).toHaveBeenCalledOnce()
+      })
+
+      resolveTasks()
+      await Promise.all(refreshes)
+
+      expect(ipc.getTasksForProject).toHaveBeenCalledOnce()
+      expect(ipc.getTaskRelationshipReferences).toHaveBeenCalledOnce()
+    })
   })
 })

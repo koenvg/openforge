@@ -51,8 +51,8 @@ vi.mock('../lib/ipc', () => ({
     callOrder.push('getTasksForProject')
     return []
   }),
-  getAllTasks: vi.fn(async () => {
-    callOrder.push('getAllTasks')
+  getTaskRelationshipReferences: vi.fn(async () => {
+    callOrder.push('getTaskRelationshipReferences')
     return []
   }),
   getTaskAttention: vi.fn(async () => []),

@@ -1,5 +1,15 @@
 use super::*;
 
+fn load_task_relationship_references(
+    state: &AppState,
+    project_id: &str,
+) -> Result<Vec<db::TaskRelationshipReferenceRow>, String> {
+    let database = crate::db::acquire_db(&state.db);
+    database
+        .get_task_relationship_references_for_project(project_id)
+        .map_err(|error| format!("Failed to get task relationship references: {error}"))
+}
+
 pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_json::Value> {
     match request.command.as_str() {
         "get_task_config" => {
@@ -116,6 +126,12 @@ pub(super) fn handle(state: &AppState, request: &AppInvokeRequest) -> AppResult<
                 })?
             };
             json_value(tasks)
+        }
+        "get_task_relationship_references" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let references = load_task_relationship_references(state, &project_id)
+                .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?;
+            json_value(references)
         }
         "get_project_attention" => {
             let attention = {

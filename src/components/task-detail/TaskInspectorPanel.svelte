@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Task } from '../../lib/types'
+  import type { Task, TaskRelationshipReference } from '../../lib/types'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { getTaskTitle } from '../../lib/taskTitle'
@@ -10,7 +10,7 @@
     task: Task | null
     workspacePath?: string | null
     allTasks?: Task[]
-    dependencyReferenceTasks?: Task[]
+    dependencyReferenceTasks?: TaskRelationshipReference[]
     onOpenFullView?: () => void
     onOpenLinkedTask?: (taskId: string, projectId: string | null) => void
     onEditTask?: (taskId: string) => void
