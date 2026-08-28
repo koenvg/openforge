@@ -99,10 +99,6 @@ impl GitHubClient {
         pr_number: i64,
         token: &str,
     ) -> Result<PullRequest, GitHubError> {
-        #[cfg(test)]
-        if let Some(result) = self.test_pull_request(owner, repo, pr_number) {
-            return result;
-        }
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}",
             owner, repo, pr_number
@@ -132,8 +128,9 @@ impl GitHubClient {
             review_comments_url.push_str(&format!("&since={}", ts));
         }
 
-        let mut review_comments: Vec<ReviewComment> =
-            self.get_all_pages(&review_comments_url, token).await?;
+        let mut review_comments: Vec<ReviewComment> = self
+            .get_with_etag::<Vec<ReviewComment>>(&review_comments_url, token)
+            .await?;
 
         let mut issue_comments_url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/comments?per_page=100",
@@ -143,8 +140,9 @@ impl GitHubClient {
             issue_comments_url.push_str(&format!("&since={}", ts));
         }
 
-        let mut issue_comments: Vec<IssueComment> =
-            self.get_all_pages(&issue_comments_url, token).await?;
+        let mut issue_comments: Vec<IssueComment> = self
+            .get_with_etag::<Vec<IssueComment>>(&issue_comments_url, token)
+            .await?;
 
         let mut all_comments = Vec::new();
 
@@ -159,7 +157,17 @@ impl GitHubClient {
         // Fetch review bodies (top-level summary comments from PR reviews).
         // These are only accessible via /pulls/{number}/reviews and are NOT
         // included in the review comments or issue comments endpoints.
-        let reviews = self.get_pr_reviews(owner, repo, pr_number, token).await?;
+        let reviews = self
+            .get_pr_reviews(owner, repo, pr_number, token)
+            .await
+            .unwrap_or_else(|e| {
+                warn!(
+                    "[GitHub] Failed to fetch reviews for PR #{}: {}",
+                    pr_number,
+                    e.sanitized_log_message()
+                );
+                vec![]
+            });
 
         for review in reviews {
             let body = match &review.body {

@@ -10,7 +10,6 @@
 //! - `transport` — GitHub request construction and execution
 //! - `response_cache` — ETag conditional requests and response caching
 //! - `rate_limit` — Rate-limit detection, state, and logging
-//! - `pagination` — Multi-page REST response collection
 //! - `pulls` — Pull request operations (details, comments, files, search)
 //! - `checks` — CI check runs and commit status operations
 //! - `reviews` — PR review operations
@@ -24,7 +23,6 @@ mod checks;
 pub mod error;
 mod events;
 mod graphql;
-mod pagination;
 mod pulls;
 mod rate_limit;
 mod repos;
@@ -45,12 +43,7 @@ pub use types::*;
 
 use reqwest::Client;
 use response_cache::{ConditionalResponse, EtagResponseCache};
-#[cfg(test)]
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
-#[cfg(test)]
-type TestPullRequests = HashMap<(String, String, i64), PullRequest>;
 
 #[derive(Clone, Debug)]
 enum GitHubTokenSource {
@@ -66,8 +59,6 @@ pub struct GitHubClient {
     etag_cache: Arc<Mutex<EtagResponseCache>>,
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
     token_source: GitHubTokenSource,
-    #[cfg(test)]
-    test_pull_requests: Option<Arc<TestPullRequests>>,
 }
 
 /// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
@@ -106,8 +97,6 @@ impl GitHubClient {
             etag_cache: Arc::new(Mutex::new(EtagResponseCache::new())),
             last_rate_limit_reset: Arc::new(Mutex::new(None)),
             token_source: GitHubTokenSource::SecureStore,
-            #[cfg(test)]
-            test_pull_requests: None,
         }
     }
 
@@ -117,52 +106,6 @@ impl GitHubClient {
             token_source: GitHubTokenSource::Fixed(result),
             ..Self::new()
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_test_pull_requests(
-        pull_requests: Vec<(String, String, PullRequest)>,
-    ) -> Self {
-        let pull_requests = pull_requests
-            .into_iter()
-            .map(|(owner, repo, pull_request)| {
-                (
-                    (
-                        owner.to_ascii_lowercase(),
-                        repo.to_ascii_lowercase(),
-                        pull_request.number,
-                    ),
-                    pull_request,
-                )
-            })
-            .collect();
-        Self {
-            token_source: GitHubTokenSource::Fixed(Ok(Some("test-token".to_string()))),
-            test_pull_requests: Some(Arc::new(pull_requests)),
-            ..Self::new()
-        }
-    }
-
-    #[cfg(test)]
-    fn test_pull_request(
-        &self,
-        owner: &str,
-        repo: &str,
-        number: i64,
-    ) -> Option<Result<PullRequest, GitHubError>> {
-        self.test_pull_requests.as_ref().map(|pull_requests| {
-            pull_requests
-                .get(&(
-                    owner.to_ascii_lowercase(),
-                    repo.to_ascii_lowercase(),
-                    number,
-                ))
-                .cloned()
-                .ok_or_else(|| GitHubError::ApiError {
-                    status: 404,
-                    message: "Not Found".to_string(),
-                })
-        })
     }
 
     pub(crate) async fn github_token(&self) -> Result<Option<String>, String> {

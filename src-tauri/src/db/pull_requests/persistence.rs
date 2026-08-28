@@ -37,54 +37,6 @@ impl Database {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn update_pr_comment_from_github(
-        &self,
-        id: i64,
-        pr_id: i64,
-        author: &str,
-        body: &str,
-        comment_type: &str,
-        file_path: Option<&str>,
-        line_number: Option<i32>,
-        outdated: bool,
-        created_at: i64,
-    ) -> Result<()> {
-        let conn = self.lock_conn()?;
-        conn.execute(
-            "UPDATE pr_comments SET
-                pr_id = ?2,
-                author = ?3,
-                body = ?4,
-                comment_type = ?5,
-                file_path = ?6,
-                line_number = ?7,
-                outdated = ?8,
-                created_at = ?9
-             WHERE id = ?1",
-            rusqlite::params![
-                id,
-                pr_id,
-                author,
-                body,
-                comment_type,
-                file_path,
-                line_number,
-                if outdated { 1 } else { 0 },
-                created_at,
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_pr_comment(&self, pr_id: i64, comment_id: i64) -> Result<()> {
-        let conn = self.lock_conn()?;
-        conn.execute(
-            "DELETE FROM pr_comments WHERE pr_id = ?1 AND id = ?2",
-            rusqlite::params![pr_id, comment_id],
-        )?;
-        Ok(())
-    }
     /// Insert or update a pull request in the database.
     /// Legacy callers use the repository-local PR number as the row id.
     #[allow(clippy::too_many_arguments)]
@@ -167,13 +119,13 @@ impl Database {
              SET pr_id = ?1
              WHERE pr_id IN (
                SELECT id FROM pull_requests
-               WHERE repo_owner = ?2 COLLATE NOCASE AND repo_name = ?3 COLLATE NOCASE AND pr_number = ?4 AND id <> ?1
+               WHERE repo_owner = ?2 AND repo_name = ?3 AND pr_number = ?4 AND id <> ?1
              )",
             rusqlite::params![id, repo_owner, repo_name, pr_number],
         )?;
         tx.execute(
             "DELETE FROM pull_requests
-             WHERE repo_owner = ?1 COLLATE NOCASE AND repo_name = ?2 COLLATE NOCASE AND pr_number = ?3 AND id <> ?4",
+             WHERE repo_owner = ?1 AND repo_name = ?2 AND pr_number = ?3 AND id <> ?4",
             rusqlite::params![repo_owner, repo_name, pr_number, id],
         )?;
         tx.commit()?;
@@ -186,15 +138,6 @@ impl Database {
         conn.execute(
             "UPDATE pull_requests SET head_sha = ?1 WHERE id = ?2",
             rusqlite::params![sha, pr_id],
-        )?;
-        Ok(())
-    }
-
-    pub fn update_pr_title(&self, pr_id: i64, title: &str) -> Result<()> {
-        let conn = self.lock_conn()?;
-        conn.execute(
-            "UPDATE pull_requests SET title = ?1 WHERE id = ?2",
-            rusqlite::params![title, pr_id],
         )?;
         Ok(())
     }
@@ -360,10 +303,10 @@ impl Database {
         Ok(())
     }
 
-    pub fn mark_comment_addressed(&self, id: i64) -> Result<bool> {
+    pub fn mark_comment_addressed(&self, id: i64) -> Result<()> {
         let conn = self.lock_conn()?;
-        let updated = conn.execute("UPDATE pr_comments SET addressed = 1 WHERE id = ?1", [id])?;
-        Ok(updated > 0)
+        conn.execute("UPDATE pr_comments SET addressed = 1 WHERE id = ?1", [id])?;
+        Ok(())
     }
 
     /// Refresh a comment's `outdated` flag without touching its local

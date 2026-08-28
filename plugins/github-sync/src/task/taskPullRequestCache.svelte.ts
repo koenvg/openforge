@@ -5,7 +5,6 @@ import type { GithubTaskClient } from './githubTaskClient'
 export interface TaskPullRequestCacheEntry {
   pullRequests: PullRequestInfo[]
   commentsByPrId: Map<number, PrComment[]>
-  commentsError: string | null
   loaded: boolean
   loading: boolean
   stale: boolean
@@ -23,7 +22,6 @@ export interface TaskPullRequestCache {
 const EMPTY_ENTRY: TaskPullRequestCacheEntry = {
   pullRequests: [],
   commentsByPrId: new Map(),
-  commentsError: null,
   loaded: false,
   loading: false,
   stale: false,
@@ -63,12 +61,10 @@ export function createTaskPullRequestCache(client: GithubTaskClient): TaskPullRe
       try {
         const pullRequests = await client.listPullRequests(taskId)
         const previousComments = forTask(taskId).commentsByPrId
-        let commentsError: string | null = null
         const commentEntries = await Promise.all(pullRequests.map(async (pr) => {
           try {
             return [pr.id, await client.getComments(pr.id)] as const
-          } catch (error) {
-            commentsError ??= errorMessage(error)
+          } catch {
             return [pr.id, previousComments.get(pr.id) ?? []] as const
           }
         }))
@@ -80,7 +76,6 @@ export function createTaskPullRequestCache(client: GithubTaskClient): TaskPullRe
           return {
             pullRequests,
             commentsByPrId: new Map(commentEntries),
-            commentsError,
             loaded: true,
             loading: false,
             stale: false,

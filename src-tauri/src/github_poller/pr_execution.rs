@@ -37,7 +37,6 @@ pub(super) struct PollSinglePrResult {
     pub(super) old_ci_status: Option<String>,
     pub(super) old_review_status: Option<String>,
     pub(super) comments: Vec<PrComment>,
-    pub(super) comments_snapshot_complete: bool,
     pub(super) check_runs: Option<CheckRunsResponse>,
     pub(super) combined_status: Option<CombinedStatusResponse>,
     pub(super) reviews: Option<Vec<PrReview>>,
@@ -73,7 +72,6 @@ pub(super) fn comment_fetch_error_result(
         old_ci_status,
         old_review_status,
         comments: vec![],
-        comments_snapshot_complete: false,
         check_runs: None,
         combined_status: None,
         reviews: None,
@@ -273,12 +271,7 @@ pub(super) async fn poll_single_pr(
     PollSinglePrResult {
         pr_id: pr.id,
         ticket_id: pr.ticket_id,
-        pr_title: rest_sources
-            .pr_details_result
-            .as_ref()
-            .ok()
-            .map(|details| details.title.clone())
-            .unwrap_or(pr.title),
+        pr_title: pr.title,
         github_node_id: graphql_snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.github_node_id.clone())
@@ -288,7 +281,6 @@ pub(super) async fn poll_single_pr(
         old_ci_status,
         old_review_status,
         comments,
-        comments_snapshot_complete: fetch_comments,
         check_runs,
         combined_status,
         reviews: rest_sources.reviews,

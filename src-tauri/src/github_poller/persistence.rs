@@ -70,16 +70,15 @@ pub(super) fn persist_polled_comments(
     mut on_new_comment: impl FnMut(i64),
 ) -> PersistCommentsResult {
     let mut persist_result = PersistCommentsResult::default();
-    let mut remote_ids: HashSet<i64> = HashSet::new();
+    let mut inserted_this_batch: HashSet<i64> = HashSet::new();
 
     for comment in &result.comments {
-        if !remote_ids.insert(comment.id) {
-            continue;
-        }
-        let already_seen = existing_ids.contains(&comment.id);
-        let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
+        let already_seen =
+            existing_ids.contains(&comment.id) || inserted_this_batch.contains(&comment.id);
 
         if !already_seen {
+            let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
+
             if let Err(e) = db.insert_pr_comment(
                 comment.id,
                 result.pr_id,
@@ -102,36 +101,18 @@ pub(super) fn persist_polled_comments(
 
             on_new_comment(comment.id);
             persist_result.new_comment_count += 1;
+            inserted_this_batch.insert(comment.id);
         }
 
-        if let Err(e) = db.update_pr_comment_from_github(
-            comment.id,
-            result.pr_id,
-            &comment.user.login,
-            &comment.body,
-            &comment.comment_type,
-            comment.path.as_deref(),
-            comment.line,
-            comment.outdated,
-            created_at,
-        ) {
+        // Refresh the GitHub "outdated" state for every fetched comment — new or
+        // pre-existing. This never touches the local `addressed` flag, so an
+        // addressed comment stays addressed even after it becomes outdated.
+        if let Err(e) = db.update_comment_outdated(comment.id, comment.outdated) {
             warn!(
-                "[GitHub Poller] Failed to refresh comment {}: {}",
+                "[GitHub Poller] Failed to update outdated for comment {}: {}",
                 comment.id, e
             );
             persist_result.error_count += 1;
-        }
-    }
-
-    if result.comments_snapshot_complete {
-        for deleted_id in existing_ids.difference(&remote_ids) {
-            if let Err(e) = db.delete_pr_comment(result.pr_id, *deleted_id) {
-                warn!(
-                    "[GitHub Poller] Failed to delete stale comment {}: {}",
-                    deleted_id, e
-                );
-                persist_result.error_count += 1;
-            }
         }
     }
 
@@ -572,13 +553,8 @@ fn persist_review_status(
     Ok(changed.then_some(status))
 }
 
-pub(super) fn persist_pr_snapshot(db: &Database, result: &PollSinglePrResult) -> usize {
+fn persist_pr_snapshot(db: &Database, result: &PollSinglePrResult) -> usize {
     let mut errors = 0;
-    errors += log_pr_update_error(
-        result.pr_id,
-        "update title",
-        db.update_pr_title(result.pr_id, &result.pr_title),
-    );
     if let Some(github_node_id) = result.github_node_id.as_deref() {
         errors += log_pr_update_error(
             result.pr_id,

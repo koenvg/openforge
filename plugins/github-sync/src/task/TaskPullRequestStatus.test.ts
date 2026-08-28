@@ -112,6 +112,27 @@ describe('GitHub Sync Task pull request section', () => {
     expect(screen.getByText('owner/other')).toBeTruthy()
   })
 
+  it('removes a comment after it is marked addressed', async () => {
+    let loaded = false
+    const invoke = vi.fn(async (method: string) => {
+      if (method === 'listTaskPullRequests') {
+        return [createPullRequest({ unaddressed_comment_count: loaded ? 0 : 1 })]
+      }
+      if (method === 'getTaskPrComments') {
+        if (loaded) return []
+        loaded = true
+        return [baseComment]
+      }
+      return emptyPollResult
+    })
+
+    renderSection(invoke)
+    await fireEvent.click(await screen.findByRole('button', { name: '✓ Mark addressed' }))
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: '✓ Mark addressed' })).toBeNull())
+    expect(invoke).toHaveBeenCalledWith('markTaskPrCommentAddressed', { commentId: 501 })
+  })
+
   it('does not show merge-readiness blockers after the pull request is merged', async () => {
     const merged = createPullRequest({
       state: 'merged',
@@ -352,8 +373,7 @@ describe('GitHub Sync Task pull request section', () => {
     renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Squash and merge' }))
 
-    expect(screen.getByText('Merge owner/repo pull request #42 “Test PR”?')).toBeTruthy()
-    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
+    expect(screen.queryByText('Merge owner/repo pull request #42 “Test PR”?')).toBeNull()
     expect((screen.getByRole('button', { name: 'Merging…' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status', { name: 'Merging pull request' })).toBeTruthy()
     await fireEvent.click(screen.getByRole('button', { name: 'Merging…' }))
@@ -398,7 +418,6 @@ describe('GitHub Sync Task pull request section', () => {
 
     const { rerender } = renderSection(invoke)
     await fireEvent.click(await screen.findByRole('button', { name: 'Create a merge commit' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Confirm Merge' }))
     await rerender({
       taskId: 'T-99',
       projectId: 'P-1',
