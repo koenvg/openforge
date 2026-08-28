@@ -144,24 +144,26 @@
   {:else if content !== null}
     <div class="flex h-full min-h-0 flex-col">
       <div class="shrink-0 border-b border-base-300 bg-base-100 px-5 py-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="text-base font-semibold tracking-tight text-base-content break-all">{fileName}</div>
+        <div class="flex min-h-9 items-center justify-between gap-4">
+          <div class="flex min-w-0 flex-wrap items-center gap-y-1">
+            <div class="mr-3 text-base font-semibold tracking-tight text-base-content break-all">{fileName}</div>
+            <div class="flex flex-wrap items-center gap-y-1 border-l border-base-300 pl-3 text-xs text-base-content/60">
+              <span>{formatFileSize(content.size)}</span>
+              {#if content.mimeType}
+                <span class="ml-3 border-l border-base-300 pl-3 font-mono">{content.mimeType}</span>
+              {/if}
+              {#if lineCount !== null}
+                <span class="ml-3 border-l border-base-300 pl-3">{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
+              {/if}
+              {#if modifiedAt !== null}
+                <span class="ml-3 border-l border-base-300 pl-3">Modified {formatModifiedAt(modifiedAt)}</span>
+              {/if}
+            </div>
+          </div>
           {#if onReturnFocusToTree}
             <button class={RETURN_TO_TREE_BUTTON_CLASS} type="button" onclick={() => onReturnFocusToTree?.()}>
               Return focus to selected file in tree
             </button>
-          {/if}
-        </div>
-        <div class="mt-1.5 flex flex-wrap items-center gap-y-1 text-xs text-base-content/60">
-          <span>{formatFileSize(content.size)}</span>
-          {#if content.mimeType}
-            <span class="ml-3 border-l border-base-300 pl-3 font-mono">{content.mimeType}</span>
-          {/if}
-          {#if lineCount !== null}
-            <span class="ml-3 border-l border-base-300 pl-3">{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span>
-          {/if}
-          {#if modifiedAt !== null}
-            <span class="ml-3 border-l border-base-300 pl-3">Modified {formatModifiedAt(modifiedAt)}</span>
           {/if}
         </div>
       </div>
