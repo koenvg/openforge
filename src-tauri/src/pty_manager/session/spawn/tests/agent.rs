@@ -134,7 +134,6 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
 #[tokio::test]
 async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
     let mut manager = PtyManager::new();
-    manager.set_ghostty_terminal_state_enabled(true);
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
     manager.set_pid_dir(tmp_dir.path().to_path_buf());
     let task_id = "ghostty-agent-runtime-events";

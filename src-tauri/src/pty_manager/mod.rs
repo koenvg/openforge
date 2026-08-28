@@ -11,7 +11,6 @@ mod pids;
 mod session;
 mod terminal_model_bridge;
 
-use crate::terminal_model::ShadowMode;
 #[cfg(test)]
 use crate::terminal_model::TerminalModelTestFault;
 #[cfg(test)]
@@ -23,7 +22,7 @@ use authority::TerminalAuthorityContract;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -114,8 +113,6 @@ impl From<std::io::Error> for PtyError {
 // PTY Manager
 // ============================================================================
 
-pub(crate) const GHOSTTY_TERMINAL_STATE_CONFIG: &str = "ghostty_terminal_state_enabled";
-
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
 pub struct PtyManager {
@@ -133,8 +130,6 @@ pub struct PtyManager {
     agent_spawn_generations: AgentSpawnGenerations,
     #[cfg(test)]
     lifecycle_locks: LifecycleLockRegistry,
-    shadow_mode: ShadowMode,
-    ghostty_terminal_state_enabled: Arc<AtomicBool>,
     #[cfg(test)]
     terminal_model_test_fault: Arc<std::sync::Mutex<TerminalModelTestFault>>,
     #[cfg(test)]
@@ -238,8 +233,6 @@ impl PtyManager {
             pending_shell_spawns: test_handles.pending_shell_spawns,
             terminal_sessions,
             pid_dir_override: None,
-            shadow_mode: ShadowMode::from_environment(),
-            ghostty_terminal_state_enabled: Arc::new(AtomicBool::new(false)),
             #[cfg(test)]
             terminal_model_test_fault: Arc::new(std::sync::Mutex::new(
                 TerminalModelTestFault::None,
@@ -253,25 +246,8 @@ impl PtyManager {
         }
     }
 
-    pub(crate) fn set_ghostty_terminal_state_enabled(&self, enabled: bool) {
-        self.ghostty_terminal_state_enabled
-            .store(enabled, Ordering::Release);
-    }
-
-    pub(crate) fn ghostty_terminal_state_enabled(&self) -> bool {
-        self.ghostty_terminal_state_enabled.load(Ordering::Acquire)
-    }
-
     pub(crate) fn terminal_authority_contract(&self) -> TerminalAuthorityContract {
-        if self.ghostty_terminal_state_enabled() {
-            TerminalAuthorityContract::ghostty_authoritative()
-        } else {
-            TerminalAuthorityContract::xterm_authoritative()
-        }
-    }
-
-    fn terminal_model_enabled(&self) -> bool {
-        self.shadow_mode.is_enabled() || self.ghostty_terminal_state_enabled()
+        TerminalAuthorityContract::ghostty_authoritative()
     }
 }
 
@@ -293,10 +269,6 @@ impl PtyManager {
         value: impl Into<String>,
     ) {
         self.test_environment.insert(key.into(), value.into());
-    }
-
-    pub(crate) fn set_shadow_mode(&mut self, mode: ShadowMode) {
-        self.shadow_mode = mode;
     }
 
     pub(crate) fn set_terminal_model_test_fault(&self, fault: TerminalModelTestFault) {

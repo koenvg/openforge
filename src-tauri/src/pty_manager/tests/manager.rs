@@ -64,10 +64,8 @@ fn terminal_environment_advertises_iterm_only_when_requested() {
 }
 
 #[test]
-fn ghostty_feature_flag_selects_ghostty_as_terminal_state_authority() {
+fn new_sessions_use_ghostty_as_terminal_state_authority() {
     let manager = PtyManager::new();
-
-    manager.set_ghostty_terminal_state_enabled(true);
 
     let authority = manager.terminal_authority_contract();
     assert_eq!(authority.parsed_state_owner, ParsedStateOwner::Ghostty);

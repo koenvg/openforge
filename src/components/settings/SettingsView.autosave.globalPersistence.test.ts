@@ -45,7 +45,6 @@ describe('SettingsView autosave global persistence', () => {
     resolvers.get('ai_provider')?.('claude-code')
     resolvers.get('pr_review_guidance')?.('Review guidance')
     resolvers.get('pr_walkthrough_guidance')?.('Walkthrough guidance')
-    resolvers.get('ghostty_terminal_state_enabled')?.('false')
 
     await vi.waitFor(() => {
       expect(requireElement(screen.getByPlaceholderText('ghp_...'), HTMLInputElement).disabled).toBe(false)

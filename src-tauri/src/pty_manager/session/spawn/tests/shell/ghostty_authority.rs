@@ -12,16 +12,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
-async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
-    let mut harness = ShellTestHarness::new();
-    harness
-        .manager
-        .set_shadow_mode(crate::terminal_model::ShadowMode::Enabled);
-    let task_id = "shadow-shell";
+async fn ghostty_authority_tracks_live_shell_without_changing_replay_or_lifecycle() {
+    let harness = ShellTestHarness::new();
+    let task_id = "ghostty-authority-shell";
     let session_key = shell_session_key(task_id, Some(0));
     let mut command = CommandBuilder::new("/bin/sh");
     command.arg("-lc");
-    command.arg("printf 'shadow-output'; exec sleep 30");
+    command.arg("printf 'ghostty-output'; exec sleep 30");
 
     let instance_id = harness
         .spawn_with_publisher(
@@ -31,12 +28,12 @@ async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
             command,
         )
         .await
-        .expect("shell PTY should spawn with shadow mode enabled");
+        .expect("shell PTY should spawn with Ghostty authority");
 
     wait_for_output(
         &harness.manager,
         &session_key,
-        "shadow-output",
+        "ghostty-output",
         Duration::from_secs(5),
     )
     .await;
@@ -50,16 +47,16 @@ async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
         let sessions = harness.manager.sessions.lock().await;
         let session = sessions.get(&session_key).expect("live shell session");
         assert_eq!(session.instance_id, instance_id);
-        let shadow = session
+        let model = session
             .terminal_model
             .as_ref()
-            .expect("shadow model should follow the live instance");
-        let snapshot = shadow.snapshot().expect("canonical snapshot should encode");
-        let portable = shadow.portable_vt().expect("portable VT should format");
+            .expect("Ghostty model should own the live instance");
+        let snapshot = model.snapshot().expect("canonical snapshot should encode");
+        let portable = model.portable_vt().expect("portable VT should format");
         assert!(snapshot.starts_with(b"GHOSTSNP"));
         assert!(portable
-            .windows(b"shadow-output".len())
-            .any(|part| part == b"shadow-output"));
+            .windows(b"ghostty-output".len())
+            .any(|part| part == b"ghostty-output"));
     }
 
     harness
@@ -78,7 +75,6 @@ async fn shadow_mode_tracks_live_shell_without_changing_replay_or_lifecycle() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ghostty_model_creation_failure_terminates_session_and_preserves_shell_key() {
     let harness = ShellTestHarness::new();
-    harness.manager.set_ghostty_terminal_state_enabled(true);
     harness
         .manager
         .set_terminal_model_test_fault(TerminalModelTestFault::CreateFailure);
@@ -146,7 +142,6 @@ async fn ghostty_model_creation_failure_terminates_session_and_preserves_shell_k
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ghostty_model_queue_saturation_backpressures_and_recovers_the_session() {
     let harness = ShellTestHarness::new();
-    harness.manager.set_ghostty_terminal_state_enabled(true);
     let queue_gate = TerminalModelQueueSaturationGate::new();
     harness
         .manager
@@ -225,7 +220,6 @@ async fn ghostty_model_queue_saturation_backpressures_and_recovers_the_session()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ghostty_model_worker_panic_terminates_the_affected_session() {
     let harness = ShellTestHarness::new();
-    harness.manager.set_ghostty_terminal_state_enabled(true);
     harness
         .manager
         .set_terminal_model_test_fault(TerminalModelTestFault::PanicOnFirstCommand);

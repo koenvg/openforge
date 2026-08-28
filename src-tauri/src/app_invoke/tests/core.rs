@@ -63,21 +63,6 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
         "dark"
     );
 
-    invoke_ok(
-        &state,
-        "set_config",
-        json!({
-            "key": crate::pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG,
-            "value": "true",
-        }),
-    )
-    .await;
-    assert!(state
-        .pty_manager
-        .as_ref()
-        .expect("PTY manager")
-        .ghostty_terminal_state_enabled());
-
     let project = invoke_ok(
         &state,
         "create_project",

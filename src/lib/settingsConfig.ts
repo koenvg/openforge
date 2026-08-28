@@ -36,7 +36,6 @@ export interface GlobalSettingsConfig {
   taskIdPrefix: string
   githubToken: string
   taskDisplayTitleMetadataUpdatesEnabled: boolean
-  ghosttyTerminalStateEnabled: boolean
   githubPollInterval: number
   useWorktrees: boolean
   aiProvider: string
@@ -103,7 +102,6 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   taskIdPrefix: '',
   githubToken: '',
   taskDisplayTitleMetadataUpdatesEnabled: false,
-  ghosttyTerminalStateEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
   useWorktrees: true,
   aiProvider: 'claude-code',
@@ -145,7 +143,16 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, reviewGuidance, walkthroughGuidance, ghosttyTerminalStateEnabled] = await Promise.all([
+  const [
+    taskIdPrefix,
+    githubToken,
+    taskDisplayTitleMetadataUpdatesEnabled,
+    githubPollInterval,
+    useWorktrees,
+    aiProvider,
+    reviewGuidance,
+    walkthroughGuidance,
+  ] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
     getConfig('task_display_title_metadata_updates_enabled'),
@@ -154,14 +161,12 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
     getConfig('ai_provider'),
     getConfig('pr_review_guidance'),
     getConfig('pr_walkthrough_guidance'),
-    getConfig('ghostty_terminal_state_enabled'),
   ])
 
   return {
     taskIdPrefix: taskIdPrefix ?? DEFAULT_GLOBAL_SETTINGS.taskIdPrefix,
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
     taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
-    ghosttyTerminalStateEnabled: ghosttyTerminalStateEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),
     useWorktrees: useWorktrees == null ? DEFAULT_GLOBAL_SETTINGS.useWorktrees : useWorktrees === 'true',
     aiProvider: aiProvider ?? DEFAULT_GLOBAL_SETTINGS.aiProvider,

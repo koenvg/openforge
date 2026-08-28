@@ -2,8 +2,7 @@
 mod session;
 
 pub(crate) use session::{
-    ShadowMode, TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder,
-    TerminalModelSession,
+    TerminalModelEvent, TerminalModelEventSink, TerminalModelFeeder, TerminalModelSession,
 };
 #[cfg(test)]
 pub(crate) use session::{

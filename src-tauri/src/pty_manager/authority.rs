@@ -1,5 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ParsedStateOwner {
+    #[cfg(test)]
     Xterm,
     Ghostty,
 }
@@ -12,12 +13,14 @@ pub(crate) enum QueryResponseOwner {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReplayOwner {
+    #[cfg(test)]
     PtyByteBuffer,
     GhosttySnapshot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SnapshotOwner {
+    #[cfg(test)]
     None,
     Ghostty,
 }
@@ -31,6 +34,7 @@ pub(crate) struct TerminalAuthorityContract {
 }
 
 impl TerminalAuthorityContract {
+    #[cfg(test)]
     pub(crate) const fn xterm_authoritative() -> Self {
         Self {
             parsed_state_owner: ParsedStateOwner::Xterm,

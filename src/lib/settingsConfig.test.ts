@@ -120,16 +120,14 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('opencode')
         .mockResolvedValueOnce('Custom review guidance')
         .mockResolvedValueOnce('Custom walkthrough guidance')
-        .mockResolvedValueOnce('true')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(9)
+      expect(getConfig).toHaveBeenCalledTimes(8)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
         taskDisplayTitleMetadataUpdatesEnabled: true,
-        ghosttyTerminalStateEnabled: true,
         githubPollInterval: 45,
         useWorktrees: false,
         aiProvider: 'opencode',
@@ -151,7 +149,6 @@ describe('settingsConfig', () => {
         taskIdPrefix: '',
         githubToken: '',
         taskDisplayTitleMetadataUpdatesEnabled: false,
-        ghosttyTerminalStateEnabled: false,
         githubPollInterval: 60,
         useWorktrees: true,
         aiProvider: 'claude-code',

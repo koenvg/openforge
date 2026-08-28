@@ -166,10 +166,16 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
         log.contains(&format!("cwd={}", canonical_project_repo.display())),
         "provider must launch from the Project path saved in the database, got: {log}"
     );
-    let event = tokio::time::timeout(Duration::from_secs(1), events.recv())
-        .await
-        .expect("task event should arrive")
-        .expect("task event should be readable");
+    let event = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let event = events.recv().await.expect("task event should be readable");
+            if event.event_name == "task-changed" {
+                break event;
+            }
+        }
+    })
+    .await
+    .expect("task event should arrive");
     assert_eq!(event.event_name, "task-changed");
     assert_eq!(event.payload["action"], "updated");
     assert_eq!(event.payload["task_id"], task_id);
@@ -708,12 +714,18 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
         "feature/open-pr"
     );
 
-    let db = crate::db::acquire_db(&state.db);
-    let workspace = db
-        .get_task_workspace_for_task(&task_id)
-        .expect("get workspace")
-        .expect("workspace should exist");
-    assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+    {
+        let db = crate::db::acquire_db(&state.db);
+        let workspace = db
+            .get_task_workspace_for_task(&task_id)
+            .expect("get workspace")
+            .expect("workspace should exist");
+        assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
+    }
+
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(&task_id).await;
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

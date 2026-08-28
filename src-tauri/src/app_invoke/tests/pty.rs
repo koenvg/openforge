@@ -29,7 +29,12 @@ async fn handles_commands_that_do_not_require_spawn() {
 
 #[tokio::test]
 async fn spawns_without_backend_app_emitter() {
-    let (state, _temp_dir) = test_state("app_invoke_pty_spawn_without_app");
+    let (mut state, _temp_dir) = test_state("app_invoke_pty_spawn_without_app");
+
+    // Raw and model PTY chunks share this receiver. Keep the bounded shell exchange
+    // from evicting the events this test observes.
+    let (app_event_tx, _) = tokio::sync::broadcast::channel(1_024);
+    state.app_event_tx = Some(app_event_tx);
 
     let instance_id = invoke_ok(
         &state,
@@ -69,19 +74,14 @@ async fn spawns_without_backend_app_emitter() {
         .await;
     let mut saw_output = false;
     let mut saw_exit = false;
-    for _ in 0..8 {
-        let Ok(event) =
-            tokio::time::timeout(std::time::Duration::from_secs(2), events.recv()).await
-        else {
-            break;
-        };
-        let event = event.expect("event should be available");
-        saw_output |= event.event_name == "pty-output-T-1-shell-1";
-        saw_exit |= event.event_name == "pty-exit-T-1-shell-1";
-        if saw_output && saw_exit {
-            break;
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !saw_output || !saw_exit {
+            let event = events.recv().await.expect("event should be available");
+            saw_output |= event.event_name == "pty-output-T-1-shell-1";
+            saw_exit |= event.event_name == "pty-exit-T-1-shell-1";
         }
-    }
+    })
+    .await;
     assert!(saw_output, "sidecar should publish PTY output events");
     if !saw_exit {
         let _ = state
@@ -95,21 +95,12 @@ async fn spawns_without_backend_app_emitter() {
 }
 
 #[tokio::test]
-async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering() {
+async fn ghostty_authority_returns_canonical_terminal_snapshot_for_xterm_rendering() {
     let (mut state, _temp_dir) = test_state("app_invoke_ghostty_snapshot");
     // Raw and model PTY chunks share this receiver. Size this test-local channel for the
     // bounded shell exchange so an unrelated burst cannot evict the event under test.
     let (app_event_tx, _) = tokio::sync::broadcast::channel(1_024);
     state.app_event_tx = Some(app_event_tx);
-    invoke_ok(
-        &state,
-        "set_config",
-        json!({
-            "key": crate::pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG,
-            "value": "true",
-        }),
-    )
-    .await;
     let instance_id = invoke_ok(
         &state,
         "pty_spawn_shell",
@@ -219,68 +210,8 @@ async fn ghostty_feature_returns_canonical_terminal_snapshot_for_xterm_rendering
 }
 
 #[tokio::test]
-async fn xterm_authority_rejects_stale_query_responses() {
-    let (state, _temp_dir) = test_state("app_invoke_xterm_authority");
-    let instance_id = invoke_ok(
-        &state,
-        "pty_spawn_shell",
-        json!({
-            "taskId": "T-authority",
-            "cwd": "/tmp",
-            "cols": 80,
-            "rows": 24,
-            "terminalIndex": 0,
-        }),
-    )
-    .await
-    .as_u64()
-    .expect("instance id");
-
-    let stale = invoke(
-        &state,
-        "pty_write_terminal_query_response",
-        json!({
-            "shellSessionKey": "T-authority-shell-0",
-            "ptyInstanceId": instance_id + 1,
-            "data": "\u{1b}[1;1R",
-        }),
-    )
-    .await
-    .expect_err("stale xterm response should be rejected");
-    assert_eq!(stale.0, StatusCode::CONFLICT);
-    assert!(stale.1.contains("stale PTY instance"));
-
-    invoke_ok(
-        &state,
-        "pty_write_terminal_query_response",
-        json!({
-            "shellSessionKey": "T-authority-shell-0",
-            "ptyInstanceId": instance_id,
-            "data": "\u{1b}[1;1R",
-        }),
-    )
-    .await;
-
-    let _ = state
-        .pty_manager
-        .as_ref()
-        .expect("PTY manager")
-        .kill_shells_for_task("T-authority")
-        .await;
-}
-
-#[tokio::test]
 async fn ghostty_authority_rejects_xterm_generated_query_responses() {
     let (state, _temp_dir) = test_state("app_invoke_ghostty_authority");
-    invoke_ok(
-        &state,
-        "set_config",
-        json!({
-            "key": crate::pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG,
-            "value": "true",
-        }),
-    )
-    .await;
     let instance_id = invoke_ok(
         &state,
         "pty_spawn_shell",

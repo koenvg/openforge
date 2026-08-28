@@ -1,16 +1,16 @@
 # Terminal state and protocol-response paths
 
-OpenForge supports two explicit terminal authority modes. Both render through xterm and retain the same keyboard, IME, selection, link, image, accessibility, and presentation paths.
+OpenForge defines two terminal authority contracts at the Terminal Runtime transport seam. Both render through xterm and retain the same keyboard, IME, selection, link, image, accessibility, and presentation paths.
 
 - `xterm-authoritative`: xterm owns parsed state and terminal-generated replies; the Rust PTY byte buffer supplies replay.
 - `ghostty-authoritative`: the Rust sidecar's `libghostty-vt` model owns parsed state, restoration snapshots, and terminal-generated replies; xterm renders the model's portable VT snapshot and later output bytes.
 
-The experimental `ghostty_terminal_state_enabled` setting selects the authority for newly created Terminal Sessions. Existing sessions retain the contract captured at spawn.
+The Rust Sidecar assigns `ghostty-authoritative` to every newly created Terminal Session. Terminal Runtime keeps the `xterm-authoritative` contract for compatibility, but terminal authority is no longer a user setting.
 
-The contracts are typed in both runtimes:
+The contracts are represented where each runtime needs them:
 
 - TypeScript: `XTERM_AUTHORITATIVE_TERMINAL_CONTRACT` and `GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT` in `packages/terminal-runtime/src/terminalAuthority.ts`
-- Rust: `TerminalAuthorityContract::{xterm_authoritative, ghostty_authoritative}` in `src-tauri/src/pty_manager/authority.rs`
+- Rust: live sessions use `TerminalAuthorityContract::ghostty_authoritative` in `src-tauri/src/pty_manager/authority.rs`; test-only xterm fixtures exercise the compatibility path
 
 ## Transport seam
 
