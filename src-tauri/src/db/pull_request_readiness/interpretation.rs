@@ -73,6 +73,7 @@ pub(crate) struct PullRequestReadinessInput<'a> {
     pub(crate) updated_at: i64,
     pub(crate) draft: bool,
     pub(crate) is_queued: bool,
+    pub(crate) merge_queue_required: Option<bool>,
     pub(crate) unaddressed_comment_count: i64,
     pub(crate) merge_readiness_status: Option<&'a str>,
     pub(crate) merge_readiness_action: Option<&'a str>,
@@ -93,6 +94,7 @@ impl<'a> From<&'a PrRow> for PullRequestReadinessInput<'a> {
             updated_at: pr.updated_at,
             draft: pr.draft,
             is_queued: pr.is_queued,
+            merge_queue_required: pr.merge_queue_required,
             unaddressed_comment_count: pr.unaddressed_comment_count,
             merge_readiness_status: pr.merge_readiness_status.as_deref(),
             merge_readiness_action: pr.merge_readiness_action.as_deref(),
@@ -282,7 +284,11 @@ fn fallback_readiness_view(input: &PullRequestReadinessInput<'_>) -> PullRequest
             && matches!(ci_status.as_deref(), None | Some("none"))
             && matches!(review_status.as_deref(), None | Some("none")))
     {
-        PullRequestReadinessStatus::ReadyToMerge
+        if input.merge_queue_required == Some(true) {
+            PullRequestReadinessStatus::ReadyToEnqueue
+        } else {
+            PullRequestReadinessStatus::ReadyToMerge
+        }
     } else if mergeable_state.as_deref() == Some("unknown")
         || input.mergeable.is_none()
         || (mergeable_state.is_none() && input.mergeable != Some(false))
@@ -348,6 +354,43 @@ mod tests {
         pr.readiness_updated_at = Some(pr.updated_at);
 
         let readiness = PullRequestReadinessView::from(&pr);
+
+        assert_eq!(readiness.status(), PullRequestReadinessStatus::ReadyToMerge);
+    }
+
+    fn stale_ready_to_merge_pr(merge_queue_required: Option<bool>) -> PrRow {
+        let mut pr = make_github_readiness_pr();
+        pr.merge_readiness_status = Some("ready_to_merge".to_string());
+        pr.merge_readiness_action = Some("merge".to_string());
+        pr.readiness_source_head_sha = Some("stale-head-sha".to_string());
+        pr.readiness_updated_at = Some(pr.updated_at);
+        pr.merge_queue_required = merge_queue_required;
+        pr
+    }
+
+    #[test]
+    fn fresh_persisted_ready_to_merge_outranks_the_merge_queue_requirement() {
+        let mut pr = stale_ready_to_merge_pr(Some(true));
+        pr.readiness_source_head_sha = Some(pr.head_sha.clone());
+
+        let readiness = PullRequestReadinessView::from(&pr);
+
+        assert_eq!(readiness.status(), PullRequestReadinessStatus::ReadyToMerge);
+    }
+
+    #[test]
+    fn stale_ready_to_merge_falls_back_to_ready_to_enqueue_when_the_merge_queue_is_required() {
+        let readiness = PullRequestReadinessView::from(&stale_ready_to_merge_pr(Some(true)));
+
+        assert_eq!(
+            readiness.status(),
+            PullRequestReadinessStatus::ReadyToEnqueue
+        );
+    }
+
+    #[test]
+    fn stale_ready_to_merge_stays_ready_to_merge_when_the_merge_queue_is_not_required() {
+        let readiness = PullRequestReadinessView::from(&stale_ready_to_merge_pr(Some(false)));
 
         assert_eq!(readiness.status(), PullRequestReadinessStatus::ReadyToMerge);
     }

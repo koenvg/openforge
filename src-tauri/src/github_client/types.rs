@@ -591,7 +591,6 @@ pub struct RepositoryPolicyFacts {
     pub required_reviews: PolicyValue<Option<usize>>,
     pub requires_up_to_date_branch: PolicyValue<Option<bool>>,
     pub requires_conversation_resolution: PolicyValue<Option<bool>>,
-    pub merge_queue_required: PolicyValue<Option<bool>>,
     pub allowed_merge_methods: PolicyValue<Vec<PullRequestMergeMethod>>,
     pub default_merge_method: PolicyValue<Option<PullRequestMergeMethod>>,
     pub required_deployments: PolicyValue<Vec<String>>,
@@ -605,7 +604,6 @@ impl RepositoryPolicyFacts {
             required_reviews: PolicyValue::known(Some(0)),
             requires_up_to_date_branch: PolicyValue::known(Some(false)),
             requires_conversation_resolution: PolicyValue::known(Some(false)),
-            merge_queue_required: PolicyValue::known(Some(false)),
             allowed_merge_methods: PolicyValue::unknown("repository merge methods unavailable"),
             default_merge_method: PolicyValue::unknown("default merge method unavailable"),
             required_deployments: PolicyValue::known(Vec::new()),
@@ -620,7 +618,6 @@ impl RepositoryPolicyFacts {
             required_reviews: PolicyValue::unknown(reason.clone()),
             requires_up_to_date_branch: PolicyValue::unknown(reason.clone()),
             requires_conversation_resolution: PolicyValue::unknown(reason.clone()),
-            merge_queue_required: PolicyValue::unknown(reason.clone()),
             allowed_merge_methods: PolicyValue::unknown(reason.clone()),
             default_merge_method: PolicyValue::unknown(reason.clone()),
             required_deployments: PolicyValue::unknown(reason.clone()),
@@ -642,7 +639,7 @@ pub struct GitHubReadinessSnapshot {
     pub review_decision: Option<String>,
     pub review_status: Option<String>,
     pub auto_merge_requested: bool,
-    pub merge_queue_required: Option<bool>,
+    pub merge_queue_enabled: Option<bool>,
     pub merge_queue_state: Option<String>,
     pub merge_group_sha: Option<String>,
     pub unresolved_conversations: Option<bool>,
@@ -673,7 +670,7 @@ impl GitHubReadinessSnapshot {
             review_decision: None,
             review_status: None,
             auto_merge_requested: false,
-            merge_queue_required: None,
+            merge_queue_enabled: None,
             merge_queue_state: None,
             merge_group_sha: None,
             unresolved_conversations: None,
@@ -742,6 +739,9 @@ impl GitHubReadinessSnapshot {
             .get("autoMergeRequest")
             .map(|value| !value.is_null())
             .unwrap_or(false);
+        let merge_queue_enabled = pr
+            .get("isMergeQueueEnabled")
+            .and_then(|value| value.as_bool());
         let merge_queue = pr.get("mergeQueueEntry");
         let merge_queue_state = merge_queue.and_then(|entry| string_field(entry, "state"));
         let merge_group_sha = merge_queue
@@ -816,7 +816,7 @@ impl GitHubReadinessSnapshot {
             review_decision,
             review_status,
             auto_merge_requested,
-            merge_queue_required: policy.merge_queue_required.value,
+            merge_queue_enabled,
             merge_queue_state,
             merge_group_sha,
             unresolved_conversations,
@@ -944,10 +944,6 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
                 .filter_map(|value| value.as_str().map(ToOwned::to_owned))
                 .collect::<Vec<_>>()
         });
-    let requires_merge_queue = rule
-        .get("requiresMergeQueue")
-        .and_then(|value| value.as_bool());
-
     let (required_deployments, unknown_reasons) = match (
         requires_deployments,
         required_deployment_environments,
@@ -965,7 +961,6 @@ fn parse_repository_policy(rule: Option<&serde_json::Value>) -> RepositoryPolicy
         required_reviews: PolicyValue::known(required_reviews),
         requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
         requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
-        merge_queue_required: PolicyValue::known(requires_merge_queue),
         allowed_merge_methods: PolicyValue::unknown("repository merge methods unavailable"),
         default_merge_method: PolicyValue::unknown("default merge method unavailable"),
         required_deployments,
@@ -1607,6 +1602,7 @@ mod tests {
                         "mergeStateStatus": "FUTURE_STATE",
                         "reviewDecision": "AI_REVIEW_PENDING",
                         "autoMergeRequest": { "enabledAt": "2026-01-01T00:00:00Z" },
+                        "isMergeQueueEnabled": true,
                         "mergeQueueEntry": { "state": "AWAITING_CHECKS", "mergeGroup": { "headSha": "merge-group-sha" } },
                         "commits": {
                             "nodes": [{
@@ -1627,8 +1623,7 @@ mod tests {
                                 "requiredApprovingReviewCount": 2,
                                 "requiresStrictStatusChecks": true,
                                 "requiresConversationResolution": true,
-                                "requiresDeployments": false,
-                                "requiresMergeQueue": true
+                                "requiresDeployments": false
                             }
                         }
                     }
@@ -1670,7 +1665,7 @@ mod tests {
             snapshot.policy.requires_conversation_resolution.value,
             Some(true)
         );
-        assert_eq!(snapshot.policy.merge_queue_required.value, Some(true));
+        assert_eq!(snapshot.merge_queue_enabled, Some(true));
         assert_eq!(
             snapshot.status_check_rollup_sha.as_deref(),
             Some("head-sha-1")
@@ -1826,7 +1821,7 @@ mod tests {
         assert!(snapshot.source_head_sha.is_none());
         assert!(!snapshot.policy.required_checks.known);
         assert!(!snapshot.policy.required_reviews.known);
-        assert!(!snapshot.policy.merge_queue_required.known);
+        assert_eq!(snapshot.merge_queue_enabled, None);
         assert!(snapshot
             .policy
             .unknown_reasons
@@ -1888,6 +1883,7 @@ mod tests {
                                 }
                             }]
                         },
+                        "isMergeQueueEnabled": true,
                         "reviewThreads": { "nodes": [] },
                         "baseRef": { "name": "main", "branchProtectionRule": null }
                     }
@@ -1897,7 +1893,6 @@ mod tests {
 
         let snapshot = GitHubReadinessSnapshot::from_graphql_response(&payload).unwrap();
 
-        // Usable PR data from the partial response is preserved.
         assert_eq!(snapshot.source_head_sha.as_deref(), Some("head-sha-9"));
         assert_eq!(
             snapshot.status_check_rollup_sha.as_deref(),
@@ -1905,15 +1900,11 @@ mod tests {
         );
         assert_eq!(snapshot.check_runs.check_runs[0].name, "ci");
         assert_eq!(snapshot.review_status.as_deref(), Some("approved"));
-        // The rollup SHA matches the head SHA, so the salvaged GraphQL checks are
-        // trusted and no REST check re-fetch is needed for this PR.
+        assert_eq!(snapshot.merge_queue_enabled, Some(true));
         assert!(!snapshot.requires_rest_check_fallback());
 
-        // Branch-protection coverage is unknown because the field errored, so the
-        // REST fallback must fill only that gap rather than trusting an empty policy.
         assert!(!snapshot.policy.required_checks.known);
         assert!(!snapshot.policy.required_reviews.known);
-        assert!(!snapshot.policy.merge_queue_required.known);
         assert_eq!(
             snapshot.policy.allowed_merge_methods.value,
             vec![
@@ -1926,7 +1917,6 @@ mod tests {
             Some(PullRequestMergeMethod::Squash)
         );
 
-        // The error message is surfaced for diagnostics.
         assert!(snapshot
             .warnings
             .iter()

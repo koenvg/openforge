@@ -1,4 +1,7 @@
-use crate::{db, github_client::GitHubClient};
+use crate::{
+    db,
+    github_client::{EnqueuePullRequestRequest, GitHubClient},
+};
 use std::sync::{Arc, Mutex};
 
 use super::auth::github_token;
@@ -318,12 +321,15 @@ pub async fn enqueue_task_pull_request(
     };
     github_client
         .enqueue_pull_request_by_node_id(
-            github_node_id,
-            &pr.repo_owner,
-            &pr.repo_name,
-            pr.pr_number,
+            EnqueuePullRequestRequest {
+                pull_request_id: github_node_id,
+                expected_head_oid: expected_head_sha,
+                owner: &pr.repo_owner,
+                repo: &pr.repo_name,
+                pr_number: pr.pr_number,
+                actor_login: &actor_login,
+            },
             &token,
-            &actor_login,
         )
         .await
         .map_err(|e| format!("Failed to enqueue pull request: {e}"))?;

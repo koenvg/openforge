@@ -616,7 +616,7 @@ fn persist_readiness(
         None,
         &result.head_sha,
         result.is_queued,
-        false,
+        None,
         new_comment_count,
         now,
     );

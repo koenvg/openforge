@@ -86,7 +86,6 @@ fn known_readiness_policy(
     required_reviews: Option<usize>,
     requires_up_to_date_branch: Option<bool>,
     requires_conversation_resolution: Option<bool>,
-    merge_queue_required: Option<bool>,
 ) -> crate::github_client::RepositoryPolicyFacts {
     crate::github_client::RepositoryPolicyFacts {
         required_checks: crate::github_client::PolicyValue::known(
@@ -99,7 +98,6 @@ fn known_readiness_policy(
         requires_conversation_resolution: crate::github_client::PolicyValue::known(
             requires_conversation_resolution,
         ),
-        merge_queue_required: crate::github_client::PolicyValue::known(merge_queue_required),
         allowed_merge_methods: crate::github_client::PolicyValue::known(vec![
             crate::github_client::PullRequestMergeMethod::Merge,
         ]),
@@ -142,7 +140,7 @@ fn readiness_snapshot_with_policy(
         review_decision: Some("APPROVED".to_string()),
         review_status: Some("approved".to_string()),
         auto_merge_requested: false,
-        merge_queue_required: None,
+        merge_queue_enabled: None,
         merge_queue_state: None,
         merge_group_sha: Some("merge-group-sha".to_string()),
         unresolved_conversations: Some(true),
@@ -156,13 +154,7 @@ fn select_branch_policy_inputs_prefers_known_graphql_policy_over_rest_fallbacks(
     let mut snapshot = readiness_snapshot_with_policy(
         Some("graphql-head-sha"),
         Some("graphql-head-sha"),
-        known_readiness_policy(
-            vec!["graphql-ci"],
-            Some(2),
-            Some(true),
-            Some(true),
-            Some(true),
-        ),
+        known_readiness_policy(vec!["graphql-ci"], Some(2), Some(true), Some(true)),
     );
     snapshot.unresolved_conversations = Some(true);
     let rest_checks =
@@ -182,7 +174,6 @@ fn select_branch_policy_inputs_prefers_known_graphql_policy_over_rest_fallbacks(
     assert!(inputs.required_reviews_policy_known);
     assert!(inputs.requires_up_to_date_branch);
     assert!(inputs.conversations_blocking);
-    assert!(inputs.merge_queue_required_by_policy);
 }
 
 #[test]
@@ -190,7 +181,7 @@ fn select_branch_policy_inputs_intersects_repository_and_branch_merge_methods() 
     let mut snapshot = readiness_snapshot_with_policy(
         Some("graphql-head-sha"),
         Some("graphql-head-sha"),
-        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(false)),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false)),
     );
     snapshot.policy.allowed_merge_methods = crate::github_client::PolicyValue::known(vec![
         crate::github_client::PullRequestMergeMethod::Merge,
@@ -244,7 +235,6 @@ fn merge_readiness_waits_when_merge_method_policy_is_unknown() {
         required_reviews_policy_known: true,
         requires_up_to_date_branch: false,
         conversations_blocking: false,
-        merge_queue_required_by_policy: false,
         merge_methods_policy_known: false,
         allowed_merge_methods: Vec::new(),
         default_merge_method: None,
@@ -266,7 +256,7 @@ fn current_graphql_readiness_keeps_mergeability_when_check_rollup_needs_rest_fal
     let mut snapshot = readiness_snapshot_with_policy(
         Some("pr-head-sha"),
         Some("stale-rollup-sha"),
-        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(false)),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false)),
     );
     snapshot.mergeable_state = Some("clean".to_string());
     snapshot.review_status = Some("approved".to_string());
@@ -324,7 +314,6 @@ fn select_branch_policy_inputs_uses_rest_when_graphql_policy_is_unknown() {
     assert!(inputs.required_reviews_policy_known);
     assert!(inputs.requires_up_to_date_branch);
     assert!(!inputs.conversations_blocking);
-    assert!(!inputs.merge_queue_required_by_policy);
 }
 
 #[test]
@@ -333,7 +322,7 @@ fn github_readiness_keeps_merge_group_validation_sha_out_of_pr_head() {
     let mut snapshot = readiness_snapshot_with_policy(
         Some("pr-head-sha"),
         Some("pr-head-sha"),
-        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false)),
     );
     snapshot.merge_queue_state = Some("QUEUED".to_string());
     snapshot.merge_group_sha = Some("merge-group-sha".to_string());

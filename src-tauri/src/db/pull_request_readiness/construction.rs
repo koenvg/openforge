@@ -170,7 +170,7 @@ pub(crate) fn finalize_readiness_facts_for_poll(
     graphql_snapshot: Option<&GitHubReadinessSnapshot>,
     source_head_sha: &str,
     readiness_is_queued: bool,
-    merge_queue_required_by_policy: bool,
+    last_known_merge_queue_required: Option<bool>,
     new_comment_count: usize,
     updated_at: i64,
 ) -> PrMergeReadinessFacts {
@@ -180,11 +180,6 @@ pub(crate) fn finalize_readiness_facts_for_poll(
         }
         if readiness_facts.merge_queue_state.is_none() {
             readiness_facts.merge_queue_state = snapshot.merge_queue_state.clone();
-        }
-        if readiness_facts.merge_queue_required.is_none() {
-            readiness_facts.merge_queue_required = snapshot
-                .merge_queue_required
-                .or(snapshot.policy.merge_queue_required.value);
         }
         if !snapshot.policy.unknown_reasons.is_empty() {
             readiness_facts.warnings_json = add_readiness_warning(
@@ -204,15 +199,20 @@ pub(crate) fn finalize_readiness_facts_for_poll(
                 },
             );
         }
-        if merge_queue_required_by_policy
-            && !readiness_is_queued
-            && readiness_facts.status.as_deref() == Some("ready_to_merge")
-        {
-            readiness_facts.status = Some("ready_to_enqueue".to_string());
-            readiness_facts.action = Some("enqueue".to_string());
-            readiness_facts.merge_queue_required = Some(true);
-            readiness_facts.merge_queue_state = Some("not_queued".to_string());
-        }
+    }
+
+    readiness_facts.merge_queue_required = readiness_facts
+        .merge_queue_required
+        .or_else(|| graphql_snapshot.and_then(|snapshot| snapshot.merge_queue_enabled))
+        .or(last_known_merge_queue_required);
+
+    if readiness_facts.merge_queue_required == Some(true)
+        && !readiness_is_queued
+        && readiness_facts.status.as_deref() == Some("ready_to_merge")
+    {
+        readiness_facts.status = Some("ready_to_enqueue".to_string());
+        readiness_facts.action = Some("enqueue".to_string());
+        readiness_facts.merge_queue_state = Some("not_queued".to_string());
     }
 
     let effective_source_sha = if readiness_is_queued {

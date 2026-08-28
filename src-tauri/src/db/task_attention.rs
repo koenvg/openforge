@@ -206,6 +206,7 @@ impl super::Database {
                     updated_at: pr.updated_at,
                     draft: pr.draft,
                     is_queued: pr.is_queued,
+                    merge_queue_required: pr.merge_queue_required,
                     unaddressed_comment_count: pr.unaddressed_comment_count,
                     merge_readiness_status: pr.merge_readiness_status,
                     merge_readiness_action: pr.merge_readiness_action,

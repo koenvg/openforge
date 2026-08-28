@@ -58,7 +58,7 @@ fn github_readiness_snapshot_keeps_ci_data_scoped_to_source_sha() {
         review_decision: Some("APPROVED".to_string()),
         review_status: Some("approved".to_string()),
         auto_merge_requested: false,
-        merge_queue_required: Some(false),
+        merge_queue_enabled: Some(false),
         merge_queue_state: None,
         merge_group_sha: None,
         unresolved_conversations: Some(false),
@@ -96,7 +96,7 @@ fn github_readiness_snapshot_mismatched_rollup_sha_requires_rest_fallback() {
         review_decision: None,
         review_status: None,
         auto_merge_requested: false,
-        merge_queue_required: None,
+        merge_queue_enabled: None,
         merge_queue_state: None,
         merge_group_sha: None,
         unresolved_conversations: None,
@@ -370,7 +370,6 @@ fn known_readiness_policy(
     required_reviews: Option<usize>,
     requires_up_to_date_branch: Option<bool>,
     requires_conversation_resolution: Option<bool>,
-    merge_queue_required: Option<bool>,
 ) -> RepositoryPolicyFacts {
     RepositoryPolicyFacts {
         required_checks: PolicyValue::known(
@@ -379,7 +378,6 @@ fn known_readiness_policy(
         required_reviews: PolicyValue::known(required_reviews),
         requires_up_to_date_branch: PolicyValue::known(requires_up_to_date_branch),
         requires_conversation_resolution: PolicyValue::known(requires_conversation_resolution),
-        merge_queue_required: PolicyValue::known(merge_queue_required),
         allowed_merge_methods: PolicyValue::known(vec![PullRequestMergeMethod::Merge]),
         default_merge_method: PolicyValue::known(Some(PullRequestMergeMethod::Merge)),
         required_deployments: PolicyValue::known(Vec::new()),
@@ -418,7 +416,7 @@ fn readiness_snapshot_with_policy(
         review_decision: Some("APPROVED".to_string()),
         review_status: Some("approved".to_string()),
         auto_merge_requested: false,
-        merge_queue_required: None,
+        merge_queue_enabled: None,
         merge_queue_state: None,
         merge_group_sha: Some("merge-group-sha".to_string()),
         unresolved_conversations: Some(true),
@@ -481,26 +479,34 @@ fn select_snapshot_readiness_inputs_rejects_missing_or_stale_head_data() {
     assert!(select_snapshot_readiness_inputs(&pr, None).is_none());
 }
 
-#[test]
-fn finalize_readiness_facts_for_poll_preserves_snapshot_queue_facts() {
+fn merge_queue_snapshot(merge_queue_enabled: Option<bool>) -> GitHubReadinessSnapshot {
     let mut snapshot = readiness_snapshot_with_policy(
         Some("graphql-head-sha"),
         Some("graphql-head-sha"),
-        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false)),
     );
-    snapshot.merge_queue_required = Some(true);
-    snapshot.merge_queue_state = None;
-    snapshot.merge_group_sha = Some("merge-group-sha".to_string());
+    snapshot.merge_queue_enabled = merge_queue_enabled;
+    snapshot
+}
 
-    let facts = finalize_readiness_facts_for_poll(
+fn finalize_ready_to_merge(
+    snapshot: Option<&GitHubReadinessSnapshot>,
+    last_known_merge_queue_required: Option<bool>,
+) -> PrMergeReadinessFacts {
+    finalize_readiness_facts_for_poll(
         ready_to_merge_facts(),
-        Some(&snapshot),
+        snapshot,
         "graphql-head-sha",
         false,
-        true,
+        last_known_merge_queue_required,
         0,
         1234,
-    );
+    )
+}
+
+#[test]
+fn finalize_promotes_ready_to_merge_to_ready_to_enqueue_when_the_merge_queue_is_enabled() {
+    let facts = finalize_ready_to_merge(Some(&merge_queue_snapshot(Some(true))), None);
 
     assert_eq!(facts.status.as_deref(), Some("ready_to_enqueue"));
     assert_eq!(facts.action.as_deref(), Some("enqueue"));
@@ -512,11 +518,37 @@ fn finalize_readiness_facts_for_poll_preserves_snapshot_queue_facts() {
 }
 
 #[test]
+fn finalize_keeps_ready_to_merge_when_the_merge_queue_is_disabled() {
+    let facts = finalize_ready_to_merge(Some(&merge_queue_snapshot(Some(false))), None);
+
+    assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+    assert_eq!(facts.action.as_deref(), Some("merge"));
+    assert_eq!(facts.merge_queue_required, Some(false));
+}
+
+#[test]
+fn finalize_uses_the_last_known_merge_queue_requirement_when_the_graphql_snapshot_is_missing() {
+    let facts = finalize_ready_to_merge(None, Some(true));
+
+    assert_eq!(facts.status.as_deref(), Some("ready_to_enqueue"));
+    assert_eq!(facts.action.as_deref(), Some("enqueue"));
+    assert_eq!(facts.merge_queue_required, Some(true));
+}
+
+#[test]
+fn finalize_prefers_a_fresh_snapshot_over_the_last_known_merge_queue_requirement() {
+    let facts = finalize_ready_to_merge(Some(&merge_queue_snapshot(Some(false))), Some(true));
+
+    assert_eq!(facts.status.as_deref(), Some("ready_to_merge"));
+    assert_eq!(facts.merge_queue_required, Some(false));
+}
+
+#[test]
 fn github_readiness_finalize_uses_merge_group_sha_for_queued_validation() {
     let mut snapshot = readiness_snapshot_with_policy(
         Some("pr-head-sha"),
         Some("pr-head-sha"),
-        known_readiness_policy(vec![], Some(0), Some(false), Some(false), Some(true)),
+        known_readiness_policy(vec![], Some(0), Some(false), Some(false)),
     );
     snapshot.merge_queue_state = Some("QUEUED".to_string());
     snapshot.merge_group_sha = Some("merge-group-sha".to_string());
@@ -530,7 +562,7 @@ fn github_readiness_finalize_uses_merge_group_sha_for_queued_validation() {
         Some(&snapshot),
         "pr-head-sha",
         true,
-        true,
+        None,
         0,
         1234,
     );
@@ -556,7 +588,7 @@ fn finalize_readiness_facts_for_poll_adds_warnings_for_unknown_policy_and_new_co
         Some(&snapshot),
         "graphql-head-sha",
         false,
-        false,
+        None,
         1,
         5678,
     );
