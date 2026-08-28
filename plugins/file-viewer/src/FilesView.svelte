@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge-app/plugin-sdk/frontend'
-  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import {
     countDefaultHiddenRootEntries,
@@ -25,7 +24,7 @@
     projectId: string | null
   }
 
-  let { api, context: _context, projectName, projectId = null }: Props = $props()
+  let { api, context: _context, projectId = null }: Props = $props()
 
   let loading = $state(true)
   let rootError = $state<string | null>(null)
@@ -56,7 +55,6 @@
   const fileContent = $derived(projectState.fileContent)
   const showHiddenRootEntries = $derived(projectState.showHiddenRootEntries)
   const hiddenRootEntryCount = $derived(countDefaultHiddenRootEntries(rootEntries))
-  const visibleRootEntryCount = $derived(showHiddenRootEntries ? rootEntries.length : rootEntries.length - hiddenRootEntryCount)
   const flatEntries = $derived(flattenFileBrowserEntries(projectState))
   const selectedEntry = $derived(
     selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
@@ -407,29 +405,6 @@
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
-  <PluginPageHeader
-    title={`${projectName || 'Project'} — Files`}
-    subtitle="Browse and preview project files"
-    surface="default"
-  >
-    {#snippet actions()}
-      {#if hasLoaded && !loading}
-        <div class="flex items-center gap-2 shrink-0">
-          {#if hiddenRootEntryCount > 0}
-            <button
-              class="btn btn-outline btn-sm h-9 min-h-9 px-3 text-[13px] font-medium"
-              type="button"
-              onclick={toggleHiddenRootEntries}
-              aria-pressed={showHiddenRootEntries}
-            >
-              {showHiddenRootEntries ? 'Hide generated folders' : `Show generated folders (${hiddenRootEntryCount})`}
-            </button>
-          {/if}
-          <span class="badge badge-ghost badge-sm h-7 px-2.5 font-mono text-xs">{visibleRootEntryCount} {visibleRootEntryCount === 1 ? 'item' : 'items'}</span>
-        </div>
-      {/if}
-    {/snippet}
-  </PluginPageHeader>
 
   <FilesBrowserSection
     {api}
@@ -449,6 +424,8 @@
     {fileContent}
     {previewFocusRequest}
     {treeFocusRequest}
+    {hiddenRootEntryCount}
+    {showHiddenRootEntries}
     {searchQuery}
     {searchActive}
     {searchLoading}
@@ -459,6 +436,7 @@
     searchLimit={SEARCH_LIMIT}
     onSearchInput={handleSearchInput}
     onClearSearch={clearSearch}
+    onToggleHiddenRootEntries={toggleHiddenRootEntries}
     onRetrySearch={retrySearch}
     onRetryRootLoad={retryRootLoad}
     onRetryDirectoryLoad={retryDirectoryLoad}

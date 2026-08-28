@@ -7,6 +7,7 @@ vi.mock('@lucide/svelte', () => ({
   Archive: vi.fn(() => ({})),
   CircleAlert: vi.fn(() => ({})),
   FileQuestion: vi.fn(() => ({})),
+  FolderCog: vi.fn(() => ({})),
   FileText: vi.fn(() => ({})),
   Folder: vi.fn(() => ({})),
   FolderOpen: vi.fn(() => ({})),
@@ -128,12 +129,16 @@ describe('plugin FilesView', () => {
     })
   })
 
-  it('shows project name in the header', async () => {
+  it('omits the default page header to maximize workspace height', async () => {
     renderFilesView({ projectName: 'My Awesome Project' })
 
     await waitFor(() => {
-      expect(screen.getByText(/My Awesome Project/)).toBeTruthy()
+      expect(screen.getByRole('searchbox', { name: 'Search files' })).toBeTruthy()
     })
+
+    expect(screen.queryByText(/My Awesome Project/)).toBeNull()
+    expect(screen.queryByText('Browse and preview project files')).toBeNull()
+    expect(screen.queryByText('0 items')).toBeNull()
   })
 
   it('loads directory children when a directory is expanded', async () => {
