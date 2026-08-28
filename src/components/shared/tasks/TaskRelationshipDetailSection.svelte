@@ -69,11 +69,8 @@
   <span class={idSpanClass}>{item.id}</span>
   <span class={statusSpanClass}>{statusLabel}</span>
   {#if item.projectName}
-    <span class={projectSpanClass} title={`Other project: ${item.projectName}`}>
+    <span class={projectSpanClass}>
       <FolderKanban size={11} aria-hidden="true" />
-      {#if !isDependencies}
-        <span class="uppercase tracking-wide opacity-70">{isFull ? 'Other project:' : 'Other:'}</span>
-      {/if}
       <span>{item.projectName}</span>
     </span>
   {/if}

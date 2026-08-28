@@ -85,7 +85,8 @@ describe('TaskRelationshipDetailSection', () => {
     expect(section.textContent).toContain('Dependent tasks')
     expect(section.textContent).not.toContain('// DEPENDENTS')
     expect(section.textContent).toContain('T-2')
-    expect(section.textContent).toContain('Other:')
+    expect(section.textContent).not.toContain('Other:')
+    expect(section.querySelector('[title^="Other project:"]')).toBeNull()
     expect(section.textContent).toContain('ready after this')
     expect(section.textContent).toContain('T-3')
     expect(section.textContent).toContain('still waits on 1 dep')
@@ -105,6 +106,8 @@ describe('TaskRelationshipDetailSection', () => {
         onOpenRelatedTask,
       },
     })
+
+    expect(screen.getByLabelText('Dependent tasks').textContent).not.toContain('Other project:')
 
     await fireEvent.click(screen.getByRole('button', { name: /T-2/ }))
 
