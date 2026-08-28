@@ -21,6 +21,9 @@ Do not import from SDK internals such as `@openforge-app/plugin-sdk/dist/...` or
 | `@openforge-app/plugin-sdk/numberParsing` | Strict finite-number parsing helper. |
 | `@openforge-app/plugin-sdk/pluginIcons` | Frontend custom-icon validation and sanitization helpers. |
 | `@openforge-app/plugin-sdk/sanitize` | HTML sanitization helper. |
+| `@openforge-app/plugin-sdk/ui/PluginPageShell.svelte` | Full-page plugin View shell with composed fixed-header and constrained-body regions. |
+| `@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte` | Standard plugin page heading, description, and actions. |
+| `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Loading, error, empty, and content state composition for plugin Views. |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Svelte Markdown rendering component. |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Svelte resizable panel component. |
 | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation content. |
@@ -405,3 +408,43 @@ import PluginSidebarLink from '@openforge-app/plugin-sdk/ui/PluginSidebarLink.sv
 ```
 
 Use only component paths declared in the package exports. Do not import renderer-private components or SDK source/dist internals.
+
+### Full-page plugin Views
+
+Use `PluginPageShell` for a registered plugin View that needs the same fixed-header, constrained-body structure as OpenForge's Task and Dashboard views. Compose the header explicitly so the shell does not duplicate `PluginPageHeader` props or prevent a purpose-built toolbar when a View needs one.
+
+```svelte
+<script lang="ts">
+  import PluginPageHeader from '@openforge-app/plugin-sdk/ui/PluginPageHeader.svelte'
+  import PluginPageShell from '@openforge-app/plugin-sdk/ui/PluginPageShell.svelte'
+  import PluginViewState from '@openforge-app/plugin-sdk/ui/PluginViewState.svelte'
+  import ResizablePanel from '@openforge-app/plugin-sdk/ui/ResizablePanel.svelte'
+</script>
+
+<PluginPageShell class="files-page">
+  {#snippet header()}
+    <PluginPageHeader title="Files" subtitle="Browse and preview project files">
+      {#snippet actions()}
+        <button type="button" onclick={refresh}>Refresh</button>
+      {/snippet}
+    </PluginPageHeader>
+  {/snippet}
+
+  <PluginViewState {loading} {error} empty={files.length === 0}>
+    <div class="flex h-full min-h-0 overflow-hidden">
+      <ResizablePanel storageKey="com.example.files:tree" label="Project files">
+        <!-- Plugin-owned tree with its own scroll container. -->
+      </ResizablePanel>
+      <main class="min-w-0 flex-1 overflow-auto" aria-label="File preview">
+        <!-- Plugin-owned content. -->
+      </main>
+    </div>
+  </PluginViewState>
+</PluginPageShell>
+```
+
+`PluginPageShell` requires `header` and `children` snippets. Its optional `class` prop applies to the root for plugin CSS scoping. The shell owns full-height sizing, clipping, the fixed header region, and the flexing body boundary. It does not own loading state, body layout, scrolling, responsive pane behavior, or persisted panel state. Put `overflow-auto` on the plugin-owned region that should scroll. Qualify `ResizablePanel.storageKey` with the plugin id to avoid collisions with other plugins.
+
+`PluginPageHeader` renders an `h1` by default, accepts an optional `subtitle` and `actions` snippet, and supports `headingLevel="h2"` when used for a nested section. A registered full-page View should normally expose one `h1`; the host already supplies the surrounding `main` landmark.
+
+In component tests, assert the visible heading, actions, state, and plugin content through accessible queries. Do not assert the shell's Tailwind classes.

@@ -1,0 +1,3 @@
+# Compose plugin page shells from stable SDK regions
+
+Registered Views in GitHub Sync, Task Schedules, and an independently owned Codex Usage plugin repeat the same full-height page boundary, fixed header, and constrained body. OpenForge publishes `PluginPageShell` with required `header` and content snippets so plugins can compose `PluginPageHeader` or a purpose-built toolbar without duplicating header props in the shell. The shell owns sizing and clipping, while plugins retain loading state, scrolling, responsive body behavior, and domain-specific layouts; task panes, browser attachments, and terminal runtime UI remain outside this contract.

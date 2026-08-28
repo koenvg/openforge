@@ -5,17 +5,24 @@
     title: string
     subtitle?: string | null
     surface?: 'default' | 'subtle'
+    headingLevel?: 'h1' | 'h2'
     actions?: Snippet
   }
 
-  let { title, subtitle = null, surface = 'subtle', actions }: Props = $props()
+  let {
+    title,
+    subtitle = null,
+    surface = 'default',
+    headingLevel = 'h1',
+    actions,
+  }: Props = $props()
 </script>
 
-<header class="flex items-center justify-between gap-4 border-b border-base-300 px-6 py-3 shrink-0 {surface === 'default' ? 'bg-base-100' : 'bg-base-200'}">
+<header class="flex min-h-13 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 px-4 py-2 sm:px-6 {surface === 'default' ? 'bg-base-100' : 'bg-base-200'}">
   <div class="min-w-0">
-    <h2 class="text-[22px] font-semibold text-base-content tracking-tight m-0 truncate">{title}</h2>
+    <svelte:element this={headingLevel} class="m-0 truncate text-base font-semibold leading-5 tracking-[-0.01em] text-base-content">{title}</svelte:element>
     {#if subtitle}
-      <p class="text-[13px] text-secondary mt-0.5 m-0 truncate">{subtitle}</p>
+      <p class="m-0 mt-0.5 truncate text-[13px] leading-5 text-base-content/60">{subtitle}</p>
     {/if}
   </div>
   {#if actions}

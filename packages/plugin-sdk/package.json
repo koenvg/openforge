@@ -78,6 +78,7 @@
     "./ui/ResizablePanel.svelte": "./dist/ui/ResizablePanel.svelte",
     "./ui/Modal.svelte": "./dist/ui/Modal.svelte",
     "./ui/PluginPageHeader.svelte": "./dist/ui/PluginPageHeader.svelte",
+    "./ui/PluginPageShell.svelte": "./dist/ui/PluginPageShell.svelte",
     "./ui/PluginViewState.svelte": "./dist/ui/PluginViewState.svelte",
     "./ui/PluginSidebarLink.svelte": "./dist/ui/PluginSidebarLink.svelte",
     "./ui/FileTypeIcon.svelte": "./dist/ui/FileTypeIcon.svelte",

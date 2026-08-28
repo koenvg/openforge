@@ -20,6 +20,7 @@ describe('plugin-sdk public UI exports', () => {
       'ResizablePanel',
       'Modal',
       'PluginPageHeader',
+      'PluginPageShell',
       'PluginViewState',
       'PluginSidebarLink',
       'FileTypeIcon',
