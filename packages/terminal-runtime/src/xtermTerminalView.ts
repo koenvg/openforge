@@ -159,6 +159,7 @@ export function createXtermTerminalView(options: XtermTerminalViewOptions): Term
       webglRenderer.load()
     },
     unmount() {
+      terminal.blur()
       presentation.detach()
       hostDiv.parentNode?.removeChild(hostDiv)
     },

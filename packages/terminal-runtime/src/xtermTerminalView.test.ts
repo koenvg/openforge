@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     write: vi.fn((_data: string | Uint8Array, _callback?: () => void) => {}),
     refresh: vi.fn(),
     focus: vi.fn(),
+    blur: vi.fn(),
     onData: vi.fn((_listener: (data: string) => void) => ({ dispose: vi.fn() })),
     onWriteParsed: vi.fn((callback: () => void) => {
       mocks.writeParsedCallbacks.push(callback)
@@ -111,6 +112,7 @@ describe('xterm TerminalView adapter', () => {
     expect(view.isMountedIn(firstContainer)).toBe(true)
 
     view.unmount()
+    expect(mocks.terminal.blur).toHaveBeenCalledOnce()
     view.mount(secondContainer)
     view.dispose()
     view.dispose()

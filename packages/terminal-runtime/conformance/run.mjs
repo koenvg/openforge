@@ -8,6 +8,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import {
   assertPresentation,
+  assertTerminalScreenshotCursorAtCell,
   assertTerminalScreenshotHasInk,
   comparePngBuffers,
   parsePsProcessRows,
@@ -219,6 +220,62 @@ async function runInteractionAndRecovery(browser, report, browserPid) {
       throw new Error('detach, reattach, or reconnect lost presented terminal output')
     }
     recordCheck(report, 'detach-reattach-reconnect', { reattached: reattached.evidence, reconnected: reconnected.evidence })
+
+    await reset(page, { surface: 'plugin-shell', theme: 'dark', echoInput: true })
+    await page.evaluate(() => window.terminalConformance.writeRepeated(
+      'earlier output remains visible\r\nkoen@openforge % ',
+      1,
+    ))
+    await page.evaluate(() => window.terminalConformance.focus())
+    await page.keyboard.insertText('echo current')
+    await page.evaluate(() => window.terminalConformance.waitForInputCount(1))
+    for (let navigation = 0; navigation < 5; navigation += 1) {
+      await page.evaluate(() => window.terminalConformance.detachAndReattach())
+    }
+    await page.evaluate(() => window.terminalConformance.focus())
+    await page.keyboard.insertText(' input')
+    const navigatedInput = await page.evaluate(() => window.terminalConformance.waitForInputCount(2))
+    const expectedPromptLine = 'koen@openforge % echo current input'
+    const cursorLine = navigatedInput.presentation.lines.find(
+      line => line.row === navigatedInput.presentation.cursor.y,
+    )
+    if (cursorLine?.text !== expectedPromptLine) {
+      throw new Error(
+        `repeated navigation moved live input away from its prompt: ${JSON.stringify(cursorLine?.text)}`,
+      )
+    }
+    if (navigatedInput.presentation.cursor.x !== expectedPromptLine.length) {
+      throw new Error(
+        `repeated navigation placed the cursor at column ${navigatedInput.presentation.cursor.x}; expected ${expectedPromptLine.length}`,
+      )
+    }
+    const terminalHost = page.locator('#terminal-host')
+    const [terminalScreenshot, terminalBounds, screenBounds] = await Promise.all([
+      terminalHost.screenshot({ animations: 'disabled' }),
+      terminalHost.boundingBox(),
+      page.locator('#terminal-host .xterm-screen').boundingBox(),
+    ])
+    if (!terminalBounds || !screenBounds) {
+      throw new Error('terminal cursor rendering bounds are unavailable after repeated navigation')
+    }
+    const cursorPaint = assertTerminalScreenshotCursorAtCell(terminalScreenshot, {
+      screen: {
+        x: screenBounds.x - terminalBounds.x,
+        y: screenBounds.y - terminalBounds.y,
+        width: screenBounds.width,
+        height: screenBounds.height,
+      },
+      geometry: navigatedInput.presentation.geometry,
+      cursor: navigatedInput.presentation.cursor,
+      cursorColor: [216, 212, 222, 255],
+      minimumCoverage: 0.75,
+    })
+    recordCheck(report, 'repeated-navigation-prompt-cursor', {
+      cursor: navigatedInput.presentation.cursor,
+      line: cursorLine.text,
+      evidence: navigatedInput.evidence,
+      cursorPaint,
+    })
 
     await reset(page, { surface: 'plugin-shell', theme: 'dark' })
     const payload = `${'0123456789abcdef'.repeat(64)}\r\n`
