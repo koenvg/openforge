@@ -92,7 +92,6 @@ pub struct AppState {
     pub db: std::sync::Arc<Mutex<db::Database>>,
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
-    pub completed_session_reaper: crate::completed_session_reaper::CompletedSessionReaper,
     pub github_client: GitHubClient,
     pub frontend_host_requests:
         crate::frontend_host_request_transport::FrontendHostRequestTransport,

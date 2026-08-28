@@ -407,51 +407,6 @@ async fn test_kill_pty_cleans_output_buffers() {
 }
 
 #[tokio::test]
-async fn reclaim_agent_pty_stops_the_process_and_keeps_replay() {
-    let mut manager = PtyManager::new();
-    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(temp_dir.path().to_path_buf());
-    let task_id = "completed-agent-reclaim";
-    manager
-        .spawn_companion_test_agent_pty(
-            task_id,
-            temp_dir.path(),
-            "printf 'completed output'; while true; do sleep 1; done",
-        )
-        .await
-        .expect("spawn Agent Session PTY");
-
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if manager
-                .get_pty_buffer(task_id)
-                .await
-                .is_some_and(|output| output.contains("completed output"))
-            {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("Agent Session output deadline");
-
-    manager
-        .reclaim_agent_pty(task_id)
-        .await
-        .expect("reclaim Agent Session PTY");
-
-    assert!(!manager
-        .get_session_keys()
-        .await
-        .contains(&task_id.to_string()));
-    assert_eq!(
-        manager.get_pty_buffer(task_id).await.as_deref(),
-        Some("completed output"),
-    );
-}
-
-#[tokio::test]
 async fn test_get_session_keys_empty() {
     let manager = PtyManager::new();
     let keys = manager.get_session_keys().await;

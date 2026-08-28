@@ -12,7 +12,7 @@ use super::super::super::pids::{
 };
 use super::super::super::{PtyError, PtyManager};
 use super::super::ManagedRecovery;
-use super::{PtySession, PtySessionKind};
+use super::PtySession;
 
 impl PtyManager {
     pub(in super::super) async fn terminate_session_process(
@@ -200,49 +200,6 @@ impl PtyManager {
             .lock()
             .await
             .remove(session_key);
-    }
-
-    /// Stops a completed Agent Session PTY while retaining its replay buffer.
-    pub async fn reclaim_agent_pty(&self, task_id: &str) -> Result<(), PtyError> {
-        self.terminal_sessions
-            .agent_spawn_generations
-            .lock()
-            .await
-            .remove(task_id);
-        let lifecycle_lock = self.lifecycle_lock_for(task_id).await;
-        let _lifecycle_guard = lifecycle_lock.lock().await;
-
-        let session = self.terminal_sessions.sessions.lock().await.remove(task_id);
-        let Some(mut session) = session else {
-            return Ok(());
-        };
-        if !matches!(session.kind, PtySessionKind::Agent) {
-            self.terminal_sessions
-                .sessions
-                .lock()
-                .await
-                .insert(task_id.to_string(), session);
-            return Err(PtyError::ProcessNotFound(task_id.to_string()));
-        }
-
-        info!(
-            "Reclaiming completed Agent Session PTY for task {}",
-            task_id
-        );
-        if let Err(error) = self
-            .terminate_current_session_process(task_id, &mut session, true)
-            .await
-        {
-            self.retain_failed_current_cleanup(task_id, session).await;
-            return Err(error);
-        }
-        self.terminal_sessions
-            .last_output
-            .lock()
-            .await
-            .remove(task_id);
-        info!("Completed Agent Session PTY for task {} reclaimed", task_id);
-        Ok(())
     }
 
     pub(in super::super) async fn terminate_failed_terminal_model(

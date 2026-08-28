@@ -279,19 +279,11 @@ async fn start_http_server_with_app_state(
         task_claims.clone(),
     );
     let frontend_host_requests = plugin_host.frontend_host_requests();
-    let completed_session_reaper = crate::completed_session_reaper::CompletedSessionReaper::new(
-        db.clone(),
-        pty_manager.clone(),
-    );
-    if let Some(app) = app.as_ref() {
-        app.manage(completed_session_reaper.clone());
-    }
     let state = AppState {
         app,
         db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
-        completed_session_reaper,
         github_client: github_client.clone(),
         frontend_host_requests,
         plugin_host: Some(plugin_host),

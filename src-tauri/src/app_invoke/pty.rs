@@ -102,7 +102,6 @@ pub(super) async fn handle_app_pty_command(
                 std::sync::Arc::clone(&state.db),
                 pty_manager.clone(),
                 state.app_event_tx.clone(),
-                state.completed_session_reaper.clone(),
             );
             let outcome = service
                 .deliver(&task_id, &message)
