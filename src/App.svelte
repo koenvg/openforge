@@ -4,7 +4,6 @@
   import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
-  import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
@@ -325,16 +324,6 @@
       </div>
     </main>
 
-    {#if $activeProjectId && $currentView !== 'board' && $currentView !== 'global_settings' && $currentView !== TASK_SCHEDULES_VIEW_KEY && !selectedTask}
-      <button
-        type="button"
-        class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"
-        aria-label="Create new task"
-        onclick={taskCreation.openNewTask}
-      >
-        +
-      </button>
-    {/if}
   </div>
 </div>
 
