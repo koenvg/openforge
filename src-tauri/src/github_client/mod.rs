@@ -43,6 +43,9 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+type TestPullRequests = HashMap<(String, String, i64), PullRequest>;
+
 enum ConditionalResponse {
     NotModified(Option<Arc<str>>),
     Fresh(Response),
@@ -63,7 +66,7 @@ pub struct GitHubClient {
     last_rate_limit_reset: Arc<Mutex<Option<i64>>>,
     token_source: GitHubTokenSource,
     #[cfg(test)]
-    test_pull_requests: Option<Arc<HashMap<(String, String, i64), PullRequest>>>,
+    test_pull_requests: Option<Arc<TestPullRequests>>,
 }
 
 /// Result of interpreting the HTTP status of a `GET /repos/{owner}/{repo}` call.
