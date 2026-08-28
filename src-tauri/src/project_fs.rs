@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
+use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProjectFsErrorKind {
@@ -325,7 +326,52 @@ pub(crate) async fn read_dir(
     Ok(dirs)
 }
 
+fn contains_binary_control(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .any(|byte| byte.is_ascii_control() && !matches!(*byte, b'\t' | b'\n' | b'\r' | 0x0c))
+}
+
+fn is_utf8_text_sample(bytes: &[u8]) -> bool {
+    if contains_binary_control(bytes) {
+        return false;
+    }
+
+    match std::str::from_utf8(bytes) {
+        Ok(_) => true,
+        Err(error) => error.error_len().is_none(),
+    }
+}
+
+fn decode_text_content(bytes: Vec<u8>) -> Option<String> {
+    if contains_binary_control(&bytes) {
+        return None;
+    }
+
+    String::from_utf8(bytes).ok()
+}
+
+async fn read_file_bytes(full_path: &Path) -> ProjectFsResult<Vec<u8>> {
+    tokio::fs::read(full_path)
+        .await
+        .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))
+}
+
+async fn read_file_sample(full_path: &Path, sample_size: u64) -> ProjectFsResult<Vec<u8>> {
+    let file = tokio::fs::File::open(full_path)
+        .await
+        .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))?;
+    let mut bytes = Vec::new();
+    file.take(sample_size)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|error| ProjectFsError::internal(format!("Failed to read file: {error}")))?;
+    Ok(bytes)
+}
+
 pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<ProjectFileContent> {
+    const MAX_INLINE_PREVIEW_SIZE: u64 = 1_048_576;
+    const CONTENT_SAMPLE_SIZE: u64 = 8_192;
     let metadata = tokio::fs::metadata(full_path).await.map_err(|error| {
         ProjectFsError::internal(format!("Failed to read file metadata: {error}"))
     })?;
@@ -340,8 +386,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
     let mime_type = preview_metadata.mime_type_string();
     match preview_metadata.preview_type {
         ProjectFilePreviewType::Text => {
-            const MAX_TEXT_SIZE: u64 = 1_048_576;
-            if size > MAX_TEXT_SIZE {
+            if size > MAX_INLINE_PREVIEW_SIZE {
                 return Ok(ProjectFileContent {
                     r#type: "large-file".to_string(),
                     content: String::new(),
@@ -349,9 +394,7 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
                     size,
                 });
             }
-            let bytes = tokio::fs::read(full_path).await.map_err(|error| {
-                ProjectFsError::internal(format!("Failed to read file: {error}"))
-            })?;
+            let bytes = read_file_bytes(full_path).await?;
             let content = String::from_utf8(bytes).map_err(|error| {
                 ProjectFsError::bad_request(format!("File is not valid UTF-8: {error}"))
             })?;
@@ -363,14 +406,45 @@ pub(crate) async fn read_file_preview(full_path: &Path) -> ProjectFsResult<Proje
             })
         }
         ProjectFilePreviewType::Image => {
-            let bytes = tokio::fs::read(full_path).await.map_err(|error| {
-                ProjectFsError::internal(format!("Failed to read file: {error}"))
-            })?;
+            let bytes = read_file_bytes(full_path).await?;
             use base64::Engine;
             Ok(ProjectFileContent {
                 r#type: "image".to_string(),
                 content: base64::engine::general_purpose::STANDARD.encode(bytes),
                 mime_type,
+                size,
+            })
+        }
+        ProjectFilePreviewType::Binary => {
+            if size > MAX_INLINE_PREVIEW_SIZE {
+                let sample = read_file_sample(full_path, CONTENT_SAMPLE_SIZE).await?;
+                let is_text = is_utf8_text_sample(&sample);
+                return Ok(ProjectFileContent {
+                    r#type: if is_text { "large-file" } else { "binary" }.to_string(),
+                    content: String::new(),
+                    mime_type: if is_text {
+                        Some("text/plain".to_string())
+                    } else {
+                        mime_type
+                    },
+                    size,
+                });
+            }
+
+            let bytes = read_file_bytes(full_path).await?;
+            let content = decode_text_content(bytes);
+            let Some(content) = content else {
+                return Ok(ProjectFileContent {
+                    r#type: "binary".to_string(),
+                    content: String::new(),
+                    mime_type,
+                    size,
+                });
+            };
+            Ok(ProjectFileContent {
+                r#type: "text".to_string(),
+                content,
+                mime_type: Some("text/plain".to_string()),
                 size,
             })
         }
@@ -443,6 +517,59 @@ mod tests {
             );
             assert_eq!(metadata.mime_type, expected_mime, "MIME type for {path}");
         }
+    }
+
+    #[tokio::test]
+    async fn previews_extensionless_utf8_content_as_text() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let license_path = temp_dir.path().join("LICENSE");
+        let license_text = "Copyright 2026 OpenForge contributors\n";
+        tokio::fs::write(&license_path, license_text)
+            .await
+            .expect("LICENSE fixture");
+
+        let preview = read_file_preview(&license_path)
+            .await
+            .expect("extensionless text preview");
+
+        assert_eq!(preview.r#type, "text");
+        assert_eq!(preview.content, license_text);
+        assert_eq!(preview.mime_type.as_deref(), Some("text/plain"));
+    }
+
+    #[tokio::test]
+    async fn identifies_large_extensionless_utf8_content_without_rendering_it() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let large_text_path = temp_dir.path().join("NOTICE");
+        let large_text = vec![b'a'; 1_048_577];
+        tokio::fs::write(&large_text_path, large_text)
+            .await
+            .expect("large text fixture");
+
+        let preview = read_file_preview(&large_text_path)
+            .await
+            .expect("large extensionless text preview metadata");
+
+        assert_eq!(preview.r#type, "large-file");
+        assert!(preview.content.is_empty());
+        assert_eq!(preview.mime_type.as_deref(), Some("text/plain"));
+    }
+
+    #[tokio::test]
+    async fn keeps_extensionless_binary_content_blocked() {
+        let temp_dir = tempfile::tempdir().expect("project root");
+        let binary_path = temp_dir.path().join("artifact");
+        tokio::fs::write(&binary_path, b"\x01\x02\x03binary payload")
+            .await
+            .expect("binary fixture");
+
+        let preview = read_file_preview(&binary_path)
+            .await
+            .expect("binary preview metadata");
+
+        assert_eq!(preview.r#type, "binary");
+        assert!(preview.content.is_empty());
+        assert_eq!(preview.mime_type, None);
     }
 
     #[test]

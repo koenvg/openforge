@@ -149,7 +149,7 @@ async fn writes_project_files_through_the_app_invoke_boundary() {
 }
 
 #[tokio::test]
-async fn fs_read_file_treats_gitignore_dotfile_as_text() {
+async fn fs_read_file_treats_gitignore_and_extensionless_utf8_as_text() {
     let (state, _temp_dir) = test_state("app_invoke_gitignore_dotfile_text_preview");
     let temp_dir = tempfile::tempdir().expect("temp project dir");
     std::fs::write(
@@ -184,9 +184,9 @@ async fn fs_read_file_treats_gitignore_dotfile_as_text() {
         json!({ "projectId": project_id, "filePath": "extensionless" }),
     )
     .await;
-    assert_eq!(extensionless["type"], "binary");
-    assert_eq!(extensionless["content"], "");
-    assert_eq!(extensionless["mimeType"], serde_json::Value::Null);
+    assert_eq!(extensionless["type"], "text");
+    assert_eq!(extensionless["content"], "plain text\n");
+    assert_eq!(extensionless["mimeType"], "text/plain");
 }
 
 #[tokio::test]
