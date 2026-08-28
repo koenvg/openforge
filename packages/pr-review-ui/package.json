@@ -39,6 +39,7 @@
     "@git-diff-view/svelte": "catalog:",
     "@lucide/svelte": "catalog:",
     "@openforge-app/plugin-sdk": "workspace:*",
+    "marked": "catalog:",
     "@tanstack/virtual-core": "catalog:"
   },
   "peerDependencies": {

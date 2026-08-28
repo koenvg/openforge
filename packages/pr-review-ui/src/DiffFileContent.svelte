@@ -2,7 +2,6 @@
   import type { DiffFile } from '@git-diff-view/core'
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import type { AgentReviewComment, AiThread, PrFileDiff, ReviewComment, ReviewSubmissionComment } from '@openforge-app/plugin-sdk/domain'
-  import MarkdownContent from '@openforge-app/plugin-sdk/ui/MarkdownContent.svelte'
   import { buildExtendData, type CommentDisplayData, type PendingReply } from './diffComments'
   import { diffHighlighter } from './diffHighlighter'
   import { getImagePreviewDataUrl, isImageFileDiff, type FileContents } from './diffAdapter'
@@ -10,6 +9,7 @@
   import InlineCommentForm from './InlineCommentForm.svelte'
   import InlineCommentThread from './InlineCommentThread.svelte'
   import FileContentsError from './FileContentsError.svelte'
+  import RichMarkdownDiff from './RichMarkdownDiff.svelte'
 
   interface Props {
     file: PrFileDiff
@@ -142,10 +142,10 @@
 {:else if richDiffActive && file.patch}
   <div class="bg-base-100 p-6 text-base-content leading-relaxed" role="region" aria-label="Rich diff for {file.filename}">
     {#if fileContents}
-      <MarkdownContent
+      <RichMarkdownDiff
+        {file}
         content={fileContents.newContent}
         imageBaseUrl={githubMarkdownImageBaseUrl}
-        markdownFilePath={file.filename}
         {resolveRepositoryImage}
         {onOpenRepositoryPath}
         {onOpenUrl}
@@ -153,6 +153,25 @@
           activeIndex: 0,
           images: [{ ...image, filename: file.filename, label: 'Rich preview' }],
         }) : undefined}
+        {existingComments}
+        {pendingComments}
+        {agentComments}
+        {aiThreads}
+        {pendingReplies}
+        {onPendingCommentsChange}
+        {onAgentCommentsChange}
+        {onUpdateAgentCommentStatus}
+        {onReplyToThread}
+        {onAskAboutComment}
+        {onReplyToExistingComment}
+        {onAddReplyToReview}
+        {onRemovePendingReply}
+        {getInlineCommentText}
+        {onSetInlineCommentText}
+        {onClearInlineCommentText}
+        {onSubmitInlineComment}
+        {onAskAgent}
+        {onCommentNow}
       />
     {:else if fileContentError}
       <FileContentsError filename={file.filename} error={fileContentError} onRetry={onRetryFileContents} />
