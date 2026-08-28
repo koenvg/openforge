@@ -80,6 +80,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/testing` | Registry fakes and mock APIs for plugin tests |
 | `@openforge-app/plugin-sdk/vite` | SDK build helper(s) for plugin packages |
 | `@openforge-app/plugin-sdk/package-metadata-schema.json` | JSON schema for validating `package.json#openforge` metadata |
+| `@openforge-app/plugin-sdk/collapsibleSectionState` | Shared persisted collapse-state store and helpers, including `pluginSectionKey(...)` |
 | `@openforge-app/plugin-sdk/domain` | Shared OpenForge domain types |
 | `@openforge-app/plugin-sdk/fileIcons` | File-type icon lookup helpers |
 | `@openforge-app/plugin-sdk/markdown` | Markdown rendering helpers |
@@ -90,6 +91,7 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/sanitize` | Sanitization helpers |
 | `@openforge-app/plugin-sdk/ui/Button.svelte` | Shared plugin-safe button component |
 | `@openforge-app/plugin-sdk/ui/Checkbox.svelte` | Shared plugin-safe checkbox component |
+| `@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte` | Shared plugin-safe collapsible section with persisted expanded/collapsed state |
 | `@openforge-app/plugin-sdk/ui/FileTypeIcon.svelte` | Shared file-type icon component |
 | `@openforge-app/plugin-sdk/ui/MarkdownContent.svelte` | Shared Markdown Svelte component |
 | `@openforge-app/plugin-sdk/ui/Modal.svelte` | Shared plugin-safe modal/dialog shell with focus, Escape, backdrop, accessible naming, and close-disabled behavior |
@@ -97,6 +99,25 @@ Use the public package exports only:
 | `@openforge-app/plugin-sdk/ui/PluginViewState.svelte` | Shared loading, empty, and error state component |
 | `@openforge-app/plugin-sdk/ui/PluginSidebarLink.svelte` | Standard accessible link for plugin-owned sidebar navigation |
 | `@openforge-app/plugin-sdk/ui/ResizablePanel.svelte` | Shared resizable-panel Svelte component |
+
+Use `CollapsibleSection` for plugin sections that should remember whether the user collapsed them:
+
+```svelte
+<script lang="ts">
+  import { pluginSectionKey } from '@openforge-app/plugin-sdk/collapsibleSectionState'
+  import CollapsibleSection from '@openforge-app/plugin-sdk/ui/CollapsibleSection.svelte'
+
+  const sectionKey = pluginSectionKey('acme.notes', 'details')
+</script>
+
+<CollapsibleSection {sectionKey} title="Details">
+  <p>Plugin content</p>
+</CollapsibleSection>
+```
+
+Pass the plugin's `openforge.id`, or `context.pluginId` from a component contribution, to `pluginSectionKey(...)`. The helper keeps common local keys such as `details` from colliding with host sections or sections from other plugins.
+
+Collapse state is shared by every mounted section with the same key and persisted to local storage across app reloads. Sections start expanded. Keep the local key stable, and include a task or project identifier only when each task or project should remember its own state. `setSectionCollapsed(...)` and `toggleSection(...)` from the same state export support programmatic changes.
 
 Do not import from `src/`, `src-tauri/`, Electron main/preload code, app stores, or undocumented package internals. For the full component-layer contract, see [OpenForge component-library guidelines](./components/component-library-guidelines.md).
 
