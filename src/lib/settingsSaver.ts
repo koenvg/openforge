@@ -16,7 +16,6 @@ export interface ProjectSettingsSavePayload {
 export interface GlobalSettingsSavePayload {
   taskIdPrefix?: string
   githubToken?: string
-  codeCleanupTasksEnabled?: boolean
   taskDisplayTitleMetadataUpdatesEnabled?: boolean
   ghosttyTerminalStateEnabled?: boolean
   githubPollInterval?: number
@@ -39,9 +38,6 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
 export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Promise<void> {
   if (payload.taskIdPrefix !== undefined) await setConfig('task_id_prefix', payload.taskIdPrefix)
   if (payload.githubToken !== undefined) await setConfig('github_token', payload.githubToken)
-  if (payload.codeCleanupTasksEnabled !== undefined) {
-    await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
-  }
   if (payload.taskDisplayTitleMetadataUpdatesEnabled !== undefined) {
     await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
   }

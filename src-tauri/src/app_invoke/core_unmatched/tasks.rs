@@ -214,12 +214,7 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
     let worktree_branch = payload_optional_string(&request.payload, "worktreeBranch")?;
     let title = payload_optional_string(&request.payload, "title")?;
     let source_ticket_url = payload_optional_string(&request.payload, "sourceTicketUrl")?;
-    // Task-level hierarchy overrides: absent (None) means "inherit
-    // project/global" so the runtime resolves them at start time.
-    let code_cleanup_enabled = request
-        .payload
-        .get("codeCleanupEnabled")
-        .and_then(|value| value.as_bool());
+    // A missing Task-level hierarchy override means the runtime inherits the project/global value.
     let task_display_title_updates_enabled = request
         .payload
         .get("taskDisplayTitleUpdatesEnabled")
@@ -239,7 +234,6 @@ fn create_task(state: &AppState, request: &AppInvokeRequest) -> AppResult<serde_
                 worktree_branch: worktree_branch.as_deref(),
                 title: title.as_deref(),
                 source_ticket_url: source_ticket_url.as_deref(),
-                code_cleanup_enabled,
                 task_display_title_updates_enabled,
                 ai_provider: ai_provider.as_deref(),
             })

@@ -1,14 +1,12 @@
-import { fromStore } from 'svelte/store'
 import { DEFAULT_GITHUB_POLL_INTERVAL_SECONDS, loadGlobalSettings, parseGitHubPollIntervalSeconds } from '../../lib/settingsConfig'
 import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
 import type { GlobalSettingsSavePayload } from '../../lib/settingsSaver'
-import { codeCleanupTasksEnabled, error } from '../../lib/stores'
+import { error } from '../../lib/stores'
 
 // `pr_walkthrough_prompt` lives in the Agents section only, mirroring project settings.
 // Every other global section excludes it so the long prompt is not rendered three times.
 export const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins', 'pr_walkthrough_prompt']
 export const PROVIDER_ONLY_EXCLUDE_KEYS = [
-  'code_cleanup_tasks_enabled',
   'task_display_title_metadata_updates_enabled',
   'use_worktrees',
   'task_id_prefix',
@@ -16,7 +14,6 @@ export const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'plugins',
 ]
 export const GITHUB_ONLY_EXCLUDE_KEYS = [
-  'code_cleanup_tasks_enabled',
   'task_display_title_metadata_updates_enabled',
   'ai_provider',
   'use_worktrees',
@@ -30,8 +27,6 @@ function getErrorMessage(value: unknown): string {
 }
 
 export function createSettingsGlobalController() {
-  const codeCleanupTasksEnabledState = fromStore(codeCleanupTasksEnabled)
-
   let taskIdPrefix = $state('')
   let githubToken = $state('')
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
@@ -40,12 +35,10 @@ export function createSettingsGlobalController() {
   let walkthroughPrompt = $state(DEFAULT_PR_WALKTHROUGH_PROMPT)
   let loaded = $state(false)
   let loadError = $state<string | null>(null)
-  let isCodeCleanupTasksEnabled = $state(codeCleanupTasksEnabledState.current)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
   let isGhosttyTerminalStateEnabled = $state(false)
 
   const hierarchyValues = $derived<Record<string, string>>({
-    code_cleanup_tasks_enabled: isCodeCleanupTasksEnabled ? 'true' : 'false',
     task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
     ai_provider: aiProvider,
     use_worktrees: useWorktrees ? 'true' : 'false',
@@ -59,8 +52,6 @@ export function createSettingsGlobalController() {
       const settings = await loadGlobalSettings()
       taskIdPrefix = settings.taskIdPrefix
       githubToken = settings.githubToken
-      isCodeCleanupTasksEnabled = settings.codeCleanupTasksEnabled
-      codeCleanupTasksEnabled.set(isCodeCleanupTasksEnabled)
       isTaskDisplayTitleMetadataUpdatesEnabled = settings.taskDisplayTitleMetadataUpdatesEnabled
       isGhosttyTerminalStateEnabled = settings.ghosttyTerminalStateEnabled
       githubPollInterval = settings.githubPollInterval
@@ -86,10 +77,6 @@ export function createSettingsGlobalController() {
 
   function applySettingChange(key: string, value: string): GlobalSettingsSavePayload | undefined {
     switch (key) {
-      case 'code_cleanup_tasks_enabled':
-        isCodeCleanupTasksEnabled = value === 'true'
-        codeCleanupTasksEnabled.set(isCodeCleanupTasksEnabled)
-        return { codeCleanupTasksEnabled: isCodeCleanupTasksEnabled }
       case 'task_display_title_metadata_updates_enabled':
         isTaskDisplayTitleMetadataUpdatesEnabled = value === 'true'
         return { taskDisplayTitleMetadataUpdatesEnabled: isTaskDisplayTitleMetadataUpdatesEnabled }

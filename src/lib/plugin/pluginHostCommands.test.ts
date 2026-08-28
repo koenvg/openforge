@@ -109,7 +109,6 @@ describe('plugin host commands', () => {
       worktreeBranch: null,
       title: null,
       sourceTicketUrl: null,
-      codeCleanupEnabled: undefined,
       taskDisplayTitleUpdatesEnabled: undefined,
       aiProvider: null,
     })

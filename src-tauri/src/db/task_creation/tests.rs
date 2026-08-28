@@ -104,7 +104,6 @@ fn test_create_task_with_metadata_normalizes_and_deduplicates_label_names() {
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             },
@@ -174,7 +173,6 @@ fn test_create_task_with_metadata_rolls_back_every_write_when_label_assignment_f
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: Some(true),
                 task_display_title_updates_enabled: Some(false),
                 ai_provider: Some("opencode"),
             },
@@ -188,11 +186,7 @@ fn test_create_task_with_metadata_rolls_back_every_write_when_label_assignment_f
         .get_task(failed_task_id)
         .expect("get rolled-back task")
         .is_none());
-    for key in [
-        "code_cleanup_tasks_enabled",
-        "task_display_title_metadata_updates_enabled",
-        "ai_provider",
-    ] {
+    for key in ["task_display_title_metadata_updates_enabled", "ai_provider"] {
         assert_eq!(
             db.get_task_config(failed_task_id, key)
                 .expect("get rolled-back task config"),
@@ -279,7 +273,6 @@ fn test_create_task_with_options_persists_manual_title() {
             worktree_branch: None,
             title: Some("  Custom title  "),
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -315,7 +308,6 @@ fn test_task_id_prefix_prefers_project_override() {
             worktree_branch: None,
             title: None,
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -388,17 +380,11 @@ fn test_create_task_snapshots_task_config_when_provided() {
             worktree_branch: None,
             title: None,
             source_ticket_url: None,
-            code_cleanup_enabled: Some(true),
             task_display_title_updates_enabled: Some(false),
             ai_provider: Some("opencode"),
         })
         .unwrap();
 
-    assert_eq!(
-        db.get_task_config(&task.id, "code_cleanup_tasks_enabled")
-            .unwrap(),
-        Some("true".to_string())
-    );
     assert_eq!(
         db.get_task_config(&task.id, "task_display_title_metadata_updates_enabled")
             .unwrap(),
@@ -409,9 +395,6 @@ fn test_create_task_snapshots_task_config_when_provided() {
         Some("opencode".to_string())
     );
     // Resolver reads the snapshot.
-    assert!(db
-        .resolve_task_bool(&task.id, "code_cleanup_tasks_enabled", false)
-        .unwrap());
     assert_eq!(
         db.resolve_ai_provider_for_task(&task.id).unwrap(),
         "opencode"
@@ -435,7 +418,6 @@ fn test_create_task_with_options_blank_title_falls_back_to_null() {
             worktree_branch: None,
             title: Some("   "),
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -464,7 +446,6 @@ fn test_create_task_with_options_persists_source_ticket_url() {
             worktree_branch: None,
             title: None,
             source_ticket_url: Some(url),
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
@@ -499,7 +480,6 @@ fn test_create_task_with_options_blank_source_ticket_url_falls_back_to_null() {
             worktree_branch: None,
             title: None,
             source_ticket_url: Some("   "),
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })

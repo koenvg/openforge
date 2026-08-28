@@ -439,7 +439,6 @@ mod tests {
                 worktree_branch: None,
                 title: Some("Manual title"),
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })

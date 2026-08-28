@@ -6,7 +6,7 @@ import { createAppLifecycleController } from './appLifecycleController'
 import { registerAppShortcuts } from './appShortcuts'
 import type { AppShortcutHandlers } from './appShortcuts'
 import { loadAppStartupData } from './appStartup'
-import { getAppMode, getConfig } from './ipc'
+import { getAppMode } from './ipc'
 import {
   initializePluginRuntime,
   loadEnabledForApp,
@@ -36,7 +36,6 @@ interface AppShellLifecycleControllerOptions {
   pluginOwner: AppShellPluginOwner
   onCloseRequested(event: { preventDefault(): void }): void
   setAppMode(mode: string | null): void
-  setCodeCleanupTasksEnabled(enabled: boolean): void
   onWindowFocusChange(focused: boolean): void
 }
 
@@ -73,9 +72,7 @@ export function createAppShellLifecycleController(options: AppShellLifecycleCont
       },
       loadProjects: options.appData.loadProjects,
       getAppMode,
-      getConfig,
       setAppMode: options.setAppMode,
-      setCodeCleanupTasksEnabled: options.setCodeCleanupTasksEnabled,
       loadProjectAttention: options.appData.loadProjectAttention,
       loadTasks: options.appData.loadTasks,
     }),

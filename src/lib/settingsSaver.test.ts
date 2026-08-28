@@ -59,7 +59,6 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
-      codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: true,
       ghosttyTerminalStateEnabled: true,
       githubPollInterval: 45,
@@ -69,7 +68,6 @@ describe('settingsSaver', () => {
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
-    expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('task_display_title_metadata_updates_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('ghostty_terminal_state_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')
@@ -88,7 +86,6 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
-      codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 0,
       useWorktrees: true,
@@ -102,7 +99,6 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
-      codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 10,
       useWorktrees: true,
@@ -116,7 +112,6 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
-      codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: 301,
       useWorktrees: true,
@@ -130,7 +125,6 @@ describe('settingsSaver', () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
       githubToken: 'gh-token',
-      codeCleanupTasksEnabled: true,
       taskDisplayTitleMetadataUpdatesEnabled: false,
       githubPollInterval: Number.NaN,
       useWorktrees: true,

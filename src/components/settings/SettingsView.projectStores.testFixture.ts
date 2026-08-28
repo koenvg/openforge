@@ -42,7 +42,6 @@ const stores = vi.hoisted(() => {
 
   return {
     activeProjectId: createMockWritable<string | null>('test-project-id'),
-    codeCleanupTasksEnabled: createMockWritable(false),
     error: createMockWritable<string | null>(null),
     defaultProject,
     projects: createMockWritable([defaultProject]),
@@ -52,13 +51,11 @@ const stores = vi.hoisted(() => {
 vi.mock('../../lib/stores', () => ({
   activeProjectId: stores.activeProjectId,
   projects: stores.projects,
-  codeCleanupTasksEnabled: stores.codeCleanupTasksEnabled,
   error: stores.error,
 }))
 
 export function resetSettingsViewProjectStores() {
   stores.activeProjectId.set('test-project-id')
-  stores.codeCleanupTasksEnabled.set(false)
   stores.error.set(null)
   stores.projects.set([{ ...stores.defaultProject }])
 }

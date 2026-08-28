@@ -5,7 +5,6 @@ import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
 import HierarchicalSettingsCard from './HierarchicalSettingsCard.svelte'
 
 const baseValues: Record<string, string> = {
-  code_cleanup_tasks_enabled: 'false',
   task_display_title_metadata_updates_enabled: 'false',
   ai_provider: 'claude-code',
   use_worktrees: 'true',
@@ -31,7 +30,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
     expect(screen.queryByTestId('ai_provider')).not.toBeNull()
     expect(screen.queryByTestId('use_worktrees')).not.toBeNull()
     expect(screen.queryByTestId('plugin-default-demo')).not.toBeNull()
-    expect(screen.queryByTestId('code_cleanup_tasks_enabled')).not.toBeNull()
+    expect(screen.queryByTestId('task_display_title_metadata_updates_enabled')).not.toBeNull()
   })
 
   it('explains inheritance and how to override in project mode', () => {
@@ -55,7 +54,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
         mode: 'project',
         values: baseValues,
         overrides: {
-          code_cleanup_tasks_enabled: null,
+          task_display_title_metadata_updates_enabled: null,
           ai_provider: 'claude-code',
         },
         onChange: vi.fn(),
@@ -63,7 +62,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
       },
     })
 
-    expect(screen.getByTestId('status-code_cleanup_tasks_enabled').textContent).toContain('Inherited')
+    expect(screen.getByTestId('status-task_display_title_metadata_updates_enabled').textContent).toContain('Inherited')
     expect(screen.getByTestId('status-ai_provider').textContent).toContain('Overridden')
 
     await fireEvent.click(screen.getByRole('button', { name: 'Reset AI Provider to global default' }))
@@ -119,7 +118,7 @@ describe('HierarchicalSettingsCard excludeKeys', () => {
     expect(screen.queryByTestId('plugin-default-demo')).toBeNull()
 
     // Settings whose only home is the grouped card remain visible.
-    expect(screen.queryByTestId('code_cleanup_tasks_enabled')).not.toBeNull()
+    expect(screen.queryByTestId('task_display_title_metadata_updates_enabled')).not.toBeNull()
     expect(screen.queryByTestId('task_id_prefix')).not.toBeNull()
   })
 })

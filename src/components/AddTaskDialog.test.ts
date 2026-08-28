@@ -39,7 +39,6 @@ const DEFAULT_WORKTREE_OPTIONS = {
   worktreeBranch: null,
   title: null,
   sourceTicketUrl: null,
-  codeCleanupEnabled: false,
   taskDisplayTitleUpdatesEnabled: false,
   aiProvider: 'claude-code',
 }
@@ -49,7 +48,6 @@ const PROJECT_DIRECTORY_OPTIONS = {
   worktreeBranch: null,
   title: null,
   sourceTicketUrl: null,
-  codeCleanupEnabled: false,
   taskDisplayTitleUpdatesEnabled: false,
   aiProvider: 'claude-code',
 }
@@ -444,7 +442,6 @@ describe('AddTaskDialog', () => {
           worktreeBranch: 'feature/open-pr',
           title: null,
           sourceTicketUrl: null,
-          codeCleanupEnabled: false,
           taskDisplayTitleUpdatesEnabled: false,
           aiProvider: 'claude-code',
         },

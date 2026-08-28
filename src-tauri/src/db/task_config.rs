@@ -104,29 +104,25 @@ mod tests {
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })
             .unwrap();
 
         assert_eq!(
-            db.get_task_config(&task.id, "code_cleanup_tasks_enabled")
-                .unwrap(),
+            db.get_task_config(&task.id, "example_setting").unwrap(),
             None
         );
-        db.set_task_config(&task.id, "code_cleanup_tasks_enabled", "true")
+        db.set_task_config(&task.id, "example_setting", "true")
             .unwrap();
         assert_eq!(
-            db.get_task_config(&task.id, "code_cleanup_tasks_enabled")
-                .unwrap(),
+            db.get_task_config(&task.id, "example_setting").unwrap(),
             Some("true".to_string())
         );
-        db.set_task_config(&task.id, "code_cleanup_tasks_enabled", "false")
+        db.set_task_config(&task.id, "example_setting", "false")
             .unwrap();
         assert_eq!(
-            db.get_task_config(&task.id, "code_cleanup_tasks_enabled")
-                .unwrap(),
+            db.get_task_config(&task.id, "example_setting").unwrap(),
             Some("false".to_string())
         );
 
@@ -148,12 +144,11 @@ mod tests {
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })
             .unwrap();
-        let key = "code_cleanup_tasks_enabled";
+        let key = "task_display_title_metadata_updates_enabled";
 
         // Nothing set -> default.
         assert!(!db.resolve_task_bool(&task.id, key, false).unwrap());
@@ -185,7 +180,6 @@ mod tests {
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })

@@ -13,14 +13,12 @@ fn provider_run_options_borrow_saved_task_agent_and_permission_mode() {
 }
 
 #[test]
-fn start_context_resolves_saved_task_overrides() {
+fn start_context_resolves_saved_provider_override() {
     let (state, _temp_dir) =
         crate::app_invoke::test_support::test_state("task_start_context_saved_overrides");
     let task_id = {
         let db = db::acquire_db(&state.db);
         let project = db.create_project("P", "/tmp/p").expect("create Project");
-        db.set_config("code_cleanup_tasks_enabled", "false")
-            .expect("set global cleanup setting");
         let task = db
             .create_task_with_options(crate::db::NewTaskOptions {
                 initial_prompt: "p",
@@ -32,13 +30,10 @@ fn start_context_resolves_saved_task_overrides() {
                 worktree_branch: None,
                 title: None,
                 source_ticket_url: None,
-                code_cleanup_enabled: None,
                 task_display_title_updates_enabled: None,
                 ai_provider: None,
             })
             .expect("create Task");
-        db.set_task_config(&task.id, "code_cleanup_tasks_enabled", "true")
-            .expect("set Task cleanup override");
         db.set_task_config(&task.id, "ai_provider", "opencode")
             .expect("set Task provider override");
         task.id
@@ -48,7 +43,6 @@ fn start_context_resolves_saved_task_overrides() {
         .load_context(&task_id)
         .expect("load Start context");
 
-    assert!(context.code_cleanup_enabled);
     assert_eq!(context.provider_name, "opencode");
     assert_eq!(context.repo_path, Path::new("/tmp/p"));
 
@@ -64,6 +58,8 @@ async fn pi_start_preserves_disable_model_invocation_skill_command_with_generate
         let project = db
             .create_project("Pi Skill Project", "/tmp/pi-skill-project")
             .expect("create Project");
+        db.set_config("code_cleanup_tasks_enabled", "true")
+            .expect("store obsolete cleanup setting");
         db.set_project_config(&project.id, "additional_instructions", "Project rules")
             .expect("store additional instructions");
         db.set_project_config(
@@ -88,7 +84,6 @@ async fn pi_start_preserves_disable_model_invocation_skill_command_with_generate
             worktree_branch: None,
             title: None,
             source_ticket_url: None,
-            code_cleanup_enabled: Some(true),
             task_display_title_updates_enabled: None,
             ai_provider: Some("pi"),
         })
@@ -122,12 +117,11 @@ async fn pi_start_preserves_disable_model_invocation_skill_command_with_generate
         "Pi must receive the explicit skill command at byte zero"
     );
     let contribution_at = prompt.find("Plugin workflow").unwrap();
-    let cleanup_at = prompt.find("<openforge_code_cleanup>").unwrap();
     let instructions_at = prompt.find("Project rules").unwrap();
     let prefix_at = prompt.find("Start prefix").unwrap();
     let task_at = prompt.find("Complete the release notes").unwrap();
-    assert!(contribution_at < cleanup_at);
-    assert!(cleanup_at < instructions_at);
+    assert!(contribution_at < instructions_at);
+    assert!(!prompt.contains("<openforge_code_cleanup>"));
     assert!(instructions_at < prefix_at);
     assert!(prefix_at < task_at);
 

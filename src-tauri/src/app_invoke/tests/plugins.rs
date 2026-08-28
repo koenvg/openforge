@@ -152,8 +152,7 @@ async fn concurrent_frontend_prompt_contributions_preserve_each_plugin() {
         )
         .expect("task fixture")
     };
-    let prompt =
-        crate::agent_lifecycle::build_task_prompt(&task, None, false, &contributions, None);
+    let prompt = crate::agent_lifecycle::build_task_prompt(&task, None, &contributions, None);
     assert!(prompt.contains("First workflow"));
     assert!(prompt.contains("Second workflow"));
 }

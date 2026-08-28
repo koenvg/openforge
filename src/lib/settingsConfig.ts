@@ -35,7 +35,6 @@ export interface ProjectSettingsConfig {
 export interface GlobalSettingsConfig {
   taskIdPrefix: string
   githubToken: string
-  codeCleanupTasksEnabled: boolean
   taskDisplayTitleMetadataUpdatesEnabled: boolean
   ghosttyTerminalStateEnabled: boolean
   githubPollInterval: number
@@ -102,7 +101,6 @@ const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'focusFilterStates'>
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   taskIdPrefix: '',
   githubToken: '',
-  codeCleanupTasksEnabled: false,
   taskDisplayTitleMetadataUpdatesEnabled: false,
   ghosttyTerminalStateEnabled: false,
   githubPollInterval: DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
@@ -145,10 +143,9 @@ export async function loadProjectHierarchyOverrides(
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt, ghosttyTerminalStateEnabled] = await Promise.all([
+  const [taskIdPrefix, githubToken, taskDisplayTitleMetadataUpdatesEnabled, githubPollInterval, useWorktrees, aiProvider, walkthroughPrompt, ghosttyTerminalStateEnabled] = await Promise.all([
     getConfig('task_id_prefix'),
     getConfig('github_token'),
-    getConfig('code_cleanup_tasks_enabled'),
     getConfig('task_display_title_metadata_updates_enabled'),
     getConfig('github_poll_interval'),
     getConfig('use_worktrees'),
@@ -160,7 +157,6 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
   return {
     taskIdPrefix: taskIdPrefix ?? DEFAULT_GLOBAL_SETTINGS.taskIdPrefix,
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
-    codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
     taskDisplayTitleMetadataUpdatesEnabled: taskDisplayTitleMetadataUpdatesEnabled === 'true',
     ghosttyTerminalStateEnabled: ghosttyTerminalStateEnabled === 'true',
     githubPollInterval: parseGitHubPollIntervalSeconds(githubPollInterval),

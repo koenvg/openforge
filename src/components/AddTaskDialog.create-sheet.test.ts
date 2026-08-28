@@ -97,7 +97,7 @@ describe('Create Task sheet', () => {
     expect(advancedSection?.open).toBe(true)
     expect(screen.getByLabelText('Task title')).toBeTruthy()
     expect(screen.getByLabelText('Source ticket link')).toBeTruthy()
-    expect(screen.getByLabelText('Code cleanup tasks')).toBeTruthy()
+    expect(screen.queryByLabelText('Code cleanup tasks')).toBeNull()
   })
 
   it('expands environment controls from the Edit action', async () => {

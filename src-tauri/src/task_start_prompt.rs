@@ -140,35 +140,9 @@ fn split_leading_pi_skill_invocation(prompt: &str) -> Option<(&str, &str)> {
     Some((invocation, remainder.trim_start()))
 }
 
-fn append_code_cleanup_instructions(prompt: &mut String, task_id: &str) {
-    prompt.push_str(&format!(r#"<openforge_code_cleanup>
-As you work on this task, watch for code that doesn't meet project standards or that should be split into separate concerns. When you encounter such code — whether in files you're modifying or adjacent code you're reading — create a new task for it using the OpenForge CLI or the equivalent task-creation mechanism available in your environment.
-
-Create a task when you find:
-- Code that violates the project's established patterns or conventions
-- Functions or modules that are doing too many things and should be split up
-- Duplicated logic that should be extracted into a shared utility
-- Missing or inadequate error handling that deserves its own fix
-- Technical debt like TODO/FIXME/HACK comments that represent real work
-- Dead code, unused imports, or stale abstractions that should be cleaned up
-
-How to create a cleanup task:
-- Run: openforge task create --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}" --label cleanup
-- Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
-- Add useful --label values when the category is obvious (for example, cleanup, bug, docs, or tests); do not invent noisy labels just because labels exist
-- Keep the --depends-on link to "{task_id}" for cleanup tasks that are related to this work, and add additional prerequisite links when the order is known
-- Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
-
-Only create tasks for genuine issues worth addressing. Do not create tasks for minor style preferences or trivial nitpicks.
-</openforge_code_cleanup>
-
-"#));
-}
-
 pub fn build_task_prompt(
     task: &db::TaskRow,
     additional_instructions: Option<&str>,
-    code_cleanup_enabled: bool,
     start_prompt_contributions: &[StartPromptContribution],
     prompt_prefix: Option<&str>,
 ) -> String {
@@ -186,10 +160,6 @@ pub fn build_task_prompt(
     }
 
     append_start_prompt_contributions(&mut prompt, task, start_prompt_contributions);
-
-    if code_cleanup_enabled {
-        append_code_cleanup_instructions(&mut prompt, &task.id);
-    }
 
     if let Some(instructions) = additional_instructions {
         if !instructions.is_empty() {
@@ -304,7 +274,6 @@ mod tests {
         let prompt = build_task_prompt(
             &task,
             Some("Project rules here"),
-            true,
             &start_prompt_contributions(),
             Some("Verify this is still relevant before doing it."),
         );
@@ -314,15 +283,13 @@ mod tests {
             "Pi only expands skill commands at the start of the prompt"
         );
         let contribution_at = prompt.find("<openforge_start_prompt_contribution").unwrap();
-        let cleanup_at = prompt.find("<openforge_code_cleanup>").unwrap();
         let instructions_at = prompt.find("Project rules here").unwrap();
         let prefix_at = prompt
             .find("Verify this is still relevant before doing it.")
             .unwrap();
         let task_at = prompt.find("Complete the release notes").unwrap();
 
-        assert!(contribution_at < cleanup_at);
-        assert!(cleanup_at < instructions_at);
+        assert!(contribution_at < instructions_at);
         assert!(instructions_at < prefix_at);
         assert!(prefix_at < task_at);
     }
@@ -331,7 +298,7 @@ mod tests {
     fn test_build_task_prompt_includes_configured_contribution_and_task_prompt() {
         let task = sample_task("T-123", "Test Task", None);
 
-        let prompt = build_task_prompt(&task, None, false, &start_prompt_contributions(), None);
+        let prompt = build_task_prompt(&task, None, &start_prompt_contributions(), None);
 
         assert!(prompt.contains("<openforge_start_prompt_contribution id=\"project-guidance\">"));
         assert!(prompt.contains("Project start guidance for T-123"));
@@ -346,7 +313,7 @@ mod tests {
             Some("Specific implementation prompt"),
         );
 
-        let prompt = build_task_prompt(&task, None, false, &start_prompt_contributions(), None);
+        let prompt = build_task_prompt(&task, None, &start_prompt_contributions(), None);
 
         assert!(prompt.contains("Specific implementation prompt"));
         assert!(!prompt.contains("\nInitial title\n"));
@@ -359,7 +326,6 @@ mod tests {
         let prompt = build_task_prompt(
             &task,
             None,
-            false,
             &start_prompt_contributions(),
             Some("Verify this is still relevant before doing it."),
         );
@@ -385,14 +351,8 @@ mod tests {
     fn test_build_task_prompt_without_prefix_is_unchanged() {
         let task = sample_task("T-301", "Fix the login redirect", None);
 
-        let without = build_task_prompt(&task, None, false, &start_prompt_contributions(), None);
-        let blank = build_task_prompt(
-            &task,
-            None,
-            false,
-            &start_prompt_contributions(),
-            Some("   \n  "),
-        );
+        let without = build_task_prompt(&task, None, &start_prompt_contributions(), None);
+        let blank = build_task_prompt(&task, None, &start_prompt_contributions(), Some("   \n  "));
 
         assert_eq!(without, blank, "a blank prefix must not alter the prompt");
         assert!(without.ends_with("Fix the login redirect\n"));
@@ -402,7 +362,7 @@ mod tests {
     fn test_build_task_prompt_separates_prefix_from_task_prompt() {
         let task = sample_task("T-302", "Fix the login redirect", None);
 
-        let prompt = build_task_prompt(&task, None, false, &[], Some("Check relevance."));
+        let prompt = build_task_prompt(&task, None, &[], Some("Check relevance."));
 
         assert!(prompt.contains("Check relevance.\n\nFix the login redirect"));
     }
@@ -414,7 +374,6 @@ mod tests {
         let prompt = build_task_prompt(
             &task,
             Some("Project rules here"),
-            false,
             &start_prompt_contributions(),
             None,
         );
@@ -426,54 +385,5 @@ mod tests {
         assert!(contribution_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
         assert!(!prompt.contains("External ticket:"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_without_code_cleanup() {
-        let task = sample_task("T-800", "No cleanup", None);
-
-        let prompt = build_task_prompt(&task, None, false, &start_prompt_contributions(), None);
-
-        assert!(!prompt.contains("<openforge_code_cleanup>"));
-        assert!(!prompt.contains("openforge_create_task"));
-        assert!(!prompt.contains("openforge_update_task"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_with_code_cleanup_enabled() {
-        let task = sample_task("T-801", "With cleanup", None);
-
-        let prompt = build_task_prompt(&task, None, true, &start_prompt_contributions(), None);
-
-        assert!(prompt.contains("<openforge_code_cleanup>"));
-        assert!(prompt.contains("</openforge_code_cleanup>"));
-        assert!(prompt.contains(
-            "openforge task create --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\" --label cleanup"
-        ));
-        assert!(prompt.contains("Add useful --label values"));
-        assert!(prompt.contains("Keep the --depends-on link"));
-        assert!(!prompt.contains("openforge_create_task"));
-        assert!(!prompt.contains("openforge_update_task"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_code_cleanup_ordering() {
-        let task = sample_task("T-802", "Cleanup ordering", None);
-
-        let prompt = build_task_prompt(&task, None, true, &start_prompt_contributions(), None);
-
-        let contribution_pos = prompt.find("<openforge_start_prompt_contribution").unwrap();
-        let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();
-        let task_prompt_pos = prompt.find("Cleanup ordering").unwrap();
-
-        // Start contributions precede code cleanup, which precedes the task prompt.
-        assert!(
-            contribution_pos < cleanup_pos,
-            "Start contributions should come before code cleanup"
-        );
-        assert!(
-            cleanup_pos < task_prompt_pos,
-            "Code cleanup should come before task prompt"
-        );
     }
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, codeCleanupTasksEnabled, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
+  import { tasks, dependencyReferenceTasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, taskAttentionRows, taskAttentionLoaded, isLoading, projects, activeProjectId, currentView, reviewRequestCount, activeRepoReviewRequestCount, activeProjectAttentionCount, projectAttention, focusBoardFilters, outOfFocusTaskIdsByProject, sidebarPluginViewKeys } from './lib/stores'
   import { setPollContext, getProjectRepo } from './lib/ipc'
   import { GITHUB_SYNC_GLOBAL_VIEW_KEY } from './lib/githubSyncPlugin'
   import { TASK_SCHEDULES_VIEW_KEY } from './lib/taskSchedulesPlugin'
@@ -216,7 +216,6 @@
     pluginOwner: pluginController,
     onCloseRequested: closeController.handleCloseRequested,
     setAppMode: (mode) => { appMode = mode },
-    setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
     onWindowFocusChange: (focused) => { windowFocused = focused },
     shortcutHandlers: {
       showShortcuts: shortcutHelp.open,

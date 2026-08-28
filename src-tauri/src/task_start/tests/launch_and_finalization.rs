@@ -23,7 +23,6 @@ async fn safe_start_creates_implementation_run_and_publishes_canonical_invalidat
             worktree_branch: None,
             title: None,
             source_ticket_url: None,
-            code_cleanup_enabled: None,
             task_display_title_updates_enabled: None,
             ai_provider: None,
         })
