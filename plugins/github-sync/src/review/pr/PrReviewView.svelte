@@ -12,7 +12,7 @@
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
   import { walkthroughReadyFirst } from '../../lib/reviewListSort'
-  import { resolveWalkthroughPromptTemplate } from '../../lib/walkthroughPromptTemplate'
+  import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
   import {
     getPrReviewFilesKey,
     loadPrReviewedFileShas,
@@ -847,10 +847,10 @@
   // Kick off a background walkthrough + AI-review generation for a PR from the
   // list card. Deliberately does NOT mark the PR read — read state only changes
   // when the reviewer opens the PR (openPrDetail). The prompt is compiled
-  // server-side (Plan 2); the template (resolved from settings here) is passed in.
+  // server-side (Plan 2); only the two guidance settings, resolved here, are passed in.
   async function generateWalkthrough(pr: ReviewPullRequest) {
     try {
-      const promptTemplate = await resolveWalkthroughPromptTemplate(api, $activeProjectId)
+      const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, $activeProjectId)
       await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,
@@ -862,7 +862,8 @@
         headSha: pr.head_sha,
         reviewPrId: pr.id,
         projectId: $activeProjectId,
-        promptTemplate,
+        reviewGuidance,
+        walkthroughGuidance,
       })
     } catch (e) {
       console.error('Failed to start walkthrough generation:', e)

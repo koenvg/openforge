@@ -1,17 +1,21 @@
 import { DEFAULT_GITHUB_POLL_INTERVAL_SECONDS, loadGlobalSettings, parseGitHubPollIntervalSeconds } from '../../lib/settingsConfig'
-import { DEFAULT_PR_WALKTHROUGH_PROMPT } from '../../lib/prWalkthroughPrompt'
+import { DEFAULT_PR_REVIEW_GUIDANCE, DEFAULT_PR_WALKTHROUGH_GUIDANCE } from '../../lib/prGuidanceDefaults'
 import type { GlobalSettingsSavePayload } from '../../lib/settingsSaver'
 import { error } from '../../lib/stores'
 
-// `pr_walkthrough_prompt` lives in the Agents section only, mirroring project settings.
-// Every other global section excludes it so the long prompt is not rendered three times.
-export const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins', 'pr_walkthrough_prompt']
+// The two PR guidance settings live in the Agents section only, mirroring project
+// settings. Every other global section excludes them so they are not rendered three times.
+export const GLOBAL_GENERAL_EXCLUDE_KEYS = ['ai_provider', 'github_poll_interval', 'plugins', 'pr_review_guidance', 'pr_walkthrough_guidance']
+// The PR guidance settings render in their own card beside this one, so the
+// provider card excludes them too.
 export const PROVIDER_ONLY_EXCLUDE_KEYS = [
   'task_display_title_metadata_updates_enabled',
   'use_worktrees',
   'task_id_prefix',
   'github_poll_interval',
   'plugins',
+  'pr_review_guidance',
+  'pr_walkthrough_guidance',
 ]
 export const GITHUB_ONLY_EXCLUDE_KEYS = [
   'task_display_title_metadata_updates_enabled',
@@ -19,7 +23,8 @@ export const GITHUB_ONLY_EXCLUDE_KEYS = [
   'use_worktrees',
   'task_id_prefix',
   'plugins',
-  'pr_walkthrough_prompt',
+  'pr_review_guidance',
+  'pr_walkthrough_guidance',
 ]
 
 function getErrorMessage(value: unknown): string {
@@ -32,7 +37,8 @@ export function createSettingsGlobalController() {
   let githubPollInterval = $state(DEFAULT_GITHUB_POLL_INTERVAL_SECONDS)
   let useWorktrees = $state(true)
   let aiProvider = $state('claude-code')
-  let walkthroughPrompt = $state(DEFAULT_PR_WALKTHROUGH_PROMPT)
+  let reviewGuidance = $state(DEFAULT_PR_REVIEW_GUIDANCE)
+  let walkthroughGuidance = $state(DEFAULT_PR_WALKTHROUGH_GUIDANCE)
   let loaded = $state(false)
   let loadError = $state<string | null>(null)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
@@ -44,7 +50,8 @@ export function createSettingsGlobalController() {
     use_worktrees: useWorktrees ? 'true' : 'false',
     task_id_prefix: taskIdPrefix,
     github_poll_interval: String(githubPollInterval),
-    pr_walkthrough_prompt: walkthroughPrompt,
+    pr_review_guidance: reviewGuidance,
+    pr_walkthrough_guidance: walkthroughGuidance,
   })
 
   async function load(): Promise<void> {
@@ -57,7 +64,8 @@ export function createSettingsGlobalController() {
       githubPollInterval = settings.githubPollInterval
       useWorktrees = settings.useWorktrees
       aiProvider = settings.aiProvider
-      walkthroughPrompt = settings.walkthroughPrompt
+      reviewGuidance = settings.reviewGuidance
+      walkthroughGuidance = settings.walkthroughGuidance
       loaded = true
     } catch (value) {
       loadError = getErrorMessage(value)
@@ -92,9 +100,12 @@ export function createSettingsGlobalController() {
       case 'github_poll_interval':
         githubPollInterval = parseGitHubPollIntervalSeconds(value)
         return { githubPollInterval }
-      case 'pr_walkthrough_prompt':
-        walkthroughPrompt = value
-        return { walkthroughPrompt }
+      case 'pr_review_guidance':
+        reviewGuidance = value
+        return { reviewGuidance }
+      case 'pr_walkthrough_guidance':
+        walkthroughGuidance = value
+        return { walkthroughGuidance }
     }
   }
 

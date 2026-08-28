@@ -36,6 +36,9 @@ pub(super) enum ToolPolicy {
 }
 
 /// The read + git-history whitelist, passed as a single `--allowedTools` value.
+///
+/// `Skill` is deliberately absent: the CLI does not gate skill invocation on the
+/// allowlist, so guidance text can name a skill without widening this list.
 const READ_AND_GIT_HISTORY_TOOLS: &str =
     "Read Grep Glob Bash(git log:*) Bash(git blame:*) Bash(git show:*)";
 
@@ -307,7 +310,19 @@ async fn run_headless_generation(
     output_schema: Option<&str>,
     timeout_secs: u64,
 ) -> Result<String, String> {
-    let (binary_name, args) = headless_command(provider, model, tool_policy, output_schema)?;
+    // Only the repo-aware policy exposes personal skills; the diff-only path is
+    // meant to be self-contained.
+    let local_skills = match tool_policy {
+        ToolPolicy::ReadAndGitHistory => super::local_skills::local_skills_plugin_dir(),
+        ToolPolicy::None => None,
+    };
+    let (binary_name, args) = headless_command(
+        provider,
+        model,
+        tool_policy,
+        output_schema,
+        local_skills.as_deref(),
+    )?;
 
     let env = crate::user_environment::user_environment();
     let path = env
@@ -466,6 +481,7 @@ fn headless_command(
     model: Option<&str>,
     tool_policy: &ToolPolicy,
     output_schema: Option<&str>,
+    local_skills_plugin: Option<&Path>,
 ) -> Result<(&'static str, Vec<String>), String> {
     match provider {
         "claude-code" => {
@@ -504,6 +520,14 @@ fn headless_command(
                 args.push(DISALLOWED_EDIT_TOOLS.to_string());
                 args.push("--allowedTools".to_string());
                 args.push(READ_AND_GIT_HISTORY_TOOLS.to_string());
+                // The user's own skills, wrapped as a session-only plugin. This is
+                // how guidance text like "follow the /strict-code-review skill"
+                // resolves without `--setting-sources user` handing the run the
+                // user's global `permissions.allow` (see local_skills.rs).
+                if let Some(plugin_dir) = local_skills_plugin {
+                    args.push("--plugin-dir".to_string());
+                    args.push(plugin_dir.to_string_lossy().to_string());
+                }
             }
             Ok(("claude", args))
         }
@@ -580,8 +604,8 @@ mod tests {
 
     #[test]
     fn claude_code_uses_print_mode_and_reads_stdin() {
-        let (binary, args) =
-            headless_command("claude-code", None, &ToolPolicy::None, None).expect("supported");
+        let (binary, args) = headless_command("claude-code", None, &ToolPolicy::None, None, None)
+            .expect("supported");
         assert_eq!(binary, "claude");
         assert!(args.contains(&"--print".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
@@ -596,6 +620,7 @@ mod tests {
             Some("claude-opus-4-8"),
             &ToolPolicy::None,
             None,
+            None,
         )
         .unwrap();
         let idx = args
@@ -607,13 +632,14 @@ mod tests {
 
     #[test]
     fn empty_model_is_not_forwarded() {
-        let (_, args) = headless_command("claude-code", Some(""), &ToolPolicy::None, None).unwrap();
+        let (_, args) =
+            headless_command("claude-code", Some(""), &ToolPolicy::None, None, None).unwrap();
         assert!(!args.iter().any(|a| a == "--model"));
     }
 
     #[test]
     fn unsupported_provider_returns_actionable_error() {
-        let err = headless_command("opencode", None, &ToolPolicy::None, None)
+        let err = headless_command("opencode", None, &ToolPolicy::None, None, None)
             .expect_err("opencode not supported");
         assert!(err.contains("opencode"));
         assert!(err.contains("claude-code"));
@@ -622,7 +648,8 @@ mod tests {
     #[test]
     fn none_policy_adds_no_tool_or_permission_flags() {
         // The existing diff-only caller must be unchanged: no tool/permission flags.
-        let (_, args) = headless_command("claude-code", None, &ToolPolicy::None, None).unwrap();
+        let (_, args) =
+            headless_command("claude-code", None, &ToolPolicy::None, None, None).unwrap();
         assert!(!args.iter().any(|a| a == "--allowedTools"));
         assert!(!args.iter().any(|a| a == "--disallowedTools"));
         assert!(!args.iter().any(|a| a == "--permission-mode"));
@@ -632,8 +659,14 @@ mod tests {
 
     #[test]
     fn read_and_git_history_policy_whitelists_read_and_git_only() {
-        let (_, args) =
-            headless_command("claude-code", None, &ToolPolicy::ReadAndGitHistory, None).unwrap();
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadAndGitHistory,
+            None,
+            None,
+        )
+        .unwrap();
         // Do NOT inherit the user's global permissions.allow (often Bash(*)/Write/
         // Edit) — that would silently defeat the whitelist for this automated run.
         let src_idx = args
@@ -673,6 +706,63 @@ mod tests {
         let deny = &args[deny_idx + 1];
         assert!(deny.contains("Write"));
         assert!(deny.contains("Edit"));
+        // With no personal skills to expose, the flag is omitted entirely.
+        assert!(!args.iter().any(|a| a == "--plugin-dir"));
+    }
+
+    #[test]
+    fn read_and_git_history_policy_mounts_personal_skills_as_a_plugin() {
+        let plugin = std::path::PathBuf::from("/tmp/openforge-local-skills-1");
+        let (_, args) = headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadAndGitHistory,
+            None,
+            Some(&plugin),
+        )
+        .unwrap();
+
+        let idx = args
+            .iter()
+            .position(|a| a == "--plugin-dir")
+            .expect("plugin-dir present");
+        assert_eq!(args[idx + 1], "/tmp/openforge-local-skills-1");
+        // A session-only plugin must not drag the user's settings in with it:
+        // `permissions.allow` there is typically Bash(*)/Write/Edit.
+        let src_idx = args
+            .iter()
+            .position(|a| a == "--setting-sources")
+            .expect("setting-sources present");
+        assert_eq!(args[src_idx + 1], "project");
+    }
+
+    // The PR guidance settings tell users this feature needs the Claude Code
+    // provider. That claim is only true while every other provider is rejected
+    // here; if one is ever added, the Settings notice has to change with it.
+    #[test]
+    fn every_provider_except_claude_code_is_rejected() {
+        for provider in ["opencode", "codex", "grok", "gemini", "pi", ""] {
+            let result =
+                headless_command(provider, None, &ToolPolicy::ReadAndGitHistory, None, None);
+            let err = result.expect_err("only claude-code is supported");
+            assert!(err.contains("claude-code"), "provider {provider}: {err}");
+        }
+        assert!(headless_command(
+            "claude-code",
+            None,
+            &ToolPolicy::ReadAndGitHistory,
+            None,
+            None
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn none_policy_never_mounts_personal_skills() {
+        let plugin = std::path::PathBuf::from("/tmp/openforge-local-skills-1");
+        let (_, args) =
+            headless_command("claude-code", None, &ToolPolicy::None, None, Some(&plugin)).unwrap();
+        assert!(!args.iter().any(|a| a == "--plugin-dir"));
     }
 
     #[test]
@@ -712,7 +802,7 @@ mod tests {
     fn output_schema_switches_to_json_and_passes_schema() {
         let schema = r#"{"type":"object"}"#;
         let (_, args) =
-            headless_command("claude-code", None, &ToolPolicy::None, Some(schema)).unwrap();
+            headless_command("claude-code", None, &ToolPolicy::None, Some(schema), None).unwrap();
         let fmt_idx = args
             .iter()
             .position(|a| a == "--output-format")

@@ -35,7 +35,7 @@ describe('SettingsView autosave global persistence', () => {
     expect(requireElement(screen.getByTestId('github_poll_interval'), HTMLInputElement).disabled).toBe(true)
 
     await vi.waitFor(() => {
-      expect(resolvers.size).toBeGreaterThanOrEqual(7)
+      expect(resolvers.size).toBeGreaterThanOrEqual(8)
     })
     resolvers.get('task_id_prefix')?.('OF')
     resolvers.get('github_token')?.('ghp_old')
@@ -43,7 +43,8 @@ describe('SettingsView autosave global persistence', () => {
     resolvers.get('github_poll_interval')?.('60')
     resolvers.get('use_worktrees')?.('true')
     resolvers.get('ai_provider')?.('claude-code')
-    resolvers.get('pr_walkthrough_prompt')?.('Prompt')
+    resolvers.get('pr_review_guidance')?.('Review guidance')
+    resolvers.get('pr_walkthrough_guidance')?.('Walkthrough guidance')
     resolvers.get('ghostty_terminal_state_enabled')?.('false')
 
     await vi.waitFor(() => {

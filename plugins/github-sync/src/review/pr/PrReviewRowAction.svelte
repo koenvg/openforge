@@ -5,7 +5,7 @@
   import PrWalkthroughButton from './PrWalkthroughButton.svelte'
   import { createGithubSyncPrReviewClient } from './githubSyncClient'
   import { walkthroughButtonState } from '../../lib/walkthroughButtonState'
-  import { resolveWalkthroughPromptTemplate } from '../../lib/walkthroughPromptTemplate'
+  import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -65,7 +65,7 @@
   async function generate(): Promise<void> {
     const subject = pr
     try {
-      const promptTemplate = await resolveWalkthroughPromptTemplate(api, projectId)
+      const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, projectId)
       await githubSync.startAgentWalkthrough({
         repoOwner: subject.repo_owner,
         repoName: subject.repo_name,
@@ -77,7 +77,8 @@
         headSha: subject.head_sha,
         reviewPrId: subject.id,
         projectId,
-        promptTemplate,
+        reviewGuidance,
+        walkthroughGuidance,
       })
     } catch (e) {
       console.error('Failed to start walkthrough generation:', e)

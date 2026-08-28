@@ -1,0 +1,4 @@
+- One logical concept per step. A step may span several files, and one file may appear in several steps if it contains unrelated changes.
+- Scale the step count to the change: roughly 3 to 6 steps for a small PR, up to 10 or 12 for a large one. A slightly long step beats splitting one concept in two.
+- Order steps so a reader can follow them top-to-bottom: schema and types before the code that uses them, implementation before its callers, tests last.
+- Step titles are imperative and at most 80 characters.

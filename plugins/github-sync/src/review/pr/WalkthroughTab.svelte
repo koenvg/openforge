@@ -21,6 +21,7 @@
   import type { TicketSnapshot } from '../../lib/ticketCoverage'
   import TicketCoveragePanel from './TicketCoveragePanel.svelte'
   import { isInputFocused } from '../../lib/domUtils'
+  import { resolveWalkthroughGuidance } from '../../lib/walkthroughGuidance'
   import FileTree from '@openforge-app/pr-review-ui/FileTree.svelte'
   import DiffViewer from '@openforge-app/pr-review-ui/DiffViewer.svelte'
   import ReviewSubmitPanel from '@openforge-app/pr-review-ui/ReviewSubmitPanel.svelte'
@@ -72,7 +73,7 @@
   }
 
   let {
-    api: _api,
+    api,
     githubSync,
     pr,
     files,
@@ -310,9 +311,10 @@
     isStarting = true
     loadError = null
     try {
-      // The combined steps+review prompt is compiled server-side now (backend
-      // fetches the diffs and runs the repo-aware agent), so the client no longer
-      // supplies a prompt.
+      // The prompt is compiled server-side (backend fetches the diffs and runs the
+      // repo-aware agent). All this side supplies is the two guidance settings,
+      // resolved the same way as on the list card so both entry points honour them.
+      const { reviewGuidance, walkthroughGuidance } = await resolveWalkthroughGuidance(api, projectId)
       await githubSync.startAgentWalkthrough({
         repoOwner: pr.repo_owner,
         repoName: pr.repo_name,
@@ -324,6 +326,8 @@
         headSha: pr.head_sha,
         reviewPrId: pr.id,
         projectId,
+        reviewGuidance,
+        walkthroughGuidance,
       })
       walkthrough = {
         pr_id: pr.id,

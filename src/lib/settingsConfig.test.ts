@@ -32,7 +32,7 @@ import {
   loadProjectSettings,
   loadWhisperModelStatuses,
 } from './settingsConfig'
-import { DEFAULT_PR_WALKTHROUGH_PROMPT } from './prWalkthroughPrompt'
+import { DEFAULT_PR_REVIEW_GUIDANCE, DEFAULT_PR_WALKTHROUGH_GUIDANCE } from './prGuidanceDefaults'
 
 describe('settingsConfig', () => {
   beforeEach(() => {
@@ -118,12 +118,13 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce('45')
         .mockResolvedValueOnce('false')
         .mockResolvedValueOnce('opencode')
-        .mockResolvedValueOnce('Custom walkthrough prompt')
+        .mockResolvedValueOnce('Custom review guidance')
+        .mockResolvedValueOnce('Custom walkthrough guidance')
         .mockResolvedValueOnce('true')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(8)
+      expect(getConfig).toHaveBeenCalledTimes(9)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
         githubToken: 'gh-token',
@@ -132,7 +133,8 @@ describe('settingsConfig', () => {
         githubPollInterval: 45,
         useWorktrees: false,
         aiProvider: 'opencode',
-        walkthroughPrompt: 'Custom walkthrough prompt',
+        reviewGuidance: 'Custom review guidance',
+        walkthroughGuidance: 'Custom walkthrough guidance',
       })
     })
 
@@ -153,7 +155,8 @@ describe('settingsConfig', () => {
         githubPollInterval: 60,
         useWorktrees: true,
         aiProvider: 'claude-code',
-        walkthroughPrompt: DEFAULT_PR_WALKTHROUGH_PROMPT,
+        reviewGuidance: DEFAULT_PR_REVIEW_GUIDANCE,
+        walkthroughGuidance: DEFAULT_PR_WALKTHROUGH_GUIDANCE,
       })
     })
 

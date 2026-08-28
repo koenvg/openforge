@@ -285,7 +285,8 @@ export default defineBackendPlugin({
       headSha: string
       reviewPrId: number
       projectId: string | null
-      promptTemplate: string
+      reviewGuidance: string
+      walkthroughGuidance: string
     }, { walkthrough_session_key: string }>('startAgentWalkthrough', {
       handler: async (request) => {
         const sessionKey = randomUUID()
@@ -293,9 +294,10 @@ export default defineBackendPlugin({
         await beginWalkthroughGeneration(openforge, params)
 
         // Fetch diffs server-side so the trigger works without the UI having loaded files,
-        // then compile the combined steps+review prompt here. The template is the
-        // resolved `pr_walkthrough_prompt` setting (global/project), passed from the UI;
-        // only the {{…}} placeholders are filled in with this PR's title/body/diffs.
+        // then compile the combined steps+review prompt here. The template itself is the
+        // built-in one and never crosses this boundary; what the UI passes are the two
+        // resolved guidance settings, which the template embeds. Everything else in the
+        // prompt is the output contract and can't be reached from Settings.
         const files = await invokeHostCommand<PrFileDiff[]>(openforge, 'getPrFileDiffs', {
           owner: request.repoOwner, repo: request.repoName, prNumber: request.prNumber,
         })
@@ -321,7 +323,15 @@ export default defineBackendPlugin({
         }
 
         const ticket = ticketSnapshot?.item ?? null
-        const prompt = compileWalkthroughPrompt({ title: request.prTitle, body: request.prBody, files, existingComments, ticket }, request.promptTemplate)
+        const prompt = compileWalkthroughPrompt({
+          title: request.prTitle,
+          body: request.prBody,
+          files,
+          existingComments,
+          ticket,
+          reviewGuidance: request.reviewGuidance,
+          walkthroughGuidance: request.walkthroughGuidance,
+        })
 
         // Kick off generation in the background so the UI gets its session key
         // immediately and can render the optimistic "generating" state. The

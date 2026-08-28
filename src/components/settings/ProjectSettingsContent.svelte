@@ -8,6 +8,7 @@
   import SettingsProviderField from './SettingsProviderField.svelte'
   import SettingsSectionCard from './SettingsSectionCard.svelte'
   import SettingsTaskLabelsCard from './SettingsTaskLabelsCard.svelte'
+  import { PR_GUIDANCE_KEYS, PR_GUIDANCE_SECTION } from '../../lib/hierarchicalSettings'
   import type { SettingsViewController } from './settingsViewController.svelte'
 
   interface Props {
@@ -33,7 +34,7 @@
     mode="project"
     values={controller.projectHierarchyValues}
     overrides={controller.projectRawOverrides}
-    excludeKeys={['plugins']}
+    excludeKeys={['plugins', ...PR_GUIDANCE_KEYS]}
     onChange={controller.handleProjectSettingChange}
     onResetSetting={controller.handleResetProjectSetting}
     resettingKey={controller.resettingProjectSetting}
@@ -47,6 +48,19 @@
       />
     {/snippet}
   </HierarchicalSettingsCard>
+  <HierarchicalSettingsCard
+    mode="project"
+    sectionId={PR_GUIDANCE_SECTION.id}
+    title={PR_GUIDANCE_SECTION.title}
+    subtitle={PR_GUIDANCE_SECTION.subtitle}
+    values={controller.projectHierarchyValues}
+    overrides={controller.projectRawOverrides}
+    includeKeys={PR_GUIDANCE_KEYS}
+    onChange={controller.handleProjectSettingChange}
+    onResetSetting={controller.handleResetProjectSetting}
+    resettingKey={controller.resettingProjectSetting}
+    disabled={!controller.hasProject}
+  />
 {:else if activeSection === 'labels'}
   <SettingsTaskLabelsCard projectId={controller.projectId} disabled={!controller.hasProject} />
 {:else if activeSection === 'focus'}

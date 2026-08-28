@@ -38,18 +38,43 @@ describe('SettingsView rendering and navigation', () => {
     expect(screen.queryAllByText(/credentials/i).length).toBeGreaterThan(0)
   })
 
-  it('gives the PR walkthrough prompt a single home on the global page', async () => {
+  it('gives each PR guidance setting a single home on the global page', async () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
-    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
+    for (const key of ['pr_review_guidance', 'pr_walkthrough_guidance']) {
+      expect(screen.queryAllByTestId(key).length).toBe(0)
+    }
 
     await openSettingsCategory(/^Agents/)
-    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(1)
+    for (const key of ['pr_review_guidance', 'pr_walkthrough_guidance']) {
+      expect(screen.queryAllByTestId(key).length).toBe(1)
+    }
 
     await openSettingsCategory(/GitHub & Credentials/)
-    expect(screen.queryAllByTestId('pr_walkthrough_prompt').length).toBe(0)
+    for (const key of ['pr_review_guidance', 'pr_walkthrough_guidance']) {
+      expect(screen.queryAllByTestId(key).length).toBe(0)
+    }
+  })
+
+  it('separates the PR guidance fields from the provider card', async () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    await openSettingsCategory(/^Agents/)
+
+    // Its own card, so the provider selector no longer sits directly above the
+    // two long prompt fields.
+    const section = document.querySelector('#section-pr-review-prompt')
+    expect(section).not.toBeNull()
+    expect(section?.textContent).toContain('PR review prompt')
+    expect(section?.querySelector('[data-testid="pr_review_guidance"]')).not.toBeNull()
+    expect(section?.querySelector('[data-testid="pr_walkthrough_guidance"]')).not.toBeNull()
+    expect(section?.querySelector('[data-testid="ai_provider"]')).toBeNull()
+
+    const providerCard = document.querySelector('#section-configuration')
+    expect(providerCard?.querySelector('[data-testid="pr_review_guidance"]')).toBeNull()
   })
 
 
