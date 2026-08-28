@@ -50,9 +50,13 @@ vi.mock('@openforge-app/pr-review-ui/diffAdapter', async (importOriginal) => {
   }
 })
 
-vi.mock('@openforge-app/pr-review-ui/diffComments', () => ({
-  buildExtendData: vi.fn().mockReturnValue({}),
-}))
+vi.mock('@openforge-app/pr-review-ui/diffComments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openforge-app/pr-review-ui/diffComments')>()
+  return {
+    ...actual,
+    buildExtendData: vi.fn(actual.buildExtendData),
+  }
+})
 
 vi.mock('@openforge-app/pr-review-ui/diffHighlighter', () => ({
   diffHighlighter: mockDiffHighlighter,

@@ -292,6 +292,9 @@ importers:
       '@tanstack/virtual-core':
         specifier: 'catalog:'
         version: 3.17.8
+      marked:
+        specifier: 'catalog:'
+        version: 18.0.10
       svelte:
         specifier: ^5.0.0
         version: 5.56.9
