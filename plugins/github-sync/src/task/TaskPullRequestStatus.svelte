@@ -36,19 +36,11 @@
   let loadError = $derived(cachedTask.loaded ? null : cachedTask.error)
   let cachedRefreshError = $derived(cachedTask.loaded ? cachedTask.error : null)
   let refreshError = $state<string | null>(null)
+  const revalidation = useTaskPullRequestRevalidation(initialApi, cache, () => taskId, () => { refreshError = null })
+  let visibleRefreshError = $derived(refreshError ?? cachedRefreshError)
   let refreshing = $state(false)
   let adding = $state(false)
-  let confirmingMerge = $state<PullRequestInfo | null>(null)
   let confirmingEnqueue = $state<PullRequestInfo | null>(null)
-  let commentActionError = $state<string | null>(null)
-  const revalidation = useTaskPullRequestRevalidation(initialApi, cache, () => taskId, () => {
-    refreshError = null
-    commentActionError = null
-    adding = false
-    confirmingMerge = null
-    confirmingEnqueue = null
-  })
-  let visibleRefreshError = $derived(refreshError ?? cachedRefreshError)
 
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
@@ -77,39 +69,26 @@
 
   async function refreshGithubStatus(): Promise<void> {
     if (refreshing) return
-    const refreshedTaskId = taskId
     refreshing = true
     refreshError = null
     try {
-      await client.refreshTask(refreshedTaskId)
-      await cache.invalidateAndRefresh(refreshedTaskId)
+      await client.refreshTask(taskId)
+      await cache.invalidateAndRefresh(taskId)
     } catch (error) {
-      if (taskId === refreshedTaskId) refreshError = errorMessage(error)
+      refreshError = errorMessage(error)
     } finally {
       refreshing = false
     }
   }
 
   async function linkPullRequest(url: string): Promise<void> {
-    const linkedTaskId = taskId
-    await client.linkPullRequest(linkedTaskId, url)
-    try {
-      await client.refreshTask(linkedTaskId)
-      await cache.invalidateAndRefresh(linkedTaskId)
-    } catch (error) {
-      if (taskId === linkedTaskId) refreshError = errorMessage(error)
-    }
+    await client.linkPullRequest(taskId, url)
+    await cache.invalidateAndRefresh(taskId)
   }
 
   async function markAddressed(commentId: number): Promise<void> {
-    const commentTaskId = taskId
-    commentActionError = null
-    try {
-      await client.markCommentAddressed(commentId)
-      await cache.invalidateAndRefresh(commentTaskId)
-    } catch (error) {
-      if (taskId === commentTaskId) commentActionError = errorMessage(error)
-    }
+    await client.markCommentAddressed(commentId)
+    await cache.invalidateAndRefresh(taskId)
   }
 
   function openExternal(url: string): void {
@@ -119,17 +98,10 @@
   function requestAction(pr: PullRequestInfo, action: 'merge' | 'enqueue'): void {
     if (orchestration.pendingPrId !== null) return
     if (action === 'merge') {
-      confirmingMerge = pr
+      void orchestration.merge(pr)
       return
     }
     confirmingEnqueue = pr
-  }
-
-  async function confirmMerge(): Promise<void> {
-    const pr = confirmingMerge
-    if (!pr) return
-    confirmingMerge = null
-    await orchestration.merge(pr)
   }
 
   async function confirmEnqueue(): Promise<void> {
@@ -161,8 +133,6 @@
 {#snippet body()}
   {#if loadError}<p class="m-0 text-xs text-error" role="alert">Could not load pull requests: {loadError}</p>{/if}
   {#if visibleRefreshError}<p class="m-0 text-xs text-error" role="alert">Could not refresh GitHub status: {visibleRefreshError}</p>{/if}
-  {#if cachedTask.commentsError}<p class="m-0 text-xs text-error" role="alert">Could not load pull request comments: {cachedTask.commentsError}</p>{/if}
-  {#if commentActionError}<p class="m-0 text-xs text-error" role="alert">Could not mark comment addressed: {commentActionError}</p>{/if}
   {#if revalidation.showLoading}<p class="m-0 text-xs text-base-content/55">Loading pull requests…</p>{/if}
 
   {#if adding}
@@ -236,19 +206,6 @@
       {@render body()}
     </div>
   </CollapsibleSection>
-{/if}
-
-{#if confirmingMerge}
-  <Modal onClose={() => { confirmingMerge = null }} ariaLabel="Merge pull request confirmation" maxWidth="32rem">
-    {#snippet header()}<h2 class="text-lg font-semibold">Confirm Merge</h2>{/snippet}
-    <div class="flex flex-col gap-4 p-5">
-      <p>Merge {confirmingMerge.repo_owner}/{confirmingMerge.repo_name} pull request #{prNumber(confirmingMerge)} “{confirmingMerge.title}”?</p>
-      <div class="flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" onclick={() => { confirmingMerge = null }}>Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick={() => void confirmMerge()}>Confirm Merge</button>
-      </div>
-    </div>
-  </Modal>
 {/if}
 
 {#if confirmingEnqueue}

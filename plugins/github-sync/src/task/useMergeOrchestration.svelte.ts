@@ -41,24 +41,9 @@ export function useMergeOrchestration(client: GithubTaskClient, onActionComplete
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      const remoteStatePrefix = action === 'merge'
-        ? 'Pull request merged on GitHub, but local state could not be updated'
-        : 'Pull request enqueued on GitHub, but local state could not be updated'
-      const legacyPersistencePrefix = action === 'merge'
-        ? 'Failed to persist merged pull request'
-        : 'Failed to persist queued pull request'
-      const remotePersistenceFailed = message.startsWith(remoteStatePrefix)
-        || message.startsWith(legacyPersistencePrefix)
-      setFeedback(pr.id, remotePersistenceFailed
-        ? {
-            kind: 'warning',
-            message: message.startsWith(remoteStatePrefix)
-              ? message
-              : `${remoteStatePrefix}: ${message}`,
-          }
-        : actionSucceeded
-          ? { kind: 'warning', message: `Action succeeded, but local refresh failed: ${message}` }
-          : { kind: 'error', message })
+      setFeedback(pr.id, actionSucceeded
+        ? { kind: 'warning', message: `Action succeeded, but local refresh failed: ${message}` }
+        : { kind: 'error', message })
     } finally {
       pendingPrId = null
     }
