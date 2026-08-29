@@ -398,12 +398,32 @@ describe('PluginFolderPanel', () => {
     expect(mocks.reloadLocalPluginFromDisk).not.toHaveBeenCalled()
   })
 
-  it('refuses to repoint a plugin installed from a different folder', async () => {
+  it('does not auto-reload a plugin installed from a different folder', async () => {
     markInstalled(installedEntry({ installPath: '/somewhere/else/alpha' }))
     await renderWithFolder([discovered()])
 
     expect(screen.queryByRole('button', { name: 'Install plugin: Alpha' })).toBeNull()
     expect(screen.getByText('Installed from another folder')).toBeTruthy()
+
+    await clickRefresh()
+
+    await vi.waitFor(() => expect(mocks.scanPluginFolder).toHaveBeenCalledTimes(2))
+    expect(mocks.reloadLocalPluginFromDisk).not.toHaveBeenCalled()
+  })
+
+  it('lets you repoint a plugin installed from a different folder onto this one', async () => {
+    markInstalled(installedEntry({ installPath: '/somewhere/else/alpha' }))
+    await renderWithFolder([discovered()])
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Load plugin from this folder: Alpha' }))
+
+    await vi.waitFor(() =>
+      expect(mocks.reloadLocalPluginFromDisk).toHaveBeenCalledWith(
+        'com.acme.alpha',
+        `${FOLDER}/plugins/alpha`,
+        PROJECT,
+      ),
+    )
   })
 
   it('installs every installable plugin that is not installed yet', async () => {

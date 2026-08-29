@@ -49,8 +49,10 @@
     return (path ?? '').replace(/\/+$/, '')
   }
 
-  // A matching plugin id can only be installed or reloaded from its current install path. This
-  // prevents a package discovered elsewhere from silently repointing the existing installation.
+  // A matching plugin id at a different path is flagged 'foreign' instead of being reloaded
+  // automatically — refresh() below skips it, so a package that merely happens to share an id
+  // cannot silently repoint the existing installation. Repointing still works, but only through
+  // the explicit "Load from this folder" action the user clicks on that row.
   function rowStatus(row: DiscoveredPlugin): RowStatus {
     const installed = $installedPlugins.get(row.id)
     if (installed) {
@@ -225,6 +227,16 @@
           onclick={() => reload(row)}
         >
           {busyPluginId === row.id ? 'Reloading…' : 'Reload'}
+        </button>
+      {:else if status === 'foreign'}
+        <button
+          class="btn btn-ghost btn-xs"
+          type="button"
+          aria-label="Load plugin from this folder: {row.name}"
+          disabled={disabled || isBusy}
+          onclick={() => reload(row)}
+        >
+          {busyPluginId === row.id ? 'Loading…' : 'Load from this folder'}
         </button>
       {/if}
 
