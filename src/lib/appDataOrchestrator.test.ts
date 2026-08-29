@@ -12,12 +12,12 @@ vi.mock('./ipc', () => ({
   getProjects: vi.fn(),
   getPullRequests: vi.fn(),
   getReviewPrs: vi.fn(),
-  getAllTasks: vi.fn(),
+  getTaskRelationshipReferences: vi.fn(),
   getTasksForProject: vi.fn(),
 }))
 
 import { useAppDataOrchestrator } from './appDataOrchestrator.svelte'
-import type { Task } from './types'
+import type { Task, TaskRelationshipReference } from './types'
 import {
   activeProjectId,
   activeResolvedRepo,
@@ -49,7 +49,7 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
-  getAllTasks,
+  getTaskRelationshipReferences,
   getTasksForProject,
 } from './ipc'
 
@@ -74,6 +74,16 @@ function makeTask(id: string, projectId: string): Task {
   }
 }
 
+
+function relationshipReference(task: Task): TaskRelationshipReference {
+  return {
+    id: task.id,
+    status: task.status,
+    project_id: task.project_id,
+    title: task.title ?? task.initial_prompt,
+    depends_on: task.depends_on,
+  }
+}
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((promiseResolve) => {
@@ -160,7 +170,7 @@ describe('useAppDataOrchestrator', () => {
     vi.mocked(getProjects).mockResolvedValue([])
     vi.mocked(getPullRequests).mockResolvedValue([])
     vi.mocked(getReviewPrs).mockResolvedValue([])
-    vi.mocked(getAllTasks).mockResolvedValue([])
+    vi.mocked(getTaskRelationshipReferences).mockResolvedValue([])
     vi.mocked(getTasksForProject).mockResolvedValue([])
     vi.mocked(forceGithubSync).mockResolvedValue(pollResult())
   })
@@ -176,15 +186,11 @@ describe('useAppDataOrchestrator', () => {
     const crossProjectDependent = makeTask('T-dependent', 'proj-2')
     crossProjectDependent.status = 'backlog'
     crossProjectDependent.depends_on = [selectedTask.id]
-    const unrelatedTask = makeTask('T-unrelated', 'proj-2')
 
     vi.mocked(getTasksForProject).mockResolvedValue([selectedTask, visibleDependency])
-    vi.mocked(getAllTasks).mockResolvedValue([
-      selectedTask,
-      visibleDependency,
-      crossProjectDependency,
-      crossProjectDependent,
-      unrelatedTask,
+    vi.mocked(getTaskRelationshipReferences).mockResolvedValue([
+      relationshipReference(crossProjectDependency),
+      relationshipReference(crossProjectDependent),
     ])
 
     await orchestrator.loadTasks()
@@ -195,6 +201,51 @@ describe('useAppDataOrchestrator', () => {
       'T-dependent',
     ])
     expect(getLatestSessions).toHaveBeenCalledWith(['T-child', 'T-visible'])
+  })
+
+  it('single-flights bursty task-changed and session refresh requests', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    const activeTasksResponse = deferred<Task[]>()
+    activeProjectId.set('proj-1')
+    vi.mocked(getTasksForProject).mockReturnValueOnce(activeTasksResponse.promise)
+
+    const refreshes = Array.from({ length: 20 }, () => orchestrator.loadTasks())
+
+    await vi.waitFor(() => {
+      expect(getTasksForProject).toHaveBeenCalledOnce()
+      expect(getTaskRelationshipReferences).toHaveBeenCalledOnce()
+    })
+
+    activeTasksResponse.resolve([])
+    await Promise.all(refreshes)
+
+    expect(getTasksForProject).toHaveBeenCalledOnce()
+    expect(getTaskRelationshipReferences).toHaveBeenCalledOnce()
+  })
+
+  it('runs one trailing refresh when an invalidation arrives during session hydration', async () => {
+    const orchestrator = useAppDataOrchestrator({ setShowProjectSetup: vi.fn() })
+    const sessionResponse = deferred<Awaited<ReturnType<typeof getLatestSessions>>>()
+    const activeTask = makeTask('T-active', 'proj-1')
+    activeProjectId.set('proj-1')
+    vi.mocked(getTasksForProject).mockResolvedValue([activeTask])
+    vi.mocked(getLatestSessions)
+      .mockReturnValueOnce(sessionResponse.promise)
+      .mockResolvedValueOnce([])
+
+    const firstRefresh = orchestrator.loadTasks()
+    await vi.waitFor(() => {
+      expect(getTasksForProject).toHaveBeenCalledOnce()
+      expect(getLatestSessions).toHaveBeenCalledOnce()
+    })
+
+    const refreshDuringSessionLoad = orchestrator.loadTasks()
+    sessionResponse.resolve([])
+    await Promise.all([firstRefresh, refreshDuringSessionLoad])
+
+    expect(getTasksForProject).toHaveBeenCalledTimes(2)
+    expect(getTaskRelationshipReferences).toHaveBeenCalledTimes(2)
+    expect(getLatestSessions).toHaveBeenCalledTimes(2)
   })
 
 

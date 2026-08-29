@@ -61,6 +61,15 @@ pub struct CompactTaskRow {
     pub labels: Vec<TaskLabelRow>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskRelationshipReferenceRow {
+    pub id: String,
+    pub status: String,
+    pub project_id: Option<String>,
+    pub title: String,
+    pub depends_on: Vec<String>,
+}
+
 impl super::Database {
     /// Replace both prompt columns for a task that has never entered execution.
     ///

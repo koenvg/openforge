@@ -1,7 +1,7 @@
 use super::{
-    task_dependencies::load_task_dependency_ids,
-    task_labels::load_task_labels,
-    tasks::{CompactTaskRow, TaskRow},
+    task_dependencies::{load_task_dependency_ids, load_task_dependency_ids_for_tasks},
+    task_labels::{load_task_labels, load_task_labels_for_tasks},
+    tasks::{CompactTaskRow, TaskRelationshipReferenceRow, TaskRow},
     Database,
 };
 use rusqlite::{params_from_iter, OptionalExtension, Result};
@@ -51,19 +51,59 @@ fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
     })
 }
 
+fn task_relationship_reference_from_row(
+    row: &rusqlite::Row<'_>,
+) -> Result<TaskRelationshipReferenceRow> {
+    Ok(TaskRelationshipReferenceRow {
+        id: row.get(0)?,
+        status: row.get(1)?,
+        project_id: row.get(2)?,
+        title: row.get(3)?,
+        depends_on: Vec::new(),
+    })
+}
+
 fn hydrate_task_row(conn: &rusqlite::Connection, mut task: TaskRow) -> Result<TaskRow> {
     task.depends_on = load_task_dependency_ids(conn, &task.id)?;
     task.labels = load_task_labels(conn, &task.id)?;
     Ok(task)
 }
 
-fn hydrate_compact_task_row(
+fn hydrate_task_rows(conn: &rusqlite::Connection, mut tasks: Vec<TaskRow>) -> Result<Vec<TaskRow>> {
+    let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
+    let mut dependencies = load_task_dependency_ids_for_tasks(conn, &task_ids)?;
+    let mut labels = load_task_labels_for_tasks(conn, &task_ids)?;
+    for task in &mut tasks {
+        task.depends_on = dependencies.remove(&task.id).unwrap_or_default();
+        task.labels = labels.remove(&task.id).unwrap_or_default();
+    }
+    Ok(tasks)
+}
+
+fn hydrate_compact_task_rows(
     conn: &rusqlite::Connection,
-    mut task: CompactTaskRow,
-) -> Result<CompactTaskRow> {
-    task.depends_on = load_task_dependency_ids(conn, &task.id)?;
-    task.labels = load_task_labels(conn, &task.id)?;
-    Ok(task)
+    mut tasks: Vec<CompactTaskRow>,
+) -> Result<Vec<CompactTaskRow>> {
+    let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
+    let mut dependencies = load_task_dependency_ids_for_tasks(conn, &task_ids)?;
+    let mut labels = load_task_labels_for_tasks(conn, &task_ids)?;
+    for task in &mut tasks {
+        task.depends_on = dependencies.remove(&task.id).unwrap_or_default();
+        task.labels = labels.remove(&task.id).unwrap_or_default();
+    }
+    Ok(tasks)
+}
+
+fn hydrate_task_relationship_references(
+    conn: &rusqlite::Connection,
+    mut tasks: Vec<TaskRelationshipReferenceRow>,
+) -> Result<Vec<TaskRelationshipReferenceRow>> {
+    let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
+    let mut dependencies = load_task_dependency_ids_for_tasks(conn, &task_ids)?;
+    for task in &mut tasks {
+        task.depends_on = dependencies.remove(&task.id).unwrap_or_default();
+    }
+    Ok(tasks)
 }
 
 fn query_task_rows<const N: usize>(
@@ -73,11 +113,8 @@ fn query_task_rows<const N: usize>(
 ) -> Result<Vec<TaskRow>> {
     let mut statement = conn.prepare(query)?;
     let rows = statement.query_map(params_from_iter(params), task_from_row)?;
-    let mut tasks = Vec::new();
-    for row in rows {
-        tasks.push(hydrate_task_row(conn, row?)?);
-    }
-    Ok(tasks)
+    let tasks = rows.collect::<Result<Vec<_>>>()?;
+    hydrate_task_rows(conn, tasks)
 }
 
 fn query_compact_task_rows<const N: usize>(
@@ -87,11 +124,8 @@ fn query_compact_task_rows<const N: usize>(
 ) -> Result<Vec<CompactTaskRow>> {
     let mut statement = conn.prepare(query)?;
     let rows = statement.query_map(params_from_iter(params), compact_task_from_row)?;
-    let mut tasks = Vec::new();
-    for row in rows {
-        tasks.push(hydrate_compact_task_row(conn, row?)?);
-    }
-    Ok(tasks)
+    let tasks = rows.collect::<Result<Vec<_>>>()?;
+    hydrate_compact_task_rows(conn, tasks)
 }
 
 impl Database {
@@ -150,6 +184,50 @@ impl Database {
         query_task_rows(&conn, &query, [project_id, state])
     }
 
+    pub fn get_task_relationship_references_for_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<TaskRelationshipReferenceRow>> {
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(
+            r#"
+WITH active_tasks AS (
+    SELECT id
+    FROM tasks
+    WHERE project_id = ?1 AND status != 'done'
+),
+relationship_ids AS (
+    SELECT dependencies.depends_on_task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.task_id
+    UNION
+    SELECT dependencies.task_id AS id
+    FROM task_dependencies dependencies
+    INNER JOIN active_tasks active ON active.id = dependencies.depends_on_task_id
+    INNER JOIN tasks dependent ON dependent.id = dependencies.task_id
+    WHERE dependent.status != 'done'
+),
+relationship_tasks AS (
+    SELECT
+        tasks.id,
+        tasks.status,
+        tasks.project_id,
+        COALESCE(NULLIF(tasks.title, ''), substr(tasks.initial_prompt, 1, 120)) AS title,
+        tasks.updated_at
+    FROM tasks
+    INNER JOIN relationship_ids ON relationship_ids.id = tasks.id
+    WHERE NOT EXISTS (SELECT 1 FROM active_tasks WHERE active_tasks.id = tasks.id)
+)
+SELECT id, status, project_id, title
+FROM relationship_tasks
+ORDER BY updated_at DESC
+            "#,
+        )?;
+        let rows = statement.query_map([project_id], task_relationship_reference_from_row)?;
+        let tasks = rows.collect::<Result<Vec<_>>>()?;
+        hydrate_task_relationship_references(&conn, tasks)
+    }
+
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.lock_conn()?;
         let query = format!("SELECT {TASK_ROW_COLUMNS} FROM tasks ORDER BY updated_at DESC");
@@ -179,6 +257,36 @@ impl Database {
 mod tests {
     use super::*;
     use crate::db::test_helpers::*;
+    use rusqlite::trace::{TraceEvent, TraceEventCodes};
+    use std::cell::Cell;
+
+    thread_local! {
+        static TRACED_STATEMENT_COUNT: Cell<usize> = const { Cell::new(0) };
+    }
+
+    fn count_traced_statement(event: TraceEvent<'_>) {
+        if matches!(event, TraceEvent::Stmt(_, _)) {
+            TRACED_STATEMENT_COUNT.set(TRACED_STATEMENT_COUNT.get() + 1);
+        }
+    }
+
+    fn trace_statement_count<T>(db: &Database, operation: impl FnOnce() -> T) -> (T, usize) {
+        TRACED_STATEMENT_COUNT.set(0);
+        let connection = db.connection();
+        connection.lock().expect("lock connection").trace_v2(
+            TraceEventCodes::SQLITE_TRACE_STMT,
+            Some(count_traced_statement),
+        );
+
+        let result = operation();
+
+        connection
+            .lock()
+            .expect("lock connection")
+            .trace_v2(TraceEventCodes::empty(), None);
+        let statement_count = TRACED_STATEMENT_COUNT.get();
+        (result, statement_count)
+    }
 
     fn task_ids(tasks: &[TaskRow]) -> Vec<&str> {
         tasks.iter().map(|task| task.id.as_str()).collect()
@@ -354,6 +462,96 @@ mod tests {
         drop(db);
     }
 
+    #[test]
+    fn relationship_references_stay_compact_with_large_task_history() {
+        let (db, _temp_dir) = make_test_db("task_relationship_references_compact");
+        let active_project = db
+            .create_project("Active", "/tmp/task-relationship-active")
+            .expect("create active project");
+        let other_project = db
+            .create_project("Other", "/tmp/task-relationship-other")
+            .expect("create other project");
+        let active_task = db
+            .create_task("Active task", "doing", Some(&active_project.id), None, None)
+            .expect("create active task");
+        let large_prompt = format!("relationship title {}", "x".repeat(32 * 1024));
+        let dependency = db
+            .create_task(&large_prompt, "done", Some(&other_project.id), None, None)
+            .expect("create dependency");
+        let dependent = db
+            .create_task(
+                &large_prompt,
+                "backlog",
+                Some(&other_project.id),
+                None,
+                None,
+            )
+            .expect("create dependent");
+        db.add_task_dependency(&active_task.id, &dependency.id)
+            .expect("link dependency");
+        db.add_task_dependency(&dependent.id, &active_task.id)
+            .expect("link dependent");
+
+        for index in 0..128 {
+            db.create_task(
+                &format!("unrelated {index} {}", "y".repeat(32 * 1024)),
+                "done",
+                Some(&other_project.id),
+                None,
+                None,
+            )
+            .expect("create unrelated historical task");
+        }
+
+        let oversized_batch = (0..40_000)
+            .map(|index| format!("T-missing-{index}"))
+            .collect::<Vec<_>>();
+        let connection = db.connection();
+        let conn = connection.lock().expect("lock connection");
+        assert!(load_task_dependency_ids_for_tasks(&conn, &oversized_batch)
+            .expect("load oversized dependency batch")
+            .is_empty());
+        assert!(load_task_labels_for_tasks(&conn, &oversized_batch)
+            .expect("load oversized label batch")
+            .is_empty());
+        drop(conn);
+
+        let ((active_tasks, references), statement_count) = trace_statement_count(&db, || {
+            let active_tasks = db
+                .get_tasks_for_project_excluding_state(&active_project.id, "done")
+                .expect("get active project tasks");
+            let references = db
+                .get_task_relationship_references_for_project(&active_project.id)
+                .expect("get relationship references");
+            (active_tasks, references)
+        });
+        assert_eq!(active_tasks.len(), 1);
+        assert_eq!(
+            statement_count, 5,
+            "one Task refresh must use a constant number of database statements"
+        );
+        let reference_ids: std::collections::HashSet<_> =
+            references.iter().map(|task| task.id.as_str()).collect();
+        assert_eq!(
+            reference_ids,
+            std::collections::HashSet::from([dependency.id.as_str(), dependent.id.as_str()])
+        );
+        assert!(references
+            .iter()
+            .all(|task| task.title.chars().count() <= 120));
+
+        let serialized = serde_json::to_value(&references).expect("serialize references");
+        let rows = serialized.as_array().expect("reference array");
+        assert!(rows.iter().all(|row| row.get("initial_prompt").is_none()));
+        assert!(rows.iter().all(|row| row.get("prompt").is_none()));
+        assert!(
+            serde_json::to_vec(&references)
+                .expect("serialize reference bytes")
+                .len()
+                < 2_048,
+            "relationship response must not retain full task prompts"
+        );
+    }
     #[test]
     fn every_task_row_query_hydrates_dependencies_and_labels() {
         let (db, _temp_dir) = make_test_db("task_persistence_hydration");

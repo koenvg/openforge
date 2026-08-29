@@ -1,6 +1,6 @@
 export * from '@openforge-app/plugin-sdk/domain'
 
-import type { AppView, ReviewPullRequest, TaskAttentionRow } from '@openforge-app/plugin-sdk/domain'
+import type { AppView, BoardStatus, ReviewPullRequest, TaskAttentionRow } from '@openforge-app/plugin-sdk/domain'
 
 /**
  * Every startable task, split into the four board lanes. Keys are the backend's snake_case
@@ -13,6 +13,14 @@ export interface TaskLaneRows {
   backlog: TaskAttentionRow[]
 }
 
+
+export interface TaskRelationshipReference {
+  id: string
+  status: BoardStatus
+  project_id: string | null
+  title: string
+  depends_on: string[]
+}
 /**
  * A project's last-viewed in-project location: the active tab plus whichever task
  * or PR was open within it. Kept per-project (in memory) so switching away and

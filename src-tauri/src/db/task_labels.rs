@@ -1,6 +1,7 @@
 use super::{task_project_id, Database};
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -70,6 +71,43 @@ ORDER BY l.name COLLATE NOCASE ASC, l.id ASC
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
+    }
+    Ok(result)
+}
+
+pub(super) fn load_task_labels_for_tasks(
+    conn: &rusqlite::Connection,
+    task_ids: &[String],
+) -> Result<HashMap<String, Vec<TaskLabelRow>>> {
+    if task_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let task_ids_json = serde_json::to_string(task_ids)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    let mut stmt = conn.prepare(
+        r#"
+SELECT tla.task_id, l.id, l.project_id, l.name
+FROM task_labels l
+INNER JOIN task_label_assignments tla ON tla.label_id = l.id
+WHERE tla.task_id IN (SELECT value FROM json_each(?1))
+ORDER BY tla.task_id ASC, l.name COLLATE NOCASE ASC, l.id ASC
+        "#,
+    )?;
+    let rows = stmt.query_map([task_ids_json], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            TaskLabelRow {
+                id: row.get(1)?,
+                project_id: row.get(2)?,
+                name: row.get(3)?,
+            },
+        ))
+    })?;
+    let mut result: HashMap<String, Vec<TaskLabelRow>> = HashMap::new();
+    for row in rows {
+        let (task_id, label) = row?;
+        result.entry(task_id).or_default().push(label);
     }
     Ok(result)
 }

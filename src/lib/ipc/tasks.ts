@@ -1,10 +1,11 @@
 import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
-import { normalizeTask } from '../boardStatus'
+import { normalizeTask, parseBoardStatus } from '../boardStatus'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
-import type { BoardStatus, DivergenceResolution, ExistingBranchPlan, GitBranchInfo, ImplementationStatus, Project, ProjectAttention, Task, TaskAttentionRow, TaskLabel, TaskLaneRows, TaskWorkspaceInfo, WorktreeInfo, WorktreeSource, WritableBoardStatus } from '../types'
+import type { BoardStatus, DivergenceResolution, ExistingBranchPlan, GitBranchInfo, ImplementationStatus, Project, ProjectAttention, Task, TaskAttentionRow, TaskLabel, TaskLaneRows, TaskRelationshipReference, TaskWorkspaceInfo, WorktreeInfo, WorktreeSource, WritableBoardStatus } from '../types'
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
+type RawTaskRelationshipReference = Omit<TaskRelationshipReference, 'status'> & { status: string }
 export interface CreateTaskOptions {
   dependsOn?: string[]
   labelNames?: string[]
@@ -106,6 +107,11 @@ export async function getTaskLanes(): Promise<TaskLaneRows> {
 export async function getAllTasks(): Promise<Task[]> {
   const tasks = await invoke<RawTask[]>("get_tasks");
   return tasks.map(normalizeTask)
+}
+
+export async function getTaskRelationshipReferences(projectId: string): Promise<TaskRelationshipReference[]> {
+  const references = await invoke<RawTaskRelationshipReference[]>("get_task_relationship_references", { projectId })
+  return references.map((reference) => ({ ...reference, status: parseBoardStatus(reference.status) }))
 }
 
 export async function getTasksForProject(projectId: string, includeDone = false): Promise<Task[]> {

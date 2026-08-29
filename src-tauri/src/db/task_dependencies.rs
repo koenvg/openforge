@@ -1,5 +1,6 @@
 use super::{task_project_id, Database};
 use rusqlite::Result;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -50,6 +51,30 @@ pub(super) fn load_task_dependency_ids(
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
+    }
+    Ok(result)
+}
+
+pub(super) fn load_task_dependency_ids_for_tasks(
+    conn: &rusqlite::Connection,
+    task_ids: &[String],
+) -> Result<HashMap<String, Vec<String>>> {
+    if task_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let task_ids_json = serde_json::to_string(task_ids)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    let mut stmt = conn.prepare(
+        "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id IN (SELECT value FROM json_each(?1)) ORDER BY task_id ASC, created_at ASC, depends_on_task_id ASC",
+    )?;
+    let rows = stmt.query_map([task_ids_json], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut result: HashMap<String, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (task_id, dependency_id) = row?;
+        result.entry(task_id).or_default().push(dependency_id);
     }
     Ok(result)
 }

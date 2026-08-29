@@ -150,7 +150,13 @@ export function renderBoard(overrides?: {
     [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
     [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
   ])
-  const dependencyReferenceTasks = overrides?.dependencyReferenceTasks ?? []
+  const dependencyReferenceTasks = (overrides?.dependencyReferenceTasks ?? []).map((task) => ({
+    id: task.id,
+    status: task.status,
+    project_id: task.project_id,
+    title: task.title ?? task.initial_prompt,
+    depends_on: task.depends_on,
+  }))
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
   const attentionRows = overrides?.attentionRows ?? tasks
     .filter((task) => task.status === 'doing')

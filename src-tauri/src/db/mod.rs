@@ -59,7 +59,9 @@ pub use task_workspaces::TaskWorkspaceRow;
 // This is part of the Database API even though production callers currently only format it.
 #[allow(unused_imports)]
 pub use task_dependencies::TaskDependencyPersistenceError;
-pub use tasks::{CompactTaskRow, TaskInitialPromptUpdateError, TaskRow};
+pub use tasks::{
+    CompactTaskRow, TaskInitialPromptUpdateError, TaskRelationshipReferenceRow, TaskRow,
+};
 pub use worktrees::WorktreeRow;
 
 pub(crate) const STARTUP_RESUMABLE_AGENT_SESSION_STATUSES: [&str; 3] =

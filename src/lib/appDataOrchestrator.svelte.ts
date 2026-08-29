@@ -27,14 +27,14 @@ import {
   getProjects,
   getPullRequests,
   getReviewPrs,
-  getAllTasks,
+  getTaskRelationshipReferences,
   getTasksForProject,
 } from './ipc'
 import { applyProjectOrder } from './projectOrder'
 import { loadHiddenProjectIds } from './projectVisibility'
 import { githubSyncFailureMessage } from './githubSyncResult'
 import { buildTicketPullRequestMap } from './pullRequestStore'
-import type { ProjectAttention, Task } from './types'
+import type { ProjectAttention } from './types'
 
 // Task attention refreshes are throttled because lifecycle events can stream rapidly.
 // A trailing throttle coalesces bursts while guaranteeing a refresh at least once per interval.
@@ -47,20 +47,16 @@ export interface AppDataOrchestratorOptions {
   logError?: LogError
 }
 
+
+interface TaskLoadState {
+  started: boolean
+  refreshPending: boolean
+  promise: Promise<void>
+}
 function defaultLogError(message: string, errorValue: unknown): void {
   console.error(message, errorValue)
 }
 
-function findTaskRelationshipReferences(activeTasks: Task[], allTasks: Task[]): Task[] {
-  const activeTaskIds = new Set(activeTasks.map((task) => task.id))
-  const dependencyIds = new Set(activeTasks.flatMap((task) => task.depends_on))
-
-  return allTasks.filter((task) => {
-    if (activeTaskIds.has(task.id)) return false
-    if (dependencyIds.has(task.id)) return true
-    return task.status !== 'done' && task.depends_on.some((dependencyId) => activeTaskIds.has(dependencyId))
-  })
-}
 
 async function loadGlobalExcludedRepos(): Promise<Set<string>> {
   try {
@@ -84,6 +80,7 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
   let attentionCountRefreshTimer: ReturnType<typeof setTimeout> | null = null
   let attentionRefreshGeneration = 0
   let projectAttentionLoadPromise: Promise<void> | null = null
+  const taskLoads = new Map<string, TaskLoadState>()
 
   async function loadProjects(): Promise<void> {
     try {
@@ -137,18 +134,11 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
     }
   }
 
-  async function loadTasks(): Promise<void> {
-    const projectId = get(activeProjectId)
-    if (!projectId) {
-      dependencyReferenceTasks.set([])
-      return
-    }
-
-    isLoading.set(true)
+  async function refreshTasksForProject(projectId: string): Promise<void> {
     try {
-      const [activeTasks, allTasks] = await Promise.all([
+      const [activeTasks, relationshipReferences] = await Promise.all([
         getTasksForProject(projectId),
-        getAllTasks(),
+        getTaskRelationshipReferences(projectId),
       ])
       // A newer project switch may have started while this fetch was in flight (e.g.
       // rapid ⌘-cycling or a sidebar switch, each of which also kicks off a load).
@@ -158,15 +148,48 @@ export function useAppDataOrchestrator(options: AppDataOrchestratorOptions) {
         return
       }
       tasks.set(activeTasks)
-      dependencyReferenceTasks.set(findTaskRelationshipReferences(activeTasks, allTasks))
+      dependencyReferenceTasks.set(relationshipReferences)
       await loadSessions()
     } catch (e) {
       dependencyReferenceTasks.set([])
       logError('Failed to load tasks:', e)
       error.set(String(e))
-    } finally {
-      isLoading.set(false)
     }
+  }
+
+  function loadTasks(): Promise<void> {
+    const projectId = get(activeProjectId)
+    if (!projectId) {
+      dependencyReferenceTasks.set([])
+      return Promise.resolve()
+    }
+
+    const currentLoad = taskLoads.get(projectId)
+    if (currentLoad) {
+      if (currentLoad.started) currentLoad.refreshPending = true
+      return currentLoad.promise
+    }
+
+    isLoading.set(true)
+    const taskLoad: TaskLoadState = {
+      started: false,
+      refreshPending: false,
+      promise: Promise.resolve(),
+    }
+    taskLoad.promise = Promise.resolve()
+      .then(async () => {
+        taskLoad.started = true
+        do {
+          taskLoad.refreshPending = false
+          await refreshTasksForProject(projectId)
+        } while (taskLoad.refreshPending && get(activeProjectId) === projectId)
+      })
+      .finally(() => {
+        if (taskLoads.get(projectId) === taskLoad) taskLoads.delete(projectId)
+        isLoading.set(taskLoads.size > 0)
+      })
+    taskLoads.set(projectId, taskLoad)
+    return taskLoad.promise
   }
 
   async function loadPullRequests(): Promise<void> {

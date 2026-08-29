@@ -1,5 +1,5 @@
 import { writable, derived } from "svelte/store";
-import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
+import type { Task, TaskRelationshipReference, TaskAttentionRow, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ProjectViewSnapshot } from "./types";
 import type { BoardFilter } from './boardFilters'
 import { buildReviewRequestCountByProject, countAllReposUnopenedReviews, countRepoUnopenedReviews } from './prReviewBadgeCounts'
 import { buildAttentionCountByProject } from './attentionCounts'
@@ -11,7 +11,7 @@ export interface TaskRuntimeInfo {
 export const tasks = writable<Task[]>([]);
 // Completed tasks stay out of active board/search lists, but visible tasks can
 // still resolve them as read-only dependency metadata for dependency chips.
-export const dependencyReferenceTasks = writable<Task[]>([]);
+export const dependencyReferenceTasks = writable<TaskRelationshipReference[]>([]);
 export const pendingTask = writable<Task | null>(null);
 // selectedTaskId serves as both selection state and navigation:
 // - null = show Flow board

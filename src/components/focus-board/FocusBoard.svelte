@@ -13,13 +13,13 @@
   import { createOutOfFocusController } from './outOfFocusController.svelte'
   import { createFocusBoardFilterController } from './focusBoardFilterController.svelte'
   import { createFocusBoardInteractionController } from './focusBoardInteractionController.svelte'
-  import type { Task, TaskAttentionRow, AgentSession, PullRequestInfo } from '../../lib/types'
+  import type { Task, TaskRelationshipReference, TaskAttentionRow, AgentSession, PullRequestInfo } from '../../lib/types'
 
   interface Props {
     projectId: string | null
     projectName: string
     tasks: Task[]
-    dependencyReferenceTasks?: Task[]
+    dependencyReferenceTasks?: TaskRelationshipReference[]
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
     attentionRows?: TaskAttentionRow[]

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project } from '../../lib/types'
+import type { Project, TaskRelationshipReference } from '../../lib/types'
 import {
   baseTask,
   getTaskInfoPanelTestDependencies,
@@ -15,6 +15,16 @@ const {
   tasks,
 } = getTaskInfoPanelTestDependencies()
 
+
+function relationshipReference(task: Task): TaskRelationshipReference {
+  return {
+    id: task.id,
+    status: task.status,
+    project_id: task.project_id,
+    title: task.title ?? task.initial_prompt,
+    depends_on: task.depends_on,
+  }
+}
 describe('TaskInfoPanel dependencies', () => {
   beforeEach(resetTaskInfoPanelTestState)
 
@@ -75,7 +85,10 @@ describe('TaskInfoPanel dependencies', () => {
       { id: 'proj-2', name: 'Release Tools', path: '/release-tools' } as Project,
     ])
     tasks.set([selectedTask])
-    dependencyReferenceTasks.set([crossProjectDependency, crossProjectDependent])
+    dependencyReferenceTasks.set([
+      relationshipReference(crossProjectDependency),
+      relationshipReference(crossProjectDependent),
+    ])
 
     renderTaskInfoPanel({ task: selectedTask, onOpenRelatedTask })
 
@@ -100,7 +113,7 @@ describe('TaskInfoPanel dependencies', () => {
     }
     tasks.set([parentTask])
     dependencyReferenceTasks.set([
-      { ...baseTask, id: 'T-done', status: 'done', initial_prompt: completedDependencyTitle },
+      relationshipReference({ ...baseTask, id: 'T-done', status: 'done', initial_prompt: completedDependencyTitle }),
     ])
 
     renderTaskInfoPanel({ task: parentTask })
@@ -160,7 +173,7 @@ describe('TaskInfoPanel dependencies', () => {
       depends_on: ['T-42', 'T-7'],
     }
     tasks.set([selectedTask, readyDependent])
-    dependencyReferenceTasks.set([completedHiddenPrerequisite])
+    dependencyReferenceTasks.set([relationshipReference(completedHiddenPrerequisite)])
 
     renderTaskInfoPanel({ task: selectedTask, onOpenRelatedTask: vi.fn() })
 

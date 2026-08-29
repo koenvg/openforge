@@ -23,6 +23,7 @@ import {
   fsSearchFiles,
   fsWriteFile,
   getAllTasks,
+  getTaskRelationshipReferences,
   getTaskAttention,
   getTaskLanes,
   getCommitBatchFileContents,
@@ -288,6 +289,29 @@ describe("ipc spawnShellPty", () => {
 			expect.objectContaining({ id: "T-1", status: "backlog" }),
 		]);
 	});
+
+  it("loads compact relationship references without full prompt fields", async () => {
+    invokeMock.mockResolvedValueOnce([{
+      id: "T-related",
+      status: "in_progress",
+      project_id: "P-2",
+      title: "Compact relationship title",
+      depends_on: ["T-active"],
+    }])
+
+    const references = await getTaskRelationshipReferences("P-1")
+
+    expect(invokeMock).toHaveBeenLastCalledWith("get_task_relationship_references", { projectId: "P-1" })
+    expect(references).toEqual([{
+      id: "T-related",
+      status: "doing",
+      project_id: "P-2",
+      title: "Compact relationship title",
+      depends_on: ["T-active"],
+    }])
+    expect(references[0]).not.toHaveProperty("initial_prompt")
+    expect(references[0]).not.toHaveProperty("prompt")
+  })
 
 	it("rejects unknown task statuses from the backend boundary", async () => {
 		invokeMock.mockResolvedValueOnce([
