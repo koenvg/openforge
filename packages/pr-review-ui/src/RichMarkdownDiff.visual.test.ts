@@ -58,6 +58,10 @@ describe.skipIf(!runsMarkdownVisuals)('Rich Markdown diff visuals', () => {
   it('preserves structured Markdown in the dark theme', async () => {
     await expectVisualFixture('structured-content', 'dark')
   }, 30_000)
+
+  it('preserves multiple Markdown table layouts', async () => {
+    await expectVisualFixture('tables', 'light')
+  }, 30_000)
 })
 
 async function expectVisualFixture(fixture: string, theme: 'light' | 'dark') {

@@ -2,11 +2,13 @@ import { mount } from 'svelte'
 import '../../../../src/app.css'
 import proseAndLists from '../visual-fixtures/prose-and-lists.md?raw'
 import structuredContent from '../visual-fixtures/structured-content.md?raw'
+import tables from '../visual-fixtures/tables.md?raw'
 import RichMarkdownDiffVisualHarness from './RichMarkdownDiffVisualHarness.svelte'
 
 const fixtures = {
   'prose-and-lists': proseAndLists,
   'structured-content': structuredContent,
+  tables,
 }
 
 const params = new URLSearchParams(window.location.search)
