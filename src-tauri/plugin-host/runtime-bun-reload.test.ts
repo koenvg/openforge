@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -7,8 +7,10 @@ import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 
 const execFileAsync = promisify(execFile)
+const bunExecutable = process.env.OPENFORGE_BUN_PATH ?? 'bun'
+const bunAvailable = spawnSync(bunExecutable, ['--version'], { stdio: 'ignore', timeout: 5_000 }).status === 0
 
-describe('plugin-host Bun backend reload lifecycle', () => {
+describe.skipIf(!bunAvailable)('plugin-host Bun backend reload lifecycle', () => {
   it('reloads lazy CommonJS dependencies without retaining prior generations', async () => {
     const testDirectory = await mkdtemp(join(tmpdir(), 'openforge-bun-backend-reload-'))
     const probePath = join(testDirectory, 'probe.ts')
@@ -62,7 +64,7 @@ describe('plugin-host Bun backend reload lifecycle', () => {
       }))
     `)
 
-    const { stdout } = await execFileAsync(process.env.OPENFORGE_BUN_PATH ?? 'bun', [probePath], {
+    const { stdout } = await execFileAsync(bunExecutable, [probePath], {
       cwd: process.cwd(),
       timeout: 30_000,
     })
