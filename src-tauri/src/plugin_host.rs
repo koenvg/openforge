@@ -15,6 +15,7 @@ mod task_callbacks;
 mod tests;
 
 use crate::{app_events::AppEventSender, backend_runtime::AppHandle, http_server::TaskClaims};
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
@@ -39,6 +40,43 @@ pub struct PluginHostProcessDiagnostics {
     pub pid: Option<u32>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginHostV8MemoryUsage {
+    pub rss_bytes: u64,
+    pub heap_total_bytes: u64,
+    pub heap_used_bytes: u64,
+    pub external_bytes: u64,
+    pub array_buffers_bytes: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginBackendReadyState {
+    Missing,
+    Starting,
+    Ready,
+    Error,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLifecycleDiagnostics {
+    pub plugin_id: String,
+    pub state: PluginBackendReadyState,
+    pub active: bool,
+    pub activation_count: u64,
+    pub reload_count: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginHostRuntimeDiagnostics {
+    pub memory_usage: PluginHostV8MemoryUsage,
+    pub plugins: Vec<PluginLifecycleDiagnostics>,
+    pub plugin_count: u64,
+    pub plugins_truncated: bool,
+}
 impl Clone for PluginHost {
     fn clone(&self) -> Self {
         Self {

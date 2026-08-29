@@ -55,6 +55,27 @@ export type BackendStateSnapshot = {
   crashLoopGuardTripped: boolean
 }
 
+
+export type PluginLifecycleDiagnostics = {
+  pluginId: string
+  state: BackendReadyState
+  active: boolean
+  activationCount: number
+  reloadCount: number
+}
+
+export type PluginHostProcessDiagnostics = {
+  memoryUsage: {
+    rssBytes: number
+    heapTotalBytes: number
+    heapUsedBytes: number
+    externalBytes: number
+    arrayBuffersBytes: number
+  }
+  plugins: PluginLifecycleDiagnostics[]
+  pluginCount: number
+  pluginsTruncated: boolean
+}
 export type HostCallbackRequest = {
   method: string
   params: Record<string, unknown>
@@ -135,6 +156,8 @@ export type RuntimePluginState = {
   activationPromise: Promise<void> | null
   deactivationPromise: Promise<void> | null
   activationGeneration: number
+  activationCount: number
+  reloadCount: number
   importGeneration: number
   module: Record<string, unknown> | null
   methods: Map<string, RuntimeBackendMethod>

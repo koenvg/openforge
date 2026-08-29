@@ -26,7 +26,7 @@ Task listing:
   task list excludes done tasks unless --state done is passed.
 
 Diagnostics:
-  debug process-memory prints read-only Rust sidecar, plugin host, and PTY process-tree RSS attribution.
+  debug process-memory prints read-only Rust sidecar, plugin host V8 heap and bounded lifecycle metrics, and PTY process-tree RSS attribution.
 
 Task creation hygiene:
   Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.

@@ -354,4 +354,88 @@ describe('plugin-host backend lifecycle', () => {
       crashLoopGuardTripped: false,
     })
   })
+
+  it('reports bounded process memory and plugin lifecycle attribution without plugin payloads', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('echo', {
+            handler(payload) { return payload }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await runtime.activateBackend({ pluginId: 'attributed', backendPath })
+    const activeResponse = await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 41,
+      method: 'plugin.host.diagnostics',
+    })
+
+    expect(activeResponse).toEqual({
+      jsonrpc: '2.0',
+      id: 41,
+      result: {
+        memoryUsage: {
+          rssBytes: expect.any(Number),
+          heapTotalBytes: expect.any(Number),
+          heapUsedBytes: expect.any(Number),
+          externalBytes: expect.any(Number),
+          arrayBuffersBytes: expect.any(Number),
+        },
+        plugins: [{
+          pluginId: 'attributed',
+          state: 'ready',
+          active: true,
+          activationCount: 1,
+          reloadCount: 0,
+        }],
+        pluginCount: 1,
+        pluginsTruncated: false,
+      },
+    })
+
+    await runtime.deactivateBackend('attributed')
+    await runtime.activateBackend({ pluginId: 'attributed', backendPath })
+    await runtime.deactivateBackend('attributed')
+
+    const inactiveResponse = await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 42,
+      method: 'plugin.host.diagnostics',
+    })
+
+    expect(inactiveResponse).toMatchObject({
+      result: {
+        plugins: [{
+          pluginId: 'attributed',
+          state: 'missing',
+          active: false,
+          activationCount: 2,
+          reloadCount: 1,
+        }],
+      },
+    })
+    expect(JSON.stringify(inactiveResponse)).not.toContain('echo')
+
+    for (let index = 0; index < 105; index += 1) {
+      await runtime.getBackendState(`bounded-${String(index).padStart(3, '0')}`)
+    }
+    const boundedResponse = await runtime.handleJsonRpcRequest({
+      jsonrpc: '2.0',
+      id: 43,
+      method: 'plugin.host.diagnostics',
+    })
+    const diagnostics = boundedResponse.result as {
+      plugins: unknown[]
+      pluginCount: number
+      pluginsTruncated: boolean
+    }
+
+    expect(diagnostics.plugins).toHaveLength(100)
+    expect(diagnostics.pluginCount).toBe(106)
+    expect(diagnostics.pluginsTruncated).toBe(true)
+  })
 })
