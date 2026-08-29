@@ -56,7 +56,6 @@ fn test_pty_session(kind: PtySessionKind, pid_file_name: String) -> PtySession {
                 .expect("ordered test writer should start"),
         ),
         instance_id: 1,
-        authority: authority::TerminalAuthorityContract::xterm_authoritative(),
         kind,
         pid_file_name,
         terminal_model: None,

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { XTERM_AUTHORITATIVE_TERMINAL_CONTRACT } from './terminalAuthority'
 import { createTerminalSessionLifecycle } from './terminalSessionLifecycle'
 import type { PoolEntry } from './terminalRuntimeTypes'
 
@@ -18,7 +17,7 @@ function createEntry(terminalKey: string): PoolEntry {
 describe('terminal session lifecycle', () => {
   it('applies a restored PTY instance when its terminal entry becomes available', () => {
     const entries = new Map<string, PoolEntry>()
-    const lifecycle = createTerminalSessionLifecycle(key => entries.get(key), XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+    const lifecycle = createTerminalSessionLifecycle(key => entries.get(key))
     const listener = vi.fn()
     lifecycle.subscribeShellLifecycle('T-1-shell-0', listener)
 
@@ -32,15 +31,6 @@ describe('terminal session lifecycle', () => {
       ptyActive: true,
       needsClear: false,
       currentPtyInstance: 42,
-      authority: {
-        shellSessionKey: 'T-1-shell-0',
-        ptyInstanceId: 42,
-        contract: {
-          parsedStateOwner: 'xterm',
-          queryResponseOwner: 'xterm',
-          replayOwner: 'pty-byte-buffer',
-        },
-      },
     })
     expect(listener).toHaveBeenCalledWith({
       ptyActive: true,
@@ -52,7 +42,7 @@ describe('terminal session lifecycle', () => {
 
   it('publishes output and exit transitions for a terminal session', () => {
     const entry = createEntry('T-1-shell-0')
-    const lifecycle = createTerminalSessionLifecycle(() => entry, XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+    const lifecycle = createTerminalSessionLifecycle(() => entry)
     const listener = vi.fn()
     lifecycle.subscribeShellLifecycle(entry.shellSessionKey, listener)
 
@@ -75,7 +65,7 @@ describe('terminal session lifecycle', () => {
 
   it('tracks shell exit independently from the presentation reset flag', () => {
     const entry = createEntry('T-1-shell-0')
-    const lifecycle = createTerminalSessionLifecycle(() => entry, XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+    const lifecycle = createTerminalSessionLifecycle(() => entry)
 
     expect(lifecycle.shouldSpawnPty(entry)).toBe(true)
     expect(lifecycle.isShellExited(entry.shellSessionKey)).toBe(false)
@@ -90,7 +80,7 @@ describe('terminal session lifecycle', () => {
 
   it('rebinds terminal authority when restored shell state selects another PTY instance', () => {
     const entry = createEntry('T-1-shell-0')
-    const lifecycle = createTerminalSessionLifecycle(() => entry, XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+    const lifecycle = createTerminalSessionLifecycle(() => entry)
 
     lifecycle.updateShellLifecycleState(entry.shellSessionKey, {
       ptyActive: true,
@@ -100,16 +90,12 @@ describe('terminal session lifecycle', () => {
     })
 
     expect(entry.needsClear).toBe(true)
-    expect(entry.authority).toMatchObject({
-      shellSessionKey: 'T-1-shell-0',
-      ptyInstanceId: 7,
-      contract: { queryResponseOwner: 'xterm' },
-    })
+    expect(entry.currentPtyInstance).toBe(7)
   })
 
   it('retains an unmatched restored PTY instance when active sessions are cleared', () => {
     const entries = new Map<string, PoolEntry>()
-    const lifecycle = createTerminalSessionLifecycle(key => entries.get(key), XTERM_AUTHORITATIVE_TERMINAL_CONTRACT)
+    const lifecycle = createTerminalSessionLifecycle(key => entries.get(key))
     lifecycle.restorePtyInstance('T-1-shell-0', 42)
 
     lifecycle.clearAll()

@@ -1,6 +1,5 @@
 use super::pty_payload::{
-    PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload, PtyTaskPayload,
-    PtyTerminalQueryResponsePayload, PtyWritePayload,
+    PtyResizePayload, PtyShellSessionPayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload,
 };
 use super::*;
 use serde::Serialize;
@@ -124,19 +123,6 @@ pub(super) async fn handle_app_pty_command(
                         format!("Failed to write to PTY: {e}"),
                     )
                 })?;
-            serde_json::Value::Null
-        }
-        "pty_write_terminal_query_response" => {
-            let payload =
-                PtyTerminalQueryResponsePayload::decode(&request.command, &request.payload)?;
-            pty_manager
-                .write_terminal_query_response(
-                    &payload.shell_session_key,
-                    payload.pty_instance_id,
-                    payload.data.as_bytes(),
-                )
-                .await
-                .map_err(|error| (StatusCode::CONFLICT, error.to_string()))?;
             serde_json::Value::Null
         }
         "pty_resize" => {

@@ -184,11 +184,15 @@ export interface AdditionalDesktopEventPayloads {
 
 export type TerminalDesktopEventName =
   | `pty-output-${string}`
+  | `pty-model-output-${string}`
+  | `pty-model-disabled-${string}`
   | `pty-exit-${string}`
   | 'openforge-app-events-reconnected'
 
 export interface TerminalDesktopEventPayloads {
   output: { shell_session_key: string; data: string; instance_id: number }
+  modelOutput: { data: string; instance_id: number; sequence: number }
+  modelDisabled: { instance_id: number }
   exit: { instance_id: number }
   connectionRestored: { attempt: number; reconnectedAt: string }
 }
@@ -196,9 +200,13 @@ export interface TerminalDesktopEventPayloads {
 export type TerminalDesktopEventPayload<TEventName extends TerminalDesktopEventName> =
   TEventName extends `pty-output-${string}`
     ? TerminalDesktopEventPayloads['output']
-    : TEventName extends `pty-exit-${string}`
-      ? TerminalDesktopEventPayloads['exit']
-      : TerminalDesktopEventPayloads['connectionRestored']
+    : TEventName extends `pty-model-output-${string}`
+      ? TerminalDesktopEventPayloads['modelOutput']
+      : TEventName extends `pty-model-disabled-${string}`
+        ? TerminalDesktopEventPayloads['modelDisabled']
+        : TEventName extends `pty-exit-${string}`
+          ? TerminalDesktopEventPayloads['exit']
+          : TerminalDesktopEventPayloads['connectionRestored']
 
 export type KnownDesktopEventName =
   | AppDesktopEventName

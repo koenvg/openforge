@@ -1,6 +1,6 @@
 # Add an opt-in Ghostty-authoritative terminal mode
 
-Status: accepted
+Status: superseded by the unconditional Ghostty cutover documented in [Terminal state and protocol-response paths](../terminal-state-and-response-paths.md)
 
 OpenForge adds a `ghostty-authoritative` contract behind the experimental terminal-state setting while keeping `xterm-authoritative` as the default. A Terminal Session captures its contract at creation: in Ghostty mode, `libghostty-vt` owns parsed state, restoration snapshots, output watermarks, and terminal-generated protocol replies; xterm remains the renderer and user-input surface. This avoids the previous mixed diagnostic mode while preserving the established rendering behavior.
 

@@ -1,15 +1,8 @@
-import {
-  bindTerminalAuthority,
-  type TerminalAuthorityContract,
-} from './terminalAuthority'
 import { createTaskTerminalTabsSessionStore } from './taskTerminalTabsSession'
 import { createTerminalShellLifecycleStore } from './terminalShellLifecycle'
 import type { PoolEntry, ShellLifecycleState, TaskTerminalTabsSession } from './terminalRuntimeTypes'
 
-export function createTerminalSessionLifecycle(
-  getEntry: (terminalKey: string) => PoolEntry | undefined,
-  authorityContract: TerminalAuthorityContract,
-) {
+export function createTerminalSessionLifecycle(getEntry: (terminalKey: string) => PoolEntry | undefined) {
   const pendingPtyInstances = new Map<string, number>()
   const taskTabSessions = createTaskTerminalTabsSessionStore()
   const shellLifecycle = createTerminalShellLifecycleStore(getEntry)
@@ -70,11 +63,6 @@ export function createTerminalSessionLifecycle(
   function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
     if (entry.currentPtyInstance !== instanceId) entry.outputSequence = 0
     entry.currentPtyInstance = instanceId
-    if (instanceId === null) {
-      entry.authority = null
-    } else if (entry.authority?.ptyInstanceId !== instanceId) {
-      entry.authority = bindTerminalAuthority(authorityContract, entry.shellSessionKey, instanceId)
-    }
   }
 
   function isShellExited(terminalKey: string): boolean {

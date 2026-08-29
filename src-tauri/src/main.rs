@@ -199,15 +199,8 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| WhisperModelSize::from_str(&s))
         .unwrap_or(WhisperModelSize::Small);
 
-    let ghostty_terminal_state_enabled = database
-        .get_config(pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG)
-        .ok()
-        .flatten()
-        .is_some_and(|value| value == "true");
-
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
-    pty_manager.set_ghostty_terminal_state_enabled(ghostty_terminal_state_enabled);
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();

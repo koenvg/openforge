@@ -29,9 +29,6 @@
   <SettingsPreferencesCard
     isDarkMode={controller.isDarkMode}
     onThemeToggle={controller.handleThemeToggle}
-    ghosttyTerminalStateEnabled={controller.isGhosttyTerminalStateEnabled}
-    onGhosttyTerminalStateChange={controller.handleGhosttyTerminalStateChange}
-    disabled={!controller.globalSettingsLoaded}
   />
 {:else if activeSection === 'agents'}
   <HierarchicalSettingsCard

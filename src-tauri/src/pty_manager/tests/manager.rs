@@ -1,7 +1,4 @@
 use super::*;
-use crate::pty_manager::authority::{
-    ParsedStateOwner, QueryResponseOwner, ReplayOwner, SnapshotOwner,
-};
 
 #[test]
 fn test_pty_error_display() {
@@ -61,17 +58,4 @@ fn terminal_environment_advertises_iterm_only_when_requested() {
             ("ITERM_SESSION_ID", "openforge"),
         ]
     );
-}
-
-#[test]
-fn ghostty_feature_flag_selects_ghostty_as_terminal_state_authority() {
-    let manager = PtyManager::new();
-
-    manager.set_ghostty_terminal_state_enabled(true);
-
-    let authority = manager.terminal_authority_contract();
-    assert_eq!(authority.parsed_state_owner, ParsedStateOwner::Ghostty);
-    assert_eq!(authority.query_response_owner, QueryResponseOwner::Ghostty);
-    assert_eq!(authority.replay_owner, ReplayOwner::GhosttySnapshot);
-    assert_eq!(authority.snapshot_owner, SnapshotOwner::Ghostty);
 }

@@ -35,7 +35,6 @@ export function createFakeTerminalView(overrides: Partial<TerminalView> = {}): T
     refresh: vi.fn(),
     fit: vi.fn(() => ({ cols: 80, rows: 24 })),
     onUserInput: vi.fn(() => ({ dispose: vi.fn() })),
-    onQueryResponse: vi.fn(() => ({ dispose: vi.fn() })),
     setKeyEventHandler: vi.fn(),
     getSelectionText: vi.fn(() => ''),
     setTheme: vi.fn(),

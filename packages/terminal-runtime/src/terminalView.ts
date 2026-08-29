@@ -10,10 +10,6 @@ export interface TerminalViewLiveOutput {
   sequence: number
 }
 
-export interface TerminalViewQueryResponse {
-  data: string
-  ptyInstanceId: number | null
-}
 
 export interface TerminalViewGeometry {
   cols: number
@@ -99,9 +95,8 @@ export interface TerminalViewRendererFailure {
 
 /**
  * Presents one Terminal Session without owning its PTY lifecycle.
- * Terminal Runtime bootstraps xterm from PTY byte replay at sequence zero, then
- * delivers monotonic live output. Every write carries its source PTY instance so
- * generated responses remain bound to the generation whose bytes xterm parsed.
+ * Terminal Runtime bootstraps xterm from a Ghostty snapshot at sequence zero, then
+ * delivers monotonic model output for the same PTY instance.
  */
 export interface TerminalView {
   readonly geometry: TerminalViewGeometry
@@ -120,7 +115,6 @@ export interface TerminalView {
   refresh(): void
   fit(): TerminalViewGeometry | null
   onUserInput(listener: (data: string) => void): TerminalViewDisposable
-  onQueryResponse(listener: (response: TerminalViewQueryResponse) => void): TerminalViewDisposable
   setKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void
   getSelectionText(): string
   setTheme(theme: TerminalViewTheme): void

@@ -11,26 +11,6 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum ShadowMode {
-    Enabled,
-    #[default]
-    Disabled,
-}
-
-impl ShadowMode {
-    pub(crate) fn from_environment() -> Self {
-        match std::env::var("OPENFORGE_GHOSTTY_SHADOW") {
-            Ok(value) if matches!(value.as_str(), "1" | "true" | "TRUE") => Self::Enabled,
-            _ => Self::Disabled,
-        }
-    }
-
-    pub(crate) fn is_enabled(self) -> bool {
-        self == Self::Enabled
-    }
-}
-
 pub(super) const COMMAND_QUEUE_CAPACITY: usize = 64;
 const MAX_FEED_BYTES: usize = 8 * 1024;
 pub(super) const QUEUE_CATCH_UP_TIMEOUT: Duration = Duration::from_millis(50);
@@ -218,6 +198,7 @@ pub(crate) struct TerminalModelSession {
 }
 
 impl TerminalModelSession {
+    #[cfg(test)]
     pub(crate) fn start(
         session_key: String,
         instance_id: u64,

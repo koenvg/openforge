@@ -147,7 +147,6 @@ export const desktopCommandContracts = [
   {"functionName":"getTaskDetail","moduleName":"tasks","ipcCommand":"get_task_detail","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"spawnShellPty","moduleName":"terminal","ipcCommand":"pty_spawn_shell","payloadKeys":["taskId","cwd","cols","rows","terminalIndex","terminalImageProtocol"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"writePty","moduleName":"terminal","ipcCommand":"pty_write","payloadKeys":["shellSessionKey","data"],"owner":"rust-sidecar","domain":"agent-session-pty"},
-  {"functionName":"writeTerminalQueryResponse","moduleName":"terminal","ipcCommand":"pty_write_terminal_query_response","payloadKeys":["shellSessionKey","ptyInstanceId","data"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"resizePty","moduleName":"terminal","ipcCommand":"pty_resize","payloadKeys":["shellSessionKey","cols","rows"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"killPty","moduleName":"terminal","ipcCommand":"pty_kill","payloadKeys":["shellSessionKey"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"killShellsForTask","moduleName":"terminal","ipcCommand":"pty_kill_shells_for_task","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},

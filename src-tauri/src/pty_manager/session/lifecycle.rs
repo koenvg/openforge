@@ -133,7 +133,6 @@ pub(in super::super) struct PtySession {
     pub(in super::super) master: Arc<StdMutex<Box<dyn portable_pty::MasterPty + Send>>>,
     pub(in super::super) writer: Arc<OrderedPtyWriter>,
     pub(in super::super) instance_id: u64,
-    pub(in super::super) authority: super::super::authority::TerminalAuthorityContract,
     pub(in super::super) kind: PtySessionKind,
     pub(in super::super) pid_file_name: String,
     pub(in super::super) terminal_model: Option<Arc<TerminalModelSession>>,
@@ -253,24 +252,6 @@ impl PtyManager {
             .map_err(|failure| failure.into_pty_error())?;
 
         Ok(())
-    }
-
-    pub async fn write_terminal_query_response(
-        &self,
-        session_key: &str,
-        instance_id: u64,
-        data: &[u8],
-    ) -> Result<(), PtyError> {
-        self.terminal_sessions
-            .operate(
-                SessionTarget::Exact {
-                    session_key,
-                    instance_id,
-                },
-                SessionOperation::WriteQueryResponse(data),
-            )
-            .await
-            .map_err(|failure| failure.into_pty_error())
     }
 
     /// Resizes the PTY for the given session key.

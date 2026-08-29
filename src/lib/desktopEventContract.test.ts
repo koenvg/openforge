@@ -33,16 +33,16 @@ describe('Desktop event contract', () => {
   })
 
   it('keeps PTY channel names and Rust payload fields inside the desktop adapter', () => {
-    expectTypeOf<TerminalDesktopEventPayload<`pty-output-${string}`>>().toEqualTypeOf<{
-      shell_session_key: string
+    expectTypeOf<TerminalDesktopEventPayload<`pty-model-output-${string}`>>().toEqualTypeOf<{
       data: string
       instance_id: number
+      sequence: number
     }>()
     expectTypeOf<TerminalDesktopEventPayload<`pty-exit-${string}`>>()
       .toEqualTypeOf<{ instance_id: number }>()
 
     const adapterSource = source('src/lib/desktopTerminalTransport.ts')
-    expect(adapterSource).toContain('`pty-output-${shellSessionKey}`')
+    expect(adapterSource).toContain('`pty-model-output-${shellSessionKey}`')
     expect(adapterSource).toContain('`pty-exit-${shellSessionKey}`')
     expect(adapterSource).toContain('ptyInstanceId: payload.instance_id')
 
@@ -50,11 +50,10 @@ describe('Desktop event contract', () => {
     expect(runtimeSource).not.toContain('pty-output-')
     expect(runtimeSource).not.toContain('instance_id')
 
-    const producerSource = source('src-tauri/src/pty_manager/events.rs')
-    expect(producerSource).toContain('format!("pty-output-{}", self.session_key)')
-    expect(producerSource).toContain('format!("pty-exit-{}", session_key)')
-    expect(producerSource).toContain('"shell_session_key": &self.session_key')
-    expect(producerSource).toContain('"instance_id": self.instance_id')
+    const producerSource = source('src-tauri/src/pty_manager/terminal_model_bridge.rs')
+    expect(producerSource).toContain('format!("pty-model-output-{}", self.session_key)')
+    expect(producerSource).toContain('"instance_id": frame.instance_id')
+    expect(producerSource).toContain('"sequence": frame.sequence')
   })
 
 })

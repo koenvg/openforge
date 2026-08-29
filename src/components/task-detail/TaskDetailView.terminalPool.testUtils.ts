@@ -57,12 +57,11 @@ vi.mock('../../lib/terminalPool', () => {
     subscribeSession: vi.fn(async () => ({ dispose: vi.fn() })),
     subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
     readReplay: vi.fn(async () => ({
-      data: null,
+      historicalData: null,
       isLive: false,
       ptyInstanceId: null,
     })),
     writeUserInput: vi.fn(async () => undefined),
-    writeQueryResponse: vi.fn(async () => undefined),
     resize: vi.fn(async () => undefined),
     dispose: vi.fn(),
   }
@@ -90,9 +89,7 @@ vi.mock('../../lib/terminalPool', () => {
       attachmentGeneration: 0,
       spawnPending: false,
       currentPtyInstance: null,
-      authority: null,
       terminalStateSource: 'bootstrapping',
-      pendingPtyOutput: [],
       terminalModelSequence: null,
       pendingTerminalModelOutput: [],
       terminalReplayRecovery: null,

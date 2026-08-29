@@ -1,7 +1,5 @@
-import type { TerminalAuthorityBinding } from './terminalAuthority'
 import type {
   TerminalModelOutputEvent,
-  TerminalOutputEvent,
   TerminalTransportDisposable,
 } from './terminalTransport'
 import type { TerminalView, TerminalViewDisposable } from './terminalView'
@@ -10,7 +8,7 @@ import type { ThemeMode } from './theme'
 
 export type TerminalRuntimeUnlistenFn = () => void
 
-export type TerminalStateSource = 'bootstrapping' | 'pty-byte-replay' | 'ghostty-snapshot'
+export type TerminalStateSource = 'bootstrapping' | 'ghostty-snapshot'
 
 export interface TerminalSessionConfiguration {
   renderer: 'xterm'
@@ -40,9 +38,7 @@ export interface PoolEntry {
   attachmentGeneration: number
   spawnPending: boolean
   currentPtyInstance: number | null
-  authority: TerminalAuthorityBinding | null
   terminalStateSource: TerminalStateSource
-  pendingPtyOutput: TerminalOutputEvent[]
   terminalModelSequence: number | null
   pendingTerminalModelOutput: TerminalModelOutputEvent[]
   terminalReplayRecovery: Promise<void> | null

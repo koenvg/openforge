@@ -42,7 +42,6 @@ export function createSettingsGlobalController() {
   let loaded = $state(false)
   let loadError = $state<string | null>(null)
   let isTaskDisplayTitleMetadataUpdatesEnabled = $state(false)
-  let isGhosttyTerminalStateEnabled = $state(false)
 
   const hierarchyValues = $derived<Record<string, string>>({
     task_display_title_metadata_updates_enabled: isTaskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false',
@@ -60,7 +59,6 @@ export function createSettingsGlobalController() {
       taskIdPrefix = settings.taskIdPrefix
       githubToken = settings.githubToken
       isTaskDisplayTitleMetadataUpdatesEnabled = settings.taskDisplayTitleMetadataUpdatesEnabled
-      isGhosttyTerminalStateEnabled = settings.ghosttyTerminalStateEnabled
       githubPollInterval = settings.githubPollInterval
       useWorktrees = settings.useWorktrees
       aiProvider = settings.aiProvider
@@ -78,10 +76,6 @@ export function createSettingsGlobalController() {
     return { githubToken: value }
   }
 
-  function setGhosttyTerminalState(enabled: boolean): GlobalSettingsSavePayload {
-    isGhosttyTerminalStateEnabled = enabled
-    return { ghosttyTerminalStateEnabled: enabled }
-  }
 
   function applySettingChange(key: string, value: string): GlobalSettingsSavePayload | undefined {
     switch (key) {
@@ -114,10 +108,8 @@ export function createSettingsGlobalController() {
     get loaded() { return loaded },
     get loadError() { return loadError },
     get githubToken() { return githubToken },
-    get isGhosttyTerminalStateEnabled() { return isGhosttyTerminalStateEnabled },
     load,
     setGithubToken,
-    setGhosttyTerminalState,
     applySettingChange,
   }
 }

@@ -7,8 +7,6 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 	return {
 		isDarkMode: false,
 		onThemeToggle: vi.fn(),
-		ghosttyTerminalStateEnabled: false,
-		onGhosttyTerminalStateChange: vi.fn(),
 		...overrides,
 	}
 }
@@ -64,23 +62,10 @@ describe('SettingsPreferencesCard', () => {
 		})
 	})
 
-	describe('Ghostty terminal model', () => {
-		it('offers the experimental backend state authority disabled by default', async () => {
-			const onGhosttyTerminalStateChange = vi.fn()
-			render(SettingsPreferencesCard, {
-				props: defaultProps({ onGhosttyTerminalStateChange }),
-			})
-			expect(screen.getByText(/xterm continues rendering/)).toBeTruthy()
+	it('does not expose terminal authority as a user preference', () => {
+		render(SettingsPreferencesCard, { props: defaultProps() })
 
-			const toggle = requireElement(
-				screen.getByTestId('ghostty-terminal-state-toggle'),
-				HTMLInputElement,
-			)
-			expect(toggle.checked).toBe(false)
-
-			await fireEvent.click(toggle)
-
-			expect(onGhosttyTerminalStateChange).toHaveBeenCalledWith(true)
-		})
+		expect(screen.queryByText('Ghostty terminal model')).toBeNull()
+		expect(screen.queryByTestId('ghostty-terminal-state-toggle')).toBeNull()
 	})
 })

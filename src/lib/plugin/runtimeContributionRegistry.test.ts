@@ -369,7 +369,6 @@ describe('runtime contribution registry', () => {
       setProjectConfig: vi.fn(async () => undefined),
       spawnShell: vi.fn(async () => 42),
       writeShell: vi.fn(async () => undefined),
-      writeTerminalQueryResponse: vi.fn(async () => undefined),
       resizeShell: vi.fn(async () => undefined),
       killShell: vi.fn(async () => undefined),
       getShellBuffer: vi.fn(async () => ({ buffer: 'buffered', isLive: true, instanceId: 42 })),

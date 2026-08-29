@@ -12,7 +12,6 @@ import {
 
 
 interface AdapterReplay {
-  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   isLive: boolean
   instanceId: number | null
@@ -21,14 +20,11 @@ interface AdapterReplay {
 
 interface AdapterHarness {
   transport: TerminalTransport
-  emitOutput(shellSessionKey: string, data: string, ptyInstanceId: number): void
   emitModelOutput(shellSessionKey: string, data: string, ptyInstanceId: number, sequence: number): void
   emitExit(shellSessionKey: string, ptyInstanceId: number): void
   emitConnectionRestored(): void
-  setReplay(data: string | null, ptyInstanceId: number | null): void
   setGhosttyReplay(data: string, ptyInstanceId: number, watermark: number, compatibilityReplay?: string): void
   expectUserInput(shellSessionKey: string, data: string): void
-  expectQueryResponse(shellSessionKey: string, data: string, ptyInstanceId: number): void
   expectResize(shellSessionKey: string, cols: number, rows: number): void
   sessionListenerCount(shellSessionKey: string): number
   connectionListenerCount(): number
@@ -37,7 +33,12 @@ interface AdapterHarness {
 
 function createDesktopHarness(): AdapterHarness {
   const listeners = new Map<string, (event: { payload: unknown }) => void>()
-  let replay: AdapterReplay = { buffer: 'desktop replay', isLive: true, instanceId: 7 }
+  let replay: AdapterReplay = {
+    buffer: null,
+    isLive: true,
+    instanceId: 7,
+    snapshot: { instanceId: 7, watermark: 0, data: btoa('desktop replay') },
+  }
   let failExitSubscription = false
   const port = {
     listenEvent: vi.fn(async (eventName: string, handler: (event: { payload: unknown }) => void) => {
@@ -50,16 +51,10 @@ function createDesktopHarness(): AdapterHarness {
     }),
     getPtyBuffer: vi.fn(async () => replay),
     writePty: vi.fn(async () => undefined),
-    writeTerminalQueryResponse: vi.fn(async () => undefined),
     resizePty: vi.fn(async () => undefined),
   }
   return {
     transport: createDesktopTerminalTransport(port),
-    emitOutput(shellSessionKey, data, ptyInstanceId) {
-      listeners.get(`pty-output-${shellSessionKey}`)?.({
-        payload: { task_id: 'ignored', data, instance_id: ptyInstanceId },
-      })
-    },
     emitModelOutput(shellSessionKey, data, ptyInstanceId, sequence) {
       listeners.get(`pty-model-output-${shellSessionKey}`)?.({
         payload: { data: btoa(data), instance_id: ptyInstanceId, sequence },
@@ -73,12 +68,8 @@ function createDesktopHarness(): AdapterHarness {
         payload: { attempt: 2, reconnectedAt: '2026-08-26T00:00:00Z' },
       })
     },
-    setReplay(data, ptyInstanceId) {
-      replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
-    },
     setGhosttyReplay(data, ptyInstanceId, watermark, compatibilityReplay) {
       replay = {
-        authority: 'ghostty-authoritative',
         buffer: null,
         isLive: true,
         instanceId: ptyInstanceId,
@@ -92,23 +83,12 @@ function createDesktopHarness(): AdapterHarness {
     },
     expectUserInput(shellSessionKey, data) {
       expect(port.writePty).toHaveBeenCalledWith(shellSessionKey, data)
-      expect(port.writeTerminalQueryResponse).not.toHaveBeenCalledWith(
-        expect.objectContaining({ data }),
-      )
-    },
-    expectQueryResponse(shellSessionKey, data, ptyInstanceId) {
-      expect(port.writeTerminalQueryResponse).toHaveBeenCalledWith({
-        shellSessionKey,
-        data,
-        ptyInstanceId,
-      })
     },
     expectResize(shellSessionKey, cols, rows) {
       expect(port.resizePty).toHaveBeenCalledWith(shellSessionKey, cols, rows)
     },
     sessionListenerCount(shellSessionKey) {
-      return Number(listeners.has(`pty-output-${shellSessionKey}`))
-        + Number(listeners.has(`pty-model-output-${shellSessionKey}`))
+      return Number(listeners.has(`pty-model-output-${shellSessionKey}`))
         + Number(listeners.has(`pty-model-disabled-${shellSessionKey}`))
         + Number(listeners.has(`pty-exit-${shellSessionKey}`))
     },
@@ -119,7 +99,12 @@ function createDesktopHarness(): AdapterHarness {
 
 function createTrustedPluginHarness(): AdapterHarness {
   const listeners = new Map<string, (payload: unknown) => void>()
-  let replay: AdapterReplay = { buffer: 'plugin replay', isLive: true, instanceId: 7 }
+  let replay: AdapterReplay = {
+    buffer: null,
+    isLive: true,
+    instanceId: 7,
+    snapshot: { instanceId: 7, watermark: 0, data: btoa('plugin replay') },
+  }
   let failExitSubscription = false
   const port = {
     events: {
@@ -135,19 +120,11 @@ function createTrustedPluginHarness(): AdapterHarness {
     shell: {
       getBuffer: vi.fn(async () => replay),
       write: vi.fn(async () => undefined),
-      writeTerminalQueryResponse: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
     },
   }
   return {
     transport: createTrustedPluginTerminalTransport(() => port),
-    emitOutput(shellSessionKey, data, ptyInstanceId) {
-      listeners.get(`openforge.pty-output-${shellSessionKey}`)?.({
-        task_id: 'ignored',
-        data,
-        instance_id: ptyInstanceId,
-      })
-    },
     emitModelOutput(shellSessionKey, data, ptyInstanceId, sequence) {
       listeners.get(`openforge.pty-model-output-${shellSessionKey}`)?.({
         data: btoa(data),
@@ -164,12 +141,8 @@ function createTrustedPluginHarness(): AdapterHarness {
         reconnectedAt: '2026-08-26T00:00:00Z',
       })
     },
-    setReplay(data, ptyInstanceId) {
-      replay = { buffer: data, isLive: ptyInstanceId !== null, instanceId: ptyInstanceId }
-    },
     setGhosttyReplay(data, ptyInstanceId, watermark, compatibilityReplay) {
       replay = {
-        authority: 'ghostty-authoritative',
         buffer: null,
         isLive: true,
         instanceId: ptyInstanceId,
@@ -183,17 +156,6 @@ function createTrustedPluginHarness(): AdapterHarness {
     },
     expectUserInput(_shellSessionKey, data) {
       expect(port.shell.write).toHaveBeenCalledWith({ taskId: 'T-1', terminalIndex: 2, data })
-      expect(port.shell.writeTerminalQueryResponse).not.toHaveBeenCalledWith(
-        expect.objectContaining({ data }),
-      )
-    },
-    expectQueryResponse(_shellSessionKey, data, ptyInstanceId) {
-      expect(port.shell.writeTerminalQueryResponse).toHaveBeenCalledWith({
-        taskId: 'T-1',
-        terminalIndex: 2,
-        data,
-        ptyInstanceId,
-      })
     },
     expectResize(_shellSessionKey, cols, rows) {
       expect(port.shell.resize).toHaveBeenCalledWith({
@@ -204,8 +166,7 @@ function createTrustedPluginHarness(): AdapterHarness {
       })
     },
     sessionListenerCount(shellSessionKey) {
-      return Number(listeners.has(`openforge.pty-output-${shellSessionKey}`))
-        + Number(listeners.has(`openforge.pty-model-output-${shellSessionKey}`))
+      return Number(listeners.has(`openforge.pty-model-output-${shellSessionKey}`))
         + Number(listeners.has(`openforge.pty-model-disabled-${shellSessionKey}`))
         + Number(listeners.has(`openforge.pty-exit-${shellSessionKey}`))
     },
@@ -245,26 +206,6 @@ describe.each([
     vi.unstubAllGlobals()
   })
 
-  it('normalizes replay, live output, and PTY exit at the Terminal Runtime seam', async () => {
-    const harness = createHarness()
-    const view = createFakeTerminalView()
-    const runtime = createTerminalRuntime({
-      transport: harness.transport,
-      environment: { openLink: vi.fn(async () => undefined) },
-      createTerminalView: () => view,
-    })
-
-    const entry = await runtime.acquire('T-1-shell-2')
-    harness.emitOutput('T-1-shell-2', 'live output', 7)
-    harness.emitExit('T-1-shell-2', 6)
-
-    expect(view.bootstrap).toHaveBeenCalledWith(expect.stringContaining('replay'), 7, 0)
-    expect(view.writeLive).toHaveBeenCalledWith({ data: 'live output', ptyInstanceId: 7, sequence: 1 })
-    expect(entry.ptyActive).toBe(true)
-
-    harness.emitExit('T-1-shell-2', 7)
-    expect(entry.ptyActive).toBe(false)
-  })
 
   it('normalizes Ghostty snapshots and sequenced model output at the Terminal Runtime seam', async () => {
     const harness = createHarness()
@@ -278,7 +219,6 @@ describe.each([
     })
 
     const entry = await runtime.acquire('T-1-shell-2')
-    harness.emitOutput('T-1-shell-2', 'raw output must be ignored', 9)
     harness.emitModelOutput('T-1-shell-2', 'model output', 9, 4)
 
     expect(view.bootstrap).toHaveBeenNthCalledWith(
@@ -298,7 +238,7 @@ describe.each([
       ptyInstanceId: 9,
       sequence: 1,
     })
-    expect(entry.authority?.contract.mode).toBe('ghostty-authoritative')
+    expect(entry.currentPtyInstance).toBe(9)
     expect(entry.terminalModelSequence).toBe(4)
   })
 
@@ -319,38 +259,10 @@ describe.each([
     expect(failedView.dispose).toHaveBeenCalledOnce()
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(0)
     await expect(runtime.acquire('T-1-shell-2')).resolves.toBeDefined()
-    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(4)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
     runtime.dispose()
   })
 
-  it('keeps user input separate from instance-scoped query responses', async () => {
-    const harness = createHarness()
-    let onUserInput: ((data: string) => void) | undefined
-    let onQueryResponse: ((response: { data: string; ptyInstanceId: number | null }) => void) | undefined
-    const view = createFakeTerminalView({
-      onUserInput: vi.fn((listener) => {
-        onUserInput = listener
-        return { dispose: vi.fn() }
-      }),
-      onQueryResponse: vi.fn((listener) => {
-        onQueryResponse = listener
-        return { dispose: vi.fn() }
-      }),
-    })
-    const runtime = createTerminalRuntime({
-      transport: harness.transport,
-      environment: { openLink: vi.fn(async () => undefined) },
-      createTerminalView: () => view,
-    })
-    await runtime.acquire('T-1-shell-2')
-
-    onUserInput?.('typed input')
-    onQueryResponse?.({ data: '\u001b[1;1R', ptyInstanceId: 7 })
-    await vi.waitFor(() => {
-      harness.expectUserInput('T-1-shell-2', 'typed input')
-      harness.expectQueryResponse('T-1-shell-2', '\u001b[1;1R', 7)
-    })
-  })
 
   it('routes geometry, reconnect replay, session release, and runtime disposal', async () => {
     stubAttachmentObservers()
@@ -372,13 +284,17 @@ describe.each([
     await runtime.attach(entry, document.createElement('div'))
 
     harness.expectResize('T-1-shell-2', 80, 24)
-    harness.setReplay('reconnected replay', 7)
+    harness.setGhosttyReplay('reconnected replay', 7, 0)
     harness.emitConnectionRestored()
     await vi.waitFor(() => {
-      expect(view.bootstrap).toHaveBeenLastCalledWith('reconnected replay', 7, 0)
+      expect(view.bootstrap).toHaveBeenLastCalledWith(
+        Uint8Array.from(new TextEncoder().encode('reconnected replay')),
+        7,
+        0,
+      )
     })
 
-    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(4)
+    expect(harness.sessionListenerCount('T-1-shell-2')).toBe(3)
     expect(harness.connectionListenerCount()).toBe(1)
     runtime.release('T-1-shell-2')
     expect(harness.sessionListenerCount('T-1-shell-2')).toBe(0)

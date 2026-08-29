@@ -50,11 +50,6 @@ pub(super) async fn handle(
                     )
                 })?;
             }
-            if key == crate::pty_manager::GHOSTTY_TERMINAL_STATE_CONFIG {
-                if let Some(pty_manager) = &state.pty_manager {
-                    pty_manager.set_ghostty_terminal_state_enabled(value == "true");
-                }
-            }
             if matches!(
                 key.as_str(),
                 "project_sidebar_order" | "project_sidebar_hidden"

@@ -1,30 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createFakeTerminalView } from './terminalView.testUtils'
-import { createTerminalRuntime } from './terminalRuntime'
+import { createTerminalRuntime, type TerminalReplay } from './terminalRuntime'
 
 describe('terminal runtime transport seam', () => {
-
   it('acquires a Terminal Session through one named transport subscription', async () => {
     const view = createFakeTerminalView()
     const sessionSubscriptions: Array<{
       shellSessionKey: string
       handlers: {
-        onOutput(event: { data: string; ptyInstanceId: number }): void
+        onModelOutput(event: { data: Uint8Array; ptyInstanceId: number; sequence: number }): void
         onExit(event: { ptyInstanceId: number }): void
       }
     }> = []
-    let resolveReplay!: (replay: { data: string; isLive: boolean; ptyInstanceId: number }) => void
+    let resolveReplay!: (replay: TerminalReplay) => void
     const transport = {
       subscribeSession: vi.fn(async (shellSessionKey, handlers) => {
         sessionSubscriptions.push({ shellSessionKey, handlers })
         return { dispose: vi.fn() }
       }),
       subscribeConnectionRestored: vi.fn(async () => ({ dispose: vi.fn() })),
-      readReplay: vi.fn(() => new Promise<{ data: string; isLive: boolean; ptyInstanceId: number }>(
-        resolve => { resolveReplay = resolve },
-      )),
+      readReplay: vi.fn(() => new Promise<TerminalReplay>(resolve => { resolveReplay = resolve })),
       writeUserInput: vi.fn(async () => undefined),
-      writeQueryResponse: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
       dispose: vi.fn(),
     }
@@ -36,16 +32,33 @@ describe('terminal runtime transport seam', () => {
 
     const acquisition = runtime.acquire('T-1-shell-0')
     await vi.waitFor(() => expect(transport.readReplay).toHaveBeenCalledOnce())
-    sessionSubscriptions[0]?.handlers.onOutput({ data: ' then live', ptyInstanceId: 7 })
+    sessionSubscriptions[0]?.handlers.onModelOutput({
+      data: Uint8Array.from(new TextEncoder().encode(' then live')),
+      ptyInstanceId: 7,
+      sequence: 1,
+    })
     expect(view.writeLive).not.toHaveBeenCalled()
 
-    resolveReplay({ data: 'replay first', isLive: true, ptyInstanceId: 7 })
+    resolveReplay({
+      historicalData: null,
+      isLive: true,
+      ptyInstanceId: 7,
+      snapshot: {
+        data: Uint8Array.from(new TextEncoder().encode('snapshot first')),
+        ptyInstanceId: 7,
+        watermark: 0,
+      },
+    })
     const entry = await acquisition
 
     expect(transport.subscribeSession).toHaveBeenCalledOnce()
     expect(transport.subscribeSession).toHaveBeenCalledWith('T-1-shell-0', expect.any(Object))
-    expect(view.bootstrap).toHaveBeenCalledWith('replay first', 7, 0)
-    expect(view.writeLive).toHaveBeenCalledWith({ data: ' then live', ptyInstanceId: 7, sequence: 1 })
+    expect(view.bootstrap).toHaveBeenCalledWith(expect.any(Uint8Array), 7, 0)
+    expect(view.writeLive).toHaveBeenCalledWith({
+      data: Uint8Array.from(new TextEncoder().encode(' then live')),
+      ptyInstanceId: 7,
+      sequence: 1,
+    })
     expect(vi.mocked(view.bootstrap).mock.invocationCallOrder[0])
       .toBeLessThan(vi.mocked(view.writeLive).mock.invocationCallOrder[0])
     expect(entry.currentPtyInstance).toBe(7)

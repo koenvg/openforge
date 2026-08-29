@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use super::authority::QueryResponseOwner;
 use super::PtyError;
 
 mod lifecycle;
@@ -78,7 +77,6 @@ impl SessionTarget<'_> {
 pub(super) enum SessionOperation<'a> {
     Write(&'a [u8]),
     WriteAttachment(&'a [u8]),
-    WriteQueryResponse(&'a [u8]),
     Resize { columns: u16, rows: u16 },
     ResizeAttachment { columns: u16, rows: u16 },
 }
@@ -342,26 +340,12 @@ impl TerminalSessions {
                     .ok_or_else(|| TerminalSessionFailure::Missing {
                         session_key: session_key.to_string(),
                     })?;
-            let is_query_response = matches!(&operation, SessionOperation::WriteQueryResponse(_));
-            if is_query_response
-                && session.authority.query_response_owner != QueryResponseOwner::Xterm
-            {
-                return Err(TerminalSessionFailure::Write(
-                    "Ghostty owns terminal query responses for this session".to_string(),
-                ));
-            }
             let requested_instance_id = match &target {
                 SessionTarget::Current(_) => None,
                 SessionTarget::Exact { instance_id, .. } => Some(*instance_id),
             };
             if let Some(requested_instance_id) = requested_instance_id {
                 if requested_instance_id != session.instance_id {
-                    if is_query_response {
-                        return Err(TerminalSessionFailure::Write(format!(
-                            "stale PTY instance {requested_instance_id} for {session_key}; current instance is {}",
-                            session.instance_id
-                        )));
-                    }
                     return Err(TerminalSessionFailure::Stale {
                         session_key: session_key.to_string(),
                     });
@@ -387,9 +371,6 @@ impl TerminalSessions {
         match operation {
             SessionOperation::Write(data) | SessionOperation::WriteAttachment(data) => writer
                 .write_user_input(session_key, instance_id, data)
-                .map_err(|error| TerminalSessionFailure::Write(error.to_string())),
-            SessionOperation::WriteQueryResponse(data) => writer
-                .write_xterm_query_response(session_key, instance_id, data)
                 .map_err(|error| TerminalSessionFailure::Write(error.to_string())),
             SessionOperation::Resize { columns, rows }
             | SessionOperation::ResizeAttachment { columns, rows } => {

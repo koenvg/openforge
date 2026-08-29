@@ -83,9 +83,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     scheduleSave()
   }
 
-  function handleGhosttyTerminalStateChange(enabled: boolean): void {
-    scheduleSave(globalController.setGhosttyTerminalState(enabled))
-  }
 
   function handleGlobalSettingChange(key: string, value: string): void {
     scheduleSave(globalController.applySettingChange(key, value))
@@ -119,7 +116,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     get modelStatuses() { return whisperController.modelStatuses },
     get downloadingModel() { return whisperController.downloadingModel },
     get isDarkMode() { return themeController.isDarkMode },
-    get isGhosttyTerminalStateEnabled() { return globalController.isGhosttyTerminalStateEnabled },
     get settingsLoading() { return settingsLoading },
     get projectSettingsLoadError() { return projectController.settingsLoadError },
     get globalSettingsLoadError() { return globalController.loadError },
@@ -157,7 +153,6 @@ export function useSettingsViewController(options: SettingsViewControllerOptions
     beginDeleteConfirmation: projectController.beginDeleteConfirmation,
     cancelDeleteConfirmation: projectController.cancelDeleteConfirmation,
     handleThemeToggle,
-    handleGhosttyTerminalStateChange,
     handleGlobalSettingChange,
     handleGlobalPluginToggle: pluginController.toggleGlobalDefault,
     handleProjectSettingChange: projectController.changeSetting,

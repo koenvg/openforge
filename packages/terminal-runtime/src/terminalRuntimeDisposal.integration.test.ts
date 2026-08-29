@@ -25,7 +25,7 @@ describe('terminal runtime disposal', () => {
     expect(terminalMocks.instances[0].dispose).toHaveBeenCalledOnce()
     expect(runtime.hasTerminal('T-1-shell-0')).toBe(false)
     expect(trackedThemeMode.getSubscriberCount()).toBe(0)
-    expect(host.getListenerCount('pty-output-T-1-shell-0')).toBe(0)
+    expect(host.getListenerCount('pty-model-output-T-1-shell-0')).toBe(0)
     expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(0)
     expect(host.getListenerCount('openforge-app-events-reconnected')).toBe(0)
     expect(host.transport.dispose).toHaveBeenCalledOnce()
@@ -57,9 +57,9 @@ describe('terminal runtime disposal', () => {
 
     runtime.release('T-1-shell-0')
 
-    expect(host.getListenerCount('pty-output-T-1-shell-0')).toBe(0)
+    expect(host.getListenerCount('pty-model-output-T-1-shell-0')).toBe(0)
     expect(host.getListenerCount('pty-exit-T-1-shell-0')).toBe(0)
-    expect(host.getListenerCount('pty-output-T-1-shell-1')).toBe(1)
+    expect(host.getListenerCount('pty-model-output-T-1-shell-1')).toBe(1)
     expect(host.getListenerCount('pty-exit-T-1-shell-1')).toBe(1)
     expect(host.getListenerCount('openforge-app-events-reconnected')).toBe(1)
     expect(host.transport.dispose).not.toHaveBeenCalled()

@@ -26,7 +26,6 @@ describe('host Terminal Session Service boundary', () => {
     expect(agentFacadeSource).not.toContain('createTerminalRuntime(')
     expect(pluginFacadeSource).not.toContain('createTerminalRuntime(')
     expect(pluginFacadeSource).not.toContain("from './ipc'")
-    expect(pluginFacadeSource).not.toContain('XTERM_AUTHORITATIVE_TERMINAL_CONTRACT')
     expect(builtinModulesSource).toContain('configureTerminalSessionClient(regularTerminalSessions)')
   })
 

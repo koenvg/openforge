@@ -77,7 +77,6 @@ describe('terminal runtime inline image lifecycle', () => {
     const compatibilityReplay = INLINE_IMAGE_COMPATIBILITY_REPLAY
     const host = createHost()
     host.getPtyBuffer = async () => ({
-      authority: 'ghostty-authoritative',
       buffer: null,
       snapshot: {
         instanceId: 7,
@@ -98,12 +97,10 @@ describe('terminal runtime inline image lifecycle', () => {
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       1,
       Uint8Array.from(new TextEncoder().encode(compatibilityReplay)),
-      expect.any(Function),
     )
     expect(terminalMocks.instances[0].write).toHaveBeenNthCalledWith(
       2,
       Uint8Array.from(new TextEncoder().encode('ghostty snapshot')),
-      expect.any(Function),
     )
   })
 

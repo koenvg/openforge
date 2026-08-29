@@ -1,4 +1,4 @@
-import type { TerminalImageProtocol, TerminalQueryResponseWrite } from '@openforge-app/terminal-runtime'
+import type { TerminalImageProtocol } from '@openforge-app/terminal-runtime'
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { DesktopPtyBufferState } from '../desktopTerminalTransport'
 
@@ -24,15 +24,6 @@ export async function writePty(shellSessionKey: string, data: string): Promise<v
   return invoke("pty_write", { shellSessionKey, data });
 }
 
-export async function writeTerminalQueryResponse(
-  response: TerminalQueryResponseWrite,
-): Promise<void> {
-  return invoke('pty_write_terminal_query_response', {
-    shellSessionKey: response.shellSessionKey,
-    ptyInstanceId: response.ptyInstanceId,
-    data: response.data,
-  })
-}
 
 export async function resizePty(shellSessionKey: string, cols: number, rows: number): Promise<void> {
   return invoke("pty_resize", { shellSessionKey, cols, rows });

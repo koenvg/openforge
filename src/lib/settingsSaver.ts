@@ -17,7 +17,6 @@ export interface GlobalSettingsSavePayload {
   taskIdPrefix?: string
   githubToken?: string
   taskDisplayTitleMetadataUpdatesEnabled?: boolean
-  ghosttyTerminalStateEnabled?: boolean
   githubPollInterval?: number
   useWorktrees?: boolean
   aiProvider?: string
@@ -41,9 +40,6 @@ export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Pr
   if (payload.githubToken !== undefined) await setConfig('github_token', payload.githubToken)
   if (payload.taskDisplayTitleMetadataUpdatesEnabled !== undefined) {
     await setConfig('task_display_title_metadata_updates_enabled', payload.taskDisplayTitleMetadataUpdatesEnabled ? 'true' : 'false')
-  }
-  if (payload.ghosttyTerminalStateEnabled !== undefined) {
-    await setConfig('ghostty_terminal_state_enabled', payload.ghosttyTerminalStateEnabled ? 'true' : 'false')
   }
   if (payload.githubPollInterval !== undefined) {
     await setConfig('github_poll_interval', String(normalizeGitHubPollIntervalSeconds(payload.githubPollInterval)))

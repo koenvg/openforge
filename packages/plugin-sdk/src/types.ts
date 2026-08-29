@@ -622,10 +622,6 @@ export interface ShellWriteRequest extends ShellSessionRequest {
   data: string
 }
 
-export interface ShellTerminalQueryResponseRequest extends ShellSessionRequest {
-  ptyInstanceId: number
-  data: string
-}
 
 export interface ShellResizeRequest extends ShellSessionRequest {
   cols: number
@@ -640,7 +636,6 @@ export interface TerminalViewSnapshot {
 }
 
 export interface PtyBufferState {
-  authority?: 'xterm-authoritative' | 'ghostty-authoritative'
   buffer: string | null
   snapshot?: TerminalViewSnapshot | null
   isLive: boolean
@@ -650,7 +645,6 @@ export interface PtyBufferState {
 export interface ShellAPI {
   spawn(request: ShellSpawnRequest): Promise<number>
   write(request: ShellWriteRequest): Promise<void>
-  writeTerminalQueryResponse(request: ShellTerminalQueryResponseRequest): Promise<void>
   resize(request: ShellResizeRequest): Promise<void>
   kill(request: ShellSessionRequest): Promise<void>
   getBuffer(request: ShellSessionRequest): Promise<PtyBufferState>

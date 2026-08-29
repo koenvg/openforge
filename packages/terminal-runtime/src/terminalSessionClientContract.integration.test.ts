@@ -20,7 +20,12 @@ describe('Terminal Session client contract', () => {
     const writePty = vi.spyOn(host, 'writePty')
     let buffer = 'bootstrap'
     let instanceId = 1
-    host.getPtyBuffer = vi.fn(async () => ({ buffer, isLive: true, instanceId }))
+    host.getPtyBuffer = vi.fn(async () => ({
+      buffer: null,
+      isLive: true,
+      instanceId,
+      snapshot: { instanceId, watermark: 0, data: btoa(buffer) },
+    }))
     const inputListeners: Array<(data: string) => void> = []
     const view = createFakeTerminalView({
       onUserInput: vi.fn((listener: (data: string) => void) => {
@@ -34,23 +39,31 @@ describe('Terminal Session client contract', () => {
 
     const entry = await client.acquire(shellSessionKey)
 
-    expect(view.bootstrap).toHaveBeenCalledWith('bootstrap', 1, 0)
+    expect(view.bootstrap).toHaveBeenCalledWith(
+      Uint8Array.from(new TextEncoder().encode('bootstrap')),
+      1,
+      0,
+    )
 
     inputListeners[0]?.('typed')
     expect(writePty).toHaveBeenCalledWith(shellSessionKey, 'typed')
 
     buffer = 'reconnected'
     host.emit('openforge-app-events-reconnected', { attempt: 1, reconnectedAt: 'now' })
-    await vi.waitFor(() => expect(view.bootstrap).toHaveBeenCalledWith('reconnected', 1, 0))
+    await vi.waitFor(() => expect(view.bootstrap).toHaveBeenCalledWith(
+      Uint8Array.from(new TextEncoder().encode('reconnected')),
+      1,
+      0,
+    ))
 
     await client.markShellPtyStarted(entry, 2)
     instanceId = 2
-    host.emit(`pty-output-${shellSessionKey}`, { data: 'stale', instance_id: 1 })
-    host.emit(`pty-output-${shellSessionKey}`, { data: 'current', instance_id: 2 })
+    host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('stale'), instance_id: 1, sequence: 1 })
+    host.emit(`pty-model-output-${shellSessionKey}`, { data: btoa('current'), instance_id: 2, sequence: 1 })
 
     expect(view.writeLive).toHaveBeenCalledTimes(1)
     expect(view.writeLive).toHaveBeenCalledWith({
-      data: 'current',
+      data: Uint8Array.from(new TextEncoder().encode('current')),
       ptyInstanceId: 2,
       sequence: 1,
     })

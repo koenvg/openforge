@@ -1,12 +1,6 @@
-import {
-  bindTerminalAuthority,
-  GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT,
-  type TerminalAuthorityContract,
-} from './terminalAuthority'
 import type {
   TerminalModelDisabledEvent,
   TerminalModelOutputEvent,
-  TerminalOutputEvent,
   TerminalReplay,
   TerminalTransport,
 } from './terminalTransport'
@@ -14,7 +8,6 @@ import type { PoolEntry } from './terminalRuntimeTypes'
 
 interface TerminalStateViewOptions {
   transport: TerminalTransport
-  authority: TerminalAuthorityContract
   resetEntry(entry: PoolEntry): void
   markOutput(entry: PoolEntry): void
 }
@@ -28,32 +21,15 @@ function pushBounded<T>(queue: T[], value: T): void {
 
 export function createTerminalStateView({
   transport,
-  authority,
   resetEntry,
   markOutput,
 }: TerminalStateViewOptions) {
-  function writePtyOutput(entry: PoolEntry, event: TerminalOutputEvent): void {
-    if (entry.authority?.contract.mode !== 'xterm-authoritative') return
-    if (entry.authority.ptyInstanceId !== event.ptyInstanceId || !event.data) return
-    if (entry.needsClear) {
-      resetEntry(entry)
-      entry.needsClear = false
-    }
-    entry.outputSequence += 1
-    entry.view.writeLive({
-      data: event.data,
-      ptyInstanceId: event.ptyInstanceId,
-      sequence: entry.outputSequence,
-    })
-    markOutput(entry)
-  }
 
   function writeTerminalModelOutput(
     entry: PoolEntry,
     event: TerminalModelOutputEvent,
   ): boolean {
-    if (entry.authority?.contract.mode !== 'ghostty-authoritative') return true
-    if (entry.authority.ptyInstanceId !== event.ptyInstanceId) return true
+    if (entry.currentPtyInstance !== event.ptyInstanceId) return true
     const currentSequence = entry.terminalModelSequence
     if (currentSequence === null || event.sequence <= currentSequence) return true
     if (event.sequence !== currentSequence + 1) return false
@@ -69,49 +45,39 @@ export function createTerminalStateView({
   }
 
   function flushPendingOutput(entry: PoolEntry): void {
-    if (entry.authority?.contract.mode === 'ghostty-authoritative') {
-      entry.pendingPtyOutput.length = 0
-      const pending = entry.pendingTerminalModelOutput.splice(0)
-      for (const event of pending) {
-        if (!writeTerminalModelOutput(entry, event)) {
-          pushBounded(entry.pendingTerminalModelOutput, event)
-          void recover(entry)
-          break
-        }
+    const pending = entry.pendingTerminalModelOutput.splice(0)
+    for (const event of pending) {
+      if (!writeTerminalModelOutput(entry, event)) {
+        pushBounded(entry.pendingTerminalModelOutput, event)
+        void recover(entry)
+        break
+      }
+    }
+  }
+
+
+  function activateGhosttySnapshot(entry: PoolEntry, replay: TerminalReplay, reset: boolean): void {
+    if (replay.ptyInstanceId === null) {
+      if (reset) {
+        resetEntry(entry)
+        entry.hasOutput = false
+      }
+      entry.ptyActive = false
+      entry.shellExited = false
+      entry.needsClear = false
+      entry.outputSequence = 0
+      entry.currentPtyInstance = null
+      entry.terminalStateSource = 'ghostty-snapshot'
+      entry.terminalModelSequence = null
+      entry.pendingTerminalModelOutput.length = 0
+      entry.hasOutput = Boolean(replay.historicalData)
+      if (replay.historicalData) {
+        entry.view.bootstrap(replay.historicalData, null, entry.outputSequence)
       }
       return
     }
-
-    entry.pendingTerminalModelOutput.length = 0
-    const pending = entry.pendingPtyOutput.splice(0)
-    for (const event of pending) writePtyOutput(entry, event)
-  }
-
-  function activateXtermReplay(entry: PoolEntry, replay: TerminalReplay, reset: boolean): void {
-    if (reset) {
-      resetEntry(entry)
-      entry.hasOutput = false
-    }
-    entry.ptyActive = replay.isLive
-    entry.shellExited = !replay.isLive && replay.ptyInstanceId !== null
-    entry.needsClear = false
-    entry.outputSequence = 0
-    entry.terminalStateSource = 'pty-byte-replay'
-    entry.terminalModelSequence = null
-    if (replay.ptyInstanceId !== null) {
-      entry.currentPtyInstance = replay.ptyInstanceId
-      entry.authority = bindTerminalAuthority(authority, entry.shellSessionKey, replay.ptyInstanceId)
-    }
-    if (replay.data) {
-      entry.view.bootstrap(replay.data, replay.ptyInstanceId, entry.outputSequence)
-      entry.hasOutput = true
-    }
-    flushPendingOutput(entry)
-  }
-
-  function activateGhosttySnapshot(entry: PoolEntry, replay: TerminalReplay, reset: boolean): void {
     const snapshot = replay.snapshot
-    if (!snapshot || replay.ptyInstanceId === null || snapshot.ptyInstanceId !== replay.ptyInstanceId) {
+    if (!snapshot || snapshot.ptyInstanceId !== replay.ptyInstanceId) {
       throw new Error('Ghostty-authoritative terminal state requires a current snapshot')
     }
     if (reset) {
@@ -123,11 +89,6 @@ export function createTerminalStateView({
     entry.needsClear = false
     entry.outputSequence = 0
     entry.currentPtyInstance = replay.ptyInstanceId
-    entry.authority = bindTerminalAuthority(
-      GHOSTTY_AUTHORITATIVE_TERMINAL_CONTRACT,
-      entry.shellSessionKey,
-      replay.ptyInstanceId,
-    )
     entry.terminalStateSource = 'ghostty-snapshot'
     entry.terminalModelSequence = snapshot.watermark
     // Seed renderer-only state, such as inline images, before the Ghostty snapshot
@@ -156,11 +117,7 @@ export function createTerminalStateView({
         flushPendingOutput(entry)
         return
       }
-      if (replay.authority === 'ghostty-authoritative') {
-        activateGhosttySnapshot(entry, replay, reset)
-      } else {
-        activateXtermReplay(entry, replay, reset)
-      }
+      activateGhosttySnapshot(entry, replay, reset)
     })
     entry.terminalReplayRecovery = recovery
     try {
@@ -170,13 +127,6 @@ export function createTerminalStateView({
     }
   }
 
-  function handlePtyOutput(entry: PoolEntry, event: TerminalOutputEvent): void {
-    if (entry.spawnPending || entry.terminalStateSource === 'bootstrapping') {
-      pushBounded(entry.pendingPtyOutput, event)
-      return
-    }
-    writePtyOutput(entry, event)
-  }
 
   function handleTerminalModelOutput(entry: PoolEntry, event: TerminalModelOutputEvent): void {
     if (entry.spawnPending || entry.terminalStateSource === 'bootstrapping') {
@@ -189,13 +139,11 @@ export function createTerminalStateView({
   }
 
   function handleTerminalModelDisabled(entry: PoolEntry, event: TerminalModelDisabledEvent): void {
-    if (entry.authority?.contract.mode !== 'ghostty-authoritative') return
-    if (entry.authority.ptyInstanceId !== event.ptyInstanceId) return
+    if (entry.currentPtyInstance !== event.ptyInstanceId) return
     entry.ptyActive = false
   }
 
   return {
-    handlePtyOutput,
     handleTerminalModelOutput,
     handleTerminalModelDisabled,
     recover,
