@@ -4,6 +4,7 @@ use super::{
 use crate::{
     app_events::{AppEventCursor, AppEventEnvelope, AppEventFrame},
     process_memory::{collect_process_memory_diagnostics, ProcessMemoryDiagnostics},
+    process_memory_history::ProcessMemoryHistorySnapshot,
 };
 use axum::{
     extract::{DefaultBodyLimit, Json, State},
@@ -184,6 +185,11 @@ async fn debug_process_memory_handler(
     .map(Json)
     .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))
 }
+async fn debug_process_memory_history_handler(
+    State(state): State<AppState>,
+) -> Json<ProcessMemoryHistorySnapshot> {
+    Json(state.process_memory_history.snapshot())
+}
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
@@ -195,4 +201,8 @@ pub(super) fn router() -> Router<AppState> {
             post(app_invoke_handler).layer(DefaultBodyLimit::max(APP_INVOKE_MAX_BODY_BYTES)),
         )
         .route("/debug/process-memory", get(debug_process_memory_handler))
+        .route(
+            "/debug/process-memory/history",
+            get(debug_process_memory_history_handler),
+        )
 }

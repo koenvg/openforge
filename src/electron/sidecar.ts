@@ -250,6 +250,7 @@ export function createSidecarLaunchConfig(options: SidecarLaunchConfigOptions = 
     OPENFORGE_BACKEND_PORT: String(port),
     OPENFORGE_BACKEND_TOKEN: token,
     OPENFORGE_ELECTRON_SIDECAR: '1',
+    OPENFORGE_ELECTRON_PID: String(process.pid),
   }
 
   const baseUrl = `http://${host}:${port}`

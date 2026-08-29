@@ -40,4 +40,21 @@ describe('OpenForge debug commands', () => {
 
     expect(result).toEqual(response);
   });
+
+  it('prints the bounded totals-only process memory history', async () => {
+    const response = {
+      enabled: true,
+      sampleIntervalSeconds: 60,
+      maxSamples: 60,
+      rssSemantics: 'inclusive process-tree RSS totals',
+      samples: [{ collectedAt: '2026-07-03T12:00:00Z', trackedUniqueRssBytes: 4096 }],
+    };
+
+    const result = await runCliAgainstJsonBridge(['debug', 'process-memory-history'], {
+      url: '/debug/process-memory/history',
+      response,
+    });
+
+    expect(result).toEqual(response);
+  });
 });

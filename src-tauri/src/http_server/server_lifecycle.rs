@@ -40,6 +40,21 @@ pub(super) fn resolve_http_server_port(
         .unwrap_or(crate::http_bridge_port_contract::DEFAULT_HTTP_BRIDGE_PORT)
 }
 
+fn process_memory_history_enabled_preference(db: &std::sync::Arc<Mutex<db::Database>>) -> bool {
+    crate::process_memory_history::enabled_preference(db).unwrap_or_else(|error| {
+        warn!("[process_memory] {error}");
+        false
+    })
+}
+
+fn restore_process_memory_history(state: &AppState, enabled: bool) {
+    if enabled {
+        state
+            .process_memory_history
+            .enable(state.process_memory_sampling_context());
+    }
+}
+
 /// Start the HTTP server on the configured port
 ///
 /// The server listens on 127.0.0.1 (localhost only) to ensure
@@ -94,6 +109,7 @@ pub(super) async fn shutdown_sidecar_runtime(
 ) {
     info!("[http_server] Rust sidecar shutdown cleanup started");
 
+    state.process_memory_history.disable();
     state
         .frontend_host_requests
         .shutdown("OpenForge is shutting down before the frontend host request completed");
@@ -279,6 +295,8 @@ async fn start_http_server_with_app_state(
         task_claims.clone(),
     );
     let frontend_host_requests = plugin_host.frontend_host_requests();
+    let process_memory_history = crate::process_memory_history::ProcessMemoryHistory::default();
+    let process_memory_history_enabled = process_memory_history_enabled_preference(&db);
     let state = AppState {
         app,
         db: db.clone(),
@@ -295,8 +313,11 @@ async fn start_http_server_with_app_state(
         companion_gateway: Some(companion_gateway.clone()),
         task_claims,
         task_start_worktree_root: crate::task_start::default_worktree_root(),
+        process_memory_history: process_memory_history.clone(),
         poll_context: poll_context.clone(),
     };
+
+    restore_process_memory_history(&state, process_memory_history_enabled);
 
     if is_electron_sidecar {
         tokio::spawn(crate::github_poller::start_github_poller_for_sidecar(
@@ -339,7 +360,7 @@ async fn start_http_server_with_app_state(
 }
 
 #[cfg(test)]
-mod companion_restore_tests {
+mod lifecycle_restore_tests {
     use super::*;
 
     #[tokio::test]
@@ -365,5 +386,23 @@ mod companion_restore_tests {
             false,
         )
         .is_none());
+    }
+
+    #[tokio::test]
+    async fn persisted_process_memory_history_preference_restores_sampling_on_startup() {
+        let (state, _temp_dir) =
+            crate::test_support::test_state("process_memory_history_startup_restore", |_, _| {});
+        crate::db::acquire_db(&state.db)
+            .set_config(
+                crate::process_memory_history::PROCESS_MEMORY_HISTORY_ENABLED_CONFIG,
+                "true",
+            )
+            .expect("persist history preference");
+
+        let enabled = process_memory_history_enabled_preference(&state.db);
+        restore_process_memory_history(&state, enabled);
+
+        assert!(state.process_memory_history.snapshot().enabled);
+        state.process_memory_history.disable();
     }
 }

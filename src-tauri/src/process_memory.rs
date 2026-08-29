@@ -1,6 +1,7 @@
 use crate::{
     db::AgentSessionRow,
     plugin_host::PluginHost,
+    process_memory_history::PROCESS_MEMORY_RSS_SEMANTICS,
     pty_manager::{PtyManager, TerminalSessionLifecycleState},
 };
 use serde::Serialize;
@@ -73,6 +74,7 @@ pub struct PtyProcessTreeMemoryDiagnostics {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessMemoryTotals {
+    pub electron_total_tree_rss_bytes: u64,
     pub sidecar_rss_bytes: u64,
     pub sidecar_total_tree_rss_bytes: u64,
     pub plugin_host_rss_bytes: u64,
@@ -85,6 +87,7 @@ pub struct ProcessMemoryTotals {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessMemoryDiagnostics {
+    pub rss_semantics: &'static str,
     pub collected_at: String,
     pub sidecar: ProcessMemoryNode,
     pub plugin_host: Option<PluginHostMemoryDiagnostics>,
@@ -117,6 +120,11 @@ pub async fn collect_process_memory_diagnostics(
     let sidecar = build_process_tree(sidecar_pid, &processes).ok_or_else(|| {
         format!("current sidecar process {sidecar_pid} was not found in process table")
     })?;
+
+    let electron = std::env::var("OPENFORGE_ELECTRON_PID")
+        .ok()
+        .and_then(|pid| pid.parse::<u32>().ok())
+        .and_then(|pid| build_process_tree(pid, &processes));
 
     let plugin_host = match plugin_host {
         Some(host) => {
@@ -151,9 +159,15 @@ pub async fn collect_process_memory_diagnostics(
             .map_err(|e| format!("loading agent sessions for process memory diagnostics: {e}"))?
     };
     let pty_process_trees = pty_memory_diagnostics(&pty_sessions, &agent_sessions, &processes);
-    let totals = build_totals(&sidecar, plugin_host.as_ref(), &pty_process_trees);
+    let totals = build_totals(
+        electron.as_ref(),
+        &sidecar,
+        plugin_host.as_ref(),
+        &pty_process_trees,
+    );
 
     Ok(ProcessMemoryDiagnostics {
+        rss_semantics: PROCESS_MEMORY_RSS_SEMANTICS,
         collected_at: chrono::Utc::now().to_rfc3339(),
         sidecar,
         plugin_host,
@@ -270,6 +284,7 @@ fn pty_memory_diagnostics(
 }
 
 fn build_totals(
+    electron: Option<&ProcessMemoryNode>,
     sidecar: &ProcessMemoryNode,
     plugin_host: Option<&PluginHostMemoryDiagnostics>,
     pty_process_trees: &[PtyProcessTreeMemoryDiagnostics],
@@ -288,6 +303,9 @@ fn build_totals(
     }
 
     ProcessMemoryTotals {
+        electron_total_tree_rss_bytes: electron
+            .map(|process| process.total_tree_rss_bytes)
+            .unwrap_or(0),
         sidecar_rss_bytes: sidecar.rss_bytes,
         sidecar_total_tree_rss_bytes: sidecar.total_tree_rss_bytes,
         plugin_host_rss_bytes: plugin_host
@@ -574,7 +592,7 @@ mod tests {
             helper_processes: Vec::new(),
         };
 
-        let totals = build_totals(&sidecar, None, &[pty]);
+        let totals = build_totals(None, &sidecar, None, &[pty]);
 
         assert_eq!(totals.sidecar_total_tree_rss_bytes, 130 * 1024);
         assert_eq!(totals.pty_total_tree_rss_bytes, 30 * 1024);
@@ -673,5 +691,19 @@ mod tests {
             serde_json::to_value(status).expect("status should serialize"),
             "error"
         );
+    }
+
+    #[test]
+    fn totals_include_the_electron_tree_with_explicit_overlap_semantics() {
+        let processes =
+            parse_ps_output("1 0 200 electron\n2 1 50 renderer\n10 1 100 sidecar\n20 10 25 pty\n");
+        let electron = build_process_tree(1, &processes).expect("electron tree");
+        let sidecar = build_process_tree(10, &processes).expect("sidecar tree");
+
+        let totals = build_totals(Some(&electron), &sidecar, None, &[]);
+
+        assert_eq!(totals.electron_total_tree_rss_bytes, 375 * 1024);
+        assert_eq!(totals.sidecar_total_tree_rss_bytes, 125 * 1024);
+        assert_eq!(totals.tracked_unique_rss_bytes, 125 * 1024);
     }
 }

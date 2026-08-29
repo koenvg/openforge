@@ -104,7 +104,21 @@ pub struct AppState {
     pub companion_gateway: Option<crate::companion_gateway::CompanionGatewayManager>,
     pub task_claims: TaskClaims,
     pub task_start_worktree_root: Option<std::path::PathBuf>,
+    pub process_memory_history: crate::process_memory_history::ProcessMemoryHistory,
     pub poll_context: crate::github_poller::PollContext,
+}
+
+impl AppState {
+    pub(crate) fn process_memory_sampling_context(
+        &self,
+    ) -> crate::process_memory_history::ProcessMemorySamplingContext {
+        crate::process_memory_history::ProcessMemorySamplingContext {
+            db: self.db.clone(),
+            pty_manager: self.pty_manager.clone(),
+            plugin_host: self.plugin_host.clone(),
+            github_client: self.github_client.clone(),
+        }
+    }
 }
 
 pub use crate::task_claims::{TaskClaims, TaskOperation};

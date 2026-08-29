@@ -40,6 +40,7 @@ pub(crate) fn test_state(
             companion_gateway: None,
             task_claims: TaskClaims::new(),
             task_start_worktree_root: Some(temp_dir.path().join("worktrees")),
+            process_memory_history: crate::process_memory_history::ProcessMemoryHistory::default(),
             poll_context: crate::github_poller::PollContext::new(),
         },
         temp_dir,

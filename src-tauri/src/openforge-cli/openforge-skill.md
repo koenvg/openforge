@@ -20,7 +20,7 @@ Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 
-Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task start`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`). Flat task/project compatibility aliases are no longer supported.
+Use canonical nested command groups (`openforge task create`, `openforge task update`, `openforge task start`, `openforge task list`, `openforge task plan apply`, `openforge project list`, `openforge project labels list`, `openforge debug process-memory`, `openforge debug process-memory-history`). Flat task/project compatibility aliases are no longer supported.
 
 `openforge task start --task-id <id>` starts the native configured implementation flow using persisted task and project configuration. Dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain authoritative; the command does not accept runtime overrides.
 
@@ -55,6 +55,7 @@ openforge task get --task-id T-123
 openforge task start --task-id T-123
 openforge project labels list --project-id P-1
 openforge debug process-memory
+openforge debug process-memory-history
 openforge task labels list --task-id T-123
 openforge task labels add --task-id T-123 --label bug
 openforge task labels remove --task-id T-123 --label-id 42

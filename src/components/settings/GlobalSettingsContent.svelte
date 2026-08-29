@@ -5,6 +5,7 @@
   import SettingsCompanionCard from './SettingsCompanionCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsDeveloperLogsCard from './SettingsDeveloperLogsCard.svelte'
+  import SettingsProcessMemoryCard from './SettingsProcessMemoryCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsProviderField from './SettingsProviderField.svelte'
   import { PR_GUIDANCE_KEYS, PR_GUIDANCE_SECTION } from '../../lib/hierarchicalSettings'
@@ -89,5 +90,6 @@
 {:else if activeSection === 'companion'}
   <SettingsCompanionCard />
 {:else if activeSection === 'developer'}
+  <SettingsProcessMemoryCard />
   <SettingsDeveloperLogsCard />
 {/if}

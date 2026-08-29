@@ -55,6 +55,8 @@ export const desktopIpcFunctionDomains = {
   selectDirectory: 'app-shell',
   getDeveloperLogs: 'app-shell',
   getDeveloperLogSnapshot: 'app-shell',
+  getProcessMemoryHistory: 'app-shell',
+  setProcessMemoryHistoryEnabled: 'app-shell',
   getPrComments: 'github-review',
   markCommentAddressed: 'github-review',
   mergePullRequest: 'github-review',

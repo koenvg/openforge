@@ -27,6 +27,7 @@ Task listing:
 
 Diagnostics:
   debug process-memory prints read-only Rust sidecar, plugin host V8 heap and bounded lifecycle metrics, and PTY process-tree RSS attribution.
+  debug process-memory-history prints the opt-in, totals-only one-hour RSS history.
 
 Task creation hygiene:
   Before creating follow-up Tasks, use project labels list when a project id is known and reuse an existing label when it fits.
@@ -38,6 +39,7 @@ Task creation hygiene:
 Examples:
   openforge project labels list --project-id P-1
   openforge debug process-memory
+  openforge debug process-memory-history
   openforge task list --project-id P-1
   openforge task start --task-id T-123
   openforge task delete --task-id T-123

@@ -18,6 +18,10 @@ async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = response_body_json(response).await;
+    assert!(json.get("electron").is_none());
+    assert!(json["totals"]["electronTotalTreeRssBytes"]
+        .as_u64()
+        .is_some());
     assert_eq!(json["sidecar"]["pid"], std::process::id());
     assert!(json["sidecar"]["rssBytes"].as_u64().unwrap_or(0) > 0);
     assert!(
@@ -31,6 +35,31 @@ async fn test_debug_process_memory_handler_returns_read_only_diagnostics() {
     assert_eq!(json["githubResponseCache"]["bodyBytes"], 0);
 }
 
+#[tokio::test]
+async fn test_debug_process_memory_history_handler_returns_the_bounded_totals_contract() {
+    let (state, _temp_dir) = test_state("http_debug_process_memory_history_handler");
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/debug/process-memory/history")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["enabled"], false);
+    assert_eq!(json["sampleIntervalSeconds"], 60);
+    assert_eq!(json["maxSamples"], 60);
+    assert_eq!(json["samples"], serde_json::json!([]));
+    assert!(json["rssSemantics"].as_str().is_some());
+    assert!(json.get("commands").is_none());
+    assert!(json.get("payloads").is_none());
+}
 #[tokio::test]
 async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention() {
     let (state, _temp_dir) = test_state("http_get_project_attention_handler_zeroed_row");
