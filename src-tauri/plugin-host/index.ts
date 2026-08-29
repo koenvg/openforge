@@ -3,7 +3,7 @@ import { validateSchemaValue } from '@openforge-app/plugin-runtime/commandValida
 import type { AgentCommandDescriptor, CommandDescriptor, PluginCommandInvocationContext } from '@openforge-app/plugin-sdk'
 import { createBackendApi, DEFAULT_EXTERNAL_TEXT_FILE_READ_TIMEOUT_MS } from './backend-api'
 import { BackendLifecycle } from './backend-lifecycle'
-import { logPluginHostError, toError, withPluginConsole } from './console-attribution'
+import { installPluginConsoleRouting, logPluginHostError, toError, withPluginConsole } from './console-attribution'
 import { globalContributionRegistry } from './contribution-registry'
 import type {
   ActivateBackendInput,
@@ -19,6 +19,8 @@ import type {
 } from './runtime-types'
 import { StdioHostCallbackBridge, startStdioServer, writeJsonRpcResponse } from './stdio-transport'
 import { assertLocalId, isNonEmptyString, requireAgentInvocationContext, RuntimeValidationError } from './validation'
+
+installPluginConsoleRouting()
 
 export class PluginHostRuntime {
   private readonly lifecycle: BackendLifecycle
