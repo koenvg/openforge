@@ -130,6 +130,18 @@ jobs:
       - name: Run terminal presentation conformance
         run: pnpm terminal:presentation
 
+      - name: Run Markdown visual regression tests
+        run: pnpm markdown:visual
+
+      - name: Upload Markdown visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: markdown-visual-${{ runner.os }}-${{ runner.arch }}
+          path: screenshots/markdown-visual
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload terminal presentation report
         if: always()
         uses: actions/upload-artifact@v6

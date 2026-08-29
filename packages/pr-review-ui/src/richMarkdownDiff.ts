@@ -9,6 +9,7 @@ interface RichMarkdownSourceBlock {
 export interface RichMarkdownContentBlock extends RichMarkdownSourceBlock {
   kind: 'content'
   markdown: string
+  tokenType: string
 }
 
 export interface RichMarkdownListItem extends RichMarkdownSourceBlock {
@@ -182,6 +183,7 @@ function parseContent(
     kind: 'content',
     markdown: token.raw,
     startLine,
+    tokenType: token.type,
     endLine,
     anchorLine: firstChangedLine(changedLines, startLine, endLine),
   }
