@@ -13,6 +13,7 @@
   } from './lib/fileExplorer'
   import { buildSearchResultEntries, collectDirPaths } from './lib/fileSearch'
   import FilesBrowserSection from './FilesBrowserSection.svelte'
+  import type { FilesBrowserActions, FilesBrowserViewModel } from './lib/fileBrowserView'
 
   const SEARCH_LIMIT = 50
   const SEARCH_DEBOUNCE_MS = 150
@@ -349,6 +350,72 @@
     }
   }
 
+  const browserView = $derived.by((): FilesBrowserViewModel => ({
+    project: {
+      id: $activeProjectId,
+      loading,
+      rootError,
+    },
+    toolbar: {
+      searchQuery,
+      hiddenRootEntryCount,
+      showHiddenRootEntries,
+    },
+    tree: {
+      directoryError,
+      failedRevealPath,
+      rootEntries,
+      flatEntries,
+      expandedPaths,
+      selectedPath,
+      treeScrollTop: projectState.treeScrollTop,
+      treeFocusRequest,
+      search: {
+        active: searchActive,
+        loading: searchLoading,
+        error: searchError,
+        entries: searchEntries,
+        expandedDirs: searchExpandedDirs,
+        limitReached: searchLimitReached,
+        limit: SEARCH_LIMIT,
+      },
+    },
+    preview: {
+      selectedPath,
+      selectedEntry,
+      selectedFileName,
+      fileContent,
+      fileError,
+      contentScrollTop: projectState.contentScrollTop,
+      previewFocusRequest,
+    },
+  }))
+
+  const browserActions: FilesBrowserActions = {
+    onRetryRootLoad: retryRootLoad,
+    toolbar: {
+      onSearchInput: handleSearchInput,
+      onClearSearch: clearSearch,
+      onToggleHiddenRootEntries: toggleHiddenRootEntries,
+    },
+    tree: {
+      onRetrySearch: retrySearch,
+      onRetryDirectoryLoad: retryDirectoryLoad,
+      onRetryRevealPath: retryRevealPath,
+      onToggleDir: toggleDir,
+      onSelectFile: selectFile,
+      onTreeScrollTopChange: updateTreeScrollTop,
+    },
+    preview: {
+      onContentScrollTopChange: updateContentScrollTop,
+      onRetrySelectedFile: retrySelectedFile,
+      onOpenRepositoryPath: async (repositoryPath) => {
+        await selectFile(repositoryPath)
+      },
+      onReturnFocusToSelectedFile: returnFocusToSelectedFile,
+    },
+  }
+
   $effect(() => {
     $activeProjectId = projectId
   })
@@ -406,46 +473,5 @@
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
 
-  <FilesBrowserSection
-    {api}
-    activeProjectId={$activeProjectId}
-    {loading}
-    {rootError}
-    {directoryError}
-    {fileError}
-    {failedRevealPath}
-    {rootEntries}
-    {flatEntries}
-    {expandedPaths}
-    {selectedPath}
-    {selectedEntry}
-    {selectedFileName}
-    {projectState}
-    {fileContent}
-    {previewFocusRequest}
-    {treeFocusRequest}
-    {hiddenRootEntryCount}
-    {showHiddenRootEntries}
-    {searchQuery}
-    {searchActive}
-    {searchLoading}
-    {searchError}
-    {searchEntries}
-    {searchExpandedDirs}
-    {searchLimitReached}
-    searchLimit={SEARCH_LIMIT}
-    onSearchInput={handleSearchInput}
-    onClearSearch={clearSearch}
-    onToggleHiddenRootEntries={toggleHiddenRootEntries}
-    onRetrySearch={retrySearch}
-    onRetryRootLoad={retryRootLoad}
-    onRetryDirectoryLoad={retryDirectoryLoad}
-    onRetrySelectedFile={retrySelectedFile}
-    onRetryRevealPath={retryRevealPath}
-    onToggleDir={toggleDir}
-    onSelectFile={selectFile}
-    onTreeScrollTopChange={updateTreeScrollTop}
-    onContentScrollTopChange={updateContentScrollTop}
-    onReturnFocusToSelectedFile={returnFocusToSelectedFile}
-  />
+  <FilesBrowserSection {api} view={browserView} actions={browserActions} />
 </div>
