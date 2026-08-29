@@ -473,47 +473,72 @@ Project file methods are available to frontend and backend plugins:
 
 Backend plugins also receive two user-scoped file APIs under the same `fs` capability:
 
-- `openforge.fs.userData` reads and writes files in a host-owned directory namespaced by plugin id. Paths are relative to that directory. Use this for durable plugin files that do not fit JSON `storage`, such as telemetry logs or cached indexes.
-- `openforge.fs.external` reads from an absolute root chosen by the plugin or user. Every call includes the root, and the nested `path` remains relative to it. This API has `readDir(...)`, `readTextFile(...)`, and the byte-bounded `readTextFileChunks(...)` async iterable. It cannot write external files.
+- `openforge.fs.userData` reads and writes files in a host-owned directory namespaced by plugin id. Paths are relative to that directory. `writeTextFile(...)` atomically replaces and syncs a file. `appendTextFile(...)` appends and syncs text, then returns the resulting UTF-8 byte size. Use this for durable plugin files that do not fit JSON `storage`, such as telemetry logs or cached indexes.
+- `openforge.fs.external` reads from an absolute root chosen by the plugin or user. Every call includes the root, and the nested `path` remains relative to it. This API has `readDir(...)`, `readTextFile(...)`, `stat(...)`, and the byte-bounded `readTextFileChunks(...)` async iterable. It cannot write external files.
 
 ```ts
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-const piSessionsRoot = join(homedir(), '.pi', 'agent', 'sessions')
-const years = await openforge.fs.external.readDir({ root: piSessionsRoot })
-const session = await openforge.fs.external.readTextFile({
-  root: piSessionsRoot,
-  path: '2026/session.jsonl'
-})
+const collectorRoot = join(homedir(), '.openforge', 'skill-telemetry', 'events')
+const path = 'pi-skills.jsonl'
+const metadata = await openforge.fs.external.stat({ root: collectorRoot, path })
+const sameFile = checkpoint.identity === metadata.identity
+  && checkpoint.offsetBytes <= metadata.sizeBytes
+const startOffsetBytes = sameFile ? checkpoint.offsetBytes : 0
+const maxBytes = metadata.sizeBytes - startOffsetBytes
 
 const scanAbort = new AbortController()
-let unfinishedLine = ''
+let unfinishedLine = sameFile ? checkpoint.unfinishedLine : ''
+const acceptedRecords: string[] = []
+const utf8 = new TextEncoder()
+let rangeBytesRead = 0
 for await (const chunk of openforge.fs.external.readTextFileChunks({
-  root: piSessionsRoot,
-  path: '2026/session.jsonl',
+  root: collectorRoot,
+  path,
+  expectedIdentity: metadata.identity,
+  startOffsetBytes,
+  maxBytes,
   chunkSizeBytes: 64 * 1024,
   signal: scanAbort.signal,
 })) {
+  rangeBytesRead += utf8.encode(chunk).byteLength
   unfinishedLine += chunk
   for (let newline = unfinishedLine.indexOf('\n'); newline >= 0; newline = unfinishedLine.indexOf('\n')) {
-    await indexSessionLine(unfinishedLine.slice(0, newline))
+    const record = unfinishedLine.slice(0, newline)
+    if (await acceptCollectorRecord(record)) acceptedRecords.push(`${record}\n`)
     unfinishedLine = unfinishedLine.slice(newline + 1)
   }
 }
-if (unfinishedLine.length > 0) await indexSessionLine(unfinishedLine)
+if (rangeBytesRead !== maxBytes) throw new Error('collector file truncated during ranged read')
 
+const append = await openforge.fs.userData.appendTextFile({
+  path: 'telemetry/events.jsonl',
+  content: acceptedRecords.join(''),
+})
 await openforge.fs.userData.writeTextFile({
-  path: 'telemetry/usage.json',
-  content: JSON.stringify({ sessionCount: years.length })
+  path: 'telemetry/state.json',
+  content: JSON.stringify({
+    committedIndexBytes: append.sizeBytes,
+    source: {
+      identity: metadata.identity,
+      offsetBytes: metadata.sizeBytes,
+      unfinishedLine,
+    },
+  }),
 })
 ```
 
-The host creates parent directories for `userData.writeTextFile(...)`. `readTextFile(...)` returns the complete UTF-8 file rather than the Project preview format or its 1 MiB text limit. Use it only when the complete file fits comfortably in the shared plugin-host heap.
+The host creates parent directories for user-data writes. `writeTextFile(...)` writes a temporary sibling, syncs it, atomically replaces the destination, and syncs the parent directory before resolving. `appendTextFile(...)` syncs the appended content and parent directory before returning `{ sizeBytes }`. `readTextFile(...)` returns the complete UTF-8 file rather than the Project preview format or its 1 MiB text limit. Use a complete read only when the file fits comfortably in the shared plugin-host heap.
+OpenForge's supported macOS host provides stable external file identities and parent-directory syncing. A future host that cannot provide either guarantee must reject the affected operation rather than return a weaker result.
 
-`readTextFileChunks(...)` starts host I/O when iteration begins. Each yielded string is at most `chunkSizeBytes` in UTF-8 bytes. The default is 64 KiB, and accepted values range from 4 bytes through 1 MiB. A chunk never splits a UTF-8 code point, but chunk boundaries do not follow lines. A line scanner must retain text after the last newline and prepend it to the next chunk. Its memory use is one chunk plus the longest unfinished line.
+For an append-only index and checkpoint, serialize writes to that index. Append the index first and use its returned `sizeBytes` in a subsequent `writeTextFile(...)` checkpoint. Readers must stop at the checkpoint's committed byte length. A crash before the atomic checkpoint replacement leaves the previous pointer authoritative and the extra index suffix uncommitted. After any reported write error, reload the checkpoint before retrying because an I/O error can race with the final filesystem operation. Source replay must be idempotent, usually through stable event IDs.
 
-The host canonicalizes the root and target again for every chunk, applying the same absolute-root, relative-child, traversal, and symlink-escape checks as `readTextFile(...)`. It opens and closes the file for each host read, so no descriptor or host stream session remains while plugin code processes a yielded chunk. Breaking out of the loop needs no explicit cleanup. The iterable is not a file snapshot; replacing, truncating, or appending the file during iteration may change later chunks or fail the read. Invalid UTF-8 fails the iteration. Paths do not expand `~`, and user-data writes reject symlink targets outside their assigned root.
+`external.stat(...)` returns `{ identity, sizeBytes, modifiedAtMs }` for a file. The identity stays stable while the same filesystem object is appended in place. Reset a source checkpoint when its identity changes or its size falls below the committed source offset. Pass the accepted identity as `expectedIdentity` to the ranged read so replacement between stat and a host read fails instead of returning bytes from another file.
+
+`readTextFileChunks(...)` starts host I/O when iteration begins. `startOffsetBytes` defaults to zero, and optional `maxBytes` caps the total range. Each yielded string is at most `chunkSizeBytes` in UTF-8 bytes. The default chunk size is 64 KiB, and accepted values range from 4 bytes through 1 MiB. Start and range-end offsets must land on UTF-8 code point boundaries. Chunk boundaries do not follow lines, so a line scanner must retain text after the last newline and prepend it to the next chunk.
+
+The host canonicalizes the root and target again for every stat and chunk operation. It applies the same absolute-root, relative-child, traversal, and symlink-escape checks as `readTextFile(...)`. Each chunk opens and closes the file, so no descriptor or host stream remains while plugin code processes it. Breaking out of the loop needs no cleanup. The iterable is not a snapshot. Appends may become visible to an unbounded read, while bounded reads stop after `maxBytes`. An identity-bound read fails after replacement. Truncation can end a range early, so compare the total yielded UTF-8 bytes with the stat-derived range before advancing a checkpoint. Invalid UTF-8 and misaligned UTF-8 ranges fail the iteration. Paths do not expand `~`, and user-data writes reject symlink targets outside their assigned root.
 
 Pass an `AbortSignal` when a background service needs cancellation. The iterable checks it before and after each host read. Aborting stops future reads and discards a result that completes after cancellation, though the in-flight host read itself may finish. Call `abort()` from the background service's `stop()` hook.
 
@@ -525,9 +550,10 @@ Backend entries run as trusted Node code, so Node built-ins and npm dependencies
 
 Migrate direct filesystem code as follows:
 
-1. Replace writes to a plugin-created directory under the home directory with `openforge.fs.userData.writeTextFile(...)`. Store a relative path, not an absolute home path.
-2. Replace reads from a configured directory such as `~/.pi/agent/sessions` with `openforge.fs.external.readDir(...)` and `readTextFile(...)`. Use `readTextFileChunks(...)` for files that should not be loaded into the shared plugin-host heap at once. Resolve the absolute root once with `node:os` and `node:path`, then pass relative child paths to the API.
-3. Keep `node:fs` only when a Node dependency or package-local implementation detail requires it. Do not use it to access OpenForge app data, Project files, or another plugin's user-data directory.
+1. Replace whole-file writes under a plugin-created home directory with `openforge.fs.userData.writeTextFile(...)`. Store a relative path, not an absolute home path. Remove temporary-file and rename code because the host now performs the atomic synced replacement.
+2. Replace append handles and manual `fsync` calls with `openforge.fs.userData.appendTextFile(...)`. Use the returned byte size when the next atomic state write publishes a committed index length.
+3. Replace configured-directory reads such as `~/.pi/agent/sessions` with `openforge.fs.external.readDir(...)` and `readTextFile(...)`. For append logs, call `stat(...)`, compare identity and size with the checkpoint, then pass `expectedIdentity`, `startOffsetBytes`, and `maxBytes` to `readTextFileChunks(...)`. Verify the yielded UTF-8 byte count before advancing the checkpoint. Resolve the absolute root once with `node:os` and `node:path`; keep child paths relative.
+4. Keep `node:fs` only when a Node dependency or package-local implementation detail requires it. Do not use it to access OpenForge app data, Project files, or another plugin's user-data directory.
 
 Frontend plugins cannot use `fs.userData`, `fs.external`, or `node:fs`. Put this work in the backend entry and expose only the needed result through a backend method.
 
@@ -574,7 +600,7 @@ describe('frontend activation', () => {
 })
 ```
 
-For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. The backend fake records user-data calls in `fsUserDataReadDirs`, `fsUserDataReads`, and `fsUserDataWrites`, and external read calls in `fsExternalReadDirs`, `fsExternalReads`, and `fsExternalReadTextFileChunks`. Seed chunked reads with the `externalTextFiles` option. The fake splits seeded content on the same UTF-8 byte limit and honors `AbortSignal` cancellation.
+For unit tests that only need an API object, use `createMockOpenForgeApi`, `createMockFrontendOpenForgeApi`, or `createMockBackendOpenForgeApi`; host-facing calls are recorded under `api.__testing.calls`. Seed Task Agent Session history with the `agentSessions` option; `tasks.listSessions(...)` applies the same Task, provider, creation-time, and newest-first rules, and records requests in `taskSessionListRequests`. Seed user-data files with `userDataTextFiles`; the backend fake applies replacements and appends in memory and records them in `fsUserDataWrites` and `fsUserDataAppends`. Seed external files, identities, and mtimes with `externalTextFiles`. The fake records `fsExternalStats` and ranged chunk requests, applies the same UTF-8 byte limits, rejects stale identities or misaligned ranges, and honors `AbortSignal` cancellation.
 
 ## Authoring checklist
 

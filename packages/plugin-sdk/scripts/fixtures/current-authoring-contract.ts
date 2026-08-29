@@ -66,6 +66,16 @@ const registry = createOpenForgeRegistryFake({
   packageMetadata: appPackageMetadata,
 })
 void registry.backendApi.commands.register(registration)
+void registry.backendApi.fs.external.stat({ root: '/collector', path: 'events.jsonl' })
+void registry.backendApi.fs.external.readTextFileChunks({
+  root: '/collector',
+  path: 'events.jsonl',
+  expectedIdentity: '41:9',
+  startOffsetBytes: 128,
+  maxBytes: 4096,
+})
+void registry.backendApi.fs.userData.appendTextFile({ path: 'events/index.jsonl', content: '{}\n' })
+void registry.backendApi.fs.userData.writeTextFile({ path: 'events/state.json', content: '{"bytes":3}' })
 
 declare const viewComponent: PluginViewRegistration['component']
 declare const navigationComponent: NonNullable<PluginViewRegistration['navigationComponent']>

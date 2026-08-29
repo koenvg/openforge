@@ -203,10 +203,12 @@ export class RuntimeCommonApiRegistry {
           readDir: async () => unavailableCapability('fs.userData.readDir'),
           readTextFile: async () => unavailableCapability('fs.userData.readTextFile'),
           writeTextFile: async () => unavailableCapability('fs.userData.writeTextFile'),
+          appendTextFile: async () => unavailableCapability('fs.userData.appendTextFile'),
         },
         external: {
           readDir: async () => unavailableCapability('fs.external.readDir'),
           readTextFile: async () => unavailableCapability('fs.external.readTextFile'),
+          stat: async () => unavailableCapability('fs.external.stat'),
           readTextFileChunks: () => unavailableCapability('fs.external.readTextFileChunks'),
         },
       },
