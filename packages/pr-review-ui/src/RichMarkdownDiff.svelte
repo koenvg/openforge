@@ -202,12 +202,12 @@
 <div class="markdown-body rich-markdown-document">
   {#each document.blocks as block (`${block.kind}:${block.startLine}:${block.endLine}`)}
     {#if block.kind === 'list'}
-      <div class="grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
+      <div class="rich-markdown-block rich-markdown-block-list grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
         <div></div>
         {@render listContent(block)}
       </div>
     {:else if block.kind === 'table'}
-      <div class="grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
+      <div class="rich-markdown-block rich-markdown-block-table grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
         <div></div>
         <div class="min-w-0 overflow-x-auto">
           <table>
@@ -249,7 +249,7 @@
         </div>
       </div>
     {:else}
-      <div class="group relative grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
+      <div class="rich-markdown-block rich-markdown-block-{block.tokenType} group relative grid grid-cols-[2.75rem_minmax(0,1fr)]" data-markdown-source-start={block.startLine} data-markdown-source-end={block.endLine}>
         <div class="relative">
           {#if block.anchorLine !== null}{@render commentButton(block.anchorLine, 'gutter')}{/if}
         </div>
@@ -264,6 +264,37 @@
 </div>
 
 <style>
+  /* Top-level Markdown tokens render in separate commentable wrappers. Keep the
+     document rhythm on those wrappers because each nested MarkdownContent resets
+     its own first and last child margins. */
+  .rich-markdown-block {
+    margin: 0 0 0.75em;
+  }
+
+  .rich-markdown-block-heading {
+    margin-top: 1.25em;
+    margin-bottom: 0.5em;
+  }
+
+  .rich-markdown-block-hr {
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+
+  .rich-markdown-block:first-child {
+    margin-top: 0;
+  }
+
+  .rich-markdown-block:last-child {
+    margin-bottom: 0;
+  }
+
+  .rich-markdown-block-list > :global(ol),
+  .rich-markdown-block-list > :global(ul),
+  .rich-markdown-block-table :global(table) {
+    margin-bottom: 0;
+  }
+
   .rich-markdown-document :global(li > .markdown-body > p:last-child),
   .rich-markdown-document :global(th .markdown-body > p:last-child),
   .rich-markdown-document :global(td .markdown-body > p:last-child) {
