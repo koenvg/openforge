@@ -106,8 +106,8 @@ var openforgePackageMetadataSchema_default = {
 		"backend": {
 			"type": "string",
 			"minLength": 1,
-			"pattern": "\\.cjs$",
-			"description": "Path to the built CommonJS backend entry artifact. Use a .cjs filename so the plugin host can reload it without retaining stale module instances."
+			"pattern": "\\.(?:mjs|js|cjs)$",
+			"description": "Path to the built backend JavaScript artifact. Use .mjs for new plugins; .js and .cjs remain supported for compatibility. The host runs each backend in a replaceable worker."
 		},
 		"requires": {
 			"type": "array",
@@ -260,9 +260,13 @@ function validateOptionalString(value, path) {
 function validateBackendEntry(value) {
 	const errors = validateOptionalString(value, "backend");
 	if (!isNonEmptyString(value)) return errors;
-	if (!value.endsWith(".cjs")) errors.push({
+	if (![
+		".mjs",
+		".js",
+		".cjs"
+	].some((extension) => value.endsWith(extension))) errors.push({
 		path: "backend",
-		message: "Must point to a CommonJS .cjs artifact"
+		message: "Must point to a built .mjs, .js, or .cjs artifact"
 	});
 	return errors;
 }

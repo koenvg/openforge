@@ -25,7 +25,7 @@ acme-notes-plugin/
   package.json
   dist/
     frontend.js
-    backend.cjs
+    backend.mjs
 ```
 
 Source files, tests, and build configuration may exist in the author repository, but they are not required in the installed package unless you intentionally publish them for review or debugging. A minimal `files` list for an npm package often includes only `dist` and `package.json`.
@@ -36,7 +36,7 @@ Reviewer checklist:
 - `package.json#openforge.id` is stable and unique app-wide.
 - `package.json#openforge.displayName` and `description` describe what the **Trusted Plugin** does for users.
 - `package.json#openforge.frontend`, when present, points to a relative `.js`, `.mjs`, or `.cjs` file inside the package.
-- `package.json#openforge.backend`, when present, points to a relative CommonJS `.cjs` file inside the package; TypeScript and ESM backend entries are not supported.
+- `package.json#openforge.backend`, when present, points to a relative `.mjs`, `.js`, or `.cjs` file inside the package. Use `.mjs` for new plugins.
 - Entry paths do not use absolute paths or `..` traversal.
 - Assets and extra files are intentionally included and do not expose secrets or unrelated project data.
 

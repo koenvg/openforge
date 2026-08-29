@@ -8,9 +8,9 @@ export default defineConfig({
     target: 'node20',
     rollupOptions: {
       output: {
-        entryFileNames: 'backend.cjs',
-        chunkFileNames: '[name]-[hash].cjs',
-        format: 'cjs',
+        entryFileNames: 'backend.mjs',
+        chunkFileNames: '[name]-[hash].mjs',
+        format: 'es',
       },
     },
   },

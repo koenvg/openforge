@@ -8,9 +8,9 @@ describe('Task Schedules backend bundle config', () => {
 
     expect(config.ssr?.noExternal).toEqual(expect.arrayContaining(['@openforge-app/plugin-sdk', 'cronstrue']))
     expect(config.build?.rollupOptions?.output).toMatchObject({
-      entryFileNames: 'backend.cjs',
-      chunkFileNames: '[name]-[hash].cjs',
-      format: 'cjs',
+      entryFileNames: 'backend.mjs',
+      chunkFileNames: '[name]-[hash].mjs',
+      format: 'es',
     })
   })
 })

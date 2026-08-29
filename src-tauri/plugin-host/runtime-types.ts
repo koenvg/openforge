@@ -93,6 +93,7 @@ export type RuntimeOptions = {
   crashLoopLimit?: number
   crashLoopWindowMs?: number
   hostCallbacks?: HostCallbackHandler
+  coordinatorCallbacks?: HostCallbackHandler
   externalTextFileReadTimeoutMs?: number
 }
 

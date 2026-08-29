@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, realpath } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -80,6 +80,157 @@ describe('plugin-host JSON-RPC and stdio transport', () => {
     }
   })
 
+
+  it('runs ESM backends in replaceable per-plugin workers', async () => {
+    const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-worker-'))
+    const hostPath = await realpath(await buildBackendPluginHostRuntime(process.cwd(), hostOutDir))
+    const pluginDirectory = await mkdtemp(join(tmpdir(), 'openforge-esm-backend-'))
+    const backendPath = join(pluginDirectory, 'backend.mjs')
+    const writeBackend = async (generation: number) => {
+      await writeFile(backendPath, `
+        import { threadId } from 'node:worker_threads'
+        export default {
+          activate(openforge, context) {
+            context.subscriptions.add(openforge.backend.registerMethod('generation', {
+              handler() { return { generation: ${generation}, threadId } }
+            }))
+          }
+        }
+      `)
+    }
+    await writeBackend(1)
+
+    const child = spawn(process.execPath, [hostPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const lines = createInterface({ input: child.stdout })
+    const stderr: string[] = []
+    const pending = new Map<number, {
+      resolve: (response: { result?: unknown; error?: { message: string } }) => void
+      reject: (error: Error) => void
+    }>()
+    child.stderr.on('data', chunk => stderr.push(String(chunk)))
+    lines.on('line', (line) => {
+      const response = JSON.parse(line) as { id?: number; result?: unknown; error?: { message: string } }
+      if (typeof response.id !== 'number') return
+      pending.get(response.id)?.resolve(response)
+      pending.delete(response.id)
+    })
+
+    const request = (id: number, method: string, params: Record<string, unknown>) => new Promise<{
+      result?: unknown
+      error?: { message: string }
+    }>((resolve, reject) => {
+      pending.set(id, { resolve, reject })
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
+    })
+
+    try {
+      const first = await request(1, 'esm-worker.generation', {
+        pluginId: 'esm-worker', backendPath, command: 'generation',
+      })
+      expect(first.error).toBeUndefined()
+      expect(first.result).toMatchObject({ generation: 1, threadId: expect.any(Number) })
+      expect((first.result as { threadId: number }).threadId).toBeGreaterThan(0)
+      await expect(request(20, 'plugin.host.diagnostics', {})).resolves.toMatchObject({
+        result: {
+          pluginCount: 1,
+          plugins: [expect.objectContaining({ pluginId: 'esm-worker', active: true })],
+        },
+      })
+
+      await expect(request(2, 'plugin.backend.deactivate', { pluginId: 'esm-worker' }))
+        .resolves.toMatchObject({ result: { state: 'missing', ready: false } })
+      await writeBackend(2)
+
+      const second = await request(3, 'esm-worker.generation', {
+        pluginId: 'esm-worker', backendPath, command: 'generation',
+      })
+      expect(second.error).toBeUndefined()
+      expect(second.result).toMatchObject({ generation: 2, threadId: expect.any(Number) })
+      expect((second.result as { threadId: number }).threadId)
+        .not.toBe((first.result as { threadId: number }).threadId)
+    } finally {
+      for (const { reject } of pending.values()) reject(new Error(`Plugin host stopped: ${stderr.join('')}`))
+      pending.clear()
+      lines.close()
+      child.kill()
+    }
+  })
+
+  it('routes global commands and events between isolated plugin workers', async () => {
+    const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-cross-worker-'))
+    const hostPath = await realpath(await buildBackendPluginHostRuntime(process.cwd(), hostOutDir))
+    const targetBackendPath = join(await mkdtemp(join(tmpdir(), 'openforge-target-backend-')), 'backend.mjs')
+    const sourceBackendPath = join(await mkdtemp(join(tmpdir(), 'openforge-source-backend-')), 'backend.mjs')
+    await writeFile(targetBackendPath, `
+      const received = []
+      export default {
+        activate(openforge, context) {
+          context.subscriptions.add(openforge.commands.register({
+            id: 'echo', title: 'Echo', handler(payload) { return { echoed: payload } }
+          }))
+          context.subscriptions.add(openforge.events.onGlobal('shared.event', payload => received.push(payload)))
+          context.subscriptions.add(openforge.backend.registerMethod('receivedEvents', {
+            handler() { return received }
+          }))
+        }
+      }
+    `)
+    await writeFile(sourceBackendPath, `
+      export default {
+        activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('callTarget', {
+            handler(payload) { return openforge.commands.invokeGlobal('target.echo', payload) }
+          }))
+          context.subscriptions.add(openforge.backend.registerMethod('emitGlobal', {
+            handler(payload) { return openforge.events.emitGlobal('shared.event', payload) }
+          }))
+          context.subscriptions.add(openforge.backend.registerMethod('listCommands', {
+            handler() { return openforge.commands.list() }
+          }))
+        }
+      }
+    `)
+
+    const child = spawn(process.execPath, [hostPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const lines = createInterface({ input: child.stdout })
+    const responses = new Map<number, (response: { result?: unknown; error?: { message: string } }) => void>()
+    lines.on('line', line => {
+      const response = JSON.parse(line) as { id?: number; result?: unknown; error?: { message: string } }
+      if (typeof response.id !== 'number') return
+      responses.get(response.id)?.(response)
+      responses.delete(response.id)
+    })
+    const request = (id: number, method: string, params: Record<string, unknown>) => new Promise<{
+      result?: unknown
+      error?: { message: string }
+    }>(resolve => {
+      responses.set(id, resolve)
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
+    })
+
+    try {
+      await expect(request(1, 'plugin.backend.whenReady', { pluginId: 'target', backendPath: targetBackendPath }))
+        .resolves.toMatchObject({ result: { state: 'ready' } })
+      await expect(request(2, 'source.callTarget', {
+        pluginId: 'source', backendPath: sourceBackendPath, command: 'callTarget', payload: 'across-workers',
+      })).resolves.toMatchObject({ result: { echoed: 'across-workers' } })
+      await expect(request(3, 'source.emitGlobal', {
+        pluginId: 'source', backendPath: sourceBackendPath, command: 'emitGlobal', payload: 'broadcast',
+      })).resolves.toMatchObject({ result: null })
+      await expect(request(4, 'target.receivedEvents', {
+        pluginId: 'target', backendPath: targetBackendPath, command: 'receivedEvents',
+      })).resolves.toMatchObject({ result: ['broadcast'] })
+      const listed = await request(5, 'source.listCommands', {
+        pluginId: 'source', backendPath: sourceBackendPath, command: 'listCommands',
+      })
+      expect(listed.result).toEqual(expect.arrayContaining([
+        expect.objectContaining({ qualifiedId: 'target.echo' }),
+      ]))
+    } finally {
+      lines.close()
+      child.kill()
+    }
+  })
   it('completes external text reads and propagates errors through the built stdio host', async () => {
     const hostOutDir = await mkdtemp(join(tmpdir(), 'openforge-built-plugin-host-fs-'))
     const hostPath = await realpath(await buildBackendPluginHostRuntime(process.cwd(), hostOutDir))

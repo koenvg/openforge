@@ -25,7 +25,7 @@ Declare only the capabilities your plugin uses. OpenForge loads built entry poin
     "description": "Project planning recipes for OpenForge",
     "icon": "calendar-check",
     "frontend": "./dist/frontend.js",
-    "backend": "./dist/backend.cjs",
+    "backend": "./dist/backend.mjs",
     "requires": [
       "views",
       "navigation",

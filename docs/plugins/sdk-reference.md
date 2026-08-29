@@ -253,7 +253,7 @@ Plugin packages declare OpenForge metadata in `package.json#openforge`:
     "displayName": "My Plugin",
     "description": "Adds workflow-specific OpenForge behavior.",
     "frontend": "dist/frontend.js",
-    "backend": "dist/backend.cjs",
+    "backend": "dist/backend.mjs",
     "requires": ["commands", "notifications"]
   }
 }
